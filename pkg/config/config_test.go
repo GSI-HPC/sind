@@ -234,6 +234,68 @@ storage:
 	}
 }
 
+func TestValidate_Valid(t *testing.T) {
+	cfg := &Cluster{
+		Kind: "Cluster",
+		Name: "default",
+		Nodes: []Node{
+			{Role: "controller"},
+			{Role: "compute"},
+		},
+	}
+	require.NoError(t, cfg.Validate())
+}
+
+func TestValidate_RequiredFields(t *testing.T) {
+	tests := []struct {
+		name    string
+		nodes   []Node
+		wantErr string
+	}{
+		{
+			name: "missing controller",
+			nodes: []Node{
+				{Role: "compute"},
+			},
+			wantErr: "exactly one controller",
+		},
+		{
+			name: "multiple controllers",
+			nodes: []Node{
+				{Role: "controller"},
+				{Role: "controller"},
+				{Role: "compute"},
+			},
+			wantErr: "exactly one controller",
+		},
+		{
+			name: "no compute",
+			nodes: []Node{
+				{Role: "controller"},
+			},
+			wantErr: "at least one compute",
+		},
+		{
+			name:    "empty nodes",
+			nodes:   []Node{},
+			wantErr: "exactly one controller",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Cluster{
+				Kind:  "Cluster",
+				Name:  "default",
+				Nodes: tt.nodes,
+			}
+			err := cfg.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
 		name    string

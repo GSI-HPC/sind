@@ -94,6 +94,29 @@ type Cluster struct {
 	Nodes    []Node   `json:"nodes,omitempty"`
 }
 
+// Validate checks that the cluster configuration satisfies all constraints.
+// It should be called after ApplyDefaults.
+func (c *Cluster) Validate() error {
+	var controllers, computes int
+	for _, n := range c.Nodes {
+		switch n.Role {
+		case "controller":
+			controllers++
+		case "compute":
+			computes++
+		}
+	}
+
+	if controllers != 1 {
+		return fmt.Errorf("exactly one controller required, got %d", controllers)
+	}
+	if computes < 1 {
+		return fmt.Errorf("at least one compute node required, got %d", computes)
+	}
+
+	return nil
+}
+
 // Parse parses a YAML cluster configuration and returns a Cluster.
 func Parse(data []byte) (*Cluster, error) {
 	if len(data) == 0 {
