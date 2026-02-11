@@ -42,6 +42,61 @@ func TestParse_MinimalYAML(t *testing.T) {
 	}
 }
 
+func TestParse_WithDefaults(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantImage string
+		wantCPUs  int
+		wantMem   string
+		wantTmp   string
+	}{
+		{
+			name: "all defaults specified",
+			input: `kind: Cluster
+defaults:
+  image: ghcr.io/gsi-hpc/sind-node:25.11.2
+  cpus: 4
+  memory: 8g
+  tmpSize: 2g`,
+			wantImage: "ghcr.io/gsi-hpc/sind-node:25.11.2",
+			wantCPUs:  4,
+			wantMem:   "8g",
+			wantTmp:   "2g",
+		},
+		{
+			name: "partial defaults",
+			input: `kind: Cluster
+defaults:
+  image: custom:latest`,
+			wantImage: "custom:latest",
+		},
+		{
+			name:  "no defaults section",
+			input: "kind: Cluster",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Parse([]byte(tt.input))
+			require.NoError(t, err)
+			if tt.wantImage != "" {
+				assert.Equal(t, tt.wantImage, cfg.Defaults.Image)
+			}
+			if tt.wantCPUs != 0 {
+				assert.Equal(t, tt.wantCPUs, cfg.Defaults.CPUs)
+			}
+			if tt.wantMem != "" {
+				assert.Equal(t, tt.wantMem, cfg.Defaults.Memory)
+			}
+			if tt.wantTmp != "" {
+				assert.Equal(t, tt.wantTmp, cfg.Defaults.TmpSize)
+			}
+		})
+	}
+}
+
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
 		name    string

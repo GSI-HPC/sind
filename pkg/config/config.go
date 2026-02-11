@@ -9,19 +9,28 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// ClusterConfig represents a sind cluster configuration.
-type ClusterConfig struct {
-	Kind string `json:"kind"`
-	Name string `json:"name"`
+// Defaults holds default settings applied to all nodes unless overridden.
+type Defaults struct {
+	Image   string `json:"image,omitempty"`
+	CPUs    int    `json:"cpus,omitempty"`
+	Memory  string `json:"memory,omitempty"`
+	TmpSize string `json:"tmpSize,omitempty"`
 }
 
-// Parse parses a YAML cluster configuration and returns a ClusterConfig.
-func Parse(data []byte) (*ClusterConfig, error) {
+// Cluster represents a sind cluster configuration.
+type Cluster struct {
+	Kind     string   `json:"kind"`
+	Name     string   `json:"name,omitempty"`
+	Defaults Defaults `json:"defaults,omitempty"`
+}
+
+// Parse parses a YAML cluster configuration and returns a Cluster.
+func Parse(data []byte) (*Cluster, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty configuration")
 	}
 
-	var cfg ClusterConfig
+	var cfg Cluster
 	if err := yaml.UnmarshalStrict(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
