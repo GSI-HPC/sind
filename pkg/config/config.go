@@ -94,21 +94,43 @@ type Cluster struct {
 	Nodes    []Node   `json:"nodes,omitempty"`
 }
 
+var validRoles = map[string]bool{
+	"controller": true,
+	"submitter":  true,
+	"compute":    true,
+}
+
 // Validate checks that the cluster configuration satisfies all constraints.
 // It should be called after ApplyDefaults.
 func (c *Cluster) Validate() error {
-	var controllers, computes int
+	var controllers, submitters, computes int
 	for _, n := range c.Nodes {
+		if !validRoles[n.Role] {
+			return fmt.Errorf("invalid role %q, must be one of: controller, submitter, compute", n.Role)
+		}
+
 		switch n.Role {
 		case "controller":
 			controllers++
+		case "submitter":
+			submitters++
 		case "compute":
 			computes++
+		}
+
+		if n.Count > 0 && n.Role != "compute" {
+			return fmt.Errorf("count is only valid for compute nodes, not %q", n.Role)
+		}
+		if n.Managed != nil && n.Role != "compute" {
+			return fmt.Errorf("managed is only valid for compute nodes, not %q", n.Role)
 		}
 	}
 
 	if controllers != 1 {
 		return fmt.Errorf("exactly one controller required, got %d", controllers)
+	}
+	if submitters > 1 {
+		return fmt.Errorf("at most one submitter allowed, got %d", submitters)
 	}
 	if computes < 1 {
 		return fmt.Errorf("at least one compute node required, got %d", computes)

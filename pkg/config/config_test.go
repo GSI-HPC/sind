@@ -296,6 +296,74 @@ func TestValidate_RequiredFields(t *testing.T) {
 	}
 }
 
+func TestValidate_Constraints(t *testing.T) {
+	tests := []struct {
+		name    string
+		nodes   []Node
+		wantErr string
+	}{
+		{
+			name: "multiple submitters",
+			nodes: []Node{
+				{Role: "controller"},
+				{Role: "submitter"},
+				{Role: "submitter"},
+				{Role: "compute"},
+			},
+			wantErr: "at most one submitter",
+		},
+		{
+			name: "count on controller",
+			nodes: []Node{
+				{Role: "controller", Count: 2},
+				{Role: "compute"},
+			},
+			wantErr: "count is only valid for compute",
+		},
+		{
+			name: "count on submitter",
+			nodes: []Node{
+				{Role: "controller"},
+				{Role: "submitter", Count: 2},
+				{Role: "compute"},
+			},
+			wantErr: "count is only valid for compute",
+		},
+		{
+			name: "invalid role",
+			nodes: []Node{
+				{Role: "controller"},
+				{Role: "worker"},
+				{Role: "compute"},
+			},
+			wantErr: `invalid role "worker"`,
+		},
+		{
+			name: "managed on non-compute",
+			nodes: []Node{
+				{Role: "controller", Managed: boolPtr(false)},
+				{Role: "compute"},
+			},
+			wantErr: "managed is only valid for compute",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Cluster{
+				Kind:  "Cluster",
+				Name:  "default",
+				Nodes: tt.nodes,
+			}
+			err := cfg.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
 		name    string
