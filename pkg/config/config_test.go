@@ -470,6 +470,36 @@ func TestParse_Errors(t *testing.T) {
 			input:   "kind: Pod",
 			wantErr: `kind must be "Cluster"`,
 		},
+		{
+			name: "node is neither string nor object",
+			input: `kind: Cluster
+nodes:
+  - [1, 2]`,
+			wantErr: "node must be a string",
+		},
+		{
+			name: "node full form with invalid field type",
+			input: `kind: Cluster
+nodes:
+  - role: controller
+    cpus: not-a-number`,
+			wantErr: "parsing config",
+		},
+		{
+			name: "shorthand node with multiple keys",
+			input: `kind: Cluster
+nodes:
+  - compute: 3
+    memory: 4g`,
+			wantErr: "shorthand node must have exactly one key",
+		},
+		{
+			name: "shorthand node with non-integer count",
+			input: `kind: Cluster
+nodes:
+  - compute: abc`,
+			wantErr: "shorthand node count",
+		},
 	}
 
 	for _, tt := range tests {
