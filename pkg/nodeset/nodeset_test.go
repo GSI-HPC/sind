@@ -131,3 +131,72 @@ func TestExpand_RangeWithPadding(t *testing.T) {
 		})
 	}
 }
+
+func TestExpand_List(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "simple list",
+			pattern: "node-[0,2,5]",
+			want:    []string{"node-0", "node-2", "node-5"},
+		},
+		{
+			name:    "single element list",
+			pattern: "node-[3]",
+			want:    []string{"node-3"},
+		},
+		{
+			name:    "list with suffix",
+			pattern: "compute-[0,3].dev",
+			want:    []string{"compute-0.dev", "compute-3.dev"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExpand_MixedRangeList(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "range then single",
+			pattern: "node-[0-2,5]",
+			want:    []string{"node-0", "node-1", "node-2", "node-5"},
+		},
+		{
+			name:    "single then range",
+			pattern: "node-[0,3-5]",
+			want:    []string{"node-0", "node-3", "node-4", "node-5"},
+		},
+		{
+			name:    "multiple ranges",
+			pattern: "node-[0-1,5-6]",
+			want:    []string{"node-0", "node-1", "node-5", "node-6"},
+		},
+		{
+			name:    "complex mix",
+			pattern: "node-[0,2-4,7,9-10]",
+			want:    []string{"node-0", "node-2", "node-3", "node-4", "node-7", "node-9", "node-10"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

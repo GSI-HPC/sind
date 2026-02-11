@@ -18,9 +18,11 @@ import (
 //   - Comma-separated: "a,b,c" → ["a", "b", "c"]
 //   - Ranges: "node-[0-3]" → ["node-0", "node-1", "node-2", "node-3"]
 //   - Padded ranges: "node-[00-03]" → ["node-00", "node-01", "node-02", "node-03"]
+//   - Lists: "node-[0,2,5]" → ["node-0", "node-2", "node-5"]
+//   - Mixed: "node-[0-2,5]" → ["node-0", "node-1", "node-2", "node-5"]
 func Expand(pattern string) ([]string, error) {
-	// Split on commas to handle multiple nodesets
-	parts := strings.Split(pattern, ",")
+	// Split on commas outside brackets
+	parts := splitOutsideBrackets(pattern)
 
 	var result []string
 	for _, part := range parts {
@@ -33,7 +35,38 @@ func Expand(pattern string) ([]string, error) {
 	return result, nil
 }
 
-// expandSingle expands a single nodeset pattern (no commas).
+// splitOutsideBrackets splits a pattern on commas that are not inside brackets.
+func splitOutsideBrackets(pattern string) []string {
+	var parts []string
+	var current strings.Builder
+	depth := 0
+
+	for _, ch := range pattern {
+		switch ch {
+		case '[':
+			depth++
+			current.WriteRune(ch)
+		case ']':
+			depth--
+			current.WriteRune(ch)
+		case ',':
+			if depth == 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			} else {
+				current.WriteRune(ch)
+			}
+		default:
+			current.WriteRune(ch)
+		}
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	return parts
+}
+
+// expandSingle expands a single nodeset pattern (no top-level commas).
 func expandSingle(pattern string) ([]string, error) {
 	// Find bracket expression using Cut
 	prefix, rest, hasBracket := strings.Cut(pattern, "[")
@@ -47,7 +80,7 @@ func expandSingle(pattern string) ([]string, error) {
 		return nil, fmt.Errorf("unclosed bracket in pattern: %s", pattern)
 	}
 
-	// Parse the bracket content as a range (e.g., "0-3")
+	// Parse the bracket content (may contain commas and ranges)
 	expanded, err := expandBracket(bracketContent)
 	if err != nil {
 		return nil, fmt.Errorf("invalid bracket expression in %s: %w", pattern, err)
@@ -62,12 +95,32 @@ func expandSingle(pattern string) ([]string, error) {
 }
 
 // expandBracket expands the content inside brackets.
-// Supports ranges like "0-3" or "00-03" (with padding).
+// Supports:
+//   - Single values: "5" → ["5"]
+//   - Ranges: "0-3" → ["0", "1", "2", "3"]
+//   - Lists: "0,2,5" → ["0", "2", "5"]
+//   - Mixed: "0-2,5" → ["0", "1", "2", "5"]
 func expandBracket(content string) ([]string, error) {
-	startStr, endStr, isRange := strings.Cut(content, "-")
+	// Split on commas to handle lists
+	parts := strings.Split(content, ",")
+
+	var result []string
+	for _, part := range parts {
+		expanded, err := expandRangeOrValue(part)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, expanded...)
+	}
+	return result, nil
+}
+
+// expandRangeOrValue expands a single range (e.g., "0-3") or value (e.g., "5").
+func expandRangeOrValue(part string) ([]string, error) {
+	startStr, endStr, isRange := strings.Cut(part, "-")
 	if !isRange {
 		// Single value
-		return []string{content}, nil
+		return []string{part}, nil
 	}
 
 	return expandRange(startStr, endStr)
