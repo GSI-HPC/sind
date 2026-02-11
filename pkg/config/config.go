@@ -4,6 +4,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -51,7 +52,9 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 	if _, ok := raw["role"]; ok {
 		type nodeAlias Node // prevents infinite recursion
 		var alias nodeAlias
-		if err := json.Unmarshal(data, &alias); err != nil {
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&alias); err != nil {
 			return err
 		}
 		*n = Node(alias)
@@ -172,6 +175,9 @@ func (c *Cluster) Validate() error {
 			computes++
 		}
 
+		if n.Count < 0 {
+			return fmt.Errorf("count must not be negative, got %d", n.Count)
+		}
 		if n.Count > 0 && n.Role != "compute" {
 			return fmt.Errorf("count is only valid for compute nodes, not %q", n.Role)
 		}

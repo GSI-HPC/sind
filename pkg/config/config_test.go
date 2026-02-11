@@ -315,15 +315,37 @@ func TestApplyDefaults_BuiltinDefaults(t *testing.T) {
 }
 
 func TestValidate_Valid(t *testing.T) {
-	cfg := &Cluster{
-		Kind: "Cluster",
-		Name: "default",
-		Nodes: []Node{
-			{Role: "controller"},
-			{Role: "compute"},
+	tests := []struct {
+		name  string
+		nodes []Node
+	}{
+		{
+			name: "controller and compute",
+			nodes: []Node{
+				{Role: "controller"},
+				{Role: "compute"},
+			},
+		},
+		{
+			name: "controller, submitter, and compute",
+			nodes: []Node{
+				{Role: "controller"},
+				{Role: "submitter"},
+				{Role: "compute"},
+			},
 		},
 	}
-	require.NoError(t, cfg.Validate())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Cluster{
+				Kind:  "Cluster",
+				Name:  "default",
+				Nodes: tt.nodes,
+			}
+			require.NoError(t, cfg.Validate())
+		})
+	}
 }
 
 func TestValidate_RequiredFields(t *testing.T) {
@@ -419,12 +441,28 @@ func TestValidate_Constraints(t *testing.T) {
 			wantErr: `invalid role "worker"`,
 		},
 		{
-			name: "managed on non-compute",
+			name: "managed false on non-compute",
 			nodes: []Node{
 				{Role: "controller", Managed: boolPtr(false)},
 				{Role: "compute"},
 			},
 			wantErr: "managed is only valid for compute",
+		},
+		{
+			name: "managed true on non-compute",
+			nodes: []Node{
+				{Role: "controller", Managed: boolPtr(true)},
+				{Role: "compute"},
+			},
+			wantErr: "managed is only valid for compute",
+		},
+		{
+			name: "negative count",
+			nodes: []Node{
+				{Role: "controller"},
+				{Role: "compute", Count: -1},
+			},
+			wantErr: "count must not be negative",
 		},
 	}
 
@@ -500,6 +538,19 @@ nodes:
   - compute: abc`,
 			wantErr: "shorthand node count",
 		},
+		{
+			name:    "unknown top-level field",
+			input:   "kind: Cluster\nunknownField: value",
+			wantErr: "unknown field",
+		},
+		{
+			name: "unknown node field",
+			input: `kind: Cluster
+nodes:
+  - role: controller
+    unknownField: value`,
+			wantErr: "unknown field",
+		},
 	}
 
 	for _, tt := range tests {
@@ -509,4 +560,45 @@ nodes:
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
+}
+
+func TestParse_ShorthandZeroCount(t *testing.T) {
+	input := `kind: Cluster
+nodes:
+  - controller
+  - compute: 0`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, cfg.Nodes, 2)
+	assert.Equal(t, "compute", cfg.Nodes[1].Role)
+	assert.Equal(t, 0, cfg.Nodes[1].Count)
+}
+
+func TestParse_Pipeline(t *testing.T) {
+	input := `kind: Cluster
+name: test
+defaults:
+  image: custom:latest
+  cpus: 4
+nodes:
+  - controller
+  - submitter
+  - compute: 3`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	assert.Equal(t, "test", cfg.Name)
+	require.Len(t, cfg.Nodes, 3)
+	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, "custom:latest", cfg.Nodes[0].Image)
+	assert.Equal(t, 4, cfg.Nodes[0].CPUs)
+	assert.Equal(t, "2g", cfg.Nodes[0].Memory)
+	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
+	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }
