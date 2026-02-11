@@ -315,3 +315,64 @@ func TestExpand_EmptyPattern(t *testing.T) {
 	_, err := Expand("")
 	assert.Error(t, err)
 }
+
+// Edge case tests for Step 1.6
+
+func TestExpand_EmptyBracket(t *testing.T) {
+	_, err := Expand("node-[]")
+	assert.Error(t, err)
+}
+
+func TestExpand_NestedBrackets(t *testing.T) {
+	_, err := Expand("node-[[0-1]]")
+	assert.Error(t, err)
+}
+
+func TestExpand_MultipleBracketGroups(t *testing.T) {
+	// Multiple bracket groups are not supported
+	_, err := Expand("node-[0-1]-[2-3]")
+	assert.Error(t, err)
+}
+
+func TestExpand_WhitespaceInBrackets(t *testing.T) {
+	_, err := Expand("node-[ 0-3 ]")
+	assert.Error(t, err)
+}
+
+func TestExpand_NoPrefix(t *testing.T) {
+	got, err := Expand("[0-3]")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"0", "1", "2", "3"}, got)
+}
+
+func TestExpand_TrailingComma(t *testing.T) {
+	_, err := Expand("node-[0,1,]")
+	assert.Error(t, err)
+}
+
+func TestExpand_LeadingComma(t *testing.T) {
+	_, err := Expand("node-[,0,1]")
+	assert.Error(t, err)
+}
+
+func TestExpand_MixedPaddingWidths(t *testing.T) {
+	// When start has padding (00) but range exceeds it (100), padding from start is used
+	got, err := Expand("node-[00-02]")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"node-00", "node-01", "node-02"}, got)
+}
+
+func TestExpand_LargeRange(t *testing.T) {
+	got, err := Expand("node-[0-999]")
+	require.NoError(t, err)
+	assert.Len(t, got, 1000)
+	assert.Equal(t, "node-0", got[0])
+	assert.Equal(t, "node-999", got[999])
+}
+
+func TestExpand_NegativeNumbers(t *testing.T) {
+	// Negative numbers are not supported in nodeset notation
+	// The "-" is interpreted as a range separator
+	_, err := Expand("node-[-3--1]")
+	assert.Error(t, err)
+}

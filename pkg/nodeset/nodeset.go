@@ -84,6 +84,11 @@ func expandSingle(pattern string) ([]string, error) {
 		return nil, fmt.Errorf("unclosed bracket in pattern: %s", pattern)
 	}
 
+	// Check for multiple bracket groups (not supported)
+	if strings.Contains(suffix, "[") {
+		return nil, fmt.Errorf("multiple bracket groups not supported: %s", pattern)
+	}
+
 	// Parse the bracket content (may contain commas and ranges)
 	expanded, err := expandBracket(bracketContent)
 	if err != nil {
@@ -105,11 +110,18 @@ func expandSingle(pattern string) ([]string, error) {
 //   - Lists: "0,2,5" → ["0", "2", "5"]
 //   - Mixed: "0-2,5" → ["0", "1", "2", "5"]
 func expandBracket(content string) ([]string, error) {
+	if content == "" {
+		return nil, fmt.Errorf("empty bracket expression")
+	}
+
 	// Split on commas to handle lists
 	parts := strings.Split(content, ",")
 
 	var result []string
 	for _, part := range parts {
+		if part == "" {
+			return nil, fmt.Errorf("empty element in bracket expression")
+		}
 		expanded, err := expandRangeOrValue(part)
 		if err != nil {
 			return nil, err
