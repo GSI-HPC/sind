@@ -259,3 +259,59 @@ func TestExpand_MultipleNodesets(t *testing.T) {
 		})
 	}
 }
+
+func TestExpand_InvalidRange(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+	}{
+		{
+			name:    "reversed range",
+			pattern: "node-[3-1]",
+		},
+		{
+			name:    "invalid start number",
+			pattern: "node-[abc-5]",
+		},
+		{
+			name:    "invalid end number",
+			pattern: "node-[0-xyz]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Expand(tt.pattern)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestExpand_UnclosedBracket(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+	}{
+		{
+			name:    "missing closing bracket",
+			pattern: "node-[0-3",
+		},
+		{
+			name:    "only opening bracket",
+			pattern: "node-[",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Expand(tt.pattern)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "unclosed bracket")
+		})
+	}
+}
+
+func TestExpand_EmptyPattern(t *testing.T) {
+	_, err := Expand("")
+	assert.Error(t, err)
+}

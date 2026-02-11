@@ -21,6 +21,10 @@ import (
 //   - Lists: "node-[0,2,5]" → ["node-0", "node-2", "node-5"]
 //   - Mixed: "node-[0-2,5]" → ["node-0", "node-1", "node-2", "node-5"]
 func Expand(pattern string) ([]string, error) {
+	if pattern == "" {
+		return nil, fmt.Errorf("empty pattern")
+	}
+
 	// Split on commas outside brackets
 	parts := splitOutsideBrackets(pattern)
 
