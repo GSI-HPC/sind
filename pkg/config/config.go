@@ -17,11 +17,23 @@ type Defaults struct {
 	TmpSize string `json:"tmpSize,omitempty"`
 }
 
+// Node represents a single node or node group in the cluster configuration.
+type Node struct {
+	Role    string `json:"role"`
+	Count   int    `json:"count,omitempty"`
+	Image   string `json:"image,omitempty"`
+	CPUs    int    `json:"cpus,omitempty"`
+	Memory  string `json:"memory,omitempty"`
+	TmpSize string `json:"tmpSize,omitempty"`
+	Managed *bool  `json:"managed,omitempty"`
+}
+
 // Cluster represents a sind cluster configuration.
 type Cluster struct {
 	Kind     string   `json:"kind"`
 	Name     string   `json:"name,omitempty"`
 	Defaults Defaults `json:"defaults,omitempty"`
+	Nodes    []Node   `json:"nodes,omitempty"`
 }
 
 // Parse parses a YAML cluster configuration and returns a Cluster.

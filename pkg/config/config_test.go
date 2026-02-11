@@ -97,6 +97,49 @@ defaults:
 	}
 }
 
+func TestParse_NodesFullForm(t *testing.T) {
+	input := `kind: Cluster
+nodes:
+  - role: controller
+    cpus: 2
+    memory: 4g
+    tmpSize: 2g
+  - role: submitter
+  - role: compute
+    count: 3
+    cpus: 4
+    memory: 8g
+  - role: compute
+    count: 2
+    managed: false`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, cfg.Nodes, 4)
+
+	// controller
+	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, 2, cfg.Nodes[0].CPUs)
+	assert.Equal(t, "4g", cfg.Nodes[0].Memory)
+	assert.Equal(t, "2g", cfg.Nodes[0].TmpSize)
+
+	// submitter
+	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
+
+	// managed compute
+	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	assert.Equal(t, 3, cfg.Nodes[2].Count)
+	assert.Equal(t, 4, cfg.Nodes[2].CPUs)
+	assert.Equal(t, "8g", cfg.Nodes[2].Memory)
+	assert.Nil(t, cfg.Nodes[2].Managed)
+
+	// unmanaged compute
+	assert.Equal(t, "compute", cfg.Nodes[3].Role)
+	assert.Equal(t, 2, cfg.Nodes[3].Count)
+	require.NotNil(t, cfg.Nodes[3].Managed)
+	assert.False(t, *cfg.Nodes[3].Managed)
+}
+
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
 		name    string
