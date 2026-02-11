@@ -72,3 +72,62 @@ func TestExpand_MultipleSimple(t *testing.T) {
 		})
 	}
 }
+
+func TestExpand_Range(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "simple range",
+			pattern: "node-[0-3]",
+			want:    []string{"node-0", "node-1", "node-2", "node-3"},
+		},
+		{
+			name:    "single element range",
+			pattern: "node-[5-5]",
+			want:    []string{"node-5"},
+		},
+		{
+			name:    "range with prefix and suffix",
+			pattern: "compute-[0-2].dev",
+			want:    []string{"compute-0.dev", "compute-1.dev", "compute-2.dev"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExpand_RangeWithPadding(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "zero-padded range",
+			pattern: "node-[00-03]",
+			want:    []string{"node-00", "node-01", "node-02", "node-03"},
+		},
+		{
+			name:    "three-digit padding",
+			pattern: "node-[008-012]",
+			want:    []string{"node-008", "node-009", "node-010", "node-011", "node-012"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
