@@ -4,6 +4,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"sigs.k8s.io/yaml"
@@ -26,6 +27,50 @@ type Node struct {
 	Memory  string `json:"memory,omitempty"`
 	TmpSize string `json:"tmpSize,omitempty"`
 	Managed *bool  `json:"managed,omitempty"`
+}
+
+// UnmarshalJSON supports three YAML forms:
+//   - bare string: "controller"
+//   - shorthand map: "compute: 3"  (role: count)
+//   - full object: "role: compute\n  count: 3\n  cpus: 4"
+func (n *Node) UnmarshalJSON(data []byte) error {
+	// Try bare string: "controller"
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		n.Role = s
+		return nil
+	}
+
+	// Try object form
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("node must be a string, role:count map, or full object: %w", err)
+	}
+
+	// If "role" key exists, it's the full form
+	if _, ok := raw["role"]; ok {
+		type nodeAlias Node // prevents infinite recursion
+		var alias nodeAlias
+		if err := json.Unmarshal(data, &alias); err != nil {
+			return err
+		}
+		*n = Node(alias)
+		return nil
+	}
+
+	// Shorthand map: {"compute": 3}
+	if len(raw) != 1 {
+		return fmt.Errorf("shorthand node must have exactly one key (role), got %d", len(raw))
+	}
+	for role, countRaw := range raw {
+		n.Role = role
+		var count int
+		if err := json.Unmarshal(countRaw, &count); err != nil {
+			return fmt.Errorf("shorthand node count for %q: %w", role, err)
+		}
+		n.Count = count
+	}
+	return nil
 }
 
 // Cluster represents a sind cluster configuration.

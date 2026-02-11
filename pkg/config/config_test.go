@@ -140,6 +140,49 @@ nodes:
 	assert.False(t, *cfg.Nodes[3].Managed)
 }
 
+func TestParse_NodesShorthand(t *testing.T) {
+	input := `kind: Cluster
+nodes:
+  - controller
+  - submitter
+  - compute: 3`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, cfg.Nodes, 3)
+
+	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, 0, cfg.Nodes[0].Count)
+
+	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
+
+	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	assert.Equal(t, 3, cfg.Nodes[2].Count)
+}
+
+func TestParse_NodesMixed(t *testing.T) {
+	input := `kind: Cluster
+nodes:
+  - controller
+  - role: compute
+    count: 3
+    cpus: 4
+  - compute: 2`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, cfg.Nodes, 3)
+
+	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+
+	assert.Equal(t, "compute", cfg.Nodes[1].Role)
+	assert.Equal(t, 3, cfg.Nodes[1].Count)
+	assert.Equal(t, 4, cfg.Nodes[1].CPUs)
+
+	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	assert.Equal(t, 2, cfg.Nodes[2].Count)
+}
+
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
 		name    string
