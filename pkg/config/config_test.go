@@ -234,6 +234,86 @@ storage:
 	}
 }
 
+func TestApplyDefaults_MinimalConfig(t *testing.T) {
+	cfg := &Cluster{Kind: "Cluster", Name: "default"}
+	cfg.ApplyDefaults()
+
+	require.Len(t, cfg.Nodes, 2)
+	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, "compute", cfg.Nodes[1].Role)
+}
+
+func TestApplyDefaults_InheritsGlobalDefaults(t *testing.T) {
+	cfg := &Cluster{
+		Kind: "Cluster",
+		Name: "default",
+		Defaults: Defaults{
+			Image:   "custom:latest",
+			CPUs:    4,
+			Memory:  "8g",
+			TmpSize: "2g",
+		},
+		Nodes: []Node{
+			{Role: "controller"},
+			{Role: "compute"},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	for _, n := range cfg.Nodes {
+		assert.Equal(t, "custom:latest", n.Image, "node %s", n.Role)
+		assert.Equal(t, 4, n.CPUs, "node %s", n.Role)
+		assert.Equal(t, "8g", n.Memory, "node %s", n.Role)
+		assert.Equal(t, "2g", n.TmpSize, "node %s", n.Role)
+	}
+}
+
+func TestApplyDefaults_NodeOverridesGlobal(t *testing.T) {
+	cfg := &Cluster{
+		Kind: "Cluster",
+		Name: "default",
+		Defaults: Defaults{
+			Image:  "default:latest",
+			CPUs:   2,
+			Memory: "4g",
+		},
+		Nodes: []Node{
+			{Role: "controller", CPUs: 8},
+			{Role: "compute", Image: "special:latest"},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	// controller: overrides CPUs, inherits rest
+	assert.Equal(t, "default:latest", cfg.Nodes[0].Image)
+	assert.Equal(t, 8, cfg.Nodes[0].CPUs)
+	assert.Equal(t, "4g", cfg.Nodes[0].Memory)
+
+	// compute: overrides image, inherits rest
+	assert.Equal(t, "special:latest", cfg.Nodes[1].Image)
+	assert.Equal(t, 2, cfg.Nodes[1].CPUs)
+	assert.Equal(t, "4g", cfg.Nodes[1].Memory)
+}
+
+func TestApplyDefaults_BuiltinDefaults(t *testing.T) {
+	cfg := &Cluster{
+		Kind: "Cluster",
+		Name: "default",
+		Nodes: []Node{
+			{Role: "controller"},
+			{Role: "compute"},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	for _, n := range cfg.Nodes {
+		assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", n.Image, "node %s", n.Role)
+		assert.Equal(t, 2, n.CPUs, "node %s", n.Role)
+		assert.Equal(t, "2g", n.Memory, "node %s", n.Role)
+		assert.Equal(t, "1g", n.TmpSize, "node %s", n.Role)
+	}
+}
+
 func TestValidate_Valid(t *testing.T) {
 	cfg := &Cluster{
 		Kind: "Cluster",

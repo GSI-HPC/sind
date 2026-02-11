@@ -94,6 +94,60 @@ type Cluster struct {
 	Nodes    []Node   `json:"nodes,omitempty"`
 }
 
+const (
+	DefaultImage   = "ghcr.io/gsi-hpc/sind-node:latest"
+	DefaultCPUs    = 2
+	DefaultMemory  = "2g"
+	DefaultTmpSize = "1g"
+)
+
+// ApplyDefaults populates missing fields with defaults.
+// If no nodes are defined, creates a minimal cluster (1 controller + 1 compute).
+// Node-level fields inherit from the Defaults section, which in turn falls back
+// to built-in defaults.
+func (c *Cluster) ApplyDefaults() {
+	if len(c.Nodes) == 0 {
+		c.Nodes = []Node{
+			{Role: "controller"},
+			{Role: "compute"},
+		}
+	}
+
+	// Resolve effective defaults: user defaults → built-in defaults
+	image := c.Defaults.Image
+	if image == "" {
+		image = DefaultImage
+	}
+	cpus := c.Defaults.CPUs
+	if cpus == 0 {
+		cpus = DefaultCPUs
+	}
+	memory := c.Defaults.Memory
+	if memory == "" {
+		memory = DefaultMemory
+	}
+	tmpSize := c.Defaults.TmpSize
+	if tmpSize == "" {
+		tmpSize = DefaultTmpSize
+	}
+
+	// Apply to each node where not already set
+	for i := range c.Nodes {
+		if c.Nodes[i].Image == "" {
+			c.Nodes[i].Image = image
+		}
+		if c.Nodes[i].CPUs == 0 {
+			c.Nodes[i].CPUs = cpus
+		}
+		if c.Nodes[i].Memory == "" {
+			c.Nodes[i].Memory = memory
+		}
+		if c.Nodes[i].TmpSize == "" {
+			c.Nodes[i].TmpSize = tmpSize
+		}
+	}
+}
+
 var validRoles = map[string]bool{
 	"controller": true,
 	"submitter":  true,
