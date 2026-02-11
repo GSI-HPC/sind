@@ -79,14 +79,16 @@ func splitOutsideBrackets(pattern string) []string {
 			current.WriteRune(ch)
 		}
 	}
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
-	}
+	parts = append(parts, current.String())
 	return parts
 }
 
 // expandSingle expands a single nodeset pattern (no top-level commas).
 func expandSingle(pattern string) ([]string, error) {
+	if pattern == "" {
+		return nil, fmt.Errorf("empty element in pattern")
+	}
+
 	// Find bracket expression using Cut
 	prefix, rest, hasBracket := strings.Cut(pattern, "[")
 	if !hasBracket {

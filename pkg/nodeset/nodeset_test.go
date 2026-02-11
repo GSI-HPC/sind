@@ -355,6 +355,21 @@ func TestExpand_LeadingComma(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestExpand_TopLevelLeadingComma(t *testing.T) {
+	_, err := Expand(",node-0")
+	assert.Error(t, err)
+}
+
+func TestExpand_TopLevelTrailingComma(t *testing.T) {
+	_, err := Expand("node-0,")
+	assert.Error(t, err)
+}
+
+func TestExpand_LoneComma(t *testing.T) {
+	_, err := Expand(",")
+	assert.Error(t, err)
+}
+
 func TestExpand_MixedPaddingWidths(t *testing.T) {
 	// When start has padding (00) but range exceeds it (100), padding from start is used
 	got, err := Expand("node-[00-02]")
@@ -468,4 +483,32 @@ func TestExpand_OverlappingRanges(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestExpand_SortEmptyIndex(t *testing.T) {
+	// Exercises nodesetLess empty-index branch: "controller" has no numeric index,
+	// "controller2" has index "2"
+	got, err := Expand("controller,controller2")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"controller", "controller2"}, got)
+}
+
+func TestExpand_SortBySuffix(t *testing.T) {
+	// Same prefix and index, different suffix — sorted by suffix
+	got, err := Expand("node-0.prod,node-0.dev")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"node-0.dev", "node-0.prod"}, got)
+}
+
+func TestExpand_NoPrefixWithSuffix(t *testing.T) {
+	got, err := Expand("[0-2].dev")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"0.dev", "1.dev", "2.dev"}, got)
+}
+
+func TestExpand_MultiClusterSort(t *testing.T) {
+	// Full sort-order exercise: prefix, then suffix, then numeric index
+	got, err := Expand("compute-1.prod,compute-0.dev,compute-1.dev,compute-0.prod")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"compute-0.dev", "compute-1.dev", "compute-0.prod", "compute-1.prod"}, got)
 }
