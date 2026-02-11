@@ -200,3 +200,62 @@ func TestExpand_MixedRangeList(t *testing.T) {
 		})
 	}
 }
+
+func TestExpand_WithCluster(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "range with cluster suffix",
+			pattern: "compute-[0-1].dev",
+			want:    []string{"compute-0.dev", "compute-1.dev"},
+		},
+		{
+			name:    "list with cluster suffix",
+			pattern: "compute-[0,2].prod",
+			want:    []string{"compute-0.prod", "compute-2.prod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExpand_MultipleNodesets(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "two nodesets with ranges",
+			pattern: "a-[0-1],b-[0-1]",
+			want:    []string{"a-0", "a-1", "b-0", "b-1"},
+		},
+		{
+			name:    "nodesets with different clusters",
+			pattern: "compute-[0-1].dev,compute-[0-1].prod",
+			want:    []string{"compute-0.dev", "compute-1.dev", "compute-0.prod", "compute-1.prod"},
+		},
+		{
+			name:    "mixed simple and range",
+			pattern: "controller,compute-[0-2]",
+			want:    []string{"controller", "compute-0", "compute-1", "compute-2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
