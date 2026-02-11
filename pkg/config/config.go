@@ -73,11 +73,24 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// DataStorage configures the shared data volume.
+type DataStorage struct {
+	Type      string `json:"type,omitempty"`
+	HostPath  string `json:"hostPath,omitempty"`
+	MountPath string `json:"mountPath,omitempty"`
+}
+
+// Storage configures cluster storage options.
+type Storage struct {
+	DataStorage DataStorage `json:"dataStorage,omitempty"`
+}
+
 // Cluster represents a sind cluster configuration.
 type Cluster struct {
 	Kind     string   `json:"kind"`
 	Name     string   `json:"name,omitempty"`
 	Defaults Defaults `json:"defaults,omitempty"`
+	Storage  Storage  `json:"storage,omitempty"`
 	Nodes    []Node   `json:"nodes,omitempty"`
 }
 

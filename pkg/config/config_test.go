@@ -183,6 +183,57 @@ nodes:
 	assert.Equal(t, 2, cfg.Nodes[2].Count)
 }
 
+func TestParse_Storage(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		wantType      string
+		wantHostPath  string
+		wantMountPath string
+	}{
+		{
+			name: "volume type",
+			input: `kind: Cluster
+storage:
+  dataStorage:
+    type: volume`,
+			wantType: "volume",
+		},
+		{
+			name: "hostPath type",
+			input: `kind: Cluster
+storage:
+  dataStorage:
+    type: hostPath
+    hostPath: ./data
+    mountPath: /data`,
+			wantType:      "hostPath",
+			wantHostPath:  "./data",
+			wantMountPath: "/data",
+		},
+		{
+			name:  "no storage section",
+			input: "kind: Cluster",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Parse([]byte(tt.input))
+			require.NoError(t, err)
+			if tt.wantType != "" {
+				assert.Equal(t, tt.wantType, cfg.Storage.DataStorage.Type)
+			}
+			if tt.wantHostPath != "" {
+				assert.Equal(t, tt.wantHostPath, cfg.Storage.DataStorage.HostPath)
+			}
+			if tt.wantMountPath != "" {
+				assert.Equal(t, tt.wantMountPath, cfg.Storage.DataStorage.MountPath)
+			}
+		})
+	}
+}
+
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
 		name    string
