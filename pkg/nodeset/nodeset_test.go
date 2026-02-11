@@ -55,12 +55,12 @@ func TestExpand_MultipleSimple(t *testing.T) {
 		{
 			name:    "two nodes",
 			pattern: "controller,compute-0",
-			want:    []string{"controller", "compute-0"},
+			want:    []string{"compute-0", "controller"},
 		},
 		{
 			name:    "nodes with cluster suffix",
 			pattern: "controller.dev,compute-0.dev",
-			want:    []string{"controller.dev", "compute-0.dev"},
+			want:    []string{"compute-0.dev", "controller.dev"},
 		},
 	}
 
@@ -247,7 +247,7 @@ func TestExpand_MultipleNodesets(t *testing.T) {
 		{
 			name:    "mixed simple and range",
 			pattern: "controller,compute-[0-2]",
-			want:    []string{"controller", "compute-0", "compute-1", "compute-2"},
+			want:    []string{"compute-0", "compute-1", "compute-2", "controller"},
 		},
 	}
 
@@ -375,4 +375,97 @@ func TestExpand_NegativeNumbers(t *testing.T) {
 	// The "-" is interpreted as a range separator
 	_, err := Expand("node-[-3--1]")
 	assert.Error(t, err)
+}
+
+// Step 1.7: Deduplication and Sorting tests
+
+func TestExpand_Deduplication(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "duplicate simple names",
+			pattern: "node-0,node-0",
+			want:    []string{"node-0"},
+		},
+		{
+			name:    "multiple duplicates",
+			pattern: "a,b,a,c,b",
+			want:    []string{"a", "b", "c"},
+		},
+		{
+			name:    "duplicate from range and explicit",
+			pattern: "node-[0-2],node-1",
+			want:    []string{"node-0", "node-1", "node-2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExpand_Sorting(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "alphabetical sorting",
+			pattern: "zulu,alpha,node-2,node-1",
+			want:    []string{"alpha", "node-1", "node-2", "zulu"},
+		},
+		{
+			name:    "numeric suffix sorting",
+			pattern: "node-10,node-2,node-1",
+			want:    []string{"node-1", "node-2", "node-10"},
+		},
+		{
+			name:    "mixed prefixes",
+			pattern: "compute-1,alpha-2,compute-0,alpha-1",
+			want:    []string{"alpha-1", "alpha-2", "compute-0", "compute-1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExpand_OverlappingRanges(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+	}{
+		{
+			name:    "overlapping ranges",
+			pattern: "node-[0-2],node-[1-3]",
+			want:    []string{"node-0", "node-1", "node-2", "node-3"},
+		},
+		{
+			name:    "fully overlapping ranges",
+			pattern: "node-[0-5],node-[2-3]",
+			want:    []string{"node-0", "node-1", "node-2", "node-3", "node-4", "node-5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Expand(tt.pattern)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

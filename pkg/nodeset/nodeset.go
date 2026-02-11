@@ -8,6 +8,7 @@ package nodeset
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -36,7 +37,21 @@ func Expand(pattern string) ([]string, error) {
 		}
 		result = append(result, expanded...)
 	}
-	return result, nil
+
+	// Deduplicate preserving first occurrence
+	seen := make(map[string]struct{}, len(result))
+	deduped := make([]string, 0, len(result))
+	for _, s := range result {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			deduped = append(deduped, s)
+		}
+	}
+
+	// Sort using natural ordering (numeric segments compared numerically)
+	slices.SortFunc(deduped, nodesetLess)
+
+	return deduped, nil
 }
 
 // splitOutsideBrackets splits a pattern on commas that are not inside brackets.
@@ -166,4 +181,59 @@ func expandRange(startStr, endStr string) ([]string, error) {
 		result = append(result, fmt.Sprintf("%0*d", width, i))
 	}
 	return result, nil
+}
+
+// isDigit reports whether b is an ASCII digit.
+func isDigit(b byte) bool { return '0' <= b && b <= '9' }
+
+// parseNodeName splits a node name into prefix, numeric index, and suffix
+// by finding the last group of consecutive ASCII digits.
+// Examples:
+//
+//	"compute-0.dev" → ("compute-", "0", ".dev")
+//	"controller"    → ("controller", "", "")
+//	"node-12"       → ("node-", "12", "")
+func parseNodeName(name string) (prefix, indexStr, suffix string) {
+	// Scan backwards past non-digit suffix
+	i := len(name) - 1
+	for i >= 0 && !isDigit(name[i]) {
+		i--
+	}
+	if i < 0 {
+		return name, "", ""
+	}
+	digitEnd := i + 1
+
+	// Scan backwards past digits to find start of numeric group
+	for i >= 0 && isDigit(name[i]) {
+		i--
+	}
+	digitStart := i + 1
+
+	return name[:digitStart], name[digitStart:digitEnd], name[digitEnd:]
+}
+
+// nodesetLess compares two node names using ClusterShell-compatible ordering.
+// Names are split into (prefix, numericIndex, suffix) by finding the last
+// digit group. Sorting is by (prefix, suffix, numericIndex), which groups
+// nodes sharing the same prefix and suffix together, sorted numerically.
+func nodesetLess(a, b string) int {
+	prefA, idxA, sufA := parseNodeName(a)
+	prefB, idxB, sufB := parseNodeName(b)
+
+	if c := strings.Compare(prefA, prefB); c != 0 {
+		return c
+	}
+	if c := strings.Compare(sufA, sufB); c != 0 {
+		return c
+	}
+
+	// Same prefix and suffix — compare numeric index
+	if idxA == "" || idxB == "" {
+		return strings.Compare(idxA, idxB)
+	}
+
+	numA, _ := strconv.Atoi(idxA)
+	numB, _ := strconv.Atoi(idxB)
+	return numA - numB
 }
