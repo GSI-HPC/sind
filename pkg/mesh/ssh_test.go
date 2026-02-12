@@ -229,6 +229,115 @@ func TestEnsureSSH_StartError(t *testing.T) {
 	assert.Contains(t, err.Error(), "starting SSH container")
 }
 
+// --- AddKnownHost ---
+
+func TestAddKnownHost(t *testing.T) {
+	var m docker.MockExecutor
+	// AppendFile → success
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.AddKnownHost(context.Background(),
+		"controller.dev.sind.local", "ssh-ed25519 AAAA...")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{
+		"exec", "-i", string(cluster.SSHContainerName),
+		"sh", "-c", "cat >> " + knownHostsPath,
+	}, m.Calls[0].Args)
+	assert.Equal(t, "controller.dev.sind.local ssh-ed25519 AAAA...\n", m.Calls[0].Stdin)
+}
+
+func TestAddKnownHost_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.AddKnownHost(context.Background(),
+		"controller.dev.sind.local", "ssh-ed25519 AAAA...")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "adding known host controller.dev.sind.local")
+}
+
+// --- RemoveKnownHost ---
+
+func TestRemoveKnownHost(t *testing.T) {
+	existing := "controller.dev.sind.local ssh-ed25519 AAAA...\n" +
+		"compute-0.dev.sind.local ssh-ed25519 BBBB...\n"
+
+	var m docker.MockExecutor
+	// ReadFile → existing content
+	m.AddResult(existing, "", nil)
+	// WriteFile → success
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, "compute-0.dev.sind.local ssh-ed25519 BBBB...\n", m.Calls[1].Stdin)
+}
+
+func TestRemoveKnownHost_LastEntry(t *testing.T) {
+	existing := "controller.dev.sind.local ssh-ed25519 AAAA...\n"
+
+	var m docker.MockExecutor
+	m.AddResult(existing, "", nil)
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	require.NoError(t, err)
+
+	// Should write empty content.
+	assert.Equal(t, "", m.Calls[1].Stdin)
+}
+
+func TestRemoveKnownHost_NotFound(t *testing.T) {
+	existing := "controller.dev.sind.local ssh-ed25519 AAAA...\n"
+
+	var m docker.MockExecutor
+	m.AddResult(existing, "", nil)
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveKnownHost(context.Background(), "compute-0.dev.sind.local")
+	require.NoError(t, err)
+
+	// Should preserve existing content.
+	assert.Equal(t, "controller.dev.sind.local ssh-ed25519 AAAA...\n", m.Calls[1].Stdin)
+}
+
+func TestRemoveKnownHost_ReadError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading known_hosts")
+}
+
+func TestRemoveKnownHost_WriteError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("controller.dev.sind.local ssh-ed25519 AAAA...\n", "", nil)
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "writing known_hosts")
+}
+
 // --- generateKeypair ---
 
 func TestGenerateKeypair(t *testing.T) {

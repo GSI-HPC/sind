@@ -10,10 +10,14 @@ import (
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
+
+// knownHostsPath is the path to the known_hosts file inside the SSH container.
+const knownHostsPath = "/root/.ssh/known_hosts"
 
 // SSHImage is the container image used for the SSH relay container.
 const SSHImage = "alpine:latest"
@@ -96,6 +100,51 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 	err = m.Docker.StartContainer(ctx, cluster.SSHContainerName)
 	if err != nil {
 		return fmt.Errorf("starting SSH container: %w", err)
+	}
+
+	return nil
+}
+
+// AddKnownHost appends a host key entry to the known_hosts file in the SSH
+// container. The hostKey should be the full key type and data (e.g.
+// "ssh-ed25519 AAAA...").
+func (m *Manager) AddKnownHost(ctx context.Context, hostname, hostKey string) error {
+	entry := hostname + " " + hostKey + "\n"
+	err := m.Docker.AppendFile(ctx, cluster.SSHContainerName, knownHostsPath, entry)
+	if err != nil {
+		return fmt.Errorf("adding known host %s: %w", hostname, err)
+	}
+	return nil
+}
+
+// RemoveKnownHost removes all entries for the given hostname from the
+// known_hosts file in the SSH container.
+func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {
+	content, err := m.Docker.ReadFile(ctx, cluster.SSHContainerName, knownHostsPath)
+	if err != nil {
+		return fmt.Errorf("reading known_hosts: %w", err)
+	}
+
+	var kept []string
+	for _, line := range strings.Split(content, "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 1 && fields[0] == hostname {
+			continue
+		}
+		kept = append(kept, line)
+	}
+
+	var result string
+	if len(kept) > 0 {
+		result = strings.Join(kept, "\n") + "\n"
+	}
+
+	err = m.Docker.WriteFile(ctx, cluster.SSHContainerName, knownHostsPath, result)
+	if err != nil {
+		return fmt.Errorf("writing known_hosts: %w", err)
 	}
 
 	return nil
