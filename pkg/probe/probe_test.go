@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
@@ -186,4 +187,116 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	err := SlurmdReady(context.Background(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "slurmd not ready")
+}
+
+func TestNodeProbes(t *testing.T) {
+	tests := []struct {
+		role  string
+		names []string
+	}{
+		{"controller", []string{"container", "systemd", "sshd", "slurmctld"}},
+		{"compute", []string{"container", "systemd", "sshd", "slurmd"}},
+		{"submitter", []string{"container", "systemd", "sshd"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.role, func(t *testing.T) {
+			probes := NodeProbes(tt.role)
+			var names []string
+			for _, p := range probes {
+				names = append(names, p.Name)
+			}
+			assert.Equal(t, tt.names, names)
+		})
+	}
+}
+
+func TestUntilReady_AllPass(t *testing.T) {
+	var m docker.MockExecutor
+	// Single probe that succeeds immediately.
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 1)
+}
+
+func TestUntilReady_RetryThenPass(t *testing.T) {
+	var m docker.MockExecutor
+	// First attempt: not running. Second attempt: running.
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 2)
+}
+
+func TestUntilReady_Timeout(t *testing.T) {
+	var m docker.MockExecutor
+	// Always fail — queue enough results to cover polling attempts.
+	for i := 0; i < 100; i++ {
+		m.AddResult(inspectJSON("created"), "", nil)
+	}
+	c := docker.NewClient(&m)
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReady(context.Background(), c, testContainer, probes, 50*time.Millisecond, time.Millisecond)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not ready")
+	assert.Contains(t, err.Error(), "probe container")
+}
+
+func TestUntilReady_MultipleProbes(t *testing.T) {
+	var m docker.MockExecutor
+	// Two probes, both pass on first attempt.
+	m.AddResult(inspectJSON("running"), "", nil)
+	m.AddResult("running\n", "", nil)
+	c := docker.NewClient(&m)
+
+	probes := []Probe{
+		{"container", ContainerRunning},
+		{"systemd", SystemdReady},
+	}
+	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 2)
+}
+
+func TestUntilReady_SecondProbeFails(t *testing.T) {
+	var m docker.MockExecutor
+	// First attempt: container OK, systemd not ready.
+	// Second attempt: container OK, systemd ready.
+	m.AddResult(inspectJSON("running"), "", nil)
+	m.AddResult("starting\n", "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	m.AddResult("running\n", "", nil)
+	c := docker.NewClient(&m)
+
+	probes := []Probe{
+		{"container", ContainerRunning},
+		{"systemd", SystemdReady},
+	}
+	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 4)
+}
+
+func TestUntilReady_ContextCanceled(t *testing.T) {
+	var m docker.MockExecutor
+	for i := 0; i < 100; i++ {
+		m.AddResult(inspectJSON("created"), "", nil)
+	}
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReady(ctx, c, testContainer, probes, time.Second, time.Millisecond)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not ready")
 }

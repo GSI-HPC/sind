@@ -6,9 +6,66 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
+
+// Func is a probe function that checks a single readiness condition.
+type Func func(ctx context.Context, client *docker.Client, name docker.ContainerName) error
+
+// Probe is a named readiness check.
+type Probe struct {
+	Name  string
+	Check Func
+}
+
+// NodeProbes returns the probes applicable to a node with the given role.
+func NodeProbes(role string) []Probe {
+	probes := []Probe{
+		{"container", ContainerRunning},
+		{"systemd", SystemdReady},
+		{"sshd", SSHDReady},
+	}
+	switch role {
+	case "controller":
+		probes = append(probes, Probe{"slurmctld", SlurmctldReady})
+	case "compute":
+		probes = append(probes, Probe{"slurmd", SlurmdReady})
+	}
+	return probes
+}
+
+// UntilReady polls the given probes until they all pass or the timeout expires.
+// The interval controls the delay between polling attempts. On timeout, the
+// error includes the name and message of the last failing probe.
+func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, timeout, interval time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var lastErr error
+	for {
+		var failed bool
+		for _, p := range probes {
+			if err := p.Check(ctx, client, name); err != nil {
+				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
+				failed = true
+				break
+			}
+		}
+		if !failed {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("node %s not ready: %w", name, lastErr)
+		case <-ticker.C:
+		}
+	}
+}
 
 // ContainerRunning verifies that the container is in the "running" state.
 func ContainerRunning(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
