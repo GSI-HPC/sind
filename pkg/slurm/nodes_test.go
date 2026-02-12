@@ -83,6 +83,30 @@ func TestGenerateNodesConf_SkipsNonCompute(t *testing.T) {
 	assert.Contains(t, conf, "NodeName=compute-0")
 }
 
+func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
+	nodes := []config.Node{
+		{Role: "controller", CPUs: 2, Memory: "2g"},
+		{Role: "compute", Count: 2, CPUs: 2, Memory: "2g", Managed: boolPtr(false)},
+	}
+
+	conf := GenerateNodesConf(nodes)
+
+	assert.NotContains(t, conf, "NodeName=")
+	assert.NotContains(t, conf, "PartitionName=")
+}
+
+func TestGenerateNodesConf_ExplicitManaged(t *testing.T) {
+	nodes := []config.Node{
+		{Role: "controller", CPUs: 2, Memory: "2g"},
+		{Role: "compute", CPUs: 2, Memory: "2g", Managed: boolPtr(true)},
+	}
+
+	conf := GenerateNodesConf(nodes)
+
+	assert.Contains(t, conf, "NodeName=compute-0")
+	assert.Contains(t, conf, "PartitionName=all Nodes=compute-0")
+}
+
 func TestGenerateNodesConf_MemoryMB(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
