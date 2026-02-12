@@ -6,6 +6,7 @@ package mesh
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -14,23 +15,8 @@ import (
 // DNSImage is the container image used for the mesh DNS server.
 const DNSImage = "coredns/coredns:latest"
 
-// corefile is the CoreDNS configuration for the mesh DNS server.
-// The hosts plugin serves sind.local records from /hosts and auto-reloads
-// the file on changes. All other queries are forwarded to the system resolver.
-const corefile = `sind.local:53 {
-    hosts /hosts {
-        fallthrough
-    }
-    log
-    errors
-}
-
-.:53 {
-    forward . /etc/resolv.conf
-    log
-    errors
-}
-`
+// corefilePath is the path to the Corefile inside the DNS container.
+const corefilePath = "/Corefile"
 
 // Manager handles global infrastructure resources shared across all clusters.
 type Manager struct {
@@ -60,7 +46,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 
 // EnsureDNS creates the mesh DNS container if it does not already exist.
 // The container runs CoreDNS on the mesh network, serving sind.local records
-// from a hosts file that is updated as nodes are added and removed.
+// from inline hosts entries in the Corefile.
 func (m *Manager) EnsureDNS(ctx context.Context) error {
 	exists, err := m.Docker.ContainerExists(ctx, cluster.DNSContainerName)
 	if err != nil {
@@ -80,8 +66,7 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 	}
 
 	err = m.Docker.CopyToContainer(ctx, cluster.DNSContainerName, "/", map[string][]byte{
-		"Corefile": []byte(corefile),
-		"hosts":    {},
+		"Corefile": []byte(generateCorefile(nil)),
 	})
 	if err != nil {
 		return fmt.Errorf("writing DNS configuration: %w", err)
@@ -93,4 +78,98 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// AddDNSRecord adds an A record to the mesh DNS Corefile and reloads CoreDNS.
+// The hostname should be a fully qualified sind DNS name (e.g. "controller.dev.sind.local").
+func (m *Manager) AddDNSRecord(ctx context.Context, hostname, ip string) error {
+	entries, err := m.readDNSEntries(ctx)
+	if err != nil {
+		return err
+	}
+
+	entries = append(entries, ip+" "+hostname)
+
+	return m.writeDNSEntries(ctx, entries)
+}
+
+// RemoveDNSRecord removes all A records for the given hostname from the mesh DNS
+// Corefile and reloads CoreDNS.
+func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
+	entries, err := m.readDNSEntries(ctx)
+	if err != nil {
+		return err
+	}
+
+	var kept []string
+	for _, entry := range entries {
+		fields := strings.Fields(entry)
+		if len(fields) >= 2 && fields[1] == hostname {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+
+	return m.writeDNSEntries(ctx, kept)
+}
+
+// readDNSEntries reads the current Corefile and extracts the host entries.
+func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
+	data, err := m.Docker.CopyFromContainer(ctx, cluster.DNSContainerName, corefilePath)
+	if err != nil {
+		return nil, fmt.Errorf("reading DNS Corefile: %w", err)
+	}
+	return parseEntries(string(data)), nil
+}
+
+// writeDNSEntries generates a new Corefile, writes it to the container, and
+// sends SIGHUP to reload CoreDNS.
+func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
+	err := m.Docker.CopyToContainer(ctx, cluster.DNSContainerName, "/", map[string][]byte{
+		"Corefile": []byte(generateCorefile(entries)),
+	})
+	if err != nil {
+		return fmt.Errorf("writing DNS Corefile: %w", err)
+	}
+
+	err = m.Docker.SignalContainer(ctx, cluster.DNSContainerName, "HUP")
+	if err != nil {
+		return fmt.Errorf("reloading DNS: %w", err)
+	}
+	return nil
+}
+
+// generateCorefile builds a complete CoreDNS Corefile with the given host entries
+// inlined in the hosts block. Each entry is an "IP hostname" string.
+func generateCorefile(entries []string) string {
+	var b strings.Builder
+	b.WriteString("sind.local:53 {\n    hosts {\n")
+	for _, entry := range entries {
+		b.WriteString("        " + entry + "\n")
+	}
+	b.WriteString("        fallthrough\n    }\n    log\n    errors\n}\n\n")
+	b.WriteString(".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n")
+	return b.String()
+}
+
+// parseEntries extracts host entries from a Corefile's hosts block.
+// Each returned string is an "IP hostname" line.
+func parseEntries(corefile string) []string {
+	var entries []string
+	inHosts := false
+	for _, line := range strings.Split(corefile, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "hosts {" {
+			inHosts = true
+			continue
+		}
+		if inHosts && (trimmed == "fallthrough" || trimmed == "}") {
+			inHosts = false
+			continue
+		}
+		if inHosts && trimmed != "" {
+			entries = append(entries, trimmed)
+		}
+	}
+	return entries
 }
