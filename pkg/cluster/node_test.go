@@ -225,6 +225,18 @@ func TestBuildRunArgs_Resources(t *testing.T) {
 	assert.Equal(t, "/tmp:rw,nosuid,nodev,size=2g", tmpfs)
 }
 
+func TestBuildRunArgs_SecurityOpts(t *testing.T) {
+	cfg := defaultRunConfig()
+	args := BuildRunArgs(cfg)
+
+	// writable-cgroups for cgroupv2 support (Docker 28+)
+	secOpts := argValues(args, "--security-opt")
+	assert.Contains(t, secOpts, "writable-cgroups")
+
+	// Private cgroup namespace for systemd
+	assert.Contains(t, args, "--cgroupns=private")
+}
+
 func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.ClusterName = "default"

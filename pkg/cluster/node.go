@@ -92,6 +92,12 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--memory", cfg.Memory,
 	)
 
+	// Security options for systemd containers
+	args = append(args,
+		"--cgroupns=private",
+		"--security-opt", "writable-cgroups",
+	)
+
 	// Labels
 	labels := NodeLabels(cfg.ClusterName, cfg.Role, cfg.SlurmVersion)
 	keys := make([]string, 0, len(labels))
