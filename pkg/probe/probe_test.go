@@ -134,6 +134,16 @@ func TestSSHDReady_UnexpectedBanner(t *testing.T) {
 	assert.Contains(t, err.Error(), "unexpected banner")
 }
 
+func TestSSHDReady_EmptyBanner(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	err := SSHDReady(context.Background(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected banner")
+}
+
 func TestSSHDReady_ConnectionRefused(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
@@ -283,6 +293,25 @@ func TestUntilReady_SecondProbeFails(t *testing.T) {
 	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 4)
+}
+
+func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
+	var m docker.MockExecutor
+	// Container always passes, systemd always fails.
+	for i := 0; i < 100; i++ {
+		m.AddResult(inspectJSON("running"), "", nil)
+		m.AddResult("starting\n", "", nil)
+	}
+	c := docker.NewClient(&m)
+
+	probes := []Probe{
+		{"container", ContainerRunning},
+		{"systemd", SystemdReady},
+	}
+	err := UntilReady(context.Background(), c, testContainer, probes, 50*time.Millisecond, time.Millisecond)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not ready")
+	assert.Contains(t, err.Error(), "probe systemd")
 }
 
 func TestUntilReady_EmptyProbes(t *testing.T) {
