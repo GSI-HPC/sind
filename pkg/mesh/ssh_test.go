@@ -143,6 +143,92 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	assert.Equal(t, []string{"rm", string(sshKeygenContainerName)}, m.Calls[4].Args)
 }
 
+// --- EnsureSSH ---
+
+func TestEnsureSSH_Creates(t *testing.T) {
+	const containerID = "def456"
+
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-ssh\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// CreateContainer → success
+	m.AddResult(containerID+"\n", "", nil)
+	// StartContainer → success
+	m.AddResult("sind-ssh\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureSSH(context.Background())
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 3)
+	assert.Equal(t, []string{"container", "inspect", string(cluster.SSHContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{
+		"create",
+		"--name", string(cluster.SSHContainerName),
+		"--network", string(cluster.MeshNetworkName),
+		"-v", string(cluster.SSHVolumeName) + ":/root/.ssh",
+		SSHImage,
+		"sleep", "infinity",
+	}, m.Calls[1].Args)
+	assert.Equal(t, []string{"start", string(cluster.SSHContainerName)}, m.Calls[2].Args)
+}
+
+func TestEnsureSSH_AlreadyExists(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureSSH(context.Background())
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 1)
+}
+
+func TestEnsureSSH_CheckError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureSSH(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "checking SSH container")
+}
+
+func TestEnsureSSH_CreateError(t *testing.T) {
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-ssh\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// CreateContainer → error
+	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureSSH(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "creating SSH container")
+}
+
+func TestEnsureSSH_StartError(t *testing.T) {
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-ssh\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// CreateContainer → success
+	m.AddResult("def456\n", "", nil)
+	// StartContainer → error
+	m.AddResult("", "Error: cannot start\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureSSH(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "starting SSH container")
+}
+
 // --- generateKeypair ---
 
 func TestGenerateKeypair(t *testing.T) {

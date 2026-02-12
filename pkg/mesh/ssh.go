@@ -15,6 +15,9 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
+// SSHImage is the container image used for the SSH relay container.
+const SSHImage = "alpine:latest"
+
 // sshKeygenImage is the container image used as a temporary helper for writing
 // SSH keys into the SSH volume. The container is never started.
 const sshKeygenImage = "busybox:latest"
@@ -62,6 +65,37 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("writing SSH keys: %w", err)
+	}
+
+	return nil
+}
+
+// EnsureSSH creates the SSH relay container if it does not already exist.
+// The container runs on the mesh network with the SSH volume mounted at
+// /root/.ssh so that ssh automatically discovers the keypair and known_hosts.
+func (m *Manager) EnsureSSH(ctx context.Context) error {
+	exists, err := m.Docker.ContainerExists(ctx, cluster.SSHContainerName)
+	if err != nil {
+		return fmt.Errorf("checking SSH container: %w", err)
+	}
+	if exists {
+		return nil
+	}
+
+	_, err = m.Docker.CreateContainer(ctx,
+		"--name", string(cluster.SSHContainerName),
+		"--network", string(cluster.MeshNetworkName),
+		"-v", string(cluster.SSHVolumeName)+":/root/.ssh",
+		SSHImage,
+		"sleep", "infinity",
+	)
+	if err != nil {
+		return fmt.Errorf("creating SSH container: %w", err)
+	}
+
+	err = m.Docker.StartContainer(ctx, cluster.SSHContainerName)
+	if err != nil {
+		return fmt.Errorf("starting SSH container: %w", err)
 	}
 
 	return nil
