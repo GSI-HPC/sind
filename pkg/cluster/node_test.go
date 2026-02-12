@@ -238,7 +238,9 @@ func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 	assert.Contains(t, secOpts, "writable-cgroups")
 
 	// Private cgroup namespace for systemd
-	assert.Contains(t, args, "--cgroupns=private")
+	cgroupns, ok := argValue(args, "--cgroupns")
+	assert.True(t, ok)
+	assert.Equal(t, "private", cgroupns)
 }
 
 func TestBuildRunArgs_DefaultCluster(t *testing.T) {
