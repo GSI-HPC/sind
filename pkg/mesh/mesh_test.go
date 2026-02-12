@@ -531,6 +531,43 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.local")
 }
 
+func TestRemoveDNSRecord_SignalError(t *testing.T) {
+	existing := []string{"172.18.0.2 controller.dev.sind.local"}
+
+	var m docker.MockExecutor
+	m.AddResult(corefileTar(t, existing), "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveDNSRecord(context.Background(), "controller.dev.sind.local")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reloading DNS")
+}
+
+func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
+	existing := []string{
+		"172.18.0.2 controller.dev.sind.local",
+		"172.18.0.5 controller.dev.sind.local",
+		"172.18.0.3 compute-0.dev.sind.local",
+	}
+
+	var m docker.MockExecutor
+	m.AddResult(corefileTar(t, existing), "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveDNSRecord(context.Background(), "controller.dev.sind.local")
+	require.NoError(t, err)
+
+	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
+	assert.NotContains(t, corefile, "controller.dev.sind.local")
+	assert.Contains(t, corefile, "172.18.0.3 compute-0.dev.sind.local")
+}
+
 func TestRemoveDNSRecord_ReadError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))

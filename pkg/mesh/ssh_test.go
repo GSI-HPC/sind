@@ -299,6 +299,23 @@ func TestRemoveKnownHost_LastEntry(t *testing.T) {
 	assert.Equal(t, "", m.Calls[1].Stdin)
 }
 
+func TestRemoveKnownHost_DuplicateHostnames(t *testing.T) {
+	existing := "controller.dev.sind.local ssh-ed25519 AAAA...\n" +
+		"controller.dev.sind.local ssh-ed25519 BBBB...\n" +
+		"compute-0.dev.sind.local ssh-ed25519 CCCC...\n"
+
+	var m docker.MockExecutor
+	m.AddResult(existing, "", nil)
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	require.NoError(t, err)
+
+	assert.Equal(t, "compute-0.dev.sind.local ssh-ed25519 CCCC...\n", m.Calls[1].Stdin)
+}
+
 func TestRemoveKnownHost_NotFound(t *testing.T) {
 	existing := "controller.dev.sind.local ssh-ed25519 AAAA...\n"
 
