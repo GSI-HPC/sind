@@ -107,6 +107,13 @@ func TestGenerateNodesConf_ExplicitManaged(t *testing.T) {
 	assert.Contains(t, conf, "PartitionName=all Nodes=compute-0")
 }
 
+func TestGenerateNodesConf_EmptyInput(t *testing.T) {
+	conf := GenerateNodesConf(nil)
+
+	assert.NotContains(t, conf, "NodeName=")
+	assert.NotContains(t, conf, "PartitionName=")
+}
+
 func TestGenerateNodesConf_MemoryMB(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
@@ -140,6 +147,16 @@ func TestParseMemoryMB(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestParseMemoryMB_Zero(t *testing.T) {
+	got, err := parseMemoryMB("0g")
+	assert.NoError(t, err)
+	assert.Equal(t, 0, got)
+
+	got, err = parseMemoryMB("0m")
+	assert.NoError(t, err)
+	assert.Equal(t, 0, got)
 }
 
 func TestParseMemoryMB_Invalid(t *testing.T) {

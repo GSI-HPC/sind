@@ -14,6 +14,8 @@ func TestGenerateSlurmConf(t *testing.T) {
 
 	assert.Contains(t, conf, "ClusterName=dev")
 	assert.Contains(t, conf, "SlurmctldHost=controller")
+	assert.Contains(t, conf, "ProctrackType=proctrack/cgroup")
+	assert.Contains(t, conf, "TaskPlugin=task/cgroup,task/affinity")
 	assert.Contains(t, conf, "ReturnToService=2")
 	assert.Contains(t, conf, "include /etc/slurm/sind-nodes.conf")
 }
