@@ -1,0 +1,220 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package cluster
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// argValue returns the value following the first occurrence of flag in args.
+func argValue(args []string, flag string) (string, bool) {
+	for i, a := range args {
+		if a == flag && i+1 < len(args) {
+			return args[i+1], true
+		}
+	}
+	return "", false
+}
+
+// argValues returns all values following each occurrence of flag in args.
+func argValues(args []string, flag string) []string {
+	var values []string
+	for i, a := range args {
+		if a == flag && i+1 < len(args) {
+			values = append(values, args[i+1])
+		}
+	}
+	return values
+}
+
+func defaultRunConfig() RunConfig {
+	return RunConfig{
+		ClusterName:  "dev",
+		ShortName:    "controller",
+		Role:         "controller",
+		Image:        "ghcr.io/gsi-hpc/sind-node:25.11",
+		CPUs:         2,
+		Memory:       "2g",
+		TmpSize:      "1g",
+		SlurmVersion: "25.11.0",
+		DNSIP:        "172.18.0.2",
+	}
+}
+
+func TestBuildRunArgs_Basic(t *testing.T) {
+	cfg := defaultRunConfig()
+	args := BuildRunArgs(cfg)
+
+	// Container name
+	name, ok := argValue(args, "--name")
+	assert.True(t, ok, "--name flag present")
+	assert.Equal(t, "sind-dev-controller", name)
+
+	// Hostname
+	hostname, ok := argValue(args, "--hostname")
+	assert.True(t, ok, "--hostname flag present")
+	assert.Equal(t, "controller", hostname)
+
+	// Image is last element
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", args[len(args)-1])
+
+	// Labels
+	labels := argValues(args, "--label")
+	assert.Contains(t, labels, "sind.cluster=dev")
+	assert.Contains(t, labels, "sind.role=controller")
+	assert.Contains(t, labels, "sind.slurm.version=25.11.0")
+}
+
+func TestBuildRunArgs_ComputeNode(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.ShortName = "compute-0"
+	cfg.Role = "compute"
+	args := BuildRunArgs(cfg)
+
+	name, _ := argValue(args, "--name")
+	assert.Equal(t, "sind-dev-compute-0", name)
+
+	hostname, _ := argValue(args, "--hostname")
+	assert.Equal(t, "compute-0", hostname)
+
+	labels := argValues(args, "--label")
+	assert.Contains(t, labels, "sind.role=compute")
+}
+
+func TestBuildRunArgs_NoSlurmVersion(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.SlurmVersion = ""
+	args := BuildRunArgs(cfg)
+
+	labels := argValues(args, "--label")
+	assert.Contains(t, labels, "sind.cluster=dev")
+	assert.Contains(t, labels, "sind.role=controller")
+	for _, l := range labels {
+		assert.NotContains(t, l, "sind.slurm.version")
+	}
+}
+
+func TestBuildRunArgs_Network(t *testing.T) {
+	cfg := defaultRunConfig()
+	args := BuildRunArgs(cfg)
+
+	network, ok := argValue(args, "--network")
+	assert.True(t, ok, "--network flag present")
+	assert.Equal(t, "sind-dev-net", network)
+
+	dns, ok := argValue(args, "--dns")
+	assert.True(t, ok, "--dns flag present")
+	assert.Equal(t, "172.18.0.2", dns)
+
+	search, ok := argValue(args, "--dns-search")
+	assert.True(t, ok, "--dns-search flag present")
+	assert.Equal(t, "dev.sind.local", search)
+}
+
+func TestBuildRunArgs_Network_NoDNSIP(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DNSIP = ""
+	args := BuildRunArgs(cfg)
+
+	_, ok := argValue(args, "--dns")
+	assert.False(t, ok, "--dns flag absent when DNSIP empty")
+
+	_, ok = argValue(args, "--dns-search")
+	assert.True(t, ok, "--dns-search still present")
+}
+
+func TestBuildRunArgs_Mounts(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     string
+		wantConf string
+	}{
+		{
+			name:     "controller gets rw config",
+			role:     "controller",
+			wantConf: "sind-dev-config:/etc/slurm:rw,z",
+		},
+		{
+			name:     "compute gets ro config",
+			role:     "compute",
+			wantConf: "sind-dev-config:/etc/slurm:ro,z",
+		},
+		{
+			name:     "submitter gets ro config",
+			role:     "submitter",
+			wantConf: "sind-dev-config:/etc/slurm:ro,z",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := defaultRunConfig()
+			cfg.Role = tt.role
+			cfg.ShortName = tt.role
+			args := BuildRunArgs(cfg)
+
+			volumes := argValues(args, "-v")
+			assert.Contains(t, volumes, tt.wantConf)
+			assert.Contains(t, volumes, "sind-dev-munge:/etc/munge:ro,z")
+			assert.Contains(t, volumes, "sind-dev-data:/data:rw,z")
+		})
+	}
+}
+
+func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataHostPath = "/home/user/data"
+	cfg.DataMountPath = "/shared"
+	args := BuildRunArgs(cfg)
+
+	volumes := argValues(args, "-v")
+	assert.Contains(t, volumes, "/home/user/data:/shared:rw,z")
+	for _, v := range volumes {
+		assert.NotContains(t, v, "sind-dev-data")
+	}
+}
+
+func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
+	cfg := defaultRunConfig()
+	args := BuildRunArgs(cfg)
+
+	volumes := argValues(args, "-v")
+	assert.Contains(t, volumes, "sind-dev-data:/data:rw,z")
+}
+
+func TestBuildRunArgs_Resources(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.CPUs = 4
+	cfg.Memory = "8g"
+	cfg.TmpSize = "2g"
+	args := BuildRunArgs(cfg)
+
+	cpus, ok := argValue(args, "--cpus")
+	assert.True(t, ok)
+	assert.Equal(t, "4", cpus)
+
+	memory, ok := argValue(args, "--memory")
+	assert.True(t, ok)
+	assert.Equal(t, "8g", memory)
+
+	tmpfs, ok := argValue(args, "--tmpfs")
+	assert.True(t, ok)
+	assert.Equal(t, "/tmp:rw,nosuid,nodev,size=2g", tmpfs)
+}
+
+func TestBuildRunArgs_DefaultCluster(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.ClusterName = "default"
+	args := BuildRunArgs(cfg)
+
+	name, _ := argValue(args, "--name")
+	assert.Equal(t, "sind-default-controller", name)
+
+	network, _ := argValue(args, "--network")
+	assert.Equal(t, "sind-default-net", network)
+
+	search, _ := argValue(args, "--dns-search")
+	assert.Equal(t, "default.sind.local", search)
+}
