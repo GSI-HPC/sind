@@ -5,9 +5,26 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 )
+
+// VolumeExists returns true if the given volume exists.
+func (c *Client) VolumeExists(ctx context.Context, name VolumeName) (bool, error) {
+	_, _, err := c.run(ctx, "volume", "inspect", string(name))
+	if err != nil {
+		// docker volume inspect exits 1 for missing volumes;
+		// distinguish from other errors by checking ExitError.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
 
 // CreateVolume creates a Docker volume.
 func (c *Client) CreateVolume(ctx context.Context, name VolumeName) error {

@@ -5,6 +5,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,6 +13,40 @@ import (
 )
 
 const testVolumeName VolumeName = "sind-dev-config"
+
+func TestVolumeExists_True(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("[{}]\n", "", nil)
+	c := NewClient(&m)
+
+	exists, err := c.VolumeExists(context.Background(), testVolumeName)
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"volume", "inspect", string(testVolumeName)}, m.Calls[0].Args)
+}
+
+func TestVolumeExists_False(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error: No such volume: "+string(testVolumeName)+"\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	exists, err := c.VolumeExists(context.Background(), testVolumeName)
+	require.NoError(t, err)
+	assert.False(t, exists)
+}
+
+func TestVolumeExists_OtherError(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := NewClient(&m)
+
+	exists, err := c.VolumeExists(context.Background(), testVolumeName)
+	assert.Error(t, err)
+	assert.False(t, exists)
+}
 
 func TestCreateVolume(t *testing.T) {
 	var m MockExecutor
