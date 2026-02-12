@@ -32,3 +32,28 @@ func InjectPublicKey(ctx context.Context, client *docker.Client, container docke
 	}
 	return nil
 }
+
+// CollectHostKey retrieves the ed25519 host public key from a node container
+// by running ssh-keyscan against localhost. Returns the key in "ssh-ed25519 AAAA..."
+// format (without the hostname prefix).
+func CollectHostKey(ctx context.Context, client *docker.Client, container docker.ContainerName) (string, error) {
+	stdout, err := client.Exec(ctx, container, "ssh-keyscan", "-t", "ed25519", "localhost")
+	if err != nil {
+		return "", fmt.Errorf("scanning host key: %w", err)
+	}
+
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Format: "localhost ssh-ed25519 AAAA..."
+		_, key, ok := strings.Cut(line, " ")
+		if !ok {
+			continue
+		}
+		return key, nil
+	}
+
+	return "", fmt.Errorf("no ed25519 host key found")
+}
