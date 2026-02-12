@@ -39,3 +39,18 @@ func CheckSystemdReady(ctx context.Context, client *docker.Client, name docker.C
 	}
 	return nil
 }
+
+// CheckSSHD verifies that sshd is accepting connections and responding with
+// the SSH protocol banner on port 22.
+func CheckSSHD(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	stdout, err := client.Exec(ctx, name,
+		"bash", "-c", "read -t1 line < /dev/tcp/localhost/22 && echo \"$line\"")
+	if err != nil {
+		return fmt.Errorf("sshd not ready: %w", err)
+	}
+	banner := strings.TrimSpace(stdout)
+	if !strings.HasPrefix(banner, "SSH-") {
+		return fmt.Errorf("sshd not ready: unexpected banner %q", banner)
+	}
+	return nil
+}

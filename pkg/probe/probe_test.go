@@ -108,3 +108,37 @@ func TestCheckSystemdReady_ExecError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking systemd state")
 }
+
+func TestCheckSSHD(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("SSH-2.0-OpenSSH_9.8\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := CheckSSHD(context.Background(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "bash", "-c", "read -t1 line < /dev/tcp/localhost/22 && echo \"$line\""},
+		m.Calls[0].Args)
+}
+
+func TestCheckSSHD_UnexpectedBanner(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("HTTP/1.1 400 Bad Request\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := CheckSSHD(context.Background(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected banner")
+}
+
+func TestCheckSSHD_ConnectionRefused(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := CheckSSHD(context.Background(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sshd not ready")
+}
