@@ -6,6 +6,7 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -24,6 +25,9 @@ type NetworkID string
 // NetworkName is a human-readable Docker network name.
 type NetworkName string
 
+// VolumeName is a human-readable Docker volume name.
+type VolumeName string
+
 // Client provides operations against the Docker CLI.
 type Client struct {
 	Executor Executor
@@ -37,6 +41,10 @@ func NewClient(executor Executor) *Client {
 
 func (c *Client) run(ctx context.Context, args ...string) (string, string, error) {
 	return c.Executor.Run(ctx, c.Command, args...)
+}
+
+func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
+	return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
 }
 
 // CreateContainer creates and starts a container in detached mode.
@@ -196,9 +204,6 @@ func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, con
 	return err
 }
 
-// VolumeName is a human-readable Docker volume name.
-type VolumeName string
-
 // CreateVolume creates a Docker volume.
 func (c *Client) CreateVolume(ctx context.Context, name VolumeName) error {
 	_, _, err := c.run(ctx, "volume", "create", string(name))
@@ -265,7 +270,7 @@ func (c *Client) Exec(ctx context.Context, container ContainerName, command ...s
 // ExecWithStdin runs a command inside a container, piping stdin to it.
 func (c *Client) ExecWithStdin(ctx context.Context, container ContainerName, stdin io.Reader, command ...string) error {
 	args := append([]string{"exec", "-i", string(container)}, command...)
-	_, _, err := c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
+	_, _, err := c.runWithStdin(ctx, stdin, args...)
 	return err
 }
 
@@ -275,7 +280,8 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 	if err != nil {
 		// docker image inspect exits 1 for missing images;
 		// distinguish from other errors by checking ExitError.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 			return false, nil
 		}
 		return false, err
