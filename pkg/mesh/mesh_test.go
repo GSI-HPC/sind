@@ -211,6 +211,20 @@ func TestCleanupMesh_NetworkError(t *testing.T) {
 	assert.Contains(t, err.Error(), "removing mesh network")
 }
 
+func TestCleanupMesh_RemoveContainerError(t *testing.T) {
+	var m docker.MockExecutor
+	// SSH container: exists, stop (best-effort), remove fails
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("sind-ssh\n", "", nil)
+	m.AddResult("", "Error: removal in progress\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.CleanupMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "removing SSH container")
+}
+
 func TestCleanupMesh_VolumeError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH
@@ -625,6 +639,11 @@ func TestParseEntries_Roundtrip(t *testing.T) {
 	cf := generateCorefile(original)
 	parsed := parseEntries(cf)
 	assert.Equal(t, original, parsed)
+}
+
+func TestParseEntries_NoHostsBlock(t *testing.T) {
+	entries := parseEntries(".:53 {\n    forward . /etc/resolv.conf\n}\n")
+	assert.Empty(t, entries)
 }
 
 // --- test helpers ---
