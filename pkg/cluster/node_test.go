@@ -3,9 +3,13 @@
 package cluster
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // argValue returns the value following the first occurrence of flag in args.
@@ -250,4 +254,75 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 
 	search, _ := argValue(args, "--dns-search")
 	assert.Equal(t, "default.sind.local", search)
+}
+
+// --- CreateNode ---
+
+func TestCreateNode(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("abc123\n", "", nil) // CreateContainer
+	m.AddResult("", "", nil)         // ConnectNetwork
+	m.AddResult("", "", nil)         // StartContainer
+
+	c := docker.NewClient(&m)
+	cfg := defaultRunConfig()
+
+	id, err := CreateNode(context.Background(), c, cfg)
+	require.NoError(t, err)
+	assert.Equal(t, docker.ContainerID("abc123"), id)
+
+	require.Len(t, m.Calls, 3)
+
+	// CreateContainer: first arg is "create", last is image
+	assert.Equal(t, "create", m.Calls[0].Args[0])
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", m.Calls[0].Args[len(m.Calls[0].Args)-1])
+
+	// ConnectNetwork
+	assert.Equal(t, []string{"network", "connect", "sind-mesh", "sind-dev-controller"}, m.Calls[1].Args)
+
+	// StartContainer
+	assert.Equal(t, []string{"start", "sind-dev-controller"}, m.Calls[2].Args)
+}
+
+func TestCreateNode_CreateError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("image not found"))
+
+	c := docker.NewClient(&m)
+	cfg := defaultRunConfig()
+
+	_, err := CreateNode(context.Background(), c, cfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "creating container")
+	assert.Len(t, m.Calls, 1)
+}
+
+func TestCreateNode_ConnectError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("abc123\n", "", nil)             // CreateContainer
+	m.AddResult("", "", fmt.Errorf("net error")) // ConnectNetwork
+
+	c := docker.NewClient(&m)
+	cfg := defaultRunConfig()
+
+	_, err := CreateNode(context.Background(), c, cfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "connecting")
+	assert.Contains(t, err.Error(), "mesh")
+	assert.Len(t, m.Calls, 2)
+}
+
+func TestCreateNode_StartError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("abc123\n", "", nil)                // CreateContainer
+	m.AddResult("", "", nil)                        // ConnectNetwork
+	m.AddResult("", "", fmt.Errorf("start failed")) // StartContainer
+
+	c := docker.NewClient(&m)
+	cfg := defaultRunConfig()
+
+	_, err := CreateNode(context.Background(), c, cfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "starting container")
+	assert.Len(t, m.Calls, 3)
 }

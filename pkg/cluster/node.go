@@ -3,8 +3,12 @@
 package cluster
 
 import (
+	"context"
+	"fmt"
 	"sort"
 	"strconv"
+
+	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
 // Label keys used on sind containers.
@@ -113,4 +117,26 @@ func BuildRunArgs(cfg RunConfig) []string {
 	args = append(args, cfg.Image)
 
 	return args
+}
+
+// CreateNode creates a node container, connects it to the mesh network,
+// and starts it. Returns the container ID.
+func CreateNode(ctx context.Context, client *docker.Client, cfg RunConfig) (docker.ContainerID, error) {
+	args := BuildRunArgs(cfg)
+
+	id, err := client.CreateContainer(ctx, args...)
+	if err != nil {
+		return "", fmt.Errorf("creating container %s: %w", cfg.ShortName, err)
+	}
+
+	containerName := ContainerName(cfg.ClusterName, cfg.ShortName)
+	if err := client.ConnectNetwork(ctx, MeshNetworkName, containerName); err != nil {
+		return "", fmt.Errorf("connecting %s to mesh: %w", cfg.ShortName, err)
+	}
+
+	if err := client.StartContainer(ctx, containerName); err != nil {
+		return "", fmt.Errorf("starting container %s: %w", cfg.ShortName, err)
+	}
+
+	return id, nil
 }
