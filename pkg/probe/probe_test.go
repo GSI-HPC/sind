@@ -60,3 +60,51 @@ func TestCheckContainerRunning_InspectError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting container")
 }
+
+func TestCheckSystemdReady_Running(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("running\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := CheckSystemdReady(context.Background(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "sh", "-c", "systemctl is-system-running 2>/dev/null || true"},
+		m.Calls[0].Args)
+}
+
+func TestCheckSystemdReady_Degraded(t *testing.T) {
+	var m docker.MockExecutor
+	// The sh wrapper always exits 0, so stdout contains "degraded".
+	m.AddResult("degraded\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := CheckSystemdReady(context.Background(), c, testContainer)
+	require.NoError(t, err)
+}
+
+func TestCheckSystemdReady_NotReady(t *testing.T) {
+	for _, state := range []string{"starting", "initializing", "stopping"} {
+		t.Run(state, func(t *testing.T) {
+			var m docker.MockExecutor
+			m.AddResult(state+"\n", "", nil)
+			c := docker.NewClient(&m)
+
+			err := CheckSystemdReady(context.Background(), c, testContainer)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), state)
+		})
+	}
+}
+
+func TestCheckSystemdReady_ExecError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error: No such container\n", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+
+	err := CheckSystemdReady(context.Background(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking systemd state")
+}
