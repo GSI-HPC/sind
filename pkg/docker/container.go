@@ -3,17 +3,48 @@
 package docker
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os/exec"
+	"sort"
 	"strings"
 )
 
-// CreateContainer creates and starts a container in detached mode.
-// The args are passed directly to `docker run -d` and should include the
-// image name as the last element. Returns the container ID.
+// ContainerExists returns true if the given container exists (running or stopped).
+func (c *Client) ContainerExists(ctx context.Context, name ContainerName) (bool, error) {
+	_, _, err := c.run(ctx, "container", "inspect", string(name))
+	if err != nil {
+		// docker container inspect exits 1 for missing containers;
+		// distinguish from other errors by checking ExitError.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// CreateContainer creates a container without starting it (docker create).
+// Use StartContainer to start it afterwards. Returns the container ID.
 func (c *Client) CreateContainer(ctx context.Context, args ...string) (ContainerID, error) {
+	createArgs := append([]string{"create"}, args...)
+	stdout, _, err := c.run(ctx, createArgs...)
+	if err != nil {
+		return "", err
+	}
+	return ContainerID(strings.TrimSpace(stdout)), nil
+}
+
+// RunContainer creates and starts a container in detached mode (docker run -d).
+// The args are passed directly and should include the image name as the last
+// element. Returns the container ID.
+func (c *Client) RunContainer(ctx context.Context, args ...string) (ContainerID, error) {
 	runArgs := append([]string{"run", "-d"}, args...)
 	stdout, _, err := c.run(ctx, runArgs...)
 	if err != nil {
@@ -155,4 +186,53 @@ func (c *Client) ExecWithStdin(ctx context.Context, container ContainerName, std
 	args := append([]string{"exec", "-i", string(container)}, command...)
 	_, _, err := c.runWithStdin(ctx, stdin, args...)
 	return err
+}
+
+// CopyToContainer writes files into a container directory via docker cp.
+// Files are provided as a map of filename to content. The container may be
+// running or stopped. Keys are sorted for deterministic tar output.
+func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, destDir string, files map[string][]byte) error {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		content := files[name]
+		// WriteHeader and Write cannot fail on a bytes.Buffer.
+		tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
+		tw.Write(content)
+	}
+	tw.Close()
+
+	_, _, err := c.runWithStdin(ctx, &buf, "cp", "-", string(container)+":"+destDir)
+	return err
+}
+
+// CopyFromContainer reads a single file from a container via docker cp.
+// The container may be running or stopped.
+func (c *Client) CopyFromContainer(ctx context.Context, container ContainerName, srcPath string) ([]byte, error) {
+	stdout, _, err := c.run(ctx, "cp", string(container)+":"+srcPath, "-")
+	if err != nil {
+		return nil, err
+	}
+	tr := tar.NewReader(strings.NewReader(stdout))
+	for {
+		_, err := tr.Next()
+		if err == io.EOF {
+			return nil, fmt.Errorf("file not found in tar output for %s:%s", container, srcPath)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading tar output: %w", err)
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, fmt.Errorf("reading file content: %w", err)
+		}
+		return data, nil
+	}
 }
