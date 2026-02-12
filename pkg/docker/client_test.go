@@ -5,6 +5,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -434,4 +435,51 @@ func TestListVolumes_Error(t *testing.T) {
 	entries, err := c.ListVolumes(context.Background())
 	assert.Error(t, err)
 	assert.Nil(t, entries)
+}
+
+func TestExec(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("ssh-ed25519 AAAA...\n", "", nil)
+	c := NewClient(&m)
+
+	stdout, err := c.Exec(context.Background(), testContainerName, "cat", "/etc/ssh/ssh_host_ed25519_key.pub")
+	require.NoError(t, err)
+	assert.Equal(t, "ssh-ed25519 AAAA...\n", stdout)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainerName), "cat", "/etc/ssh/ssh_host_ed25519_key.pub"}, m.Calls[0].Args)
+}
+
+func TestExec_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "OCI runtime exec failed\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	stdout, err := c.Exec(context.Background(), testContainerName, "false")
+	assert.Error(t, err)
+	assert.Empty(t, stdout)
+}
+
+func TestExecWithStdin(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	stdin := strings.NewReader("ssh-ed25519 AAAA... root@sind\n")
+	err := c.ExecWithStdin(context.Background(), testContainerName, stdin, "sh", "-c", "cat >> /root/.ssh/authorized_keys")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", "cat >> /root/.ssh/authorized_keys"}, m.Calls[0].Args)
+	assert.Equal(t, "ssh-ed25519 AAAA... root@sind\n", m.Calls[0].Stdin)
+}
+
+func TestExecWithStdin_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	stdin := strings.NewReader("data")
+	err := c.ExecWithStdin(context.Background(), testContainerName, stdin, "cat")
+	assert.Error(t, err)
 }

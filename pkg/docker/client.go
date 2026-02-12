@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -248,4 +249,21 @@ func (c *Client) ListVolumes(ctx context.Context, filters ...string) ([]VolumeLi
 		})
 	}
 	return entries, nil
+}
+
+// Exec runs a command inside a container and returns its stdout.
+func (c *Client) Exec(ctx context.Context, container ContainerName, command ...string) (string, error) {
+	args := append([]string{"exec", string(container)}, command...)
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		return "", err
+	}
+	return stdout, nil
+}
+
+// ExecWithStdin runs a command inside a container, piping stdin to it.
+func (c *Client) ExecWithStdin(ctx context.Context, container ContainerName, stdin io.Reader, command ...string) error {
+	args := append([]string{"exec", "-i", string(container)}, command...)
+	_, _, err := c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
+	return err
 }

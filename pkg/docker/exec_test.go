@@ -6,11 +6,18 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type failReader struct{}
+
+func (r *failReader) Read([]byte) (int, error) {
+	return 0, fmt.Errorf("read failed")
+}
 
 func TestOSExecutor_SimpleCommand(t *testing.T) {
 	var e OSExecutor
@@ -59,6 +66,15 @@ func TestOSExecutor_ContextCanceled(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestOSExecutor_WithStdin(t *testing.T) {
+	var e OSExecutor
+	stdin := strings.NewReader("hello from stdin")
+	stdout, stderr, err := e.RunWithStdin(context.Background(), stdin, "cat")
+	require.NoError(t, err)
+	assert.Equal(t, "hello from stdin", stdout)
+	assert.Empty(t, stderr)
+}
+
 func TestMockExecutor_RecordsCalls(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("ok\n", "", nil)
@@ -93,4 +109,27 @@ func TestMockExecutor_UnexpectedCall(t *testing.T) {
 	_, _, err := m.Run(context.Background(), "docker", "ps")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected call")
+}
+
+func TestMockExecutor_WithStdinError(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+
+	r := &failReader{}
+	_, _, err := m.RunWithStdin(context.Background(), r, "cmd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mock: reading stdin")
+}
+
+func TestMockExecutor_WithStdin(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+
+	stdin := strings.NewReader("key-data")
+	m.RunWithStdin(context.Background(), stdin, "docker", "exec", "-i", "node")
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, "docker", m.Calls[0].Name)
+	assert.Equal(t, []string{"exec", "-i", "node"}, m.Calls[0].Args)
+	assert.Equal(t, "key-data", m.Calls[0].Stdin)
 }
