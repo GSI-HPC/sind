@@ -209,6 +209,26 @@ func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
 	assert.Contains(t, volumes, "sind-dev-data:/data:rw,z")
 }
 
+func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataHostPath = "/home/user/data"
+	// DataMountPath left empty — should default to /data
+	args := BuildRunArgs(cfg)
+
+	volumes := argValues(args, "-v")
+	assert.Contains(t, volumes, "/home/user/data:/data:rw,z")
+}
+
+func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataMountPath = "/shared"
+	// DataHostPath left empty — should use docker volume
+	args := BuildRunArgs(cfg)
+
+	volumes := argValues(args, "-v")
+	assert.Contains(t, volumes, "sind-dev-data:/shared:rw,z")
+}
+
 func TestBuildRunArgs_Resources(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.CPUs = 4
