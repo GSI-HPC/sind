@@ -76,6 +76,118 @@ func TestEnsureMeshNetwork_CreateError(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating mesh network")
 }
 
+func TestEnsureDNS_Creates(t *testing.T) {
+	const containerID = "abc123"
+
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-dns\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// CreateContainer → success
+	m.AddResult(containerID+"\n", "", nil)
+	// CopyToContainer → success
+	m.AddResult("", "", nil)
+	// StartContainer → success
+	m.AddResult("sind-dns\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureDNS(context.Background())
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 4)
+	// 1. Check existence
+	assert.Equal(t, []string{"container", "inspect", string(cluster.DNSContainerName)}, m.Calls[0].Args)
+	// 2. Create container
+	assert.Equal(t, []string{
+		"create",
+		"--name", string(cluster.DNSContainerName),
+		"--network", string(cluster.MeshNetworkName),
+		DNSImage,
+	}, m.Calls[1].Args)
+	// 3. Copy config files
+	assert.Equal(t, []string{"cp", "-", string(cluster.DNSContainerName) + ":/"}, m.Calls[2].Args)
+	assert.NotEmpty(t, m.Calls[2].Stdin)
+	// 4. Start container
+	assert.Equal(t, []string{"start", string(cluster.DNSContainerName)}, m.Calls[3].Args)
+}
+
+func TestEnsureDNS_AlreadyExists(t *testing.T) {
+	var m docker.MockExecutor
+	// ContainerExists → found
+	m.AddResult("[{}]\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureDNS(context.Background())
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"container", "inspect", string(cluster.DNSContainerName)}, m.Calls[0].Args)
+}
+
+func TestEnsureDNS_InspectError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureDNS(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "checking DNS container")
+}
+
+func TestEnsureDNS_CreateError(t *testing.T) {
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-dns\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// CreateContainer → error
+	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureDNS(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "creating DNS container")
+}
+
+func TestEnsureDNS_CopyError(t *testing.T) {
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-dns\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// CreateContainer → success
+	m.AddResult("abc123\n", "", nil)
+	// CopyToContainer → error
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureDNS(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "writing DNS configuration")
+}
+
+func TestEnsureDNS_StartError(t *testing.T) {
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-dns\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// CreateContainer → success
+	m.AddResult("abc123\n", "", nil)
+	// CopyToContainer → success
+	m.AddResult("", "", nil)
+	// StartContainer → error
+	m.AddResult("", "Error: cannot start\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureDNS(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "starting DNS container")
+}
+
 // exitCode1 runs a command that exits with code 1 and returns its ProcessState.
 func exitCode1(t *testing.T) *os.ProcessState {
 	t.Helper()
