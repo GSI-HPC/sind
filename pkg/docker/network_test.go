@@ -5,6 +5,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,6 +13,40 @@ import (
 )
 
 const testNetworkName NetworkName = "sind-dev-net"
+
+func TestNetworkExists_True(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("[{}]\n", "", nil)
+	c := NewClient(&m)
+
+	exists, err := c.NetworkExists(context.Background(), testNetworkName)
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "inspect", string(testNetworkName)}, m.Calls[0].Args)
+}
+
+func TestNetworkExists_False(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	exists, err := c.NetworkExists(context.Background(), testNetworkName)
+	require.NoError(t, err)
+	assert.False(t, exists)
+}
+
+func TestNetworkExists_OtherError(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := NewClient(&m)
+
+	exists, err := c.NetworkExists(context.Background(), testNetworkName)
+	assert.Error(t, err)
+	assert.False(t, exists)
+}
 
 func TestCreateNetwork(t *testing.T) {
 	const networkID NetworkID = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
