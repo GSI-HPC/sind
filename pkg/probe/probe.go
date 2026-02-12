@@ -10,8 +10,8 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-// CheckContainerRunning verifies that the container is in the "running" state.
-func CheckContainerRunning(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+// ContainerRunning verifies that the container is in the "running" state.
+func ContainerRunning(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	info, err := client.InspectContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("inspecting container: %w", err)
@@ -22,11 +22,11 @@ func CheckContainerRunning(ctx context.Context, client *docker.Client, name dock
 	return nil
 }
 
-// CheckSystemdReady verifies that systemd has finished booting.
+// SystemdReady verifies that systemd has finished booting.
 // Both "running" and "degraded" are considered ready, since degraded means
 // systemd completed startup but some units failed (which is expected when
 // Slurm daemons haven't been configured yet).
-func CheckSystemdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+func SystemdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	// systemctl is-system-running exits non-zero for all states except "running".
 	// Wrap in sh so we always get stdout (Client.Exec discards it on error).
 	stdout, err := client.Exec(ctx, name, "sh", "-c", "systemctl is-system-running 2>/dev/null || true")
@@ -40,9 +40,9 @@ func CheckSystemdReady(ctx context.Context, client *docker.Client, name docker.C
 	return nil
 }
 
-// CheckSSHD verifies that sshd is accepting connections and responding with
+// SSHDReady verifies that sshd is accepting connections and responding with
 // the SSH protocol banner on port 22.
-func CheckSSHD(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+func SSHDReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	stdout, err := client.Exec(ctx, name,
 		"bash", "-c", "read -t1 line < /dev/tcp/localhost/22 && echo \"$line\"")
 	if err != nil {
@@ -55,8 +55,8 @@ func CheckSSHD(ctx context.Context, client *docker.Client, name docker.Container
 	return nil
 }
 
-// CheckSlurmctld verifies that slurmctld is responding to RPC requests.
-func CheckSlurmctld(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+// SlurmctldReady verifies that slurmctld is responding to RPC requests.
+func SlurmctldReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	_, err := client.Exec(ctx, name, "scontrol", "ping")
 	if err != nil {
 		return fmt.Errorf("slurmctld not ready: %w", err)
@@ -64,8 +64,8 @@ func CheckSlurmctld(ctx context.Context, client *docker.Client, name docker.Cont
 	return nil
 }
 
-// CheckSlurmd verifies that the slurmd service is active.
-func CheckSlurmd(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+// SlurmdReady verifies that the slurmd service is active.
+func SlurmdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	_, err := client.Exec(ctx, name, "systemctl", "is-active", "slurmd")
 	if err != nil {
 		return fmt.Errorf("slurmd not ready: %w", err)
