@@ -193,3 +193,59 @@ func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, con
 	_, _, err := c.run(ctx, "network", "disconnect", string(network), string(container))
 	return err
 }
+
+// VolumeName is a human-readable Docker volume name.
+type VolumeName string
+
+// CreateVolume creates a Docker volume.
+func (c *Client) CreateVolume(ctx context.Context, name VolumeName) error {
+	_, _, err := c.run(ctx, "volume", "create", string(name))
+	return err
+}
+
+// RemoveVolume removes a Docker volume.
+func (c *Client) RemoveVolume(ctx context.Context, name VolumeName) error {
+	_, _, err := c.run(ctx, "volume", "rm", string(name))
+	return err
+}
+
+// VolumeListEntry holds summary information from docker volume ls.
+type VolumeListEntry struct {
+	Name   VolumeName
+	Driver string
+}
+
+// volumeLsEntry maps the docker volume ls --format json output.
+type volumeLsEntry struct {
+	Name   string `json:"Name"`
+	Driver string `json:"Driver"`
+}
+
+// ListVolumes returns volumes matching the given filters.
+// Each filter is passed as a --filter flag (e.g. "name=sind-dev").
+func (c *Client) ListVolumes(ctx context.Context, filters ...string) ([]VolumeListEntry, error) {
+	args := []string{"volume", "ls", "--format", "json"}
+	for _, f := range filters {
+		args = append(args, "--filter", f)
+	}
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	stdout = strings.TrimSpace(stdout)
+	if stdout == "" {
+		return nil, nil
+	}
+	var entries []VolumeListEntry
+	for _, line := range strings.Split(stdout, "\n") {
+		var v volumeLsEntry
+		if err := json.Unmarshal([]byte(line), &v); err != nil {
+			return nil, fmt.Errorf("parsing volume ls output: %w", err)
+		}
+		entries = append(entries, VolumeListEntry{
+			Name:   VolumeName(v.Name),
+			Driver: v.Driver,
+		})
+	}
+	return entries, nil
+}
