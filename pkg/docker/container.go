@@ -71,6 +71,12 @@ func (c *Client) RemoveContainer(ctx context.Context, name ContainerName) error 
 	return err
 }
 
+// SignalContainer sends a signal to a running container (docker kill -s).
+func (c *Client) SignalContainer(ctx context.Context, name ContainerName, signal string) error {
+	_, _, err := c.run(ctx, "kill", "-s", signal, string(name))
+	return err
+}
+
 // ContainerInfo holds inspected container details.
 type ContainerInfo struct {
 	ID     ContainerID

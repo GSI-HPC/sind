@@ -114,6 +114,27 @@ func TestRemoveContainer_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestSignalContainer(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.SignalContainer(context.Background(), testContainerName, "HUP")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"kill", "-s", "HUP", string(testContainerName)}, m.Calls[0].Args)
+}
+
+func TestSignalContainer_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.SignalContainer(context.Background(), testContainerName, "HUP")
+	assert.Error(t, err)
+}
+
 const inspectJSON = `[{
   "Id": "94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca",
   "Name": "/sind-dev-controller",
