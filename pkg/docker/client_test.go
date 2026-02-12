@@ -247,3 +247,93 @@ func TestListContainers_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 }
+
+const testNetwork = "sind-dev-net"
+
+func TestCreateNetwork(t *testing.T) {
+	const networkID = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
+
+	var m MockExecutor
+	m.AddResult(networkID+"\n", "", nil)
+	c := NewClient(&m)
+
+	id, err := c.CreateNetwork(context.Background(), testNetwork)
+	require.NoError(t, err)
+	assert.Equal(t, networkID, id)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "create", testNetwork}, m.Calls[0].Args)
+}
+
+func TestCreateNetwork_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error response from daemon: network with name "+testNetwork+" already exists\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	id, err := c.CreateNetwork(context.Background(), testNetwork)
+	assert.Error(t, err)
+	assert.Empty(t, id)
+}
+
+func TestRemoveNetwork(t *testing.T) {
+	var m MockExecutor
+	m.AddResult(testNetwork+"\n", "", nil)
+	c := NewClient(&m)
+
+	err := c.RemoveNetwork(context.Background(), testNetwork)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "rm", testNetwork}, m.Calls[0].Args)
+}
+
+func TestRemoveNetwork_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error: No such network: "+testNetwork+"\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.RemoveNetwork(context.Background(), testNetwork)
+	assert.Error(t, err)
+}
+
+func TestConnectNetwork(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.ConnectNetwork(context.Background(), testNetwork, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "connect", testNetwork, testContainer}, m.Calls[0].Args)
+}
+
+func TestConnectNetwork_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error response from daemon: No such container: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.ConnectNetwork(context.Background(), testNetwork, testContainer)
+	assert.Error(t, err)
+}
+
+func TestDisconnectNetwork(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.DisconnectNetwork(context.Background(), testNetwork, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "disconnect", testNetwork, testContainer}, m.Calls[0].Args)
+}
+
+func TestDisconnectNetwork_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error response from daemon: No such container: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.DisconnectNetwork(context.Background(), testNetwork, testContainer)
+	assert.Error(t, err)
+}

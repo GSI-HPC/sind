@@ -153,3 +153,30 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 	}
 	return entries, nil
 }
+
+// CreateNetwork creates a Docker network and returns its ID.
+func (c *Client) CreateNetwork(ctx context.Context, name string) (string, error) {
+	stdout, _, err := c.run(ctx, "network", "create", name)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(stdout), nil
+}
+
+// RemoveNetwork removes a Docker network.
+func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
+	_, _, err := c.run(ctx, "network", "rm", name)
+	return err
+}
+
+// ConnectNetwork connects a container to a network.
+func (c *Client) ConnectNetwork(ctx context.Context, network, container string) error {
+	_, _, err := c.run(ctx, "network", "connect", network, container)
+	return err
+}
+
+// DisconnectNetwork disconnects a container from a network.
+func (c *Client) DisconnectNetwork(ctx context.Context, network, container string) error {
+	_, _, err := c.run(ctx, "network", "disconnect", network, container)
+	return err
+}
