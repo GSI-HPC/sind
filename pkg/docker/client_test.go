@@ -11,17 +11,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testContainer = "sind-dev-controller"
+const (
+	testContainerName ContainerName = "sind-dev-controller"
+	testNetworkName   NetworkName   = "sind-dev-net"
+)
 
 func TestCreateContainer(t *testing.T) {
-	const containerID = "b98dd34e3931dd738dd597ca2ae6fdc30a955be1c0662a321c634a82e5348ee9"
+	const containerID ContainerID = "b98dd34e3931dd738dd597ca2ae6fdc30a955be1c0662a321c634a82e5348ee9"
 
 	var m MockExecutor
-	m.AddResult(containerID+"\n", "", nil)
+	m.AddResult(string(containerID)+"\n", "", nil)
 	c := NewClient(&m)
 
 	id, err := c.CreateContainer(context.Background(),
-		"--name", testContainer,
+		"--name", string(testContainerName),
 		"--label", "sind.cluster=dev",
 		"alpine",
 	)
@@ -32,7 +35,7 @@ func TestCreateContainer(t *testing.T) {
 	assert.Equal(t, "docker", m.Calls[0].Name)
 	assert.Equal(t, []string{
 		"run", "-d",
-		"--name", testContainer,
+		"--name", string(testContainerName),
 		"--label", "sind.cluster=dev",
 		"alpine",
 	}, m.Calls[0].Args)
@@ -50,64 +53,64 @@ func TestCreateContainer_Error(t *testing.T) {
 
 func TestStartContainer(t *testing.T) {
 	var m MockExecutor
-	m.AddResult(testContainer+"\n", "", nil)
+	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.StartContainer(context.Background(), testContainer)
+	err := c.StartContainer(context.Background(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"start", testContainer}, m.Calls[0].Args)
+	assert.Equal(t, []string{"start", string(testContainerName)}, m.Calls[0].Args)
 }
 
 func TestStartContainer_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error: No such container: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.StartContainer(context.Background(), testContainer)
+	err := c.StartContainer(context.Background(), testContainerName)
 	assert.Error(t, err)
 }
 
 func TestStopContainer(t *testing.T) {
 	var m MockExecutor
-	m.AddResult(testContainer+"\n", "", nil)
+	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.StopContainer(context.Background(), testContainer)
+	err := c.StopContainer(context.Background(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"stop", testContainer}, m.Calls[0].Args)
+	assert.Equal(t, []string{"stop", string(testContainerName)}, m.Calls[0].Args)
 }
 
 func TestStopContainer_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error: No such container: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.StopContainer(context.Background(), testContainer)
+	err := c.StopContainer(context.Background(), testContainerName)
 	assert.Error(t, err)
 }
 
 func TestRemoveContainer(t *testing.T) {
 	var m MockExecutor
-	m.AddResult(testContainer+"\n", "", nil)
+	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.RemoveContainer(context.Background(), testContainer)
+	err := c.RemoveContainer(context.Background(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"rm", testContainer}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", string(testContainerName)}, m.Calls[0].Args)
 }
 
 func TestRemoveContainer_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error: No such container: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.RemoveContainer(context.Background(), testContainer)
+	err := c.RemoveContainer(context.Background(), testContainerName)
 	assert.Error(t, err)
 }
 
@@ -129,31 +132,31 @@ func TestInspectContainer(t *testing.T) {
 	m.AddResult(inspectJSON, "", nil)
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainer)
+	info, err := c.InspectContainer(context.Background(), testContainerName)
 	require.NoError(t, err)
 
-	assert.Equal(t, "94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca", info.ID)
-	assert.Equal(t, testContainer, info.Name)
+	assert.Equal(t, ContainerID("94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca"), info.ID)
+	assert.Equal(t, testContainerName, info.Name)
 	assert.Equal(t, "running", info.Status)
 	assert.Equal(t, map[string]string{
 		"sind.cluster": "dev",
 		"sind.role":    "controller",
 	}, info.Labels)
-	assert.Equal(t, map[string]string{
+	assert.Equal(t, map[NetworkName]string{
 		"sind-dev-net": "172.18.0.2",
 		"sind-mesh":    "172.19.0.3",
 	}, info.IPs)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"inspect", testContainer}, m.Calls[0].Args)
+	assert.Equal(t, []string{"inspect", string(testContainerName)}, m.Calls[0].Args)
 }
 
 func TestInspectContainer_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error: No such object: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error: No such object: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainer)
+	info, err := c.InspectContainer(context.Background(), testContainerName)
 	assert.Error(t, err)
 	assert.Nil(t, info)
 }
@@ -163,7 +166,7 @@ func TestInspectContainer_InvalidJSON(t *testing.T) {
 	m.AddResult("not json", "", nil)
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainer)
+	info, err := c.InspectContainer(context.Background(), testContainerName)
 	assert.Error(t, err)
 	assert.Nil(t, info)
 	assert.Contains(t, err.Error(), "parsing inspect output")
@@ -174,7 +177,7 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	m.AddResult("[]", "", nil)
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainer)
+	info, err := c.InspectContainer(context.Background(), testContainerName)
 	assert.Error(t, err)
 	assert.Nil(t, info)
 	assert.Contains(t, err.Error(), "no results")
@@ -192,11 +195,11 @@ func TestListContainers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 
-	assert.Equal(t, "sind-dev-controller", entries[0].Name)
+	assert.Equal(t, ContainerName("sind-dev-controller"), entries[0].Name)
 	assert.Equal(t, "running", entries[0].State)
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", entries[0].Image)
 
-	assert.Equal(t, "sind-dev-compute-0", entries[1].Name)
+	assert.Equal(t, ContainerName("sind-dev-compute-0"), entries[1].Name)
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.cluster=dev"}, m.Calls[0].Args)
@@ -248,51 +251,49 @@ func TestListContainers_Error(t *testing.T) {
 	assert.Nil(t, entries)
 }
 
-const testNetwork = "sind-dev-net"
-
 func TestCreateNetwork(t *testing.T) {
-	const networkID = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
+	const networkID NetworkID = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
 
 	var m MockExecutor
-	m.AddResult(networkID+"\n", "", nil)
+	m.AddResult(string(networkID)+"\n", "", nil)
 	c := NewClient(&m)
 
-	id, err := c.CreateNetwork(context.Background(), testNetwork)
+	id, err := c.CreateNetwork(context.Background(), testNetworkName)
 	require.NoError(t, err)
 	assert.Equal(t, networkID, id)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "create", testNetwork}, m.Calls[0].Args)
+	assert.Equal(t, []string{"network", "create", string(testNetworkName)}, m.Calls[0].Args)
 }
 
 func TestCreateNetwork_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error response from daemon: network with name "+testNetwork+" already exists\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error response from daemon: network with name "+string(testNetworkName)+" already exists\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	id, err := c.CreateNetwork(context.Background(), testNetwork)
+	id, err := c.CreateNetwork(context.Background(), testNetworkName)
 	assert.Error(t, err)
 	assert.Empty(t, id)
 }
 
 func TestRemoveNetwork(t *testing.T) {
 	var m MockExecutor
-	m.AddResult(testNetwork+"\n", "", nil)
+	m.AddResult(string(testNetworkName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.RemoveNetwork(context.Background(), testNetwork)
+	err := c.RemoveNetwork(context.Background(), testNetworkName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "rm", testNetwork}, m.Calls[0].Args)
+	assert.Equal(t, []string{"network", "rm", string(testNetworkName)}, m.Calls[0].Args)
 }
 
 func TestRemoveNetwork_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error: No such network: "+testNetwork+"\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.RemoveNetwork(context.Background(), testNetwork)
+	err := c.RemoveNetwork(context.Background(), testNetworkName)
 	assert.Error(t, err)
 }
 
@@ -301,19 +302,19 @@ func TestConnectNetwork(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.ConnectNetwork(context.Background(), testNetwork, testContainer)
+	err := c.ConnectNetwork(context.Background(), testNetworkName, testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "connect", testNetwork, testContainer}, m.Calls[0].Args)
+	assert.Equal(t, []string{"network", "connect", string(testNetworkName), string(testContainerName)}, m.Calls[0].Args)
 }
 
 func TestConnectNetwork_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error response from daemon: No such container: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.ConnectNetwork(context.Background(), testNetwork, testContainer)
+	err := c.ConnectNetwork(context.Background(), testNetworkName, testContainerName)
 	assert.Error(t, err)
 }
 
@@ -322,18 +323,18 @@ func TestDisconnectNetwork(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.DisconnectNetwork(context.Background(), testNetwork, testContainer)
+	err := c.DisconnectNetwork(context.Background(), testNetworkName, testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "disconnect", testNetwork, testContainer}, m.Calls[0].Args)
+	assert.Equal(t, []string{"network", "disconnect", string(testNetworkName), string(testContainerName)}, m.Calls[0].Args)
 }
 
 func TestDisconnectNetwork_Error(t *testing.T) {
 	var m MockExecutor
-	m.AddResult("", "Error response from daemon: No such container: "+testContainer+"\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.DisconnectNetwork(context.Background(), testNetwork, testContainer)
+	err := c.DisconnectNetwork(context.Background(), testNetworkName, testContainerName)
 	assert.Error(t, err)
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
+// Package docker provides a thin abstraction over the Docker CLI.
 package docker
 
 import (
@@ -8,6 +9,18 @@ import (
 	"fmt"
 	"strings"
 )
+
+// ContainerID is a Docker container identifier (64 hex characters).
+type ContainerID string
+
+// ContainerName is a human-readable Docker container name.
+type ContainerName string
+
+// NetworkID is a Docker network identifier.
+type NetworkID string
+
+// NetworkName is a human-readable Docker network name.
+type NetworkName string
 
 // Client provides operations against the Docker CLI.
 type Client struct {
@@ -27,40 +40,40 @@ func (c *Client) run(ctx context.Context, args ...string) (string, string, error
 // CreateContainer creates and starts a container in detached mode.
 // The args are passed directly to `docker run -d` and should include the
 // image name as the last element. Returns the container ID.
-func (c *Client) CreateContainer(ctx context.Context, args ...string) (string, error) {
+func (c *Client) CreateContainer(ctx context.Context, args ...string) (ContainerID, error) {
 	runArgs := append([]string{"run", "-d"}, args...)
 	stdout, _, err := c.run(ctx, runArgs...)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(stdout), nil
+	return ContainerID(strings.TrimSpace(stdout)), nil
 }
 
 // StartContainer starts a stopped container.
-func (c *Client) StartContainer(ctx context.Context, name string) error {
-	_, _, err := c.run(ctx, "start", name)
+func (c *Client) StartContainer(ctx context.Context, name ContainerName) error {
+	_, _, err := c.run(ctx, "start", string(name))
 	return err
 }
 
 // StopContainer gracefully stops a running container.
-func (c *Client) StopContainer(ctx context.Context, name string) error {
-	_, _, err := c.run(ctx, "stop", name)
+func (c *Client) StopContainer(ctx context.Context, name ContainerName) error {
+	_, _, err := c.run(ctx, "stop", string(name))
 	return err
 }
 
 // RemoveContainer removes a container.
-func (c *Client) RemoveContainer(ctx context.Context, name string) error {
-	_, _, err := c.run(ctx, "rm", name)
+func (c *Client) RemoveContainer(ctx context.Context, name ContainerName) error {
+	_, _, err := c.run(ctx, "rm", string(name))
 	return err
 }
 
 // ContainerInfo holds inspected container details.
 type ContainerInfo struct {
-	ID     string
-	Name   string
+	ID     ContainerID
+	Name   ContainerName
 	Status string
 	Labels map[string]string
-	IPs    map[string]string // network name → IP address
+	IPs    map[NetworkName]string
 }
 
 // inspectResult maps the subset of docker inspect JSON we care about.
@@ -81,8 +94,8 @@ type inspectResult struct {
 }
 
 // InspectContainer returns detailed information about a container.
-func (c *Client) InspectContainer(ctx context.Context, name string) (*ContainerInfo, error) {
-	stdout, _, err := c.run(ctx, "inspect", name)
+func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*ContainerInfo, error) {
+	stdout, _, err := c.run(ctx, "inspect", string(name))
 	if err != nil {
 		return nil, err
 	}
@@ -94,13 +107,13 @@ func (c *Client) InspectContainer(ctx context.Context, name string) (*ContainerI
 		return nil, fmt.Errorf("inspect returned no results for %q", name)
 	}
 	r := results[0]
-	ips := make(map[string]string, len(r.NetworkSettings.Networks))
+	ips := make(map[NetworkName]string, len(r.NetworkSettings.Networks))
 	for net, info := range r.NetworkSettings.Networks {
-		ips[net] = info.IPAddress
+		ips[NetworkName(net)] = info.IPAddress
 	}
 	return &ContainerInfo{
-		ID:     r.ID,
-		Name:   strings.TrimPrefix(r.Name, "/"),
+		ID:     ContainerID(r.ID),
+		Name:   ContainerName(strings.TrimPrefix(r.Name, "/")),
 		Status: r.State.Status,
 		Labels: r.Config.Labels,
 		IPs:    ips,
@@ -109,8 +122,8 @@ func (c *Client) InspectContainer(ctx context.Context, name string) (*ContainerI
 
 // ContainerListEntry holds summary information from docker ps.
 type ContainerListEntry struct {
-	ID    string
-	Name  string
+	ID    ContainerID
+	Name  ContainerName
 	State string
 	Image string
 }
@@ -145,8 +158,8 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 			return nil, fmt.Errorf("parsing ps output: %w", err)
 		}
 		entries = append(entries, ContainerListEntry{
-			ID:    p.ID,
-			Name:  p.Names,
+			ID:    ContainerID(p.ID),
+			Name:  ContainerName(p.Names),
 			State: p.State,
 			Image: p.Image,
 		})
@@ -155,28 +168,28 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 }
 
 // CreateNetwork creates a Docker network and returns its ID.
-func (c *Client) CreateNetwork(ctx context.Context, name string) (string, error) {
-	stdout, _, err := c.run(ctx, "network", "create", name)
+func (c *Client) CreateNetwork(ctx context.Context, name NetworkName) (NetworkID, error) {
+	stdout, _, err := c.run(ctx, "network", "create", string(name))
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(stdout), nil
+	return NetworkID(strings.TrimSpace(stdout)), nil
 }
 
 // RemoveNetwork removes a Docker network.
-func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
-	_, _, err := c.run(ctx, "network", "rm", name)
+func (c *Client) RemoveNetwork(ctx context.Context, name NetworkName) error {
+	_, _, err := c.run(ctx, "network", "rm", string(name))
 	return err
 }
 
 // ConnectNetwork connects a container to a network.
-func (c *Client) ConnectNetwork(ctx context.Context, network, container string) error {
-	_, _, err := c.run(ctx, "network", "connect", network, container)
+func (c *Client) ConnectNetwork(ctx context.Context, network NetworkName, container ContainerName) error {
+	_, _, err := c.run(ctx, "network", "connect", string(network), string(container))
 	return err
 }
 
 // DisconnectNetwork disconnects a container from a network.
-func (c *Client) DisconnectNetwork(ctx context.Context, network, container string) error {
-	_, _, err := c.run(ctx, "network", "disconnect", network, container)
+func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, container ContainerName) error {
+	_, _, err := c.run(ctx, "network", "disconnect", string(network), string(container))
 	return err
 }
