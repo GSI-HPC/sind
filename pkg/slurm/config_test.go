@@ -32,3 +32,9 @@ func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
 			"line has trailing whitespace: %q", line)
 	}
 }
+
+func TestGenerateCgroupConf(t *testing.T) {
+	conf := GenerateCgroupConf()
+
+	assert.Contains(t, conf, "CgroupPlugin=autodetect")
+}
