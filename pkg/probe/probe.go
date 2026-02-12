@@ -54,3 +54,21 @@ func CheckSSHD(ctx context.Context, client *docker.Client, name docker.Container
 	}
 	return nil
 }
+
+// CheckSlurmctld verifies that slurmctld is responding to RPC requests.
+func CheckSlurmctld(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	_, err := client.Exec(ctx, name, "scontrol", "ping")
+	if err != nil {
+		return fmt.Errorf("slurmctld not ready: %w", err)
+	}
+	return nil
+}
+
+// CheckSlurmd verifies that the slurmd service is active.
+func CheckSlurmd(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	_, err := client.Exec(ctx, name, "systemctl", "is-active", "slurmd")
+	if err != nil {
+		return fmt.Errorf("slurmd not ready: %w", err)
+	}
+	return nil
+}

@@ -142,3 +142,48 @@ func TestCheckSSHD_ConnectionRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sshd not ready")
 }
+
+func TestCheckSlurmctld(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("Slurmctld(primary) at controller is UP\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := CheckSlurmctld(context.Background(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "scontrol", "ping"}, m.Calls[0].Args)
+}
+
+func TestCheckSlurmctld_NotReady(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "slurm_persist_conn_open_without_init: failed to open persistent connection\n",
+		fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := CheckSlurmctld(context.Background(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slurmctld not ready")
+}
+
+func TestCheckSlurmd(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("active\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := CheckSlurmd(context.Background(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmd"}, m.Calls[0].Args)
+}
+
+func TestCheckSlurmd_NotReady(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := CheckSlurmd(context.Background(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slurmd not ready")
+}
