@@ -7,27 +7,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"sort"
 	"strings"
 )
 
 // ContainerExists returns true if the given container exists (running or stopped).
 func (c *Client) ContainerExists(ctx context.Context, name ContainerName) (bool, error) {
-	_, _, err := c.run(ctx, "container", "inspect", string(name))
-	if err != nil {
-		// docker container inspect exits 1 for missing containers;
-		// distinguish from other errors by checking ExitError.
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+	return c.exists(ctx, "container", "inspect", string(name))
 }
 
 // CreateContainer creates a container without starting it (docker create).
