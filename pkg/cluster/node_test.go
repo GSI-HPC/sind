@@ -29,6 +29,27 @@ func argValues(args []string, flag string) []string {
 	return values
 }
 
+func TestNodeLabels(t *testing.T) {
+	labels := NodeLabels("dev", "controller", "25.11.0")
+
+	assert.Equal(t, map[string]string{
+		"sind.cluster":       "dev",
+		"sind.role":          "controller",
+		"sind.slurm.version": "25.11.0",
+	}, labels)
+}
+
+func TestNodeLabels_NoSlurmVersion(t *testing.T) {
+	labels := NodeLabels("dev", "compute", "")
+
+	assert.Equal(t, map[string]string{
+		"sind.cluster": "dev",
+		"sind.role":    "compute",
+	}, labels)
+	_, ok := labels[LabelSlurmVersion]
+	assert.False(t, ok, "slurm version label absent")
+}
+
 func defaultRunConfig() RunConfig {
 	return RunConfig{
 		ClusterName:  "dev",

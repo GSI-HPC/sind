@@ -2,7 +2,30 @@
 
 package cluster
 
-import "strconv"
+import (
+	"sort"
+	"strconv"
+)
+
+// Label keys used on sind containers.
+const (
+	LabelCluster      = "sind.cluster"
+	LabelRole         = "sind.role"
+	LabelSlurmVersion = "sind.slurm.version"
+)
+
+// NodeLabels returns the standard labels for a node container.
+// The slurm version label is omitted when slurmVersion is empty.
+func NodeLabels(clusterName, role, slurmVersion string) map[string]string {
+	labels := map[string]string{
+		LabelCluster: clusterName,
+		LabelRole:    role,
+	}
+	if slurmVersion != "" {
+		labels[LabelSlurmVersion] = slurmVersion
+	}
+	return labels
+}
 
 // RunConfig holds the parameters needed to build docker run arguments
 // for creating a node container.
@@ -70,12 +93,14 @@ func BuildRunArgs(cfg RunConfig) []string {
 	)
 
 	// Labels
-	args = append(args,
-		"--label", "sind.cluster="+cfg.ClusterName,
-		"--label", "sind.role="+cfg.Role,
-	)
-	if cfg.SlurmVersion != "" {
-		args = append(args, "--label", "sind.slurm.version="+cfg.SlurmVersion)
+	labels := NodeLabels(cfg.ClusterName, cfg.Role, cfg.SlurmVersion)
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		args = append(args, "--label", k+"="+labels[k])
 	}
 
 	// Image (must be last for docker create/run)
