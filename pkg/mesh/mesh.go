@@ -28,6 +28,83 @@ func NewManager(docker *docker.Client) *Manager {
 	return &Manager{Docker: docker}
 }
 
+// EnsureMesh creates all global infrastructure resources (mesh network, DNS,
+// SSH volume, SSH container) if they do not already exist.
+func (m *Manager) EnsureMesh(ctx context.Context) error {
+	if err := m.EnsureMeshNetwork(ctx); err != nil {
+		return err
+	}
+	if err := m.EnsureDNS(ctx); err != nil {
+		return err
+	}
+	if err := m.EnsureSSHVolume(ctx); err != nil {
+		return err
+	}
+	if err := m.EnsureSSH(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CleanupMesh removes all global infrastructure resources. This should only
+// be called when the last cluster is deleted.
+func (m *Manager) CleanupMesh(ctx context.Context) error {
+	// Remove containers first (auto-disconnects from networks).
+	if err := m.removeContainerIfExists(ctx, cluster.SSHContainerName); err != nil {
+		return fmt.Errorf("removing SSH container: %w", err)
+	}
+	if err := m.removeContainerIfExists(ctx, cluster.DNSContainerName); err != nil {
+		return fmt.Errorf("removing DNS container: %w", err)
+	}
+
+	if err := m.removeNetworkIfExists(ctx, cluster.MeshNetworkName); err != nil {
+		return fmt.Errorf("removing mesh network: %w", err)
+	}
+
+	if err := m.removeVolumeIfExists(ctx, cluster.SSHVolumeName); err != nil {
+		return fmt.Errorf("removing SSH volume: %w", err)
+	}
+
+	return nil
+}
+
+// removeContainerIfExists stops and removes a container if it exists.
+func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.ContainerName) error {
+	exists, err := m.Docker.ContainerExists(ctx, name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	_ = m.Docker.StopContainer(ctx, name) // best-effort; may already be stopped
+	return m.Docker.RemoveContainer(ctx, name)
+}
+
+// removeNetworkIfExists removes a network if it exists.
+func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.NetworkName) error {
+	exists, err := m.Docker.NetworkExists(ctx, name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	return m.Docker.RemoveNetwork(ctx, name)
+}
+
+// removeVolumeIfExists removes a volume if it exists.
+func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeName) error {
+	exists, err := m.Docker.VolumeExists(ctx, name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	return m.Docker.RemoveVolume(ctx, name)
+}
+
 // EnsureMeshNetwork creates the shared mesh network if it does not already exist.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	exists, err := m.Docker.NetworkExists(ctx, cluster.MeshNetworkName)

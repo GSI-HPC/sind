@@ -19,6 +19,212 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- EnsureMesh ---
+
+func TestEnsureMesh(t *testing.T) {
+	var m docker.MockExecutor
+	// EnsureMeshNetwork: NetworkExists → not found, CreateNetwork → success
+	m.AddResult("", "Error: No such network: sind-mesh\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("net-id\n", "", nil)
+	// EnsureDNS: ContainerExists → not found, CreateContainer, CopyToContainer, StartContainer
+	m.AddResult("", "Error: No such container: sind-dns\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("dns-id\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("sind-dns\n", "", nil)
+	// EnsureSSHVolume: VolumeExists → not found, CreateVolume, CreateContainer, CopyToContainer, RemoveContainer
+	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("sind-ssh-config\n", "", nil)
+	m.AddResult("keygen-id\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	// EnsureSSH: ContainerExists → not found, CreateContainer, StartContainer
+	m.AddResult("", "Error: No such container: sind-ssh\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("ssh-id\n", "", nil)
+	m.AddResult("sind-ssh\n", "", nil)
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureMesh(context.Background())
+	require.NoError(t, err)
+}
+
+func TestEnsureMesh_AllExist(t *testing.T) {
+	var m docker.MockExecutor
+	// All four exist checks return success.
+	m.AddResult("[{}]\n", "", nil) // NetworkExists
+	m.AddResult("[{}]\n", "", nil) // ContainerExists (DNS)
+	m.AddResult("[{}]\n", "", nil) // VolumeExists (SSH)
+	m.AddResult("[{}]\n", "", nil) // ContainerExists (SSH)
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureMesh(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 4)
+}
+
+func TestEnsureMesh_NetworkError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "mesh network")
+}
+
+func TestEnsureMesh_DNSError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // network exists
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "DNS container")
+}
+
+func TestEnsureMesh_SSHVolumeError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // network exists
+	m.AddResult("[{}]\n", "", nil) // DNS exists
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SSH volume")
+}
+
+func TestEnsureMesh_SSHContainerError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // network exists
+	m.AddResult("[{}]\n", "", nil) // DNS exists
+	m.AddResult("[{}]\n", "", nil) // SSH volume exists
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.EnsureMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SSH container")
+}
+
+// --- CleanupMesh ---
+
+func TestCleanupMesh(t *testing.T) {
+	var m docker.MockExecutor
+	// removeContainerIfExists(SSH): exists, stop, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("sind-ssh\n", "", nil)
+	m.AddResult("sind-ssh\n", "", nil)
+	// removeContainerIfExists(DNS): exists, stop, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("sind-dns\n", "", nil)
+	m.AddResult("sind-dns\n", "", nil)
+	// removeNetworkIfExists: exists, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("sind-mesh\n", "", nil)
+	// removeVolumeIfExists: exists, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("sind-ssh-config\n", "", nil)
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.CleanupMesh(context.Background())
+	require.NoError(t, err)
+
+	// Verify order: SSH container, DNS container, network, volume.
+	assert.Equal(t, []string{"container", "inspect", string(cluster.SSHContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"stop", string(cluster.SSHContainerName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", string(cluster.SSHContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"container", "inspect", string(cluster.DNSContainerName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"stop", string(cluster.DNSContainerName)}, m.Calls[4].Args)
+	assert.Equal(t, []string{"rm", string(cluster.DNSContainerName)}, m.Calls[5].Args)
+	assert.Equal(t, []string{"network", "inspect", string(cluster.MeshNetworkName)}, m.Calls[6].Args)
+	assert.Equal(t, []string{"network", "rm", string(cluster.MeshNetworkName)}, m.Calls[7].Args)
+	assert.Equal(t, []string{"volume", "inspect", string(cluster.SSHVolumeName)}, m.Calls[8].Args)
+	assert.Equal(t, []string{"volume", "rm", string(cluster.SSHVolumeName)}, m.Calls[9].Args)
+}
+
+func TestCleanupMesh_NoneExist(t *testing.T) {
+	var m docker.MockExecutor
+	// All four exist checks return not found.
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.CleanupMesh(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 4) // only exist checks, no removes
+}
+
+func TestCleanupMesh_SSHContainerError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.CleanupMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "removing SSH container")
+}
+
+func TestCleanupMesh_DNSContainerError(t *testing.T) {
+	var m docker.MockExecutor
+	// SSH container doesn't exist
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	// DNS container check fails
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.CleanupMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "removing DNS container")
+}
+
+func TestCleanupMesh_NetworkError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS
+	m.AddResult("", "", fmt.Errorf("connection refused"))                   // network
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.CleanupMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "removing mesh network")
+}
+
+func TestCleanupMesh_VolumeError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network
+	m.AddResult("", "", fmt.Errorf("connection refused"))                   // volume
+	c := docker.NewClient(&m)
+	mgr := NewManager(c)
+
+	err := mgr.CleanupMesh(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "removing SSH volume")
+}
+
 // --- EnsureMeshNetwork ---
 
 func TestEnsureMeshNetwork_Creates(t *testing.T) {
