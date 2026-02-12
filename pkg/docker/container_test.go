@@ -319,6 +319,72 @@ func TestExecWithStdin_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestReadFile(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("line1\nline2\n", "", nil)
+	c := NewClient(&m)
+
+	content, err := c.ReadFile(context.Background(), testContainerName, "/etc/hosts")
+	require.NoError(t, err)
+	assert.Equal(t, "line1\nline2\n", content)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainerName), "cat", "/etc/hosts"}, m.Calls[0].Args)
+}
+
+func TestReadFile_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "cat: /missing: No such file\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	_, err := c.ReadFile(context.Background(), testContainerName, "/missing")
+	assert.Error(t, err)
+}
+
+func TestWriteFile(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.WriteFile(context.Background(), testContainerName, "/tmp/out", "hello\n")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", "cat > /tmp/out"}, m.Calls[0].Args)
+	assert.Equal(t, "hello\n", m.Calls[0].Stdin)
+}
+
+func TestWriteFile_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.WriteFile(context.Background(), testContainerName, "/tmp/out", "data")
+	assert.Error(t, err)
+}
+
+func TestAppendFile(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.AppendFile(context.Background(), testContainerName, "/tmp/log", "new line\n")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", "cat >> /tmp/log"}, m.Calls[0].Args)
+	assert.Equal(t, "new line\n", m.Calls[0].Stdin)
+}
+
+func TestAppendFile_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.AppendFile(context.Background(), testContainerName, "/tmp/log", "data")
+	assert.Error(t, err)
+}
+
 func TestContainerExists_True(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("[{}]\n", "", nil)

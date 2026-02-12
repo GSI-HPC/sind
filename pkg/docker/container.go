@@ -194,6 +194,23 @@ func (c *Client) ExecWithStdin(ctx context.Context, container ContainerName, std
 	return err
 }
 
+// ReadFile reads a file from a running container via docker exec.
+func (c *Client) ReadFile(ctx context.Context, container ContainerName, path string) (string, error) {
+	return c.Exec(ctx, container, "cat", path)
+}
+
+// WriteFile overwrites a file in a running container via docker exec.
+func (c *Client) WriteFile(ctx context.Context, container ContainerName, path, content string) error {
+	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
+		"sh", "-c", "cat > "+path)
+}
+
+// AppendFile appends content to a file in a running container via docker exec.
+func (c *Client) AppendFile(ctx context.Context, container ContainerName, path, content string) error {
+	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
+		"sh", "-c", "cat >> "+path)
+}
+
 // CopyToContainer writes files into a container directory via docker cp.
 // Files are provided as a map of filename to content. The container may be
 // running or stopped. Keys are sorted for deterministic tar output.
