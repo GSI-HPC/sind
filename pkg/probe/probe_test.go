@@ -285,6 +285,15 @@ func TestUntilReady_SecondProbeFails(t *testing.T) {
 	assert.Len(t, m.Calls, 4)
 }
 
+func TestUntilReady_EmptyProbes(t *testing.T) {
+	var m docker.MockExecutor
+	c := docker.NewClient(&m)
+
+	err := UntilReady(context.Background(), c, testContainer, nil, time.Second, time.Millisecond)
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls)
+}
+
 func TestUntilReady_ContextCanceled(t *testing.T) {
 	var m docker.MockExecutor
 	for i := 0; i < 100; i++ {
