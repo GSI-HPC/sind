@@ -90,6 +90,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `log/slog` (stdlib) | Structured logging |
 | `al.essio.dev/pkg/shellescape` | Safe shell command construction |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
+| `github.com/spf13/afero` | Filesystem abstraction for testability |
 
 **Nodeset expansion** (e.g., `compute-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
 
