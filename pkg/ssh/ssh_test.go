@@ -120,6 +120,17 @@ func TestCollectHostKey_MalformedLine(t *testing.T) {
 	assert.Contains(t, err.Error(), "no ed25519 host key found")
 }
 
+func TestCollectHostKey_MalformedThenValid(t *testing.T) {
+	var m docker.MockExecutor
+	// Malformed line skipped, valid key returned from next line
+	m.AddResult("malformed\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n", "", nil)
+	c := docker.NewClient(&m)
+
+	key, err := CollectHostKey(context.Background(), c, "sind-dev-controller")
+	require.NoError(t, err)
+	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest", key)
+}
+
 func TestCollectHostKey_EmptyOutput(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", nil)
@@ -195,6 +206,28 @@ func TestExportConfig(t *testing.T) {
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/id_ed25519"}, m.Calls[0].Args)
 	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/known_hosts"}, m.Calls[1].Args)
+}
+
+func TestExportConfig_FilePermissions(t *testing.T) {
+	_, c := exportDockerMock()
+	fs := afero.NewMemMapFs()
+
+	err := ExportConfig(context.Background(), c, fs, testExportDir)
+	require.NoError(t, err)
+
+	// Private key must be 0600 (owner read/write only).
+	info, err := fs.Stat(testExportDir + "/id_ed25519")
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+
+	// ssh_config and known_hosts are 0644.
+	info, err = fs.Stat(testExportDir + "/ssh_config")
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0644), info.Mode().Perm())
+
+	info, err = fs.Stat(testExportDir + "/known_hosts")
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0644), info.Mode().Perm())
 }
 
 func TestExportConfig_ReadPrivKeyError(t *testing.T) {
