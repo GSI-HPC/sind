@@ -5,14 +5,6 @@ package cluster
 
 import "github.com/GSI-HPC/sind/pkg/docker"
 
-// Global resource names shared across all clusters.
-const (
-	MeshNetworkName  docker.NetworkName   = "sind-mesh"
-	DNSContainerName docker.ContainerName = "sind-dns"
-	SSHContainerName docker.ContainerName = "sind-ssh"
-	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
-)
-
 // NetworkName returns the Docker network name for a cluster.
 func NetworkName(cluster string) docker.NetworkName {
 	return docker.NetworkName("sind-" + cluster + "-net")

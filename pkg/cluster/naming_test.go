@@ -64,9 +64,3 @@ func TestVolumeName(t *testing.T) {
 	}
 }
 
-func TestGlobalNames(t *testing.T) {
-	assert.Equal(t, docker.NetworkName("sind-mesh"), MeshNetworkName)
-	assert.Equal(t, docker.ContainerName("sind-dns"), DNSContainerName)
-	assert.Equal(t, docker.ContainerName("sind-ssh"), SSHContainerName)
-	assert.Equal(t, docker.VolumeName("sind-ssh-config"), SSHVolumeName)
-}

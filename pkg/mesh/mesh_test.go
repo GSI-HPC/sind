@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,16 +144,16 @@ func TestCleanupMesh(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify order: SSH container, DNS container, network, volume.
-	assert.Equal(t, []string{"container", "inspect", string(cluster.SSHContainerName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{"stop", string(cluster.SSHContainerName)}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", string(cluster.SSHContainerName)}, m.Calls[2].Args)
-	assert.Equal(t, []string{"container", "inspect", string(cluster.DNSContainerName)}, m.Calls[3].Args)
-	assert.Equal(t, []string{"stop", string(cluster.DNSContainerName)}, m.Calls[4].Args)
-	assert.Equal(t, []string{"rm", string(cluster.DNSContainerName)}, m.Calls[5].Args)
-	assert.Equal(t, []string{"network", "inspect", string(cluster.MeshNetworkName)}, m.Calls[6].Args)
-	assert.Equal(t, []string{"network", "rm", string(cluster.MeshNetworkName)}, m.Calls[7].Args)
-	assert.Equal(t, []string{"volume", "inspect", string(cluster.SSHVolumeName)}, m.Calls[8].Args)
-	assert.Equal(t, []string{"volume", "rm", string(cluster.SSHVolumeName)}, m.Calls[9].Args)
+	assert.Equal(t, []string{"container", "inspect", string(SSHContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"stop", string(SSHContainerName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", string(SSHContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"container", "inspect", string(DNSContainerName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"stop", string(DNSContainerName)}, m.Calls[4].Args)
+	assert.Equal(t, []string{"rm", string(DNSContainerName)}, m.Calls[5].Args)
+	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[6].Args)
+	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[7].Args)
+	assert.Equal(t, []string{"volume", "inspect", string(SSHVolumeName)}, m.Calls[8].Args)
+	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[9].Args)
 }
 
 func TestCleanupMesh_NoneExist(t *testing.T) {
@@ -257,8 +256,8 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"network", "inspect", string(cluster.MeshNetworkName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{"network", "create", string(cluster.MeshNetworkName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"network", "create", string(NetworkName)}, m.Calls[1].Args)
 }
 
 func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
@@ -273,7 +272,7 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 
 	// Only inspect, no create
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "inspect", string(cluster.MeshNetworkName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
 }
 
 func TestEnsureMeshNetwork_InspectError(t *testing.T) {
@@ -324,15 +323,15 @@ func TestEnsureDNS_Creates(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"container", "inspect", string(cluster.DNSContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"container", "inspect", string(DNSContainerName)}, m.Calls[0].Args)
 	assert.Equal(t, []string{
 		"create",
-		"--name", string(cluster.DNSContainerName),
-		"--network", string(cluster.MeshNetworkName),
+		"--name", string(DNSContainerName),
+		"--network", string(NetworkName),
 		DNSImage,
 	}, m.Calls[1].Args)
-	assert.Equal(t, []string{"cp", "-", string(cluster.DNSContainerName) + ":/"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"start", string(cluster.DNSContainerName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"cp", "-", string(DNSContainerName) + ":/"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"start", string(DNSContainerName)}, m.Calls[3].Args)
 
 	// Verify initial Corefile has empty hosts block
 	corefile := extractTarFile(t, m.Calls[2].Stdin, "Corefile")
@@ -423,12 +422,12 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 
 	require.Len(t, m.Calls, 3)
 	// Verify read
-	assert.Equal(t, []string{"cp", string(cluster.DNSContainerName) + ":/Corefile", "-"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"cp", string(DNSContainerName) + ":/Corefile", "-"}, m.Calls[0].Args)
 	// Verify written Corefile contains the record
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.local")
 	// Verify SIGHUP
-	assert.Equal(t, []string{"kill", "-s", "HUP", string(cluster.DNSContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"kill", "-s", "HUP", string(DNSContainerName)}, m.Calls[2].Args)
 }
 
 func TestAddDNSRecord_Appends(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 // Label keys used on sind containers.
@@ -131,7 +132,7 @@ func CreateNode(ctx context.Context, client *docker.Client, cfg RunConfig) (dock
 	}
 
 	containerName := ContainerName(cfg.ClusterName, cfg.ShortName)
-	if err := client.ConnectNetwork(ctx, MeshNetworkName, containerName); err != nil {
+	if err := client.ConnectNetwork(ctx, mesh.NetworkName, containerName); err != nil {
 		return "", fmt.Errorf("connecting %s to mesh: %w", cfg.ShortName, err)
 	}
 

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
 )
 
@@ -80,12 +80,12 @@ func GenerateSSHConfig(dir string) string {
 // the private key and known_hosts from the SSH relay container and writing
 // ssh_config, id_ed25519, and known_hosts to dir.
 func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir string) error {
-	privKey, err := client.ReadFile(ctx, cluster.SSHContainerName, "/root/.ssh/id_ed25519")
+	privKey, err := client.ReadFile(ctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519")
 	if err != nil {
 		return fmt.Errorf("reading private key: %w", err)
 	}
 
-	knownHosts, err := client.ReadFile(ctx, cluster.SSHContainerName, "/root/.ssh/known_hosts")
+	knownHosts, err := client.ReadFile(ctx, mesh.SSHContainerName, "/root/.ssh/known_hosts")
 	if err != nil {
 		return fmt.Errorf("reading known_hosts: %w", err)
 	}

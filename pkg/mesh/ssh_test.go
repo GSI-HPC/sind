@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +28,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	// CreateVolume → success
-	m.AddResult(string(cluster.SSHVolumeName)+"\n", "", nil)
+	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
 	// CreateContainer → success
 	m.AddResult(containerID+"\n", "", nil)
 	// CopyToContainer → success
@@ -43,12 +42,12 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"volume", "inspect", string(cluster.SSHVolumeName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{"volume", "create", string(cluster.SSHVolumeName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{"volume", "inspect", string(SSHVolumeName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"volume", "create", string(SSHVolumeName)}, m.Calls[1].Args)
 	assert.Equal(t, []string{
 		"create",
 		"--name", string(sshKeygenContainerName),
-		"-v", string(cluster.SSHVolumeName) + ":/ssh",
+		"-v", string(SSHVolumeName) + ":/ssh",
 		sshKeygenImage,
 	}, m.Calls[2].Args)
 	assert.Equal(t, []string{"cp", "-", string(sshKeygenContainerName) + ":/ssh"}, m.Calls[3].Args)
@@ -108,7 +107,7 @@ func TestEnsureSSHVolume_CreateContainerError(t *testing.T) {
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	// CreateVolume → success
-	m.AddResult(string(cluster.SSHVolumeName)+"\n", "", nil)
+	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
 	// CreateContainer → error
 	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
@@ -125,7 +124,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	// CreateVolume → success
-	m.AddResult(string(cluster.SSHVolumeName)+"\n", "", nil)
+	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
 	// CreateContainer → success
 	m.AddResult("abc123\n", "", nil)
 	// CopyToContainer → error
@@ -163,16 +162,16 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 3)
-	assert.Equal(t, []string{"container", "inspect", string(cluster.SSHContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"container", "inspect", string(SSHContainerName)}, m.Calls[0].Args)
 	assert.Equal(t, []string{
 		"create",
-		"--name", string(cluster.SSHContainerName),
-		"--network", string(cluster.MeshNetworkName),
-		"-v", string(cluster.SSHVolumeName) + ":/root/.ssh",
+		"--name", string(SSHContainerName),
+		"--network", string(NetworkName),
+		"-v", string(SSHVolumeName) + ":/root/.ssh",
 		SSHImage,
 		"sleep", "infinity",
 	}, m.Calls[1].Args)
-	assert.Equal(t, []string{"start", string(cluster.SSHContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"start", string(SSHContainerName)}, m.Calls[2].Args)
 }
 
 func TestEnsureSSH_AlreadyExists(t *testing.T) {
@@ -244,7 +243,7 @@ func TestAddKnownHost(t *testing.T) {
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{
-		"exec", "-i", string(cluster.SSHContainerName),
+		"exec", "-i", string(SSHContainerName),
 		"sh", "-c", "cat >> " + knownHostsPath,
 	}, m.Calls[0].Args)
 	assert.Equal(t, "controller.dev.sind.local ssh-ed25519 AAAA...\n", m.Calls[0].Stdin)

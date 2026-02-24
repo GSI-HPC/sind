@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -34,7 +33,7 @@ const sshKeygenContainerName docker.ContainerName = "sind-ssh-keygen"
 // id_ed25519 (private key), id_ed25519.pub (public key), and an empty
 // known_hosts file.
 func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
-	exists, err := m.Docker.VolumeExists(ctx, cluster.SSHVolumeName)
+	exists, err := m.Docker.VolumeExists(ctx, SSHVolumeName)
 	if err != nil {
 		return fmt.Errorf("checking SSH volume: %w", err)
 	}
@@ -42,7 +41,7 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 		return nil
 	}
 
-	err = m.Docker.CreateVolume(ctx, cluster.SSHVolumeName)
+	err = m.Docker.CreateVolume(ctx, SSHVolumeName)
 	if err != nil {
 		return fmt.Errorf("creating SSH volume: %w", err)
 	}
@@ -54,7 +53,7 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 	// in via docker cp, then the container is removed.
 	_, err = m.Docker.CreateContainer(ctx,
 		"--name", string(sshKeygenContainerName),
-		"-v", string(cluster.SSHVolumeName)+":/ssh",
+		"-v", string(SSHVolumeName)+":/ssh",
 		sshKeygenImage,
 	)
 	if err != nil {
@@ -78,7 +77,7 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 // The container runs on the mesh network with the SSH volume mounted at
 // /root/.ssh so that ssh automatically discovers the keypair and known_hosts.
 func (m *Manager) EnsureSSH(ctx context.Context) error {
-	exists, err := m.Docker.ContainerExists(ctx, cluster.SSHContainerName)
+	exists, err := m.Docker.ContainerExists(ctx, SSHContainerName)
 	if err != nil {
 		return fmt.Errorf("checking SSH container: %w", err)
 	}
@@ -87,9 +86,9 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 	}
 
 	_, err = m.Docker.CreateContainer(ctx,
-		"--name", string(cluster.SSHContainerName),
-		"--network", string(cluster.MeshNetworkName),
-		"-v", string(cluster.SSHVolumeName)+":/root/.ssh",
+		"--name", string(SSHContainerName),
+		"--network", string(NetworkName),
+		"-v", string(SSHVolumeName)+":/root/.ssh",
 		SSHImage,
 		"sleep", "infinity",
 	)
@@ -97,7 +96,7 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 		return fmt.Errorf("creating SSH container: %w", err)
 	}
 
-	err = m.Docker.StartContainer(ctx, cluster.SSHContainerName)
+	err = m.Docker.StartContainer(ctx, SSHContainerName)
 	if err != nil {
 		return fmt.Errorf("starting SSH container: %w", err)
 	}
@@ -110,7 +109,7 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 // "ssh-ed25519 AAAA...").
 func (m *Manager) AddKnownHost(ctx context.Context, hostname, hostKey string) error {
 	entry := hostname + " " + hostKey + "\n"
-	err := m.Docker.AppendFile(ctx, cluster.SSHContainerName, knownHostsPath, entry)
+	err := m.Docker.AppendFile(ctx, SSHContainerName, knownHostsPath, entry)
 	if err != nil {
 		return fmt.Errorf("adding known host %s: %w", hostname, err)
 	}
@@ -120,7 +119,7 @@ func (m *Manager) AddKnownHost(ctx context.Context, hostname, hostKey string) er
 // RemoveKnownHost removes all entries for the given hostname from the
 // known_hosts file in the SSH container.
 func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {
-	content, err := m.Docker.ReadFile(ctx, cluster.SSHContainerName, knownHostsPath)
+	content, err := m.Docker.ReadFile(ctx, SSHContainerName, knownHostsPath)
 	if err != nil {
 		return fmt.Errorf("reading known_hosts: %w", err)
 	}
@@ -142,7 +141,7 @@ func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {
 		result = strings.Join(kept, "\n") + "\n"
 	}
 
-	err = m.Docker.WriteFile(ctx, cluster.SSHContainerName, knownHostsPath, result)
+	err = m.Docker.WriteFile(ctx, SSHContainerName, knownHostsPath, result)
 	if err != nil {
 		return fmt.Errorf("writing known_hosts: %w", err)
 	}
