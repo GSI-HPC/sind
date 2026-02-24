@@ -14,6 +14,67 @@ import (
 // volumeTypes lists the cluster volume suffixes in creation order.
 var volumeTypes = []string{"config", "munge", "data"}
 
+// Delete orchestrates the full cluster deletion flow.
+//
+// Deleting a non-existent cluster is not an error. The function handles
+// partial clusters (e.g., from a failed creation) by removing whatever
+// resources exist.
+//
+//	ListClusterResources
+//	      │
+//	DeregisterMesh        DNS + known_hosts per node
+//	      │
+//	DeleteContainers      stop + rm per container
+//	      │
+//	DeleteNetwork         rm cluster network
+//	      │
+//	DeleteVolumes         rm cluster volumes
+//	      │
+//	HasOtherClusters?
+//	    yes → done
+//	    no  → CleanupMesh
+func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
+	res, err := ListClusterResources(ctx, client, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// Nothing to delete.
+	if len(res.Containers) == 0 && !res.NetworkExists && len(res.Volumes) == 0 {
+		return nil
+	}
+
+	// Remove DNS records and known_hosts entries before deleting containers.
+	if err := DeregisterMesh(ctx, meshMgr, clusterName, res.Containers); err != nil {
+		return err
+	}
+
+	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
+		return err
+	}
+
+	if res.NetworkExists {
+		if err := DeleteNetwork(ctx, client, res.Network); err != nil {
+			return err
+		}
+	}
+
+	if err := DeleteVolumes(ctx, client, res.Volumes); err != nil {
+		return err
+	}
+
+	// Clean up mesh infrastructure if this was the last cluster.
+	hasOther, err := HasOtherClusters(ctx, client, clusterName)
+	if err != nil {
+		return err
+	}
+	if !hasOther {
+		return meshMgr.CleanupMesh(ctx)
+	}
+
+	return nil
+}
+
 // Resources holds the Docker resources belonging to a cluster.
 type Resources struct {
 	Containers    []docker.ContainerListEntry
