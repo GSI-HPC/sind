@@ -127,6 +127,7 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 			if count <= 0 {
 				count = 1
 			}
+			isManaged := n.Managed == nil || *n.Managed
 			for i := 0; i < count; i++ {
 				configs = append(configs, RunConfig{
 					ClusterName:   cfg.Name,
@@ -140,6 +141,7 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 					DNSIP:         dnsIP,
 					DataHostPath:  dataHostPath,
 					DataMountPath: dataMountPath,
+					Managed:       isManaged,
 				})
 				computeIdx++
 			}
@@ -155,6 +157,33 @@ func CreateClusterNodes(ctx context.Context, client *docker.Client, configs []Ru
 		_, err := CreateNode(ctx, client, cfg)
 		if err != nil {
 			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
+		}
+	}
+	return nil
+}
+
+// EnableSlurmServices enables the role-appropriate Slurm daemon on each node.
+// Controller nodes get slurmctld; managed compute nodes get slurmd.
+// Submitter and unmanaged compute nodes are skipped.
+func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []RunConfig) error {
+	for _, cfg := range configs {
+		var service string
+		switch cfg.Role {
+		case "controller":
+			service = "slurmctld"
+		case "compute":
+			if !cfg.Managed {
+				continue
+			}
+			service = "slurmd"
+		default:
+			continue
+		}
+
+		containerName := ContainerName(cfg.ClusterName, cfg.ShortName)
+		_, err := client.Exec(ctx, containerName, "systemctl", "enable", "--now", service)
+		if err != nil {
+			return fmt.Errorf("enabling %s on %s: %w", service, cfg.ShortName, err)
 		}
 	}
 	return nil

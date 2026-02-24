@@ -45,6 +45,7 @@ type RunConfig struct {
 	DNSIP         string // mesh DNS container IP (optional)
 	DataHostPath  string // host path for data volume (empty = use docker volume)
 	DataMountPath string // mount point for data (default: /data)
+	Managed       bool   // start slurmd and add to slurm.conf (compute only)
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.

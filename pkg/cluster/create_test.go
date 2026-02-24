@@ -201,6 +201,7 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 	assert.Equal(t, "controller", configs[0].Role)
 	assert.Equal(t, "compute-0", configs[1].ShortName)
 	assert.Equal(t, "compute", configs[1].Role)
+	assert.True(t, configs[1].Managed, "compute defaults to managed")
 	// Shared fields
 	for _, c := range configs {
 		assert.Equal(t, "dev", c.ClusterName)
@@ -262,6 +263,25 @@ func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "compute-0", configs[1].ShortName)
+}
+
+func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "compute", Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+				Managed: boolPtr(false)},
+			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "", "")
+
+	require.Len(t, configs, 4)
+	assert.False(t, configs[1].Managed, "compute-0 unmanaged")
+	assert.False(t, configs[2].Managed, "compute-1 unmanaged")
+	assert.True(t, configs[3].Managed, "compute-2 managed")
 }
 
 func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
@@ -360,4 +380,80 @@ func TestCreateClusterNodes_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
+}
+
+// --- EnableSlurmServices ---
+
+func TestEnableSlurmServices(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // slurmctld on controller
+	m.AddResult("", "", nil) // slurmd on compute-0
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{ClusterName: "dev", ShortName: "compute-0", Role: "compute", Managed: true},
+	}
+
+	err := EnableSlurmServices(context.Background(), c, configs)
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"exec", "sind-dev-controller", "systemctl", "enable", "--now", "slurmctld"},
+		m.Calls[0].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-compute-0", "systemctl", "enable", "--now", "slurmd"},
+		m.Calls[1].Args)
+}
+
+func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // slurmctld on controller
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{ClusterName: "dev", ShortName: "submitter", Role: "submitter"},
+	}
+
+	err := EnableSlurmServices(context.Background(), c, configs)
+
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 1) // only controller
+}
+
+func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // slurmctld on controller
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{ClusterName: "dev", ShortName: "compute-0", Role: "compute", Managed: false},
+		{ClusterName: "dev", ShortName: "compute-1", Role: "compute", Managed: true},
+	}
+
+	// Need result for compute-1 slurmd
+	m.AddResult("", "", nil)
+
+	err := EnableSlurmServices(context.Background(), c, configs)
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 2)
+	// Controller + compute-1 only; compute-0 skipped
+	assert.Contains(t, m.Calls[1].Args, "sind-dev-compute-1")
+}
+
+func TestEnableSlurmServices_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("systemctl failed"))
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
+	}
+
+	err := EnableSlurmServices(context.Background(), c, configs)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabling slurmctld on controller")
 }
