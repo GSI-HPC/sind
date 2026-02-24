@@ -15,6 +15,15 @@ import (
 // that write files into volumes.
 const helperImage = "busybox:latest"
 
+// CreateClusterNetwork creates the cluster-specific Docker bridge network.
+func CreateClusterNetwork(ctx context.Context, client *docker.Client, clusterName string) error {
+	_, err := client.CreateNetwork(ctx, NetworkName(clusterName))
+	if err != nil {
+		return fmt.Errorf("creating cluster network: %w", err)
+	}
+	return nil
+}
+
 // CreateClusterVolumes creates the config, munge, and data volumes for a cluster.
 func CreateClusterVolumes(ctx context.Context, client *docker.Client, clusterName string) error {
 	for _, vtype := range []string{"config", "munge", "data"} {

@@ -13,6 +13,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- CreateClusterNetwork ---
+
+func TestCreateClusterNetwork(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("net-id-123\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := CreateClusterNetwork(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "create", "sind-dev-net"}, m.Calls[0].Args)
+}
+
+func TestCreateClusterNetwork_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("network already exists"))
+	c := docker.NewClient(&m)
+
+	err := CreateClusterNetwork(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "creating cluster network")
+}
+
 // --- CreateClusterVolumes ---
 
 func TestCreateClusterVolumes(t *testing.T) {
