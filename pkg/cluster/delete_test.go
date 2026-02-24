@@ -133,6 +133,140 @@ func TestListClusterResources_LabelFilter(t *testing.T) {
 	assert.Equal(t, "label=sind.cluster=myCluster", args[filterIdx+1])
 }
 
+// --- DeleteContainers ---
+
+func TestDeleteContainers(t *testing.T) {
+	var m docker.MockExecutor
+	// Container 1: stop + rm
+	m.AddResult("", "", nil) // stop
+	m.AddResult("", "", nil) // rm
+	// Container 2: stop + rm
+	m.AddResult("", "", nil) // stop
+	m.AddResult("", "", nil) // rm
+	c := docker.NewClient(&m)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller"},
+		{Name: "sind-dev-compute-0"},
+	}
+	err := DeleteContainers(context.Background(), c, containers)
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 4)
+	assert.Equal(t, []string{"stop", "sind-dev-controller"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "sind-dev-controller"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"stop", "sind-dev-compute-0"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"rm", "sind-dev-compute-0"}, m.Calls[3].Args)
+}
+
+func TestDeleteContainers_StopErrorIgnored(t *testing.T) {
+	var m docker.MockExecutor
+	// stop fails (already stopped) but rm succeeds
+	m.AddResult("", "Error\n", fmt.Errorf("container already stopped"))
+	m.AddResult("", "", nil) // rm
+	c := docker.NewClient(&m)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller"},
+	}
+	err := DeleteContainers(context.Background(), c, containers)
+
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 2)
+}
+
+func TestDeleteContainers_RemoveError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)                            // stop
+	m.AddResult("", "", fmt.Errorf("container in use")) // rm fails
+	c := docker.NewClient(&m)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller"},
+	}
+	err := DeleteContainers(context.Background(), c, containers)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "removing container sind-dev-controller")
+}
+
+func TestDeleteContainers_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	c := docker.NewClient(&m)
+
+	err := DeleteContainers(context.Background(), c, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls)
+}
+
+// --- DeleteNetwork ---
+
+func TestDeleteNetwork(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // network rm
+	c := docker.NewClient(&m)
+
+	err := DeleteNetwork(context.Background(), c, docker.NetworkName("sind-dev-net"))
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "rm", "sind-dev-net"}, m.Calls[0].Args)
+}
+
+func TestDeleteNetwork_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("network has active endpoints"))
+	c := docker.NewClient(&m)
+
+	err := DeleteNetwork(context.Background(), c, docker.NetworkName("sind-dev-net"))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "removing network sind-dev-net")
+}
+
+// --- DeleteVolumes ---
+
+func TestDeleteVolumes(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // config
+	m.AddResult("", "", nil) // munge
+	m.AddResult("", "", nil) // data
+	c := docker.NewClient(&m)
+
+	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
+	err := DeleteVolumes(context.Background(), c, volumes)
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 3)
+	assert.Equal(t, []string{"volume", "rm", "sind-dev-config"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"volume", "rm", "sind-dev-munge"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"volume", "rm", "sind-dev-data"}, m.Calls[2].Args)
+}
+
+func TestDeleteVolumes_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)                         // config OK
+	m.AddResult("", "", fmt.Errorf("volume in use")) // munge fails
+	c := docker.NewClient(&m)
+
+	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
+	err := DeleteVolumes(context.Background(), c, volumes)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "removing volume sind-dev-munge")
+}
+
+func TestDeleteVolumes_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	c := docker.NewClient(&m)
+
+	err := DeleteVolumes(context.Background(), c, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls)
+}
+
 // --- helpers ---
 
 type psEntry struct {

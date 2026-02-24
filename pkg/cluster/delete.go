@@ -56,3 +56,33 @@ func ListClusterResources(ctx context.Context, client *docker.Client, clusterNam
 
 	return res, nil
 }
+
+// DeleteContainers stops and removes the given containers. Stop errors are
+// ignored (the container may already be stopped), but remove errors are fatal.
+func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
+	for _, c := range containers {
+		_ = client.StopContainer(ctx, c.Name) // best-effort
+		if err := client.RemoveContainer(ctx, c.Name); err != nil {
+			return fmt.Errorf("removing container %s: %w", c.Name, err)
+		}
+	}
+	return nil
+}
+
+// DeleteNetwork removes the cluster network.
+func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.NetworkName) error {
+	if err := client.RemoveNetwork(ctx, name); err != nil {
+		return fmt.Errorf("removing network %s: %w", name, err)
+	}
+	return nil
+}
+
+// DeleteVolumes removes the given cluster volumes.
+func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
+	for _, v := range volumes {
+		if err := client.RemoveVolume(ctx, v); err != nil {
+			return fmt.Errorf("removing volume %s: %w", v, err)
+		}
+	}
+	return nil
+}
