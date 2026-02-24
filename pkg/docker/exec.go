@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sync"
 )
 
 // Executor runs external commands and captures their output.
@@ -57,21 +58,44 @@ type MockResult struct {
 	Err    error
 }
 
-// MockExecutor records all calls and returns preconfigured results in order.
-// It is intended for use in tests.
+// MockExecutor records all calls and returns preconfigured results.
+// It is safe for concurrent use.
+//
+// Results are dispatched in two modes:
+//   - If OnCall is set, it is called for every invocation to produce a result.
+//   - Otherwise, results queued via AddResult are returned in FIFO order.
+//
+// OnCall is useful when multiple goroutines share a MockExecutor and
+// result dispatch must be based on command arguments rather than call order.
 type MockExecutor struct {
+	// OnCall, if set, is called to produce a result for each invocation.
+	// The args slice contains the docker subcommand and its arguments
+	// (e.g. ["inspect", "sind-dns"]). Stdin is non-empty for RunWithStdin calls.
+	OnCall func(args []string, stdin string) MockResult
+
+	mu      sync.Mutex
 	Calls   []MockCall
 	results []MockResult
 	idx     int
 }
 
 // AddResult enqueues a result to be returned by the next Run or RunWithStdin call.
+// Only used when OnCall is nil.
 func (m *MockExecutor) AddResult(stdout, stderr string, err error) {
 	m.results = append(m.results, MockResult{Stdout: stdout, Stderr: stderr, Err: err})
 }
 
 func (m *MockExecutor) record(name string, args []string, stdin string) (string, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.Calls = append(m.Calls, MockCall{Name: name, Args: args, Stdin: stdin})
+
+	if m.OnCall != nil {
+		r := m.OnCall(args, stdin)
+		return r.Stdout, r.Stderr, r.Err
+	}
+
 	if m.idx >= len(m.results) {
 		return "", "", fmt.Errorf("mock: unexpected call #%d: %s %v", len(m.Calls), name, args)
 	}
