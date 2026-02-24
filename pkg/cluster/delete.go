@@ -89,6 +89,26 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 	return nil
 }
 
+// HasOtherClusters checks whether any sind cluster containers exist besides
+// the named cluster. This is used to decide whether to clean up mesh
+// infrastructure after deleting a cluster.
+func HasOtherClusters(ctx context.Context, client *docker.Client, clusterName string) (bool, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelCluster)
+	if err != nil {
+		return false, fmt.Errorf("listing sind containers: %w", err)
+	}
+	for _, c := range containers {
+		// Check if any container belongs to a different cluster by inspecting
+		// the container name prefix. Containers for clusterName have the
+		// prefix "sind-<clusterName>-".
+		prefix := "sind-" + clusterName + "-"
+		if !strings.HasPrefix(string(c.Name), prefix) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // DeregisterMesh removes DNS records and known_hosts entries for each container
 // in the cluster. This is the inverse of registerMesh during cluster creation.
 func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {

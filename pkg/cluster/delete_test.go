@@ -354,6 +354,74 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	assert.Contains(t, err.Error(), "removing known host for controller")
 }
 
+// --- HasOtherClusters ---
+
+func TestHasOtherClusters_True(t *testing.T) {
+	var m docker.MockExecutor
+	// ListContainers returns containers from two clusters
+	m.AddResult(ndjson(
+		psEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		psEntry{ID: "b", Names: "sind-prod-controller", State: "running", Image: "img"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	has, err := HasOtherClusters(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, has)
+}
+
+func TestHasOtherClusters_False(t *testing.T) {
+	var m docker.MockExecutor
+	// Only containers from the same cluster
+	m.AddResult(ndjson(
+		psEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		psEntry{ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "img"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	has, err := HasOtherClusters(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.False(t, has)
+}
+
+func TestHasOtherClusters_NoContainers(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // empty list
+	c := docker.NewClient(&m)
+
+	has, err := HasOtherClusters(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.False(t, has)
+}
+
+func TestHasOtherClusters_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := HasOtherClusters(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing sind containers")
+}
+
+func TestHasOtherClusters_LabelFilter(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	_, _ = HasOtherClusters(context.Background(), c, "dev")
+
+	require.Len(t, m.Calls, 1)
+	args := m.Calls[0].Args
+	filterIdx := indexOf(args, "--filter")
+	require.Greater(t, filterIdx, -1)
+	assert.Equal(t, "label=sind.cluster", args[filterIdx+1])
+}
+
 // --- helpers ---
 
 type psEntry struct {
