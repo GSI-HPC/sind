@@ -184,9 +184,9 @@ func createAllNodes(ctx context.Context, client *docker.Client, nodeConfigs []Ru
 //	        └─────────────────┼─────────────────────┘
 func setupNodes(ctx context.Context, client *docker.Client, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration) ([]nodeResult, error) {
 	baseProbes := []probe.Probe{
-		{"container", probe.ContainerRunning},
-		{"systemd", probe.SystemdReady},
-		{"sshd", probe.SSHDReady},
+		{Name: "container", Check: probe.ContainerRunning},
+		{Name: "systemd", Check: probe.SystemdReady},
+		{Name: "sshd", Check: probe.SSHDReady},
 	}
 	results := make([]nodeResult, len(nodeConfigs))
 
@@ -271,13 +271,13 @@ func enableSlurm(ctx context.Context, client *docker.Client, clusterName string,
 		switch nc.Role {
 		case "controller":
 			service = "slurmctld"
-			slurmProbe = probe.Probe{"slurmctld", probe.SlurmctldReady}
+			slurmProbe = probe.Probe{Name: "slurmctld", Check: probe.SlurmctldReady}
 		case "compute":
 			if !nc.Managed {
 				continue
 			}
 			service = "slurmd"
-			slurmProbe = probe.Probe{"slurmd", probe.SlurmdReady}
+			slurmProbe = probe.Probe{Name: "slurmd", Check: probe.SlurmdReady}
 		default:
 			continue
 		}

@@ -3,9 +3,9 @@
 package cluster
 
 import (
-	"context"
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -124,7 +124,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 
 func TestWriteClusterConfig_CopyError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("abc123\n", "", nil)            // CreateContainer
+	m.AddResult("abc123\n", "", nil)             // CreateContainer
 	m.AddResult("", "", fmt.Errorf("cp failed")) // CopyToContainer
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
 	c := docker.NewClient(&m)
@@ -178,7 +178,7 @@ func TestWriteMungeKey_CreateError(t *testing.T) {
 
 func TestWriteMungeKey_CopyError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("abc123\n", "", nil)            // CreateContainer
+	m.AddResult("abc123\n", "", nil)             // CreateContainer
 	m.AddResult("", "", fmt.Errorf("cp failed")) // CopyToContainer
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
 	c := docker.NewClient(&m)
@@ -326,6 +326,34 @@ func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath)
 	assert.Empty(t, configs[0].DataMountPath)
+}
+
+func TestNodeRunConfigs_VolumeStorageCustomMount(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Storage: config.Storage{
+			DataStorage: config.DataStorage{
+				MountPath: "/shared",
+			},
+		},
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "", "")
+
+	require.Len(t, configs, 1)
+	assert.Empty(t, configs[0].DataHostPath, "volume type uses docker volume, not host path")
+	assert.Equal(t, "/shared", configs[0].DataMountPath)
+}
+
+func TestNodeRunConfigs_EmptyNodes(t *testing.T) {
+	cfg := &config.Cluster{Name: "dev"}
+
+	configs := NodeRunConfigs(cfg, "172.18.0.2", "25.11.0")
+
+	assert.Empty(t, configs)
 }
 
 // --- CreateClusterNodes ---
@@ -1043,6 +1071,30 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "collecting host key")
+}
+
+func TestRegisterMesh_DNSError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		// CopyFromContainer (read Corefile) fails
+		if args[0] == "cp" && len(args) == 3 && args[2] == "-" {
+			return docker.MockResult{Err: fmt.Errorf("dns container not running")}
+		}
+		return docker.MockResult{}
+	}
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client)
+	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	results := []nodeResult{{
+		info:    &docker.ContainerInfo{ID: "id1", IPs: map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"}},
+		hostKey: "ssh-ed25519 AAAA-key",
+	}}
+
+	_, err := registerMesh(context.Background(), meshMgr, "dev", "25.11.0", configs, results)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "registering DNS")
 }
 
 func TestRegisterMesh_KnownHostError(t *testing.T) {

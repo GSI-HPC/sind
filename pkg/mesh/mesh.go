@@ -13,7 +13,7 @@ import (
 
 // Global resource names shared across all clusters.
 const (
-	NetworkName  docker.NetworkName   = "sind-mesh"
+	NetworkName      docker.NetworkName   = "sind-mesh"
 	DNSContainerName docker.ContainerName = "sind-dns"
 	SSHContainerName docker.ContainerName = "sind-ssh"
 	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
