@@ -5,8 +5,10 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 // volumeTypes lists the cluster volume suffixes in creation order.
@@ -82,6 +84,24 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 	for _, v := range volumes {
 		if err := client.RemoveVolume(ctx, v); err != nil {
 			return fmt.Errorf("removing volume %s: %w", v, err)
+		}
+	}
+	return nil
+}
+
+// DeregisterMesh removes DNS records and known_hosts entries for each container
+// in the cluster. This is the inverse of registerMesh during cluster creation.
+func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {
+	prefix := "sind-" + clusterName + "-"
+	for _, c := range containers {
+		shortName := strings.TrimPrefix(string(c.Name), prefix)
+		dnsName := DNSName(shortName, clusterName)
+
+		if err := meshMgr.RemoveDNSRecord(ctx, dnsName); err != nil {
+			return fmt.Errorf("removing DNS record for %s: %w", shortName, err)
+		}
+		if err := meshMgr.RemoveKnownHost(ctx, dnsName); err != nil {
+			return fmt.Errorf("removing known host for %s: %w", shortName, err)
 		}
 	}
 	return nil

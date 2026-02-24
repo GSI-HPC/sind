@@ -3,6 +3,8 @@
 package cluster
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -267,6 +270,90 @@ func TestDeleteVolumes_Empty(t *testing.T) {
 	assert.Empty(t, m.Calls)
 }
 
+// --- DeregisterMesh ---
+
+func TestDeregisterMesh(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = meshDeregisterOnCall(
+		"controller.dev.sind.local ssh-ed25519 AAAA1\ncompute-0.dev.sind.local ssh-ed25519 AAAA2\n",
+	)
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller"},
+		{Name: "sind-dev-compute-0"},
+	}
+	err := DeregisterMesh(context.Background(), mgr, "dev", containers)
+
+	require.NoError(t, err)
+}
+
+func TestDeregisterMesh_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c)
+
+	err := DeregisterMesh(context.Background(), mgr, "dev", nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls)
+}
+
+func TestDeregisterMesh_DNSError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		// CopyFromContainer (read Corefile) fails
+		if len(args) > 0 && args[0] == "cp" {
+			return docker.MockResult{Err: fmt.Errorf("DNS container not running")}
+		}
+		return docker.MockResult{}
+	}
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller"},
+	}
+	err := DeregisterMesh(context.Background(), mgr, "dev", containers)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "removing DNS record for controller")
+}
+
+func TestDeregisterMesh_KnownHostError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		// CopyFromContainer (read Corefile) → return valid Corefile
+		if len(args) >= 2 && args[0] == "cp" && strings.Contains(args[1], "sind-dns") {
+			return docker.MockResult{Stdout: tarFile("Corefile", emptyCorefileContent())}
+		}
+		// CopyToContainer (write Corefile) → success
+		if len(args) >= 2 && args[0] == "cp" && args[1] == "-" {
+			return docker.MockResult{}
+		}
+		// Signal DNS → success
+		if len(args) >= 2 && args[0] == "kill" {
+			return docker.MockResult{}
+		}
+		// ReadFile (known_hosts via exec cat) → fail
+		if len(args) >= 2 && args[0] == "exec" {
+			return docker.MockResult{Err: fmt.Errorf("SSH container not running")}
+		}
+		return docker.MockResult{}
+	}
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller"},
+	}
+	err := DeregisterMesh(context.Background(), mgr, "dev", containers)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "removing known host for controller")
+}
+
 // --- helpers ---
 
 type psEntry struct {
@@ -294,4 +381,47 @@ func indexOf(slice []string, s string) int {
 		}
 	}
 	return -1
+}
+
+// meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecord
+// and RemoveKnownHost operations for DeregisterMesh tests.
+func meshDeregisterOnCall(knownHostsContent string) func([]string, string) docker.MockResult {
+	return func(args []string, stdin string) docker.MockResult {
+		if len(args) == 0 {
+			return docker.MockResult{}
+		}
+		switch {
+		// CopyFromContainer: docker cp sind-dns:/Corefile -
+		case args[0] == "cp" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
+			return docker.MockResult{Stdout: tarFile("Corefile", emptyCorefileContent())}
+		// CopyToContainer: docker cp - sind-dns:/
+		case args[0] == "cp" && len(args) >= 2 && args[1] == "-":
+			return docker.MockResult{}
+		// Signal: docker kill -s HUP sind-dns
+		case args[0] == "kill":
+			return docker.MockResult{}
+		// ReadFile: docker exec sind-ssh cat /root/.ssh/known_hosts
+		case args[0] == "exec" && len(args) >= 3 && args[2] == "cat":
+			return docker.MockResult{Stdout: knownHostsContent}
+		// WriteFile: docker exec -i sind-ssh sh -c 'cat > ...'
+		case args[0] == "exec" && len(args) >= 2 && args[1] == "-i":
+			return docker.MockResult{}
+		}
+		return docker.MockResult{}
+	}
+}
+
+// tarFile creates a tar archive containing a single file.
+func tarFile(name, content string) string {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
+	tw.Write([]byte(content))
+	tw.Close()
+	return buf.String()
+}
+
+// emptyCorefileContent returns a Corefile with no host entries.
+func emptyCorefileContent() string {
+	return "sind.local:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 }
