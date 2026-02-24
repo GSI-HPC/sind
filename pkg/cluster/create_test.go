@@ -182,3 +182,182 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 	assert.Contains(t, err.Error(), "writing munge key")
 	assert.Len(t, m.Calls, 3) // defer still runs
 }
+
+// --- NodeRunConfigs ---
+
+func TestNodeRunConfigs_Minimal(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "172.18.0.2", "25.11.0")
+
+	require.Len(t, configs, 2)
+	assert.Equal(t, "controller", configs[0].ShortName)
+	assert.Equal(t, "controller", configs[0].Role)
+	assert.Equal(t, "compute-0", configs[1].ShortName)
+	assert.Equal(t, "compute", configs[1].Role)
+	// Shared fields
+	for _, c := range configs {
+		assert.Equal(t, "dev", c.ClusterName)
+		assert.Equal(t, "img:1", c.Image)
+		assert.Equal(t, "172.18.0.2", c.DNSIP)
+		assert.Equal(t, "25.11.0", c.SlurmVersion)
+	}
+}
+
+func TestNodeRunConfigs_MultiComputeGroups(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "compute", Count: 2, Image: "img:1", CPUs: 4, Memory: "8g", TmpSize: "1g"},
+			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "", "")
+
+	require.Len(t, configs, 4)
+	assert.Equal(t, "compute-0", configs[1].ShortName)
+	assert.Equal(t, 4, configs[1].CPUs)
+	assert.Equal(t, "compute-1", configs[2].ShortName)
+	assert.Equal(t, 4, configs[2].CPUs)
+	assert.Equal(t, "compute-2", configs[3].ShortName)
+	assert.Equal(t, 2, configs[3].CPUs)
+}
+
+func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "submitter", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "", "")
+
+	require.Len(t, configs, 3)
+	assert.Equal(t, "controller", configs[0].ShortName)
+	assert.Equal(t, "submitter", configs[1].ShortName)
+	assert.Equal(t, "compute-0", configs[2].ShortName)
+}
+
+func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "compute", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "", "")
+
+	require.Len(t, configs, 2)
+	assert.Equal(t, "compute-0", configs[1].ShortName)
+}
+
+func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Storage: config.Storage{
+			DataStorage: config.DataStorage{
+				Type:      "hostPath",
+				HostPath:  "/data/shared",
+				MountPath: "/shared",
+			},
+		},
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "", "")
+
+	require.Len(t, configs, 1)
+	assert.Equal(t, "/data/shared", configs[0].DataHostPath)
+	assert.Equal(t, "/shared", configs[0].DataMountPath)
+}
+
+func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, "", "")
+
+	require.Len(t, configs, 1)
+	assert.Empty(t, configs[0].DataHostPath)
+	assert.Empty(t, configs[0].DataMountPath)
+}
+
+// --- CreateClusterNodes ---
+
+func TestCreateClusterNodes(t *testing.T) {
+	var m docker.MockExecutor
+	// Node 1: CreateContainer + ConnectNetwork + StartContainer
+	m.AddResult("id1\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	// Node 2: CreateContainer + ConnectNetwork + StartContainer
+	m.AddResult("id2\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{ClusterName: "dev", ShortName: "controller", Role: "controller",
+			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		{ClusterName: "dev", ShortName: "compute-0", Role: "compute",
+			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+	}
+
+	err := CreateClusterNodes(context.Background(), c, configs)
+
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 6) // 2 nodes × 3 calls each
+}
+
+func TestCreateClusterNodes_Error(t *testing.T) {
+	var m docker.MockExecutor
+	// Node 1: success
+	m.AddResult("id1\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	// Node 2: CreateContainer fails
+	m.AddResult("", "", fmt.Errorf("image not found"))
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{ClusterName: "dev", ShortName: "controller", Role: "controller",
+			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		{ClusterName: "dev", ShortName: "compute-0", Role: "compute",
+			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+	}
+
+	err := CreateClusterNodes(context.Background(), c, configs)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "compute-0")
+	assert.Len(t, m.Calls, 4) // 3 (node1) + 1 (node2 fails on create)
+}
+
+func TestCreateClusterNodes_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	c := docker.NewClient(&m)
+
+	err := CreateClusterNodes(context.Background(), c, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls)
+}

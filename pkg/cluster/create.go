@@ -90,3 +90,72 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName strin
 
 	return nil
 }
+
+// NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
+// Compute nodes are indexed sequentially across all compute groups.
+func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig {
+	var configs []RunConfig
+	computeIdx := 0
+
+	dataHostPath := ""
+	dataMountPath := ""
+	if cfg.Storage.DataStorage.Type == "hostPath" {
+		dataHostPath = cfg.Storage.DataStorage.HostPath
+	}
+	if cfg.Storage.DataStorage.MountPath != "" {
+		dataMountPath = cfg.Storage.DataStorage.MountPath
+	}
+
+	for _, n := range cfg.Nodes {
+		switch n.Role {
+		case "controller", "submitter":
+			configs = append(configs, RunConfig{
+				ClusterName:   cfg.Name,
+				ShortName:     n.Role,
+				Role:          n.Role,
+				Image:         n.Image,
+				CPUs:          n.CPUs,
+				Memory:        n.Memory,
+				TmpSize:       n.TmpSize,
+				SlurmVersion:  slurmVersion,
+				DNSIP:         dnsIP,
+				DataHostPath:  dataHostPath,
+				DataMountPath: dataMountPath,
+			})
+		case "compute":
+			count := n.Count
+			if count <= 0 {
+				count = 1
+			}
+			for i := 0; i < count; i++ {
+				configs = append(configs, RunConfig{
+					ClusterName:   cfg.Name,
+					ShortName:     fmt.Sprintf("compute-%d", computeIdx),
+					Role:          "compute",
+					Image:         n.Image,
+					CPUs:          n.CPUs,
+					Memory:        n.Memory,
+					TmpSize:       n.TmpSize,
+					SlurmVersion:  slurmVersion,
+					DNSIP:         dnsIP,
+					DataHostPath:  dataHostPath,
+					DataMountPath: dataMountPath,
+				})
+				computeIdx++
+			}
+		}
+	}
+	return configs
+}
+
+// CreateClusterNodes creates all node containers for the cluster.
+// Each node is created, connected to the mesh network, and started.
+func CreateClusterNodes(ctx context.Context, client *docker.Client, configs []RunConfig) error {
+	for _, cfg := range configs {
+		_, err := CreateNode(ctx, client, cfg)
+		if err != nil {
+			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
+		}
+	}
+	return nil
+}
