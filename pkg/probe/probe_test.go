@@ -226,8 +226,11 @@ func TestUntilReady_AllPass(t *testing.T) {
 	m.AddResult(inspectJSON("running"), "", nil)
 	c := docker.NewClient(&m)
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	probes := []Probe{{"container", ContainerRunning}}
-	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 1)
 }
@@ -239,8 +242,11 @@ func TestUntilReady_RetryThenPass(t *testing.T) {
 	m.AddResult(inspectJSON("running"), "", nil)
 	c := docker.NewClient(&m)
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	probes := []Probe{{"container", ContainerRunning}}
-	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 2)
 }
@@ -253,8 +259,11 @@ func TestUntilReady_Timeout(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
 	probes := []Probe{{"container", ContainerRunning}}
-	err := UntilReady(context.Background(), c, testContainer, probes, 50*time.Millisecond, time.Millisecond)
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
 	assert.Contains(t, err.Error(), "probe container")
@@ -267,11 +276,14 @@ func TestUntilReady_MultipleProbes(t *testing.T) {
 	m.AddResult("running\n", "", nil)
 	c := docker.NewClient(&m)
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	probes := []Probe{
 		{"container", ContainerRunning},
 		{"systemd", SystemdReady},
 	}
-	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 2)
 }
@@ -286,11 +298,14 @@ func TestUntilReady_SecondProbeFails(t *testing.T) {
 	m.AddResult("running\n", "", nil)
 	c := docker.NewClient(&m)
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	probes := []Probe{
 		{"container", ContainerRunning},
 		{"systemd", SystemdReady},
 	}
-	err := UntilReady(context.Background(), c, testContainer, probes, time.Second, time.Millisecond)
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 4)
 }
@@ -304,11 +319,14 @@ func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
 	probes := []Probe{
 		{"container", ContainerRunning},
 		{"systemd", SystemdReady},
 	}
-	err := UntilReady(context.Background(), c, testContainer, probes, 50*time.Millisecond, time.Millisecond)
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
 	assert.Contains(t, err.Error(), "probe systemd")
@@ -318,7 +336,7 @@ func TestUntilReady_EmptyProbes(t *testing.T) {
 	var m docker.MockExecutor
 	c := docker.NewClient(&m)
 
-	err := UntilReady(context.Background(), c, testContainer, nil, time.Second, time.Millisecond)
+	err := UntilReady(context.Background(), c, testContainer, nil, time.Millisecond)
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
 }
@@ -334,7 +352,7 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 	cancel() // already canceled
 
 	probes := []Probe{{"container", ContainerRunning}}
-	err := UntilReady(ctx, c, testContainer, probes, time.Second, time.Millisecond)
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
 }

@@ -36,13 +36,11 @@ func NodeProbes(role string) []Probe {
 	return probes
 }
 
-// UntilReady polls the given probes until they all pass or the timeout expires.
-// The interval controls the delay between polling attempts. On timeout, the
-// error includes the name and message of the last failing probe.
-func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, timeout, interval time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
+// UntilReady polls the given probes until they all pass or the context expires.
+// The caller controls the deadline via the context. The interval controls the
+// delay between polling attempts. On timeout, the error includes the name and
+// message of the last failing probe.
+func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
