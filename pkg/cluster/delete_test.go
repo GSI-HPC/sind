@@ -3,8 +3,6 @@
 package cluster
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -327,7 +325,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	m.OnCall = func(args []string, stdin string) docker.MockResult {
 		// CopyFromContainer (read Corefile) → return valid Corefile
 		if len(args) >= 2 && args[0] == "cp" && strings.Contains(args[1], "sind-dns") {
-			return docker.MockResult{Stdout: tarFile("Corefile", emptyCorefileContent())}
+			return docker.MockResult{Stdout: tarArchive("Corefile", emptyCorefileContent())}
 		}
 		// CopyToContainer (write Corefile) → success
 		if len(args) >= 2 && args[0] == "cp" && args[1] == "-" {
@@ -421,6 +419,22 @@ func TestHasOtherClusters_LabelFilter(t *testing.T) {
 	filterIdx := indexOf(args, "--filter")
 	require.Greater(t, filterIdx, -1)
 	assert.Equal(t, "label=sind.cluster", args[filterIdx+1])
+}
+
+func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
+	// Cluster "dev" must not match container "sind-dev2-controller".
+	// The prefix includes the trailing dash: "sind-dev-".
+	var m docker.MockExecutor
+	m.AddResult(ndjson(
+		psEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		psEntry{ID: "b", Names: "sind-dev2-controller", State: "running", Image: "img"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	has, err := HasOtherClusters(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, has, "sind-dev2-controller should not match cluster dev")
 }
 
 // --- Delete Orchestrator ---
@@ -622,6 +636,33 @@ func TestDelete_VolumeRemoveError(t *testing.T) {
 	assert.Contains(t, err.Error(), "removing volume")
 }
 
+func TestDelete_CleanupMeshError(t *testing.T) {
+	// No other clusters → CleanupMesh runs and fails.
+	var m docker.MockExecutor
+	exitErr := notFoundErr(t)
+	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
+		containers:    nil,
+		networkExists: false,
+		volumes:       []string{"config"},
+		otherClusters: false,
+	})
+	// Override: make CleanupMesh's ContainerExists (container inspect sind-ssh) fail.
+	inner := m.OnCall
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "container" && len(args) >= 3 && args[1] == "inspect" {
+			return docker.MockResult{Err: fmt.Errorf("docker daemon unreachable")}
+		}
+		return inner(args, stdin)
+	}
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c)
+
+	err := Delete(context.Background(), c, mgr, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "removing SSH container")
+}
+
 // --- helpers ---
 
 type psEntry struct {
@@ -661,7 +702,7 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) docke
 		switch {
 		// CopyFromContainer: docker cp sind-dns:/Corefile -
 		case args[0] == "cp" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
-			return docker.MockResult{Stdout: tarFile("Corefile", emptyCorefileContent())}
+			return docker.MockResult{Stdout: tarArchive("Corefile", emptyCorefileContent())}
 		// CopyToContainer: docker cp - sind-dns:/
 		case args[0] == "cp" && len(args) >= 2 && args[1] == "-":
 			return docker.MockResult{}
@@ -677,21 +718,6 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) docke
 		}
 		return docker.MockResult{}
 	}
-}
-
-// tarFile creates a tar archive containing a single file.
-func tarFile(name, content string) string {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
-	tw.Write([]byte(content))
-	tw.Close()
-	return buf.String()
-}
-
-// emptyCorefileContent returns a Corefile with no host entries.
-func emptyCorefileContent() string {
-	return "sind.local:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 }
 
 // deleteOnCallOpts configures the behavior of deleteOnCall.
@@ -798,7 +824,7 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 				return docker.MockResult{Err: fmt.Errorf("DNS container not running")}
 			}
 			if len(args) >= 2 && strings.Contains(args[1], "sind-dns") {
-				return docker.MockResult{Stdout: tarFile("Corefile", emptyCorefileContent())}
+				return docker.MockResult{Stdout: tarArchive("Corefile", emptyCorefileContent())}
 			}
 			return docker.MockResult{}
 

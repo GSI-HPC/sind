@@ -547,10 +547,14 @@ func tarArchive(name, content string) string {
 	return buf.String()
 }
 
+// emptyCorefileContent returns a Corefile with no host entries.
+func emptyCorefileContent() string {
+	return "sind.local:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
+}
+
 // emptyCorefileTar returns a tar archive containing an empty Corefile (no host entries).
 func emptyCorefileTar() string {
-	corefile := "sind.local:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
-	return tarArchive("Corefile", corefile)
+	return tarArchive("Corefile", emptyCorefileContent())
 }
 
 // happyOnCall returns an OnCall function that handles the full Create flow
