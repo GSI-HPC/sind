@@ -115,8 +115,14 @@ func GetNodes(ctx context.Context, client *docker.Client, clusterName string) ([
 // nodeOrder returns a sort key that orders nodes by role (controller, submitter, compute)
 // then by name within each role.
 func nodeOrder(n *NodeSummary) string {
+	return roleSortKey(n.Role, n.Name)
+}
+
+// roleSortKey returns a sort key that orders by role (controller, submitter, compute)
+// then by name within each role.
+func roleSortKey(role, name string) string {
 	var prefix string
-	switch n.Role {
+	switch role {
 	case "controller":
 		prefix = "0"
 	case "submitter":
@@ -126,7 +132,7 @@ func nodeOrder(n *NodeSummary) string {
 	default:
 		prefix = "9"
 	}
-	return prefix + n.Name
+	return prefix + name
 }
 
 // NetworkSummary holds summary information about a sind network.

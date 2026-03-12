@@ -247,9 +247,9 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 func TestGetNetworkHealth_NoneExist(t *testing.T) {
 	var m docker.MockExecutor
 	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
-	m.AddResult("", "Error: No such network\n", notFound)    // mesh
-	m.AddResult("", "Error: No such container\n", notFound)   // dns
-	m.AddResult("", "Error: No such network\n", notFound)     // cluster net
+	m.AddResult("", "Error: No such network\n", notFound)   // mesh
+	m.AddResult("", "Error: No such container\n", notFound) // dns
+	m.AddResult("", "Error: No such network\n", notFound)   // cluster net
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(context.Background(), c, "dev")
@@ -263,9 +263,9 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	var m docker.MockExecutor
 	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
-	m.AddResult("[{}]\n", "", nil)                          // mesh exists
-	m.AddResult("[{}]\n", "", nil)                          // dns exists
-	m.AddResult("", "Error: No such network\n", notFound)  // cluster net missing
+	m.AddResult("[{}]\n", "", nil)                        // mesh exists
+	m.AddResult("[{}]\n", "", nil)                        // dns exists
+	m.AddResult("", "Error: No such network\n", notFound) // cluster net missing
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(context.Background(), c, "dev")
@@ -289,8 +289,8 @@ func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                           // mesh OK
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))   // dns error
+	m.AddResult("[{}]\n", "", nil)                         // mesh OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error")) // dns error
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(context.Background(), c, "dev")
@@ -301,9 +301,9 @@ func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                          // mesh OK
-	m.AddResult("[{}]\n", "", nil)                          // dns OK
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))  // cluster net error
+	m.AddResult("[{}]\n", "", nil)                         // mesh OK
+	m.AddResult("[{}]\n", "", nil)                         // dns OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error")) // cluster net error
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(context.Background(), c, "dev")
@@ -368,9 +368,9 @@ func TestGetVolumeHealth_NoneExist(t *testing.T) {
 func TestGetVolumeHealth_PartialExist(t *testing.T) {
 	var m docker.MockExecutor
 	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
-	m.AddResult("[{}]\n", "", nil)                        // config exists
-	m.AddResult("", "Error: No such volume\n", notFound)  // munge missing
-	m.AddResult("[{}]\n", "", nil)                        // data exists
+	m.AddResult("[{}]\n", "", nil)                       // config exists
+	m.AddResult("", "Error: No such volume\n", notFound) // munge missing
+	m.AddResult("[{}]\n", "", nil)                       // data exists
 	c := docker.NewClient(&m)
 
 	health, err := GetVolumeHealth(context.Background(), c, "dev")
@@ -577,4 +577,87 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking node controller")
+}
+
+func TestGetStatus_NetworkHealthError(t *testing.T) {
+	var m docker.MockExecutor
+	base := fullStatusOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		// Mesh network check fails.
+		if args[0] == "network" && args[1] == "inspect" {
+			return docker.MockResult{Err: fmt.Errorf("docker daemon error")}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	_, err := GetStatus(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking mesh network")
+}
+
+func TestGetStatus_VolumeHealthError(t *testing.T) {
+	var m docker.MockExecutor
+	base := fullStatusOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		// Volume check fails.
+		if args[0] == "volume" && args[1] == "inspect" {
+			return docker.MockResult{Err: fmt.Errorf("docker daemon error")}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	_, err := GetStatus(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking volume")
+}
+
+func TestGetStatus_SortOrder(t *testing.T) {
+	var m docker.MockExecutor
+	base := fullStatusOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		// Return nodes in non-sorted order including submitter.
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: ndjson(
+				psEntry{
+					ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=compute",
+				},
+				psEntry{
+					ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=submitter",
+				},
+				psEntry{
+					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=controller",
+				},
+			)}
+		}
+		if args[0] == "inspect" {
+			name := args[1]
+			var ip string
+			switch name {
+			case "sind-dev-controller":
+				ip = "172.18.0.2"
+			case "sind-dev-submitter":
+				ip = "172.18.0.4"
+			case "sind-dev-compute-0":
+				ip = "172.18.0.3"
+			}
+			return docker.MockResult{Stdout: statusInspectJSON(name, "running", ip)}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	status, err := GetStatus(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, status.Nodes, 3)
+	assert.Equal(t, "controller", status.Nodes[0].Role)
+	assert.Equal(t, "submitter", status.Nodes[1].Role)
+	assert.Equal(t, "compute", status.Nodes[2].Role)
 }
