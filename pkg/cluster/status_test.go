@@ -693,3 +693,67 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	assert.Equal(t, "submitter", status.Nodes[1].Role)
 	assert.Equal(t, "compute", status.Nodes[2].Role)
 }
+
+func TestGetStatus_MixedStates(t *testing.T) {
+	var m docker.MockExecutor
+	base := fullStatusOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: ndjson(
+				psEntry{
+					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=controller",
+				},
+				psEntry{
+					ID: "b", Names: "sind-dev-compute-0", State: "exited", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=compute",
+				},
+			)}
+		}
+		if args[0] == "inspect" {
+			name := args[1]
+			switch name {
+			case "sind-dev-controller":
+				return docker.MockResult{Stdout: statusInspectJSON(name, "running", "172.18.0.2")}
+			case "sind-dev-compute-0":
+				return docker.MockResult{Stdout: statusInspectJSON(name, "exited", "")}
+			}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	status, err := GetStatus(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, StatusUnknown, status.Status)
+	require.Len(t, status.Nodes, 2)
+	assert.Equal(t, "running", status.Nodes[0].Health.Container)
+	assert.Equal(t, "exited", status.Nodes[1].Health.Container)
+}
+
+func TestGetVolumeHealth_MungeCheckError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil)                         // config OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error")) // munge error
+	c := docker.NewClient(&m)
+
+	_, err := GetVolumeHealth(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking volume sind-dev-munge")
+}
+
+func TestGetVolumeHealth_DataCheckError(t *testing.T) {
+	var m docker.MockExecutor
+	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
+	m.AddResult("[{}]\n", "", nil)                         // config OK
+	m.AddResult("", "Error: No such volume\n", notFound)   // munge not found
+	m.AddResult("", "", fmt.Errorf("docker daemon error")) // data error
+	c := docker.NewClient(&m)
+
+	_, err := GetVolumeHealth(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking volume sind-dev-data")
+}

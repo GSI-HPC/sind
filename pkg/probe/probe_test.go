@@ -229,6 +229,7 @@ func TestNodeProbes(t *testing.T) {
 		{"controller", []string{"container", "systemd", "sshd", "slurmctld"}},
 		{"compute", []string{"container", "systemd", "sshd", "slurmd"}},
 		{"submitter", []string{"container", "systemd", "sshd"}},
+		{"unknown", []string{"container", "systemd", "sshd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.role, func(t *testing.T) {
