@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
@@ -75,6 +76,57 @@ func GetClusters(ctx context.Context, client *docker.Client) ([]*ClusterSummary,
 		return result[i].Name < result[j].Name
 	})
 	return result, nil
+}
+
+// NodeSummary holds summary information about a node in a sind cluster.
+type NodeSummary struct {
+	Name   string // short name: "controller", "compute-0"
+	Role   string // "controller", "submitter", "compute"
+	Status Status
+}
+
+// GetNodes lists all nodes in the named cluster.
+func GetNodes(ctx context.Context, client *docker.Client, clusterName string) ([]*NodeSummary, error) {
+	containers, err := client.ListContainers(ctx,
+		"label="+LabelCluster+"="+clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	if len(containers) == 0 {
+		return nil, nil
+	}
+
+	prefix := "sind-" + clusterName + "-"
+	result := make([]*NodeSummary, 0, len(containers))
+	for _, c := range containers {
+		shortName := strings.TrimPrefix(string(c.Name), prefix)
+		result = append(result, &NodeSummary{
+			Name:   shortName,
+			Role:   c.Labels[LabelRole],
+			Status: containerStateToStatus(c.State),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return nodeOrder(result[i]) < nodeOrder(result[j])
+	})
+	return result, nil
+}
+
+// nodeOrder returns a sort key that orders nodes by role (controller, submitter, compute)
+// then by name within each role.
+func nodeOrder(n *NodeSummary) string {
+	var prefix string
+	switch n.Role {
+	case "controller":
+		prefix = "0"
+	case "submitter":
+		prefix = "1"
+	case "compute":
+		prefix = "2"
+	default:
+		prefix = "9"
+	}
+	return prefix + n.Name
 }
 
 // aggregateStatus determines the overall cluster status from node states.

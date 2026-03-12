@@ -164,3 +164,131 @@ func TestGetClusters_NoSlurmVersion(t *testing.T) {
 	require.Len(t, clusters, 1)
 	assert.Equal(t, "", clusters[0].SlurmVersion)
 }
+
+// --- GetNodes ---
+
+func TestGetNodes(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(
+		psEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		psEntry{
+			ID: "b", Names: "sind-dev-compute-1", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=compute",
+		},
+		psEntry{
+			ID: "c", Names: "sind-dev-compute-0", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=compute",
+		},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 3)
+
+	// Sorted: controller first, then compute by name.
+	assert.Equal(t, "controller", nodes[0].Name)
+	assert.Equal(t, "controller", nodes[0].Role)
+	assert.Equal(t, StatusRunning, nodes[0].Status)
+
+	assert.Equal(t, "compute-0", nodes[1].Name)
+	assert.Equal(t, "compute", nodes[1].Role)
+
+	assert.Equal(t, "compute-1", nodes[2].Name)
+	assert.Equal(t, "compute", nodes[2].Role)
+}
+
+func TestGetNodes_WithStatus(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(
+		psEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		psEntry{
+			ID: "b", Names: "sind-dev-compute-0", State: "exited", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=compute",
+		},
+		psEntry{
+			ID: "c", Names: "sind-dev-compute-1", State: "paused", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=compute",
+		},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 3)
+	assert.Equal(t, StatusRunning, nodes[0].Status)
+	assert.Equal(t, StatusStopped, nodes[1].Status)
+	assert.Equal(t, StatusPaused, nodes[2].Status)
+}
+
+func TestGetNodes_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(context.Background(), c, "nonexistent")
+
+	require.NoError(t, err)
+	assert.Empty(t, nodes)
+}
+
+func TestGetNodes_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker ps failed"))
+	c := docker.NewClient(&m)
+
+	_, err := GetNodes(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing containers")
+}
+
+func TestGetNodes_LabelFilter(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	_, _ = GetNodes(context.Background(), c, "myCluster")
+
+	require.Len(t, m.Calls, 1)
+	args := m.Calls[0].Args
+	filterIdx := indexOf(args, "--filter")
+	require.Greater(t, filterIdx, -1)
+	assert.Equal(t, "label=sind.cluster=myCluster", args[filterIdx+1])
+}
+
+func TestGetNodes_SortOrder(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(
+		psEntry{
+			ID: "a", Names: "sind-dev-compute-0", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=compute",
+		},
+		psEntry{
+			ID: "b", Names: "sind-dev-submitter", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=submitter",
+		},
+		psEntry{
+			ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 3)
+	// Order: controller, submitter, compute
+	assert.Equal(t, "controller", nodes[0].Role)
+	assert.Equal(t, "submitter", nodes[1].Role)
+	assert.Equal(t, "compute", nodes[2].Role)
+}
