@@ -5,6 +5,8 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/probe"
@@ -122,6 +124,90 @@ func GetVolumeHealth(ctx context.Context, client *docker.Client, clusterName str
 	}
 
 	return health, nil
+}
+
+// NodeStatus combines node identity with health information.
+type NodeStatus struct {
+	Name   string // DNS-style name: "controller.dev"
+	Role   string // "controller", "submitter", "compute"
+	Health *NodeHealth
+}
+
+// ClusterStatus holds the full status of a sind cluster.
+type ClusterStatus struct {
+	Name    string
+	Status  Status
+	Nodes   []*NodeStatus
+	Network *NetworkHealth
+	Volumes *VolumeHealth
+}
+
+// GetStatus returns the full status of a cluster, aggregating node, network,
+// and volume health information.
+func GetStatus(ctx context.Context, client *docker.Client, clusterName string) (*ClusterStatus, error) {
+	// List all containers in this cluster.
+	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+
+	prefix := "sind-" + clusterName + "-"
+	var nodes []*NodeStatus
+	var states []string
+	for _, c := range containers {
+		shortName := strings.TrimPrefix(string(c.Name), prefix)
+		role := c.Labels[LabelRole]
+
+		health, err := GetNodeHealth(ctx, client, string(c.Name), role)
+		if err != nil {
+			return nil, fmt.Errorf("checking node %s: %w", shortName, err)
+		}
+
+		nodes = append(nodes, &NodeStatus{
+			Name:   shortName + "." + clusterName,
+			Role:   role,
+			Health: health,
+		})
+		states = append(states, c.State)
+	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
+	})
+
+	network, err := GetNetworkHealth(ctx, client, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	volumes, err := GetVolumeHealth(ctx, client, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ClusterStatus{
+		Name:    clusterName,
+		Status:  aggregateStatus(states),
+		Nodes:   nodes,
+		Network: network,
+		Volumes: volumes,
+	}, nil
+}
+
+// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter, compute).
+func nodeStatusOrder(n *NodeStatus) string {
+	var prefix string
+	switch n.Role {
+	case "controller":
+		prefix = "0"
+	case "submitter":
+		prefix = "1"
+	case "compute":
+		prefix = "2"
+	default:
+		prefix = "9"
+	}
+	return prefix + n.Name
 }
 
 // roleServices returns the Slurm service names for the given role.
