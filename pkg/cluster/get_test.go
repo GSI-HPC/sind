@@ -4,7 +4,9 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -291,4 +293,122 @@ func TestGetNodes_SortOrder(t *testing.T) {
 	assert.Equal(t, "controller", nodes[0].Role)
 	assert.Equal(t, "submitter", nodes[1].Role)
 	assert.Equal(t, "compute", nodes[2].Role)
+}
+
+// --- GetNetworks ---
+
+type networkEntry struct {
+	Name   string `json:"Name"`
+	Driver string `json:"Driver"`
+}
+
+func ndjsonNetworks(entries ...networkEntry) string {
+	var lines []string
+	for _, e := range entries {
+		data, _ := json.Marshal(e)
+		lines = append(lines, string(data))
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func TestGetNetworks(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjsonNetworks(
+		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
+		networkEntry{Name: "sind-mesh", Driver: "bridge"},
+		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	networks, err := GetNetworks(context.Background(), c)
+
+	require.NoError(t, err)
+	require.Len(t, networks, 3)
+	// Sorted by name.
+	assert.Equal(t, "sind-dev-net", networks[0].Name)
+	assert.Equal(t, "bridge", networks[0].Driver)
+	assert.Equal(t, "sind-mesh", networks[1].Name)
+	assert.Equal(t, "sind-prod-net", networks[2].Name)
+}
+
+func TestGetNetworks_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	networks, err := GetNetworks(context.Background(), c)
+
+	require.NoError(t, err)
+	assert.Empty(t, networks)
+}
+
+func TestGetNetworks_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetNetworks(context.Background(), c)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing networks")
+}
+
+// --- GetVolumes ---
+
+type volumeEntry struct {
+	Name   string `json:"Name"`
+	Driver string `json:"Driver"`
+}
+
+func ndjsonVolumes(entries ...volumeEntry) string {
+	var lines []string
+	for _, e := range entries {
+		data, _ := json.Marshal(e)
+		lines = append(lines, string(data))
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func TestGetVolumes(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjsonVolumes(
+		volumeEntry{Name: "sind-dev-data", Driver: "local"},
+		volumeEntry{Name: "sind-dev-config", Driver: "local"},
+		volumeEntry{Name: "sind-dev-munge", Driver: "local"},
+		volumeEntry{Name: "sind-ssh-config", Driver: "local"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	volumes, err := GetVolumes(context.Background(), c)
+
+	require.NoError(t, err)
+	require.Len(t, volumes, 4)
+	// Sorted by name.
+	assert.Equal(t, "sind-dev-config", volumes[0].Name)
+	assert.Equal(t, "local", volumes[0].Driver)
+	assert.Equal(t, "sind-dev-data", volumes[1].Name)
+	assert.Equal(t, "sind-dev-munge", volumes[2].Name)
+	assert.Equal(t, "sind-ssh-config", volumes[3].Name)
+}
+
+func TestGetVolumes_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	volumes, err := GetVolumes(context.Background(), c)
+
+	require.NoError(t, err)
+	assert.Empty(t, volumes)
+}
+
+func TestGetVolumes_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetVolumes(context.Background(), c)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing volumes")
 }

@@ -129,6 +129,63 @@ func nodeOrder(n *NodeSummary) string {
 	return prefix + n.Name
 }
 
+// NetworkSummary holds summary information about a sind network.
+type NetworkSummary struct {
+	Name   string
+	Driver string
+}
+
+// GetNetworks lists all sind-related Docker networks.
+// This includes per-cluster networks (sind-<cluster>-net) and the mesh network (sind-mesh).
+func GetNetworks(ctx context.Context, client *docker.Client) ([]*NetworkSummary, error) {
+	entries, err := client.ListNetworks(ctx, "name=sind-")
+	if err != nil {
+		return nil, fmt.Errorf("listing networks: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	result := make([]*NetworkSummary, 0, len(entries))
+	for _, e := range entries {
+		result = append(result, &NetworkSummary{
+			Name:   string(e.Name),
+			Driver: e.Driver,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	return result, nil
+}
+
+// VolumeSummary holds summary information about a sind volume.
+type VolumeSummary struct {
+	Name   string
+	Driver string
+}
+
+// GetVolumes lists all sind-related Docker volumes.
+func GetVolumes(ctx context.Context, client *docker.Client) ([]*VolumeSummary, error) {
+	entries, err := client.ListVolumes(ctx, "name=sind-")
+	if err != nil {
+		return nil, fmt.Errorf("listing volumes: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	result := make([]*VolumeSummary, 0, len(entries))
+	for _, e := range entries {
+		result = append(result, &VolumeSummary{
+			Name:   string(e.Name),
+			Driver: e.Driver,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	return result, nil
+}
+
 // aggregateStatus determines the overall cluster status from node states.
 // If all nodes share the same status, that status is returned. Otherwise,
 // the cluster status is unknown.
