@@ -110,6 +110,15 @@ func SSHDReady(ctx context.Context, client *docker.Client, name docker.Container
 	return nil
 }
 
+// MungeReady verifies that the munge authentication service is active.
+func MungeReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	_, err := client.Exec(ctx, name, "systemctl", "is-active", "munge")
+	if err != nil {
+		return fmt.Errorf("munge not ready: %w", err)
+	}
+	return nil
+}
+
 // SlurmctldReady verifies that slurmctld is responding to RPC requests.
 func SlurmctldReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	_, err := client.Exec(ctx, name, "scontrol", "ping")

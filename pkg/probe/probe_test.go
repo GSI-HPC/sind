@@ -177,6 +177,28 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmctld not ready")
 }
 
+func TestMungeReady(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("active\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := MungeReady(context.Background(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "munge"}, m.Calls[0].Args)
+}
+
+func TestMungeReady_NotReady(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := MungeReady(context.Background(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "munge not ready")
+}
+
 func TestSlurmdReady(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("active\n", "", nil)
