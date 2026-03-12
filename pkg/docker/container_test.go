@@ -204,8 +204,8 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	assert.Contains(t, err.Error(), "no results")
 }
 
-const psJSON = `{"ID":"94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca","Names":"sind-dev-controller","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11"}
-{"ID":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2","Names":"sind-dev-compute-0","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11"}`
+const psJSON = `{"ID":"94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca","Names":"sind-dev-controller","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=controller"}
+{"ID":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2","Names":"sind-dev-compute-0","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=compute"}`
 
 func TestListContainers(t *testing.T) {
 	var m MockExecutor
@@ -219,11 +219,25 @@ func TestListContainers(t *testing.T) {
 	assert.Equal(t, ContainerName("sind-dev-controller"), entries[0].Name)
 	assert.Equal(t, "running", entries[0].State)
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", entries[0].Image)
+	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "controller"}, entries[0].Labels)
 
 	assert.Equal(t, ContainerName("sind-dev-compute-0"), entries[1].Name)
+	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "compute"}, entries[1].Labels)
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.cluster=dev"}, m.Calls[0].Args)
+}
+
+func TestListContainers_NoLabels(t *testing.T) {
+	const noLabelsJSON = `{"ID":"abc123","Names":"sind-dev-controller","State":"running","Image":"img"}`
+	var m MockExecutor
+	m.AddResult(noLabelsJSON, "", nil)
+	c := NewClient(&m)
+
+	entries, err := c.ListContainers(context.Background())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Nil(t, entries[0].Labels)
 }
 
 func TestListContainers_Empty(t *testing.T) {

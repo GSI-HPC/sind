@@ -135,3 +135,56 @@ func TestDisconnectNetwork_Error(t *testing.T) {
 	err := c.DisconnectNetwork(context.Background(), testNetworkName, testContainerName)
 	assert.Error(t, err)
 }
+
+const networkLsJSON = `{"Name":"sind-dev-net","Driver":"bridge","ID":"abc123","Scope":"local"}
+{"Name":"sind-mesh","Driver":"bridge","ID":"def456","Scope":"local"}
+{"Name":"sind-prod-net","Driver":"bridge","ID":"ghi789","Scope":"local"}`
+
+func TestListNetworks(t *testing.T) {
+	var m MockExecutor
+	m.AddResult(networkLsJSON, "", nil)
+	c := NewClient(&m)
+
+	entries, err := c.ListNetworks(context.Background(), "name=sind-")
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+
+	assert.Equal(t, NetworkName("sind-dev-net"), entries[0].Name)
+	assert.Equal(t, "bridge", entries[0].Driver)
+	assert.Equal(t, NetworkName("sind-mesh"), entries[1].Name)
+	assert.Equal(t, NetworkName("sind-prod-net"), entries[2].Name)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "ls", "--format", "json", "--filter", "name=sind-"}, m.Calls[0].Args)
+}
+
+func TestListNetworks_Empty(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	entries, err := c.ListNetworks(context.Background(), "name=nonexistent")
+	require.NoError(t, err)
+	assert.Nil(t, entries)
+}
+
+func TestListNetworks_InvalidJSON(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("not json\n", "", nil)
+	c := NewClient(&m)
+
+	entries, err := c.ListNetworks(context.Background())
+	assert.Error(t, err)
+	assert.Nil(t, entries)
+	assert.Contains(t, err.Error(), "parsing network ls output")
+}
+
+func TestListNetworks_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	entries, err := c.ListNetworks(context.Background())
+	assert.Error(t, err)
+	assert.Nil(t, entries)
+}

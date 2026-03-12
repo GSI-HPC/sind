@@ -167,6 +167,28 @@ func TestGetClusters_NoSlurmVersion(t *testing.T) {
 	assert.Equal(t, "", clusters[0].SlurmVersion)
 }
 
+func TestGetClusters_EmptyClusterLabel(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(
+		psEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		psEntry{
+			ID: "b", Names: "sind-orphan", State: "running", Image: "img",
+			Labels: "sind.cluster=,sind.role=compute",
+		},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	clusters, err := GetClusters(context.Background(), c)
+
+	require.NoError(t, err)
+	require.Len(t, clusters, 1)
+	assert.Equal(t, "dev", clusters[0].Name)
+	assert.Equal(t, 1, clusters[0].NodeCount)
+}
+
 // --- GetNodes ---
 
 func TestGetNodes(t *testing.T) {
@@ -293,6 +315,56 @@ func TestGetNodes_SortOrder(t *testing.T) {
 	assert.Equal(t, "controller", nodes[0].Role)
 	assert.Equal(t, "submitter", nodes[1].Role)
 	assert.Equal(t, "compute", nodes[2].Role)
+}
+
+func TestGetNodes_UnknownRole(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(
+		psEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		psEntry{
+			ID: "b", Names: "sind-dev-mystery", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=mystery",
+		},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	// controller (prefix "0") sorts before unknown role (prefix "9").
+	assert.Equal(t, "controller", nodes[0].Role)
+	assert.Equal(t, "mystery", nodes[1].Role)
+}
+
+func TestContainerStateToStatus(t *testing.T) {
+	tests := []struct {
+		state  string
+		status Status
+	}{
+		{"running", StatusRunning},
+		{"paused", StatusPaused},
+		{"exited", StatusStopped},
+		{"dead", StatusStopped},
+		{"created", StatusStopped},
+		{"restarting", StatusUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.state, func(t *testing.T) {
+			assert.Equal(t, tt.status, containerStateToStatus(tt.state))
+		})
+	}
+}
+
+func TestAggregateStatus_Empty(t *testing.T) {
+	assert.Equal(t, StatusUnknown, aggregateStatus(nil))
+}
+
+func TestAggregateStatus_Single(t *testing.T) {
+	assert.Equal(t, StatusRunning, aggregateStatus([]string{"running"}))
 }
 
 // --- GetNetworks ---

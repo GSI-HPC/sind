@@ -121,6 +121,18 @@ func TestMockExecutor_WithStdinError(t *testing.T) {
 	assert.Contains(t, err.Error(), "mock: reading stdin")
 }
 
+func TestMockExecutor_OnCall(t *testing.T) {
+	var m MockExecutor
+	m.OnCall = func(args []string, stdin string) MockResult {
+		return MockResult{Stdout: "dispatched", Stderr: "", Err: nil}
+	}
+
+	stdout, _, err := m.Run(context.Background(), "docker", "ps")
+	require.NoError(t, err)
+	assert.Equal(t, "dispatched", stdout)
+	require.Len(t, m.Calls, 1)
+}
+
 func TestMockExecutor_WithStdin(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("", "", nil)
