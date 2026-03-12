@@ -666,10 +666,11 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 // --- helpers ---
 
 type psEntry struct {
-	ID    string `json:"ID"`
-	Names string `json:"Names"`
-	State string `json:"State"`
-	Image string `json:"Image"`
+	ID     string `json:"ID"`
+	Names  string `json:"Names"`
+	State  string `json:"State"`
+	Image  string `json:"Image"`
+	Labels string `json:"Labels,omitempty"`
 }
 
 // ndjson builds newline-delimited JSON from the given entries.

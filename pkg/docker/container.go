@@ -120,18 +120,20 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 
 // ContainerListEntry holds summary information from docker ps.
 type ContainerListEntry struct {
-	ID    ContainerID
-	Name  ContainerName
-	State string
-	Image string
+	ID     ContainerID
+	Name   ContainerName
+	State  string
+	Image  string
+	Labels map[string]string
 }
 
 // psEntry maps the docker ps --format json output.
 type psEntry struct {
-	ID    string `json:"ID"`
-	Names string `json:"Names"`
-	State string `json:"State"`
-	Image string `json:"Image"`
+	ID     string `json:"ID"`
+	Names  string `json:"Names"`
+	State  string `json:"State"`
+	Image  string `json:"Image"`
+	Labels string `json:"Labels"`
 }
 
 // ListContainers returns containers matching the given filters.
@@ -156,13 +158,27 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 			return nil, fmt.Errorf("parsing ps output: %w", err)
 		}
 		entries = append(entries, ContainerListEntry{
-			ID:    ContainerID(p.ID),
-			Name:  ContainerName(p.Names),
-			State: p.State,
-			Image: p.Image,
+			ID:     ContainerID(p.ID),
+			Name:   ContainerName(p.Names),
+			State:  p.State,
+			Image:  p.Image,
+			Labels: parseLabels(p.Labels),
 		})
 	}
 	return entries, nil
+}
+
+// parseLabels parses the comma-separated key=value label string from docker ps JSON output.
+func parseLabels(s string) map[string]string {
+	if s == "" {
+		return nil
+	}
+	labels := make(map[string]string)
+	for _, pair := range strings.Split(s, ",") {
+		k, v, _ := strings.Cut(pair, "=")
+		labels[k] = v
+	}
+	return labels
 }
 
 // Exec runs a command inside a container and returns its stdout.
