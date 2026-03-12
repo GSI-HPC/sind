@@ -5,6 +5,8 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -207,4 +209,119 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, health.IP)
+}
+
+// --- GetNetworkHealth ---
+
+// statusExitCode1 runs a command that exits with code 1 and returns its ProcessState.
+func statusExitCode1(t *testing.T) *os.ProcessState {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "exit 1")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	return exitErr.ProcessState
+}
+
+func TestGetNetworkHealth_AllHealthy(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // NetworkExists: sind-mesh
+	m.AddResult("[{}]\n", "", nil) // ContainerExists: sind-dns
+	m.AddResult("[{}]\n", "", nil) // NetworkExists: sind-dev-net
+	c := docker.NewClient(&m)
+
+	health, err := GetNetworkHealth(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, health.Mesh)
+	assert.True(t, health.DNS)
+	assert.True(t, health.Cluster)
+
+	// Verify correct resources were checked.
+	require.Len(t, m.Calls, 3)
+	assert.Equal(t, []string{"network", "inspect", "sind-mesh"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"container", "inspect", "sind-dns"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"network", "inspect", "sind-dev-net"}, m.Calls[2].Args)
+}
+
+func TestGetNetworkHealth_NoneExist(t *testing.T) {
+	var m docker.MockExecutor
+	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	m.AddResult("", "Error: No such network\n", notFound)    // mesh
+	m.AddResult("", "Error: No such container\n", notFound)   // dns
+	m.AddResult("", "Error: No such network\n", notFound)     // cluster net
+	c := docker.NewClient(&m)
+
+	health, err := GetNetworkHealth(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.False(t, health.Mesh)
+	assert.False(t, health.DNS)
+	assert.False(t, health.Cluster)
+}
+
+func TestGetNetworkHealth_PartialHealth(t *testing.T) {
+	var m docker.MockExecutor
+	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	m.AddResult("[{}]\n", "", nil)                          // mesh exists
+	m.AddResult("[{}]\n", "", nil)                          // dns exists
+	m.AddResult("", "Error: No such network\n", notFound)  // cluster net missing
+	c := docker.NewClient(&m)
+
+	health, err := GetNetworkHealth(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, health.Mesh)
+	assert.True(t, health.DNS)
+	assert.False(t, health.Cluster)
+}
+
+func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetNetworkHealth(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking mesh network")
+}
+
+func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil)                           // mesh OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))   // dns error
+	c := docker.NewClient(&m)
+
+	_, err := GetNetworkHealth(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking DNS container")
+}
+
+func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil)                          // mesh OK
+	m.AddResult("[{}]\n", "", nil)                          // dns OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))  // cluster net error
+	c := docker.NewClient(&m)
+
+	_, err := GetNetworkHealth(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking cluster network")
+}
+
+func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // mesh
+	m.AddResult("[{}]\n", "", nil) // dns
+	m.AddResult("[{}]\n", "", nil) // cluster net
+	c := docker.NewClient(&m)
+
+	_, err := GetNetworkHealth(context.Background(), c, "default")
+
+	require.NoError(t, err)
+	// Verify cluster network name uses default.
+	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[2].Args)
 }

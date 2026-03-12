@@ -61,6 +61,39 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 	return health, nil
 }
 
+// NetworkHealth holds the health status of cluster networking.
+type NetworkHealth struct {
+	Mesh    bool // sind-mesh network exists
+	DNS     bool // sind-dns container exists and running
+	Cluster bool // cluster network exists
+}
+
+// GetNetworkHealth checks the health of mesh, DNS, and cluster networking.
+func GetNetworkHealth(ctx context.Context, client *docker.Client, clusterName string) (*NetworkHealth, error) {
+	health := &NetworkHealth{}
+
+	meshExists, err := client.NetworkExists(ctx, "sind-mesh")
+	if err != nil {
+		return nil, fmt.Errorf("checking mesh network: %w", err)
+	}
+	health.Mesh = meshExists
+
+	dnsExists, err := client.ContainerExists(ctx, "sind-dns")
+	if err != nil {
+		return nil, fmt.Errorf("checking DNS container: %w", err)
+	}
+	health.DNS = dnsExists
+
+	clusterNet := NetworkName(clusterName)
+	clusterExists, err := client.NetworkExists(ctx, docker.NetworkName(clusterNet))
+	if err != nil {
+		return nil, fmt.Errorf("checking cluster network: %w", err)
+	}
+	health.Cluster = clusterExists
+
+	return health, nil
+}
+
 // roleServices returns the Slurm service names for the given role.
 func roleServices(role string) []string {
 	switch role {
