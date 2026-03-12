@@ -94,6 +94,36 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, clusterName st
 	return health, nil
 }
 
+// VolumeHealth holds the existence status of cluster volumes.
+type VolumeHealth struct {
+	Config bool // sind-<cluster>-config volume exists
+	Munge  bool // sind-<cluster>-munge volume exists
+	Data   bool // sind-<cluster>-data volume exists
+}
+
+// GetVolumeHealth checks whether the cluster's config, munge, and data volumes exist.
+func GetVolumeHealth(ctx context.Context, client *docker.Client, clusterName string) (*VolumeHealth, error) {
+	health := &VolumeHealth{}
+
+	for _, vtype := range []string{"config", "munge", "data"} {
+		volName := VolumeName(clusterName, vtype)
+		exists, err := client.VolumeExists(ctx, docker.VolumeName(volName))
+		if err != nil {
+			return nil, fmt.Errorf("checking volume %s: %w", volName, err)
+		}
+		switch vtype {
+		case "config":
+			health.Config = exists
+		case "munge":
+			health.Munge = exists
+		case "data":
+			health.Data = exists
+		}
+	}
+
+	return health, nil
+}
+
 // roleServices returns the Slurm service names for the given role.
 func roleServices(role string) []string {
 	switch role {

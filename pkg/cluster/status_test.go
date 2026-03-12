@@ -325,3 +325,84 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	// Verify cluster network name uses default.
 	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[2].Args)
 }
+
+// --- GetVolumeHealth ---
+
+func TestGetVolumeHealth_AllExist(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // config
+	m.AddResult("[{}]\n", "", nil) // munge
+	m.AddResult("[{}]\n", "", nil) // data
+	c := docker.NewClient(&m)
+
+	health, err := GetVolumeHealth(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, health.Config)
+	assert.True(t, health.Munge)
+	assert.True(t, health.Data)
+
+	// Verify correct volume names were checked.
+	require.Len(t, m.Calls, 3)
+	assert.Equal(t, []string{"volume", "inspect", "sind-dev-config"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"volume", "inspect", "sind-dev-munge"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"volume", "inspect", "sind-dev-data"}, m.Calls[2].Args)
+}
+
+func TestGetVolumeHealth_NoneExist(t *testing.T) {
+	var m docker.MockExecutor
+	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	m.AddResult("", "Error: No such volume\n", notFound) // config
+	m.AddResult("", "Error: No such volume\n", notFound) // munge
+	m.AddResult("", "Error: No such volume\n", notFound) // data
+	c := docker.NewClient(&m)
+
+	health, err := GetVolumeHealth(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.False(t, health.Config)
+	assert.False(t, health.Munge)
+	assert.False(t, health.Data)
+}
+
+func TestGetVolumeHealth_PartialExist(t *testing.T) {
+	var m docker.MockExecutor
+	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	m.AddResult("[{}]\n", "", nil)                        // config exists
+	m.AddResult("", "Error: No such volume\n", notFound)  // munge missing
+	m.AddResult("[{}]\n", "", nil)                        // data exists
+	c := docker.NewClient(&m)
+
+	health, err := GetVolumeHealth(context.Background(), c, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, health.Config)
+	assert.False(t, health.Munge)
+	assert.True(t, health.Data)
+}
+
+func TestGetVolumeHealth_CheckError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))
+	c := docker.NewClient(&m)
+
+	_, err := GetVolumeHealth(context.Background(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking volume sind-dev-config")
+}
+
+func TestGetVolumeHealth_DefaultCluster(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // config
+	m.AddResult("[{}]\n", "", nil) // munge
+	m.AddResult("[{}]\n", "", nil) // data
+	c := docker.NewClient(&m)
+
+	_, err := GetVolumeHealth(context.Background(), c, "default")
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"volume", "inspect", "sind-default-config"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"volume", "inspect", "sind-default-munge"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"volume", "inspect", "sind-default-data"}, m.Calls[2].Args)
+}
