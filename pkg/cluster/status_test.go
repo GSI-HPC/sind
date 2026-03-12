@@ -5,7 +5,6 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"testing"
 
@@ -145,6 +144,47 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	assert.False(t, health.Services["slurmd"])
 }
 
+func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
+	var m docker.MockExecutor
+	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		// scontrol ping fails
+		if len(args) >= 3 && args[2] == "scontrol" {
+			return docker.MockResult{Err: fmt.Errorf("exit status 1")}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+
+	require.NoError(t, err)
+	assert.Equal(t, "running", health.Container)
+	assert.True(t, health.Munge)
+	assert.True(t, health.SSHD)
+	assert.False(t, health.Services["slurmctld"])
+}
+
+func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if len(args) >= 2 && args[0] == "inspect" {
+			return docker.MockResult{Stdout: statusInspectJSON("sind-dev-compute-0", "exited", "")}
+		}
+		return docker.MockResult{Err: fmt.Errorf("container not running")}
+	}
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(context.Background(), c, "sind-dev-compute-0", "compute")
+
+	require.NoError(t, err)
+	assert.Equal(t, "exited", health.Container)
+	assert.False(t, health.Munge)
+	assert.False(t, health.SSHD)
+	require.Contains(t, health.Services, "slurmd")
+	assert.False(t, health.Services["slurmd"])
+}
+
 func TestGetNodeHealth_MungeFailing(t *testing.T) {
 	var m docker.MockExecutor
 	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
@@ -213,15 +253,7 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 
 // --- GetNetworkHealth ---
 
-// statusExitCode1 runs a command that exits with code 1 and returns its ProcessState.
-func statusExitCode1(t *testing.T) *os.ProcessState {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr.ProcessState
-}
+// exitCode1 is defined in preflight_test.go.
 
 func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	var m docker.MockExecutor
@@ -246,7 +278,7 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 
 func TestGetNetworkHealth_NoneExist(t *testing.T) {
 	var m docker.MockExecutor
-	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("", "Error: No such network\n", notFound)   // mesh
 	m.AddResult("", "Error: No such container\n", notFound) // dns
 	m.AddResult("", "Error: No such network\n", notFound)   // cluster net
@@ -262,7 +294,7 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	var m docker.MockExecutor
-	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("[{}]\n", "", nil)                        // mesh exists
 	m.AddResult("[{}]\n", "", nil)                        // dns exists
 	m.AddResult("", "Error: No such network\n", notFound) // cluster net missing
@@ -351,7 +383,7 @@ func TestGetVolumeHealth_AllExist(t *testing.T) {
 
 func TestGetVolumeHealth_NoneExist(t *testing.T) {
 	var m docker.MockExecutor
-	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("", "Error: No such volume\n", notFound) // config
 	m.AddResult("", "Error: No such volume\n", notFound) // munge
 	m.AddResult("", "Error: No such volume\n", notFound) // data
@@ -367,7 +399,7 @@ func TestGetVolumeHealth_NoneExist(t *testing.T) {
 
 func TestGetVolumeHealth_PartialExist(t *testing.T) {
 	var m docker.MockExecutor
-	notFound := &exec.ExitError{ProcessState: statusExitCode1(t)}
+	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("[{}]\n", "", nil)                       // config exists
 	m.AddResult("", "Error: No such volume\n", notFound) // munge missing
 	m.AddResult("[{}]\n", "", nil)                       // data exists

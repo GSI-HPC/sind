@@ -66,7 +66,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 // NetworkHealth holds the health status of cluster networking.
 type NetworkHealth struct {
 	Mesh    bool // sind-mesh network exists
-	DNS     bool // sind-dns container exists and running
+	DNS     bool // sind-dns container exists
 	Cluster bool // cluster network exists
 }
 
