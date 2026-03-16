@@ -12,6 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// workerContainers returns a standard set of cluster containers for worker tests.
+func workerContainers(computes ...string) string {
+	entries := []psEntry{
+		{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=controller"},
+	}
+	for _, c := range computes {
+		entries = append(entries, psEntry{
+			ID: "c" + c, Names: "sind-dev-" + c, State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=compute",
+		})
+	}
+	return ndjson(entries...)
+}
+
 // --- ValidateWorkerAdd ---
 
 func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
@@ -150,6 +165,100 @@ func TestWorkerAdd_ListContainersError(t *testing.T) {
 		ClusterName: "dev",
 		Count:       1,
 	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing cluster containers")
+}
+
+// --- NextComputeIndex ---
+
+func TestNextComputeIndex_Empty(t *testing.T) {
+	// No compute containers → next index is 0.
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: ndjson(
+				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+			)}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	idx, err := NextComputeIndex(context.Background(), client, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, idx)
+}
+
+func TestNextComputeIndex_Sequential(t *testing.T) {
+	// compute-0 and compute-1 exist → next index is 2.
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: workerContainers("compute-0", "compute-1")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	idx, err := NextComputeIndex(context.Background(), client, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, idx)
+}
+
+func TestNextComputeIndex_Gap(t *testing.T) {
+	// compute-0 and compute-3 exist → next index is 4 (fills after max).
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: workerContainers("compute-0", "compute-3")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	idx, err := NextComputeIndex(context.Background(), client, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, 4, idx)
+}
+
+func TestNextComputeIndex_NonComputeIgnored(t *testing.T) {
+	// Controller and submitter don't affect compute index.
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: ndjson(
+				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+				psEntry{ID: "def", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=submitter"},
+			)}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	idx, err := NextComputeIndex(context.Background(), client, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, idx)
+}
+
+func TestNextComputeIndex_ListError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Err: fmt.Errorf("docker daemon not running")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	_, err := NextComputeIndex(context.Background(), client, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing cluster containers")

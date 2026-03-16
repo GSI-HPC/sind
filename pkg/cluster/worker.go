@@ -5,6 +5,8 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
@@ -52,4 +54,32 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, opts WorkerAd
 	}
 
 	return nil
+}
+
+// NextComputeIndex determines the next compute node index by examining
+// existing containers in the cluster. Returns max(existing indices) + 1,
+// or 0 if no compute containers exist.
+func NextComputeIndex(ctx context.Context, client *docker.Client, clusterName string) (int, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
+	if err != nil {
+		return 0, fmt.Errorf("listing cluster containers: %w", err)
+	}
+
+	prefix := string(ContainerName(clusterName, "compute-"))
+	maxIdx := -1
+	for _, c := range containers {
+		name := string(c.Name)
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		suffix := name[len(prefix):]
+		idx, err := strconv.Atoi(suffix)
+		if err != nil {
+			continue
+		}
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+	return maxIdx + 1, nil
 }
