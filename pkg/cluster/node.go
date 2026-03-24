@@ -101,7 +101,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// Security options for systemd containers
 	args = append(args,
 		"--cgroupns", "private",
-		"--security-opt", "writable-cgroups",
+		"--security-opt", "writable-cgroups=true",
 	)
 
 	// Labels

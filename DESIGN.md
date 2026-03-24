@@ -9,7 +9,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 ## Prerequisites
 
 - Linux host with cgroupv2
-- Docker Engine 28.0+ (required for `--security-opt writable-cgroups`)
+- Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true`)
 
 ## Supported Slurm Versions
 

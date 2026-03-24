@@ -255,7 +255,7 @@ func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 
 	// writable-cgroups for cgroupv2 support (Docker 28+)
 	secOpts := argValues(args, "--security-opt")
-	assert.Contains(t, secOpts, "writable-cgroups")
+	assert.Contains(t, secOpts, "writable-cgroups=true")
 
 	// Private cgroup namespace for systemd
 	cgroupns, ok := argValue(args, "--cgroupns")
