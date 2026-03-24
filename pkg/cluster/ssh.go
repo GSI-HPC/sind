@@ -2,7 +2,13 @@
 
 package cluster
 
-import "github.com/GSI-HPC/sind/pkg/mesh"
+import (
+	"context"
+	"fmt"
+
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
+)
 
 // BuildSSHArgs builds the docker CLI arguments for running SSH through the
 // sind-ssh relay container. The returned args are suitable for passing to
@@ -21,4 +27,25 @@ func BuildSSHArgs(node, cluster string, isTTY bool, sshOptions, command []string
 	args = append(args, DNSName(node, cluster))
 	args = append(args, command...)
 	return args
+}
+
+// EnterTarget determines the target node for an interactive shell.
+// Returns "submitter" if present in the cluster, otherwise "controller".
+func EnterTarget(ctx context.Context, client *docker.Client, clusterName string) (string, error) {
+	entries, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
+	if err != nil {
+		return "", fmt.Errorf("listing cluster containers: %w", err)
+	}
+
+	for _, e := range entries {
+		if e.Labels[LabelRole] == "submitter" {
+			return "submitter", nil
+		}
+	}
+	for _, e := range entries {
+		if e.Labels[LabelRole] == "controller" {
+			return "controller", nil
+		}
+	}
+	return "", fmt.Errorf("no submitter or controller found in cluster %q", clusterName)
 }
