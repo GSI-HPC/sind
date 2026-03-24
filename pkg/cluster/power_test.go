@@ -12,6 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// listErrorMock returns a mock that fails on any call, simulating docker daemon unavailability.
+func listErrorMock() *docker.MockExecutor {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		return docker.MockResult{Err: fmt.Errorf("docker daemon unavailable")}
+	}
+	return &m
+}
+
 // powerContainers returns a standard set of cluster containers for power tests.
 func powerContainers() string {
 	return ndjson(
@@ -100,11 +109,7 @@ func TestPower_Shutdown_EmptyNodes(t *testing.T) {
 }
 
 func TestPower_Shutdown_ListError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
-		return docker.MockResult{Err: fmt.Errorf("docker daemon unavailable")}
-	}
-	client := docker.NewClient(&m)
+	client := docker.NewClient(listErrorMock())
 
 	err := PowerShutdown(context.Background(), client, "dev", []string{"compute-0"})
 
@@ -148,6 +153,15 @@ func TestPower_Cut_EmptyNodes(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
+}
+
+func TestPower_Cut_ListError(t *testing.T) {
+	client := docker.NewClient(listErrorMock())
+
+	err := PowerCut(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing")
 }
 
 func TestPower_Cut_KillError(t *testing.T) {
@@ -195,6 +209,15 @@ func TestPower_On(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-compute-1"}, starts)
+}
+
+func TestPower_On_ListError(t *testing.T) {
+	client := docker.NewClient(listErrorMock())
+
+	err := PowerOn(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing")
 }
 
 func TestPower_On_StartError(t *testing.T) {
@@ -246,6 +269,15 @@ func TestPower_Reboot(t *testing.T) {
 		"stop=sind-dev-compute-0",
 		"start=sind-dev-compute-0",
 	}, ops)
+}
+
+func TestPower_Reboot_ListError(t *testing.T) {
+	client := docker.NewClient(listErrorMock())
+
+	err := PowerReboot(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing")
 }
 
 func TestPower_Reboot_StopError(t *testing.T) {
@@ -321,6 +353,15 @@ func TestPower_Cycle(t *testing.T) {
 	}, ops)
 }
 
+func TestPower_Cycle_ListError(t *testing.T) {
+	client := docker.NewClient(listErrorMock())
+
+	err := PowerCycle(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing")
+}
+
 func TestPower_Cycle_KillError(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = func(args []string, _ string) docker.MockResult {
@@ -338,6 +379,28 @@ func TestPower_Cycle_KillError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "killing")
+}
+
+func TestPower_Cycle_StartError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "kill" {
+			return docker.MockResult{}
+		}
+		if args[0] == "start" {
+			return docker.MockResult{Err: fmt.Errorf("start failed")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerCycle(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "starting")
 }
 
 // --- PowerFreeze ---
@@ -366,6 +429,15 @@ func TestPower_Freeze(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-compute-1"}, pauses)
+}
+
+func TestPower_Freeze_ListError(t *testing.T) {
+	client := docker.NewClient(listErrorMock())
+
+	err := PowerFreeze(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing")
 }
 
 func TestPower_Freeze_PauseError(t *testing.T) {
@@ -413,6 +485,15 @@ func TestPower_Unfreeze(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{"sind-dev-compute-0"}, unpauses)
+}
+
+func TestPower_Unfreeze_ListError(t *testing.T) {
+	client := docker.NewClient(listErrorMock())
+
+	err := PowerUnfreeze(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing")
 }
 
 func TestPower_Unfreeze_UnpauseError(t *testing.T) {
