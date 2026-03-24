@@ -1108,3 +1108,255 @@ func TestWorkerAdd_NegativeCount(t *testing.T) {
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "compute-1", nodes[0].Name)
 }
+
+// --- WorkerAdd error path tests ---
+
+func TestWorkerAdd_ListError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Err: fmt.Errorf("docker daemon not running")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	_, err := WorkerAdd(context.Background(), client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing cluster containers")
+}
+
+func TestWorkerAdd_CreateNodeError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "create" {
+			return docker.MockResult{Err: fmt.Errorf("image not found")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+}
+
+func TestWorkerAdd_SetupNodesError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "exec" && len(args) > 2 && args[2] == "sh" &&
+			strings.Contains(strings.Join(args, " "), "is-system-running") {
+			return docker.MockResult{Err: fmt.Errorf("container not running")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, 50*time.Millisecond)
+
+	require.Error(t, err)
+}
+
+func TestWorkerAdd_RegisterNodesError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		// Fail on DNS CopyFromContainer (cp ... sind-dns:... -)
+		if args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns") {
+			return docker.MockResult{Err: fmt.Errorf("DNS container crashed")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+}
+
+func TestWorkerAdd_EnableSlurmError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "exec" && len(args) > 3 &&
+			strings.Contains(args[1], "compute") && args[2] == "systemctl" && args[3] == "enable" {
+			return docker.MockResult{Err: fmt.Errorf("systemctl failed")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+}
+
+func TestWorkerAdd_ControllerInspectError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "inspect" && args[1] == "sind-dev-controller" {
+			return docker.MockResult{Err: fmt.Errorf("container not running")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	_, err := WorkerAdd(context.Background(), client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "inspecting controller")
+}
+
+func TestWorkerAdd_UpdateNodesConfReadError(t *testing.T) {
+	// The first sind-nodes.conf read (validation) succeeds,
+	// but the second read (inside updateNodesConf) fails.
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	readCount := 0
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat" &&
+			strings.Contains(strings.Join(args, " "), "sind-nodes.conf") {
+			readCount++
+			if readCount >= 2 {
+				return docker.MockResult{Err: fmt.Errorf("file disappeared")}
+			}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reading sind-nodes.conf")
+}
+
+func TestWorkerAdd_WriteNodesConfError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "exec" && args[1] == "-i" &&
+			strings.Contains(strings.Join(args, " "), "sind-dev-controller") {
+			return docker.MockResult{Err: fmt.Errorf("disk full")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating sind-nodes.conf")
+}
+
+func TestWorkerAdd_ScontrolReconfigureError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
+			return docker.MockResult{Err: fmt.Errorf("slurmctld not responding")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reconfiguring slurmctld")
+}
+
+// --- WorkerRemove error path tests ---
+
+func TestWorkerRemove_RemoveNodesConfError(t *testing.T) {
+	nodesConf := "# Generated by sind\n" +
+		"NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"NodeName=compute-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=compute-0,compute-1 Default=YES MaxTime=INFINITE State=UP\n"
+
+	var m docker.MockExecutor
+	inner := workerRemoveOnCall(t, nodesConf)
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "exec" && args[1] == "-i" &&
+			strings.Contains(strings.Join(args, " "), "sind-dev-controller") {
+			return docker.MockResult{Err: fmt.Errorf("disk full")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating sind-nodes.conf")
+}
+
+func TestWorkerRemove_DeregisterMeshError(t *testing.T) {
+	var m docker.MockExecutor
+	inner := workerRemoveOnCall(t, "")
+	m.OnCall = func(args []string, stdin string) docker.MockResult {
+		if args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns") {
+			return docker.MockResult{Err: fmt.Errorf("DNS container crashed")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1"})
+
+	require.Error(t, err)
+}
