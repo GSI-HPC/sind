@@ -51,6 +51,40 @@ func PowerOn(ctx context.Context, client *docker.Client, clusterName string, sho
 	return nil
 }
 
+// PowerReboot gracefully restarts the specified nodes (docker stop + start).
+func PowerReboot(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
+	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	for _, name := range containers {
+		if err := client.StopContainer(ctx, name); err != nil {
+			return fmt.Errorf("stopping %s: %w", name, err)
+		}
+		if err := client.StartContainer(ctx, name); err != nil {
+			return fmt.Errorf("starting %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// PowerCycle hard-restarts the specified nodes (docker kill + start).
+func PowerCycle(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
+	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	for _, name := range containers {
+		if err := client.KillContainer(ctx, name); err != nil {
+			return fmt.Errorf("killing %s: %w", name, err)
+		}
+		if err := client.StartContainer(ctx, name); err != nil {
+			return fmt.Errorf("starting %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 // resolveTargets validates that all shortNames exist in the cluster and returns
 // their Docker container names. Returns nil without error for empty shortNames.
 func resolveTargets(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) ([]docker.ContainerName, error) {

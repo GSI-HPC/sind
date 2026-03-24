@@ -215,3 +215,127 @@ func TestPower_On_StartError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "starting")
 }
+
+// --- PowerReboot ---
+
+func TestPower_Reboot(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "stop" || args[0] == "start" {
+			return docker.MockResult{}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerReboot(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.NoError(t, err)
+
+	// Verify stop then start sequence.
+	var ops []string
+	for _, c := range m.Calls {
+		if c.Args[0] == "stop" || c.Args[0] == "start" {
+			ops = append(ops, c.Args[0]+"="+c.Args[1])
+		}
+	}
+	assert.Equal(t, []string{
+		"stop=sind-dev-compute-0",
+		"start=sind-dev-compute-0",
+	}, ops)
+}
+
+func TestPower_Reboot_StopError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "stop" {
+			return docker.MockResult{Err: fmt.Errorf("stop failed")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerReboot(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stopping")
+}
+
+func TestPower_Reboot_StartError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "stop" {
+			return docker.MockResult{}
+		}
+		if args[0] == "start" {
+			return docker.MockResult{Err: fmt.Errorf("start failed")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerReboot(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "starting")
+}
+
+// --- PowerCycle ---
+
+func TestPower_Cycle(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "kill" || args[0] == "start" {
+			return docker.MockResult{}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerCycle(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.NoError(t, err)
+
+	// Verify kill then start sequence.
+	var ops []string
+	for _, c := range m.Calls {
+		if c.Args[0] == "kill" || c.Args[0] == "start" {
+			ops = append(ops, c.Args[0]+"="+c.Args[1])
+		}
+	}
+	assert.Equal(t, []string{
+		"kill=sind-dev-compute-0",
+		"start=sind-dev-compute-0",
+	}, ops)
+}
+
+func TestPower_Cycle_KillError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "kill" {
+			return docker.MockResult{Err: fmt.Errorf("kill failed")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerCycle(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "killing")
+}
