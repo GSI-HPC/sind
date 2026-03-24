@@ -38,7 +38,7 @@ func parseNodeArgs(args string) ([]nodeTarget, error) {
 	return targets, nil
 }
 
-// groupByCluster groups node targets by cluster name, preserving order.
+// groupByCluster groups node targets by cluster name.
 func groupByCluster(targets []nodeTarget) map[string][]string {
 	result := make(map[string][]string)
 	for _, t := range targets {

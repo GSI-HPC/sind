@@ -35,6 +35,5 @@ func TestFormatServices(t *testing.T) {
 func TestFormatServices_Multiple(t *testing.T) {
 	services := map[string]bool{"slurmctld": true, "slurmd": false}
 	got := formatServices(services)
-	assert.Contains(t, got, "slurmctld \u2713")
-	assert.Contains(t, got, "slurmd \u2717")
+	assert.Equal(t, "slurmctld \u2713 slurmd \u2717", got)
 }

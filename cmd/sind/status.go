@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -86,9 +87,14 @@ func formatServices(services map[string]bool) string {
 	if len(services) == 0 {
 		return ""
 	}
+	names := make([]string, 0, len(services))
+	for name := range services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	var parts []string
-	for name, ok := range services {
-		parts = append(parts, name+" "+checkmark(ok))
+	for _, name := range names {
+		parts = append(parts, name+" "+checkmark(services[name]))
 	}
 	return strings.Join(parts, " ")
 }

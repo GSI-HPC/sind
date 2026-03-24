@@ -27,7 +27,7 @@ While the cluster configuration file resembles a Kubernetes manifest, sind is **
 - sind does not continuously watch or reconcile cluster state
 - sind does not automatically repair drift or failures
 
-sind provides commands for inspection (`get`), modification (`worker add/remove`), and simulation (`power`) but these are imperative operations, not declarative state management.
+sind provides commands for inspection (`get`), modification (`create/delete worker`), and simulation (`power`) but these are imperative operations, not declarative state management.
 
 This design is intentional: sind is a development and testing tool that aids the creation of more sophisticated Slurm cluster management tooling, not a production cluster controller.
 
@@ -235,11 +235,11 @@ NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `default`.
 ### Worker Lifecycle
 
 ```bash
-sind worker add [CLUSTER] [FLAGS]       # add compute nodes
-sind worker remove NODES                # remove compute nodes from cluster
+sind create worker [CLUSTER] [FLAGS]    # add compute nodes
+sind delete worker NODES               # remove compute nodes from cluster
 ```
 
-**worker add flags:**
+**create worker flags:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -253,11 +253,11 @@ sind worker remove NODES                # remove compute nodes from cluster
 Examples:
 
 ```bash
-sind worker add                              # 1 managed node with cluster defaults
-sind worker add --count 3                    # 3 managed nodes
-sind worker add --count 2 --unmanaged        # 2 unmanaged nodes (slurmd not started)
-sind worker add --cpus 4 --memory 8g         # 1 managed node with resource limits
-sind worker add dev --count 2                # 2 managed nodes in dev cluster
+sind create worker                           # 1 managed node with cluster defaults
+sind create worker --count 3                 # 3 managed nodes
+sind create worker --count 2 --unmanaged     # 2 unmanaged nodes (slurmd not started)
+sind create worker --cpus 4 --memory 8g      # 1 managed node with resource limits
+sind create worker dev --count 2             # 2 managed nodes in dev cluster
 ```
 
 **Managed node workflow:**
@@ -271,7 +271,7 @@ By default (without `--unmanaged`), sind:
 
 Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration.
 
-**worker remove** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container.
+**delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container.
 
 ### Power Control
 
@@ -773,8 +773,8 @@ include /etc/slurm/sind-nodes.conf
 This file contains node and partition definitions for sind-managed nodes. sind assumes exclusive ownership of this file:
 
 - `sind create cluster` generates initial node definitions here
-- `sind worker add` appends new nodes (unless `--unmanaged`)
-- `sind worker remove` removes nodes (for managed nodes)
+- `sind create worker` appends new nodes (unless `--unmanaged`)
+- `sind delete worker` removes nodes (for managed nodes)
 
 Users should not edit `sind-nodes.conf` directly. To add custom node definitions, create a separate file and add an include directive to `slurm.conf`.
 
@@ -791,7 +791,7 @@ sind avoids providing fully flexible customization of the initial configuration 
 Users may:
 - Edit `slurm.conf` directly (sind does not modify it after creation)
 - Add additional include files for custom configuration
-- Replace the entire configuration (but `sind worker add` will then fail for managed nodes)
+- Replace the entire configuration (but `sind create worker` will then fail for managed nodes)
 
 ## Slurm Version Discovery
 
