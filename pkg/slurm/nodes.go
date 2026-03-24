@@ -54,6 +54,56 @@ func GenerateNodesConf(nodes []config.Node) string {
 	return b.String()
 }
 
+// NodeEntry represents a single node to add to sind-nodes.conf.
+type NodeEntry struct {
+	Name     string
+	CPUs     int
+	MemoryMB int
+}
+
+// AddNodesToConf adds node definitions to existing sind-nodes.conf content.
+// New NodeName lines are inserted and the PartitionName Nodes= list is
+// updated to include both existing and new nodes.
+func AddNodesToConf(existing string, nodes []NodeEntry) string {
+	lines := strings.Split(strings.TrimRight(existing, "\n"), "\n")
+
+	var managed []string
+	var nonPartLines []string
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "PartitionName=") {
+			continue // will be regenerated
+		}
+		nonPartLines = append(nonPartLines, line)
+		if strings.HasPrefix(line, "NodeName=") {
+			fields := strings.Fields(line)
+			if len(fields) > 0 {
+				name := strings.TrimPrefix(fields[0], "NodeName=")
+				managed = append(managed, name)
+			}
+		}
+	}
+
+	for _, n := range nodes {
+		nonPartLines = append(nonPartLines, fmt.Sprintf("NodeName=%s CPUs=%d RealMemory=%d State=UNKNOWN",
+			n.Name, n.CPUs, n.MemoryMB))
+		managed = append(managed, n.Name)
+	}
+
+	if len(managed) > 0 {
+		nonPartLines = append(nonPartLines, fmt.Sprintf("PartitionName=all Nodes=%s Default=YES MaxTime=INFINITE State=UP",
+			strings.Join(managed, ",")))
+	}
+
+	return strings.Join(nonPartLines, "\n") + "\n"
+}
+
+// ParseMemoryMB parses a Docker-style memory string (e.g. "2g", "512m") and
+// returns the value in megabytes.
+func ParseMemoryMB(s string) (int, error) {
+	return parseMemoryMB(s)
+}
+
 // parseMemoryMB parses a Docker-style memory string (e.g. "2g", "512m") and
 // returns the value in megabytes.
 func parseMemoryMB(s string) (int, error) {
