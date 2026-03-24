@@ -11,44 +11,17 @@ import (
 
 // PowerShutdown gracefully stops the specified nodes (docker stop).
 func PowerShutdown(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
-	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
-	if err != nil {
-		return err
-	}
-	for _, name := range containers {
-		if err := client.StopContainer(ctx, name); err != nil {
-			return fmt.Errorf("stopping %s: %w", name, err)
-		}
-	}
-	return nil
+	return forEachTarget(ctx, client, clusterName, shortNames, "stopping", client.StopContainer)
 }
 
 // PowerCut immediately kills the specified nodes (docker kill).
 func PowerCut(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
-	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
-	if err != nil {
-		return err
-	}
-	for _, name := range containers {
-		if err := client.KillContainer(ctx, name); err != nil {
-			return fmt.Errorf("killing %s: %w", name, err)
-		}
-	}
-	return nil
+	return forEachTarget(ctx, client, clusterName, shortNames, "killing", client.KillContainer)
 }
 
 // PowerOn starts the specified stopped nodes (docker start).
 func PowerOn(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
-	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
-	if err != nil {
-		return err
-	}
-	for _, name := range containers {
-		if err := client.StartContainer(ctx, name); err != nil {
-			return fmt.Errorf("starting %s: %w", name, err)
-		}
-	}
-	return nil
+	return forEachTarget(ctx, client, clusterName, shortNames, "starting", client.StartContainer)
 }
 
 // PowerReboot gracefully restarts the specified nodes (docker stop + start).
@@ -88,27 +61,23 @@ func PowerCycle(ctx context.Context, client *docker.Client, clusterName string, 
 // PowerFreeze suspends all processes in the specified nodes (docker pause).
 // The containers remain running but are completely unresponsive.
 func PowerFreeze(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
-	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
-	if err != nil {
-		return err
-	}
-	for _, name := range containers {
-		if err := client.PauseContainer(ctx, name); err != nil {
-			return fmt.Errorf("pausing %s: %w", name, err)
-		}
-	}
-	return nil
+	return forEachTarget(ctx, client, clusterName, shortNames, "pausing", client.PauseContainer)
 }
 
 // PowerUnfreeze resumes the specified frozen nodes (docker unpause).
 func PowerUnfreeze(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
+	return forEachTarget(ctx, client, clusterName, shortNames, "unpausing", client.UnpauseContainer)
+}
+
+// forEachTarget resolves node names, then applies op to each container.
+func forEachTarget(ctx context.Context, client *docker.Client, clusterName string, shortNames []string, verb string, op func(context.Context, docker.ContainerName) error) error {
 	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
 	if err != nil {
 		return err
 	}
 	for _, name := range containers {
-		if err := client.UnpauseContainer(ctx, name); err != nil {
-			return fmt.Errorf("unpausing %s: %w", name, err)
+		if err := op(ctx, name); err != nil {
+			return fmt.Errorf("%s %s: %w", verb, name, err)
 		}
 	}
 	return nil
