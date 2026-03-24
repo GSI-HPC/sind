@@ -39,7 +39,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ssh requires exactly one node, got %d", len(target))
 	}
 
-	isTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+	isTTY := stdinIsTTY()
 	dockerArgs := cluster.BuildSSHArgs(target[0].ShortName, target[0].Cluster, isTTY, sshOptions, command)
 
 	return dockerExec(cmd, dockerArgs)
@@ -69,7 +69,7 @@ func runEnter(cmd *cobra.Command, clusterName string) error {
 		return err
 	}
 
-	isTTY := isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+	isTTY := stdinIsTTY()
 	dockerArgs := cluster.BuildSSHArgs(target, clusterName, isTTY, nil, nil)
 
 	return dockerExec(cmd, dockerArgs)
@@ -104,6 +104,10 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	return dockerExec(cmd, dockerArgs)
+}
+
+func stdinIsTTY() bool {
+	return isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
 }
 
 // parseSSHArgs separates SSH options, node target, and remote command.
@@ -161,15 +165,19 @@ func parseExecArgs(args []string) (clusterName string, command []string, err err
 		return "", nil, fmt.Errorf("command required after --")
 	}
 
+	if dashIdx > 1 {
+		return "", nil, fmt.Errorf("expected at most one argument before --, got %d", dashIdx)
+	}
+
 	clusterName = "default"
-	if dashIdx > 0 {
+	if dashIdx == 1 {
 		clusterName = args[0]
 	}
 
 	return clusterName, command, nil
 }
 
-// dockerExec runs a docker command, replacing the current process if possible.
+// dockerExec runs a docker command with stdin/stdout/stderr inherited.
 func dockerExec(cmd *cobra.Command, args []string) error {
 	dockerCmd := exec.CommandContext(cmd.Context(), "docker", args...)
 	dockerCmd.Stdin = os.Stdin

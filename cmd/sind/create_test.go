@@ -44,35 +44,16 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCreateCluster_FlagParsing(t *testing.T) {
-	tests := []struct {
-		name     string
-		args     []string
-		wantName string
-	}{
-		{
-			name:     "default name",
-			args:     []string{"create", "cluster"},
-			wantName: "default",
-		},
-		{
-			name:     "custom name",
-			args:     []string{"create", "cluster", "--name", "dev"},
-			wantName: "dev",
-		},
-	}
+func TestCreateCluster_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	createCmd, _, err := cmd.Find([]string{"create", "cluster"})
+	require.NoError(t, err)
+	assert.Equal(t, "cluster [--name NAME] [--config FILE]", createCmd.Use)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := NewRootCommand()
-			cmd.SetArgs(tt.args)
-
-			// Find the create cluster subcommand to check flag parsing
-			createCmd, _, err := cmd.Find([]string{"create", "cluster"})
-			require.NoError(t, err)
-			assert.Equal(t, "cluster [--name NAME] [--config FILE]", createCmd.Use)
-		})
-	}
+	// Check flags exist with correct defaults
+	assert.NotNil(t, createCmd.Flags().Lookup("name"))
+	assert.NotNil(t, createCmd.Flags().Lookup("config"))
+	assert.Equal(t, "default", createCmd.Flags().Lookup("name").DefValue)
 }
 
 func TestCreateCluster_RejectsArgs(t *testing.T) {
@@ -80,7 +61,7 @@ func TestCreateCluster_RejectsArgs(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCreateCluster_NameOverridesConfig(t *testing.T) {
+func TestLoadConfig_PreservesName(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	data := []byte("kind: Cluster\nname: from-file\n")
@@ -89,8 +70,4 @@ func TestCreateCluster_NameOverridesConfig(t *testing.T) {
 	cfg, err := loadConfig(path)
 	require.NoError(t, err)
 	assert.Equal(t, "from-file", cfg.Name)
-
-	// When --name is used, it should override the config name
-	// (tested via the runCreateCluster flow, but we verify the config loading
-	// returns the file value so the override logic can be tested separately)
 }

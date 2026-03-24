@@ -27,27 +27,14 @@ func TestCheckmark(t *testing.T) {
 }
 
 func TestFormatServices(t *testing.T) {
-	tests := []struct {
-		name     string
-		services map[string]bool
-		want     string
-	}{
-		{"empty", nil, ""},
-		{"single healthy", map[string]bool{"slurmctld": true}, "slurmctld \u2713"},
-		{"single unhealthy", map[string]bool{"slurmd": false}, "slurmd \u2717"},
-	}
+	assert.Equal(t, "", formatServices(nil))
+	assert.Equal(t, "slurmctld \u2713", formatServices(map[string]bool{"slurmctld": true}))
+	assert.Equal(t, "slurmd \u2717", formatServices(map[string]bool{"slurmd": false}))
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := formatServices(tt.services)
-			if len(tt.services) <= 1 {
-				assert.Equal(t, tt.want, got)
-			} else {
-				// Multiple services: just check all parts are present
-				for name, ok := range tt.services {
-					assert.Contains(t, got, name+" "+checkmark(ok))
-				}
-			}
-		})
-	}
+func TestFormatServices_Multiple(t *testing.T) {
+	services := map[string]bool{"slurmctld": true, "slurmd": false}
+	got := formatServices(services)
+	assert.Contains(t, got, "slurmctld \u2713")
+	assert.Contains(t, got, "slurmd \u2717")
 }

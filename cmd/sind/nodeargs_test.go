@@ -44,8 +44,13 @@ func TestParseNodeArgs_MultipleSpecs(t *testing.T) {
 	assert.Equal(t, []string{"compute-0", "compute-1"}, groups["prod"])
 }
 
-func TestParseNodeArgs_Invalid(t *testing.T) {
+func TestParseNodeArgs_EmptyShortName(t *testing.T) {
 	_, err := parseNodeArgs(".dev")
+	assert.Error(t, err)
+}
+
+func TestParseNodeArgs_TrailingDot(t *testing.T) {
+	_, err := parseNodeArgs("compute-0.")
 	assert.Error(t, err)
 }
 

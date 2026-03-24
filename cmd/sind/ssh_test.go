@@ -72,6 +72,12 @@ func TestParseSSHArgs_Empty(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestParseSSHArgs_OnlyDash(t *testing.T) {
+	_, _, _, err := parseSSHArgs([]string{"--"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "node argument required")
+}
+
 func TestParseExecArgs_Simple(t *testing.T) {
 	cluster, cmd, err := parseExecArgs([]string{"--", "hostname"})
 	require.NoError(t, err)
@@ -96,4 +102,10 @@ func TestParseExecArgs_MissingCommand(t *testing.T) {
 	_, _, err := parseExecArgs([]string{"--"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "command required")
+}
+
+func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
+	_, _, err := parseExecArgs([]string{"a", "b", "--", "cmd"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "at most one argument before --")
 }
