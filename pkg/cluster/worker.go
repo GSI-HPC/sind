@@ -115,26 +115,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 
 	// Register DNS + known_hosts and build result.
-	var nodes []*Node
-	for i, nc := range nodeConfigs {
-		nr := nodeResults[i]
-		nodeIP := nr.info.IPs[NetworkName(opts.ClusterName)]
-		dnsName := DNSName(nc.ShortName, opts.ClusterName)
-
-		if err := meshMgr.AddDNSRecord(ctx, dnsName, nodeIP); err != nil {
-			return nil, fmt.Errorf("registering DNS for %s: %w", nc.ShortName, err)
-		}
-		if err := meshMgr.AddKnownHost(ctx, dnsName, nr.hostKey); err != nil {
-			return nil, fmt.Errorf("registering host key for %s: %w", nc.ShortName, err)
-		}
-
-		nodes = append(nodes, &Node{
-			Name:        nc.ShortName,
-			Role:        nc.Role,
-			ContainerID: nr.info.ID,
-			IP:          nodeIP,
-			Status:      StatusRunning,
-		})
+	nodes, err := registerNodes(ctx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
+	if err != nil {
+		return nil, err
 	}
 
 	// For managed workers: update sind-nodes.conf + reconfigure slurmctld.
@@ -256,7 +239,8 @@ func NextComputeIndex(ctx context.Context, client *docker.Client, clusterName st
 // --- Unexported helpers ---
 
 // resolveWorkerInfra fetches DNS IP, SSH public key, and slurm version
-// concurrently.
+// concurrently. The Slurm version is read from the controller's labels
+// (unlike resolveInfra, which discovers it from the image).
 //
 //	┌──────────┐  ┌──────────┐  ┌──────────────┐
 //	│  DNS IP  │  │ SSH key  │  │Slurm version │
@@ -265,20 +249,9 @@ func NextComputeIndex(ctx context.Context, client *docker.Client, clusterName st
 func resolveWorkerInfra(ctx context.Context, client *docker.Client, controllerName docker.ContainerName) (dnsIP, sshPubKey, slurmVersion string, err error) {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		info, err := client.InspectContainer(gctx, mesh.DNSContainerName)
-		if err != nil {
-			return fmt.Errorf("inspecting DNS container: %w", err)
-		}
-		dnsIP = info.IPs[mesh.NetworkName]
-		return nil
-	})
-	g.Go(func() error {
-		key, err := client.ReadFile(gctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519.pub")
-		if err != nil {
-			return fmt.Errorf("reading SSH public key: %w", err)
-		}
-		sshPubKey = key
-		return nil
+		var meshErr error
+		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client)
+		return meshErr
 	})
 	g.Go(func() error {
 		info, err := client.InspectContainer(gctx, controllerName)
@@ -302,7 +275,10 @@ func updateNodesConf(ctx context.Context, client *docker.Client, controllerName 
 
 	var entries []slurm.NodeEntry
 	for _, nc := range nodeConfigs {
-		memMB, _ := slurm.ParseMemoryMB(nc.Memory)
+		memMB, err := slurm.ParseMemoryMB(nc.Memory)
+		if err != nil {
+			return fmt.Errorf("parsing memory %q for %s: %w", nc.Memory, nc.ShortName, err)
+		}
 		entries = append(entries, slurm.NodeEntry{
 			Name:     nc.ShortName,
 			CPUs:     nc.CPUs,

@@ -83,6 +83,30 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	return cluster, nil
 }
 
+// resolveMeshInfra fetches DNS IP and SSH public key from mesh infrastructure
+// concurrently.
+func resolveMeshInfra(ctx context.Context, client *docker.Client) (dnsIP, sshPubKey string, err error) {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		info, err := client.InspectContainer(gctx, mesh.DNSContainerName)
+		if err != nil {
+			return fmt.Errorf("inspecting DNS container: %w", err)
+		}
+		dnsIP = info.IPs[mesh.NetworkName]
+		return nil
+	})
+	g.Go(func() error {
+		key, err := client.ReadFile(gctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519.pub")
+		if err != nil {
+			return fmt.Errorf("reading SSH public key: %w", err)
+		}
+		sshPubKey = key
+		return nil
+	})
+	err = g.Wait()
+	return
+}
+
 // resolveInfra fetches mesh details and the Slurm version concurrently.
 //
 //	┌──────────┐  ┌──────────┐  ┌──────────────┐
@@ -100,20 +124,9 @@ func resolveInfra(ctx context.Context, client *docker.Client, cfg *config.Cluste
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		info, err := client.InspectContainer(gctx, mesh.DNSContainerName)
-		if err != nil {
-			return fmt.Errorf("inspecting DNS container: %w", err)
-		}
-		dnsIP = info.IPs[mesh.NetworkName]
-		return nil
-	})
-	g.Go(func() error {
-		key, err := client.ReadFile(gctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519.pub")
-		if err != nil {
-			return fmt.Errorf("reading SSH public key: %w", err)
-		}
-		sshPubKey = key
-		return nil
+		var meshErr error
+		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client)
+		return meshErr
 	})
 	g.Go(func() error {
 		ver, err := slurm.DiscoverVersion(gctx, client, controllerImage)
@@ -225,11 +238,23 @@ func setupNodes(ctx context.Context, client *docker.Client, clusterName, sshPubK
 // the Cluster result. Serial because AddDNSRecord is a read-modify-write
 // on the shared Corefile.
 func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurmVersion string, nodeConfigs []RunConfig, results []nodeResult) (*Cluster, error) {
-	cluster := &Cluster{
+	nodes, err := registerNodes(ctx, meshMgr, clusterName, nodeConfigs, results)
+	if err != nil {
+		return nil, err
+	}
+	return &Cluster{
 		Name:         clusterName,
 		SlurmVersion: slurmVersion,
 		Status:       StatusRunning,
-	}
+		Nodes:        nodes,
+	}, nil
+}
+
+// registerNodes registers DNS records and known_hosts entries for each node,
+// and returns the resulting Node list. Serial because AddDNSRecord is a
+// read-modify-write on the shared Corefile.
+func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig, results []nodeResult) ([]*Node, error) {
+	nodes := make([]*Node, 0, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
 		nr := results[i]
 		nodeIP := nr.info.IPs[NetworkName(clusterName)]
@@ -242,7 +267,7 @@ func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurm
 			return nil, fmt.Errorf("registering host key for %s: %w", nc.ShortName, err)
 		}
 
-		cluster.Nodes = append(cluster.Nodes, &Node{
+		nodes = append(nodes, &Node{
 			Name:        nc.ShortName,
 			Role:        nc.Role,
 			ContainerID: nr.info.ID,
@@ -250,7 +275,7 @@ func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurm
 			Status:      StatusRunning,
 		})
 	}
-	return cluster, nil
+	return nodes, nil
 }
 
 // enableSlurm enables the Slurm daemon on each eligible node and waits for
