@@ -339,3 +339,97 @@ func TestPower_Cycle_KillError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "killing")
 }
+
+// --- PowerFreeze ---
+
+func TestPower_Freeze(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "pause" {
+			return docker.MockResult{}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerFreeze(context.Background(), client, "dev", []string{"compute-0", "compute-1"})
+
+	require.NoError(t, err)
+
+	var pauses []string
+	for _, c := range m.Calls {
+		if c.Args[0] == "pause" {
+			pauses = append(pauses, c.Args[1])
+		}
+	}
+	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-compute-1"}, pauses)
+}
+
+func TestPower_Freeze_PauseError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "pause" {
+			return docker.MockResult{Err: fmt.Errorf("container is not running")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerFreeze(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pausing")
+}
+
+// --- PowerUnfreeze ---
+
+func TestPower_Unfreeze(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "unpause" {
+			return docker.MockResult{}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerUnfreeze(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.NoError(t, err)
+
+	var unpauses []string
+	for _, c := range m.Calls {
+		if c.Args[0] == "unpause" {
+			unpauses = append(unpauses, c.Args[1])
+		}
+	}
+	assert.Equal(t, []string{"sind-dev-compute-0"}, unpauses)
+}
+
+func TestPower_Unfreeze_UnpauseError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "unpause" {
+			return docker.MockResult{Err: fmt.Errorf("container is not paused")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerUnfreeze(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unpausing")
+}

@@ -85,6 +85,35 @@ func PowerCycle(ctx context.Context, client *docker.Client, clusterName string, 
 	return nil
 }
 
+// PowerFreeze suspends all processes in the specified nodes (docker pause).
+// The containers remain running but are completely unresponsive.
+func PowerFreeze(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
+	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	for _, name := range containers {
+		if err := client.PauseContainer(ctx, name); err != nil {
+			return fmt.Errorf("pausing %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// PowerUnfreeze resumes the specified frozen nodes (docker unpause).
+func PowerUnfreeze(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
+	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	for _, name := range containers {
+		if err := client.UnpauseContainer(ctx, name); err != nil {
+			return fmt.Errorf("unpausing %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 // resolveTargets validates that all shortNames exist in the cluster and returns
 // their Docker container names. Returns nil without error for empty shortNames.
 func resolveTargets(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) ([]docker.ContainerName, error) {

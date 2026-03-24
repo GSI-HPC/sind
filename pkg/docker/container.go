@@ -71,6 +71,18 @@ func (c *Client) SignalContainer(ctx context.Context, name ContainerName, signal
 	return err
 }
 
+// PauseContainer suspends all processes in a container (docker pause).
+func (c *Client) PauseContainer(ctx context.Context, name ContainerName) error {
+	_, _, err := c.run(ctx, "pause", string(name))
+	return err
+}
+
+// UnpauseContainer resumes a paused container (docker unpause).
+func (c *Client) UnpauseContainer(ctx context.Context, name ContainerName) error {
+	_, _, err := c.run(ctx, "unpause", string(name))
+	return err
+}
+
 // ContainerInfo holds inspected container details.
 type ContainerInfo struct {
 	ID     ContainerID

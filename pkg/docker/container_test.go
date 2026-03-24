@@ -114,6 +114,48 @@ func TestRemoveContainer_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestPauseContainer(t *testing.T) {
+	var m MockExecutor
+	m.AddResult(string(testContainerName)+"\n", "", nil)
+	c := NewClient(&m)
+
+	err := c.PauseContainer(context.Background(), testContainerName)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"pause", string(testContainerName)}, m.Calls[0].Args)
+}
+
+func TestPauseContainer_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error: container is not running\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.PauseContainer(context.Background(), testContainerName)
+	assert.Error(t, err)
+}
+
+func TestUnpauseContainer(t *testing.T) {
+	var m MockExecutor
+	m.AddResult(string(testContainerName)+"\n", "", nil)
+	c := NewClient(&m)
+
+	err := c.UnpauseContainer(context.Background(), testContainerName)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"unpause", string(testContainerName)}, m.Calls[0].Args)
+}
+
+func TestUnpauseContainer_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error: container is not paused\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.UnpauseContainer(context.Background(), testContainerName)
+	assert.Error(t, err)
+}
+
 func TestKillContainer(t *testing.T) {
 	var m MockExecutor
 	m.AddResult(string(testContainerName)+"\n", "", nil)
