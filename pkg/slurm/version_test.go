@@ -39,22 +39,22 @@ func TestParseVersion(t *testing.T) {
 		{
 			name:    "empty output",
 			input:   "",
-			wantErr: "unexpected scontrol --version output",
+			wantErr: "unexpected slurmctld -V output",
 		},
 		{
 			name:    "wrong prefix",
 			input:   "SLURM 25.11.0\n",
-			wantErr: "unexpected scontrol --version output",
+			wantErr: "unexpected slurmctld -V output",
 		},
 		{
 			name:    "missing version",
 			input:   "slurm \n",
-			wantErr: "unexpected scontrol --version output",
+			wantErr: "unexpected slurmctld -V output",
 		},
 		{
 			name:    "single word",
 			input:   "slurm\n",
-			wantErr: "unexpected scontrol --version output",
+			wantErr: "unexpected slurmctld -V output",
 		},
 	}
 
@@ -87,7 +87,7 @@ func TestDiscoverVersion(t *testing.T) {
 	assert.Equal(t, "25.11.0", version)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"run", "--rm", image, "scontrol", "--version"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"run", "--rm", image, "slurmctld", "-V"}, m.Calls[0].Args)
 }
 
 func TestDiscoverVersion_RunError(t *testing.T) {
@@ -97,7 +97,7 @@ func TestDiscoverVersion_RunError(t *testing.T) {
 
 	version, err := DiscoverVersion(context.Background(), c, "missing:latest")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "running scontrol --version")
+	assert.Contains(t, err.Error(), "running slurmctld -V")
 	assert.Empty(t, version)
 }
 
@@ -108,6 +108,6 @@ func TestDiscoverVersion_ParseError(t *testing.T) {
 
 	version, err := DiscoverVersion(context.Background(), c, "bad:image")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected scontrol --version output")
+	assert.Contains(t, err.Error(), "unexpected slurmctld -V output")
 	assert.Empty(t, version)
 }
