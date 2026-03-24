@@ -68,13 +68,13 @@ func AddNodesToConf(existing string, nodes []NodeEntry) string {
 	lines := strings.Split(strings.TrimRight(existing, "\n"), "\n")
 
 	var managed []string
-	var nonPartLines []string
+	var kept []string
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "PartitionName=") {
 			continue // will be regenerated
 		}
-		nonPartLines = append(nonPartLines, line)
+		kept = append(kept, line)
 		if strings.HasPrefix(line, "NodeName=") {
 			fields := strings.Fields(line)
 			if len(fields) > 0 {
@@ -85,17 +85,17 @@ func AddNodesToConf(existing string, nodes []NodeEntry) string {
 	}
 
 	for _, n := range nodes {
-		nonPartLines = append(nonPartLines, fmt.Sprintf("NodeName=%s CPUs=%d RealMemory=%d State=UNKNOWN",
+		kept = append(kept, fmt.Sprintf("NodeName=%s CPUs=%d RealMemory=%d State=UNKNOWN",
 			n.Name, n.CPUs, n.MemoryMB))
 		managed = append(managed, n.Name)
 	}
 
 	if len(managed) > 0 {
-		nonPartLines = append(nonPartLines, fmt.Sprintf("PartitionName=all Nodes=%s Default=YES MaxTime=INFINITE State=UP",
+		kept = append(kept, fmt.Sprintf("PartitionName=all Nodes=%s Default=YES MaxTime=INFINITE State=UP",
 			strings.Join(managed, ",")))
 	}
 
-	return strings.Join(nonPartLines, "\n") + "\n"
+	return strings.Join(kept, "\n") + "\n"
 }
 
 // RemoveNodesFromConf removes the named nodes from existing sind-nodes.conf

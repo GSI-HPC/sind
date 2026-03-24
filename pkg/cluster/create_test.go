@@ -495,8 +495,8 @@ func TestEnableSlurmServices_Error(t *testing.T) {
 
 // --- Create (end-to-end) ---
 
-// inspectJSON builds the JSON output that docker inspect returns for a container.
-func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkName]string) string {
+// inspectJSONLabels builds docker inspect JSON output with custom labels.
+func inspectJSONLabels(t *testing.T, name, status string, networks map[docker.NetworkName]string, labels map[string]string) string {
 	t.Helper()
 	type netInfo struct {
 		IPAddress string `json:"IPAddress"`
@@ -516,7 +516,7 @@ func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkN
 	}
 	r := result{ID: "id-" + name, Name: "/" + name}
 	r.State.Status = status
-	r.Config.Labels = map[string]string{}
+	r.Config.Labels = labels
 	nets := make(map[string]netInfo)
 	for n, ip := range networks {
 		nets[string(n)] = netInfo{IPAddress: ip}
@@ -525,6 +525,12 @@ func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkN
 	data, err := json.Marshal([]result{r})
 	require.NoError(t, err)
 	return string(data)
+}
+
+// inspectJSON builds the JSON output that docker inspect returns for a container.
+func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkName]string) string {
+	t.Helper()
+	return inspectJSONLabels(t, name, status, networks, map[string]string{})
 }
 
 // notFoundErr returns an exec.ExitError with exit code 1 for "not found" mocking.

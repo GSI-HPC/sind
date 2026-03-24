@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
+	"golang.org/x/sync/errgroup"
 )
 
 // WorkerAddOptions holds the parameters for adding compute workers to a cluster.
@@ -24,6 +25,8 @@ type WorkerAddOptions struct {
 	TmpSize     string
 	Unmanaged   bool
 }
+
+// --- Exported functions ---
 
 // WorkerAdd adds compute workers to an existing cluster.
 //
@@ -147,59 +150,6 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	return nodes, nil
 }
 
-// resolveWorkerInfra fetches DNS IP, SSH public key, and slurm version
-// needed for adding workers to an existing cluster.
-func resolveWorkerInfra(ctx context.Context, client *docker.Client, controllerName docker.ContainerName) (dnsIP, sshPubKey, slurmVersion string, err error) {
-	dnsInfo, err := client.InspectContainer(ctx, mesh.DNSContainerName)
-	if err != nil {
-		return "", "", "", fmt.Errorf("inspecting DNS container: %w", err)
-	}
-	dnsIP = dnsInfo.IPs[mesh.NetworkName]
-
-	sshPubKey, err = client.ReadFile(ctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519.pub")
-	if err != nil {
-		return "", "", "", fmt.Errorf("reading SSH public key: %w", err)
-	}
-
-	info, err := client.InspectContainer(ctx, controllerName)
-	if err != nil {
-		return "", "", "", fmt.Errorf("inspecting controller: %w", err)
-	}
-	slurmVersion = info.Labels[LabelSlurmVersion]
-
-	return dnsIP, sshPubKey, slurmVersion, nil
-}
-
-// updateNodesConf reads the current sind-nodes.conf from the controller,
-// appends the new node definitions, writes it back, and reconfigures slurmctld.
-func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, nodeConfigs []RunConfig) error {
-	current, err := client.ReadFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf")
-	if err != nil {
-		return fmt.Errorf("reading sind-nodes.conf: %w", err)
-	}
-
-	var entries []slurm.NodeEntry
-	for _, nc := range nodeConfigs {
-		memMB, _ := slurm.ParseMemoryMB(nc.Memory)
-		entries = append(entries, slurm.NodeEntry{
-			Name:     nc.ShortName,
-			CPUs:     nc.CPUs,
-			MemoryMB: memMB,
-		})
-	}
-	updated := slurm.AddNodesToConf(current, entries)
-
-	if err := client.WriteFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf", updated); err != nil {
-		return fmt.Errorf("updating sind-nodes.conf: %w", err)
-	}
-
-	if _, err := client.Exec(ctx, controllerName, "scontrol", "reconfigure"); err != nil {
-		return fmt.Errorf("reconfiguring slurmctld: %w", err)
-	}
-
-	return nil
-}
-
 // WorkerRemove removes compute workers from a cluster.
 //
 // For managed nodes (those present in sind-nodes.conf), the flow is:
@@ -258,44 +208,6 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	return DeleteContainers(ctx, client, targets)
 }
 
-// removeNodesConf removes node definitions from sind-nodes.conf and
-// reconfigures slurmctld.
-func removeNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, currentConf string, shortNames []string) error {
-	updated := slurm.RemoveNodesFromConf(currentConf, shortNames)
-
-	if err := client.WriteFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf", updated); err != nil {
-		return fmt.Errorf("updating sind-nodes.conf: %w", err)
-	}
-
-	if _, err := client.Exec(ctx, controllerName, "scontrol", "reconfigure"); err != nil {
-		return fmt.Errorf("reconfiguring slurmctld: %w", err)
-	}
-
-	return nil
-}
-
-// nextComputeIndexFromContainers computes the next compute node index from
-// a pre-fetched container list.
-func nextComputeIndexFromContainers(containers []docker.ContainerListEntry, clusterName string) int {
-	prefix := string(ContainerName(clusterName, "compute-"))
-	maxIdx := -1
-	for _, c := range containers {
-		name := string(c.Name)
-		if !strings.HasPrefix(name, prefix) {
-			continue
-		}
-		suffix := name[len(prefix):]
-		idx, err := strconv.Atoi(suffix)
-		if err != nil {
-			continue
-		}
-		if idx > maxIdx {
-			maxIdx = idx
-		}
-	}
-	return maxIdx + 1
-}
-
 // ValidateWorkerAdd checks prerequisites for adding workers to a cluster.
 // For managed workers, it verifies that sind-nodes.conf exists on the
 // controller (indicating sind-generated Slurm configuration is in use).
@@ -339,4 +251,106 @@ func NextComputeIndex(ctx context.Context, client *docker.Client, clusterName st
 		return 0, fmt.Errorf("listing cluster containers: %w", err)
 	}
 	return nextComputeIndexFromContainers(containers, clusterName), nil
+}
+
+// --- Unexported helpers ---
+
+// resolveWorkerInfra fetches DNS IP, SSH public key, and slurm version
+// concurrently.
+//
+//	┌──────────┐  ┌──────────┐  ┌──────────────┐
+//	│  DNS IP  │  │ SSH key  │  │Slurm version │
+//	└────┬─────┘  └────┬─────┘  └──────┬───────┘
+//	     └─────────────┼───────────────┘
+func resolveWorkerInfra(ctx context.Context, client *docker.Client, controllerName docker.ContainerName) (dnsIP, sshPubKey, slurmVersion string, err error) {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		info, err := client.InspectContainer(gctx, mesh.DNSContainerName)
+		if err != nil {
+			return fmt.Errorf("inspecting DNS container: %w", err)
+		}
+		dnsIP = info.IPs[mesh.NetworkName]
+		return nil
+	})
+	g.Go(func() error {
+		key, err := client.ReadFile(gctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519.pub")
+		if err != nil {
+			return fmt.Errorf("reading SSH public key: %w", err)
+		}
+		sshPubKey = key
+		return nil
+	})
+	g.Go(func() error {
+		info, err := client.InspectContainer(gctx, controllerName)
+		if err != nil {
+			return fmt.Errorf("inspecting controller: %w", err)
+		}
+		slurmVersion = info.Labels[LabelSlurmVersion]
+		return nil
+	})
+	err = g.Wait()
+	return
+}
+
+// updateNodesConf reads the current sind-nodes.conf from the controller,
+// appends the new node definitions, writes it back, and reconfigures slurmctld.
+func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, nodeConfigs []RunConfig) error {
+	current, err := client.ReadFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf")
+	if err != nil {
+		return fmt.Errorf("reading sind-nodes.conf: %w", err)
+	}
+
+	var entries []slurm.NodeEntry
+	for _, nc := range nodeConfigs {
+		memMB, _ := slurm.ParseMemoryMB(nc.Memory)
+		entries = append(entries, slurm.NodeEntry{
+			Name:     nc.ShortName,
+			CPUs:     nc.CPUs,
+			MemoryMB: memMB,
+		})
+	}
+	updated := slurm.AddNodesToConf(current, entries)
+
+	return writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
+}
+
+// removeNodesConf removes node definitions from sind-nodes.conf and
+// reconfigures slurmctld.
+func removeNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, currentConf string, shortNames []string) error {
+	updated := slurm.RemoveNodesFromConf(currentConf, shortNames)
+	return writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
+}
+
+// writeNodesConfAndReconfigure writes sind-nodes.conf to the controller
+// and triggers slurmctld to reload.
+func writeNodesConfAndReconfigure(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, content string) error {
+	if err := client.WriteFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf", content); err != nil {
+		return fmt.Errorf("updating sind-nodes.conf: %w", err)
+	}
+	if _, err := client.Exec(ctx, controllerName, "scontrol", "reconfigure"); err != nil {
+		return fmt.Errorf("reconfiguring slurmctld: %w", err)
+	}
+	return nil
+}
+
+// nextComputeIndexFromContainers computes the next compute node index from
+// a pre-fetched container list.
+func nextComputeIndexFromContainers(containers []docker.ContainerListEntry, clusterName string) int {
+	prefix := string(ContainerName(clusterName, "compute-"))
+	maxIdx := -1
+	for _, c := range containers {
+		name := string(c.Name)
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		suffix := name[len(prefix):]
+		idx, err := strconv.Atoi(suffix)
+		if err != nil {
+			continue
+		}
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+	return maxIdx + 1
 }
