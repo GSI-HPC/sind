@@ -9,8 +9,6 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -61,10 +59,9 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	client := docker.NewClient(&docker.OSExecutor{})
-	meshMgr := mesh.NewManager(client)
-
 	ctx := cmd.Context()
+	client := clientFrom(ctx)
+	meshMgr := meshMgrFrom(ctx, client)
 	if err := meshMgr.EnsureMesh(ctx); err != nil {
 		return fmt.Errorf("setting up mesh: %w", err)
 	}

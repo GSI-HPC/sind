@@ -4,8 +4,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,6 +19,22 @@ func executeCommand(args ...string) (string, string, error) {
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.SetArgs(args)
+	err := cmd.Execute()
+	return stdout.String(), stderr.String(), err
+}
+
+func executeWithMock(mock *docker.MockExecutor, args ...string) (string, string, error) {
+	cmd := NewRootCommand()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs(args)
+
+	client := docker.NewClient(mock)
+	ctx := withClient(context.Background(), client)
+	cmd.SetContext(ctx)
+
 	err := cmd.Execute()
 	return stdout.String(), stderr.String(), err
 }
