@@ -114,6 +114,27 @@ func TestRemoveContainer_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestKillContainer(t *testing.T) {
+	var m MockExecutor
+	m.AddResult(string(testContainerName)+"\n", "", nil)
+	c := NewClient(&m)
+
+	err := c.KillContainer(context.Background(), testContainerName)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"kill", string(testContainerName)}, m.Calls[0].Args)
+}
+
+func TestKillContainer_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.KillContainer(context.Background(), testContainerName)
+	assert.Error(t, err)
+}
+
 func TestSignalContainer(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("", "", nil)

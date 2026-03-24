@@ -111,3 +111,50 @@ func TestPower_Shutdown_ListError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
 }
+
+// --- PowerCut ---
+
+func TestPower_Cut(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "kill" {
+			return docker.MockResult{}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerCut(context.Background(), client, "dev", []string{"compute-0", "controller"})
+
+	require.NoError(t, err)
+
+	var kills []string
+	for _, c := range m.Calls {
+		if c.Args[0] == "kill" {
+			kills = append(kills, c.Args[1])
+		}
+	}
+	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-controller"}, kills)
+}
+
+func TestPower_Cut_KillError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "kill" {
+			return docker.MockResult{Err: fmt.Errorf("container not running")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerCut(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "killing")
+}
