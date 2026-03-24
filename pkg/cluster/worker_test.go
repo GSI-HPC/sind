@@ -520,3 +520,50 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controller not found")
 }
+
+// --- WorkerAdd (unmanaged) ---
+
+func TestWorkerAdd_Unmanaged(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = workerAddOnCall(t)
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev",
+		Count:       1,
+		CPUs:        2,
+		Memory:      "2g",
+		TmpSize:     "1g",
+		Unmanaged:   true,
+	}, time.Millisecond)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "compute-1", nodes[0].Name)
+	assert.Equal(t, "compute", nodes[0].Role)
+	assert.Equal(t, StatusRunning, nodes[0].Status)
+
+	// Verify slurm config was NOT updated and slurmd was NOT enabled.
+	for _, call := range m.Calls {
+		args := call.Args
+		joined := strings.Join(args, " ")
+		// Should not read/write sind-nodes.conf on controller
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat" &&
+			strings.Contains(joined, "sind-nodes.conf") {
+			t.Error("should not read sind-nodes.conf for unmanaged worker")
+		}
+		// Should not call scontrol reconfigure
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
+			t.Error("should not call scontrol reconfigure for unmanaged worker")
+		}
+		// Should not enable slurmd on new node
+		if args[0] == "exec" && len(args) > 3 && strings.Contains(args[1], "compute-1") &&
+			args[2] == "systemctl" && args[3] == "enable" {
+			t.Error("should not enable slurmd for unmanaged worker")
+		}
+	}
+}
