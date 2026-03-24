@@ -687,3 +687,39 @@ func TestWorkerRemove_NodeNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+// --- WorkerRemove (unmanaged) ---
+
+func TestWorkerRemove_Unmanaged(t *testing.T) {
+	// sind-nodes.conf missing → treat as unmanaged (no slurm config update).
+	var m docker.MockExecutor
+	m.OnCall = workerRemoveOnCall(t, "") // empty nodesConf → ReadFile fails
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1"})
+
+	require.NoError(t, err)
+
+	// Verify no scontrol reconfigure was called.
+	for _, call := range m.Calls {
+		args := call.Args
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
+			t.Error("should not call scontrol reconfigure for unmanaged removal")
+		}
+	}
+
+	// Verify container was still stopped and removed.
+	var stopped, removed bool
+	for _, call := range m.Calls {
+		joined := strings.Join(call.Args, " ")
+		if call.Args[0] == "stop" && strings.Contains(joined, "compute-1") {
+			stopped = true
+		}
+		if call.Args[0] == "rm" && strings.Contains(joined, "compute-1") {
+			removed = true
+		}
+	}
+	assert.True(t, stopped, "container should be stopped")
+	assert.True(t, removed, "container should be removed")
+}
