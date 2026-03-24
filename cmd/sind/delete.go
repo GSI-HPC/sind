@@ -16,6 +16,7 @@ func newDeleteCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newDeleteClusterCommand())
+	cmd.AddCommand(newDeleteWorkerCommand())
 
 	return cmd
 }

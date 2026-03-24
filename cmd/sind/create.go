@@ -21,6 +21,7 @@ func newCreateCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newCreateClusterCommand())
+	cmd.AddCommand(newCreateWorkerCommand())
 
 	return cmd
 }
