@@ -47,23 +47,17 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return nil, fmt.Errorf("listing cluster containers: %w", err)
 	}
 
-	controllerName := ContainerName(opts.ClusterName, "controller")
-	var controllerImage string
-	for _, c := range containers {
-		if c.Name == controllerName {
-			controllerImage = c.Image
-			break
-		}
-	}
-	if controllerImage == "" {
+	controller, ok := findController(containers, opts.ClusterName)
+	if !ok {
 		return nil, fmt.Errorf("controller not found for cluster %q", opts.ClusterName)
 	}
+	controllerName := controller.Name
 
 	// Validate sind-nodes.conf for managed workers.
 	if !opts.Unmanaged {
 		_, err := client.ReadFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf")
 		if err != nil {
-			return nil, fmt.Errorf("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
+			return nil, errSindNodesConfMissing
 		}
 	}
 
@@ -79,7 +73,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// Resolve image: use opts or fall back to controller's image.
 	image := opts.Image
 	if image == "" {
-		image = controllerImage
+		image = controller.Image
 	}
 
 	// Build RunConfig entries for new nodes.
@@ -143,39 +137,47 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 //
 // For unmanaged nodes, only steps 3–4 are performed.
 func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
+	if len(shortNames) == 0 {
+		return nil
+	}
+
 	// List cluster containers to find controller and validate targets.
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return fmt.Errorf("listing cluster containers: %w", err)
 	}
 
-	controllerName := ContainerName(clusterName, "controller")
-	hasController := false
+	controller, hasController := findController(containers, clusterName)
 	containerMap := make(map[docker.ContainerName]docker.ContainerListEntry, len(containers))
 	for _, c := range containers {
 		containerMap[c.Name] = c
-		if c.Name == controllerName {
-			hasController = true
-		}
 	}
 
-	// Resolve which nodes to remove, checking they exist.
+	// Resolve which nodes to remove, checking they exist and are compute nodes.
+	seen := make(map[string]bool, len(shortNames))
 	var targets []docker.ContainerListEntry
 	for _, name := range shortNames {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
 		cn := ContainerName(clusterName, name)
 		c, ok := containerMap[cn]
 		if !ok {
 			return fmt.Errorf("node %q not found in cluster %q", name, clusterName)
+		}
+		if role := c.Labels[LabelRole]; role != "compute" {
+			return fmt.Errorf("node %q has role %q: only compute nodes can be removed with worker remove", name, role)
 		}
 		targets = append(targets, c)
 	}
 
 	// For managed nodes: check if sind-nodes.conf exists and update it.
 	if hasController {
-		nodesConf, err := client.ReadFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf")
+		nodesConf, err := client.ReadFile(ctx, controller.Name, "/etc/slurm/sind-nodes.conf")
 		if err == nil {
 			// sind-nodes.conf exists → remove managed nodes from it.
-			if err := removeNodesConf(ctx, client, controllerName, nodesConf, shortNames); err != nil {
+			if err := removeNodesConf(ctx, client, controller.Name, nodesConf, shortNames); err != nil {
 				return err
 			}
 		}
@@ -201,15 +203,8 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, opts WorkerAd
 		return fmt.Errorf("listing cluster containers: %w", err)
 	}
 
-	controllerName := ContainerName(opts.ClusterName, "controller")
-	found := false
-	for _, c := range containers {
-		if c.Name == controllerName {
-			found = true
-			break
-		}
-	}
-	if !found {
+	controller, ok := findController(containers, opts.ClusterName)
+	if !ok {
 		return fmt.Errorf("controller not found for cluster %q", opts.ClusterName)
 	}
 
@@ -217,9 +212,9 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, opts WorkerAd
 		return nil
 	}
 
-	_, err = client.ReadFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf")
+	_, err = client.ReadFile(ctx, controller.Name, "/etc/slurm/sind-nodes.conf")
 	if err != nil {
-		return fmt.Errorf("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
+		return errSindNodesConfMissing
 	}
 
 	return nil
@@ -237,6 +232,20 @@ func NextComputeIndex(ctx context.Context, client *docker.Client, clusterName st
 }
 
 // --- Unexported helpers ---
+
+// findController returns the controller's container entry from the list.
+// Returns false if no controller exists for the given cluster.
+func findController(containers []docker.ContainerListEntry, clusterName string) (docker.ContainerListEntry, bool) {
+	controllerName := ContainerName(clusterName, "controller")
+	for _, c := range containers {
+		if c.Name == controllerName {
+			return c, true
+		}
+	}
+	return docker.ContainerListEntry{}, false
+}
+
+var errSindNodesConfMissing = fmt.Errorf("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
 
 // resolveWorkerInfra fetches DNS IP, SSH public key, and slurm version
 // concurrently. The Slurm version is read from the controller's labels

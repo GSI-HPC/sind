@@ -1008,3 +1008,103 @@ func TestNextComputeIndex_NonNumericSuffix(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, idx)
 }
+
+func TestWorkerRemove_RejectsController(t *testing.T) {
+	// Removing the controller via worker remove must be rejected.
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: workerContainers("compute-0")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"controller"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only compute nodes")
+}
+
+func TestWorkerRemove_RejectsSubmitter(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: ndjson(
+				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+				psEntry{ID: "sub", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=submitter"},
+				psEntry{ID: "c0", Names: "sind-dev-compute-0", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=compute"},
+			)}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"submitter"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only compute nodes")
+}
+
+func TestWorkerRemove_DuplicateNames(t *testing.T) {
+	// Duplicate names should be deduplicated — container removed only once.
+	var m docker.MockExecutor
+	m.OnCall = workerRemoveOnCall(t, "")
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1", "compute-1"})
+
+	require.NoError(t, err)
+
+	var removeCount int
+	for _, call := range m.Calls {
+		if call.Args[0] == "rm" && strings.Contains(strings.Join(call.Args, " "), "compute-1") {
+			removeCount++
+		}
+	}
+	assert.Equal(t, 1, removeCount, "container should be removed exactly once")
+}
+
+func TestWorkerRemove_EmptyNames(t *testing.T) {
+	// Empty shortNames is a no-op — no docker calls should be made.
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		return docker.MockResult{Err: fmt.Errorf("should not be called")}
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	err := WorkerRemove(context.Background(), client, mgr, "dev", nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls, "no docker calls should be made for empty shortNames")
+}
+
+func TestWorkerAdd_NegativeCount(t *testing.T) {
+	// Negative count defaults to 1, same as zero.
+	var m docker.MockExecutor
+	m.OnCall = workerAddOnCall(t)
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev",
+		Count:       -5,
+		CPUs:        2,
+		Memory:      "2g",
+		TmpSize:     "1g",
+	}, time.Millisecond)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "compute-1", nodes[0].Name)
+}
