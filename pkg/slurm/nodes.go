@@ -98,6 +98,45 @@ func AddNodesToConf(existing string, nodes []NodeEntry) string {
 	return strings.Join(nonPartLines, "\n") + "\n"
 }
 
+// RemoveNodesFromConf removes the named nodes from existing sind-nodes.conf
+// content. NodeName lines for the removed nodes are deleted and the
+// PartitionName Nodes= list is updated.
+func RemoveNodesFromConf(existing string, names []string) string {
+	remove := make(map[string]bool, len(names))
+	for _, n := range names {
+		remove[n] = true
+	}
+
+	lines := strings.Split(strings.TrimRight(existing, "\n"), "\n")
+
+	var managed []string
+	var kept []string
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "PartitionName=") {
+			continue // will be regenerated
+		}
+		if strings.HasPrefix(line, "NodeName=") {
+			fields := strings.Fields(line)
+			if len(fields) > 0 {
+				name := strings.TrimPrefix(fields[0], "NodeName=")
+				if remove[name] {
+					continue // skip removed node
+				}
+				managed = append(managed, name)
+			}
+		}
+		kept = append(kept, line)
+	}
+
+	if len(managed) > 0 {
+		kept = append(kept, fmt.Sprintf("PartitionName=all Nodes=%s Default=YES MaxTime=INFINITE State=UP",
+			strings.Join(managed, ",")))
+	}
+
+	return strings.Join(kept, "\n") + "\n"
+}
+
 // ParseMemoryMB parses a Docker-style memory string (e.g. "2g", "512m") and
 // returns the value in megabytes.
 func ParseMemoryMB(s string) (int, error) {
