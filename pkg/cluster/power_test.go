@@ -140,6 +140,16 @@ func TestPower_Cut(t *testing.T) {
 	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-controller"}, kills)
 }
 
+func TestPower_Cut_EmptyNodes(t *testing.T) {
+	var m docker.MockExecutor
+	client := docker.NewClient(&m)
+
+	err := PowerCut(context.Background(), client, "dev", nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls)
+}
+
 func TestPower_Cut_KillError(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = func(args []string, _ string) docker.MockResult {
@@ -157,4 +167,51 @@ func TestPower_Cut_KillError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "killing")
+}
+
+// --- PowerOn ---
+
+func TestPower_On(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "start" {
+			return docker.MockResult{}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerOn(context.Background(), client, "dev", []string{"compute-0", "compute-1"})
+
+	require.NoError(t, err)
+
+	var starts []string
+	for _, c := range m.Calls {
+		if c.Args[0] == "start" {
+			starts = append(starts, c.Args[1])
+		}
+	}
+	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-compute-1"}, starts)
+}
+
+func TestPower_On_StartError(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: powerContainers()}
+		}
+		if args[0] == "start" {
+			return docker.MockResult{Err: fmt.Errorf("container already running")}
+		}
+		return docker.MockResult{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerOn(context.Background(), client, "dev", []string{"compute-0"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "starting")
 }

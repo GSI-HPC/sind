@@ -37,6 +37,20 @@ func PowerCut(ctx context.Context, client *docker.Client, clusterName string, sh
 	return nil
 }
 
+// PowerOn starts the specified stopped nodes (docker start).
+func PowerOn(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
+	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	for _, name := range containers {
+		if err := client.StartContainer(ctx, name); err != nil {
+			return fmt.Errorf("starting %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 // resolveTargets validates that all shortNames exist in the cluster and returns
 // their Docker container names. Returns nil without error for empty shortNames.
 func resolveTargets(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) ([]docker.ContainerName, error) {
