@@ -254,11 +254,11 @@ func TestPower_Reboot(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerReboot(context.Background(), client, "dev", []string{"compute-0"})
+	err := PowerReboot(context.Background(), client, "dev", []string{"compute-0", "compute-1"})
 
 	require.NoError(t, err)
 
-	// Verify stop then start sequence.
+	// Verify per-node stop+start sequence (not batched).
 	var ops []string
 	for _, c := range m.Calls {
 		if c.Args[0] == "stop" || c.Args[0] == "start" {
@@ -268,6 +268,8 @@ func TestPower_Reboot(t *testing.T) {
 	assert.Equal(t, []string{
 		"stop=sind-dev-compute-0",
 		"start=sind-dev-compute-0",
+		"stop=sind-dev-compute-1",
+		"start=sind-dev-compute-1",
 	}, ops)
 }
 
@@ -336,11 +338,11 @@ func TestPower_Cycle(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCycle(context.Background(), client, "dev", []string{"compute-0"})
+	err := PowerCycle(context.Background(), client, "dev", []string{"compute-0", "compute-1"})
 
 	require.NoError(t, err)
 
-	// Verify kill then start sequence.
+	// Verify per-node kill+start sequence (not batched).
 	var ops []string
 	for _, c := range m.Calls {
 		if c.Args[0] == "kill" || c.Args[0] == "start" {
@@ -350,6 +352,8 @@ func TestPower_Cycle(t *testing.T) {
 	assert.Equal(t, []string{
 		"kill=sind-dev-compute-0",
 		"start=sind-dev-compute-0",
+		"kill=sind-dev-compute-1",
+		"start=sind-dev-compute-1",
 	}, ops)
 }
 

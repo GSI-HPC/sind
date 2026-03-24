@@ -26,36 +26,14 @@ func PowerOn(ctx context.Context, client *docker.Client, clusterName string, sho
 
 // PowerReboot gracefully restarts the specified nodes (docker stop + start).
 func PowerReboot(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
-	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
-	if err != nil {
-		return err
-	}
-	for _, name := range containers {
-		if err := client.StopContainer(ctx, name); err != nil {
-			return fmt.Errorf("stopping %s: %w", name, err)
-		}
-		if err := client.StartContainer(ctx, name); err != nil {
-			return fmt.Errorf("starting %s: %w", name, err)
-		}
-	}
-	return nil
+	return forEachTargetPair(ctx, client, clusterName, shortNames,
+		"stopping", client.StopContainer, "starting", client.StartContainer)
 }
 
 // PowerCycle hard-restarts the specified nodes (docker kill + start).
 func PowerCycle(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error {
-	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
-	if err != nil {
-		return err
-	}
-	for _, name := range containers {
-		if err := client.KillContainer(ctx, name); err != nil {
-			return fmt.Errorf("killing %s: %w", name, err)
-		}
-		if err := client.StartContainer(ctx, name); err != nil {
-			return fmt.Errorf("starting %s: %w", name, err)
-		}
-	}
-	return nil
+	return forEachTargetPair(ctx, client, clusterName, shortNames,
+		"killing", client.KillContainer, "starting", client.StartContainer)
 }
 
 // PowerFreeze suspends all processes in the specified nodes (docker pause).
@@ -78,6 +56,23 @@ func forEachTarget(ctx context.Context, client *docker.Client, clusterName strin
 	for _, name := range containers {
 		if err := op(ctx, name); err != nil {
 			return fmt.Errorf("%s %s: %w", verb, name, err)
+		}
+	}
+	return nil
+}
+
+// forEachTargetPair resolves node names, then applies two operations per container.
+func forEachTargetPair(ctx context.Context, client *docker.Client, clusterName string, shortNames []string, verb1 string, op1 func(context.Context, docker.ContainerName) error, verb2 string, op2 func(context.Context, docker.ContainerName) error) error {
+	containers, err := resolveTargets(ctx, client, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	for _, name := range containers {
+		if err := op1(ctx, name); err != nil {
+			return fmt.Errorf("%s %s: %w", verb1, name, err)
+		}
+		if err := op2(ctx, name); err != nil {
+			return fmt.Errorf("%s %s: %w", verb2, name, err)
 		}
 	}
 	return nil
