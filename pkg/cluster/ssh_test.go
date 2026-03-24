@@ -178,3 +178,62 @@ func TestEnter_TargetSelection_ListError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
 }
+
+// --- ExecArgs ---
+
+func TestExec_OneShot(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: ndjson(
+				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+				psEntry{ID: "c2", Names: "sind-dev-compute-0", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=compute"},
+			)}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	args, err := ExecArgs(context.Background(), client, "dev", []string{"sinfo", "-N"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"exec", "-i", "sind-ssh",
+		"ssh", "controller.dev.sind.local", "sinfo", "-N",
+	}, args)
+}
+
+func TestExec_OneShotWithSubmitter(t *testing.T) {
+	var m docker.MockExecutor
+	m.OnCall = func(args []string, _ string) docker.MockResult {
+		if args[0] == "ps" {
+			return docker.MockResult{Stdout: ndjson(
+				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+				psEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=submitter"},
+			)}
+		}
+		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	args, err := ExecArgs(context.Background(), client, "dev", []string{"hostname"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"exec", "-i", "sind-ssh",
+		"ssh", "submitter.dev.sind.local", "hostname",
+	}, args)
+}
+
+func TestExec_ListError(t *testing.T) {
+	client := docker.NewClient(listErrorMock())
+
+	_, err := ExecArgs(context.Background(), client, "dev", []string{"hostname"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing")
+}

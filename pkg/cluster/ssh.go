@@ -49,3 +49,14 @@ func EnterTarget(ctx context.Context, client *docker.Client, clusterName string)
 	}
 	return "", fmt.Errorf("no submitter or controller found in cluster %q", clusterName)
 }
+
+// ExecArgs builds docker CLI arguments for a one-shot command execution on
+// the cluster's submitter (or controller). The returned args are suitable for
+// passing to docker directly.
+func ExecArgs(ctx context.Context, client *docker.Client, clusterName string, command []string) ([]string, error) {
+	target, err := EnterTarget(ctx, client, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	return BuildSSHArgs(target, clusterName, false, nil, command), nil
+}
