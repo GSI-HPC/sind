@@ -75,6 +75,22 @@ func TestParseVersion(t *testing.T) {
 
 // --- DiscoverVersion ---
 
+func TestDiscoverVersionLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	image := "ghcr.io/gsi-hpc/sind-node:latest"
+
+	if !rec.IsIntegration() {
+		rec.AddResult("slurm 25.11.4\n", "", nil)
+	}
+
+	version, err := DiscoverVersion(t.Context(), c, image)
+	require.NoError(t, err)
+	assert.Contains(t, version, "25.11")
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestDiscoverVersion(t *testing.T) {
 	const image = "ghcr.io/gsi-hpc/sind-node:25.11"
 
