@@ -20,6 +20,84 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- Resource Lifecycle ---
+
+func TestClusterResourceLifecycle(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	clusterName := "it-res"
+
+	if !rec.IsIntegration() {
+		// CreateClusterNetwork
+		rec.AddResult("net-id\n", "", nil)
+		// CreateClusterVolumes (config, munge, data)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+		// WriteClusterConfig (create helper, copy, remove helper)
+		rec.AddResult("helper-id\n", "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+		// WriteMungeKey (create helper, copy, remove helper)
+		rec.AddResult("helper-id\n", "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+		// Verify: network exists, volumes exist
+		rec.AddResult("[{}]\n", "", nil)
+		rec.AddResult("[{}]\n", "", nil)
+		rec.AddResult("[{}]\n", "", nil)
+		rec.AddResult("[{}]\n", "", nil)
+		// Cleanup: remove volumes, network
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+	}
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.RemoveVolume(bg, VolumeName(clusterName, "config"))
+		_ = c.RemoveVolume(bg, VolumeName(clusterName, "munge"))
+		_ = c.RemoveVolume(bg, VolumeName(clusterName, "data"))
+		_ = c.RemoveNetwork(bg, NetworkName(clusterName))
+	})
+
+	// Create network.
+	err := CreateClusterNetwork(ctx, c, clusterName)
+	require.NoError(t, err)
+
+	// Create volumes.
+	err = CreateClusterVolumes(ctx, c, clusterName)
+	require.NoError(t, err)
+
+	// Write config (uses busybox helper container, no systemd needed).
+	cfg := &config.Cluster{
+		Name: clusterName,
+		Nodes: []config.Node{
+			{Role: "controller", CPUs: 2, Memory: "2g"},
+			{Role: "compute", Count: 1, CPUs: 2, Memory: "2g"},
+		},
+	}
+	err = WriteClusterConfig(ctx, c, cfg)
+	require.NoError(t, err)
+
+	// Write munge key.
+	err = WriteMungeKey(ctx, c, clusterName, []byte("test-munge-key-data"))
+	require.NoError(t, err)
+
+	// Verify resources exist.
+	exists, err := c.NetworkExists(ctx, NetworkName(clusterName))
+	require.NoError(t, err)
+	assert.True(t, exists, "cluster network")
+
+	for _, vtype := range []string{"config", "munge", "data"} {
+		exists, err = c.VolumeExists(ctx, VolumeName(clusterName, vtype))
+		require.NoError(t, err)
+		assert.True(t, exists, vtype+" volume")
+	}
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 // --- CreateClusterNetwork ---
 
 func TestCreateClusterNetwork(t *testing.T) {
