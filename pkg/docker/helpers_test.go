@@ -2,7 +2,46 @@
 
 package docker
 
+import (
+	"crypto/rand"
+	"fmt"
+	"testing"
+)
+
 const testContainerName ContainerName = "sind-dev-controller"
+
+// testID generates a short random hex suffix for unique resource names.
+// testID is a per-process random suffix so parallel integration test
+// runs don't collide on Docker resource names.
+var testID = func() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}()
+
+// itName returns a unique Docker resource name for integration tests.
+// In unit mode the suffix is still appended but mock data uses the same value.
+func itName(base string) string {
+	return "sind-it-" + base + "-" + testID
+}
+
+// itContainerName returns a unique ContainerName for integration tests.
+func itContainerName(t *testing.T, base string) ContainerName {
+	t.Helper()
+	return ContainerName(itName(base))
+}
+
+// itNetworkName returns a unique NetworkName for integration tests.
+func itNetworkName(t *testing.T, base string) NetworkName {
+	t.Helper()
+	return NetworkName(itName(base))
+}
+
+// itVolumeName returns a unique VolumeName for integration tests.
+func itVolumeName(t *testing.T, base string) VolumeName {
+	t.Helper()
+	return VolumeName(itName(base))
+}
 
 // testRecorder holds a RecordingExecutor and the underlying mock (if any).
 // In unit mode, mock is non-nil and AddResult configures responses.

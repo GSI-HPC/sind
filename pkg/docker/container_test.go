@@ -19,22 +19,23 @@ import (
 func TestContainerStateLifecycle(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := ContainerName("sind-it-state")
+	name := itContainerName(t, "state")
+	n := string(name)
 
 	if !rec.IsIntegration() {
 		rec.AddResult("abc123\n", "", nil)                                        // create
 		rec.AddResult("[{}]\n", "", nil)                                          // exists → true
-		rec.AddResult("sind-it-state\n", "", nil)                                 // start
-		rec.AddResult(inspectRunning("sind-it-state"), "", nil)                   // inspect → running
-		rec.AddResult("sind-it-state\n", "", nil)                                 // stop
-		rec.AddResult(inspectExited("sind-it-state"), "", nil)                    // inspect → exited
-		rec.AddResult("sind-it-state\n", "", nil)                                 // start again
-		rec.AddResult("sind-it-state\n", "", nil)                                 // pause
-		rec.AddResult(inspectPaused("sind-it-state"), "", nil)                    // inspect → paused
-		rec.AddResult("sind-it-state\n", "", nil)                                 // unpause
-		rec.AddResult(inspectRunning("sind-it-state"), "", nil)                   // inspect → running
-		rec.AddResult("sind-it-state\n", "", nil)                                 // kill
-		rec.AddResult("sind-it-state\n", "", nil)                                 // remove
+		rec.AddResult(n+"\n", "", nil)                                            // start
+		rec.AddResult(inspectRunning(n), "", nil)                                 // inspect → running
+		rec.AddResult(n+"\n", "", nil)                                            // stop
+		rec.AddResult(inspectExited(n), "", nil)                                  // inspect → exited
+		rec.AddResult(n+"\n", "", nil)                                            // start again
+		rec.AddResult(n+"\n", "", nil)                                            // pause
+		rec.AddResult(inspectPaused(n), "", nil)                                  // inspect → paused
+		rec.AddResult(n+"\n", "", nil)                                            // unpause
+		rec.AddResult(inspectRunning(n), "", nil)                                 // inspect → running
+		rec.AddResult(n+"\n", "", nil)                                            // kill
+		rec.AddResult(n+"\n", "", nil)                                            // remove
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists → false
 	}
 	t.Cleanup(func() {
@@ -103,16 +104,17 @@ func TestContainerStateLifecycle(t *testing.T) {
 func TestContainerExecAndFiles(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := ContainerName("sind-it-files")
+	name := itContainerName(t, "files")
+	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)        // run
-		rec.AddResult("hello\n", "", nil)         // exec echo
-		rec.AddResult("", "", nil)                // write
-		rec.AddResult("", "", nil)                // append
-		rec.AddResult("line1\nline2\n", "", nil)  // read
-		rec.AddResult("sind-it-files\n", "", nil) // kill (cleanup)
-		rec.AddResult("sind-it-files\n", "", nil) // rm (cleanup)
+		rec.AddResult("abc123\n", "", nil)       // run
+		rec.AddResult("hello\n", "", nil)        // exec echo
+		rec.AddResult("", "", nil)               // write
+		rec.AddResult("", "", nil)               // append
+		rec.AddResult("line1\nline2\n", "", nil) // read
+		rec.AddResult(n+"\n", "", nil)           // kill (cleanup)
+		rec.AddResult(n+"\n", "", nil)           // rm (cleanup)
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
@@ -145,15 +147,16 @@ func TestContainerExecAndFiles(t *testing.T) {
 func TestContainerLabelsAndList(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := ContainerName("sind-it-labels")
+	name := itContainerName(t, "labels")
+	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)                                                                                                                                                                       // run
-		rec.AddResult(`[{"Id":"abc123","Name":"/sind-it-labels","State":{"Status":"running"},"Config":{"Labels":{"sind.cluster":"it-test","sind.role":"compute"}},"NetworkSettings":{"Networks":{}}}]`, "", nil) // inspect
-		rec.AddResult(`{"ID":"abc123","Names":"sind-it-labels","State":"running","Image":"busybox:latest","Labels":"sind.cluster=it-test,sind.role=compute"}`+"\n", "", nil)                                     // list
-		rec.AddResult("", "", nil)                                                                                                                                                                               // list empty
-		rec.AddResult("sind-it-labels\n", "", nil)                                                                                                                                                               // kill (cleanup)
-		rec.AddResult("sind-it-labels\n", "", nil)                                                                                                                                                               // rm (cleanup)
+		rec.AddResult("abc123\n", "", nil)                                                                                                                                                              // run
+		rec.AddResult(`[{"Id":"abc123","Name":"/`+n+`","State":{"Status":"running"},"Config":{"Labels":{"sind.cluster":"it-test","sind.role":"compute"}},"NetworkSettings":{"Networks":{}}}]`, "", nil) // inspect
+		rec.AddResult(`{"ID":"abc123","Names":"`+n+`","State":"running","Image":"busybox:latest","Labels":"sind.cluster=it-test,sind.role=compute"}`+"\n", "", nil)                                     // list
+		rec.AddResult("", "", nil)                                                                                                                                                                      // list empty
+		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                  // kill (cleanup)
+		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                  // rm (cleanup)
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()

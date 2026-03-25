@@ -17,16 +17,17 @@ const testVolumeName VolumeName = "sind-dev-config"
 func TestVolumeLifecycle(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := VolumeName("sind-it-vol")
+	name := itVolumeName(t, "vol")
+	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("sind-it-vol\n", "", nil)                                                                                                         // create
-		rec.AddResult("[{}]\n", "", nil)                                                                                                                // exists → true
-		rec.AddResult(`{"Name":"sind-it-vol","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-it-vol/_data","Scope":"local"}`+"\n", "", nil) // list
-		rec.AddResult("", "", nil)                                                                                                                      // list no matches
-		rec.AddResult("sind-it-vol\n", "", nil)                                                                                                         // remove (ok)
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})                                                                       // exists → false
-		rec.AddResult("", "Error: No such volume\n", fmt.Errorf("exit status 1"))                                                                       // remove again (error)
+		rec.AddResult(n+"\n", "", nil)                                                                                                      // create
+		rec.AddResult("[{}]\n", "", nil)                                                                                                    // exists → true
+		rec.AddResult(`{"Name":"`+n+`","Driver":"local","Mountpoint":"/var/lib/docker/volumes/`+n+`/_data","Scope":"local"}`+"\n", "", nil) // list
+		rec.AddResult("", "", nil)                                                                                                          // list no matches
+		rec.AddResult(n+"\n", "", nil)                                                                                                      // remove (ok)
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})                                                           // exists → false
+		rec.AddResult("", "Error: No such volume\n", fmt.Errorf("exit status 1"))                                                           // remove again (error)
 	}
 	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), name) })
 
@@ -40,7 +41,7 @@ func TestVolumeLifecycle(t *testing.T) {
 	assert.True(t, exists)
 
 	// List with match.
-	entries, err := c.ListVolumes(ctx, "name=sind-it-vol")
+	entries, err := c.ListVolumes(ctx, "name="+n)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, name, entries[0].Name)
