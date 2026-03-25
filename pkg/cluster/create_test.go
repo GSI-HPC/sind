@@ -77,11 +77,11 @@ func TestClusterResourceLifecycle(t *testing.T) {
 			{Role: "compute", Count: 1, CPUs: 2, Memory: "2g"},
 		},
 	}
-	err = WriteClusterConfig(ctx, c, cfg)
+	err = WriteClusterConfig(ctx, c, cfg, "busybox:latest")
 	require.NoError(t, err)
 
 	// Write munge key.
-	err = WriteMungeKey(ctx, c, clusterName, []byte("test-munge-key-data"))
+	err = WriteMungeKey(ctx, c, clusterName, []byte("test-munge-key-data"), "busybox:latest")
 	require.NoError(t, err)
 
 	// Verify resources exist.
@@ -170,7 +170,7 @@ func TestWriteClusterConfig(t *testing.T) {
 			{Role: "compute", Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
-	err := WriteClusterConfig(context.Background(), c, cfg)
+	err := WriteClusterConfig(context.Background(), c, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -194,7 +194,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(context.Background(), c, cfg)
+	err := WriteClusterConfig(context.Background(), c, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating config helper")
@@ -208,7 +208,7 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(context.Background(), c, cfg)
+	err := WriteClusterConfig(context.Background(), c, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing slurm config")
@@ -225,7 +225,7 @@ func TestWriteMungeKey(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	key := []byte("test-munge-key-data")
-	err := WriteMungeKey(context.Background(), c, "dev", key)
+	err := WriteMungeKey(context.Background(), c, "dev", key, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -248,7 +248,7 @@ func TestWriteMungeKey_CreateError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("create failed"))
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"))
+	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating munge helper")
@@ -261,7 +261,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"))
+	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing munge key")

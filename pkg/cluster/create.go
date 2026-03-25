@@ -16,9 +16,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// helperImage is the container image used for temporary helper containers
-// that write files into volumes.
-const helperImage = "busybox:latest"
+// controllerImage returns the image configured for the controller node.
+func controllerImage(cfg *config.Cluster) string {
+	for _, n := range cfg.Nodes {
+		if n.Role == "controller" {
+			return n.Image
+		}
+	}
+	return config.DefaultImage
+}
 
 // nodeResult holds per-node data collected during concurrent setup.
 type nodeResult struct {
@@ -158,10 +164,11 @@ func createResources(ctx context.Context, client *docker.Client, cfg *config.Clu
 		return err
 	}
 
+	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 	g, gctx = errgroup.WithContext(ctx)
-	g.Go(func() error { return WriteClusterConfig(gctx, client, cfg) })
-	g.Go(func() error { return WriteMungeKey(gctx, client, cfg.Name, mungeKey) })
+	g.Go(func() error { return WriteClusterConfig(gctx, client, cfg, image) })
+	g.Go(func() error { return WriteMungeKey(gctx, client, cfg.Name, mungeKey, image) })
 	return g.Wait()
 }
 
@@ -340,14 +347,14 @@ func CreateClusterVolumes(ctx context.Context, client *docker.Client, clusterNam
 // WriteClusterConfig generates and writes slurm.conf, sind-nodes.conf, and
 // cgroup.conf to the config volume. Uses a temporary container to access the
 // volume.
-func WriteClusterConfig(ctx context.Context, client *docker.Client, cfg *config.Cluster) error {
+func WriteClusterConfig(ctx context.Context, client *docker.Client, cfg *config.Cluster, image string) error {
 	helperName := ContainerName(cfg.Name, "config-helper")
 	volName := VolumeName(cfg.Name, "config")
 
 	_, err := client.CreateContainer(ctx,
 		"--name", string(helperName),
 		"-v", string(volName)+":/etc/slurm",
-		helperImage,
+		image,
 	)
 	if err != nil {
 		return fmt.Errorf("creating config helper container: %w", err)
@@ -370,14 +377,14 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, cfg *config.
 
 // WriteMungeKey writes the given munge key to the munge volume.
 // Uses a temporary container to access the volume.
-func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName string, key []byte) error {
+func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName string, key []byte, image string) error {
 	helperName := ContainerName(clusterName, "munge-helper")
 	volName := VolumeName(clusterName, "munge")
 
 	_, err := client.CreateContainer(ctx,
 		"--name", string(helperName),
 		"-v", string(volName)+":/etc/munge",
-		helperImage,
+		image,
 	)
 	if err != nil {
 		return fmt.Errorf("creating munge helper container: %w", err)
