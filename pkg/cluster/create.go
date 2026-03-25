@@ -398,6 +398,19 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName strin
 		return fmt.Errorf("writing munge key: %w", err)
 	}
 
+	// docker cp creates files as root; munge requires ownership by the munge user.
+	if err := client.StartContainer(ctx, helperName); err != nil {
+		return fmt.Errorf("starting munge helper: %w", err)
+	}
+	_, err = client.Exec(ctx, helperName, "chown", "munge:munge", "/etc/munge/munge.key")
+	if err != nil {
+		return fmt.Errorf("fixing munge key ownership: %w", err)
+	}
+	_, err = client.Exec(ctx, helperName, "chmod", "0400", "/etc/munge/munge.key")
+	if err != nil {
+		return fmt.Errorf("fixing munge key permissions: %w", err)
+	}
+
 	return nil
 }
 

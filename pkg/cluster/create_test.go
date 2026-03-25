@@ -38,8 +38,11 @@ func TestClusterResourceLifecycle(t *testing.T) {
 		rec.AddResult("helper-id\n", "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
-		// WriteMungeKey (create helper, copy, remove helper)
+		// WriteMungeKey (create helper, copy, start, chown, chmod, remove helper)
 		rec.AddResult("helper-id\n", "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("helper-id\n", "", nil)
+		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
 		// Verify: network exists, volumes exist
@@ -219,28 +222,31 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 
 func TestWriteMungeKey(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
-	m.AddResult("", "", nil)         // CopyToContainer
-	m.AddResult("", "", nil)         // RemoveContainer (defer)
+	m.AddResult("abc123\n", "", nil)                // CreateContainer (helper)
+	m.AddResult("", "", nil)                        // CopyToContainer
+	m.AddResult("sind-dev-munge-helper\n", "", nil) // StartContainer
+	m.AddResult("", "", nil)                        // Exec chown
+	m.AddResult("", "", nil)                        // Exec chmod
+	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
 	key := []byte("test-munge-key-data")
 	err := WriteMungeKey(context.Background(), c, "dev", key, "busybox:latest")
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 3)
+	require.Len(t, m.Calls, 6)
 
 	// CreateContainer mounts munge volume
 	assert.Equal(t, "create", m.Calls[0].Args[0])
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-munge:/etc/munge")
-	assert.Contains(t, m.Calls[0].Args, "sind-dev-munge-helper")
 
 	// CopyToContainer writes to /etc/munge
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
-	assert.Contains(t, m.Calls[1].Args[len(m.Calls[1].Args)-1], "sind-dev-munge-helper:/etc/munge")
 
-	// RemoveContainer cleans up
-	assert.Equal(t, []string{"rm", "sind-dev-munge-helper"}, m.Calls[2].Args)
+	// Start + chown + chmod
+	assert.Equal(t, []string{"start", "sind-dev-munge-helper"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chown", "munge:munge", "/etc/munge/munge.key"}, m.Calls[3].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chmod", "0400", "/etc/munge/munge.key"}, m.Calls[4].Args)
 }
 
 func TestWriteMungeKey_CreateError(t *testing.T) {
