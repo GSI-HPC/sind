@@ -18,6 +18,106 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- Lifecycle ---
+
+func TestMeshLifecycle(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	mgr := NewManager(c)
+
+	if !rec.IsIntegration() {
+		// EnsureMesh: create network, DNS, SSH volume, SSH container
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network exists → no
+		rec.AddResult("net-id\n", "", nil)                                        // create network
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS exists → no
+		rec.AddResult("dns-id\n", "", nil)                                        // create DNS
+		rec.AddResult("", "", nil)                                                // copy Corefile
+		rec.AddResult("sind-dns\n", "", nil)                                      // start DNS
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH vol exists → no
+		rec.AddResult("sind-ssh-config\n", "", nil)                               // create SSH vol
+		rec.AddResult("keygen-id\n", "", nil)                                     // create keygen container
+		rec.AddResult("", "", nil)                                                // copy keygen script
+		rec.AddResult("", "", nil)                                                // remove keygen container
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
+		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
+		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
+
+		// Verify: network, DNS, SSH volume, SSH container exist
+		rec.AddResult("[{}]\n", "", nil) // network exists → yes
+		rec.AddResult("[{}]\n", "", nil) // DNS exists → yes
+		rec.AddResult("[{}]\n", "", nil) // SSH vol exists → yes
+		rec.AddResult("[{}]\n", "", nil) // SSH exists → yes
+
+		// EnsureMesh again (idempotent): all exist
+		rec.AddResult("[{}]\n", "", nil) // network
+		rec.AddResult("[{}]\n", "", nil) // DNS
+		rec.AddResult("[{}]\n", "", nil) // SSH vol
+		rec.AddResult("[{}]\n", "", nil) // SSH
+
+		// CleanupMesh: remove SSH, DNS, network, volume
+		rec.AddResult("[{}]\n", "", nil)            // SSH exists
+		rec.AddResult("sind-ssh\n", "", nil)        // stop SSH
+		rec.AddResult("sind-ssh\n", "", nil)        // rm SSH
+		rec.AddResult("[{}]\n", "", nil)            // DNS exists
+		rec.AddResult("sind-dns\n", "", nil)        // stop DNS
+		rec.AddResult("sind-dns\n", "", nil)        // rm DNS
+		rec.AddResult("[{}]\n", "", nil)            // network exists
+		rec.AddResult("sind-mesh\n", "", nil)       // rm network
+		rec.AddResult("[{}]\n", "", nil)            // SSH vol exists
+		rec.AddResult("sind-ssh-config\n", "", nil) // rm SSH vol
+
+		// Verify: all gone
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH
+	}
+	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
+
+	// EnsureMesh creates all resources.
+	err := mgr.EnsureMesh(ctx)
+	require.NoError(t, err)
+
+	// Verify resources exist.
+	exists, err := c.NetworkExists(ctx, NetworkName)
+	require.NoError(t, err)
+	assert.True(t, exists, "mesh network")
+
+	exists, err = c.ContainerExists(ctx, DNSContainerName)
+	require.NoError(t, err)
+	assert.True(t, exists, "DNS container")
+
+	exists, err = c.VolumeExists(ctx, SSHVolumeName)
+	require.NoError(t, err)
+	assert.True(t, exists, "SSH volume")
+
+	exists, err = c.ContainerExists(ctx, SSHContainerName)
+	require.NoError(t, err)
+	assert.True(t, exists, "SSH container")
+
+	// EnsureMesh is idempotent.
+	err = mgr.EnsureMesh(ctx)
+	require.NoError(t, err)
+
+	// CleanupMesh removes everything.
+	err = mgr.CleanupMesh(ctx)
+	require.NoError(t, err)
+
+	// Verify resources gone.
+	exists, err = c.NetworkExists(ctx, NetworkName)
+	require.NoError(t, err)
+	assert.False(t, exists, "mesh network should be gone")
+
+	exists, err = c.ContainerExists(ctx, DNSContainerName)
+	require.NoError(t, err)
+	assert.False(t, exists, "DNS container should be gone")
+
+	exists, err = c.ContainerExists(ctx, SSHContainerName)
+	require.NoError(t, err)
+	assert.False(t, exists, "SSH container should be gone")
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 // --- EnsureMesh ---
 
 func TestEnsureMesh(t *testing.T) {
