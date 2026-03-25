@@ -3,7 +3,6 @@
 package cluster
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -33,7 +32,7 @@ func TestListClusterResources(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(context.Background(), c, "dev")
+	res, err := ListClusterResources(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 
@@ -57,7 +56,7 @@ func TestListClusterResources_NoResources(t *testing.T) {
 	addNotFound(t, &m, 3)    // VolumeExists: config, munge, data
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(context.Background(), c, "nonexistent")
+	res, err := ListClusterResources(t.Context(), c, "nonexistent")
 
 	require.NoError(t, err)
 	assert.Empty(t, res.Containers)
@@ -74,7 +73,7 @@ func TestListClusterResources_PartialVolumes(t *testing.T) {
 	m.AddResult("", "", nil) // VolumeExists: data exists
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(context.Background(), c, "dev")
+	res, err := ListClusterResources(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, res.NetworkExists)
@@ -86,7 +85,7 @@ func TestListClusterResources_ListContainersError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker ps failed"))
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(context.Background(), c, "dev")
+	_, err := ListClusterResources(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -98,7 +97,7 @@ func TestListClusterResources_NetworkCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("network inspect failed")) // non-exit error
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(context.Background(), c, "dev")
+	_, err := ListClusterResources(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking network")
@@ -111,7 +110,7 @@ func TestListClusterResources_VolumeCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("volume inspect failed")) // config check fails
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(context.Background(), c, "dev")
+	_, err := ListClusterResources(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume")
@@ -123,7 +122,7 @@ func TestListClusterResources_LabelFilter(t *testing.T) {
 	addNotFound(t, &m, 4)    // network + 3 volumes
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(context.Background(), c, "myCluster")
+	_, err := ListClusterResources(t.Context(), c, "myCluster")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 5)
@@ -151,7 +150,7 @@ func TestDeleteContainers(t *testing.T) {
 		{Name: "sind-dev-controller"},
 		{Name: "sind-dev-compute-0"},
 	}
-	err := DeleteContainers(context.Background(), c, containers)
+	err := DeleteContainers(t.Context(), c, containers)
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 4)
@@ -171,7 +170,7 @@ func TestDeleteContainers_StopErrorIgnored(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeleteContainers(context.Background(), c, containers)
+	err := DeleteContainers(t.Context(), c, containers)
 
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 2)
@@ -186,7 +185,7 @@ func TestDeleteContainers_RemoveError(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeleteContainers(context.Background(), c, containers)
+	err := DeleteContainers(t.Context(), c, containers)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing container sind-dev-controller")
@@ -196,7 +195,7 @@ func TestDeleteContainers_Empty(t *testing.T) {
 	var m docker.MockExecutor
 	c := docker.NewClient(&m)
 
-	err := DeleteContainers(context.Background(), c, nil)
+	err := DeleteContainers(t.Context(), c, nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
@@ -209,7 +208,7 @@ func TestDeleteNetwork(t *testing.T) {
 	m.AddResult("", "", nil) // network rm
 	c := docker.NewClient(&m)
 
-	err := DeleteNetwork(context.Background(), c, docker.NetworkName("sind-dev-net"))
+	err := DeleteNetwork(t.Context(), c, docker.NetworkName("sind-dev-net"))
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
@@ -221,7 +220,7 @@ func TestDeleteNetwork_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("network has active endpoints"))
 	c := docker.NewClient(&m)
 
-	err := DeleteNetwork(context.Background(), c, docker.NetworkName("sind-dev-net"))
+	err := DeleteNetwork(t.Context(), c, docker.NetworkName("sind-dev-net"))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing network sind-dev-net")
@@ -237,7 +236,7 @@ func TestDeleteVolumes(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
-	err := DeleteVolumes(context.Background(), c, volumes)
+	err := DeleteVolumes(t.Context(), c, volumes)
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -253,7 +252,7 @@ func TestDeleteVolumes_Error(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
-	err := DeleteVolumes(context.Background(), c, volumes)
+	err := DeleteVolumes(t.Context(), c, volumes)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing volume sind-dev-munge")
@@ -263,7 +262,7 @@ func TestDeleteVolumes_Empty(t *testing.T) {
 	var m docker.MockExecutor
 	c := docker.NewClient(&m)
 
-	err := DeleteVolumes(context.Background(), c, nil)
+	err := DeleteVolumes(t.Context(), c, nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
@@ -283,7 +282,7 @@ func TestDeregisterMesh(t *testing.T) {
 		{Name: "sind-dev-controller"},
 		{Name: "sind-dev-compute-0"},
 	}
-	err := DeregisterMesh(context.Background(), mgr, "dev", containers)
+	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
 
 	require.NoError(t, err)
 }
@@ -293,7 +292,7 @@ func TestDeregisterMesh_Empty(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := DeregisterMesh(context.Background(), mgr, "dev", nil)
+	err := DeregisterMesh(t.Context(), mgr, "dev", nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
@@ -314,7 +313,7 @@ func TestDeregisterMesh_DNSError(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeregisterMesh(context.Background(), mgr, "dev", containers)
+	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing DNS record for controller")
@@ -347,7 +346,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeregisterMesh(context.Background(), mgr, "dev", containers)
+	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing known host for controller")
@@ -364,7 +363,7 @@ func TestHasOtherClusters_True(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(context.Background(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, has)
@@ -379,7 +378,7 @@ func TestHasOtherClusters_False(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(context.Background(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.False(t, has)
@@ -390,7 +389,7 @@ func TestHasOtherClusters_NoContainers(t *testing.T) {
 	m.AddResult("", "", nil) // empty list
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(context.Background(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.False(t, has)
@@ -401,7 +400,7 @@ func TestHasOtherClusters_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := HasOtherClusters(context.Background(), c, "dev")
+	_, err := HasOtherClusters(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing sind containers")
@@ -412,7 +411,7 @@ func TestHasOtherClusters_LabelFilter(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, _ = HasOtherClusters(context.Background(), c, "dev")
+	_, _ = HasOtherClusters(t.Context(), c, "dev")
 
 	require.Len(t, m.Calls, 1)
 	args := m.Calls[0].Args
@@ -431,7 +430,7 @@ func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(context.Background(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, has, "sind-dev2-controller should not match cluster dev")
@@ -455,7 +454,7 @@ func TestDelete_FullCluster(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.NoError(t, err)
 }
@@ -471,7 +470,7 @@ func TestDelete_NonExistent(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "gone")
+	err := Delete(t.Context(), c, mgr, "gone")
 
 	require.NoError(t, err)
 }
@@ -489,7 +488,7 @@ func TestDelete_Partial(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.NoError(t, err)
 }
@@ -510,7 +509,7 @@ func TestDelete_PreserveMesh(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.NoError(t, err)
 }
@@ -523,7 +522,7 @@ func TestDelete_ListResourcesError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -543,7 +542,7 @@ func TestDelete_DeregisterMeshError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing DNS record")
@@ -564,7 +563,7 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing container")
@@ -582,7 +581,7 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing network")
@@ -612,7 +611,7 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing sind containers")
@@ -630,7 +629,7 @@ func TestDelete_VolumeRemoveError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing volume")
@@ -657,7 +656,7 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
-	err := Delete(context.Background(), c, mgr, "dev")
+	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing SSH container")

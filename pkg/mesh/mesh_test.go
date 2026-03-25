@@ -148,7 +148,7 @@ func TestEnsureMesh(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMesh(context.Background())
+	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
 }
 
@@ -163,7 +163,7 @@ func TestEnsureMesh_AllExist(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMesh(context.Background())
+	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 4)
 }
@@ -174,7 +174,7 @@ func TestEnsureMesh_NetworkError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMesh(context.Background())
+	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mesh network")
 }
@@ -186,7 +186,7 @@ func TestEnsureMesh_DNSError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMesh(context.Background())
+	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "DNS container")
 }
@@ -199,7 +199,7 @@ func TestEnsureMesh_SSHVolumeError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMesh(context.Background())
+	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SSH volume")
 }
@@ -213,7 +213,7 @@ func TestEnsureMesh_SSHContainerError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMesh(context.Background())
+	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SSH container")
 }
@@ -240,7 +240,7 @@ func TestCleanupMesh(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.CleanupMesh(context.Background())
+	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
 	// Verify order: SSH container, DNS container, network, volume.
@@ -267,7 +267,7 @@ func TestCleanupMesh_NoneExist(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.CleanupMesh(context.Background())
+	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 4) // only exist checks, no removes
 }
@@ -278,7 +278,7 @@ func TestCleanupMesh_SSHContainerError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.CleanupMesh(context.Background())
+	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "removing SSH container")
 }
@@ -292,7 +292,7 @@ func TestCleanupMesh_DNSContainerError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.CleanupMesh(context.Background())
+	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "removing DNS container")
 }
@@ -305,7 +305,7 @@ func TestCleanupMesh_NetworkError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.CleanupMesh(context.Background())
+	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "removing mesh network")
 }
@@ -319,7 +319,7 @@ func TestCleanupMesh_RemoveContainerError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.CleanupMesh(context.Background())
+	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "removing SSH container")
 }
@@ -333,7 +333,7 @@ func TestCleanupMesh_VolumeError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.CleanupMesh(context.Background())
+	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "removing SSH volume")
 }
@@ -352,7 +352,7 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMeshNetwork(context.Background())
+	err := mgr.EnsureMeshNetwork(t.Context())
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 2)
@@ -367,7 +367,7 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMeshNetwork(context.Background())
+	err := mgr.EnsureMeshNetwork(t.Context())
 	require.NoError(t, err)
 
 	// Only inspect, no create
@@ -381,7 +381,7 @@ func TestEnsureMeshNetwork_InspectError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMeshNetwork(context.Background())
+	err := mgr.EnsureMeshNetwork(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "checking mesh network")
 }
@@ -396,7 +396,7 @@ func TestEnsureMeshNetwork_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureMeshNetwork(context.Background())
+	err := mgr.EnsureMeshNetwork(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating mesh network")
 }
@@ -419,7 +419,7 @@ func TestEnsureDNS_Creates(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureDNS(context.Background())
+	err := mgr.EnsureDNS(t.Context())
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 4)
@@ -446,7 +446,7 @@ func TestEnsureDNS_AlreadyExists(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureDNS(context.Background())
+	err := mgr.EnsureDNS(t.Context())
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
 }
@@ -457,7 +457,7 @@ func TestEnsureDNS_InspectError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureDNS(context.Background())
+	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "checking DNS container")
 }
@@ -470,7 +470,7 @@ func TestEnsureDNS_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureDNS(context.Background())
+	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating DNS container")
 }
@@ -484,7 +484,7 @@ func TestEnsureDNS_CopyError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureDNS(context.Background())
+	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing DNS configuration")
 }
@@ -499,7 +499,7 @@ func TestEnsureDNS_StartError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureDNS(context.Background())
+	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting DNS container")
 }
@@ -517,7 +517,7 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddDNSRecord(context.Background(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 3)
@@ -540,7 +540,7 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddDNSRecord(context.Background(), "compute-0.dev.sind.local", "172.18.0.3")
+	err := mgr.AddDNSRecord(t.Context(), "compute-0.dev.sind.local", "172.18.0.3")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
@@ -554,7 +554,7 @@ func TestAddDNSRecord_ReadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddDNSRecord(context.Background(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading DNS Corefile")
 }
@@ -566,7 +566,7 @@ func TestAddDNSRecord_WriteError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddDNSRecord(context.Background(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing DNS Corefile")
 }
@@ -579,7 +579,7 @@ func TestAddDNSRecord_SignalError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddDNSRecord(context.Background(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reloading DNS")
 }
@@ -599,7 +599,7 @@ func TestRemoveDNSRecord(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
@@ -617,7 +617,7 @@ func TestRemoveDNSRecord_LastEntry(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
@@ -637,7 +637,7 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(context.Background(), "compute-0.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "compute-0.dev.sind.local")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
@@ -654,7 +654,7 @@ func TestRemoveDNSRecord_SignalError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reloading DNS")
 }
@@ -673,7 +673,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
@@ -687,7 +687,7 @@ func TestRemoveDNSRecord_ReadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading DNS Corefile")
 }
@@ -699,7 +699,7 @@ func TestRemoveDNSRecord_WriteError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(context.Background(), "x")
+	err := mgr.RemoveDNSRecord(t.Context(), "x")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing DNS Corefile")
 }

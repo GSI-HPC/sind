@@ -87,7 +87,7 @@ func TestNetworkExists_True(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil)
 	c := NewClient(&m)
 
-	exists, err := c.NetworkExists(context.Background(), testNetworkName)
+	exists, err := c.NetworkExists(t.Context(), testNetworkName)
 	require.NoError(t, err)
 	assert.True(t, exists)
 
@@ -101,7 +101,7 @@ func TestNetworkExists_False(t *testing.T) {
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	c := NewClient(&m)
 
-	exists, err := c.NetworkExists(context.Background(), testNetworkName)
+	exists, err := c.NetworkExists(t.Context(), testNetworkName)
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
@@ -111,7 +111,7 @@ func TestNetworkExists_OtherError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
-	exists, err := c.NetworkExists(context.Background(), testNetworkName)
+	exists, err := c.NetworkExists(t.Context(), testNetworkName)
 	assert.Error(t, err)
 	assert.False(t, exists)
 }
@@ -123,7 +123,7 @@ func TestCreateNetwork(t *testing.T) {
 	m.AddResult(string(networkID)+"\n", "", nil)
 	c := NewClient(&m)
 
-	id, err := c.CreateNetwork(context.Background(), testNetworkName)
+	id, err := c.CreateNetwork(t.Context(), testNetworkName)
 	require.NoError(t, err)
 	assert.Equal(t, networkID, id)
 
@@ -136,7 +136,7 @@ func TestCreateNetwork_Error(t *testing.T) {
 	m.AddResult("", "Error response from daemon: network with name "+string(testNetworkName)+" already exists\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	id, err := c.CreateNetwork(context.Background(), testNetworkName)
+	id, err := c.CreateNetwork(t.Context(), testNetworkName)
 	assert.Error(t, err)
 	assert.Empty(t, id)
 }
@@ -146,7 +146,7 @@ func TestRemoveNetwork(t *testing.T) {
 	m.AddResult(string(testNetworkName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.RemoveNetwork(context.Background(), testNetworkName)
+	err := c.RemoveNetwork(t.Context(), testNetworkName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -158,7 +158,7 @@ func TestRemoveNetwork_Error(t *testing.T) {
 	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.RemoveNetwork(context.Background(), testNetworkName)
+	err := c.RemoveNetwork(t.Context(), testNetworkName)
 	assert.Error(t, err)
 }
 
@@ -167,7 +167,7 @@ func TestConnectNetwork(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.ConnectNetwork(context.Background(), testNetworkName, testContainerName)
+	err := c.ConnectNetwork(t.Context(), testNetworkName, testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -179,7 +179,7 @@ func TestConnectNetwork_Error(t *testing.T) {
 	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.ConnectNetwork(context.Background(), testNetworkName, testContainerName)
+	err := c.ConnectNetwork(t.Context(), testNetworkName, testContainerName)
 	assert.Error(t, err)
 }
 
@@ -188,7 +188,7 @@ func TestDisconnectNetwork(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.DisconnectNetwork(context.Background(), testNetworkName, testContainerName)
+	err := c.DisconnectNetwork(t.Context(), testNetworkName, testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -200,7 +200,7 @@ func TestDisconnectNetwork_Error(t *testing.T) {
 	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.DisconnectNetwork(context.Background(), testNetworkName, testContainerName)
+	err := c.DisconnectNetwork(t.Context(), testNetworkName, testContainerName)
 	assert.Error(t, err)
 }
 
@@ -213,7 +213,7 @@ func TestListNetworks(t *testing.T) {
 	m.AddResult(networkLsJSON, "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListNetworks(context.Background(), "name=sind-")
+	entries, err := c.ListNetworks(t.Context(), "name=sind-")
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 
@@ -231,7 +231,7 @@ func TestListNetworks_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListNetworks(context.Background(), "name=nonexistent")
+	entries, err := c.ListNetworks(t.Context(), "name=nonexistent")
 	require.NoError(t, err)
 	assert.Nil(t, entries)
 }
@@ -241,7 +241,7 @@ func TestListNetworks_InvalidJSON(t *testing.T) {
 	m.AddResult("not json\n", "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListNetworks(context.Background())
+	entries, err := c.ListNetworks(t.Context())
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 	assert.Contains(t, err.Error(), "parsing network ls output")
@@ -252,7 +252,7 @@ func TestListNetworks_Error(t *testing.T) {
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	entries, err := c.ListNetworks(context.Background())
+	entries, err := c.ListNetworks(t.Context())
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 }

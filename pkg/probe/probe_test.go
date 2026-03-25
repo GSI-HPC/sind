@@ -30,7 +30,7 @@ func TestContainerRunning(t *testing.T) {
 	m.AddResult(inspectJSON("running"), "", nil)
 	c := docker.NewClient(&m)
 
-	err := ContainerRunning(context.Background(), c, testContainer)
+	err := ContainerRunning(t.Context(), c, testContainer)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -44,7 +44,7 @@ func TestContainerRunning_NotRunning(t *testing.T) {
 			m.AddResult(inspectJSON(status), "", nil)
 			c := docker.NewClient(&m)
 
-			err := ContainerRunning(context.Background(), c, testContainer)
+			err := ContainerRunning(t.Context(), c, testContainer)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), status)
 			assert.Contains(t, err.Error(), "expected running")
@@ -57,7 +57,7 @@ func TestContainerRunning_InspectError(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	err := ContainerRunning(context.Background(), c, testContainer)
+	err := ContainerRunning(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting container")
 }
@@ -67,7 +67,7 @@ func TestSystemdReady_Running(t *testing.T) {
 	m.AddResult("running\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := SystemdReady(context.Background(), c, testContainer)
+	err := SystemdReady(t.Context(), c, testContainer)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -82,7 +82,7 @@ func TestSystemdReady_Degraded(t *testing.T) {
 	m.AddResult("degraded\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := SystemdReady(context.Background(), c, testContainer)
+	err := SystemdReady(t.Context(), c, testContainer)
 	require.NoError(t, err)
 }
 
@@ -93,7 +93,7 @@ func TestSystemdReady_NotReady(t *testing.T) {
 			m.AddResult(state+"\n", "", nil)
 			c := docker.NewClient(&m)
 
-			err := SystemdReady(context.Background(), c, testContainer)
+			err := SystemdReady(t.Context(), c, testContainer)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), state)
 		})
@@ -105,7 +105,7 @@ func TestSystemdReady_ExecError(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 
-	err := SystemdReady(context.Background(), c, testContainer)
+	err := SystemdReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking systemd state")
 }
@@ -115,7 +115,7 @@ func TestSSHDReady(t *testing.T) {
 	m.AddResult("SSH-2.0-OpenSSH_9.8\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := SSHDReady(context.Background(), c, testContainer)
+	err := SSHDReady(t.Context(), c, testContainer)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -129,7 +129,7 @@ func TestSSHDReady_UnexpectedBanner(t *testing.T) {
 	m.AddResult("HTTP/1.1 400 Bad Request\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := SSHDReady(context.Background(), c, testContainer)
+	err := SSHDReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected banner")
 }
@@ -139,7 +139,7 @@ func TestSSHDReady_EmptyBanner(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	err := SSHDReady(context.Background(), c, testContainer)
+	err := SSHDReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected banner")
 }
@@ -149,7 +149,7 @@ func TestSSHDReady_ConnectionRefused(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	err := SSHDReady(context.Background(), c, testContainer)
+	err := SSHDReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sshd not ready")
 }
@@ -159,7 +159,7 @@ func TestSlurmctldReady(t *testing.T) {
 	m.AddResult("Slurmctld(primary) at controller is UP\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := SlurmctldReady(context.Background(), c, testContainer)
+	err := SlurmctldReady(t.Context(), c, testContainer)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -172,7 +172,7 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 		fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	err := SlurmctldReady(context.Background(), c, testContainer)
+	err := SlurmctldReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "slurmctld not ready")
 }
@@ -182,7 +182,7 @@ func TestMungeReady(t *testing.T) {
 	m.AddResult("active\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := MungeReady(context.Background(), c, testContainer)
+	err := MungeReady(t.Context(), c, testContainer)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -194,7 +194,7 @@ func TestMungeReady_NotReady(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	err := MungeReady(context.Background(), c, testContainer)
+	err := MungeReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "munge not ready")
 }
@@ -204,7 +204,7 @@ func TestSlurmdReady(t *testing.T) {
 	m.AddResult("active\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := SlurmdReady(context.Background(), c, testContainer)
+	err := SlurmdReady(t.Context(), c, testContainer)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -216,7 +216,7 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	err := SlurmdReady(context.Background(), c, testContainer)
+	err := SlurmdReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "slurmd not ready")
 }
@@ -249,7 +249,7 @@ func TestUntilReady_AllPass(t *testing.T) {
 	m.AddResult(inspectJSON("running"), "", nil)
 	c := docker.NewClient(&m)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
 	probes := []Probe{{"container", ContainerRunning}}
@@ -265,7 +265,7 @@ func TestUntilReady_RetryThenPass(t *testing.T) {
 	m.AddResult(inspectJSON("running"), "", nil)
 	c := docker.NewClient(&m)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
 	probes := []Probe{{"container", ContainerRunning}}
@@ -282,7 +282,7 @@ func TestUntilReady_Timeout(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	probes := []Probe{{"container", ContainerRunning}}
@@ -299,7 +299,7 @@ func TestUntilReady_MultipleProbes(t *testing.T) {
 	m.AddResult("running\n", "", nil)
 	c := docker.NewClient(&m)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
 	probes := []Probe{
@@ -321,7 +321,7 @@ func TestUntilReady_SecondProbeFails(t *testing.T) {
 	m.AddResult("running\n", "", nil)
 	c := docker.NewClient(&m)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
 	probes := []Probe{
@@ -342,7 +342,7 @@ func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	probes := []Probe{
@@ -359,7 +359,7 @@ func TestUntilReady_EmptyProbes(t *testing.T) {
 	var m docker.MockExecutor
 	c := docker.NewClient(&m)
 
-	err := UntilReady(context.Background(), c, testContainer, nil, time.Millisecond)
+	err := UntilReady(t.Context(), c, testContainer, nil, time.Millisecond)
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
 }
@@ -371,7 +371,7 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // already canceled
 
 	probes := []Probe{{"container", ContainerRunning}}

@@ -3,7 +3,6 @@
 package slurm
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -98,7 +97,7 @@ func TestDiscoverVersion(t *testing.T) {
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := docker.NewClient(&m)
 
-	version, err := DiscoverVersion(context.Background(), c, image)
+	version, err := DiscoverVersion(t.Context(), c, image)
 	require.NoError(t, err)
 	assert.Equal(t, "25.11.0", version)
 
@@ -111,7 +110,7 @@ func TestDiscoverVersion_RunError(t *testing.T) {
 	m.AddResult("", "Unable to find image\n", fmt.Errorf("exit status 125"))
 	c := docker.NewClient(&m)
 
-	version, err := DiscoverVersion(context.Background(), c, "missing:latest")
+	version, err := DiscoverVersion(t.Context(), c, "missing:latest")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "running slurmctld -V")
 	assert.Empty(t, version)
@@ -122,7 +121,7 @@ func TestDiscoverVersion_ParseError(t *testing.T) {
 	m.AddResult("unexpected output\n", "", nil)
 	c := docker.NewClient(&m)
 
-	version, err := DiscoverVersion(context.Background(), c, "bad:image")
+	version, err := DiscoverVersion(t.Context(), c, "bad:image")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected slurmctld -V output")
 	assert.Empty(t, version)

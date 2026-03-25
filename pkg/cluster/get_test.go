@@ -3,7 +3,6 @@
 package cluster
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -48,7 +47,7 @@ func TestGetClusters(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(context.Background(), c)
+	clusters, err := GetClusters(t.Context(), c)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 2)
@@ -76,7 +75,7 @@ func TestGetClusters_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(context.Background(), c)
+	clusters, err := GetClusters(t.Context(), c)
 
 	require.NoError(t, err)
 	assert.Empty(t, clusters)
@@ -96,7 +95,7 @@ func TestGetClusters_MixedStatus(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(context.Background(), c)
+	clusters, err := GetClusters(t.Context(), c)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -118,7 +117,7 @@ func TestGetClusters_AllStopped(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(context.Background(), c)
+	clusters, err := GetClusters(t.Context(), c)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -130,7 +129,7 @@ func TestGetClusters_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetClusters(context.Background(), c)
+	_, err := GetClusters(t.Context(), c)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing sind containers")
@@ -141,7 +140,7 @@ func TestGetClusters_LabelFilter(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, _ = GetClusters(context.Background(), c)
+	_, _ = GetClusters(t.Context(), c)
 
 	require.Len(t, m.Calls, 1)
 	args := m.Calls[0].Args
@@ -160,7 +159,7 @@ func TestGetClusters_NoSlurmVersion(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(context.Background(), c)
+	clusters, err := GetClusters(t.Context(), c)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -181,7 +180,7 @@ func TestGetClusters_EmptyClusterLabel(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(context.Background(), c)
+	clusters, err := GetClusters(t.Context(), c)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -209,7 +208,7 @@ func TestGetNodes(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(context.Background(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
@@ -244,7 +243,7 @@ func TestGetNodes_WithStatus(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(context.Background(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
@@ -258,7 +257,7 @@ func TestGetNodes_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(context.Background(), c, "nonexistent")
+	nodes, err := GetNodes(t.Context(), c, "nonexistent")
 
 	require.NoError(t, err)
 	assert.Empty(t, nodes)
@@ -269,7 +268,7 @@ func TestGetNodes_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker ps failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNodes(context.Background(), c, "dev")
+	_, err := GetNodes(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -280,7 +279,7 @@ func TestGetNodes_LabelFilter(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, _ = GetNodes(context.Background(), c, "myCluster")
+	_, _ = GetNodes(t.Context(), c, "myCluster")
 
 	require.Len(t, m.Calls, 1)
 	args := m.Calls[0].Args
@@ -307,7 +306,7 @@ func TestGetNodes_SortOrder(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(context.Background(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
@@ -331,7 +330,7 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(context.Background(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
@@ -392,7 +391,7 @@ func TestGetNetworks(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	networks, err := GetNetworks(context.Background(), c)
+	networks, err := GetNetworks(t.Context(), c)
 
 	require.NoError(t, err)
 	require.Len(t, networks, 3)
@@ -408,7 +407,7 @@ func TestGetNetworks_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	networks, err := GetNetworks(context.Background(), c)
+	networks, err := GetNetworks(t.Context(), c)
 
 	require.NoError(t, err)
 	assert.Empty(t, networks)
@@ -419,7 +418,7 @@ func TestGetNetworks_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNetworks(context.Background(), c)
+	_, err := GetNetworks(t.Context(), c)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing networks")
@@ -451,7 +450,7 @@ func TestGetVolumes(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	volumes, err := GetVolumes(context.Background(), c)
+	volumes, err := GetVolumes(t.Context(), c)
 
 	require.NoError(t, err)
 	require.Len(t, volumes, 4)
@@ -468,7 +467,7 @@ func TestGetVolumes_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	volumes, err := GetVolumes(context.Background(), c)
+	volumes, err := GetVolumes(t.Context(), c)
 
 	require.NoError(t, err)
 	assert.Empty(t, volumes)
@@ -479,7 +478,7 @@ func TestGetVolumes_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumes(context.Background(), c)
+	_, err := GetVolumes(t.Context(), c)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing volumes")

@@ -21,7 +21,7 @@ func (r *failReader) Read([]byte) (int, error) {
 
 func TestOSExecutor_SimpleCommand(t *testing.T) {
 	var e OSExecutor
-	stdout, stderr, err := e.Run(context.Background(), "echo", "hello")
+	stdout, stderr, err := e.Run(t.Context(), "echo", "hello")
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", stdout)
 	assert.Empty(t, stderr)
@@ -29,7 +29,7 @@ func TestOSExecutor_SimpleCommand(t *testing.T) {
 
 func TestOSExecutor_CapturesStderr(t *testing.T) {
 	var e OSExecutor
-	stdout, stderr, err := e.Run(context.Background(), "sh", "-c", "echo error >&2")
+	stdout, stderr, err := e.Run(t.Context(), "sh", "-c", "echo error >&2")
 	require.NoError(t, err)
 	assert.Empty(t, stdout)
 	assert.Equal(t, "error\n", stderr)
@@ -37,7 +37,7 @@ func TestOSExecutor_CapturesStderr(t *testing.T) {
 
 func TestOSExecutor_ExitError(t *testing.T) {
 	var e OSExecutor
-	_, _, err := e.Run(context.Background(), "sh", "-c", "exit 1")
+	_, _, err := e.Run(t.Context(), "sh", "-c", "exit 1")
 	require.Error(t, err)
 	var exitErr *exec.ExitError
 	assert.ErrorAs(t, err, &exitErr)
@@ -46,7 +46,7 @@ func TestOSExecutor_ExitError(t *testing.T) {
 
 func TestOSExecutor_ExitErrorPreservesOutput(t *testing.T) {
 	var e OSExecutor
-	stdout, stderr, err := e.Run(context.Background(), "sh", "-c", "echo out; echo err >&2; exit 2")
+	stdout, stderr, err := e.Run(t.Context(), "sh", "-c", "echo out; echo err >&2; exit 2")
 	require.Error(t, err)
 	assert.Equal(t, "out\n", stdout)
 	assert.Equal(t, "err\n", stderr)
@@ -54,12 +54,12 @@ func TestOSExecutor_ExitErrorPreservesOutput(t *testing.T) {
 
 func TestOSExecutor_CommandNotFound(t *testing.T) {
 	var e OSExecutor
-	_, _, err := e.Run(context.Background(), "nonexistent-command-xyz")
+	_, _, err := e.Run(t.Context(), "nonexistent-command-xyz")
 	require.Error(t, err)
 }
 
 func TestOSExecutor_ContextCanceled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	var e OSExecutor
 	_, _, err := e.Run(ctx, "sleep", "10")
@@ -69,7 +69,7 @@ func TestOSExecutor_ContextCanceled(t *testing.T) {
 func TestOSExecutor_WithStdin(t *testing.T) {
 	var e OSExecutor
 	stdin := strings.NewReader("hello from stdin")
-	stdout, stderr, err := e.RunWithStdin(context.Background(), stdin, "cat")
+	stdout, stderr, err := e.RunWithStdin(t.Context(), stdin, "cat")
 	require.NoError(t, err)
 	assert.Equal(t, "hello from stdin", stdout)
 	assert.Empty(t, stderr)
@@ -80,8 +80,8 @@ func TestMockExecutor_RecordsCalls(t *testing.T) {
 	m.AddResult("ok\n", "", nil)
 	m.AddResult("", "", nil)
 
-	m.Run(context.Background(), "docker", "ps")
-	m.Run(context.Background(), "docker", "run", "--rm", "alpine")
+	m.Run(t.Context(), "docker", "ps")
+	m.Run(t.Context(), "docker", "run", "--rm", "alpine")
 
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t, MockCall{Name: "docker", Args: []string{"ps"}}, m.Calls[0])
@@ -93,12 +93,12 @@ func TestMockExecutor_ReturnsResults(t *testing.T) {
 	m.AddResult("out1", "err1", nil)
 	m.AddResult("out2", "", fmt.Errorf("fail"))
 
-	stdout, stderr, err := m.Run(context.Background(), "cmd1")
+	stdout, stderr, err := m.Run(t.Context(), "cmd1")
 	assert.Equal(t, "out1", stdout)
 	assert.Equal(t, "err1", stderr)
 	assert.NoError(t, err)
 
-	stdout, stderr, err = m.Run(context.Background(), "cmd2")
+	stdout, stderr, err = m.Run(t.Context(), "cmd2")
 	assert.Equal(t, "out2", stdout)
 	assert.Empty(t, stderr)
 	assert.EqualError(t, err, "fail")
@@ -106,7 +106,7 @@ func TestMockExecutor_ReturnsResults(t *testing.T) {
 
 func TestMockExecutor_UnexpectedCall(t *testing.T) {
 	var m MockExecutor
-	_, _, err := m.Run(context.Background(), "docker", "ps")
+	_, _, err := m.Run(t.Context(), "docker", "ps")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected call")
 }
@@ -116,7 +116,7 @@ func TestMockExecutor_WithStdinError(t *testing.T) {
 	m.AddResult("", "", nil)
 
 	r := &failReader{}
-	_, _, err := m.RunWithStdin(context.Background(), r, "cmd")
+	_, _, err := m.RunWithStdin(t.Context(), r, "cmd")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mock: reading stdin")
 }
@@ -127,7 +127,7 @@ func TestMockExecutor_OnCall(t *testing.T) {
 		return MockResult{Stdout: "dispatched", Stderr: "", Err: nil}
 	}
 
-	stdout, _, err := m.Run(context.Background(), "docker", "ps")
+	stdout, _, err := m.Run(t.Context(), "docker", "ps")
 	require.NoError(t, err)
 	assert.Equal(t, "dispatched", stdout)
 	require.Len(t, m.Calls, 1)
@@ -138,7 +138,7 @@ func TestMockExecutor_WithStdin(t *testing.T) {
 	m.AddResult("", "", nil)
 
 	stdin := strings.NewReader("key-data")
-	m.RunWithStdin(context.Background(), stdin, "docker", "exec", "-i", "node")
+	m.RunWithStdin(t.Context(), stdin, "docker", "exec", "-i", "node")
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, "docker", m.Calls[0].Name)

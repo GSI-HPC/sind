@@ -73,7 +73,7 @@ func TestVolumeExists_True(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil)
 	c := NewClient(&m)
 
-	exists, err := c.VolumeExists(context.Background(), testVolumeName)
+	exists, err := c.VolumeExists(t.Context(), testVolumeName)
 	require.NoError(t, err)
 	assert.True(t, exists)
 
@@ -87,7 +87,7 @@ func TestVolumeExists_False(t *testing.T) {
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	c := NewClient(&m)
 
-	exists, err := c.VolumeExists(context.Background(), testVolumeName)
+	exists, err := c.VolumeExists(t.Context(), testVolumeName)
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
@@ -97,7 +97,7 @@ func TestVolumeExists_OtherError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
-	exists, err := c.VolumeExists(context.Background(), testVolumeName)
+	exists, err := c.VolumeExists(t.Context(), testVolumeName)
 	assert.Error(t, err)
 	assert.False(t, exists)
 }
@@ -107,7 +107,7 @@ func TestCreateVolume(t *testing.T) {
 	m.AddResult(string(testVolumeName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.CreateVolume(context.Background(), testVolumeName)
+	err := c.CreateVolume(t.Context(), testVolumeName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -119,7 +119,7 @@ func TestCreateVolume_Error(t *testing.T) {
 	m.AddResult("", "Error response from daemon: create volume failed\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.CreateVolume(context.Background(), testVolumeName)
+	err := c.CreateVolume(t.Context(), testVolumeName)
 	assert.Error(t, err)
 }
 
@@ -128,7 +128,7 @@ func TestRemoveVolume(t *testing.T) {
 	m.AddResult(string(testVolumeName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.RemoveVolume(context.Background(), testVolumeName)
+	err := c.RemoveVolume(t.Context(), testVolumeName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -140,7 +140,7 @@ func TestRemoveVolume_Error(t *testing.T) {
 	m.AddResult("", "Error: No such volume: "+string(testVolumeName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.RemoveVolume(context.Background(), testVolumeName)
+	err := c.RemoveVolume(t.Context(), testVolumeName)
 	assert.Error(t, err)
 }
 
@@ -153,7 +153,7 @@ func TestListVolumes(t *testing.T) {
 	m.AddResult(volumeLsJSON, "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListVolumes(context.Background(), "name=sind-dev")
+	entries, err := c.ListVolumes(t.Context(), "name=sind-dev")
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 
@@ -171,7 +171,7 @@ func TestListVolumes_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListVolumes(context.Background(), "name=nonexistent")
+	entries, err := c.ListVolumes(t.Context(), "name=nonexistent")
 	require.NoError(t, err)
 	assert.Nil(t, entries)
 }
@@ -181,7 +181,7 @@ func TestListVolumes_InvalidJSON(t *testing.T) {
 	m.AddResult("not json\n", "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListVolumes(context.Background())
+	entries, err := c.ListVolumes(t.Context())
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 	assert.Contains(t, err.Error(), "parsing volume ls output")
@@ -192,7 +192,7 @@ func TestListVolumes_Error(t *testing.T) {
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	entries, err := c.ListVolumes(context.Background())
+	entries, err := c.ListVolumes(t.Context())
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 }

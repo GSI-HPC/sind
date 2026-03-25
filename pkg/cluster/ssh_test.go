@@ -3,7 +3,6 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -108,7 +107,7 @@ func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	target, err := EnterTarget(context.Background(), client, "dev")
+	target, err := EnterTarget(t.Context(), client, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "submitter", target)
@@ -129,7 +128,7 @@ func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	target, err := EnterTarget(context.Background(), client, "dev")
+	target, err := EnterTarget(t.Context(), client, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "controller", target)
@@ -148,7 +147,7 @@ func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := EnterTarget(context.Background(), client, "dev")
+	_, err := EnterTarget(t.Context(), client, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no submitter or controller")
@@ -164,7 +163,7 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := EnterTarget(context.Background(), client, "dev")
+	_, err := EnterTarget(t.Context(), client, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no submitter or controller")
@@ -173,7 +172,7 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 func TestEnter_TargetSelection_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	_, err := EnterTarget(context.Background(), client, "dev")
+	_, err := EnterTarget(t.Context(), client, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -196,7 +195,7 @@ func TestExec_OneShot(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	args, err := ExecArgs(context.Background(), client, "dev", []string{"sinfo", "-N"})
+	args, err := ExecArgs(t.Context(), client, "dev", []string{"sinfo", "-N"})
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{
@@ -220,7 +219,7 @@ func TestExec_OneShotWithSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	args, err := ExecArgs(context.Background(), client, "dev", []string{"hostname"})
+	args, err := ExecArgs(t.Context(), client, "dev", []string{"hostname"})
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{
@@ -232,7 +231,7 @@ func TestExec_OneShotWithSubmitter(t *testing.T) {
 func TestExec_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	_, err := ExecArgs(context.Background(), client, "dev", []string{"hostname"})
+	_, err := ExecArgs(t.Context(), client, "dev", []string{"hostname"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")

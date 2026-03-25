@@ -3,7 +3,6 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -290,7 +289,7 @@ func TestCreateNode(t *testing.T) {
 	c := docker.NewClient(&m)
 	cfg := defaultRunConfig()
 
-	id, err := CreateNode(context.Background(), c, cfg)
+	id, err := CreateNode(t.Context(), c, cfg)
 	require.NoError(t, err)
 	assert.Equal(t, docker.ContainerID("abc123"), id)
 
@@ -314,7 +313,7 @@ func TestCreateNode_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(context.Background(), c, cfg)
+	_, err := CreateNode(t.Context(), c, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating container")
 	assert.Len(t, m.Calls, 1)
@@ -328,7 +327,7 @@ func TestCreateNode_ConnectError(t *testing.T) {
 	c := docker.NewClient(&m)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(context.Background(), c, cfg)
+	_, err := CreateNode(t.Context(), c, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "connecting")
 	assert.Contains(t, err.Error(), "mesh")
@@ -344,7 +343,7 @@ func TestCreateNode_StartError(t *testing.T) {
 	c := docker.NewClient(&m)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(context.Background(), c, cfg)
+	_, err := CreateNode(t.Context(), c, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting container")
 	assert.Len(t, m.Calls, 3)

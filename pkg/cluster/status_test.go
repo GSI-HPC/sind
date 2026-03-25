@@ -3,7 +3,6 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"os/exec"
 	"testing"
@@ -52,7 +51,7 @@ func TestGetNodeHealth_Controller(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-controller", "172.18.0.2")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -68,7 +67,7 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-compute-0", "172.18.0.3")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-compute-0", "compute")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -84,7 +83,7 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-submitter", "172.18.0.4")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-submitter", "submitter")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-submitter", "submitter")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -103,7 +102,7 @@ func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
 
 	require.NoError(t, err)
 	assert.Equal(t, "exited", health.Container)
@@ -117,7 +116,7 @@ func TestGetNodeHealth_InspectError(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+	_, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting container")
@@ -135,7 +134,7 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-compute-0", "compute")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -156,7 +155,7 @@ func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -175,7 +174,7 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-compute-0", "compute")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute")
 
 	require.NoError(t, err)
 	assert.Equal(t, "exited", health.Container)
@@ -197,7 +196,7 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -217,7 +216,7 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -245,7 +244,7 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(context.Background(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, health.IP)
@@ -262,7 +261,7 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // NetworkExists: sind-dev-net
 	c := docker.NewClient(&m)
 
-	health, err := GetNetworkHealth(context.Background(), c, "dev")
+	health, err := GetNetworkHealth(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, health.Mesh)
@@ -284,7 +283,7 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 	m.AddResult("", "Error: No such network\n", notFound)   // cluster net
 	c := docker.NewClient(&m)
 
-	health, err := GetNetworkHealth(context.Background(), c, "dev")
+	health, err := GetNetworkHealth(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.False(t, health.Mesh)
@@ -300,7 +299,7 @@ func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	m.AddResult("", "Error: No such network\n", notFound) // cluster net missing
 	c := docker.NewClient(&m)
 
-	health, err := GetNetworkHealth(context.Background(), c, "dev")
+	health, err := GetNetworkHealth(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, health.Mesh)
@@ -313,7 +312,7 @@ func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNetworkHealth(context.Background(), c, "dev")
+	_, err := GetNetworkHealth(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking mesh network")
@@ -325,7 +324,7 @@ func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon error")) // dns error
 	c := docker.NewClient(&m)
 
-	_, err := GetNetworkHealth(context.Background(), c, "dev")
+	_, err := GetNetworkHealth(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking DNS container")
@@ -338,7 +337,7 @@ func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon error")) // cluster net error
 	c := docker.NewClient(&m)
 
-	_, err := GetNetworkHealth(context.Background(), c, "dev")
+	_, err := GetNetworkHealth(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking cluster network")
@@ -351,7 +350,7 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // cluster net
 	c := docker.NewClient(&m)
 
-	_, err := GetNetworkHealth(context.Background(), c, "default")
+	_, err := GetNetworkHealth(t.Context(), c, "default")
 
 	require.NoError(t, err)
 	// Verify cluster network name uses default.
@@ -367,7 +366,7 @@ func TestGetVolumeHealth_AllExist(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // data
 	c := docker.NewClient(&m)
 
-	health, err := GetVolumeHealth(context.Background(), c, "dev")
+	health, err := GetVolumeHealth(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, health.Config)
@@ -389,7 +388,7 @@ func TestGetVolumeHealth_NoneExist(t *testing.T) {
 	m.AddResult("", "Error: No such volume\n", notFound) // data
 	c := docker.NewClient(&m)
 
-	health, err := GetVolumeHealth(context.Background(), c, "dev")
+	health, err := GetVolumeHealth(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.False(t, health.Config)
@@ -405,7 +404,7 @@ func TestGetVolumeHealth_PartialExist(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil)                       // data exists
 	c := docker.NewClient(&m)
 
-	health, err := GetVolumeHealth(context.Background(), c, "dev")
+	health, err := GetVolumeHealth(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, health.Config)
@@ -418,7 +417,7 @@ func TestGetVolumeHealth_CheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumeHealth(context.Background(), c, "dev")
+	_, err := GetVolumeHealth(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume sind-dev-config")
@@ -431,7 +430,7 @@ func TestGetVolumeHealth_DefaultCluster(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // data
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumeHealth(context.Background(), c, "default")
+	_, err := GetVolumeHealth(t.Context(), c, "default")
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"volume", "inspect", "sind-default-config"}, m.Calls[0].Args)
@@ -518,7 +517,7 @@ func TestGetStatus_Full(t *testing.T) {
 	m.OnCall = fullStatusOnCall(t)
 	c := docker.NewClient(&m)
 
-	status, err := GetStatus(context.Background(), c, "dev")
+	status, err := GetStatus(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "dev", status.Name)
@@ -567,7 +566,7 @@ func TestGetStatus_Empty(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	status, err := GetStatus(context.Background(), c, "dev")
+	status, err := GetStatus(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "dev", status.Name)
@@ -580,7 +579,7 @@ func TestGetStatus_ListError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetStatus(context.Background(), c, "dev")
+	_, err := GetStatus(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -605,7 +604,7 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	_, err := GetStatus(context.Background(), c, "dev")
+	_, err := GetStatus(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking node controller")
@@ -623,7 +622,7 @@ func TestGetStatus_NetworkHealthError(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	_, err := GetStatus(context.Background(), c, "dev")
+	_, err := GetStatus(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking mesh network")
@@ -641,7 +640,7 @@ func TestGetStatus_VolumeHealthError(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	_, err := GetStatus(context.Background(), c, "dev")
+	_, err := GetStatus(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume")
@@ -685,7 +684,7 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	status, err := GetStatus(context.Background(), c, "dev")
+	status, err := GetStatus(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, status.Nodes, 3)
@@ -723,7 +722,7 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	status, err := GetStatus(context.Background(), c, "dev")
+	status, err := GetStatus(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, StatusUnknown, status.Status)
@@ -738,7 +737,7 @@ func TestGetVolumeHealth_MungeCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon error")) // munge error
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumeHealth(context.Background(), c, "dev")
+	_, err := GetVolumeHealth(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume sind-dev-munge")
@@ -752,7 +751,7 @@ func TestGetVolumeHealth_DataCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon error")) // data error
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumeHealth(context.Background(), c, "dev")
+	_, err := GetVolumeHealth(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume sind-dev-data")

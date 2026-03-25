@@ -214,7 +214,7 @@ func TestRunContainer(t *testing.T) {
 	m.AddResult(string(containerID)+"\n", "", nil)
 	c := NewClient(&m)
 
-	id, err := c.RunContainer(context.Background(),
+	id, err := c.RunContainer(t.Context(),
 		"--name", string(testContainerName),
 		"--label", "sind.cluster=dev",
 		"alpine",
@@ -237,7 +237,7 @@ func TestRunContainer_Error(t *testing.T) {
 	m.AddResult("", "docker: Error response from daemon: Conflict.\n", fmt.Errorf("exit status 125"))
 	c := NewClient(&m)
 
-	id, err := c.RunContainer(context.Background(), "alpine")
+	id, err := c.RunContainer(t.Context(), "alpine")
 	assert.Error(t, err)
 	assert.Empty(t, id)
 }
@@ -247,7 +247,7 @@ func TestStartContainer(t *testing.T) {
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.StartContainer(context.Background(), testContainerName)
+	err := c.StartContainer(t.Context(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -259,7 +259,7 @@ func TestStartContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.StartContainer(context.Background(), testContainerName)
+	err := c.StartContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 }
 
@@ -268,7 +268,7 @@ func TestStopContainer(t *testing.T) {
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.StopContainer(context.Background(), testContainerName)
+	err := c.StopContainer(t.Context(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -280,7 +280,7 @@ func TestStopContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.StopContainer(context.Background(), testContainerName)
+	err := c.StopContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 }
 
@@ -289,7 +289,7 @@ func TestRemoveContainer(t *testing.T) {
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.RemoveContainer(context.Background(), testContainerName)
+	err := c.RemoveContainer(t.Context(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -301,7 +301,7 @@ func TestRemoveContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.RemoveContainer(context.Background(), testContainerName)
+	err := c.RemoveContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 }
 
@@ -310,7 +310,7 @@ func TestPauseContainer(t *testing.T) {
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.PauseContainer(context.Background(), testContainerName)
+	err := c.PauseContainer(t.Context(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -322,7 +322,7 @@ func TestPauseContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: container is not running\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.PauseContainer(context.Background(), testContainerName)
+	err := c.PauseContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 }
 
@@ -331,7 +331,7 @@ func TestUnpauseContainer(t *testing.T) {
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.UnpauseContainer(context.Background(), testContainerName)
+	err := c.UnpauseContainer(t.Context(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -343,7 +343,7 @@ func TestUnpauseContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: container is not paused\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.UnpauseContainer(context.Background(), testContainerName)
+	err := c.UnpauseContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 }
 
@@ -352,7 +352,7 @@ func TestKillContainer(t *testing.T) {
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.KillContainer(context.Background(), testContainerName)
+	err := c.KillContainer(t.Context(), testContainerName)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -364,7 +364,7 @@ func TestKillContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.KillContainer(context.Background(), testContainerName)
+	err := c.KillContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 }
 
@@ -373,7 +373,7 @@ func TestSignalContainer(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.SignalContainer(context.Background(), testContainerName, "HUP")
+	err := c.SignalContainer(t.Context(), testContainerName, "HUP")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -385,7 +385,7 @@ func TestSignalContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.SignalContainer(context.Background(), testContainerName, "HUP")
+	err := c.SignalContainer(t.Context(), testContainerName, "HUP")
 	assert.Error(t, err)
 }
 
@@ -407,7 +407,7 @@ func TestInspectContainer(t *testing.T) {
 	m.AddResult(inspectJSON, "", nil)
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainerName)
+	info, err := c.InspectContainer(t.Context(), testContainerName)
 	require.NoError(t, err)
 
 	assert.Equal(t, ContainerID("94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca"), info.ID)
@@ -431,7 +431,7 @@ func TestInspectContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such object: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainerName)
+	info, err := c.InspectContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 	assert.Nil(t, info)
 }
@@ -441,7 +441,7 @@ func TestInspectContainer_InvalidJSON(t *testing.T) {
 	m.AddResult("not json", "", nil)
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainerName)
+	info, err := c.InspectContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 	assert.Nil(t, info)
 	assert.Contains(t, err.Error(), "parsing inspect output")
@@ -452,7 +452,7 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	m.AddResult("[]", "", nil)
 	c := NewClient(&m)
 
-	info, err := c.InspectContainer(context.Background(), testContainerName)
+	info, err := c.InspectContainer(t.Context(), testContainerName)
 	assert.Error(t, err)
 	assert.Nil(t, info)
 	assert.Contains(t, err.Error(), "no results")
@@ -466,7 +466,7 @@ func TestListContainers(t *testing.T) {
 	m.AddResult(psJSON, "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListContainers(context.Background(), "label=sind.cluster=dev")
+	entries, err := c.ListContainers(t.Context(), "label=sind.cluster=dev")
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 
@@ -488,7 +488,7 @@ func TestListContainers_NoLabels(t *testing.T) {
 	m.AddResult(noLabelsJSON, "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListContainers(context.Background())
+	entries, err := c.ListContainers(t.Context())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Nil(t, entries[0].Labels)
@@ -499,7 +499,7 @@ func TestListContainers_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListContainers(context.Background(), "label=sind.cluster=none")
+	entries, err := c.ListContainers(t.Context(), "label=sind.cluster=none")
 	require.NoError(t, err)
 	assert.Nil(t, entries)
 }
@@ -509,7 +509,7 @@ func TestListContainers_MultipleFilters(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	c.ListContainers(context.Background(), "label=sind.cluster=dev", "label=sind.role=controller")
+	c.ListContainers(t.Context(), "label=sind.cluster=dev", "label=sind.role=controller")
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{
@@ -524,7 +524,7 @@ func TestListContainers_InvalidJSON(t *testing.T) {
 	m.AddResult("not json\n", "", nil)
 	c := NewClient(&m)
 
-	entries, err := c.ListContainers(context.Background())
+	entries, err := c.ListContainers(t.Context())
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 	assert.Contains(t, err.Error(), "parsing ps output")
@@ -535,7 +535,7 @@ func TestListContainers_Error(t *testing.T) {
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	entries, err := c.ListContainers(context.Background())
+	entries, err := c.ListContainers(t.Context())
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 }
@@ -545,7 +545,7 @@ func TestExec(t *testing.T) {
 	m.AddResult("ssh-ed25519 AAAA...\n", "", nil)
 	c := NewClient(&m)
 
-	stdout, err := c.Exec(context.Background(), testContainerName, "cat", "/etc/ssh/ssh_host_ed25519_key.pub")
+	stdout, err := c.Exec(t.Context(), testContainerName, "cat", "/etc/ssh/ssh_host_ed25519_key.pub")
 	require.NoError(t, err)
 	assert.Equal(t, "ssh-ed25519 AAAA...\n", stdout)
 
@@ -558,7 +558,7 @@ func TestExec_Error(t *testing.T) {
 	m.AddResult("", "OCI runtime exec failed\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	stdout, err := c.Exec(context.Background(), testContainerName, "false")
+	stdout, err := c.Exec(t.Context(), testContainerName, "false")
 	assert.Error(t, err)
 	assert.Empty(t, stdout)
 }
@@ -569,7 +569,7 @@ func TestExecWithStdin(t *testing.T) {
 	c := NewClient(&m)
 
 	stdin := strings.NewReader("ssh-ed25519 AAAA... root@sind\n")
-	err := c.ExecWithStdin(context.Background(), testContainerName, stdin, "sh", "-c", "cat >> /root/.ssh/authorized_keys")
+	err := c.ExecWithStdin(t.Context(), testContainerName, stdin, "sh", "-c", "cat >> /root/.ssh/authorized_keys")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -583,7 +583,7 @@ func TestExecWithStdin_Error(t *testing.T) {
 	c := NewClient(&m)
 
 	stdin := strings.NewReader("data")
-	err := c.ExecWithStdin(context.Background(), testContainerName, stdin, "cat")
+	err := c.ExecWithStdin(t.Context(), testContainerName, stdin, "cat")
 	assert.Error(t, err)
 }
 
@@ -592,7 +592,7 @@ func TestReadFile(t *testing.T) {
 	m.AddResult("line1\nline2\n", "", nil)
 	c := NewClient(&m)
 
-	content, err := c.ReadFile(context.Background(), testContainerName, "/etc/hosts")
+	content, err := c.ReadFile(t.Context(), testContainerName, "/etc/hosts")
 	require.NoError(t, err)
 	assert.Equal(t, "line1\nline2\n", content)
 
@@ -605,7 +605,7 @@ func TestReadFile_Error(t *testing.T) {
 	m.AddResult("", "cat: /missing: No such file\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	_, err := c.ReadFile(context.Background(), testContainerName, "/missing")
+	_, err := c.ReadFile(t.Context(), testContainerName, "/missing")
 	assert.Error(t, err)
 }
 
@@ -614,7 +614,7 @@ func TestWriteFile(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.WriteFile(context.Background(), testContainerName, "/tmp/out", "hello\n")
+	err := c.WriteFile(t.Context(), testContainerName, "/tmp/out", "hello\n")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -627,7 +627,7 @@ func TestWriteFile_Error(t *testing.T) {
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.WriteFile(context.Background(), testContainerName, "/tmp/out", "data")
+	err := c.WriteFile(t.Context(), testContainerName, "/tmp/out", "data")
 	assert.Error(t, err)
 }
 
@@ -636,7 +636,7 @@ func TestAppendFile(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	err := c.AppendFile(context.Background(), testContainerName, "/tmp/log", "new line\n")
+	err := c.AppendFile(t.Context(), testContainerName, "/tmp/log", "new line\n")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -649,7 +649,7 @@ func TestAppendFile_Error(t *testing.T) {
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.AppendFile(context.Background(), testContainerName, "/tmp/log", "data")
+	err := c.AppendFile(t.Context(), testContainerName, "/tmp/log", "data")
 	assert.Error(t, err)
 }
 
@@ -658,7 +658,7 @@ func TestContainerExists_True(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil)
 	c := NewClient(&m)
 
-	exists, err := c.ContainerExists(context.Background(), testContainerName)
+	exists, err := c.ContainerExists(t.Context(), testContainerName)
 	require.NoError(t, err)
 	assert.True(t, exists)
 
@@ -672,7 +672,7 @@ func TestContainerExists_False(t *testing.T) {
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	c := NewClient(&m)
 
-	exists, err := c.ContainerExists(context.Background(), testContainerName)
+	exists, err := c.ContainerExists(t.Context(), testContainerName)
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
@@ -682,7 +682,7 @@ func TestContainerExists_OtherError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
-	exists, err := c.ContainerExists(context.Background(), testContainerName)
+	exists, err := c.ContainerExists(t.Context(), testContainerName)
 	assert.Error(t, err)
 	assert.False(t, exists)
 }
@@ -694,7 +694,7 @@ func TestCreateContainer(t *testing.T) {
 	m.AddResult(string(containerID)+"\n", "", nil)
 	c := NewClient(&m)
 
-	id, err := c.CreateContainer(context.Background(),
+	id, err := c.CreateContainer(t.Context(),
 		"--name", string(testContainerName),
 		"--network", "sind-mesh",
 		"coredns/coredns:latest",
@@ -716,7 +716,7 @@ func TestCreateContainer_Error(t *testing.T) {
 	m.AddResult("", "docker: Error response from daemon: Conflict.\n", fmt.Errorf("exit status 125"))
 	c := NewClient(&m)
 
-	id, err := c.CreateContainer(context.Background(), "alpine")
+	id, err := c.CreateContainer(t.Context(), "alpine")
 	assert.Error(t, err)
 	assert.Empty(t, id)
 }
@@ -730,7 +730,7 @@ func TestCopyToContainer(t *testing.T) {
 		"Corefile": []byte(".:53 { whoami }\n"),
 		"hosts":    []byte(""),
 	}
-	err := c.CopyToContainer(context.Background(), testContainerName, "/", files)
+	err := c.CopyToContainer(t.Context(), testContainerName, "/", files)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -757,7 +757,7 @@ func TestCopyToContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.CopyToContainer(context.Background(), testContainerName, "/", map[string][]byte{"f": []byte("x")})
+	err := c.CopyToContainer(t.Context(), testContainerName, "/", map[string][]byte{"f": []byte("x")})
 	assert.Error(t, err)
 }
 
@@ -774,7 +774,7 @@ func TestCopyFromContainer(t *testing.T) {
 	m.AddResult(buf.String(), "", nil)
 	c := NewClient(&m)
 
-	data, err := c.CopyFromContainer(context.Background(), testContainerName, "/hosts")
+	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
 	require.NoError(t, err)
 	assert.Equal(t, content, data)
 
@@ -787,7 +787,7 @@ func TestCopyFromContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	data, err := c.CopyFromContainer(context.Background(), testContainerName, "/hosts")
+	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
 	assert.Error(t, err)
 	assert.Nil(t, data)
 }
@@ -797,7 +797,7 @@ func TestCopyFromContainer_InvalidTar(t *testing.T) {
 	m.AddResult("not a tar archive", "", nil)
 	c := NewClient(&m)
 
-	data, err := c.CopyFromContainer(context.Background(), testContainerName, "/hosts")
+	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
 	assert.Error(t, err)
 	assert.Nil(t, data)
 	assert.Contains(t, err.Error(), "reading tar output")
@@ -815,7 +815,7 @@ func TestCopyFromContainer_TruncatedTar(t *testing.T) {
 	m.AddResult(buf.String(), "", nil)
 	c := NewClient(&m)
 
-	data, err := c.CopyFromContainer(context.Background(), testContainerName, "/hosts")
+	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
 	assert.Error(t, err)
 	assert.Nil(t, data)
 	assert.Contains(t, err.Error(), "reading file content")
@@ -831,7 +831,7 @@ func TestCopyFromContainer_EmptyTar(t *testing.T) {
 	m.AddResult(buf.String(), "", nil)
 	c := NewClient(&m)
 
-	data, err := c.CopyFromContainer(context.Background(), testContainerName, "/nonexistent")
+	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/nonexistent")
 	assert.Error(t, err)
 	assert.Nil(t, data)
 	assert.Contains(t, err.Error(), "file not found in tar output")

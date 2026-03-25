@@ -112,7 +112,7 @@ func TestCreateClusterNetwork(t *testing.T) {
 	m.AddResult("net-id-123\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := CreateClusterNetwork(context.Background(), c, "dev")
+	err := CreateClusterNetwork(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
@@ -124,7 +124,7 @@ func TestCreateClusterNetwork_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("network already exists"))
 	c := docker.NewClient(&m)
 
-	err := CreateClusterNetwork(context.Background(), c, "dev")
+	err := CreateClusterNetwork(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating cluster network")
@@ -139,7 +139,7 @@ func TestCreateClusterVolumes(t *testing.T) {
 	m.AddResult("", "", nil) // data
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(context.Background(), c, "dev")
+	err := CreateClusterVolumes(t.Context(), c, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -154,7 +154,7 @@ func TestCreateClusterVolumes_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("volume create failed")) // munge fails
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(context.Background(), c, "dev")
+	err := CreateClusterVolumes(t.Context(), c, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "munge")
@@ -177,7 +177,7 @@ func TestWriteClusterConfig(t *testing.T) {
 			{Role: "compute", Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
-	err := WriteClusterConfig(context.Background(), c, cfg, "busybox:latest")
+	err := WriteClusterConfig(t.Context(), c, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -201,7 +201,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(context.Background(), c, cfg, "busybox:latest")
+	err := WriteClusterConfig(t.Context(), c, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating config helper")
@@ -215,7 +215,7 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(context.Background(), c, cfg, "busybox:latest")
+	err := WriteClusterConfig(t.Context(), c, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing slurm config")
@@ -235,7 +235,7 @@ func TestWriteMungeKey(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	key := []byte("test-munge-key-data")
-	err := WriteMungeKey(context.Background(), c, "dev", key, "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, "dev", key, "busybox:latest")
 
 	require.NoError(t, err)
 
@@ -254,7 +254,7 @@ func TestWriteMungeKey_RunError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("run failed"))
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating munge helper")
@@ -268,7 +268,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing munge key")
@@ -284,7 +284,7 @@ func TestWriteMungeKey_ChownError(t *testing.T) {
 	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fixing munge key ownership")
@@ -300,7 +300,7 @@ func TestWriteMungeKey_ChmodError(t *testing.T) {
 	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fixing munge key permissions")
@@ -514,7 +514,7 @@ func TestCreateClusterNodes(t *testing.T) {
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
-	err := CreateClusterNodes(context.Background(), c, configs)
+	err := CreateClusterNodes(t.Context(), c, configs)
 
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 6) // 2 nodes × 3 calls each
@@ -537,7 +537,7 @@ func TestCreateClusterNodes_Error(t *testing.T) {
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
-	err := CreateClusterNodes(context.Background(), c, configs)
+	err := CreateClusterNodes(t.Context(), c, configs)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "compute-0")
@@ -548,7 +548,7 @@ func TestCreateClusterNodes_Empty(t *testing.T) {
 	var m docker.MockExecutor
 	c := docker.NewClient(&m)
 
-	err := CreateClusterNodes(context.Background(), c, nil)
+	err := CreateClusterNodes(t.Context(), c, nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
@@ -567,7 +567,7 @@ func TestEnableSlurmServices(t *testing.T) {
 		{ClusterName: "dev", ShortName: "compute-0", Role: "compute", Managed: true},
 	}
 
-	err := EnableSlurmServices(context.Background(), c, configs)
+	err := EnableSlurmServices(t.Context(), c, configs)
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 2)
@@ -587,7 +587,7 @@ func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
 		{ClusterName: "dev", ShortName: "submitter", Role: "submitter"},
 	}
 
-	err := EnableSlurmServices(context.Background(), c, configs)
+	err := EnableSlurmServices(t.Context(), c, configs)
 
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 1) // only controller
@@ -607,7 +607,7 @@ func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
 	// Need result for compute-1 slurmd
 	m.AddResult("", "", nil)
 
-	err := EnableSlurmServices(context.Background(), c, configs)
+	err := EnableSlurmServices(t.Context(), c, configs)
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 2)
@@ -624,7 +624,7 @@ func TestEnableSlurmServices_Error(t *testing.T) {
 		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
 	}
 
-	err := EnableSlurmServices(context.Background(), c, configs)
+	err := EnableSlurmServices(t.Context(), c, configs)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "enabling slurmctld on controller")
@@ -820,7 +820,7 @@ func TestCreate_FullCluster(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	cluster, err := Create(ctx, client, meshMgr, createCfg(), 1*time.Millisecond)
@@ -850,7 +850,7 @@ func TestCreate_PreflightFails(t *testing.T) {
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
 
-	cluster, err := Create(context.Background(), client, meshMgr, createCfg(), time.Millisecond)
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "conflicting resources")
@@ -870,7 +870,7 @@ func TestCreate_ResolveInfraFails(t *testing.T) {
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
 
-	cluster, err := Create(context.Background(), client, meshMgr, createCfg(), time.Millisecond)
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting DNS container")
@@ -890,7 +890,7 @@ func TestCreate_CreateResourcesFails(t *testing.T) {
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
 
-	cluster, err := Create(context.Background(), client, meshMgr, createCfg(), time.Millisecond)
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating cluster network")
@@ -911,7 +911,7 @@ func TestCreate_NodeCreationFails(t *testing.T) {
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
 
-	cluster, err := Create(context.Background(), client, meshMgr, createCfg(), time.Millisecond)
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "node")
@@ -934,7 +934,7 @@ func TestCreate_SetupNodesFails(t *testing.T) {
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	cluster, err := Create(ctx, client, meshMgr, createCfg(), 10*time.Millisecond)
@@ -957,7 +957,7 @@ func TestCreate_RegisterMeshFails(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	cluster, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
@@ -979,7 +979,7 @@ func TestCreate_EnableSlurmFails(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	cluster, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
@@ -1012,7 +1012,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
@@ -1045,7 +1045,7 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
@@ -1078,7 +1078,7 @@ func TestResolveInfra_SSHKeyError(t *testing.T) {
 	client := docker.NewClient(&m)
 	cfg := createCfg()
 
-	_, _, _, err := resolveInfra(context.Background(), client, cfg)
+	_, _, _, err := resolveInfra(t.Context(), client, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading SSH public key")
@@ -1102,7 +1102,7 @@ func TestResolveInfra_SlurmVersionError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, _, _, err := resolveInfra(context.Background(), client, createCfg())
+	_, _, _, err := resolveInfra(t.Context(), client, createCfg())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "discovering Slurm version")
@@ -1144,7 +1144,7 @@ func TestSetupNodes_InspectError(t *testing.T) {
 	client := docker.NewClient(&m)
 	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	_, err := setupNodes(ctx, client, "dev", "ssh-key", configs, time.Millisecond)
 
@@ -1177,7 +1177,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 	client := docker.NewClient(&m)
 	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	_, err := setupNodes(ctx, client, "dev", "ssh-key", configs, time.Millisecond)
 
@@ -1215,7 +1215,7 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	client := docker.NewClient(&m)
 	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	_, err := setupNodes(ctx, client, "dev", "ssh-key", configs, time.Millisecond)
 
@@ -1241,7 +1241,7 @@ func TestRegisterMesh_DNSError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerMesh(context.Background(), meshMgr, "dev", "25.11.0", configs, results)
+	_, err := registerMesh(t.Context(), meshMgr, "dev", "25.11.0", configs, results)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "registering DNS")
@@ -1282,7 +1282,7 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerMesh(context.Background(), meshMgr, "dev", "25.11.0", configs, results)
+	_, err := registerMesh(t.Context(), meshMgr, "dev", "25.11.0", configs, results)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "registering host key")
@@ -1304,7 +1304,7 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	client := docker.NewClient(&m)
 	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	err := enableSlurm(ctx, client, "dev", configs, 10*time.Millisecond)
 

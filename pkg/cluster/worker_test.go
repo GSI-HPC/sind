@@ -52,7 +52,7 @@ func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(context.Background(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -78,7 +78,7 @@ func TestWorkerAdd_RequiresSindNodes_Present(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(context.Background(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -104,7 +104,7 @@ func TestWorkerAdd_AllowsUnmanaged(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(context.Background(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		Unmanaged:   true,
@@ -124,7 +124,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(context.Background(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -144,7 +144,7 @@ func TestWorkerAdd_ClusterNotFound_Unmanaged(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(context.Background(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		Unmanaged:   true,
@@ -164,7 +164,7 @@ func TestWorkerAdd_ListContainersError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(context.Background(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -189,7 +189,7 @@ func TestNextComputeIndex_Empty(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(context.Background(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, idx)
@@ -206,7 +206,7 @@ func TestNextComputeIndex_Sequential(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(context.Background(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, idx)
@@ -223,7 +223,7 @@ func TestNextComputeIndex_Gap(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(context.Background(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 4, idx)
@@ -245,7 +245,7 @@ func TestNextComputeIndex_NonComputeIgnored(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(context.Background(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, idx)
@@ -261,7 +261,7 @@ func TestNextComputeIndex_ListError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := NextComputeIndex(context.Background(), client, "dev")
+	_, err := NextComputeIndex(t.Context(), client, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing cluster containers")
@@ -387,7 +387,7 @@ func TestWorkerAdd_Managed(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -441,7 +441,7 @@ func TestWorkerAdd_Managed_UsesControllerImage(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -476,7 +476,7 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	_, err := WorkerAdd(context.Background(), client, mgr, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		CPUs:        2,
@@ -496,7 +496,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -607,7 +607,7 @@ func TestWorkerRemove_Managed(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-1"})
 
 	require.NoError(t, err)
 
@@ -649,7 +649,7 @@ func TestWorkerRemove_NodeNotFound(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-99"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-99"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -664,7 +664,7 @@ func TestWorkerRemove_Unmanaged(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-1"})
 
 	require.NoError(t, err)
 
@@ -699,7 +699,7 @@ func TestWorkerAdd_MultipleNodes(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -732,7 +732,7 @@ func TestWorkerAdd_ExplicitImage(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -767,7 +767,7 @@ func TestWorkerAdd_InfraError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	_, err := WorkerAdd(context.Background(), client, mgr, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		CPUs:        2,
@@ -792,7 +792,7 @@ func TestWorkerAdd_SindNodesConfMissing(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	_, err := WorkerAdd(context.Background(), client, mgr, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		CPUs:        2,
@@ -812,7 +812,7 @@ func TestWorkerAdd_InvalidMemory(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -838,7 +838,7 @@ func TestWorkerRemove_MultipleNodes(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-0", "compute-1"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-0", "compute-1"})
 
 	require.NoError(t, err)
 
@@ -867,7 +867,7 @@ func TestWorkerRemove_ListContainersError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-0"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing cluster containers")
@@ -880,7 +880,7 @@ func TestWorkerAdd_DefaultCount(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -902,7 +902,7 @@ func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -963,7 +963,7 @@ func TestWorkerRemove_NoController(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-0"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-0"})
 
 	require.NoError(t, err)
 
@@ -1003,7 +1003,7 @@ func TestNextComputeIndex_NonNumericSuffix(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(context.Background(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, idx)
@@ -1021,7 +1021,7 @@ func TestWorkerRemove_RejectsController(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"controller"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"controller"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only compute nodes")
@@ -1045,7 +1045,7 @@ func TestWorkerRemove_RejectsSubmitter(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"submitter"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"submitter"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only compute nodes")
@@ -1058,7 +1058,7 @@ func TestWorkerRemove_DuplicateNames(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1", "compute-1"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-1", "compute-1"})
 
 	require.NoError(t, err)
 
@@ -1080,7 +1080,7 @@ func TestWorkerRemove_EmptyNames(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", nil)
+	err := WorkerRemove(t.Context(), client, mgr, "dev", nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls, "no docker calls should be made for empty shortNames")
@@ -1093,7 +1093,7 @@ func TestWorkerAdd_NegativeCount(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1122,7 +1122,7 @@ func TestWorkerAdd_ListError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	_, err := WorkerAdd(context.Background(), client, mgr, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	}, time.Millisecond)
 
@@ -1142,7 +1142,7 @@ func TestWorkerAdd_CreateNodeError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1165,7 +1165,7 @@ func TestWorkerAdd_SetupNodesError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1188,7 +1188,7 @@ func TestWorkerAdd_RegisterNodesError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1211,7 +1211,7 @@ func TestWorkerAdd_EnableSlurmError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1233,7 +1233,7 @@ func TestWorkerAdd_ControllerInspectError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	_, err := WorkerAdd(context.Background(), client, mgr, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	}, time.Millisecond)
 
@@ -1260,7 +1260,7 @@ func TestWorkerAdd_UpdateNodesConfReadError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1284,7 +1284,7 @@ func TestWorkerAdd_WriteNodesConfError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1307,7 +1307,7 @@ func TestWorkerAdd_ScontrolReconfigureError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
@@ -1338,7 +1338,7 @@ func TestWorkerRemove_RemoveNodesConfError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-1"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating sind-nodes.conf")
@@ -1356,7 +1356,7 @@ func TestWorkerRemove_DeregisterMeshError(t *testing.T) {
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client)
 
-	err := WorkerRemove(context.Background(), client, mgr, "dev", []string{"compute-1"})
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"compute-1"})
 
 	require.Error(t, err)
 }

@@ -3,7 +3,6 @@
 package mesh
 
 import (
-	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
@@ -38,7 +37,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSHVolume(context.Background())
+	err := mgr.EnsureSSHVolume(t.Context())
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 5)
@@ -70,7 +69,7 @@ func TestEnsureSSHVolume_AlreadyExists(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSHVolume(context.Background())
+	err := mgr.EnsureSSHVolume(t.Context())
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
 }
@@ -81,7 +80,7 @@ func TestEnsureSSHVolume_CheckError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSHVolume(context.Background())
+	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "checking SSH volume")
 }
@@ -96,7 +95,7 @@ func TestEnsureSSHVolume_CreateVolumeError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSHVolume(context.Background())
+	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating SSH volume")
 }
@@ -113,7 +112,7 @@ func TestEnsureSSHVolume_CreateContainerError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSHVolume(context.Background())
+	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating temporary container")
 }
@@ -134,7 +133,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSHVolume(context.Background())
+	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing SSH keys")
 
@@ -158,7 +157,7 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSH(context.Background())
+	err := mgr.EnsureSSH(t.Context())
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 3)
@@ -180,7 +179,7 @@ func TestEnsureSSH_AlreadyExists(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSH(context.Background())
+	err := mgr.EnsureSSH(t.Context())
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
 }
@@ -191,7 +190,7 @@ func TestEnsureSSH_CheckError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSH(context.Background())
+	err := mgr.EnsureSSH(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "checking SSH container")
 }
@@ -206,7 +205,7 @@ func TestEnsureSSH_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSH(context.Background())
+	err := mgr.EnsureSSH(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating SSH container")
 }
@@ -223,7 +222,7 @@ func TestEnsureSSH_StartError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.EnsureSSH(context.Background())
+	err := mgr.EnsureSSH(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting SSH container")
 }
@@ -237,7 +236,7 @@ func TestAddKnownHost(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddKnownHost(context.Background(),
+	err := mgr.AddKnownHost(t.Context(),
 		"controller.dev.sind.local", "ssh-ed25519 AAAA...")
 	require.NoError(t, err)
 
@@ -255,7 +254,7 @@ func TestAddKnownHost_Error(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddKnownHost(context.Background(),
+	err := mgr.AddKnownHost(t.Context(),
 		"controller.dev.sind.local", "ssh-ed25519 AAAA...")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "adding known host controller.dev.sind.local")
@@ -275,7 +274,7 @@ func TestRemoveKnownHost(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 2)
@@ -291,7 +290,7 @@ func TestRemoveKnownHost_LastEntry(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
 
 	// Should write empty content.
@@ -309,7 +308,7 @@ func TestRemoveKnownHost_DuplicateHostnames(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
 
 	assert.Equal(t, "compute-0.dev.sind.local ssh-ed25519 CCCC...\n", m.Calls[1].Stdin)
@@ -324,7 +323,7 @@ func TestRemoveKnownHost_NotFound(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveKnownHost(context.Background(), "compute-0.dev.sind.local")
+	err := mgr.RemoveKnownHost(t.Context(), "compute-0.dev.sind.local")
 	require.NoError(t, err)
 
 	// Should preserve existing content.
@@ -337,7 +336,7 @@ func TestRemoveKnownHost_ReadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading known_hosts")
 }
@@ -349,7 +348,7 @@ func TestRemoveKnownHost_WriteError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveKnownHost(context.Background(), "controller.dev.sind.local")
+	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing known_hosts")
 }

@@ -3,7 +3,6 @@
 package docker
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -49,7 +48,7 @@ func TestImageExists_True(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil)
 	c := NewClient(&m)
 
-	exists, err := c.ImageExists(context.Background(), testImage)
+	exists, err := c.ImageExists(t.Context(), testImage)
 	require.NoError(t, err)
 	assert.True(t, exists)
 
@@ -63,7 +62,7 @@ func TestImageExists_False(t *testing.T) {
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	c := NewClient(&m)
 
-	exists, err := c.ImageExists(context.Background(), testImage)
+	exists, err := c.ImageExists(t.Context(), testImage)
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
@@ -73,7 +72,7 @@ func TestImageExists_OtherError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
-	exists, err := c.ImageExists(context.Background(), testImage)
+	exists, err := c.ImageExists(t.Context(), testImage)
 	assert.Error(t, err)
 	assert.False(t, exists)
 }
@@ -83,7 +82,7 @@ func TestRunEphemeral(t *testing.T) {
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := NewClient(&m)
 
-	stdout, err := c.RunEphemeral(context.Background(), testImage, "scontrol", "--version")
+	stdout, err := c.RunEphemeral(t.Context(), testImage, "scontrol", "--version")
 	require.NoError(t, err)
 	assert.Equal(t, "slurm 25.11.0\n", stdout)
 
@@ -96,7 +95,7 @@ func TestRunEphemeral_Error(t *testing.T) {
 	m.AddResult("", "Unable to find image\n", fmt.Errorf("exit status 125"))
 	c := NewClient(&m)
 
-	stdout, err := c.RunEphemeral(context.Background(), testImage, "scontrol", "--version")
+	stdout, err := c.RunEphemeral(t.Context(), testImage, "scontrol", "--version")
 	assert.Error(t, err)
 	assert.Empty(t, stdout)
 }
