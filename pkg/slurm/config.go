@@ -12,6 +12,8 @@ func GenerateSlurmConf(clusterName string) string {
 	b.WriteString("ClusterName=" + clusterName + "\n")
 	b.WriteString("SlurmctldHost=controller\n")
 	b.WriteString("SlurmUser=slurm\n")
+	b.WriteString("StateSaveLocation=/var/spool/slurmctld\n")
+	b.WriteString("SlurmdSpoolDir=/var/spool/slurmd\n")
 	b.WriteString("\n")
 	b.WriteString("ProctrackType=proctrack/cgroup\n")
 	b.WriteString("TaskPlugin=task/cgroup,task/affinity\n")
