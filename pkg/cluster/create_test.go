@@ -38,10 +38,10 @@ func TestClusterResourceLifecycle(t *testing.T) {
 		rec.AddResult("helper-id\n", "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
-		// WriteMungeKey (create helper, copy, start, chown, chmod, remove helper)
+		// WriteMungeKey (run helper, copy, chown, chmod, kill+remove helper)
 		rec.AddResult("helper-id\n", "", nil)
 		rec.AddResult("", "", nil)
-		rec.AddResult("helper-id\n", "", nil)
+		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
@@ -222,36 +222,32 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 
 func TestWriteMungeKey(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("abc123\n", "", nil)                // CreateContainer (helper)
-	m.AddResult("", "", nil)                        // CopyToContainer
-	m.AddResult("sind-dev-munge-helper\n", "", nil) // StartContainer
-	m.AddResult("", "", nil)                        // Exec chown
-	m.AddResult("", "", nil)                        // Exec chmod
-	m.AddResult("", "", nil)                        // RemoveContainer (defer)
+	m.AddResult("abc123\n", "", nil) // RunContainer (helper)
+	m.AddResult("", "", nil)         // CopyToContainer
+	m.AddResult("", "", nil)         // Exec chown
+	m.AddResult("", "", nil)         // Exec chmod
+	m.AddResult("", "", nil)         // KillContainer (defer)
+	m.AddResult("", "", nil)         // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
 	key := []byte("test-munge-key-data")
 	err := WriteMungeKey(context.Background(), c, "dev", key, "busybox:latest")
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 6)
 
-	// CreateContainer mounts munge volume
-	assert.Equal(t, "create", m.Calls[0].Args[0])
+	// RunContainer mounts munge volume
+	assert.Equal(t, "run", m.Calls[0].Args[0])
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-munge:/etc/munge")
 
-	// CopyToContainer writes to /etc/munge
+	// CopyToContainer + chown + chmod
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
-
-	// Start + chown + chmod
-	assert.Equal(t, []string{"start", "sind-dev-munge-helper"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chown", "munge:munge", "/etc/munge/munge.key"}, m.Calls[3].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chmod", "0400", "/etc/munge/munge.key"}, m.Calls[4].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chown", "munge:munge", "/etc/munge/munge.key"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chmod", "0400", "/etc/munge/munge.key"}, m.Calls[3].Args)
 }
 
-func TestWriteMungeKey_CreateError(t *testing.T) {
+func TestWriteMungeKey_RunError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("", "", fmt.Errorf("create failed"))
+	m.AddResult("", "", fmt.Errorf("run failed"))
 	c := docker.NewClient(&m)
 
 	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
@@ -262,8 +258,9 @@ func TestWriteMungeKey_CreateError(t *testing.T) {
 
 func TestWriteMungeKey_CopyError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("abc123\n", "", nil)             // CreateContainer
+	m.AddResult("abc123\n", "", nil)             // RunContainer
 	m.AddResult("", "", fmt.Errorf("cp failed")) // CopyToContainer
+	m.AddResult("", "", nil)                     // KillContainer (defer)
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
@@ -271,7 +268,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing munge key")
-	assert.Len(t, m.Calls, 3) // defer still runs
+	assert.Len(t, m.Calls, 4) // defer runs kill+rm
 }
 
 // --- NodeRunConfigs ---
@@ -690,6 +687,9 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 			return docker.MockResult{}
 		}
 		if args[0] == "create" {
+			return docker.MockResult{Stdout: "cid\n"}
+		}
+		if args[0] == "run" {
 			return docker.MockResult{Stdout: "cid\n"}
 		}
 		if args[0] == "cp" {

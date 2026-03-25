@@ -381,15 +381,19 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName strin
 	helperName := ContainerName(clusterName, "munge-helper")
 	volName := VolumeName(clusterName, "munge")
 
-	_, err := client.CreateContainer(ctx,
+	_, err := client.RunContainer(ctx,
 		"--name", string(helperName),
 		"-v", string(volName)+":/etc/munge",
 		image,
+		"sleep", "30",
 	)
 	if err != nil {
 		return fmt.Errorf("creating munge helper container: %w", err)
 	}
-	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
+	defer func() {
+		_ = client.KillContainer(ctx, helperName)
+		_ = client.RemoveContainer(ctx, helperName)
+	}()
 
 	err = client.CopyToContainer(ctx, helperName, "/etc/munge", map[string][]byte{
 		"munge.key": key,
@@ -399,9 +403,6 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName strin
 	}
 
 	// docker cp creates files as root; munge requires ownership by the munge user.
-	if err := client.StartContainer(ctx, helperName); err != nil {
-		return fmt.Errorf("starting munge helper: %w", err)
-	}
 	_, err = client.Exec(ctx, helperName, "chown", "munge:munge", "/etc/munge/munge.key")
 	if err != nil {
 		return fmt.Errorf("fixing munge key ownership: %w", err)
