@@ -89,8 +89,12 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "-v", string(VolumeName(cfg.ClusterName, "data"))+":"+dataMountPath+":rw,z")
 	}
 
-	// tmpfs
-	args = append(args, "--tmpfs", "/tmp:rw,nosuid,nodev,size="+cfg.TmpSize)
+	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
+	args = append(args,
+		"--tmpfs", "/tmp:rw,nosuid,nodev,size="+cfg.TmpSize,
+		"--tmpfs", "/run:exec,mode=755",
+		"--tmpfs", "/run/lock",
+	)
 
 	// Resource limits
 	args = append(args,
@@ -102,6 +106,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	args = append(args,
 		"--cgroupns", "private",
 		"--security-opt", "writable-cgroups=true",
+		"--security-opt", "label=disable",
 	)
 
 	// Labels

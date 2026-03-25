@@ -8,7 +8,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 ## Prerequisites
 
-- Linux host with cgroupv2
+- Linux host with cgroupv2 and `nsdelegate` mount option (`mount -o remount,nsdelegate /sys/fs/cgroup`)
 - Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true`)
 
 ## Supported Slurm Versions
@@ -516,6 +516,8 @@ Container mount flags:
 -v sind-<cluster>-munge:/etc/munge:ro,z    # all nodes
 -v sind-<cluster>-data:/data:rw,z          # all nodes
 --tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
+--tmpfs /run:exec,mode=755                 # systemd runtime
+--tmpfs /run/lock                          # systemd lock files
 ```
 
 ### Host Path Storage

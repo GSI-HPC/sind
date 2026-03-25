@@ -244,18 +244,19 @@ func TestBuildRunArgs_Resources(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "8g", memory)
 
-	tmpfs, ok := argValue(args, "--tmpfs")
-	assert.True(t, ok)
-	assert.Equal(t, "/tmp:rw,nosuid,nodev,size=2g", tmpfs)
+	tmpfs := argValues(args, "--tmpfs")
+	assert.Contains(t, tmpfs, "/tmp:rw,nosuid,nodev,size=2g")
+	assert.Contains(t, tmpfs, "/run:exec,mode=755")
+	assert.Contains(t, tmpfs, "/run/lock")
 }
 
 func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 
-	// writable-cgroups for cgroupv2 support (Docker 28+)
 	secOpts := argValues(args, "--security-opt")
 	assert.Contains(t, secOpts, "writable-cgroups=true")
+	assert.Contains(t, secOpts, "label=disable")
 
 	// Private cgroup namespace for systemd
 	cgroupns, ok := argValue(args, "--cgroupns")
