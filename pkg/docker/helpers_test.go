@@ -3,6 +3,8 @@
 package docker
 
 import (
+	"archive/tar"
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"testing"
@@ -61,6 +63,17 @@ func (r *testRecorder) AddResult(stdout, stderr string, err error) {
 // IsIntegration returns true when running against real Docker.
 func (r *testRecorder) IsIntegration() bool {
 	return r.mock == nil
+}
+
+// copyFromTar builds a tar archive containing a single file, as docker cp would return.
+func copyFromTar(content string) string {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	data := []byte(content)
+	_ = tw.WriteHeader(&tar.Header{Name: "file", Size: int64(len(data)), Mode: 0644})
+	_, _ = tw.Write(data)
+	_ = tw.Close()
+	return buf.String()
 }
 
 // inspectRunning returns mock docker inspect JSON for a running container.

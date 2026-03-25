@@ -110,13 +110,15 @@ func TestContainerExecAndFiles(t *testing.T) {
 	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)       // run
-		rec.AddResult("hello\n", "", nil)        // exec echo
-		rec.AddResult("", "", nil)               // write
-		rec.AddResult("", "", nil)               // append
-		rec.AddResult("line1\nline2\n", "", nil) // read
-		rec.AddResult(n+"\n", "", nil)           // kill (cleanup)
-		rec.AddResult(n+"\n", "", nil)           // rm (cleanup)
+		rec.AddResult("abc123\n", "", nil)               // run
+		rec.AddResult("hello\n", "", nil)                // exec echo
+		rec.AddResult("", "", nil)                       // write
+		rec.AddResult("", "", nil)                       // append
+		rec.AddResult("line1\nline2\n", "", nil)         // read
+		rec.AddResult("", "", nil)                       // copy to
+		rec.AddResult(copyFromTar("content-a"), "", nil) // copy from
+		rec.AddResult(n+"\n", "", nil)                   // kill (cleanup)
+		rec.AddResult(n+"\n", "", nil)                   // rm (cleanup)
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
@@ -142,6 +144,16 @@ func TestContainerExecAndFiles(t *testing.T) {
 	content, err := c.ReadFile(ctx, name, "/tmp/test.txt")
 	require.NoError(t, err)
 	assert.Equal(t, "line1\nline2\n", content)
+
+	// CopyTo + CopyFrom.
+	err = c.CopyToContainer(ctx, name, "/tmp", map[string][]byte{
+		"a.txt": []byte("content-a"),
+	})
+	require.NoError(t, err)
+
+	data, err := c.CopyFromContainer(ctx, name, "/tmp/a.txt")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("content-a"), data)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

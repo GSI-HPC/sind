@@ -15,6 +15,35 @@ import (
 
 const testImage = "ghcr.io/gsi-hpc/sind-node:25.11"
 
+func TestImageLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+
+	if !rec.IsIntegration() {
+		rec.AddResult("[{}]\n", "", nil)                                          // exists busybox → true
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists nonexistent → false
+		rec.AddResult("ephemeral-test\n", "", nil)                                // run ephemeral
+	}
+
+	// Exists → true (busybox is pulled by other tests).
+	exists, err := c.ImageExists(ctx, "busybox:latest")
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	// Exists → false.
+	exists, err = c.ImageExists(ctx, "nonexistent-image:v999.999")
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	// RunEphemeral.
+	stdout, err := c.RunEphemeral(ctx, "busybox:latest", "echo", "ephemeral-test")
+	require.NoError(t, err)
+	assert.Equal(t, "ephemeral-test\n", stdout)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestImageExists_True(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("[{}]\n", "", nil)
