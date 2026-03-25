@@ -18,7 +18,7 @@ func TestVolumeLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := itVolumeName(t, "vol")
+	name := itVolumeName("vol")
 	n := string(name)
 
 	if !rec.IsIntegration() {

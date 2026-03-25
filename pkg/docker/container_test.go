@@ -20,7 +20,7 @@ func TestContainerStateLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := itContainerName(t, "state")
+	name := itContainerName("state")
 	n := string(name)
 
 	if !rec.IsIntegration() {
@@ -106,7 +106,7 @@ func TestContainerExecAndFiles(t *testing.T) {
 	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := itContainerName(t, "files")
+	name := itContainerName("files")
 	n := string(name)
 
 	if !rec.IsIntegration() {
@@ -162,7 +162,7 @@ func TestContainerLabelsAndList(t *testing.T) {
 	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := itContainerName(t, "labels")
+	name := itContainerName("labels")
 	n := string(name)
 
 	if !rec.IsIntegration() {

@@ -18,7 +18,7 @@ func TestNetworkLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	name := itNetworkName(t, "net")
+	name := itNetworkName("net")
 	n := string(name)
 
 	if !rec.IsIntegration() {

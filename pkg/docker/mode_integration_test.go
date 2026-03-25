@@ -11,9 +11,7 @@ import (
 	"time"
 )
 
-// newTestClient returns a Client backed by an OSExecutor wrapped
-// in a RecordingExecutor. Skips the test if Docker is unavailable.
-func newTestClient(t *testing.T) (*Client, *testRecorder) {
+func newTestClient(t *testing.T) (*Client, *Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker not found in PATH")
@@ -23,8 +21,6 @@ func newTestClient(t *testing.T) (*Client, *testRecorder) {
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
 		t.Skip("docker daemon not running")
 	}
-	rec := &testRecorder{
-		RecordingExecutor: &RecordingExecutor{Inner: &OSExecutor{}},
-	}
+	rec := NewIntegrationRecorder()
 	return NewClient(rec.RecordingExecutor), rec
 }

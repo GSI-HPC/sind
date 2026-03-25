@@ -7,12 +7,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	"testing"
 )
 
 const testContainerName ContainerName = "sind-dev-controller"
 
-// testID generates a short random hex suffix for unique resource names.
 // testID is a per-process random suffix so parallel integration test
 // runs don't collide on Docker resource names.
 var testID = func() string {
@@ -22,48 +20,13 @@ var testID = func() string {
 }()
 
 // itName returns a unique Docker resource name for integration tests.
-// In unit mode the suffix is still appended but mock data uses the same value.
 func itName(base string) string {
 	return "sind-it-" + base + "-" + testID
 }
 
-// itContainerName returns a unique ContainerName for integration tests.
-func itContainerName(t *testing.T, base string) ContainerName {
-	t.Helper()
-	return ContainerName(itName(base))
-}
-
-// itNetworkName returns a unique NetworkName for integration tests.
-func itNetworkName(t *testing.T, base string) NetworkName {
-	t.Helper()
-	return NetworkName(itName(base))
-}
-
-// itVolumeName returns a unique VolumeName for integration tests.
-func itVolumeName(t *testing.T, base string) VolumeName {
-	t.Helper()
-	return VolumeName(itName(base))
-}
-
-// testRecorder holds a RecordingExecutor and the underlying mock (if any).
-// In unit mode, mock is non-nil and AddResult configures responses.
-// In integration mode, mock is nil and AddResult is a no-op.
-type testRecorder struct {
-	*RecordingExecutor
-	mock *MockExecutor
-}
-
-// AddResult queues a mock response. No-op in integration mode.
-func (r *testRecorder) AddResult(stdout, stderr string, err error) {
-	if r.mock != nil {
-		r.mock.AddResult(stdout, stderr, err)
-	}
-}
-
-// IsIntegration returns true when running against real Docker.
-func (r *testRecorder) IsIntegration() bool {
-	return r.mock == nil
-}
+func itContainerName(base string) ContainerName { return ContainerName(itName(base)) }
+func itNetworkName(base string) NetworkName     { return NetworkName(itName(base)) }
+func itVolumeName(base string) VolumeName       { return VolumeName(itName(base)) }
 
 // copyFromTar builds a tar archive containing a single file, as docker cp would return.
 func copyFromTar(content string) string {

@@ -6,14 +6,8 @@ package docker
 
 import "testing"
 
-// newTestClient returns a Client backed by a MockExecutor wrapped
-// in a RecordingExecutor. Use rec.AddResult() to configure responses.
-func newTestClient(t *testing.T) (*Client, *testRecorder) {
+func newTestClient(t *testing.T) (*Client, *Recorder) {
 	t.Helper()
-	m := &MockExecutor{}
-	rec := &testRecorder{
-		RecordingExecutor: &RecordingExecutor{Inner: m},
-		mock:              m,
-	}
+	rec := NewMockRecorder()
 	return NewClient(rec.RecordingExecutor), rec
 }
