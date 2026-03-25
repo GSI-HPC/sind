@@ -14,6 +14,72 @@ import (
 
 const testNetworkName NetworkName = "sind-dev-net"
 
+func TestNetworkLifecycle(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := NetworkName("sind-it-net")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("6f02052f\n", "", nil)                                                             // create
+		rec.AddResult("[{}]\n", "", nil)                                                                 // exists → true
+		rec.AddResult("sind-it-net\n", "", nil)                                                          // remove
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})                        // exists → false
+		rec.AddResult("6f02052f\n", "", nil)                                                             // re-create
+		rec.AddResult(`{"Name":"sind-it-net","Driver":"bridge","ID":"x","Scope":"local"}`+"\n", "", nil) // list
+		rec.AddResult("", "Error: network already exists\n", fmt.Errorf("exit status 1"))                // create duplicate (error)
+		rec.AddResult("", "", nil)                                                                       // list no matches (empty)
+		rec.AddResult("sind-it-net\n", "", nil)                                                          // remove (ok)
+		rec.AddResult("", "Error: No such network\n", fmt.Errorf("exit status 1"))                       // remove again (error)
+	}
+	t.Cleanup(func() { _ = c.RemoveNetwork(ctx, name) })
+
+	// Create.
+	id, err := c.CreateNetwork(ctx, name)
+	require.NoError(t, err)
+	assert.NotEmpty(t, id)
+
+	// Exists → true.
+	exists, err := c.NetworkExists(ctx, name)
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	// Remove.
+	err = c.RemoveNetwork(ctx, name)
+	require.NoError(t, err)
+
+	// Exists → false.
+	exists, err = c.NetworkExists(ctx, name)
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	// List after re-create.
+	_, err = c.CreateNetwork(ctx, name)
+	require.NoError(t, err)
+
+	entries, err := c.ListNetworks(ctx, "name=sind-it-net")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, name, entries[0].Name)
+
+	// Create duplicate → error.
+	_, err = c.CreateNetwork(ctx, name)
+	assert.Error(t, err)
+
+	// List with no matches → empty.
+	entries, err = c.ListNetworks(ctx, "name=sind-nonexistent-xyz")
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+
+	// Remove twice → second fails.
+	err = c.RemoveNetwork(ctx, name)
+	require.NoError(t, err)
+
+	err = c.RemoveNetwork(ctx, name)
+	assert.Error(t, err)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestNetworkExists_True(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("[{}]\n", "", nil)
