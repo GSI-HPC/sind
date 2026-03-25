@@ -16,6 +16,179 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestContainerStateLifecycle(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := ContainerName("sind-it-state")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("abc123\n", "", nil)                                        // create
+		rec.AddResult("[{}]\n", "", nil)                                          // exists → true
+		rec.AddResult("sind-it-state\n", "", nil)                                 // start
+		rec.AddResult(inspectRunning("sind-it-state"), "", nil)                   // inspect → running
+		rec.AddResult("sind-it-state\n", "", nil)                                 // stop
+		rec.AddResult(inspectExited("sind-it-state"), "", nil)                    // inspect → exited
+		rec.AddResult("sind-it-state\n", "", nil)                                 // start again
+		rec.AddResult("sind-it-state\n", "", nil)                                 // pause
+		rec.AddResult(inspectPaused("sind-it-state"), "", nil)                    // inspect → paused
+		rec.AddResult("sind-it-state\n", "", nil)                                 // unpause
+		rec.AddResult(inspectRunning("sind-it-state"), "", nil)                   // inspect → running
+		rec.AddResult("sind-it-state\n", "", nil)                                 // kill
+		rec.AddResult("sind-it-state\n", "", nil)                                 // remove
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists → false
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_ = c.KillContainer(cleanupCtx, name)
+		_ = c.RemoveContainer(cleanupCtx, name)
+	})
+
+	// Create.
+	_, err := c.CreateContainer(ctx, "--name", string(name), "busybox:latest", "sleep", "60")
+	require.NoError(t, err)
+
+	exists, err := c.ContainerExists(ctx, name)
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	// Start → running.
+	err = c.StartContainer(ctx, name)
+	require.NoError(t, err)
+
+	info, err := c.InspectContainer(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "running", info.Status)
+
+	// Stop → exited.
+	err = c.StopContainer(ctx, name)
+	require.NoError(t, err)
+
+	info, err = c.InspectContainer(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "exited", info.Status)
+
+	// Start → Pause → paused.
+	err = c.StartContainer(ctx, name)
+	require.NoError(t, err)
+
+	err = c.PauseContainer(ctx, name)
+	require.NoError(t, err)
+
+	info, err = c.InspectContainer(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "paused", info.Status)
+
+	// Unpause → running.
+	err = c.UnpauseContainer(ctx, name)
+	require.NoError(t, err)
+
+	info, err = c.InspectContainer(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "running", info.Status)
+
+	// Kill + Remove → gone.
+	err = c.KillContainer(ctx, name)
+	require.NoError(t, err)
+
+	err = c.RemoveContainer(ctx, name)
+	require.NoError(t, err)
+
+	exists, err = c.ContainerExists(ctx, name)
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestContainerExecAndFiles(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := ContainerName("sind-it-files")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("abc123\n", "", nil)        // run
+		rec.AddResult("hello\n", "", nil)         // exec echo
+		rec.AddResult("", "", nil)                // write
+		rec.AddResult("", "", nil)                // append
+		rec.AddResult("line1\nline2\n", "", nil)  // read
+		rec.AddResult("sind-it-files\n", "", nil) // kill (cleanup)
+		rec.AddResult("sind-it-files\n", "", nil) // rm (cleanup)
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_ = c.KillContainer(cleanupCtx, name)
+		_ = c.RemoveContainer(cleanupCtx, name)
+	})
+
+	_, err := c.RunContainer(ctx, "--name", string(name), "busybox:latest", "sleep", "60")
+	require.NoError(t, err)
+
+	// Exec.
+	stdout, err := c.Exec(ctx, name, "echo", "hello")
+	require.NoError(t, err)
+	assert.Equal(t, "hello\n", stdout)
+
+	// Write + Append + Read.
+	err = c.WriteFile(ctx, name, "/tmp/test.txt", "line1\n")
+	require.NoError(t, err)
+
+	err = c.AppendFile(ctx, name, "/tmp/test.txt", "line2\n")
+	require.NoError(t, err)
+
+	content, err := c.ReadFile(ctx, name, "/tmp/test.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "line1\nline2\n", content)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestContainerLabelsAndList(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := ContainerName("sind-it-labels")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("abc123\n", "", nil)                                                                                                                                                                       // run
+		rec.AddResult(`[{"Id":"abc123","Name":"/sind-it-labels","State":{"Status":"running"},"Config":{"Labels":{"sind.cluster":"it-test","sind.role":"compute"}},"NetworkSettings":{"Networks":{}}}]`, "", nil) // inspect
+		rec.AddResult(`{"ID":"abc123","Names":"sind-it-labels","State":"running","Image":"busybox:latest","Labels":"sind.cluster=it-test,sind.role=compute"}`+"\n", "", nil)                                     // list
+		rec.AddResult("", "", nil)                                                                                                                                                                               // list empty
+		rec.AddResult("sind-it-labels\n", "", nil)                                                                                                                                                               // kill (cleanup)
+		rec.AddResult("sind-it-labels\n", "", nil)                                                                                                                                                               // rm (cleanup)
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_ = c.KillContainer(cleanupCtx, name)
+		_ = c.RemoveContainer(cleanupCtx, name)
+	})
+
+	_, err := c.RunContainer(ctx,
+		"--name", string(name),
+		"--label", "sind.cluster=it-test",
+		"--label", "sind.role=compute",
+		"busybox:latest", "sleep", "60",
+	)
+	require.NoError(t, err)
+
+	// Inspect returns labels.
+	info, err := c.InspectContainer(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "it-test", info.Labels["sind.cluster"])
+	assert.Equal(t, "compute", info.Labels["sind.role"])
+
+	// List by label.
+	entries, err := c.ListContainers(ctx, "label=sind.cluster=it-test")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, name, entries[0].Name)
+
+	// List no matches.
+	entries, err = c.ListContainers(ctx, "label=sind.cluster=nonexistent")
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestRunContainer(t *testing.T) {
 	const containerID ContainerID = "b98dd34e3931dd738dd597ca2ae6fdc30a955be1c0662a321c634a82e5348ee9"
 

@@ -23,3 +23,18 @@ func (r *testRecorder) AddResult(stdout, stderr string, err error) {
 func (r *testRecorder) IsIntegration() bool {
 	return r.mock == nil
 }
+
+// inspectRunning returns mock docker inspect JSON for a running container.
+func inspectRunning(name string) string {
+	return `[{"Id":"abc123","Name":"/` + name + `","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
+}
+
+// inspectExited returns mock docker inspect JSON for an exited container.
+func inspectExited(name string) string {
+	return `[{"Id":"abc123","Name":"/` + name + `","State":{"Status":"exited"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
+}
+
+// inspectPaused returns mock docker inspect JSON for a paused container.
+func inspectPaused(name string) string {
+	return `[{"Id":"abc123","Name":"/` + name + `","State":{"Status":"paused"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
+}

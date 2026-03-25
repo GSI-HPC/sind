@@ -31,7 +31,7 @@ func TestNetworkLifecycle(t *testing.T) {
 		rec.AddResult("sind-it-net\n", "", nil)                                                          // remove (ok)
 		rec.AddResult("", "Error: No such network\n", fmt.Errorf("exit status 1"))                       // remove again (error)
 	}
-	t.Cleanup(func() { _ = c.RemoveNetwork(ctx, name) })
+	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
 
 	// Create.
 	id, err := c.CreateNetwork(ctx, name)

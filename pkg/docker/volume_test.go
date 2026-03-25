@@ -28,7 +28,7 @@ func TestVolumeLifecycle(t *testing.T) {
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})                                                                       // exists → false
 		rec.AddResult("", "Error: No such volume\n", fmt.Errorf("exit status 1"))                                                                       // remove again (error)
 	}
-	t.Cleanup(func() { _ = c.RemoveVolume(ctx, name) })
+	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), name) })
 
 	// Create.
 	err := c.CreateVolume(ctx, name)
