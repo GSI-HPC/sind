@@ -72,19 +72,23 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	err = CreateClusterVolumes(ctx, c, clusterName)
 	require.NoError(t, err)
 
-	// Write config (uses busybox helper container, no systemd needed).
+	// Write config.
+	helperImage := "busybox:latest"
+	if rec.IsIntegration() {
+		helperImage = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
 	cfg := &config.Cluster{
 		Name: clusterName,
 		Nodes: []config.Node{
-			{Role: "controller", CPUs: 2, Memory: "2g"},
-			{Role: "compute", Count: 1, CPUs: 2, Memory: "2g"},
+			{Role: "controller", CPUs: 2, Memory: "2g", Image: helperImage},
+			{Role: "compute", Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
 		},
 	}
-	err = WriteClusterConfig(ctx, c, cfg, "busybox:latest")
+	err = WriteClusterConfig(ctx, c, cfg, helperImage)
 	require.NoError(t, err)
 
 	// Write munge key.
-	err = WriteMungeKey(ctx, c, clusterName, []byte("test-munge-key-data"), "busybox:latest")
+	err = WriteMungeKey(ctx, c, clusterName, []byte("test-munge-key-data"), helperImage)
 	require.NoError(t, err)
 
 	// Verify resources exist.
