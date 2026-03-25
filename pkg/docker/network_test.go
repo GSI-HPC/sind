@@ -15,6 +15,7 @@ import (
 const testNetworkName NetworkName = "sind-dev-net"
 
 func TestNetworkLifecycle(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itNetworkName(t, "net")

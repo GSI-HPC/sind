@@ -15,6 +15,7 @@ import (
 const testVolumeName VolumeName = "sind-dev-config"
 
 func TestVolumeLifecycle(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itVolumeName(t, "vol")

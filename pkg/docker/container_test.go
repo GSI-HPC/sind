@@ -17,6 +17,7 @@ import (
 )
 
 func TestContainerStateLifecycle(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itContainerName(t, "state")
@@ -102,6 +103,7 @@ func TestContainerStateLifecycle(t *testing.T) {
 }
 
 func TestContainerExecAndFiles(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itContainerName(t, "files")
@@ -145,6 +147,7 @@ func TestContainerExecAndFiles(t *testing.T) {
 }
 
 func TestContainerLabelsAndList(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	name := itContainerName(t, "labels")
