@@ -120,13 +120,7 @@ func resolveMeshInfra(ctx context.Context, client *docker.Client) (dnsIP, sshPub
 //	└────┬─────┘  └────┬─────┘  └──────┬───────┘
 //	     └─────────────┼───────────────┘
 func resolveInfra(ctx context.Context, client *docker.Client, cfg *config.Cluster) (dnsIP, sshPubKey, slurmVersion string, err error) {
-	var controllerImage string
-	for _, n := range cfg.Nodes {
-		if n.Role == "controller" {
-			controllerImage = n.Image
-			break
-		}
-	}
+	image := controllerImage(cfg)
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
@@ -135,7 +129,7 @@ func resolveInfra(ctx context.Context, client *docker.Client, cfg *config.Cluste
 		return meshErr
 	})
 	g.Go(func() error {
-		ver, err := slurm.DiscoverVersion(gctx, client, controllerImage)
+		ver, err := slurm.DiscoverVersion(gctx, client, image)
 		if err != nil {
 			return fmt.Errorf("discovering Slurm version: %w", err)
 		}
