@@ -14,6 +14,58 @@ import (
 
 const testVolumeName VolumeName = "sind-dev-config"
 
+func TestVolumeLifecycle(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := VolumeName("sind-it-vol")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("sind-it-vol\n", "", nil)                                                                                                         // create
+		rec.AddResult("[{}]\n", "", nil)                                                                                                                // exists → true
+		rec.AddResult(`{"Name":"sind-it-vol","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-it-vol/_data","Scope":"local"}`+"\n", "", nil) // list
+		rec.AddResult("", "", nil)                                                                                                                      // list no matches
+		rec.AddResult("sind-it-vol\n", "", nil)                                                                                                         // remove (ok)
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})                                                                       // exists → false
+		rec.AddResult("", "Error: No such volume\n", fmt.Errorf("exit status 1"))                                                                       // remove again (error)
+	}
+	t.Cleanup(func() { _ = c.RemoveVolume(ctx, name) })
+
+	// Create.
+	err := c.CreateVolume(ctx, name)
+	require.NoError(t, err)
+
+	// Exists → true.
+	exists, err := c.VolumeExists(ctx, name)
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	// List with match.
+	entries, err := c.ListVolumes(ctx, "name=sind-it-vol")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, name, entries[0].Name)
+
+	// List with no matches.
+	entries, err = c.ListVolumes(ctx, "name=sind-nonexistent-xyz")
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+
+	// Remove.
+	err = c.RemoveVolume(ctx, name)
+	require.NoError(t, err)
+
+	// Exists → false.
+	exists, err = c.VolumeExists(ctx, name)
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	// Remove again → error.
+	err = c.RemoveVolume(ctx, name)
+	assert.Error(t, err)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestVolumeExists_True(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("[{}]\n", "", nil)
