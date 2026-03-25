@@ -275,6 +275,58 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 	assert.Len(t, m.Calls, 4) // defer runs kill+rm
 }
 
+func TestWriteMungeKey_ChownError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("abc123\n", "", nil)                // RunContainer
+	m.AddResult("", "", nil)                        // CopyToContainer
+	m.AddResult("", "", fmt.Errorf("chown failed")) // Exec chown
+	m.AddResult("", "", nil)                        // KillContainer (defer)
+	m.AddResult("", "", nil)                        // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fixing munge key ownership")
+}
+
+func TestWriteMungeKey_ChmodError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("abc123\n", "", nil)                // RunContainer
+	m.AddResult("", "", nil)                        // CopyToContainer
+	m.AddResult("", "", nil)                        // Exec chown
+	m.AddResult("", "", fmt.Errorf("chmod failed")) // Exec chmod
+	m.AddResult("", "", nil)                        // KillContainer (defer)
+	m.AddResult("", "", nil)                        // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	err := WriteMungeKey(context.Background(), c, "dev", []byte("key"), "busybox:latest")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fixing munge key permissions")
+}
+
+// --- controllerImage ---
+
+func TestControllerImage(t *testing.T) {
+	cfg := &config.Cluster{
+		Nodes: []config.Node{
+			{Role: "compute", Image: "compute:1"},
+			{Role: "controller", Image: "ctrl:1"},
+		},
+	}
+	assert.Equal(t, "ctrl:1", controllerImage(cfg))
+}
+
+func TestControllerImage_Fallback(t *testing.T) {
+	cfg := &config.Cluster{
+		Nodes: []config.Node{
+			{Role: "compute", Image: "compute:1"},
+		},
+	}
+	assert.Equal(t, config.DefaultImage, controllerImage(cfg))
+}
+
 // --- NodeRunConfigs ---
 
 func TestNodeRunConfigs_Minimal(t *testing.T) {

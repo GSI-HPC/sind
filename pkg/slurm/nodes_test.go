@@ -227,6 +227,14 @@ func TestRemoveNodesFromConf_PreservesOthers(t *testing.T) {
 	assert.Contains(t, result, "Nodes=compute-0,compute-2")
 }
 
+// --- ParseMemoryMB (exported) ---
+
+func TestParseMemoryMB_Exported(t *testing.T) {
+	got, err := ParseMemoryMB("2g")
+	assert.NoError(t, err)
+	assert.Equal(t, 2048, got)
+}
+
 // --- parseMemoryMB ---
 
 func TestParseMemoryMB(t *testing.T) {
