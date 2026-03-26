@@ -3,6 +3,7 @@
 package mesh
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
@@ -16,6 +17,71 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// --- KnownHost Lifecycle ---
+
+func TestKnownHostLifecycle(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	mgr := NewManager(c)
+
+	if !rec.IsIntegration() {
+		// EnsureMesh
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network exists → no
+		rec.AddResult("net-id\n", "", nil)                                        // create network
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS exists → no
+		rec.AddResult("dns-id\n", "", nil)                                        // create DNS
+		rec.AddResult("", "", nil)                                                // copy Corefile
+		rec.AddResult("sind-dns\n", "", nil)                                      // start DNS
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH vol exists → no
+		rec.AddResult("sind-ssh-config\n", "", nil)                               // create SSH vol
+		rec.AddResult("keygen-id\n", "", nil)                                     // create keygen container
+		rec.AddResult("", "", nil)                                                // copy keygen script
+		rec.AddResult("", "", nil)                                                // remove keygen container
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
+		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
+		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
+
+		// AddKnownHost "a"
+		rec.AddResult("", "", nil)
+
+		// AddKnownHost "b"
+		rec.AddResult("", "", nil)
+
+		// RemoveKnownHost "a": read → write
+		rec.AddResult("a.test.sind.local ssh-ed25519 AAAA\nb.test.sind.local ssh-ed25519 BBBB\n", "", nil)
+		rec.AddResult("", "", nil)
+
+		// CleanupMesh
+		rec.AddResult("[{}]\n", "", nil)            // SSH exists
+		rec.AddResult("sind-ssh\n", "", nil)        // stop SSH
+		rec.AddResult("sind-ssh\n", "", nil)        // rm SSH
+		rec.AddResult("[{}]\n", "", nil)            // DNS exists
+		rec.AddResult("sind-dns\n", "", nil)        // stop DNS
+		rec.AddResult("sind-dns\n", "", nil)        // rm DNS
+		rec.AddResult("[{}]\n", "", nil)            // network exists
+		rec.AddResult("sind-mesh\n", "", nil)       // rm network
+		rec.AddResult("[{}]\n", "", nil)            // SSH vol exists
+		rec.AddResult("sind-ssh-config\n", "", nil) // rm SSH vol
+	}
+	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
+
+	err := mgr.EnsureMesh(ctx)
+	require.NoError(t, err)
+
+	// Add two known hosts.
+	err = mgr.AddKnownHost(ctx, "a.test.sind.local", "ssh-ed25519 AAAA")
+	require.NoError(t, err)
+
+	err = mgr.AddKnownHost(ctx, "b.test.sind.local", "ssh-ed25519 BBBB")
+	require.NoError(t, err)
+
+	// Remove first host.
+	err = mgr.RemoveKnownHost(ctx, "a.test.sind.local")
+	require.NoError(t, err)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
 
 // --- EnsureSSHVolume ---
 
