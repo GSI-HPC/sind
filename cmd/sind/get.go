@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -21,6 +22,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetNodesCommand())
 	cmd.AddCommand(newGetNetworksCommand())
 	cmd.AddCommand(newGetVolumesCommand())
+	cmd.AddCommand(newGetMungeKeyCommand())
 
 	return cmd
 }
@@ -136,6 +138,31 @@ func runGetVolumes(cmd *cobra.Command) error {
 		fmt.Fprintf(w, "%s\t%s\n", v.Name, v.Driver)
 	}
 	return w.Flush()
+}
+
+func newGetMungeKeyCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "munge-key [CLUSTER]",
+		Short: "Output munge key (base64)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := "default"
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runGetMungeKey(cmd, name)
+		},
+	}
+}
+
+func runGetMungeKey(cmd *cobra.Command, name string) error {
+	client := clientFrom(cmd.Context())
+	key, err := cluster.GetMungeKey(cmd.Context(), client, name)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), base64.StdEncoding.EncodeToString(key))
+	return nil
 }
 
 func newTabWriter(out io.Writer) *tabwriter.Writer {

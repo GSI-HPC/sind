@@ -3,6 +3,8 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -107,4 +109,39 @@ func TestGetVolumes_CommandExists(t *testing.T) {
 	c, _, err := cmd.Find([]string{"get", "volumes"})
 	require.NoError(t, err)
 	assert.Equal(t, "volumes", c.Use)
+}
+
+func TestGetMungeKey_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"get", "munge-key"})
+	require.NoError(t, err)
+	assert.Equal(t, "munge-key [CLUSTER]", c.Use)
+}
+
+func TestGetMungeKey_TooManyArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "munge-key", "a", "b")
+	assert.Error(t, err)
+}
+
+func TestGetMungeKey_Output(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(psEntry{
+		ID: "a", Names: "sind-dev-controller", State: "running",
+		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+	}), "", nil)
+	m.AddResult(tarArchive("munge.key", "secret-key"), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "munge-key", "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "c2VjcmV0LWtleQ==\n", stdout)
+}
+
+func tarArchive(name, content string) string {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	data := []byte(content)
+	tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(data)), Mode: 0644})
+	tw.Write(data)
+	tw.Close()
+	return buf.String()
 }
