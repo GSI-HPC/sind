@@ -41,6 +41,45 @@ func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, con
 	return err
 }
 
+// NetworkInfo holds detailed information about a Docker network.
+type NetworkInfo struct {
+	Name    NetworkName
+	Subnet  string
+	Gateway string
+}
+
+// networkInspectResult maps the subset of docker network inspect JSON we need.
+type networkInspectResult struct {
+	Name string `json:"Name"`
+	IPAM struct {
+		Config []struct {
+			Subnet  string `json:"Subnet"`
+			Gateway string `json:"Gateway"`
+		} `json:"Config"`
+	} `json:"IPAM"`
+}
+
+// InspectNetwork returns detailed information about a network.
+func (c *Client) InspectNetwork(ctx context.Context, name NetworkName) (*NetworkInfo, error) {
+	stdout, _, err := c.run(ctx, "network", "inspect", string(name))
+	if err != nil {
+		return nil, err
+	}
+	var results []networkInspectResult
+	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
+		return nil, fmt.Errorf("parsing network inspect output: %w", err)
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("network inspect returned no results for %q", name)
+	}
+	info := &NetworkInfo{Name: NetworkName(results[0].Name)}
+	if len(results[0].IPAM.Config) > 0 {
+		info.Subnet = results[0].IPAM.Config[0].Subnet
+		info.Gateway = results[0].IPAM.Config[0].Gateway
+	}
+	return info, nil
+}
+
 // NetworkListEntry holds summary information from docker network ls.
 type NetworkListEntry struct {
 	Name   NetworkName

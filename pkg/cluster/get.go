@@ -137,11 +137,13 @@ func roleSortKey(role, name string) string {
 
 // NetworkSummary holds summary information about a sind network.
 type NetworkSummary struct {
-	Name   string
-	Driver string
+	Name    string
+	Driver  string
+	Subnet  string
+	Gateway string
 }
 
-// GetNetworks lists all sind-related Docker networks.
+// GetNetworks lists all sind-related Docker networks with IPAM details.
 // This includes per-cluster networks (sind-<cluster>-net) and the mesh network (sind-mesh).
 func GetNetworks(ctx context.Context, client *docker.Client) ([]*NetworkSummary, error) {
 	entries, err := client.ListNetworks(ctx, "name=sind-")
@@ -153,10 +155,16 @@ func GetNetworks(ctx context.Context, client *docker.Client) ([]*NetworkSummary,
 	}
 	result := make([]*NetworkSummary, 0, len(entries))
 	for _, e := range entries {
-		result = append(result, &NetworkSummary{
+		ns := &NetworkSummary{
 			Name:   string(e.Name),
 			Driver: e.Driver,
-		})
+		}
+		info, err := client.InspectNetwork(ctx, e.Name)
+		if err == nil {
+			ns.Subnet = info.Subnet
+			ns.Gateway = info.Gateway
+		}
+		result = append(result, ns)
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Name < result[j].Name

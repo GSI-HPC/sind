@@ -259,6 +259,40 @@ func TestDisconnectNetwork_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// --- InspectNetwork ---
+
+func TestInspectNetwork(t *testing.T) {
+	var m MockExecutor
+	m.AddResult(`[{"Name":"sind-dev-net","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}}]`, "", nil)
+	c := NewClient(&m)
+
+	info, err := c.InspectNetwork(t.Context(), testNetworkName)
+	require.NoError(t, err)
+	assert.Equal(t, testNetworkName, info.Name)
+	assert.Equal(t, "172.18.0.0/16", info.Subnet)
+	assert.Equal(t, "172.18.0.1", info.Gateway)
+}
+
+func TestInspectNetwork_NoIPAM(t *testing.T) {
+	var m MockExecutor
+	m.AddResult(`[{"Name":"sind-dev-net","IPAM":{"Config":[]}}]`, "", nil)
+	c := NewClient(&m)
+
+	info, err := c.InspectNetwork(t.Context(), testNetworkName)
+	require.NoError(t, err)
+	assert.Empty(t, info.Subnet)
+	assert.Empty(t, info.Gateway)
+}
+
+func TestInspectNetwork_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	_, err := c.InspectNetwork(t.Context(), testNetworkName)
+	assert.Error(t, err)
+}
+
 const networkLsJSON = `{"Name":"sind-dev-net","Driver":"bridge","ID":"abc123","Scope":"local"}
 {"Name":"sind-mesh","Driver":"bridge","ID":"def456","Scope":"local"}
 {"Name":"sind-prod-net","Driver":"bridge","ID":"ghi789","Scope":"local"}`

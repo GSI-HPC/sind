@@ -118,9 +118,9 @@ func runGetNetworks(cmd *cobra.Command) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "NAME\tDRIVER")
+	fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
 	for _, n := range networks {
-		fmt.Fprintf(w, "%s\t%s\n", n.Name, n.Driver)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", n.Name, n.Driver, n.Subnet, n.Gateway)
 	}
 	return w.Flush()
 }

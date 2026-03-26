@@ -382,6 +382,10 @@ func ndjsonNetworks(entries ...networkEntry) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+func networkInspectJSON(name, subnet, gateway string) string {
+	return fmt.Sprintf(`[{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gateway)
+}
+
 func TestGetNetworks(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult(ndjsonNetworks(
@@ -389,6 +393,9 @@ func TestGetNetworks(t *testing.T) {
 		networkEntry{Name: "sind-mesh", Driver: "bridge"},
 		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
 	), "", nil)
+	m.AddResult(networkInspectJSON("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil)
+	m.AddResult(networkInspectJSON("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)
+	m.AddResult(networkInspectJSON("sind-prod-net", "172.20.0.0/16", "172.20.0.1"), "", nil)
 	c := docker.NewClient(&m)
 
 	networks, err := GetNetworks(t.Context(), c)
@@ -398,6 +405,8 @@ func TestGetNetworks(t *testing.T) {
 	// Sorted by name.
 	assert.Equal(t, "sind-dev-net", networks[0].Name)
 	assert.Equal(t, "bridge", networks[0].Driver)
+	assert.Equal(t, "172.18.0.0/16", networks[0].Subnet)
+	assert.Equal(t, "172.18.0.1", networks[0].Gateway)
 	assert.Equal(t, "sind-mesh", networks[1].Name)
 	assert.Equal(t, "sind-prod-net", networks[2].Name)
 }
