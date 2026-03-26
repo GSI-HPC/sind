@@ -192,6 +192,24 @@ func GetVolumes(ctx context.Context, client *docker.Client) ([]*VolumeSummary, e
 	return result, nil
 }
 
+// GetMungeKey reads the munge key from a cluster's node container.
+// Any container in the cluster can be used since all mount the same munge volume.
+func GetMungeKey(ctx context.Context, client *docker.Client, clusterName string) ([]byte, error) {
+	containers, err := client.ListContainers(ctx,
+		"label="+LabelCluster+"="+clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	if len(containers) == 0 {
+		return nil, fmt.Errorf("no containers found in cluster %q", clusterName)
+	}
+	key, err := client.CopyFromContainer(ctx, containers[0].Name, "/etc/munge/munge.key")
+	if err != nil {
+		return nil, fmt.Errorf("reading munge key: %w", err)
+	}
+	return key, nil
+}
+
 // aggregateStatus determines the overall cluster status from node states.
 // If all nodes share the same status, that status is returned. Otherwise,
 // the cluster status is unknown.

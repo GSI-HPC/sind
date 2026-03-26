@@ -483,3 +483,58 @@ func TestGetVolumes_Error(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing volumes")
 }
+
+// --- GetMungeKey ---
+
+func TestGetMungeKey(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(psEntry{
+		ID: "c1", Names: "sind-dev-controller", State: "running",
+		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+	}), "", nil)
+	keyData := "secret-munge-key-bytes"
+	m.AddResult(tarArchive("munge.key", keyData), "", nil)
+	c := docker.NewClient(&m)
+
+	key, err := GetMungeKey(t.Context(), c, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, []byte(keyData), key)
+}
+
+func TestGetMungeKey_NoContainers(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	_, err := GetMungeKey(t.Context(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no containers found")
+}
+
+func TestGetMungeKey_ListError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetMungeKey(t.Context(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing containers")
+}
+
+func TestGetMungeKey_CopyError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(ndjson(psEntry{
+		ID: "c1", Names: "sind-dev-controller", State: "running",
+		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+	}), "", nil)
+	m.AddResult("", "", fmt.Errorf("cp failed"))
+	c := docker.NewClient(&m)
+
+	_, err := GetMungeKey(t.Context(), c, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reading munge key")
+}
