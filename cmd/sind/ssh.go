@@ -64,14 +64,16 @@ func newEnterCommand() *cobra.Command {
 func runEnter(cmd *cobra.Command, clusterName string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
+	realm := realmFromFlag(cmd)
+	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	target, err := cluster.EnterTarget(ctx, client, mesh.DefaultRealm, clusterName)
+	target, err := cluster.EnterTarget(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
 
 	isTTY := stdinIsTTY()
-	dockerArgs := cluster.BuildSSHArgs(mesh.SSHContainerName, target, clusterName, isTTY, nil, nil)
+	dockerArgs := cluster.BuildSSHArgs(meshMgr.SSHContainerName(), target, clusterName, isTTY, nil, nil)
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -99,7 +101,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 
-	dockerArgs, err := cluster.ExecArgs(ctx, client, mesh.DefaultRealm, mesh.SSHContainerName, clusterName, command)
+	dockerArgs, err := cluster.ExecArgs(ctx, client, realmFromFlag(cmd), mesh.SSHContainerName, clusterName, command)
 	if err != nil {
 		return err
 	}

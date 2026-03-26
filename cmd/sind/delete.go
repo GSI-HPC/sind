@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -51,7 +50,8 @@ func newDeleteClusterCommand() *cobra.Command {
 func runDeleteCluster(cmd *cobra.Command, name string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	meshMgr := meshMgrFrom(ctx, client)
+	realm := realmFromFlag(cmd)
+	meshMgr := meshMgrFrom(ctx, client, realm)
 
 	if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
 		return err
@@ -64,9 +64,10 @@ func runDeleteCluster(cmd *cobra.Command, name string) error {
 func runDeleteClustersAll(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	meshMgr := meshMgrFrom(ctx, client)
+	realm := realmFromFlag(cmd)
+	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	clusters, err := cluster.GetClusters(ctx, client, mesh.DefaultRealm)
+	clusters, err := cluster.GetClusters(ctx, client, realm)
 	if err != nil {
 		return err
 	}

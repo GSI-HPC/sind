@@ -54,7 +54,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	meshMgr := meshMgrFrom(ctx, client)
+	meshMgr := meshMgrFrom(ctx, client, realmFromFlag(cmd))
 
 	nodes, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, defaultReadinessInterval)
 	if err != nil {
@@ -88,7 +88,7 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	meshMgr := meshMgrFrom(ctx, client)
+	meshMgr := meshMgrFrom(ctx, client, realmFromFlag(cmd))
 
 	for clusterName, shortNames := range groupByCluster(targets) {
 		if err := cluster.WorkerRemove(ctx, client, meshMgr, clusterName, shortNames); err != nil {

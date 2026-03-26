@@ -8,7 +8,6 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -59,7 +58,7 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc) error {
 	client := clientFrom(ctx)
 
 	for clusterName, shortNames := range groupByCluster(targets) {
-		if err := fn(ctx, client, mesh.DefaultRealm, clusterName, shortNames); err != nil {
+		if err := fn(ctx, client, realmFromFlag(cmd), clusterName, shortNames); err != nil {
 			return err
 		}
 	}

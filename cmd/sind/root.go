@@ -21,6 +21,8 @@ func NewRootCommand() *cobra.Command {
 		SilenceErrors: true,
 	}
 
+	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
+
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newDeleteCommand())
 	cmd.AddCommand(newGetCommand())

@@ -602,3 +602,24 @@ nodes:
 	assert.Equal(t, "worker", cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }
+
+func TestParse_Realm(t *testing.T) {
+	t.Run("omitted defaults to empty", func(t *testing.T) {
+		cfg, err := Parse([]byte("kind: Cluster"))
+		require.NoError(t, err)
+		assert.Equal(t, "", cfg.Realm)
+	})
+
+	t.Run("explicit realm", func(t *testing.T) {
+		cfg, err := Parse([]byte("kind: Cluster\nrealm: myrealm"))
+		require.NoError(t, err)
+		assert.Equal(t, "myrealm", cfg.Realm)
+	})
+
+	t.Run("realm with name", func(t *testing.T) {
+		cfg, err := Parse([]byte("kind: Cluster\nname: dev\nrealm: testrealm"))
+		require.NoError(t, err)
+		assert.Equal(t, "dev", cfg.Name)
+		assert.Equal(t, "testrealm", cfg.Realm)
+	})
+}

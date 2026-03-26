@@ -62,7 +62,8 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	meshMgr := meshMgrFrom(ctx, client)
+	realm := resolveRealm(cmd, cfg.Realm)
+	meshMgr := meshMgrFrom(ctx, client, realm)
 	if err := meshMgr.EnsureMesh(ctx); err != nil {
 		return fmt.Errorf("setting up mesh: %w", err)
 	}

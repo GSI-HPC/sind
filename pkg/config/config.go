@@ -92,6 +92,7 @@ type Storage struct {
 type Cluster struct {
 	Kind     string   `json:"kind"`
 	Name     string   `json:"name,omitempty"`
+	Realm    string   `json:"realm,omitempty"`
 	Defaults Defaults `json:"defaults,omitempty"`
 	Storage  Storage  `json:"storage,omitempty"`
 	Nodes    []Node   `json:"nodes,omitempty"`

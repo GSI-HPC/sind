@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/spf13/cobra"
 )
 
 type contextKey int
@@ -36,10 +38,33 @@ func clientFrom(ctx context.Context) *docker.Client {
 }
 
 // meshMgrFrom retrieves the mesh.Manager from the context,
-// falling back to creating one from the given client.
-func meshMgrFrom(ctx context.Context, client *docker.Client) *mesh.Manager {
+// falling back to creating one from the given client and realm.
+func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh.Manager {
 	if m, ok := ctx.Value(meshMgrKey).(*mesh.Manager); ok {
 		return m
 	}
-	return mesh.NewManager(client, mesh.DefaultRealm)
+	return mesh.NewManager(client, realm)
+}
+
+// resolveRealm determines the realm with the following precedence:
+//
+//	--realm flag > config file > SIND_REALM env var > mesh.DefaultRealm
+func resolveRealm(cmd *cobra.Command, configRealm string) string {
+	if cmd.Flags().Changed("realm") {
+		r, _ := cmd.Flags().GetString("realm")
+		return r
+	}
+	if configRealm != "" {
+		return configRealm
+	}
+	if env := os.Getenv("SIND_REALM"); env != "" {
+		return env
+	}
+	return mesh.DefaultRealm
+}
+
+// realmFromFlag resolves the realm when no config is available.
+// Precedence: --realm flag > SIND_REALM env var > mesh.DefaultRealm
+func realmFromFlag(cmd *cobra.Command) string {
+	return resolveRealm(cmd, "")
 }
