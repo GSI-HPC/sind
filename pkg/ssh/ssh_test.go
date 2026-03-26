@@ -3,6 +3,7 @@
 package ssh
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -12,6 +13,43 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// --- InjectAndCollect Lifecycle ---
+
+func TestInjectAndCollectLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := docker.ContainerName("sind-it-ssh-inject")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("ctr-id\n", "", nil)                                                             // RunContainer
+		rec.AddResult("", "", nil)                                                                     // mkdir .ssh
+		rec.AddResult("", "", nil)                                                                     // append authorized_keys
+		rec.AddResult("# comment\nlocalhost ssh-ed25519 AAAA-test-hostkey\n", "", nil)                 // ssh-keyscan
+		rec.AddResult(string(name)+"\n", "", nil)                                                      // kill (cleanup)
+		rec.AddResult(string(name)+"\n", "", nil)                                                      // rm (cleanup)
+	}
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.KillContainer(bg, name)
+		_ = c.RemoveContainer(bg, name)
+	})
+
+	_, err := c.RunContainer(ctx, "--name", string(name), "busybox:latest", "sleep", "60")
+	require.NoError(t, err)
+
+	// Inject public key.
+	err = InjectPublicKey(ctx, c, name, "ssh-ed25519 AAAA-test-pubkey")
+	require.NoError(t, err)
+
+	// Collect host key.
+	hostKey, err := CollectHostKey(ctx, c, name)
+	require.NoError(t, err)
+	assert.Contains(t, hostKey, "ssh-ed25519")
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
 
 // --- InjectPublicKey ---
 
