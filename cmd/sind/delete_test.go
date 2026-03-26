@@ -77,6 +77,7 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	_, err = c.RunContainer(ctx,
 		"--name", string(ctrName),
 		"--network", string(netName),
+		"--label", "sind.realm="+testRealm,
 		"--label", "sind.cluster="+cluster,
 		"--label", "sind.role=controller",
 		"busybox:latest", "sleep", "120",

@@ -187,6 +187,7 @@ func TestGetLifecycle(t *testing.T) {
 	_, err = c.RunContainer(ctx,
 		"--name", string(ctrName),
 		"--network", string(netName),
+		"--label", "sind.realm="+testRealm,
 		"--label", "sind.cluster="+cluster,
 		"--label", "sind.role=controller",
 		"--label", "sind.slurm.version=25.11.0",

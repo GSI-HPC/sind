@@ -41,7 +41,9 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	}
 
 	isTTY := stdinIsTTY()
-	dockerArgs := cluster.BuildSSHArgs(mesh.SSHContainerName, target[0].ShortName, target[0].Cluster, isTTY, sshOptions, command)
+	realm := realmFromFlag(cmd)
+	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
+	dockerArgs := cluster.BuildSSHArgs(sshContainer, target[0].ShortName, target[0].Cluster, isTTY, sshOptions, command)
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -101,7 +103,9 @@ func runExec(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 
-	dockerArgs, err := cluster.ExecArgs(ctx, client, realmFromFlag(cmd), mesh.SSHContainerName, clusterName, command)
+	realm := realmFromFlag(cmd)
+	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
+	dockerArgs, err := cluster.ExecArgs(ctx, client, realm, sshContainer, clusterName, command)
 	if err != nil {
 		return err
 	}

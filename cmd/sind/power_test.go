@@ -53,6 +53,7 @@ func TestPowerLifecycle(t *testing.T) {
 
 	_, err := c.RunContainer(ctx,
 		"--name", string(ctrName),
+		"--label", "sind.realm="+testRealm,
 		"--label", "sind.cluster="+cluster,
 		"--label", "sind.role=worker",
 		"busybox:latest", "sleep", "120",
