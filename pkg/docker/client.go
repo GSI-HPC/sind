@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"sort"
 )
 
 // ContainerID is a Docker container identifier (64 hex characters).
@@ -42,6 +43,24 @@ func (c *Client) run(ctx context.Context, args ...string) (string, string, error
 
 func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
 	return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
+}
+
+// sortedLabelFlags returns --label k=v flag pairs in sorted key order.
+// Returns nil when labels is nil or empty.
+func sortedLabelFlags(labels map[string]string) []string {
+	if len(labels) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	args := make([]string, 0, len(labels)*2)
+	for _, k := range keys {
+		args = append(args, "--label", k+"="+labels[k])
+	}
+	return args
 }
 
 // exists runs an inspect-style command and returns true if the resource exists.

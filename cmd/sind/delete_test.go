@@ -68,11 +68,11 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	require.NoError(t, meshMgr.EnsureMesh(ctx))
 
 	// Create cluster resources.
-	_, err := c.CreateNetwork(ctx, netName)
+	_, err := c.CreateNetwork(ctx, netName, nil)
 	require.NoError(t, err)
-	require.NoError(t, c.CreateVolume(ctx, volConfig))
-	require.NoError(t, c.CreateVolume(ctx, volMunge))
-	require.NoError(t, c.CreateVolume(ctx, volData))
+	require.NoError(t, c.CreateVolume(ctx, volConfig, nil))
+	require.NoError(t, c.CreateVolume(ctx, volMunge, nil))
+	require.NoError(t, c.CreateVolume(ctx, volData, nil))
 	_, err = c.RunContainer(ctx,
 		"--name", string(ctrName),
 		"--network", string(netName),

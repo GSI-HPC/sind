@@ -321,7 +321,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, clusterName string,
 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
 func CreateClusterNetwork(ctx context.Context, client *docker.Client, clusterName string) error {
-	_, err := client.CreateNetwork(ctx, NetworkName(clusterName))
+	_, err := client.CreateNetwork(ctx, NetworkName(clusterName), nil)
 	if err != nil {
 		return fmt.Errorf("creating cluster network: %w", err)
 	}
@@ -331,7 +331,7 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, clusterNam
 // CreateClusterVolumes creates the config, munge, and data volumes for a cluster.
 func CreateClusterVolumes(ctx context.Context, client *docker.Client, clusterName string) error {
 	for _, vtype := range []string{"config", "munge", "data"} {
-		if err := client.CreateVolume(ctx, VolumeName(clusterName, vtype)); err != nil {
+		if err := client.CreateVolume(ctx, VolumeName(clusterName, vtype), nil); err != nil {
 			return fmt.Errorf("creating %s volume: %w", vtype, err)
 		}
 	}

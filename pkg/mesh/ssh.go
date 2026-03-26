@@ -42,7 +42,7 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 		return nil
 	}
 
-	err = m.Docker.CreateVolume(ctx, SSHVolumeName)
+	err = m.Docker.CreateVolume(ctx, SSHVolumeName, nil)
 	if err != nil {
 		return fmt.Errorf("creating SSH volume: %w", err)
 	}

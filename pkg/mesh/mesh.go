@@ -121,7 +121,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	if exists {
 		return nil
 	}
-	_, err = m.Docker.CreateNetwork(ctx, NetworkName)
+	_, err = m.Docker.CreateNetwork(ctx, NetworkName, nil)
 	if err != nil {
 		return fmt.Errorf("creating mesh network: %w", err)
 	}

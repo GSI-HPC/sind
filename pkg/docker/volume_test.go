@@ -33,7 +33,7 @@ func TestVolumeLifecycle(t *testing.T) {
 	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), name) })
 
 	// Create.
-	err := c.CreateVolume(ctx, name)
+	err := c.CreateVolume(ctx, name, nil)
 	require.NoError(t, err)
 
 	// Exists → true.
@@ -107,7 +107,7 @@ func TestCreateVolume(t *testing.T) {
 	m.AddResult(string(testVolumeName)+"\n", "", nil)
 	c := NewClient(&m)
 
-	err := c.CreateVolume(t.Context(), testVolumeName)
+	err := c.CreateVolume(t.Context(), testVolumeName, nil)
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
@@ -119,7 +119,7 @@ func TestCreateVolume_Error(t *testing.T) {
 	m.AddResult("", "Error response from daemon: create volume failed\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.CreateVolume(t.Context(), testVolumeName)
+	err := c.CreateVolume(t.Context(), testVolumeName, nil)
 	assert.Error(t, err)
 }
 

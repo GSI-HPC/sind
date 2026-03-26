@@ -36,7 +36,7 @@ func TestNetworkLifecycle(t *testing.T) {
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
 
 	// Create.
-	id, err := c.CreateNetwork(ctx, name)
+	id, err := c.CreateNetwork(ctx, name, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, id)
 
@@ -55,7 +55,7 @@ func TestNetworkLifecycle(t *testing.T) {
 	assert.False(t, exists)
 
 	// List after re-create.
-	_, err = c.CreateNetwork(ctx, name)
+	_, err = c.CreateNetwork(ctx, name, nil)
 	require.NoError(t, err)
 
 	entries, err := c.ListNetworks(ctx, "name="+n)
@@ -64,7 +64,7 @@ func TestNetworkLifecycle(t *testing.T) {
 	assert.Equal(t, name, entries[0].Name)
 
 	// Create duplicate → error.
-	_, err = c.CreateNetwork(ctx, name)
+	_, err = c.CreateNetwork(ctx, name, nil)
 	assert.Error(t, err)
 
 	// List with no matches → empty.
@@ -108,7 +108,7 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 	})
 
 	// Create network + container.
-	_, err := c.CreateNetwork(ctx, net)
+	_, err := c.CreateNetwork(ctx, net, nil)
 	require.NoError(t, err)
 
 	_, err = c.RunContainer(ctx, "--name", string(ctr), "busybox:latest", "sleep", "60")
@@ -178,7 +178,7 @@ func TestCreateNetwork(t *testing.T) {
 	m.AddResult(string(networkID)+"\n", "", nil)
 	c := NewClient(&m)
 
-	id, err := c.CreateNetwork(t.Context(), testNetworkName)
+	id, err := c.CreateNetwork(t.Context(), testNetworkName, nil)
 	require.NoError(t, err)
 	assert.Equal(t, networkID, id)
 
@@ -191,7 +191,7 @@ func TestCreateNetwork_Error(t *testing.T) {
 	m.AddResult("", "Error response from daemon: network with name "+string(testNetworkName)+" already exists\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	id, err := c.CreateNetwork(t.Context(), testNetworkName)
+	id, err := c.CreateNetwork(t.Context(), testNetworkName, nil)
 	assert.Error(t, err)
 	assert.Empty(t, id)
 }
