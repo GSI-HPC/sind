@@ -673,9 +673,9 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 
 func TestAddDNSRecord_RestartError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult(corefileTar(t, nil), "", nil)  // read
-	m.AddResult("", "", nil)                   // write
-	m.AddResult("sind-dns\n", "", nil)         // kill succeeds
+	m.AddResult(corefileTar(t, nil), "", nil)               // read
+	m.AddResult("", "", nil)                                // write
+	m.AddResult("sind-dns\n", "", nil)                      // kill succeeds
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1")) // start fails
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)

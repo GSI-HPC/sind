@@ -80,6 +80,7 @@ type NetworkHealth struct {
 func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
 	health := &NetworkHealth{}
 
+	// nil Docker client: only realm-derived names are needed here.
 	meshMgr := mesh.NewManager(nil, realm)
 	meshExists, err := client.NetworkExists(ctx, meshMgr.NetworkName())
 	if err != nil {

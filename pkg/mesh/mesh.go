@@ -44,7 +44,7 @@ func composeLabelFlags(project, service string) []string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	var flags []string
+	flags := make([]string, 0, len(labels)*2)
 	for _, k := range keys {
 		flags = append(flags, "--label", k+"="+labels[k])
 	}
@@ -258,7 +258,7 @@ func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
 		return err
 	}
 
-	var kept []string
+	kept := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		fields := strings.Fields(entry)
 		if len(fields) >= 2 && fields[1] == hostname {

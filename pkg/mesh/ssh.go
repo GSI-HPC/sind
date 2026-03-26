@@ -140,8 +140,9 @@ func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {
 		return fmt.Errorf("reading known_hosts: %w", err)
 	}
 
-	var kept []string
-	for _, line := range strings.Split(content, "\n") {
+	lines := strings.Split(content, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
 		if line == "" {
 			continue
 		}
