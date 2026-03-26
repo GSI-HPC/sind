@@ -39,6 +39,7 @@ func TestKnownHostLifecycle(t *testing.T) {
 		rec.AddResult("", "", nil)                                                // copy keygen script
 		rec.AddResult("", "", nil)                                                // remove keygen container
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
+		rec.AddResult(dnsInspectJSON(), "", nil)                                   // inspect DNS for IP
 		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
 		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
 
@@ -216,6 +217,8 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
+	// InspectContainer(DNS) → mesh IP
+	m.AddResult(dnsInspectJSON(), "", nil)
 	// CreateContainer → success
 	m.AddResult(containerID+"\n", "", nil)
 	// StartContainer → success
@@ -226,17 +229,19 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	err := mgr.EnsureSSH(t.Context())
 	require.NoError(t, err)
 
-	require.Len(t, m.Calls, 3)
+	require.Len(t, m.Calls, 4)
 	assert.Equal(t, []string{"container", "inspect", string(SSHContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"inspect", string(DNSContainerName)}, m.Calls[1].Args)
 	assert.Equal(t, []string{
 		"create",
 		"--name", string(SSHContainerName),
 		"--network", string(NetworkName),
+		"--dns", "10.0.0.2",
 		"-v", string(SSHVolumeName) + ":/root/.ssh",
 		SSHImage,
 		"sleep", "infinity",
-	}, m.Calls[1].Args)
-	assert.Equal(t, []string{"start", string(SSHContainerName)}, m.Calls[2].Args)
+	}, m.Calls[2].Args)
+	assert.Equal(t, []string{"start", string(SSHContainerName)}, m.Calls[3].Args)
 }
 
 func TestEnsureSSH_AlreadyExists(t *testing.T) {
@@ -266,6 +271,8 @@ func TestEnsureSSH_CreateError(t *testing.T) {
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
+	// InspectContainer(DNS) → success
+	m.AddResult(dnsInspectJSON(), "", nil)
 	// CreateContainer → error
 	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
@@ -281,6 +288,8 @@ func TestEnsureSSH_StartError(t *testing.T) {
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
+	// InspectContainer(DNS) → success
+	m.AddResult(dnsInspectJSON(), "", nil)
 	// CreateContainer → success
 	m.AddResult("def456\n", "", nil)
 	// StartContainer → error

@@ -39,6 +39,7 @@ func TestMeshLifecycle(t *testing.T) {
 		rec.AddResult("", "", nil)                                                // copy keygen script
 		rec.AddResult("", "", nil)                                                // remove keygen container
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
+		rec.AddResult(dnsInspectJSON(), "", nil)                                   // inspect DNS for IP
 		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
 		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
 
@@ -137,6 +138,7 @@ func TestDNSRecordLifecycle(t *testing.T) {
 		rec.AddResult("", "", nil)                                                // copy keygen script
 		rec.AddResult("", "", nil)                                                // remove keygen container
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
+		rec.AddResult(dnsInspectJSON(), "", nil)                                   // inspect DNS for IP
 		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
 		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
 
@@ -207,9 +209,10 @@ func TestEnsureMesh(t *testing.T) {
 	m.AddResult("keygen-id\n", "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
-	// EnsureSSH: ContainerExists → not found, CreateContainer, StartContainer
+	// EnsureSSH: ContainerExists → not found, InspectDNS, CreateContainer, StartContainer
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("ssh-id\n", "", nil)
 	m.AddResult("sind-ssh\n", "", nil)
 
@@ -811,6 +814,11 @@ func TestParseEntries_Roundtrip(t *testing.T) {
 func TestParseEntries_NoHostsBlock(t *testing.T) {
 	entries := parseEntries(".:53 {\n    forward . /etc/resolv.conf\n}\n")
 	assert.Empty(t, entries)
+}
+
+// dnsInspectJSON returns a mock docker inspect result for the DNS container on the mesh network.
+func dnsInspectJSON() string {
+	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 }
 
 // --- test helpers ---
