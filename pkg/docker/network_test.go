@@ -82,6 +82,61 @@ func TestNetworkLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	net := itNetworkName("conn")
+	ctr := itContainerName("conn")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("net-id\n", "", nil)           // create network
+		rec.AddResult("ctr-id\n", "", nil)           // run container
+		rec.AddResult("", "", nil)                    // connect
+		rec.AddResult(inspectRunning(string(ctr)), "", nil) // inspect (has net)
+		rec.AddResult("", "", nil)                    // disconnect
+		rec.AddResult(inspectRunning(string(ctr)), "", nil) // inspect (no net)
+		rec.AddResult(string(ctr)+"\n", "", nil)      // kill (cleanup)
+		rec.AddResult(string(ctr)+"\n", "", nil)      // rm (cleanup)
+		rec.AddResult(string(net)+"\n", "", nil)       // rm network (cleanup)
+	}
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.KillContainer(bg, ctr)
+		_ = c.RemoveContainer(bg, ctr)
+		_ = c.RemoveNetwork(bg, net)
+	})
+
+	// Create network + container.
+	_, err := c.CreateNetwork(ctx, net)
+	require.NoError(t, err)
+
+	_, err = c.RunContainer(ctx, "--name", string(ctr), "busybox:latest", "sleep", "60")
+	require.NoError(t, err)
+
+	// Connect → container has IP on network.
+	err = c.ConnectNetwork(ctx, net, ctr)
+	require.NoError(t, err)
+
+	info, err := c.InspectContainer(ctx, ctr)
+	require.NoError(t, err)
+	if rec.IsIntegration() {
+		assert.Contains(t, info.IPs, net, "container should be on network after connect")
+	}
+
+	// Disconnect → container no longer on network.
+	err = c.DisconnectNetwork(ctx, net, ctr)
+	require.NoError(t, err)
+
+	info, err = c.InspectContainer(ctx, ctr)
+	require.NoError(t, err)
+	if rec.IsIntegration() {
+		assert.NotContains(t, info.IPs, net, "container should not be on network after disconnect")
+	}
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestNetworkExists_True(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("[{}]\n", "", nil)
