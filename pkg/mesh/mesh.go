@@ -216,8 +216,10 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 		return fmt.Errorf("writing DNS Corefile: %w", err)
 	}
 
-	err = m.Docker.SignalContainer(ctx, DNSContainerName, "HUP")
-	if err != nil {
+	if err := m.Docker.KillContainer(ctx, DNSContainerName); err != nil {
+		return fmt.Errorf("reloading DNS: %w", err)
+	}
+	if err := m.Docker.StartContainer(ctx, DNSContainerName); err != nil {
 		return fmt.Errorf("reloading DNS: %w", err)
 	}
 	return nil
@@ -231,7 +233,7 @@ func generateCorefile(entries []string) string {
 	for _, entry := range entries {
 		b.WriteString("        " + entry + "\n")
 	}
-	b.WriteString("        fallthrough\n    }\n    log\n    errors\n}\n\n")
+	b.WriteString("        fallthrough\n    }\n    reload\n    log\n    errors\n}\n\n")
 	b.WriteString(".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n")
 	return b.String()
 }
