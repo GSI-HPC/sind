@@ -671,6 +671,20 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 	assert.Contains(t, err.Error(), "reloading DNS")
 }
 
+func TestAddDNSRecord_RestartError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(corefileTar(t, nil), "", nil)  // read
+	m.AddResult("", "", nil)                   // write
+	m.AddResult("sind-dns\n", "", nil)         // kill succeeds
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1")) // start fails
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reloading DNS")
+}
+
 // --- RemoveDNSRecord ---
 
 func TestRemoveDNSRecord(t *testing.T) {

@@ -272,6 +272,21 @@ func TestEnsureSSH_CheckError(t *testing.T) {
 	assert.Contains(t, err.Error(), "checking SSH container")
 }
 
+func TestEnsureSSH_InspectDNSError(t *testing.T) {
+	var m docker.MockExecutor
+	// ContainerExists → not found
+	m.AddResult("", "Error: No such container: sind-ssh\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	// InspectContainer(DNS) → error
+	m.AddResult("", "Error: No such container: sind-dns\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.EnsureSSH(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "inspecting DNS container")
+}
+
 func TestEnsureSSH_CreateError(t *testing.T) {
 	var m docker.MockExecutor
 	// ContainerExists → not found

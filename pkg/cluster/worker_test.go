@@ -896,6 +896,27 @@ func TestWorkerAdd_DefaultCount(t *testing.T) {
 	assert.Equal(t, "worker-1", nodes[0].Name)
 }
 
+func TestWorkerAdd_DefaultResources(t *testing.T) {
+	// When CPUs, Memory, TmpSize are zero/empty, WorkerAdd defaults to
+	// config.DefaultCPUs, config.DefaultMemory, config.DefaultTmpSize.
+	var m docker.MockExecutor
+	m.OnCall = workerAddOnCall(t)
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev",
+		Count:       1,
+		// CPUs, Memory, TmpSize intentionally omitted → should use defaults
+	}, time.Millisecond)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+}
+
 func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
