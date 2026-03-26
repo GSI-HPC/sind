@@ -8,6 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +41,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	}
 
 	isTTY := stdinIsTTY()
-	dockerArgs := cluster.BuildSSHArgs(target[0].ShortName, target[0].Cluster, isTTY, sshOptions, command)
+	dockerArgs := cluster.BuildSSHArgs(mesh.SSHContainerName, target[0].ShortName, target[0].Cluster, isTTY, sshOptions, command)
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -64,13 +65,13 @@ func runEnter(cmd *cobra.Command, clusterName string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 
-	target, err := cluster.EnterTarget(ctx, client, clusterName)
+	target, err := cluster.EnterTarget(ctx, client, mesh.DefaultRealm, clusterName)
 	if err != nil {
 		return err
 	}
 
 	isTTY := stdinIsTTY()
-	dockerArgs := cluster.BuildSSHArgs(target, clusterName, isTTY, nil, nil)
+	dockerArgs := cluster.BuildSSHArgs(mesh.SSHContainerName, target, clusterName, isTTY, nil, nil)
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -98,7 +99,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 
-	dockerArgs, err := cluster.ExecArgs(ctx, client, clusterName, command)
+	dockerArgs, err := cluster.ExecArgs(ctx, client, mesh.DefaultRealm, mesh.SSHContainerName, clusterName, command)
 	if err != nil {
 		return err
 	}

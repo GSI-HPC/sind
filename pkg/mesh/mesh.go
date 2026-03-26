@@ -70,32 +70,32 @@ func NewManager(docker *docker.Client, realm string) *Manager {
 }
 
 // networkName returns the mesh network name for this realm.
-func (m *Manager) networkName() docker.NetworkName {
+func (m *Manager) NetworkName() docker.NetworkName {
 	return docker.NetworkName(m.Realm + "-mesh")
 }
 
 // dnsContainerName returns the DNS container name for this realm.
-func (m *Manager) dnsContainerName() docker.ContainerName {
+func (m *Manager) DNSContainerName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-dns")
 }
 
 // sshContainerName returns the SSH container name for this realm.
-func (m *Manager) sshContainerName() docker.ContainerName {
+func (m *Manager) SSHContainerName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-ssh")
 }
 
 // sshVolumeName returns the SSH volume name for this realm.
-func (m *Manager) sshVolumeName() docker.VolumeName {
+func (m *Manager) SSHVolumeName() docker.VolumeName {
 	return docker.VolumeName(m.Realm + "-ssh-config")
 }
 
 // sshKeygenName returns the temporary keygen container name for this realm.
-func (m *Manager) sshKeygenName() docker.ContainerName {
+func (m *Manager) SSHKeygenName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-ssh-keygen")
 }
 
 // composeProject returns the Docker Compose project name for this realm's mesh.
-func (m *Manager) composeProject() string {
+func (m *Manager) ComposeProject() string {
 	return m.Realm + "-mesh"
 }
 
@@ -121,18 +121,18 @@ func (m *Manager) EnsureMesh(ctx context.Context) error {
 // be called when the last cluster is deleted.
 func (m *Manager) CleanupMesh(ctx context.Context) error {
 	// Remove containers first (auto-disconnects from networks).
-	if err := m.removeContainerIfExists(ctx, m.sshContainerName()); err != nil {
+	if err := m.removeContainerIfExists(ctx, m.SSHContainerName()); err != nil {
 		return fmt.Errorf("removing SSH container: %w", err)
 	}
-	if err := m.removeContainerIfExists(ctx, m.dnsContainerName()); err != nil {
+	if err := m.removeContainerIfExists(ctx, m.DNSContainerName()); err != nil {
 		return fmt.Errorf("removing DNS container: %w", err)
 	}
 
-	if err := m.removeNetworkIfExists(ctx, m.networkName()); err != nil {
+	if err := m.removeNetworkIfExists(ctx, m.NetworkName()); err != nil {
 		return fmt.Errorf("removing mesh network: %w", err)
 	}
 
-	if err := m.removeVolumeIfExists(ctx, m.sshVolumeName()); err != nil {
+	if err := m.removeVolumeIfExists(ctx, m.SSHVolumeName()); err != nil {
 		return fmt.Errorf("removing SSH volume: %w", err)
 	}
 
@@ -178,7 +178,7 @@ func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeNa
 
 // EnsureMeshNetwork creates the shared mesh network if it does not already exist.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
-	name := m.networkName()
+	name := m.NetworkName()
 	exists, err := m.Docker.NetworkExists(ctx, name)
 	if err != nil {
 		return fmt.Errorf("checking mesh network: %w", err)
@@ -187,7 +187,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 		return nil
 	}
 	networkLabels := map[string]string{
-		"com.docker.compose.project": m.composeProject(),
+		"com.docker.compose.project": m.ComposeProject(),
 		"com.docker.compose.network": "mesh",
 	}
 	_, err = m.Docker.CreateNetwork(ctx, name, networkLabels)
@@ -201,7 +201,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 // The container runs CoreDNS on the mesh network, serving sind.local records
 // from inline hosts entries in the Corefile.
 func (m *Manager) EnsureDNS(ctx context.Context) error {
-	name := m.dnsContainerName()
+	name := m.DNSContainerName()
 	exists, err := m.Docker.ContainerExists(ctx, name)
 	if err != nil {
 		return fmt.Errorf("checking DNS container: %w", err)
@@ -212,9 +212,9 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 
 	args := []string{
 		"--name", string(name),
-		"--network", string(m.networkName()),
+		"--network", string(m.NetworkName()),
 	}
-	args = append(args, composeLabelFlags(m.composeProject(), "dns")...)
+	args = append(args, composeLabelFlags(m.ComposeProject(), "dns")...)
 	args = append(args, DNSImage)
 	_, err = m.Docker.CreateContainer(ctx, args...)
 	if err != nil {
@@ -271,7 +271,7 @@ func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
 
 // readDNSEntries reads the current Corefile and extracts the host entries.
 func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
-	data, err := m.Docker.CopyFromContainer(ctx, m.dnsContainerName(), corefilePath)
+	data, err := m.Docker.CopyFromContainer(ctx, m.DNSContainerName(), corefilePath)
 	if err != nil {
 		return nil, fmt.Errorf("reading DNS Corefile: %w", err)
 	}
@@ -281,7 +281,7 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 // writeDNSEntries generates a new Corefile, writes it to the container, and
 // sends SIGHUP to reload CoreDNS.
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
-	name := m.dnsContainerName()
+	name := m.DNSContainerName()
 	err := m.Docker.CopyToContainer(ctx, name, "/", map[string][]byte{
 		"Corefile": []byte(generateCorefile(entries)),
 	})

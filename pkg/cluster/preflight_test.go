@@ -10,6 +10,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,7 +88,7 @@ func TestPreflightCheck_NoConflicts(t *testing.T) {
 	c := docker.NewClient(m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 6)
@@ -100,7 +101,7 @@ func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network sind-dev-net")
@@ -116,7 +117,7 @@ func TestPreflightCheck_ConflictingVolumes(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "volume sind-dev-config")
@@ -132,7 +133,7 @@ func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "container sind-dev-controller")
@@ -148,7 +149,7 @@ func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network sind-dev-net")
@@ -162,7 +163,7 @@ func TestPreflightCheck_NetworkCheckError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking network")
@@ -175,7 +176,7 @@ func TestPreflightCheck_VolumeCheckError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume")
@@ -188,7 +189,7 @@ func TestPreflightCheck_ContainerCheckError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking container")
@@ -211,7 +212,7 @@ func TestPreflightCheck_MultiCompute(t *testing.T) {
 			{Role: "worker", Count: 3},
 		},
 	}
-	err := PreflightCheck(t.Context(), c, cfg)
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "container sind-dev-worker-0")

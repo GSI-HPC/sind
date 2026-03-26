@@ -54,25 +54,27 @@ type nodeResult struct {
 //	      │
 //	  *Cluster
 func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (*Cluster, error) {
-	if err := PreflightCheck(ctx, client, cfg); err != nil {
+	realm := meshMgr.Realm
+
+	if err := PreflightCheck(ctx, client, realm, cfg); err != nil {
 		return nil, err
 	}
 
-	dnsIP, sshPubKey, slurmVersion, err := resolveInfra(ctx, client, cfg)
+	dnsIP, sshPubKey, slurmVersion, err := resolveInfra(ctx, client, meshMgr, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := createResources(ctx, client, cfg); err != nil {
+	if err := createResources(ctx, client, realm, cfg); err != nil {
 		return nil, err
 	}
 
-	nodeConfigs := NodeRunConfigs(cfg, dnsIP, slurmVersion)
-	if err := createAllNodes(ctx, client, nodeConfigs); err != nil {
+	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion)
+	if err := createAllNodes(ctx, client, meshMgr, nodeConfigs); err != nil {
 		return nil, err
 	}
 
-	nodeResults, err := setupNodes(ctx, client, cfg.Name, sshPubKey, nodeConfigs, readinessInterval)
+	nodeResults, err := setupNodes(ctx, client, realm, cfg.Name, sshPubKey, nodeConfigs, readinessInterval)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return nil, err
 	}
 
-	if err := enableSlurm(ctx, client, cfg.Name, nodeConfigs, readinessInterval); err != nil {
+	if err := enableSlurm(ctx, client, realm, cfg.Name, nodeConfigs, readinessInterval); err != nil {
 		return nil, err
 	}
 
@@ -91,18 +93,18 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 // resolveMeshInfra fetches DNS IP and SSH public key from mesh infrastructure
 // concurrently.
-func resolveMeshInfra(ctx context.Context, client *docker.Client) (dnsIP, sshPubKey string, err error) {
+func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) (dnsIP, sshPubKey string, err error) {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		info, err := client.InspectContainer(gctx, mesh.DNSContainerName)
+		info, err := client.InspectContainer(gctx, meshMgr.DNSContainerName())
 		if err != nil {
 			return fmt.Errorf("inspecting DNS container: %w", err)
 		}
-		dnsIP = info.IPs[mesh.NetworkName]
+		dnsIP = info.IPs[meshMgr.NetworkName()]
 		return nil
 	})
 	g.Go(func() error {
-		key, err := client.ReadFile(gctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519.pub")
+		key, err := client.ReadFile(gctx, meshMgr.SSHContainerName(), "/root/.ssh/id_ed25519.pub")
 		if err != nil {
 			return fmt.Errorf("reading SSH public key: %w", err)
 		}
@@ -119,13 +121,13 @@ func resolveMeshInfra(ctx context.Context, client *docker.Client) (dnsIP, sshPub
 //	│  DNS IP  │  │ SSH key  │  │Slurm version │
 //	└────┬─────┘  └────┬─────┘  └──────┬───────┘
 //	     └─────────────┼───────────────┘
-func resolveInfra(ctx context.Context, client *docker.Client, cfg *config.Cluster) (dnsIP, sshPubKey, slurmVersion string, err error) {
+func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster) (dnsIP, sshPubKey, slurmVersion string, err error) {
 	image := controllerImage(cfg)
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		var meshErr error
-		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client)
+		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client, meshMgr)
 		return meshErr
 	})
 	g.Go(func() error {
@@ -150,10 +152,10 @@ func resolveInfra(ctx context.Context, client *docker.Client, cfg *config.Cluste
 //	     │  │ config │ │  munge │
 //	     │  └────┬───┘ └───┬────┘
 //	     └───────┼─────────┘
-func createResources(ctx context.Context, client *docker.Client, cfg *config.Cluster) error {
+func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return CreateClusterNetwork(gctx, client, cfg.Name) })
-	g.Go(func() error { return CreateClusterVolumes(gctx, client, cfg.Name) })
+	g.Go(func() error { return CreateClusterNetwork(gctx, client, realm, cfg.Name) })
+	g.Go(func() error { return CreateClusterVolumes(gctx, client, realm, cfg.Name) })
 	if err := g.Wait(); err != nil {
 		return err
 	}
@@ -161,8 +163,8 @@ func createResources(ctx context.Context, client *docker.Client, cfg *config.Clu
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 	g, gctx = errgroup.WithContext(ctx)
-	g.Go(func() error { return WriteClusterConfig(gctx, client, cfg, image) })
-	g.Go(func() error { return WriteMungeKey(gctx, client, cfg.Name, mungeKey, image) })
+	g.Go(func() error { return WriteClusterConfig(gctx, client, realm, cfg, image) })
+	g.Go(func() error { return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image) })
 	return g.Wait()
 }
 
@@ -172,12 +174,12 @@ func createResources(ctx context.Context, client *docker.Client, cfg *config.Clu
 //	│ node₁ │ │ node₂ │ ... │ nodeₙ │
 //	└───┬───┘ └───┬───┘     └───┬───┘
 //	    └─────────┼─────────────┘
-func createAllNodes(ctx context.Context, client *docker.Client, nodeConfigs []RunConfig) error {
+func createAllNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, nodeConfigs []RunConfig) error {
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
 		nc := nc
 		g.Go(func() error {
-			_, err := CreateNode(gctx, client, nc)
+			_, err := CreateNode(gctx, client, meshMgr, nc)
 			if err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
@@ -196,7 +198,7 @@ func createAllNodes(ctx context.Context, client *docker.Client, nodeConfigs []Ru
 //	│ node₁ setup   │ │ node₂ setup   │ ... │ nodeₙ setup   │
 //	└───────┬───────┘ └───────┬───────┘     └───────┬───────┘
 //	        └─────────────────┼─────────────────────┘
-func setupNodes(ctx context.Context, client *docker.Client, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration) ([]nodeResult, error) {
+func setupNodes(ctx context.Context, client *docker.Client, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration) ([]nodeResult, error) {
 	baseProbes := []probe.Probe{
 		{Name: "container", Check: probe.ContainerRunning},
 		{Name: "systemd", Check: probe.SystemdReady},
@@ -208,7 +210,7 @@ func setupNodes(ctx context.Context, client *docker.Client, clusterName, sshPubK
 	for i, nc := range nodeConfigs {
 		i, nc := i, nc
 		g.Go(func() error {
-			containerName := ContainerName(clusterName, nc.ShortName)
+			containerName := ContainerName(realm, clusterName, nc.ShortName)
 
 			if err := probe.UntilReady(gctx, client, containerName, baseProbes, interval); err != nil {
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
@@ -258,7 +260,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 	nodes := make([]*Node, 0, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
 		nr := results[i]
-		nodeIP := nr.info.IPs[mesh.NetworkName]
+		nodeIP := nr.info.IPs[meshMgr.NetworkName()]
 		dnsName := DNSName(nc.ShortName, clusterName)
 
 		if err := meshMgr.AddDNSRecord(ctx, dnsName, nodeIP); err != nil {
@@ -272,7 +274,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 			Name:        nc.ShortName,
 			Role:        nc.Role,
 			ContainerID: nr.info.ID,
-			IP:          nr.info.IPs[NetworkName(clusterName)],
+			IP:          nr.info.IPs[NetworkName(meshMgr.Realm, clusterName)],
 			Status:      StatusRunning,
 		})
 	}
@@ -288,7 +290,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	│ wait slurmctld     │ │ wait slurmd          │
 //	└─────────┬──────────┘ └──────────┬───────────┘
 //	          └───────────┬───────────┘
-func enableSlurm(ctx context.Context, client *docker.Client, clusterName string, nodeConfigs []RunConfig, interval time.Duration) error {
+func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration) error {
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
 		nc := nc
@@ -308,7 +310,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, clusterName string,
 			continue
 		}
 		g.Go(func() error {
-			containerName := ContainerName(clusterName, nc.ShortName)
+			containerName := ContainerName(realm, clusterName, nc.ShortName)
 			_, err := client.Exec(gctx, containerName, "systemctl", "enable", "--now", service)
 			if err != nil {
 				return fmt.Errorf("enabling %s on %s: %w", service, nc.ShortName, err)
@@ -320,12 +322,12 @@ func enableSlurm(ctx context.Context, client *docker.Client, clusterName string,
 }
 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
-func CreateClusterNetwork(ctx context.Context, client *docker.Client, clusterName string) error {
+func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
 	labels := map[string]string{
-		LabelComposeProject: ComposeProject(clusterName),
+		LabelComposeProject: ComposeProject(realm, clusterName),
 		LabelComposeNetwork: "net",
 	}
-	_, err := client.CreateNetwork(ctx, NetworkName(clusterName), labels)
+	_, err := client.CreateNetwork(ctx, NetworkName(realm, clusterName), labels)
 	if err != nil {
 		return fmt.Errorf("creating cluster network: %w", err)
 	}
@@ -333,13 +335,13 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, clusterNam
 }
 
 // CreateClusterVolumes creates the config, munge, and data volumes for a cluster.
-func CreateClusterVolumes(ctx context.Context, client *docker.Client, clusterName string) error {
+func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clusterName string) error {
 	for _, vtype := range []string{"config", "munge", "data"} {
 		labels := map[string]string{
-			LabelComposeProject: ComposeProject(clusterName),
+			LabelComposeProject: ComposeProject(realm, clusterName),
 			LabelComposeVolume:  vtype,
 		}
-		if err := client.CreateVolume(ctx, VolumeName(clusterName, vtype), labels); err != nil {
+		if err := client.CreateVolume(ctx, VolumeName(realm, clusterName, vtype), labels); err != nil {
 			return fmt.Errorf("creating %s volume: %w", vtype, err)
 		}
 	}
@@ -349,9 +351,9 @@ func CreateClusterVolumes(ctx context.Context, client *docker.Client, clusterNam
 // WriteClusterConfig generates and writes slurm.conf, sind-nodes.conf, and
 // cgroup.conf to the config volume. Uses a temporary container to access the
 // volume.
-func WriteClusterConfig(ctx context.Context, client *docker.Client, cfg *config.Cluster, image string) error {
-	helperName := ContainerName(cfg.Name, "config-helper")
-	volName := VolumeName(cfg.Name, "config")
+func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) error {
+	helperName := ContainerName(realm, cfg.Name, "config-helper")
+	volName := VolumeName(realm, cfg.Name, "config")
 
 	_, err := client.CreateContainer(ctx,
 		"--name", string(helperName),
@@ -379,9 +381,9 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, cfg *config.
 
 // WriteMungeKey writes the given munge key to the munge volume.
 // Uses a temporary container to access the volume.
-func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName string, key []byte, image string) error {
-	helperName := ContainerName(clusterName, "munge-helper")
-	volName := VolumeName(clusterName, "munge")
+func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string) error {
+	helperName := ContainerName(realm, clusterName, "munge-helper")
+	volName := VolumeName(realm, clusterName, "munge")
 
 	_, err := client.RunContainer(ctx,
 		"--name", string(helperName),
@@ -419,7 +421,7 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName strin
 
 // NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
 // Worker nodes are indexed sequentially across all worker groups.
-func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig {
+func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []RunConfig {
 	var configs []RunConfig
 	workerIdx := 0
 
@@ -436,6 +438,7 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 		switch n.Role {
 		case "controller", "submitter":
 			configs = append(configs, RunConfig{
+				Realm:           realm,
 				ClusterName:     cfg.Name,
 				ShortName:       n.Role,
 				Role:            n.Role,
@@ -457,6 +460,7 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 			isManaged := n.Managed == nil || *n.Managed
 			for i := 0; i < count; i++ {
 				configs = append(configs, RunConfig{
+					Realm:           realm,
 					ClusterName:     cfg.Name,
 					ShortName:       fmt.Sprintf("worker-%d", workerIdx),
 					Role:            "worker",
@@ -480,9 +484,9 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 
 // CreateClusterNodes creates all node containers for the cluster.
 // Each node is created, connected to the mesh network, and started.
-func CreateClusterNodes(ctx context.Context, client *docker.Client, configs []RunConfig) error {
+func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, configs []RunConfig) error {
 	for _, cfg := range configs {
-		_, err := CreateNode(ctx, client, cfg)
+		_, err := CreateNode(ctx, client, meshMgr, cfg)
 		if err != nil {
 			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
 		}
@@ -508,7 +512,7 @@ func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []R
 			continue
 		}
 
-		containerName := ContainerName(cfg.ClusterName, cfg.ShortName)
+		containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
 		_, err := client.Exec(ctx, containerName, "systemctl", "enable", "--now", service)
 		if err != nil {
 			return fmt.Errorf("enabling %s on %s: %w", service, cfg.ShortName, err)

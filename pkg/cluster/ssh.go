@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
 // BuildSSHArgs builds the docker CLI arguments for running SSH through the
@@ -17,12 +16,12 @@ import (
 // node is the short name (e.g. "worker-0"), cluster is the cluster name,
 // isTTY controls whether -t is added to docker exec, sshOptions are passed
 // through to SSH before the target, and command is the optional remote command.
-func BuildSSHArgs(node, cluster string, isTTY bool, sshOptions, command []string) []string {
+func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster string, isTTY bool, sshOptions, command []string) []string {
 	args := []string{"exec", "-i"}
 	if isTTY {
 		args = append(args, "-t")
 	}
-	args = append(args, string(mesh.SSHContainerName), "ssh")
+	args = append(args, string(sshContainer), "ssh")
 	args = append(args, sshOptions...)
 	args = append(args, DNSName(node, cluster))
 	args = append(args, command...)
@@ -31,8 +30,10 @@ func BuildSSHArgs(node, cluster string, isTTY bool, sshOptions, command []string
 
 // EnterTarget determines the target node for an interactive shell.
 // Returns "submitter" if present in the cluster, otherwise "controller".
-func EnterTarget(ctx context.Context, client *docker.Client, clusterName string) (string, error) {
-	entries, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
+func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName string) (string, error) {
+	entries, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
+		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return "", fmt.Errorf("listing cluster containers: %w", err)
 	}
@@ -53,10 +54,10 @@ func EnterTarget(ctx context.Context, client *docker.Client, clusterName string)
 // ExecArgs builds docker CLI arguments for a one-shot command execution on
 // the cluster's submitter (or controller). The returned args are suitable for
 // passing to docker directly.
-func ExecArgs(ctx context.Context, client *docker.Client, clusterName string, command []string) ([]string, error) {
-	target, err := EnterTarget(ctx, client, clusterName)
+func ExecArgs(ctx context.Context, client *docker.Client, realm string, sshContainer docker.ContainerName, clusterName string, command []string) ([]string, error) {
+	target, err := EnterTarget(ctx, client, realm, clusterName)
 	if err != nil {
 		return nil, err
 	}
-	return BuildSSHArgs(target, clusterName, false, nil, command), nil
+	return BuildSSHArgs(sshContainer, target, clusterName, false, nil, command), nil
 }

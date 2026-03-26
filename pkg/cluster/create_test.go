@@ -58,18 +58,18 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		bg := context.Background()
-		_ = c.RemoveVolume(bg, VolumeName(clusterName, "config"))
-		_ = c.RemoveVolume(bg, VolumeName(clusterName, "munge"))
-		_ = c.RemoveVolume(bg, VolumeName(clusterName, "data"))
-		_ = c.RemoveNetwork(bg, NetworkName(clusterName))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "config"))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "munge"))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "data"))
+		_ = c.RemoveNetwork(bg, NetworkName(mesh.DefaultRealm, clusterName))
 	})
 
 	// Create network.
-	err := CreateClusterNetwork(ctx, c, clusterName)
+	err := CreateClusterNetwork(ctx, c, mesh.DefaultRealm, clusterName)
 	require.NoError(t, err)
 
 	// Create volumes.
-	err = CreateClusterVolumes(ctx, c, clusterName)
+	err = CreateClusterVolumes(ctx, c, mesh.DefaultRealm, clusterName)
 	require.NoError(t, err)
 
 	// Write config.
@@ -84,20 +84,20 @@ func TestClusterResourceLifecycle(t *testing.T) {
 			{Role: "worker", Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
 		},
 	}
-	err = WriteClusterConfig(ctx, c, cfg, helperImage)
+	err = WriteClusterConfig(ctx, c, mesh.DefaultRealm, cfg, helperImage)
 	require.NoError(t, err)
 
 	// Write munge key.
-	err = WriteMungeKey(ctx, c, clusterName, []byte("test-munge-key-data"), helperImage)
+	err = WriteMungeKey(ctx, c, mesh.DefaultRealm, clusterName, []byte("test-munge-key-data"), helperImage)
 	require.NoError(t, err)
 
 	// Verify resources exist.
-	exists, err := c.NetworkExists(ctx, NetworkName(clusterName))
+	exists, err := c.NetworkExists(ctx, NetworkName(mesh.DefaultRealm, clusterName))
 	require.NoError(t, err)
 	assert.True(t, exists, "cluster network")
 
 	for _, vtype := range []string{"config", "munge", "data"} {
-		exists, err = c.VolumeExists(ctx, VolumeName(clusterName, vtype))
+		exists, err = c.VolumeExists(ctx, VolumeName(mesh.DefaultRealm, clusterName, vtype))
 		require.NoError(t, err)
 		assert.True(t, exists, vtype+" volume")
 	}
@@ -112,7 +112,7 @@ func TestCreateClusterNetwork(t *testing.T) {
 	m.AddResult("net-id-123\n", "", nil)
 	c := docker.NewClient(&m)
 
-	err := CreateClusterNetwork(t.Context(), c, "dev")
+	err := CreateClusterNetwork(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
@@ -129,7 +129,7 @@ func TestCreateClusterNetwork_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("network already exists"))
 	c := docker.NewClient(&m)
 
-	err := CreateClusterNetwork(t.Context(), c, "dev")
+	err := CreateClusterNetwork(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating cluster network")
@@ -144,7 +144,7 @@ func TestCreateClusterVolumes(t *testing.T) {
 	m.AddResult("", "", nil) // data
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(t.Context(), c, "dev")
+	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -174,7 +174,7 @@ func TestCreateClusterVolumes_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("volume create failed")) // munge fails
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(t.Context(), c, "dev")
+	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "munge")
@@ -197,7 +197,7 @@ func TestWriteClusterConfig(t *testing.T) {
 			{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
-	err := WriteClusterConfig(t.Context(), c, cfg, "busybox:latest")
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -221,7 +221,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(t.Context(), c, cfg, "busybox:latest")
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating config helper")
@@ -235,7 +235,7 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(t.Context(), c, cfg, "busybox:latest")
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing slurm config")
@@ -255,7 +255,7 @@ func TestWriteMungeKey(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	key := []byte("test-munge-key-data")
-	err := WriteMungeKey(t.Context(), c, "dev", key, "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", key, "busybox:latest")
 
 	require.NoError(t, err)
 
@@ -274,7 +274,7 @@ func TestWriteMungeKey_RunError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("run failed"))
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating munge helper")
@@ -288,7 +288,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing munge key")
@@ -304,7 +304,7 @@ func TestWriteMungeKey_ChownError(t *testing.T) {
 	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fixing munge key ownership")
@@ -320,7 +320,7 @@ func TestWriteMungeKey_ChmodError(t *testing.T) {
 	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(t.Context(), c, "dev", []byte("key"), "busybox:latest")
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fixing munge key permissions")
@@ -358,7 +358,7 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "172.18.0.2", "25.11.0")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -385,7 +385,7 @@ func TestNodeRunConfigs_MultiComputeGroups(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
 
 	require.Len(t, configs, 4)
 	assert.Equal(t, "worker-0", configs[1].ShortName)
@@ -406,7 +406,7 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
 
 	require.Len(t, configs, 3)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -423,7 +423,7 @@ func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "worker-0", configs[1].ShortName)
@@ -440,7 +440,7 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
 
 	require.Len(t, configs, 4)
 	assert.False(t, configs[1].Managed, "worker-0 unmanaged")
@@ -463,7 +463,7 @@ func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
 
 	require.Len(t, configs, 1)
 	assert.Equal(t, "/data/shared", configs[0].DataHostPath)
@@ -478,7 +478,7 @@ func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
 
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath)
@@ -498,7 +498,7 @@ func TestNodeRunConfigs_VolumeStorageCustomMount(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
 
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath, "volume type uses docker volume, not host path")
@@ -508,7 +508,7 @@ func TestNodeRunConfigs_VolumeStorageCustomMount(t *testing.T) {
 func TestNodeRunConfigs_EmptyNodes(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev"}
 
-	configs := NodeRunConfigs(cfg, "172.18.0.2", "25.11.0")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
 
 	assert.Empty(t, configs)
 }
@@ -526,15 +526,16 @@ func TestCreateClusterNodes(t *testing.T) {
 	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	configs := []RunConfig{
-		{ClusterName: "dev", ShortName: "controller", Role: "controller",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{ClusterName: "dev", ShortName: "worker-0", Role: "worker",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
-	err := CreateClusterNodes(t.Context(), c, configs)
+	err := CreateClusterNodes(t.Context(), c, mgr, configs)
 
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 6) // 2 nodes × 3 calls each
@@ -549,15 +550,16 @@ func TestCreateClusterNodes_Error(t *testing.T) {
 	// Node 2: CreateContainer fails
 	m.AddResult("", "", fmt.Errorf("image not found"))
 	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	configs := []RunConfig{
-		{ClusterName: "dev", ShortName: "controller", Role: "controller",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{ClusterName: "dev", ShortName: "worker-0", Role: "worker",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
-	err := CreateClusterNodes(t.Context(), c, configs)
+	err := CreateClusterNodes(t.Context(), c, mgr, configs)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "worker-0")
@@ -567,8 +569,9 @@ func TestCreateClusterNodes_Error(t *testing.T) {
 func TestCreateClusterNodes_Empty(t *testing.T) {
 	var m docker.MockExecutor
 	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
-	err := CreateClusterNodes(t.Context(), c, nil)
+	err := CreateClusterNodes(t.Context(), c, mgr, nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
@@ -583,8 +586,8 @@ func TestEnableSlurmServices(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: true},
 	}
 
 	err := EnableSlurmServices(t.Context(), c, configs)
@@ -603,8 +606,8 @@ func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{ClusterName: "dev", ShortName: "submitter", Role: "submitter"},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "submitter", Role: "submitter"},
 	}
 
 	err := EnableSlurmServices(t.Context(), c, configs)
@@ -619,9 +622,9 @@ func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: false},
-		{ClusterName: "dev", ShortName: "worker-1", Role: "worker", Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: false},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-1", Role: "worker", Managed: true},
 	}
 
 	// Need result for worker-1 slurmd
@@ -641,7 +644,7 @@ func TestEnableSlurmServices_Error(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
 	}
 
 	err := EnableSlurmServices(t.Context(), c, configs)
@@ -1098,7 +1101,8 @@ func TestResolveInfra_SSHKeyError(t *testing.T) {
 	client := docker.NewClient(&m)
 	cfg := createCfg()
 
-	_, _, _, err := resolveInfra(t.Context(), client, cfg)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, cfg)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading SSH public key")
@@ -1122,7 +1126,8 @@ func TestResolveInfra_SlurmVersionError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, _, _, err := resolveInfra(t.Context(), client, createCfg())
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, createCfg())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "discovering Slurm version")
@@ -1162,11 +1167,11 @@ func TestSetupNodes_InspectError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	_, err := setupNodes(ctx, client, "dev", "ssh-key", configs, time.Millisecond)
+	_, err := setupNodes(ctx, client, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting node controller")
@@ -1195,11 +1200,11 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	_, err := setupNodes(ctx, client, "dev", "ssh-key", configs, time.Millisecond)
+	_, err := setupNodes(ctx, client, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "injecting SSH key")
@@ -1233,11 +1238,11 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	_, err := setupNodes(ctx, client, "dev", "ssh-key", configs, time.Millisecond)
+	_, err := setupNodes(ctx, client, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "collecting host key")
@@ -1322,11 +1327,11 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	err := enableSlurm(ctx, client, "dev", configs, 10*time.Millisecond)
+	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")

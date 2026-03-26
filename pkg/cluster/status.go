@@ -25,7 +25,7 @@ type NodeHealth struct {
 // If the container is not running, remaining checks are skipped and
 // default to false. The role determines which Slurm services are checked.
 // clusterName is used to select the cluster network IP.
-func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, role, clusterName string) (*NodeHealth, error) {
+func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, role, realm, clusterName string) (*NodeHealth, error) {
 	name := docker.ContainerName(containerName)
 
 	info, err := client.InspectContainer(ctx, name)
@@ -35,7 +35,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, ro
 
 	health := &NodeHealth{
 		Container: info.Status,
-		IP:        info.IPs[NetworkName(clusterName)],
+		IP:        info.IPs[NetworkName(realm, clusterName)],
 		Services:  make(map[string]bool),
 	}
 
@@ -76,28 +76,30 @@ type NetworkHealth struct {
 }
 
 // GetNetworkHealth checks the health of mesh, DNS, and cluster networking.
-func GetNetworkHealth(ctx context.Context, client *docker.Client, clusterName string) (*NetworkHealth, error) {
+func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
 	health := &NetworkHealth{}
 
-	meshExists, err := client.NetworkExists(ctx, "sind-mesh")
+	meshNetName := docker.NetworkName(realm + "-mesh")
+	meshExists, err := client.NetworkExists(ctx, meshNetName)
 	if err != nil {
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
 	health.Mesh = meshExists
 	if meshExists {
-		if info, err := client.InspectNetwork(ctx, "sind-mesh"); err == nil {
+		if info, err := client.InspectNetwork(ctx, meshNetName); err == nil {
 			health.MeshSubnet = info.Subnet
 			health.MeshGateway = info.Gateway
 		}
 	}
 
-	dnsExists, err := client.ContainerExists(ctx, "sind-dns")
+	dnsContainerName := docker.ContainerName(realm + "-dns")
+	dnsExists, err := client.ContainerExists(ctx, dnsContainerName)
 	if err != nil {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
 	}
 	health.DNS = dnsExists
 
-	clusterNet := NetworkName(clusterName)
+	clusterNet := NetworkName(realm, clusterName)
 	clusterExists, err := client.NetworkExists(ctx, docker.NetworkName(clusterNet))
 	if err != nil {
 		return nil, fmt.Errorf("checking cluster network: %w", err)
@@ -121,11 +123,11 @@ type VolumeHealth struct {
 }
 
 // GetVolumeHealth checks whether the cluster's config, munge, and data volumes exist.
-func GetVolumeHealth(ctx context.Context, client *docker.Client, clusterName string) (*VolumeHealth, error) {
+func GetVolumeHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*VolumeHealth, error) {
 	health := &VolumeHealth{}
 
 	for _, vtype := range []string{"config", "munge", "data"} {
-		volName := VolumeName(clusterName, vtype)
+		volName := VolumeName(realm, clusterName, vtype)
 		exists, err := client.VolumeExists(ctx, docker.VolumeName(volName))
 		if err != nil {
 			return nil, fmt.Errorf("checking volume %s: %w", volName, err)
@@ -161,21 +163,23 @@ type ClusterStatus struct {
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
 // and volume health information.
-func GetStatus(ctx context.Context, client *docker.Client, clusterName string) (*ClusterStatus, error) {
+func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName string) (*ClusterStatus, error) {
 	// List all containers in this cluster.
-	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
+	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
+		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
-	prefix := "sind-" + clusterName + "-"
+	prefix := ContainerPrefix(realm, clusterName)
 	var nodes []*NodeStatus
 	var states []string
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := c.Labels[LabelRole]
 
-		health, err := GetNodeHealth(ctx, client, string(c.Name), role, clusterName)
+		health, err := GetNodeHealth(ctx, client, string(c.Name), role, realm, clusterName)
 		if err != nil {
 			return nil, fmt.Errorf("checking node %s: %w", shortName, err)
 		}
@@ -192,12 +196,12 @@ func GetStatus(ctx context.Context, client *docker.Client, clusterName string) (
 		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
 	})
 
-	network, err := GetNetworkHealth(ctx, client, clusterName)
+	network, err := GetNetworkHealth(ctx, client, realm, clusterName)
 	if err != nil {
 		return nil, err
 	}
 
-	volumes, err := GetVolumeHealth(ctx, client, clusterName)
+	volumes, err := GetVolumeHealth(ctx, client, realm, clusterName)
 	if err != nil {
 		return nil, err
 	}

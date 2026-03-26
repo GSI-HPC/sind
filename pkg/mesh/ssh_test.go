@@ -115,7 +115,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 		"--label", "com.docker.compose.volume=ssh-config",
 		string(SSHVolumeName),
 	}, m.Calls[1].Args)
-	keygenName := string(mgr.sshKeygenName())
+	keygenName := string(mgr.SSHKeygenName())
 	assert.Equal(t, []string{
 		"create",
 		"--name", keygenName,
@@ -211,7 +211,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	assert.Contains(t, err.Error(), "writing SSH keys")
 
 	// Verify temp container is still cleaned up on error.
-	assert.Equal(t, []string{"rm", string(mgr.sshKeygenName())}, m.Calls[4].Args)
+	assert.Equal(t, []string{"rm", string(mgr.SSHKeygenName())}, m.Calls[4].Args)
 }
 
 // --- EnsureSSH ---

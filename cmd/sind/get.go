@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -77,7 +78,7 @@ func newGetVolumesCommand() *cobra.Command {
 
 func runGetClusters(cmd *cobra.Command) error {
 	client := clientFrom(cmd.Context())
-	clusters, err := cluster.GetClusters(cmd.Context(), client)
+	clusters, err := cluster.GetClusters(cmd.Context(), client, mesh.DefaultRealm)
 	if err != nil {
 		return err
 	}
@@ -97,7 +98,7 @@ func runGetClusters(cmd *cobra.Command) error {
 
 func runGetNodes(cmd *cobra.Command, name string) error {
 	client := clientFrom(cmd.Context())
-	nodes, err := cluster.GetNodes(cmd.Context(), client, name)
+	nodes, err := cluster.GetNodes(cmd.Context(), client, mesh.DefaultRealm, name)
 	if err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 
 func runGetNetworks(cmd *cobra.Command) error {
 	client := clientFrom(cmd.Context())
-	networks, err := cluster.GetNetworks(cmd.Context(), client)
+	networks, err := cluster.GetNetworks(cmd.Context(), client, mesh.DefaultRealm)
 	if err != nil {
 		return err
 	}
@@ -127,7 +128,7 @@ func runGetNetworks(cmd *cobra.Command) error {
 
 func runGetVolumes(cmd *cobra.Command) error {
 	client := clientFrom(cmd.Context())
-	volumes, err := cluster.GetVolumes(cmd.Context(), client)
+	volumes, err := cluster.GetVolumes(cmd.Context(), client, mesh.DefaultRealm)
 	if err != nil {
 		return err
 	}
@@ -157,7 +158,7 @@ func newGetMungeKeyCommand() *cobra.Command {
 
 func runGetMungeKey(cmd *cobra.Command, name string) error {
 	client := clientFrom(cmd.Context())
-	key, err := cluster.GetMungeKey(cmd.Context(), client, name)
+	key, err := cluster.GetMungeKey(cmd.Context(), client, mesh.DefaultRealm, name)
 	if err != nil {
 		return err
 	}

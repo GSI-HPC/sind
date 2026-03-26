@@ -5,13 +5,14 @@ package cluster
 import (
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 )
 
 // --- Container logs ---
 
 func TestLogs_Container(t *testing.T) {
-	args := ContainerLogArgs("controller", "dev", false)
+	args := ContainerLogArgs(mesh.DefaultRealm, "controller", "dev", false)
 
 	assert.Equal(t, []string{
 		"logs", "sind-dev-controller",
@@ -19,7 +20,7 @@ func TestLogs_Container(t *testing.T) {
 }
 
 func TestLogs_ContainerFollow(t *testing.T) {
-	args := ContainerLogArgs("worker-0", "dev", true)
+	args := ContainerLogArgs(mesh.DefaultRealm, "worker-0", "dev", true)
 
 	assert.Equal(t, []string{
 		"logs", "--follow", "sind-dev-worker-0",
@@ -29,7 +30,7 @@ func TestLogs_ContainerFollow(t *testing.T) {
 // --- Service logs ---
 
 func TestLogs_Service(t *testing.T) {
-	args := ServiceLogArgs("controller", "dev", "slurmctld", false)
+	args := ServiceLogArgs(mesh.DefaultRealm, "controller", "dev", "slurmctld", false)
 
 	assert.Equal(t, []string{
 		"exec", "sind-dev-controller",
@@ -38,7 +39,7 @@ func TestLogs_Service(t *testing.T) {
 }
 
 func TestLogs_ServiceFollow(t *testing.T) {
-	args := ServiceLogArgs("worker-0", "dev", "slurmd", true)
+	args := ServiceLogArgs(mesh.DefaultRealm, "worker-0", "dev", "slurmd", true)
 
 	assert.Equal(t, []string{
 		"exec", "sind-dev-worker-0",

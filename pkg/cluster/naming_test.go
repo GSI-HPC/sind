@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,9 +21,19 @@ func TestNetworkName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.cluster, func(t *testing.T) {
-			assert.Equal(t, tt.want, NetworkName(tt.cluster))
+			assert.Equal(t, tt.want, NetworkName(mesh.DefaultRealm, tt.cluster))
 		})
 	}
+}
+
+func TestCustomRealm_NamingFunctions(t *testing.T) {
+	realm := "myrealm"
+	assert.Equal(t, docker.NetworkName("myrealm-dev-net"), NetworkName(realm, "dev"))
+	assert.Equal(t, docker.ContainerName("myrealm-dev-controller"), ContainerName(realm, "dev", "controller"))
+	assert.Equal(t, docker.ContainerName("myrealm-dev-worker-0"), ContainerName(realm, "dev", "worker-0"))
+	assert.Equal(t, docker.VolumeName("myrealm-dev-config"), VolumeName(realm, "dev", "config"))
+	assert.Equal(t, "myrealm-dev-", ContainerPrefix(realm, "dev"))
+	assert.Equal(t, "myrealm-dev", ComposeProject(realm, "dev"))
 }
 
 func TestContainerName(t *testing.T) {
@@ -40,7 +51,7 @@ func TestContainerName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, ContainerName(tt.cluster, tt.shortName))
+			assert.Equal(t, tt.want, ContainerName(mesh.DefaultRealm, tt.cluster, tt.shortName))
 		})
 	}
 }
@@ -59,7 +70,7 @@ func TestVolumeName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, VolumeName(tt.cluster, tt.volumeType))
+			assert.Equal(t, tt.want, VolumeName(mesh.DefaultRealm, tt.cluster, tt.volumeType))
 		})
 	}
 }

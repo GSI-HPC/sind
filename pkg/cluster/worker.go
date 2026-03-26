@@ -42,13 +42,15 @@ type WorkerAddOptions struct {
 //
 // For unmanaged workers (Unmanaged=true), steps 5–7 are skipped.
 func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) ([]*Node, error) {
+	realm := meshMgr.Realm
+
 	// List cluster containers once for validation + index + image resolution.
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+opts.ClusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing cluster containers: %w", err)
 	}
 
-	controller, ok := findController(containers, opts.ClusterName)
+	controller, ok := findController(containers, realm, opts.ClusterName)
 	if !ok {
 		return nil, fmt.Errorf("controller not found for cluster %q", opts.ClusterName)
 	}
@@ -63,10 +65,10 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 
 	// Determine next index from existing containers.
-	startIdx := nextWorkerIndexFromContainers(containers, opts.ClusterName)
+	startIdx := nextWorkerIndexFromContainers(containers, realm, opts.ClusterName)
 
 	// Resolve infrastructure: DNS IP, SSH pubkey, slurm version.
-	dnsIP, sshPubKey, slurmVersion, err := resolveWorkerInfra(ctx, client, controllerName)
+	dnsIP, sshPubKey, slurmVersion, err := resolveWorkerInfra(ctx, client, meshMgr, controllerName)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +101,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	nodeConfigs := make([]RunConfig, count)
 	for i := range count {
 		nodeConfigs[i] = RunConfig{
+			Realm:           realm,
 			ClusterName:     opts.ClusterName,
 			ShortName:       fmt.Sprintf("worker-%d", startIdx+i),
 			Role:            "worker",
@@ -114,12 +117,12 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 
 	// Create and start node containers.
-	if err := createAllNodes(ctx, client, nodeConfigs); err != nil {
+	if err := createAllNodes(ctx, client, meshMgr, nodeConfigs); err != nil {
 		return nil, err
 	}
 
 	// Wait for readiness, inject SSH keys, collect host keys.
-	nodeResults, err := setupNodes(ctx, client, opts.ClusterName, sshPubKey, nodeConfigs, readinessInterval)
+	nodeResults, err := setupNodes(ctx, client, realm, opts.ClusterName, sshPubKey, nodeConfigs, readinessInterval)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +138,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		if err := updateNodesConf(ctx, client, controllerName, nodeConfigs); err != nil {
 			return nil, err
 		}
-		if err := enableSlurm(ctx, client, opts.ClusterName, nodeConfigs, readinessInterval); err != nil {
+		if err := enableSlurm(ctx, client, realm, opts.ClusterName, nodeConfigs, readinessInterval); err != nil {
 			return nil, err
 		}
 	}
@@ -153,6 +156,8 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 //
 // For unmanaged nodes, only steps 3–4 are performed.
 func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
+	realm := meshMgr.Realm
+
 	if len(shortNames) == 0 {
 		return nil
 	}
@@ -163,7 +168,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		return fmt.Errorf("listing cluster containers: %w", err)
 	}
 
-	controller, hasController := findController(containers, clusterName)
+	controller, hasController := findController(containers, realm, clusterName)
 	containerMap := make(map[docker.ContainerName]docker.ContainerListEntry, len(containers))
 	for _, c := range containers {
 		containerMap[c.Name] = c
@@ -177,7 +182,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 			continue
 		}
 		seen[name] = true
-		cn := ContainerName(clusterName, name)
+		cn := ContainerName(realm, clusterName, name)
 		c, ok := containerMap[cn]
 		if !ok {
 			return fmt.Errorf("node %q not found in cluster %q", name, clusterName)
@@ -213,13 +218,13 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // For managed workers, it verifies that sind-nodes.conf exists on the
 // controller (indicating sind-generated Slurm configuration is in use).
 // Unmanaged workers bypass the sind-nodes.conf check.
-func ValidateWorkerAdd(ctx context.Context, client *docker.Client, opts WorkerAddOptions) error {
+func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string, opts WorkerAddOptions) error {
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+opts.ClusterName)
 	if err != nil {
 		return fmt.Errorf("listing cluster containers: %w", err)
 	}
 
-	controller, ok := findController(containers, opts.ClusterName)
+	controller, ok := findController(containers, realm, opts.ClusterName)
 	if !ok {
 		return fmt.Errorf("controller not found for cluster %q", opts.ClusterName)
 	}
@@ -239,20 +244,20 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, opts WorkerAd
 // NextComputeIndex determines the next worker node index by examining
 // existing containers in the cluster. Returns max(existing indices) + 1,
 // or 0 if no worker containers exist.
-func NextComputeIndex(ctx context.Context, client *docker.Client, clusterName string) (int, error) {
+func NextComputeIndex(ctx context.Context, client *docker.Client, realm, clusterName string) (int, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return 0, fmt.Errorf("listing cluster containers: %w", err)
 	}
-	return nextWorkerIndexFromContainers(containers, clusterName), nil
+	return nextWorkerIndexFromContainers(containers, realm, clusterName), nil
 }
 
 // --- Unexported helpers ---
 
 // findController returns the controller's container entry from the list.
 // Returns false if no controller exists for the given cluster.
-func findController(containers []docker.ContainerListEntry, clusterName string) (docker.ContainerListEntry, bool) {
-	controllerName := ContainerName(clusterName, "controller")
+func findController(containers []docker.ContainerListEntry, realm, clusterName string) (docker.ContainerListEntry, bool) {
+	controllerName := ContainerName(realm, clusterName, "controller")
 	for _, c := range containers {
 		if c.Name == controllerName {
 			return c, true
@@ -271,11 +276,11 @@ var errSindNodesConfMissing = fmt.Errorf("sind-nodes.conf not found on controlle
 //	│  DNS IP  │  │ SSH key  │  │Slurm version │
 //	└────┬─────┘  └────┬─────┘  └──────┬───────┘
 //	     └─────────────┼───────────────┘
-func resolveWorkerInfra(ctx context.Context, client *docker.Client, controllerName docker.ContainerName) (dnsIP, sshPubKey, slurmVersion string, err error) {
+func resolveWorkerInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, controllerName docker.ContainerName) (dnsIP, sshPubKey, slurmVersion string, err error) {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		var meshErr error
-		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client)
+		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client, meshMgr)
 		return meshErr
 	})
 	g.Go(func() error {
@@ -336,8 +341,8 @@ func writeNodesConfAndReconfigure(ctx context.Context, client *docker.Client, co
 
 // nextComputeIndexFromContainers computes the next worker node index from
 // a pre-fetched container list.
-func nextWorkerIndexFromContainers(containers []docker.ContainerListEntry, clusterName string) int {
-	prefix := string(ContainerName(clusterName, "worker-"))
+func nextWorkerIndexFromContainers(containers []docker.ContainerListEntry, realm, clusterName string) int {
+	prefix := string(ContainerName(realm, clusterName, "worker-"))
 	maxIdx := -1
 	for _, c := range containers {
 		name := string(c.Name)

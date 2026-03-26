@@ -14,6 +14,7 @@ import (
 
 // Label keys used on sind containers.
 const (
+	LabelRealm        = "sind.realm"
 	LabelCluster      = "sind.cluster"
 	LabelRole         = "sind.role"
 	LabelSlurmVersion = "sind.slurm.version"
@@ -32,18 +33,19 @@ const (
 )
 
 // ComposeProject returns the Docker Compose project name for a cluster.
-func ComposeProject(clusterName string) string {
-	return "sind-" + clusterName
+func ComposeProject(realm, clusterName string) string {
+	return realm + "-" + clusterName
 }
 
 // NodeLabels returns the standard labels for a node container.
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is omitted when slurmVersion is empty.
-func NodeLabels(clusterName, role, slurmVersion string, containerNumber int) map[string]string {
+func NodeLabels(realm, clusterName, role, slurmVersion string, containerNumber int) map[string]string {
 	labels := map[string]string{
+		LabelRealm:                  realm,
 		LabelCluster:                clusterName,
 		LabelRole:                   role,
-		LabelComposeProject:         ComposeProject(clusterName),
+		LabelComposeProject:         ComposeProject(realm, clusterName),
 		LabelComposeService:         role,
 		LabelComposeContainerNumber: strconv.Itoa(containerNumber),
 		LabelComposeOneoff:          "False",
@@ -59,6 +61,7 @@ func NodeLabels(clusterName, role, slurmVersion string, containerNumber int) map
 // RunConfig holds the parameters needed to build docker run arguments
 // for creating a node container.
 type RunConfig struct {
+	Realm           string // realm name (e.g. "sind")
 	ClusterName     string // cluster name
 	ShortName       string // node hostname: "controller", "worker-0"
 	Role            string // "controller", "submitter", "worker"
@@ -82,12 +85,12 @@ func BuildRunArgs(cfg RunConfig) []string {
 
 	// Identity
 	args = append(args,
-		"--name", string(ContainerName(cfg.ClusterName, cfg.ShortName)),
+		"--name", string(ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)),
 		"--hostname", cfg.ShortName,
 	)
 
 	// Network
-	args = append(args, "--network", string(NetworkName(cfg.ClusterName)))
+	args = append(args, "--network", string(NetworkName(cfg.Realm, cfg.ClusterName)))
 	if cfg.DNSIP != "" {
 		args = append(args, "--dns", cfg.DNSIP)
 	}
@@ -99,8 +102,8 @@ func BuildRunArgs(cfg RunConfig) []string {
 		configMode = "rw"
 	}
 	args = append(args,
-		"-v", string(VolumeName(cfg.ClusterName, "config"))+":/etc/slurm:"+configMode+",z",
-		"-v", string(VolumeName(cfg.ClusterName, "munge"))+":/etc/munge:ro,z",
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "config"))+":/etc/slurm:"+configMode+",z",
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "munge"))+":/etc/munge:ro,z",
 	)
 
 	// Data volume
@@ -111,7 +114,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	if cfg.DataHostPath != "" {
 		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw,z")
 	} else {
-		args = append(args, "-v", string(VolumeName(cfg.ClusterName, "data"))+":"+dataMountPath+":rw,z")
+		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "data"))+":"+dataMountPath+":rw,z")
 	}
 
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
@@ -135,7 +138,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	)
 
 	// Labels
-	labels := NodeLabels(cfg.ClusterName, cfg.Role, cfg.SlurmVersion, cfg.ContainerNumber)
+	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.SlurmVersion, cfg.ContainerNumber)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
@@ -153,7 +156,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 
 // CreateNode creates a node container, connects it to the mesh network,
 // and starts it. Returns the container ID.
-func CreateNode(ctx context.Context, client *docker.Client, cfg RunConfig) (docker.ContainerID, error) {
+func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg RunConfig) (docker.ContainerID, error) {
 	args := BuildRunArgs(cfg)
 
 	id, err := client.CreateContainer(ctx, args...)
@@ -161,8 +164,8 @@ func CreateNode(ctx context.Context, client *docker.Client, cfg RunConfig) (dock
 		return "", fmt.Errorf("creating container %s: %w", cfg.ShortName, err)
 	}
 
-	containerName := ContainerName(cfg.ClusterName, cfg.ShortName)
-	if err := client.ConnectNetwork(ctx, mesh.NetworkName, containerName); err != nil {
+	containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
+	if err := client.ConnectNetwork(ctx, meshMgr.NetworkName(), containerName); err != nil {
 		return "", fmt.Errorf("connecting %s to mesh: %w", cfg.ShortName, err)
 	}
 

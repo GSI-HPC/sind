@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +29,7 @@ func newStatusCommand() *cobra.Command {
 
 func runStatus(cmd *cobra.Command, name string) error {
 	client := clientFrom(cmd.Context())
-	status, err := cluster.GetStatus(cmd.Context(), client, name)
+	status, err := cluster.GetStatus(cmd.Context(), client, mesh.DefaultRealm, name)
 	if err != nil {
 		return err
 	}

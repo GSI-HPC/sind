@@ -840,22 +840,22 @@ func TestCustomRealm_ResourceNames(t *testing.T) {
 	c := docker.NewClient(&docker.MockExecutor{})
 	mgr := NewManager(c, "testrealm")
 
-	assert.Equal(t, docker.NetworkName("testrealm-mesh"), mgr.networkName())
-	assert.Equal(t, docker.ContainerName("testrealm-dns"), mgr.dnsContainerName())
-	assert.Equal(t, docker.ContainerName("testrealm-ssh"), mgr.sshContainerName())
-	assert.Equal(t, docker.VolumeName("testrealm-ssh-config"), mgr.sshVolumeName())
-	assert.Equal(t, docker.ContainerName("testrealm-ssh-keygen"), mgr.sshKeygenName())
-	assert.Equal(t, "testrealm-mesh", mgr.composeProject())
+	assert.Equal(t, docker.NetworkName("testrealm-mesh"), mgr.NetworkName())
+	assert.Equal(t, docker.ContainerName("testrealm-dns"), mgr.DNSContainerName())
+	assert.Equal(t, docker.ContainerName("testrealm-ssh"), mgr.SSHContainerName())
+	assert.Equal(t, docker.VolumeName("testrealm-ssh-config"), mgr.SSHVolumeName())
+	assert.Equal(t, docker.ContainerName("testrealm-ssh-keygen"), mgr.SSHKeygenName())
+	assert.Equal(t, "testrealm-mesh", mgr.ComposeProject())
 }
 
 func TestCustomRealm_DefaultProducesStandardNames(t *testing.T) {
 	c := docker.NewClient(&docker.MockExecutor{})
 	mgr := NewManager(c, DefaultRealm)
 
-	assert.Equal(t, NetworkName, mgr.networkName())
-	assert.Equal(t, DNSContainerName, mgr.dnsContainerName())
-	assert.Equal(t, SSHContainerName, mgr.sshContainerName())
-	assert.Equal(t, SSHVolumeName, mgr.sshVolumeName())
+	assert.Equal(t, NetworkName, mgr.NetworkName())
+	assert.Equal(t, DNSContainerName, mgr.DNSContainerName())
+	assert.Equal(t, SSHContainerName, mgr.SSHContainerName())
+	assert.Equal(t, SSHVolumeName, mgr.SSHVolumeName())
 }
 
 func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {

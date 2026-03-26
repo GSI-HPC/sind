@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,9 +34,10 @@ func argValues(args []string, flag string) []string {
 }
 
 func TestNodeLabels(t *testing.T) {
-	labels := NodeLabels("dev", "controller", "25.11.0", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", 1)
 
 	assert.Equal(t, map[string]string{
+		"sind.realm":                          mesh.DefaultRealm,
 		"sind.cluster":                        "dev",
 		"sind.role":                           "controller",
 		"sind.slurm.version":                  "25.11.0",
@@ -49,9 +51,10 @@ func TestNodeLabels(t *testing.T) {
 }
 
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
-	labels := NodeLabels("dev", "worker", "", 3)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", "worker", "", 3)
 
 	assert.Equal(t, map[string]string{
+		"sind.realm":                          mesh.DefaultRealm,
 		"sind.cluster":                        "dev",
 		"sind.role":                           "worker",
 		"com.docker.compose.project":          "sind-dev",
@@ -67,6 +70,7 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 
 func defaultRunConfig() RunConfig {
 	return RunConfig{
+		Realm:           mesh.DefaultRealm,
 		ClusterName:     "dev",
 		ShortName:       "controller",
 		Role:            "controller",
@@ -99,6 +103,7 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 
 	// Labels
 	labels := argValues(args, "--label")
+	assert.Contains(t, labels, "sind.realm="+mesh.DefaultRealm)
 	assert.Contains(t, labels, "sind.cluster=dev")
 	assert.Contains(t, labels, "sind.role=controller")
 	assert.Contains(t, labels, "sind.slurm.version=25.11.0")
@@ -306,9 +311,10 @@ func TestCreateNode(t *testing.T) {
 	m.AddResult("", "", nil)         // StartContainer
 
 	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 	cfg := defaultRunConfig()
 
-	id, err := CreateNode(t.Context(), c, cfg)
+	id, err := CreateNode(t.Context(), c, mgr, cfg)
 	require.NoError(t, err)
 	assert.Equal(t, docker.ContainerID("abc123"), id)
 
@@ -330,9 +336,10 @@ func TestCreateNode_CreateError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("image not found"))
 
 	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(t.Context(), c, cfg)
+	_, err := CreateNode(t.Context(), c, mgr, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating container")
 	assert.Len(t, m.Calls, 1)
@@ -344,9 +351,10 @@ func TestCreateNode_ConnectError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("net error")) // ConnectNetwork
 
 	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(t.Context(), c, cfg)
+	_, err := CreateNode(t.Context(), c, mgr, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "connecting")
 	assert.Contains(t, err.Error(), "mesh")
@@ -360,9 +368,10 @@ func TestCreateNode_StartError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("start failed")) // StartContainer
 
 	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 	cfg := defaultRunConfig()
 
-	_, err := CreateNode(t.Context(), c, cfg)
+	_, err := CreateNode(t.Context(), c, mgr, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting container")
 	assert.Len(t, m.Calls, 3)

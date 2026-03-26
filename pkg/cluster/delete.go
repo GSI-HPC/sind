@@ -34,7 +34,9 @@ var volumeTypes = []string{"config", "munge", "data"}
 //	    yes → done
 //	    no  → CleanupMesh
 func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
-	res, err := ListClusterResources(ctx, client, clusterName)
+	realm := meshMgr.Realm
+
+	res, err := ListClusterResources(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
@@ -64,7 +66,7 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 
 	// Clean up mesh infrastructure if this was the last cluster.
-	hasOther, err := HasOtherClusters(ctx, client, clusterName)
+	hasOther, err := HasOtherClusters(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
@@ -85,9 +87,9 @@ type Resources struct {
 
 // ListClusterResources discovers all Docker resources belonging to the named cluster.
 // Containers are found by label filter; network and volumes are checked by name convention.
-func ListClusterResources(ctx context.Context, client *docker.Client, clusterName string) (*Resources, error) {
+func ListClusterResources(ctx context.Context, client *docker.Client, realm, clusterName string) (*Resources, error) {
 	res := &Resources{
-		Network: NetworkName(clusterName),
+		Network: NetworkName(realm, clusterName),
 	}
 
 	// Find containers by label.
@@ -107,7 +109,7 @@ func ListClusterResources(ctx context.Context, client *docker.Client, clusterNam
 
 	// Check cluster volumes.
 	for _, vtype := range volumeTypes {
-		volName := VolumeName(clusterName, vtype)
+		volName := VolumeName(realm, clusterName, vtype)
 		exists, err := client.VolumeExists(ctx, volName)
 		if err != nil {
 			return nil, fmt.Errorf("checking volume %s: %w", volName, err)
@@ -153,16 +155,16 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 // HasOtherClusters checks whether any sind cluster containers exist besides
 // the named cluster. This is used to decide whether to clean up mesh
 // infrastructure after deleting a cluster.
-func HasOtherClusters(ctx context.Context, client *docker.Client, clusterName string) (bool, error) {
-	containers, err := client.ListContainers(ctx, "label="+LabelCluster)
+func HasOtherClusters(ctx context.Context, client *docker.Client, realm, clusterName string) (bool, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return false, fmt.Errorf("listing sind containers: %w", err)
 	}
 	for _, c := range containers {
 		// Check if any container belongs to a different cluster by inspecting
 		// the container name prefix. Containers for clusterName have the
-		// prefix "sind-<clusterName>-".
-		prefix := "sind-" + clusterName + "-"
+		// prefix "<realm>-<clusterName>-".
+		prefix := ContainerPrefix(realm, clusterName)
 		if !strings.HasPrefix(string(c.Name), prefix) {
 			return true, nil
 		}
@@ -173,7 +175,7 @@ func HasOtherClusters(ctx context.Context, client *docker.Client, clusterName st
 // DeregisterMesh removes DNS records and known_hosts entries for each container
 // in the cluster. This is the inverse of registerMesh during cluster creation.
 func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {
-	prefix := "sind-" + clusterName + "-"
+	prefix := ContainerPrefix(meshMgr.Realm, clusterName)
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		dnsName := DNSName(shortName, clusterName)

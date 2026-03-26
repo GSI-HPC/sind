@@ -24,8 +24,8 @@ type ClusterSummary struct {
 
 // GetClusters lists all sind clusters by querying Docker for containers
 // with the sind.cluster label. Containers are grouped by cluster name.
-func GetClusters(ctx context.Context, client *docker.Client) ([]*ClusterSummary, error) {
-	containers, err := client.ListContainers(ctx, "label="+LabelCluster)
+func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*ClusterSummary, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return nil, fmt.Errorf("listing sind containers: %w", err)
 	}
@@ -86,7 +86,7 @@ type NodeSummary struct {
 }
 
 // GetNodes lists all nodes in the named cluster.
-func GetNodes(ctx context.Context, client *docker.Client, clusterName string) ([]*NodeSummary, error) {
+func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName string) ([]*NodeSummary, error) {
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
@@ -96,7 +96,7 @@ func GetNodes(ctx context.Context, client *docker.Client, clusterName string) ([
 		return nil, nil
 	}
 
-	prefix := "sind-" + clusterName + "-"
+	prefix := ContainerPrefix(realm, clusterName)
 	result := make([]*NodeSummary, 0, len(containers))
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
@@ -145,8 +145,8 @@ type NetworkSummary struct {
 
 // GetNetworks lists all sind-related Docker networks with IPAM details.
 // This includes per-cluster networks (sind-<cluster>-net) and the mesh network (sind-mesh).
-func GetNetworks(ctx context.Context, client *docker.Client) ([]*NetworkSummary, error) {
-	entries, err := client.ListNetworks(ctx, "name=sind-")
+func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*NetworkSummary, error) {
+	entries, err := client.ListNetworks(ctx, "name="+realm+"-")
 	if err != nil {
 		return nil, fmt.Errorf("listing networks: %w", err)
 	}
@@ -179,8 +179,8 @@ type VolumeSummary struct {
 }
 
 // GetVolumes lists all sind-related Docker volumes.
-func GetVolumes(ctx context.Context, client *docker.Client) ([]*VolumeSummary, error) {
-	entries, err := client.ListVolumes(ctx, "name=sind-")
+func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*VolumeSummary, error) {
+	entries, err := client.ListVolumes(ctx, "name="+realm+"-")
 	if err != nil {
 		return nil, fmt.Errorf("listing volumes: %w", err)
 	}
@@ -202,8 +202,9 @@ func GetVolumes(ctx context.Context, client *docker.Client) ([]*VolumeSummary, e
 
 // GetMungeKey reads the munge key from a cluster's node container.
 // Any container in the cluster can be used since all mount the same munge volume.
-func GetMungeKey(ctx context.Context, client *docker.Client, clusterName string) ([]byte, error) {
+func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string) ([]byte, error) {
 	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)

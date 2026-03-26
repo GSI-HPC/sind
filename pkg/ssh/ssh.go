@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
 )
 
@@ -62,9 +61,9 @@ func CollectHostKey(ctx context.Context, client *docker.Client, container docker
 }
 
 // sshConfigTemplate is the SSH config snippet for user SSH client integration.
-// The %s placeholders are replaced with the sind directory path.
+// The placeholders are: SSH container name, dir, dir.
 const sshConfigTemplate = `Host *.sind.local
-    ProxyCommand docker exec -i sind-ssh nc %%h 22
+    ProxyCommand docker exec -i %s nc %%h 22
     IdentityFile %s/id_ed25519
     UserKnownHostsFile %s/known_hosts
     User root
@@ -72,20 +71,20 @@ const sshConfigTemplate = `Host *.sind.local
 `
 
 // GenerateSSHConfig returns the SSH config snippet pointing to files in dir.
-func GenerateSSHConfig(dir string) string {
-	return fmt.Sprintf(sshConfigTemplate, dir, dir)
+func GenerateSSHConfig(sshContainer docker.ContainerName, dir string) string {
+	return fmt.Sprintf(sshConfigTemplate, string(sshContainer), dir, dir)
 }
 
 // ExportConfig exports SSH configuration to the given directory by reading
 // the private key and known_hosts from the SSH relay container and writing
 // ssh_config, id_ed25519, and known_hosts to dir.
-func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir string) error {
-	privKey, err := client.ReadFile(ctx, mesh.SSHContainerName, "/root/.ssh/id_ed25519")
+func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir string, sshContainer docker.ContainerName) error {
+	privKey, err := client.ReadFile(ctx, sshContainer, "/root/.ssh/id_ed25519")
 	if err != nil {
 		return fmt.Errorf("reading private key: %w", err)
 	}
 
-	knownHosts, err := client.ReadFile(ctx, mesh.SSHContainerName, "/root/.ssh/known_hosts")
+	knownHosts, err := client.ReadFile(ctx, sshContainer, "/root/.ssh/known_hosts")
 	if err != nil {
 		return fmt.Errorf("reading known_hosts: %w", err)
 	}
@@ -94,7 +93,7 @@ func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir s
 		return fmt.Errorf("creating directory %s: %w", dir, err)
 	}
 
-	if err := afero.WriteFile(fs, filepath.Join(dir, "ssh_config"), []byte(GenerateSSHConfig(dir)), 0644); err != nil {
+	if err := afero.WriteFile(fs, filepath.Join(dir, "ssh_config"), []byte(GenerateSSHConfig(sshContainer, dir)), 0644); err != nil {
 		return fmt.Errorf("writing ssh_config: %w", err)
 	}
 

@@ -7,82 +7,83 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSSH_BuildCommand(t *testing.T) {
-	args := BuildSSHArgs("worker-0", "dev", true, nil, nil)
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", true, nil, nil)
 
 	assert.Equal(t, []string{
-		"exec", "-i", "-t", "sind-ssh",
+		"exec", "-i", "-t", string(mesh.SSHContainerName),
 		"ssh", "worker-0.dev.sind.local",
 	}, args)
 }
 
 func TestSSH_BuildCommand_NonInteractive(t *testing.T) {
-	args := BuildSSHArgs("worker-0", "dev", false, nil, nil)
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", false, nil, nil)
 
 	assert.Equal(t, []string{
-		"exec", "-i", "sind-ssh",
+		"exec", "-i", string(mesh.SSHContainerName),
 		"ssh", "worker-0.dev.sind.local",
 	}, args)
 }
 
 func TestSSH_BuildCommand_WithCommand(t *testing.T) {
-	args := BuildSSHArgs("controller", "default", false, nil, []string{"hostname"})
+	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", false, nil, []string{"hostname"})
 
 	assert.Equal(t, []string{
-		"exec", "-i", "sind-ssh",
+		"exec", "-i", string(mesh.SSHContainerName),
 		"ssh", "controller.default.sind.local", "hostname",
 	}, args)
 }
 
 func TestSSH_BuildCommand_WithMultiWordCommand(t *testing.T) {
-	args := BuildSSHArgs("worker-0", "dev", false, nil, []string{"ls", "-la", "/tmp"})
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", false, nil, []string{"ls", "-la", "/tmp"})
 
 	assert.Equal(t, []string{
-		"exec", "-i", "sind-ssh",
+		"exec", "-i", string(mesh.SSHContainerName),
 		"ssh", "worker-0.dev.sind.local", "ls", "-la", "/tmp",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions(t *testing.T) {
-	args := BuildSSHArgs("worker-0", "dev", true, []string{"-v"}, nil)
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", true, []string{"-v"}, nil)
 
 	assert.Equal(t, []string{
-		"exec", "-i", "-t", "sind-ssh",
+		"exec", "-i", "-t", string(mesh.SSHContainerName),
 		"ssh", "-v", "worker-0.dev.sind.local",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions_PortForwarding(t *testing.T) {
-	args := BuildSSHArgs("controller", "default", true,
+	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", true,
 		[]string{"-L", "8080:localhost:80"}, nil)
 
 	assert.Equal(t, []string{
-		"exec", "-i", "-t", "sind-ssh",
+		"exec", "-i", "-t", string(mesh.SSHContainerName),
 		"ssh", "-L", "8080:localhost:80", "controller.default.sind.local",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions_ForceTTY(t *testing.T) {
-	args := BuildSSHArgs("worker-0", "dev", true,
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", true,
 		[]string{"-t"}, []string{"top"})
 
 	assert.Equal(t, []string{
-		"exec", "-i", "-t", "sind-ssh",
+		"exec", "-i", "-t", string(mesh.SSHContainerName),
 		"ssh", "-t", "worker-0.dev.sind.local", "top",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions_Multiple(t *testing.T) {
-	args := BuildSSHArgs("worker-0", "dev", false,
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", false,
 		[]string{"-v", "-o", "StrictHostKeyChecking=no"},
 		[]string{"uptime"})
 
 	assert.Equal(t, []string{
-		"exec", "-i", "sind-ssh",
+		"exec", "-i", string(mesh.SSHContainerName),
 		"ssh", "-v", "-o", "StrictHostKeyChecking=no",
 		"worker-0.dev.sind.local", "uptime",
 	}, args)
@@ -107,7 +108,7 @@ func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	target, err := EnterTarget(t.Context(), client, "dev")
+	target, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "submitter", target)
@@ -128,7 +129,7 @@ func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	target, err := EnterTarget(t.Context(), client, "dev")
+	target, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "controller", target)
@@ -147,7 +148,7 @@ func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := EnterTarget(t.Context(), client, "dev")
+	_, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no submitter or controller")
@@ -163,7 +164,7 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := EnterTarget(t.Context(), client, "dev")
+	_, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no submitter or controller")
@@ -172,7 +173,7 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 func TestEnter_TargetSelection_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	_, err := EnterTarget(t.Context(), client, "dev")
+	_, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -195,11 +196,11 @@ func TestExec_OneShot(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	args, err := ExecArgs(t.Context(), client, "dev", []string{"sinfo", "-N"})
+	args, err := ExecArgs(t.Context(), client, mesh.DefaultRealm, mesh.SSHContainerName, "dev", []string{"sinfo", "-N"})
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"exec", "-i", "sind-ssh",
+		"exec", "-i", string(mesh.SSHContainerName),
 		"ssh", "controller.dev.sind.local", "sinfo", "-N",
 	}, args)
 }
@@ -219,11 +220,11 @@ func TestExec_OneShotWithSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	args, err := ExecArgs(t.Context(), client, "dev", []string{"hostname"})
+	args, err := ExecArgs(t.Context(), client, mesh.DefaultRealm, mesh.SSHContainerName, "dev", []string{"hostname"})
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"exec", "-i", "sind-ssh",
+		"exec", "-i", string(mesh.SSHContainerName),
 		"ssh", "submitter.dev.sind.local", "hostname",
 	}, args)
 }
@@ -231,7 +232,7 @@ func TestExec_OneShotWithSubmitter(t *testing.T) {
 func TestExec_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	_, err := ExecArgs(t.Context(), client, "dev", []string{"hostname"})
+	_, err := ExecArgs(t.Context(), client, mesh.DefaultRealm, mesh.SSHContainerName, "dev", []string{"hostname"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")

@@ -176,7 +176,7 @@ func TestCollectHostKey_ExecError(t *testing.T) {
 // --- GenerateSSHConfig ---
 
 func TestGenerateSSHConfig(t *testing.T) {
-	config := GenerateSSHConfig("/home/user/.sind")
+	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind")
 
 	assert.Contains(t, config, "Host *.sind.local")
 	assert.Contains(t, config, "ProxyCommand docker exec -i sind-ssh nc %h 22")
@@ -205,7 +205,7 @@ func TestExportConfig(t *testing.T) {
 
 	fs := afero.NewMemMapFs()
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir)
+	err := ExportConfig(t.Context(), c, fs, testExportDir, docker.ContainerName("sind-ssh"))
 	require.NoError(t, err)
 
 	// Verify ssh_config was written with correct paths.
@@ -234,7 +234,7 @@ func TestExportConfig_FilePermissions(t *testing.T) {
 	_, c := exportDockerMock()
 	fs := afero.NewMemMapFs()
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir)
+	err := ExportConfig(t.Context(), c, fs, testExportDir, docker.ContainerName("sind-ssh"))
 	require.NoError(t, err)
 
 	// Private key must be 0600 (owner read/write only).
@@ -257,7 +257,7 @@ func TestExportConfig_ReadPrivKeyError(t *testing.T) {
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir)
+	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, docker.ContainerName("sind-ssh"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading private key")
 }
@@ -268,7 +268,7 @@ func TestExportConfig_ReadKnownHostsError(t *testing.T) {
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir)
+	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, docker.ContainerName("sind-ssh"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading known_hosts")
 }
@@ -277,7 +277,7 @@ func TestExportConfig_MkdirError(t *testing.T) {
 	_, c := exportDockerMock()
 	fs := afero.NewReadOnlyFs(afero.NewMemMapFs())
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir)
+	err := ExportConfig(t.Context(), c, fs, testExportDir, docker.ContainerName("sind-ssh"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating directory")
 }
@@ -299,7 +299,7 @@ func TestExportConfig_WriteSSHConfigError(t *testing.T) {
 	_, c := exportDockerMock()
 	fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/ssh_config"}
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir)
+	err := ExportConfig(t.Context(), c, fs, testExportDir, docker.ContainerName("sind-ssh"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing ssh_config")
 }
@@ -308,7 +308,7 @@ func TestExportConfig_WritePrivKeyError(t *testing.T) {
 	_, c := exportDockerMock()
 	fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/id_ed25519"}
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir)
+	err := ExportConfig(t.Context(), c, fs, testExportDir, docker.ContainerName("sind-ssh"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing id_ed25519")
 }
@@ -317,7 +317,7 @@ func TestExportConfig_WriteKnownHostsError(t *testing.T) {
 	_, c := exportDockerMock()
 	fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/known_hosts"}
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir)
+	err := ExportConfig(t.Context(), c, fs, testExportDir, docker.ContainerName("sind-ssh"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing known_hosts")
 }

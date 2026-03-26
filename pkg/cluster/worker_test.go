@@ -52,7 +52,7 @@ func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -78,7 +78,7 @@ func TestWorkerAdd_RequiresSindNodes_Present(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -104,7 +104,7 @@ func TestWorkerAdd_AllowsUnmanaged(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		Unmanaged:   true,
@@ -124,7 +124,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -144,7 +144,7 @@ func TestWorkerAdd_ClusterNotFound_Unmanaged(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		Unmanaged:   true,
@@ -164,7 +164,7 @@ func TestWorkerAdd_ListContainersError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, WorkerAddOptions{
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 	})
@@ -189,7 +189,7 @@ func TestNextComputeIndex_Empty(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(t.Context(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, idx)
@@ -206,7 +206,7 @@ func TestNextComputeIndex_Sequential(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(t.Context(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, idx)
@@ -223,7 +223,7 @@ func TestNextComputeIndex_Gap(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(t.Context(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 4, idx)
@@ -245,7 +245,7 @@ func TestNextComputeIndex_NonComputeIgnored(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(t.Context(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, idx)
@@ -261,7 +261,7 @@ func TestNextComputeIndex_ListError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := NextComputeIndex(t.Context(), client, "dev")
+	_, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing cluster containers")
@@ -1003,7 +1003,7 @@ func TestNextComputeIndex_NonNumericSuffix(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	idx, err := NextComputeIndex(t.Context(), client, "dev")
+	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, idx)

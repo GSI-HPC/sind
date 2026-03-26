@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +48,7 @@ func TestGetClusters(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(t.Context(), c)
+	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 2)
@@ -75,7 +76,7 @@ func TestGetClusters_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(t.Context(), c)
+	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	assert.Empty(t, clusters)
@@ -95,7 +96,7 @@ func TestGetClusters_MixedStatus(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(t.Context(), c)
+	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -117,7 +118,7 @@ func TestGetClusters_AllStopped(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(t.Context(), c)
+	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -129,7 +130,7 @@ func TestGetClusters_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetClusters(t.Context(), c)
+	_, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing sind containers")
@@ -140,13 +141,13 @@ func TestGetClusters_LabelFilter(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, _ = GetClusters(t.Context(), c)
+	_, _ = GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.Len(t, m.Calls, 1)
 	args := m.Calls[0].Args
 	filterIdx := indexOf(args, "--filter")
 	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label=sind.cluster", args[filterIdx+1])
+	assert.Equal(t, "label="+LabelRealm+"="+mesh.DefaultRealm, args[filterIdx+1])
 }
 
 func TestGetClusters_NoSlurmVersion(t *testing.T) {
@@ -159,7 +160,7 @@ func TestGetClusters_NoSlurmVersion(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(t.Context(), c)
+	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -180,7 +181,7 @@ func TestGetClusters_EmptyClusterLabel(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	clusters, err := GetClusters(t.Context(), c)
+	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
@@ -208,7 +209,7 @@ func TestGetNodes(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(t.Context(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
@@ -243,7 +244,7 @@ func TestGetNodes_WithStatus(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(t.Context(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
@@ -257,7 +258,7 @@ func TestGetNodes_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(t.Context(), c, "nonexistent")
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "nonexistent")
 
 	require.NoError(t, err)
 	assert.Empty(t, nodes)
@@ -268,7 +269,7 @@ func TestGetNodes_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker ps failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNodes(t.Context(), c, "dev")
+	_, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -279,7 +280,7 @@ func TestGetNodes_LabelFilter(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, _ = GetNodes(t.Context(), c, "myCluster")
+	_, _ = GetNodes(t.Context(), c, mesh.DefaultRealm, "myCluster")
 
 	require.Len(t, m.Calls, 1)
 	args := m.Calls[0].Args
@@ -306,7 +307,7 @@ func TestGetNodes_SortOrder(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(t.Context(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
@@ -330,7 +331,7 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(t.Context(), c, "dev")
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
@@ -398,7 +399,7 @@ func TestGetNetworks(t *testing.T) {
 	m.AddResult(networkInspectJSON("sind-prod-net", "172.20.0.0/16", "172.20.0.1"), "", nil)
 	c := docker.NewClient(&m)
 
-	networks, err := GetNetworks(t.Context(), c)
+	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	require.Len(t, networks, 3)
@@ -416,7 +417,7 @@ func TestGetNetworks_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	networks, err := GetNetworks(t.Context(), c)
+	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	assert.Empty(t, networks)
@@ -427,7 +428,7 @@ func TestGetNetworks_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNetworks(t.Context(), c)
+	_, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing networks")
@@ -459,7 +460,7 @@ func TestGetVolumes(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	volumes, err := GetVolumes(t.Context(), c)
+	volumes, err := GetVolumes(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	require.Len(t, volumes, 4)
@@ -476,7 +477,7 @@ func TestGetVolumes_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	volumes, err := GetVolumes(t.Context(), c)
+	volumes, err := GetVolumes(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
 	assert.Empty(t, volumes)
@@ -487,7 +488,7 @@ func TestGetVolumes_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumes(t.Context(), c)
+	_, err := GetVolumes(t.Context(), c, mesh.DefaultRealm)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing volumes")
@@ -505,7 +506,7 @@ func TestGetMungeKey(t *testing.T) {
 	m.AddResult(tarArchive("munge.key", keyData), "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := GetMungeKey(t.Context(), c, "dev")
+	key, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, []byte(keyData), key)
@@ -516,7 +517,7 @@ func TestGetMungeKey_NoContainers(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, err := GetMungeKey(t.Context(), c, "dev")
+	_, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no containers found")
@@ -527,7 +528,7 @@ func TestGetMungeKey_ListError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetMungeKey(t.Context(), c, "dev")
+	_, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -542,7 +543,7 @@ func TestGetMungeKey_CopyError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("cp failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetMungeKey(t.Context(), c, "dev")
+	_, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading munge key")

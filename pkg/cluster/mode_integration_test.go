@@ -80,7 +80,7 @@ defaults:
 	require.Len(t, result.Nodes, 2)
 
 	// GetClusters.
-	clusters, err := GetClusters(ctx, c)
+	clusters, err := GetClusters(ctx, c, mesh.DefaultRealm)
 	require.NoError(t, err)
 	var found bool
 	for _, cl := range clusters {
@@ -92,7 +92,7 @@ defaults:
 	assert.True(t, found, "cluster should appear in GetClusters")
 
 	// GetNodes.
-	nodes, err := GetNodes(ctx, c, clusterName)
+	nodes, err := GetNodes(ctx, c, mesh.DefaultRealm, clusterName)
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
@@ -101,7 +101,7 @@ defaults:
 	require.NoError(t, err)
 
 	// Verify gone.
-	clusters, err = GetClusters(ctx, c)
+	clusters, err = GetClusters(ctx, c, mesh.DefaultRealm)
 	require.NoError(t, err)
 	for _, cl := range clusters {
 		assert.NotEqual(t, clusterName, cl.Name)

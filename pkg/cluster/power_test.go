@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,7 @@ func TestPower_Shutdown(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
+	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -72,7 +73,7 @@ func TestPower_Shutdown_NodeNotFound(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-99"})
+	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-99"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "worker-99")
@@ -92,7 +93,7 @@ func TestPower_Shutdown_StopError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stopping")
@@ -102,7 +103,7 @@ func TestPower_Shutdown_EmptyNodes(t *testing.T) {
 	var m docker.MockExecutor
 	client := docker.NewClient(&m)
 
-	err := PowerShutdown(t.Context(), client, "dev", nil)
+	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
@@ -111,7 +112,7 @@ func TestPower_Shutdown_EmptyNodes(t *testing.T) {
 func TestPower_Shutdown_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -132,7 +133,7 @@ func TestPower_Cut(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCut(t.Context(), client, "dev", []string{"worker-0", "controller"})
+	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "controller"})
 
 	require.NoError(t, err)
 
@@ -149,7 +150,7 @@ func TestPower_Cut_EmptyNodes(t *testing.T) {
 	var m docker.MockExecutor
 	client := docker.NewClient(&m)
 
-	err := PowerCut(t.Context(), client, "dev", nil)
+	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
@@ -158,7 +159,7 @@ func TestPower_Cut_EmptyNodes(t *testing.T) {
 func TestPower_Cut_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerCut(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -177,7 +178,7 @@ func TestPower_Cut_KillError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCut(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "killing")
@@ -198,7 +199,7 @@ func TestPower_On(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerOn(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
+	err := PowerOn(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -214,7 +215,7 @@ func TestPower_On(t *testing.T) {
 func TestPower_On_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerOn(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerOn(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -233,7 +234,7 @@ func TestPower_On_StartError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerOn(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerOn(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "starting")
@@ -254,7 +255,7 @@ func TestPower_Reboot(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
+	err := PowerReboot(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -276,7 +277,7 @@ func TestPower_Reboot(t *testing.T) {
 func TestPower_Reboot_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerReboot(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -295,7 +296,7 @@ func TestPower_Reboot_StopError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerReboot(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stopping")
@@ -317,7 +318,7 @@ func TestPower_Reboot_StartError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerReboot(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "starting")
@@ -338,7 +339,7 @@ func TestPower_Cycle(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
+	err := PowerCycle(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -360,7 +361,7 @@ func TestPower_Cycle(t *testing.T) {
 func TestPower_Cycle_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerCycle(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -379,7 +380,7 @@ func TestPower_Cycle_KillError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerCycle(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "killing")
@@ -401,7 +402,7 @@ func TestPower_Cycle_StartError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerCycle(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "starting")
@@ -422,7 +423,7 @@ func TestPower_Freeze(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerFreeze(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
+	err := PowerFreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -438,7 +439,7 @@ func TestPower_Freeze(t *testing.T) {
 func TestPower_Freeze_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerFreeze(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerFreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -457,7 +458,7 @@ func TestPower_Freeze_PauseError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerFreeze(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerFreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pausing")
@@ -478,7 +479,7 @@ func TestPower_Unfreeze(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerUnfreeze(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerUnfreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.NoError(t, err)
 
@@ -494,7 +495,7 @@ func TestPower_Unfreeze(t *testing.T) {
 func TestPower_Unfreeze_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerUnfreeze(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerUnfreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -513,7 +514,7 @@ func TestPower_Unfreeze_UnpauseError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerUnfreeze(t.Context(), client, "dev", []string{"worker-0"})
+	err := PowerUnfreeze(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unpausing")
@@ -526,7 +527,7 @@ func TestPowerLifecycle(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	cluster := "it-pwr"
-	ctrName := ContainerName(cluster, "worker-0")
+	ctrName := ContainerName(mesh.DefaultRealm, cluster, "worker-0")
 
 	if !rec.IsIntegration() {
 		// Create container with labels
@@ -583,25 +584,25 @@ func TestPowerLifecycle(t *testing.T) {
 	nodes := []string{"worker-0"}
 
 	// Shutdown (stop) + On (start).
-	err = PowerShutdown(ctx, c, cluster, nodes)
+	err = PowerShutdown(ctx, c, mesh.DefaultRealm, cluster, nodes)
 	require.NoError(t, err)
 
-	err = PowerOn(ctx, c, cluster, nodes)
+	err = PowerOn(ctx, c, mesh.DefaultRealm, cluster, nodes)
 	require.NoError(t, err)
 
 	// Freeze (pause) + Unfreeze (unpause).
-	err = PowerFreeze(ctx, c, cluster, nodes)
+	err = PowerFreeze(ctx, c, mesh.DefaultRealm, cluster, nodes)
 	require.NoError(t, err)
 
-	err = PowerUnfreeze(ctx, c, cluster, nodes)
+	err = PowerUnfreeze(ctx, c, mesh.DefaultRealm, cluster, nodes)
 	require.NoError(t, err)
 
 	// Reboot (stop + start).
-	err = PowerReboot(ctx, c, cluster, nodes)
+	err = PowerReboot(ctx, c, mesh.DefaultRealm, cluster, nodes)
 	require.NoError(t, err)
 
 	// Cycle (kill + start).
-	err = PowerCycle(ctx, c, cluster, nodes)
+	err = PowerCycle(ctx, c, mesh.DefaultRealm, cluster, nodes)
 	require.NoError(t, err)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())

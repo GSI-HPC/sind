@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -41,9 +42,9 @@ func runLogs(cmd *cobra.Command, args []string, follow bool) error {
 	node := targets[0]
 	var dockerArgs []string
 	if len(args) == 2 {
-		dockerArgs = cluster.ServiceLogArgs(node.ShortName, node.Cluster, args[1], follow)
+		dockerArgs = cluster.ServiceLogArgs(mesh.DefaultRealm, node.ShortName, node.Cluster, args[1], follow)
 	} else {
-		dockerArgs = cluster.ContainerLogArgs(node.ShortName, node.Cluster, follow)
+		dockerArgs = cluster.ContainerLogArgs(mesh.DefaultRealm, node.ShortName, node.Cluster, follow)
 	}
 
 	return dockerExec(cmd, dockerArgs)

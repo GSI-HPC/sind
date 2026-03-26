@@ -32,7 +32,7 @@ func TestListClusterResources(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, "dev")
+	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 
@@ -56,7 +56,7 @@ func TestListClusterResources_NoResources(t *testing.T) {
 	addNotFound(t, &m, 3)    // VolumeExists: config, munge, data
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, "nonexistent")
+	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "nonexistent")
 
 	require.NoError(t, err)
 	assert.Empty(t, res.Containers)
@@ -73,7 +73,7 @@ func TestListClusterResources_PartialVolumes(t *testing.T) {
 	m.AddResult("", "", nil) // VolumeExists: data exists
 	c := docker.NewClient(&m)
 
-	res, err := ListClusterResources(t.Context(), c, "dev")
+	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, res.NetworkExists)
@@ -85,7 +85,7 @@ func TestListClusterResources_ListContainersError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker ps failed"))
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(t.Context(), c, "dev")
+	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -97,7 +97,7 @@ func TestListClusterResources_NetworkCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("network inspect failed")) // non-exit error
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(t.Context(), c, "dev")
+	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking network")
@@ -110,7 +110,7 @@ func TestListClusterResources_VolumeCheckError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("volume inspect failed")) // config check fails
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(t.Context(), c, "dev")
+	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume")
@@ -122,7 +122,7 @@ func TestListClusterResources_LabelFilter(t *testing.T) {
 	addNotFound(t, &m, 4)    // network + 3 volumes
 	c := docker.NewClient(&m)
 
-	_, err := ListClusterResources(t.Context(), c, "myCluster")
+	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "myCluster")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 5)
@@ -363,7 +363,7 @@ func TestHasOtherClusters_True(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(t.Context(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, has)
@@ -378,7 +378,7 @@ func TestHasOtherClusters_False(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(t.Context(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.False(t, has)
@@ -389,7 +389,7 @@ func TestHasOtherClusters_NoContainers(t *testing.T) {
 	m.AddResult("", "", nil) // empty list
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(t.Context(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.False(t, has)
@@ -400,7 +400,7 @@ func TestHasOtherClusters_Error(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := HasOtherClusters(t.Context(), c, "dev")
+	_, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing sind containers")
@@ -411,13 +411,13 @@ func TestHasOtherClusters_LabelFilter(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, _ = HasOtherClusters(t.Context(), c, "dev")
+	_, _ = HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Len(t, m.Calls, 1)
 	args := m.Calls[0].Args
 	filterIdx := indexOf(args, "--filter")
 	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label=sind.cluster", args[filterIdx+1])
+	assert.Equal(t, "label="+LabelRealm+"="+mesh.DefaultRealm, args[filterIdx+1])
 }
 
 func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
@@ -430,7 +430,7 @@ func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 	), "", nil)
 	c := docker.NewClient(&m)
 
-	has, err := HasOtherClusters(t.Context(), c, "dev")
+	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.True(t, has, "sind-dev2-controller should not match cluster dev")

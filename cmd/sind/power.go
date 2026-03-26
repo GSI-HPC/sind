@@ -8,10 +8,11 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
-type powerFunc func(ctx context.Context, client *docker.Client, clusterName string, shortNames []string) error
+type powerFunc func(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error
 
 func newPowerCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -58,7 +59,7 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc) error {
 	client := clientFrom(ctx)
 
 	for clusterName, shortNames := range groupByCluster(targets) {
-		if err := fn(ctx, client, clusterName, shortNames); err != nil {
+		if err := fn(ctx, client, mesh.DefaultRealm, clusterName, shortNames); err != nil {
 			return err
 		}
 	}

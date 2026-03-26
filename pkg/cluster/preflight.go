@@ -38,11 +38,11 @@ func NodeShortNames(nodes []config.Node) []string {
 // PreflightCheck verifies that no Docker resources conflict with the cluster
 // that would be created from the given configuration. It checks for existing
 // networks, volumes, and containers with matching names.
-func PreflightCheck(ctx context.Context, client *docker.Client, cfg *config.Cluster) error {
+func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
 	var conflicts []string
 
 	// Check cluster network.
-	netName := NetworkName(cfg.Name)
+	netName := NetworkName(realm, cfg.Name)
 	exists, err := client.NetworkExists(ctx, netName)
 	if err != nil {
 		return fmt.Errorf("checking network %s: %w", netName, err)
@@ -53,7 +53,7 @@ func PreflightCheck(ctx context.Context, client *docker.Client, cfg *config.Clus
 
 	// Check cluster volumes.
 	for _, vtype := range []string{"config", "munge", "data"} {
-		volName := VolumeName(cfg.Name, vtype)
+		volName := VolumeName(realm, cfg.Name, vtype)
 		exists, err := client.VolumeExists(ctx, volName)
 		if err != nil {
 			return fmt.Errorf("checking volume %s: %w", volName, err)
@@ -65,7 +65,7 @@ func PreflightCheck(ctx context.Context, client *docker.Client, cfg *config.Clus
 
 	// Check node containers.
 	for _, shortName := range NodeShortNames(cfg.Nodes) {
-		containerName := ContainerName(cfg.Name, shortName)
+		containerName := ContainerName(realm, cfg.Name, shortName)
 		exists, err := client.ContainerExists(ctx, containerName)
 		if err != nil {
 			return fmt.Errorf("checking container %s: %w", containerName, err)
