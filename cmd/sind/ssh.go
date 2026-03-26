@@ -177,11 +177,11 @@ func parseExecArgs(args []string) (clusterName string, command []string, err err
 	return clusterName, command, nil
 }
 
-// dockerExec runs a docker command with stdin/stdout/stderr inherited.
+// dockerExec runs a docker command with stdin/stdout/stderr from the cobra command.
 func dockerExec(cmd *cobra.Command, args []string) error {
 	dockerCmd := exec.CommandContext(cmd.Context(), "docker", args...)
 	dockerCmd.Stdin = os.Stdin
-	dockerCmd.Stdout = os.Stdout
-	dockerCmd.Stderr = os.Stderr
+	dockerCmd.Stdout = cmd.OutOrStdout()
+	dockerCmd.Stderr = cmd.ErrOrStderr()
 	return dockerCmd.Run()
 }

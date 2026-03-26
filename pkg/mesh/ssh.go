@@ -19,7 +19,8 @@ import (
 const knownHostsPath = "/root/.ssh/known_hosts"
 
 // SSHImage is the container image used for the SSH relay container.
-const SSHImage = "alpine:latest"
+// Uses the sind-node image which includes ssh client and netcat.
+const SSHImage = "ghcr.io/gsi-hpc/sind-node:latest"
 
 // sshKeygenImage is the container image used as a temporary helper for writing
 // SSH keys into the SSH volume. The container is never started.
