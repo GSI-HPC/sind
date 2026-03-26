@@ -3,8 +3,10 @@
 package main
 
 import (
+	"context"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,4 +33,79 @@ func TestPower_RequiresArgs(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+// --- Integration ---
+
+func TestPowerLifecycle(t *testing.T) {
+	c := realClient(t)
+	ctx := t.Context()
+	cluster := "cli-pwr-" + testID
+
+	ctrName := docker.ContainerName("sind-" + cluster + "-compute-0")
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.KillContainer(bg, ctrName)
+		_ = c.RemoveContainer(bg, ctrName)
+	})
+
+	_, err := c.RunContainer(ctx,
+		"--name", string(ctrName),
+		"--label", "sind.cluster="+cluster,
+		"--label", "sind.role=compute",
+		"busybox:latest", "sleep", "120",
+	)
+	require.NoError(t, err)
+
+	node := "compute-0." + cluster
+
+	// shutdown (stop)
+	_, _, err = executeWithDocker("power", "shutdown", node)
+	require.NoError(t, err)
+	info, err := c.InspectContainer(ctx, ctrName)
+	require.NoError(t, err)
+	assert.Equal(t, "exited", info.Status)
+
+	// on (start)
+	_, _, err = executeWithDocker("power", "on", node)
+	require.NoError(t, err)
+	info, err = c.InspectContainer(ctx, ctrName)
+	require.NoError(t, err)
+	assert.Equal(t, "running", info.Status)
+
+	// freeze (pause)
+	_, _, err = executeWithDocker("power", "freeze", node)
+	require.NoError(t, err)
+	info, err = c.InspectContainer(ctx, ctrName)
+	require.NoError(t, err)
+	assert.Equal(t, "paused", info.Status)
+
+	// unfreeze (unpause)
+	_, _, err = executeWithDocker("power", "unfreeze", node)
+	require.NoError(t, err)
+	info, err = c.InspectContainer(ctx, ctrName)
+	require.NoError(t, err)
+	assert.Equal(t, "running", info.Status)
+
+	// reboot (stop + start)
+	_, _, err = executeWithDocker("power", "reboot", node)
+	require.NoError(t, err)
+	info, err = c.InspectContainer(ctx, ctrName)
+	require.NoError(t, err)
+	assert.Equal(t, "running", info.Status)
+
+	// cycle (kill + start)
+	_, _, err = executeWithDocker("power", "cycle", node)
+	require.NoError(t, err)
+	info, err = c.InspectContainer(ctx, ctrName)
+	require.NoError(t, err)
+	assert.Equal(t, "running", info.Status)
+
+	// cut (kill)
+	_, _, err = executeWithDocker("power", "cut", node)
+	require.NoError(t, err)
+	info, err = c.InspectContainer(ctx, ctrName)
+	require.NoError(t, err)
+	assert.NotEqual(t, "running", info.Status)
 }

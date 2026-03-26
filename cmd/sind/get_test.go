@@ -5,6 +5,7 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -144,4 +145,82 @@ func tarArchive(name, content string) string {
 	tw.Write(data)
 	tw.Close()
 	return buf.String()
+}
+
+// --- Integration ---
+
+func TestGetClustersEmpty(t *testing.T) {
+	realClient(t)
+	stdout, _, err := executeWithDocker("get", "clusters")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "NAME")
+}
+
+func TestGetLifecycle(t *testing.T) {
+	c := realClient(t)
+	ctx := t.Context()
+	cluster := "cli-get-" + testID
+
+	netName := docker.NetworkName("sind-" + cluster + "-net")
+	ctrName := docker.ContainerName("sind-" + cluster + "-controller")
+	volConfig := docker.VolumeName("sind-" + cluster + "-config")
+	volMunge := docker.VolumeName("sind-" + cluster + "-munge")
+	volData := docker.VolumeName("sind-" + cluster + "-data")
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.KillContainer(bg, ctrName)
+		_ = c.RemoveContainer(bg, ctrName)
+		_ = c.RemoveVolume(bg, volConfig)
+		_ = c.RemoveVolume(bg, volMunge)
+		_ = c.RemoveVolume(bg, volData)
+		_ = c.RemoveNetwork(bg, netName)
+	})
+
+	_, err := c.CreateNetwork(ctx, netName)
+	require.NoError(t, err)
+	require.NoError(t, c.CreateVolume(ctx, volConfig))
+	require.NoError(t, c.CreateVolume(ctx, volMunge))
+	require.NoError(t, c.CreateVolume(ctx, volData))
+
+	_, err = c.RunContainer(ctx,
+		"--name", string(ctrName),
+		"--network", string(netName),
+		"--label", "sind.cluster="+cluster,
+		"--label", "sind.role=controller",
+		"--label", "sind.slurm.version=25.11.0",
+		"-v", string(volMunge)+":/etc/munge",
+		"busybox:latest", "sleep", "120",
+	)
+	require.NoError(t, err)
+	require.NoError(t, c.WriteFile(ctx, ctrName, "/etc/munge/munge.key", "test-munge-key"))
+
+	// get clusters
+	stdout, _, err := executeWithDocker("get", "clusters")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, cluster)
+	assert.Contains(t, stdout, "25.11.0")
+	assert.Contains(t, stdout, "running")
+
+	// get nodes
+	stdout, _, err = executeWithDocker("get", "nodes", cluster)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "controller."+cluster)
+
+	// get networks
+	stdout, _, err = executeWithDocker("get", "networks")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, string(netName))
+
+	// get volumes
+	stdout, _, err = executeWithDocker("get", "volumes")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, string(volConfig))
+	assert.Contains(t, stdout, string(volMunge))
+	assert.Contains(t, stdout, string(volData))
+
+	// get munge-key
+	stdout, _, err = executeWithDocker("get", "munge-key", cluster)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "dGVzdC1tdW5nZS1rZXk=") // base64("test-munge-key")
 }

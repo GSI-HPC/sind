@@ -3,8 +3,11 @@
 package main
 
 import (
+	"context"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,4 +36,67 @@ func TestDeleteCluster_HasAllFlag(t *testing.T) {
 func TestDeleteCluster_AllRejectsArgs(t *testing.T) {
 	_, _, err := executeCommand("delete", "cluster", "--all", "extra")
 	assert.Error(t, err)
+}
+
+// --- Integration ---
+
+func TestDeleteClusterLifecycle(t *testing.T) {
+	c := realClient(t)
+	ctx := t.Context()
+	cluster := "cli-del-" + testID
+
+	meshMgr := mesh.NewManager(c)
+
+	netName := docker.NetworkName("sind-" + cluster + "-net")
+	ctrName := docker.ContainerName("sind-" + cluster + "-controller")
+	volConfig := docker.VolumeName("sind-" + cluster + "-config")
+	volMunge := docker.VolumeName("sind-" + cluster + "-munge")
+	volData := docker.VolumeName("sind-" + cluster + "-data")
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.KillContainer(bg, ctrName)
+		_ = c.RemoveContainer(bg, ctrName)
+		_ = c.RemoveVolume(bg, volConfig)
+		_ = c.RemoveVolume(bg, volMunge)
+		_ = c.RemoveVolume(bg, volData)
+		_ = c.RemoveNetwork(bg, netName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	// Mesh must exist for Delete to deregister DNS/known_hosts.
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	// Create cluster resources.
+	_, err := c.CreateNetwork(ctx, netName)
+	require.NoError(t, err)
+	require.NoError(t, c.CreateVolume(ctx, volConfig))
+	require.NoError(t, c.CreateVolume(ctx, volMunge))
+	require.NoError(t, c.CreateVolume(ctx, volData))
+	_, err = c.RunContainer(ctx,
+		"--name", string(ctrName),
+		"--network", string(netName),
+		"--label", "sind.cluster="+cluster,
+		"--label", "sind.role=controller",
+		"busybox:latest", "sleep", "120",
+	)
+	require.NoError(t, err)
+
+	// Delete via CLI.
+	stdout, _, err := executeWithDocker("delete", "cluster", cluster)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "deleted")
+
+	// Verify cluster resources are gone.
+	exists, err := c.ContainerExists(ctx, ctrName)
+	require.NoError(t, err)
+	assert.False(t, exists, "container should be removed")
+
+	exists, err = c.NetworkExists(ctx, netName)
+	require.NoError(t, err)
+	assert.False(t, exists, "network should be removed")
+
+	exists, err = c.VolumeExists(ctx, volConfig)
+	require.NoError(t, err)
+	assert.False(t, exists, "config volume should be removed")
 }
