@@ -3,7 +3,6 @@
 package ssh
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -16,39 +15,25 @@ import (
 
 // --- InjectAndCollect Lifecycle ---
 
+// TestInjectAndCollectLifecycle exercises InjectPublicKey and CollectHostKey
+// in sequence on a container. Integration coverage for these functions is
+// provided by TestClusterCreateDeleteLifecycle (full cluster with sshd).
 func TestInjectAndCollectLifecycle(t *testing.T) {
-	t.Parallel()
-	c, rec := newTestClient(t)
-	ctx := t.Context()
-	name := docker.ContainerName("sind-it-ssh-inject")
-
-	if !rec.IsIntegration() {
-		rec.AddResult("ctr-id\n", "", nil)                                                             // RunContainer
-		rec.AddResult("", "", nil)                                                                     // mkdir .ssh
-		rec.AddResult("", "", nil)                                                                     // append authorized_keys
-		rec.AddResult("# comment\nlocalhost ssh-ed25519 AAAA-test-hostkey\n", "", nil)                 // ssh-keyscan
-		rec.AddResult(string(name)+"\n", "", nil)                                                      // kill (cleanup)
-		rec.AddResult(string(name)+"\n", "", nil)                                                      // rm (cleanup)
-	}
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = c.KillContainer(bg, name)
-		_ = c.RemoveContainer(bg, name)
-	})
-
-	_, err := c.RunContainer(ctx, "--name", string(name), "busybox:latest", "sleep", "60")
-	require.NoError(t, err)
+	var m docker.MockExecutor
+	m.AddResult("", "", nil)                                             // mkdir .ssh
+	m.AddResult("", "", nil)                                             // append authorized_keys
+	m.AddResult("# comment\nlocalhost ssh-ed25519 AAAA-test-hostkey\n", "", nil) // ssh-keyscan
+	c := docker.NewClient(&m)
+	name := docker.ContainerName("sind-dev-controller")
 
 	// Inject public key.
-	err = InjectPublicKey(ctx, c, name, "ssh-ed25519 AAAA-test-pubkey")
+	err := InjectPublicKey(t.Context(), c, name, "ssh-ed25519 AAAA-test-pubkey")
 	require.NoError(t, err)
 
 	// Collect host key.
-	hostKey, err := CollectHostKey(ctx, c, name)
+	hostKey, err := CollectHostKey(t.Context(), c, name)
 	require.NoError(t, err)
-	assert.Contains(t, hostKey, "ssh-ed25519")
-
-	t.Logf("docker I/O:\n%s", rec.Dump())
+	assert.Equal(t, "ssh-ed25519 AAAA-test-hostkey", hostKey)
 }
 
 // --- InjectPublicKey ---
