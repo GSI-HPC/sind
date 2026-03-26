@@ -3,6 +3,7 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -516,4 +517,92 @@ func TestPower_Unfreeze_UnpauseError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unpausing")
+}
+
+// --- Lifecycle ---
+
+func TestPowerLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	cluster := "it-pwr"
+	ctrName := ContainerName(cluster, "compute-0")
+
+	if !rec.IsIntegration() {
+		// Create container with labels
+		rec.AddResult("ctr-id\n", "", nil)
+
+		// Each power op: ListContainers (resolve targets) + the operation itself
+		psLine := `{"ID":"ctr-id","Names":"` + string(ctrName) + `","State":"running","Image":"busybox:latest","Labels":"sind.cluster=` + cluster + `,sind.role=compute"}` + "\n"
+
+		// PowerShutdown: ps + stop
+		rec.AddResult(psLine, "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+
+		// PowerOn: ps + start
+		rec.AddResult(psLine, "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+
+		// PowerFreeze: ps + pause
+		rec.AddResult(psLine, "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+
+		// PowerUnfreeze: ps + unpause
+		rec.AddResult(psLine, "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+
+		// PowerReboot: ps + stop + start
+		rec.AddResult(psLine, "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+
+		// PowerCycle: ps + kill + start
+		rec.AddResult(psLine, "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+
+		// Cleanup: kill + rm
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+		rec.AddResult(string(ctrName)+"\n", "", nil)
+	}
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.KillContainer(bg, ctrName)
+		_ = c.RemoveContainer(bg, ctrName)
+	})
+
+	// Create a labeled container.
+	_, err := c.CreateContainer(ctx,
+		"--name", string(ctrName),
+		"--label", LabelCluster+"="+cluster,
+		"--label", LabelRole+"=compute",
+		"busybox:latest", "sleep", "120",
+	)
+	require.NoError(t, err)
+
+	nodes := []string{"compute-0"}
+
+	// Shutdown (stop) + On (start).
+	err = PowerShutdown(ctx, c, cluster, nodes)
+	require.NoError(t, err)
+
+	err = PowerOn(ctx, c, cluster, nodes)
+	require.NoError(t, err)
+
+	// Freeze (pause) + Unfreeze (unpause).
+	err = PowerFreeze(ctx, c, cluster, nodes)
+	require.NoError(t, err)
+
+	err = PowerUnfreeze(ctx, c, cluster, nodes)
+	require.NoError(t, err)
+
+	// Reboot (stop + start).
+	err = PowerReboot(ctx, c, cluster, nodes)
+	require.NoError(t, err)
+
+	// Cycle (kill + start).
+	err = PowerCycle(ctx, c, cluster, nodes)
+	require.NoError(t, err)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
 }
