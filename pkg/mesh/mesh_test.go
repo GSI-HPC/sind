@@ -431,7 +431,12 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{"network", "create", string(NetworkName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{
+		"network", "create",
+		"--label", "com.docker.compose.network=mesh",
+		"--label", "com.docker.compose.project=sind-mesh",
+		string(NetworkName),
+	}, m.Calls[1].Args)
 }
 
 func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
@@ -498,12 +503,14 @@ func TestEnsureDNS_Creates(t *testing.T) {
 
 	require.Len(t, m.Calls, 4)
 	assert.Equal(t, []string{"container", "inspect", string(DNSContainerName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{
-		"create",
-		"--name", string(DNSContainerName),
-		"--network", string(NetworkName),
-		DNSImage,
-	}, m.Calls[1].Args)
+	createArgs := m.Calls[1].Args
+	assert.Equal(t, "create", createArgs[0])
+	assert.Equal(t, "--name", createArgs[1])
+	assert.Equal(t, string(DNSContainerName), createArgs[2])
+	assert.Equal(t, "--network", createArgs[3])
+	assert.Equal(t, string(NetworkName), createArgs[4])
+	assert.Contains(t, createArgs, "--label")
+	assert.Equal(t, DNSImage, createArgs[len(createArgs)-1])
 	assert.Equal(t, []string{"cp", "-", string(DNSContainerName) + ":/"}, m.Calls[2].Args)
 	assert.Equal(t, []string{"start", string(DNSContainerName)}, m.Calls[3].Args)
 

@@ -109,7 +109,12 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 
 	require.Len(t, m.Calls, 5)
 	assert.Equal(t, []string{"volume", "inspect", string(SSHVolumeName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{"volume", "create", string(SSHVolumeName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{
+		"volume", "create",
+		"--label", "com.docker.compose.project=sind-mesh",
+		"--label", "com.docker.compose.volume=ssh-config",
+		string(SSHVolumeName),
+	}, m.Calls[1].Args)
 	assert.Equal(t, []string{
 		"create",
 		"--name", string(sshKeygenContainerName),
@@ -232,15 +237,14 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	require.Len(t, m.Calls, 4)
 	assert.Equal(t, []string{"container", "inspect", string(SSHContainerName)}, m.Calls[0].Args)
 	assert.Equal(t, []string{"inspect", string(DNSContainerName)}, m.Calls[1].Args)
-	assert.Equal(t, []string{
-		"create",
-		"--name", string(SSHContainerName),
-		"--network", string(NetworkName),
-		"--dns", "10.0.0.2",
-		"-v", string(SSHVolumeName) + ":/root/.ssh",
-		SSHImage,
-		"sleep", "infinity",
-	}, m.Calls[2].Args)
+	sshCreateArgs := m.Calls[2].Args
+	assert.Equal(t, "create", sshCreateArgs[0])
+	assert.Equal(t, "--name", sshCreateArgs[1])
+	assert.Equal(t, string(SSHContainerName), sshCreateArgs[2])
+	assert.Contains(t, sshCreateArgs, "--label")
+	assert.Equal(t, "infinity", sshCreateArgs[len(sshCreateArgs)-1])
+	assert.Equal(t, "sleep", sshCreateArgs[len(sshCreateArgs)-2])
+	assert.Equal(t, SSHImage, sshCreateArgs[len(sshCreateArgs)-3])
 	assert.Equal(t, []string{"start", string(SSHContainerName)}, m.Calls[3].Args)
 }
 

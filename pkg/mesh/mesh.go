@@ -6,6 +6,7 @@ package mesh
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -18,6 +19,36 @@ const (
 	SSHContainerName docker.ContainerName = "sind-ssh"
 	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
 )
+
+// composeProject is the Docker Compose project name for mesh infrastructure.
+const composeProject = "sind-mesh"
+
+// composeLabels returns compose compatibility labels for a mesh container.
+func composeLabels(service string, containerNumber int) map[string]string {
+	return map[string]string{
+		"com.docker.compose.project":          composeProject,
+		"com.docker.compose.service":          service,
+		"com.docker.compose.container-number": fmt.Sprintf("%d", containerNumber),
+		"com.docker.compose.oneoff":           "False",
+		"com.docker.compose.config-hash":      "",
+		"com.docker.compose.project.config_files": "",
+	}
+}
+
+// composeLabelFlags returns --label flags for a mesh container.
+func composeLabelFlags(service string) []string {
+	labels := composeLabels(service, 1)
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var flags []string
+	for _, k := range keys {
+		flags = append(flags, "--label", k+"="+labels[k])
+	}
+	return flags
+}
 
 // DNSImage is the container image used for the mesh DNS server.
 const DNSImage = "coredns/coredns:latest"
@@ -121,7 +152,11 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	if exists {
 		return nil
 	}
-	_, err = m.Docker.CreateNetwork(ctx, NetworkName, nil)
+	networkLabels := map[string]string{
+		"com.docker.compose.project": composeProject,
+		"com.docker.compose.network": "mesh",
+	}
+	_, err = m.Docker.CreateNetwork(ctx, NetworkName, networkLabels)
 	if err != nil {
 		return fmt.Errorf("creating mesh network: %w", err)
 	}
@@ -140,11 +175,13 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 		return nil
 	}
 
-	_, err = m.Docker.CreateContainer(ctx,
+	args := []string{
 		"--name", string(DNSContainerName),
 		"--network", string(NetworkName),
-		DNSImage,
-	)
+	}
+	args = append(args, composeLabelFlags("dns")...)
+	args = append(args, DNSImage)
+	_, err = m.Docker.CreateContainer(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("creating DNS container: %w", err)
 	}

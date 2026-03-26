@@ -42,7 +42,11 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 		return nil
 	}
 
-	err = m.Docker.CreateVolume(ctx, SSHVolumeName, nil)
+	volumeLabels := map[string]string{
+		"com.docker.compose.project": composeProject,
+		"com.docker.compose.volume":  "ssh-config",
+	}
+	err = m.Docker.CreateVolume(ctx, SSHVolumeName, volumeLabels)
 	if err != nil {
 		return fmt.Errorf("creating SSH volume: %w", err)
 	}
@@ -93,14 +97,15 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 	}
 	dnsIP := dnsInfo.IPs[NetworkName]
 
-	_, err = m.Docker.CreateContainer(ctx,
+	sshArgs := []string{
 		"--name", string(SSHContainerName),
 		"--network", string(NetworkName),
 		"--dns", dnsIP,
-		"-v", string(SSHVolumeName)+":/root/.ssh",
-		SSHImage,
-		"sleep", "infinity",
-	)
+		"-v", string(SSHVolumeName) + ":/root/.ssh",
+	}
+	sshArgs = append(sshArgs, composeLabelFlags("ssh")...)
+	sshArgs = append(sshArgs, SSHImage, "sleep", "infinity")
+	_, err = m.Docker.CreateContainer(ctx, sshArgs...)
 	if err != nil {
 		return fmt.Errorf("creating SSH container: %w", err)
 	}
