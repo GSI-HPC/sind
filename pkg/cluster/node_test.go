@@ -43,6 +43,8 @@ func TestNodeLabels(t *testing.T) {
 		"com.docker.compose.service":          "controller",
 		"com.docker.compose.container-number": "1",
 		"com.docker.compose.oneoff":           "False",
+		"com.docker.compose.config-hash":           "",
+		"com.docker.compose.project.config_files": "",
 	}, labels)
 }
 
@@ -56,6 +58,8 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 		"com.docker.compose.service":          "worker",
 		"com.docker.compose.container-number": "3",
 		"com.docker.compose.oneoff":           "False",
+		"com.docker.compose.config-hash":           "",
+		"com.docker.compose.project.config_files": "",
 	}, labels)
 	_, ok := labels[LabelSlurmVersion]
 	assert.False(t, ok, "slurm version label absent")
@@ -102,6 +106,8 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	assert.Contains(t, labels, "com.docker.compose.service=controller")
 	assert.Contains(t, labels, "com.docker.compose.container-number=1")
 	assert.Contains(t, labels, "com.docker.compose.oneoff=False")
+	assert.Contains(t, labels, "com.docker.compose.config-hash=")
+	assert.Contains(t, labels, "com.docker.compose.project.config_files=")
 }
 
 func TestBuildRunArgs_ComputeNode(t *testing.T) {

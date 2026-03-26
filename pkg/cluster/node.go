@@ -25,6 +25,8 @@ const (
 	LabelComposeService         = "com.docker.compose.service"
 	LabelComposeContainerNumber = "com.docker.compose.container-number"
 	LabelComposeOneoff          = "com.docker.compose.oneoff"
+	LabelComposeConfigHash      = "com.docker.compose.config-hash"
+	LabelComposeConfigFiles     = "com.docker.compose.project.config_files"
 	LabelComposeNetwork         = "com.docker.compose.network"
 	LabelComposeVolume          = "com.docker.compose.volume"
 )
@@ -45,6 +47,8 @@ func NodeLabels(clusterName, role, slurmVersion string, containerNumber int) map
 		LabelComposeService:         role,
 		LabelComposeContainerNumber: strconv.Itoa(containerNumber),
 		LabelComposeOneoff:          "False",
+		LabelComposeConfigHash:      "",
+		LabelComposeConfigFiles:     "",
 	}
 	if slurmVersion != "" {
 		labels[LabelSlurmVersion] = slurmVersion
