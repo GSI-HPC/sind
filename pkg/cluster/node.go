@@ -19,12 +19,32 @@ const (
 	LabelSlurmVersion = "sind.slurm.version"
 )
 
+// Docker Compose compatibility labels.
+const (
+	LabelComposeProject         = "com.docker.compose.project"
+	LabelComposeService         = "com.docker.compose.service"
+	LabelComposeContainerNumber = "com.docker.compose.container-number"
+	LabelComposeOneoff          = "com.docker.compose.oneoff"
+	LabelComposeNetwork         = "com.docker.compose.network"
+	LabelComposeVolume          = "com.docker.compose.volume"
+)
+
+// ComposeProject returns the Docker Compose project name for a cluster.
+func ComposeProject(clusterName string) string {
+	return "sind-" + clusterName
+}
+
 // NodeLabels returns the standard labels for a node container.
+// containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is omitted when slurmVersion is empty.
-func NodeLabels(clusterName, role, slurmVersion string) map[string]string {
+func NodeLabels(clusterName, role, slurmVersion string, containerNumber int) map[string]string {
 	labels := map[string]string{
-		LabelCluster: clusterName,
-		LabelRole:    role,
+		LabelCluster:                clusterName,
+		LabelRole:                   role,
+		LabelComposeProject:         ComposeProject(clusterName),
+		LabelComposeService:         role,
+		LabelComposeContainerNumber: strconv.Itoa(containerNumber),
+		LabelComposeOneoff:          "False",
 	}
 	if slurmVersion != "" {
 		labels[LabelSlurmVersion] = slurmVersion
@@ -35,18 +55,19 @@ func NodeLabels(clusterName, role, slurmVersion string) map[string]string {
 // RunConfig holds the parameters needed to build docker run arguments
 // for creating a node container.
 type RunConfig struct {
-	ClusterName   string // cluster name
-	ShortName     string // node hostname: "controller", "worker-0"
-	Role          string // "controller", "submitter", "worker"
-	Image         string // container image
-	CPUs          int    // CPU limit
-	Memory        string // memory limit (e.g. "2g")
-	TmpSize       string // /tmp tmpfs size (e.g. "1g")
-	SlurmVersion  string // slurm version for labels (optional)
-	DNSIP         string // mesh DNS container IP (optional)
-	DataHostPath  string // host path for data volume (empty = use docker volume)
-	DataMountPath string // mount point for data (default: /data)
-	Managed       bool   // start slurmd and add to slurm.conf (worker only)
+	ClusterName     string // cluster name
+	ShortName       string // node hostname: "controller", "worker-0"
+	Role            string // "controller", "submitter", "worker"
+	Image           string // container image
+	CPUs            int    // CPU limit
+	Memory          string // memory limit (e.g. "2g")
+	TmpSize         string // /tmp tmpfs size (e.g. "1g")
+	SlurmVersion    string // slurm version for labels (optional)
+	DNSIP           string // mesh DNS container IP (optional)
+	DataHostPath    string // host path for data volume (empty = use docker volume)
+	DataMountPath   string // mount point for data (default: /data)
+	Managed         bool   // start slurmd and add to slurm.conf (worker only)
+	ContainerNumber int    // 1-based compose container instance number
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.
@@ -110,7 +131,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	)
 
 	// Labels
-	labels := NodeLabels(cfg.ClusterName, cfg.Role, cfg.SlurmVersion)
+	labels := NodeLabels(cfg.ClusterName, cfg.Role, cfg.SlurmVersion, cfg.ContainerNumber)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)

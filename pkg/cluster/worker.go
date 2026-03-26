@@ -99,16 +99,17 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	nodeConfigs := make([]RunConfig, count)
 	for i := range count {
 		nodeConfigs[i] = RunConfig{
-			ClusterName:  opts.ClusterName,
-			ShortName:    fmt.Sprintf("worker-%d", startIdx+i),
-			Role:         "worker",
-			Image:        image,
-			CPUs:         cpus,
-			Memory:       memory,
-			TmpSize:      tmpSize,
-			SlurmVersion: slurmVersion,
-			DNSIP:        dnsIP,
-			Managed:      !opts.Unmanaged,
+			ClusterName:     opts.ClusterName,
+			ShortName:       fmt.Sprintf("worker-%d", startIdx+i),
+			Role:            "worker",
+			Image:           image,
+			CPUs:            cpus,
+			Memory:          memory,
+			TmpSize:         tmpSize,
+			SlurmVersion:    slurmVersion,
+			DNSIP:           dnsIP,
+			Managed:         !opts.Unmanaged,
+			ContainerNumber: startIdx + i + 1,
 		}
 	}
 

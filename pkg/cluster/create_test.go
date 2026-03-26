@@ -116,7 +116,12 @@ func TestCreateClusterNetwork(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "create", "sind-dev-net"}, m.Calls[0].Args)
+	assert.Equal(t, []string{
+		"network", "create",
+		"--label", "com.docker.compose.network=net",
+		"--label", "com.docker.compose.project=sind-dev",
+		"sind-dev-net",
+	}, m.Calls[0].Args)
 }
 
 func TestCreateClusterNetwork_Error(t *testing.T) {
@@ -143,9 +148,24 @@ func TestCreateClusterVolumes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
-	assert.Equal(t, []string{"volume", "create", "sind-dev-config"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"volume", "create", "sind-dev-munge"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"volume", "create", "sind-dev-data"}, m.Calls[2].Args)
+	assert.Equal(t, []string{
+		"volume", "create",
+		"--label", "com.docker.compose.project=sind-dev",
+		"--label", "com.docker.compose.volume=config",
+		"sind-dev-config",
+	}, m.Calls[0].Args)
+	assert.Equal(t, []string{
+		"volume", "create",
+		"--label", "com.docker.compose.project=sind-dev",
+		"--label", "com.docker.compose.volume=munge",
+		"sind-dev-munge",
+	}, m.Calls[1].Args)
+	assert.Equal(t, []string{
+		"volume", "create",
+		"--label", "com.docker.compose.project=sind-dev",
+		"--label", "com.docker.compose.volume=data",
+		"sind-dev-data",
+	}, m.Calls[2].Args)
 }
 
 func TestCreateClusterVolumes_Error(t *testing.T) {

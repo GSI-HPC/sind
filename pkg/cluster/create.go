@@ -321,7 +321,11 @@ func enableSlurm(ctx context.Context, client *docker.Client, clusterName string,
 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
 func CreateClusterNetwork(ctx context.Context, client *docker.Client, clusterName string) error {
-	_, err := client.CreateNetwork(ctx, NetworkName(clusterName), nil)
+	labels := map[string]string{
+		LabelComposeProject: ComposeProject(clusterName),
+		LabelComposeNetwork: "net",
+	}
+	_, err := client.CreateNetwork(ctx, NetworkName(clusterName), labels)
 	if err != nil {
 		return fmt.Errorf("creating cluster network: %w", err)
 	}
@@ -331,7 +335,11 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, clusterNam
 // CreateClusterVolumes creates the config, munge, and data volumes for a cluster.
 func CreateClusterVolumes(ctx context.Context, client *docker.Client, clusterName string) error {
 	for _, vtype := range []string{"config", "munge", "data"} {
-		if err := client.CreateVolume(ctx, VolumeName(clusterName, vtype), nil); err != nil {
+		labels := map[string]string{
+			LabelComposeProject: ComposeProject(clusterName),
+			LabelComposeVolume:  vtype,
+		}
+		if err := client.CreateVolume(ctx, VolumeName(clusterName, vtype), labels); err != nil {
 			return fmt.Errorf("creating %s volume: %w", vtype, err)
 		}
 	}
@@ -428,17 +436,18 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 		switch n.Role {
 		case "controller", "submitter":
 			configs = append(configs, RunConfig{
-				ClusterName:   cfg.Name,
-				ShortName:     n.Role,
-				Role:          n.Role,
-				Image:         n.Image,
-				CPUs:          n.CPUs,
-				Memory:        n.Memory,
-				TmpSize:       n.TmpSize,
-				SlurmVersion:  slurmVersion,
-				DNSIP:         dnsIP,
-				DataHostPath:  dataHostPath,
-				DataMountPath: dataMountPath,
+				ClusterName:     cfg.Name,
+				ShortName:       n.Role,
+				Role:            n.Role,
+				Image:           n.Image,
+				CPUs:            n.CPUs,
+				Memory:          n.Memory,
+				TmpSize:         n.TmpSize,
+				SlurmVersion:    slurmVersion,
+				DNSIP:           dnsIP,
+				DataHostPath:    dataHostPath,
+				DataMountPath:   dataMountPath,
+				ContainerNumber: 1,
 			})
 		case "worker":
 			count := n.Count
@@ -448,18 +457,19 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 			isManaged := n.Managed == nil || *n.Managed
 			for i := 0; i < count; i++ {
 				configs = append(configs, RunConfig{
-					ClusterName:   cfg.Name,
-					ShortName:     fmt.Sprintf("worker-%d", workerIdx),
-					Role:          "worker",
-					Image:         n.Image,
-					CPUs:          n.CPUs,
-					Memory:        n.Memory,
-					TmpSize:       n.TmpSize,
-					SlurmVersion:  slurmVersion,
-					DNSIP:         dnsIP,
-					DataHostPath:  dataHostPath,
-					DataMountPath: dataMountPath,
-					Managed:       isManaged,
+					ClusterName:     cfg.Name,
+					ShortName:       fmt.Sprintf("worker-%d", workerIdx),
+					Role:            "worker",
+					Image:           n.Image,
+					CPUs:            n.CPUs,
+					Memory:          n.Memory,
+					TmpSize:         n.TmpSize,
+					SlurmVersion:    slurmVersion,
+					DNSIP:           dnsIP,
+					DataHostPath:    dataHostPath,
+					DataMountPath:   dataMountPath,
+					Managed:         isManaged,
+					ContainerNumber: workerIdx + 1,
 				})
 				workerIdx++
 			}

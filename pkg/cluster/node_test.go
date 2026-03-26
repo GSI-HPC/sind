@@ -33,21 +33,29 @@ func argValues(args []string, flag string) []string {
 }
 
 func TestNodeLabels(t *testing.T) {
-	labels := NodeLabels("dev", "controller", "25.11.0")
+	labels := NodeLabels("dev", "controller", "25.11.0", 1)
 
 	assert.Equal(t, map[string]string{
-		"sind.cluster":       "dev",
-		"sind.role":          "controller",
-		"sind.slurm.version": "25.11.0",
+		"sind.cluster":                        "dev",
+		"sind.role":                           "controller",
+		"sind.slurm.version":                  "25.11.0",
+		"com.docker.compose.project":          "sind-dev",
+		"com.docker.compose.service":          "controller",
+		"com.docker.compose.container-number": "1",
+		"com.docker.compose.oneoff":           "False",
 	}, labels)
 }
 
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
-	labels := NodeLabels("dev", "worker", "")
+	labels := NodeLabels("dev", "worker", "", 3)
 
 	assert.Equal(t, map[string]string{
-		"sind.cluster": "dev",
-		"sind.role":    "worker",
+		"sind.cluster":                        "dev",
+		"sind.role":                           "worker",
+		"com.docker.compose.project":          "sind-dev",
+		"com.docker.compose.service":          "worker",
+		"com.docker.compose.container-number": "3",
+		"com.docker.compose.oneoff":           "False",
 	}, labels)
 	_, ok := labels[LabelSlurmVersion]
 	assert.False(t, ok, "slurm version label absent")
@@ -55,15 +63,16 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 
 func defaultRunConfig() RunConfig {
 	return RunConfig{
-		ClusterName:  "dev",
-		ShortName:    "controller",
-		Role:         "controller",
-		Image:        "ghcr.io/gsi-hpc/sind-node:25.11",
-		CPUs:         2,
-		Memory:       "2g",
-		TmpSize:      "1g",
-		SlurmVersion: "25.11.0",
-		DNSIP:        "172.18.0.2",
+		ClusterName:     "dev",
+		ShortName:       "controller",
+		Role:            "controller",
+		Image:           "ghcr.io/gsi-hpc/sind-node:25.11",
+		CPUs:            2,
+		Memory:          "2g",
+		TmpSize:         "1g",
+		SlurmVersion:    "25.11.0",
+		DNSIP:           "172.18.0.2",
+		ContainerNumber: 1,
 	}
 }
 
@@ -89,6 +98,10 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	assert.Contains(t, labels, "sind.cluster=dev")
 	assert.Contains(t, labels, "sind.role=controller")
 	assert.Contains(t, labels, "sind.slurm.version=25.11.0")
+	assert.Contains(t, labels, "com.docker.compose.project=sind-dev")
+	assert.Contains(t, labels, "com.docker.compose.service=controller")
+	assert.Contains(t, labels, "com.docker.compose.container-number=1")
+	assert.Contains(t, labels, "com.docker.compose.oneoff=False")
 }
 
 func TestBuildRunArgs_ComputeNode(t *testing.T) {
