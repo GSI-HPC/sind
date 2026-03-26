@@ -29,6 +29,14 @@ var testRealm = func() string {
 	return fmt.Sprintf("it-cluster-%x", b)
 }()
 
+// lifecycleRealm returns a per-test unique realm for integration tests,
+// allowing lifecycle tests to run in parallel within the package.
+func lifecycleRealm() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("it-cluster-%x", b)
+}
+
 func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
@@ -44,6 +52,7 @@ func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 }
 
 func TestClusterCreateDeleteLifecycle(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 
@@ -59,8 +68,9 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 		t.Skipf("image %s not available", img)
 	}
 
+	realm := lifecycleRealm()
 	clusterName := "it-cluster"
-	meshMgr := mesh.NewManager(c, testRealm)
+	meshMgr := mesh.NewManager(c, realm)
 
 	t.Cleanup(func() {
 		bg := context.Background()
@@ -89,7 +99,7 @@ defaults:
 	require.Len(t, result.Nodes, 2)
 
 	// GetClusters.
-	clusters, err := GetClusters(ctx, c, testRealm)
+	clusters, err := GetClusters(ctx, c, realm)
 	require.NoError(t, err)
 	var found bool
 	for _, cl := range clusters {
@@ -101,7 +111,7 @@ defaults:
 	assert.True(t, found, "cluster should appear in GetClusters")
 
 	// GetNodes.
-	nodes, err := GetNodes(ctx, c, testRealm, clusterName)
+	nodes, err := GetNodes(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
@@ -110,7 +120,7 @@ defaults:
 	require.NoError(t, err)
 
 	// Verify gone.
-	clusters, err = GetClusters(ctx, c, testRealm)
+	clusters, err = GetClusters(ctx, c, realm)
 	require.NoError(t, err)
 	for _, cl := range clusters {
 		assert.NotEqual(t, clusterName, cl.Name)

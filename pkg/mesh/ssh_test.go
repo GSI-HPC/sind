@@ -21,9 +21,10 @@ import (
 // --- KnownHost Lifecycle ---
 
 func TestKnownHostLifecycle(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	mgr := NewManager(c, testRealm)
+	mgr := NewManager(c, lifecycleRealm(rec))
 
 	if !rec.IsIntegration() {
 		// EnsureMesh

@@ -23,6 +23,14 @@ var testRealm = func() string {
 	return fmt.Sprintf("it-mesh-%x", b)
 }()
 
+// lifecycleRealm returns a per-test unique realm for integration tests,
+// allowing lifecycle tests to run in parallel within the package.
+func lifecycleRealm(_ *docker.Recorder) string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("it-mesh-%x", b)
+}
+
 func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {

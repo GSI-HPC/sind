@@ -21,9 +21,10 @@ import (
 // --- Lifecycle ---
 
 func TestMeshLifecycle(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	mgr := NewManager(c, testRealm)
+	mgr := NewManager(c, lifecycleRealm(rec))
 
 	if !rec.IsIntegration() {
 		// EnsureMesh: create network, DNS, SSH volume, SSH container
@@ -120,9 +121,10 @@ func TestMeshLifecycle(t *testing.T) {
 }
 
 func TestDNSRecordLifecycle(t *testing.T) {
+	t.Parallel()
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	mgr := NewManager(c, testRealm)
+	mgr := NewManager(c, lifecycleRealm(rec))
 
 	if !rec.IsIntegration() {
 		// EnsureMesh
