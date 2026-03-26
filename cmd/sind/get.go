@@ -23,6 +23,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetNetworksCommand())
 	cmd.AddCommand(newGetVolumesCommand())
 	cmd.AddCommand(newGetMungeKeyCommand())
+	cmd.AddCommand(newGetDNSCommand())
 
 	return cmd
 }
@@ -136,6 +137,35 @@ func runGetVolumes(cmd *cobra.Command) error {
 	fmt.Fprintln(w, "NAME\tDRIVER")
 	for _, v := range volumes {
 		fmt.Fprintf(w, "%s\t%s\n", v.Name, v.Driver)
+	}
+	return w.Flush()
+}
+
+func newGetDNSCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "dns",
+		Short: "List mesh DNS records",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetDNS(cmd)
+		},
+	}
+}
+
+func runGetDNS(cmd *cobra.Command) error {
+	client := clientFrom(cmd.Context())
+	realm := realmFromFlag(cmd)
+	mgr := meshMgrFrom(cmd.Context(), client, realm)
+
+	records, err := mgr.GetDNSRecords(cmd.Context())
+	if err != nil {
+		return err
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
+	fmt.Fprintln(w, "HOSTNAME\tIP")
+	for _, r := range records {
+		fmt.Fprintf(w, "%s\t%s\n", r.Hostname, r.IP)
 	}
 	return w.Flush()
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -145,6 +146,60 @@ func tarArchive(name, content string) string {
 	tw.Write(data)
 	tw.Close()
 	return buf.String()
+}
+
+func TestGetDNS_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"get", "dns"})
+	require.NoError(t, err)
+	assert.Equal(t, "dns", c.Use)
+}
+
+func TestGetDNS_RejectsArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "dns", "extra")
+	assert.Error(t, err)
+}
+
+func TestGetDNS_Output(t *testing.T) {
+	corefile := "sind.local:53 {\n    hosts {\n" +
+		"        172.18.0.2 controller.dev.sind.local\n" +
+		"        172.18.0.3 worker-0.dev.sind.local\n" +
+		"        fallthrough\n    }\n    reload\n    log\n    errors\n}\n\n" +
+		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
+
+	var m docker.MockExecutor
+	m.AddResult(tarArchive("Corefile", corefile), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "dns")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "HOSTNAME")
+	assert.Contains(t, stdout, "IP")
+	assert.Contains(t, stdout, "controller.dev.sind.local")
+	assert.Contains(t, stdout, "172.18.0.2")
+	assert.Contains(t, stdout, "worker-0.dev.sind.local")
+	assert.Contains(t, stdout, "172.18.0.3")
+}
+
+func TestGetDNS_Empty(t *testing.T) {
+	corefile := "sind.local:53 {\n    hosts {\n" +
+		"        fallthrough\n    }\n    reload\n    log\n    errors\n}\n\n" +
+		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
+
+	var m docker.MockExecutor
+	m.AddResult(tarArchive("Corefile", corefile), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "dns")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "HOSTNAME")
+	assert.NotContains(t, stdout, "sind.local")
+}
+
+func TestGetDNS_Error(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("container not found"))
+
+	_, _, err := executeWithMock(&m, "get", "dns")
+	assert.Error(t, err)
 }
 
 // --- Integration ---

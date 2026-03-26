@@ -270,6 +270,28 @@ func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
 	return m.writeDNSEntries(ctx, kept)
 }
 
+// DNSRecord represents a single A record in the mesh DNS.
+type DNSRecord struct {
+	Hostname string
+	IP       string
+}
+
+// GetDNSRecords returns all A records currently served by the mesh DNS.
+func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
+	entries, err := m.readDNSEntries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]DNSRecord, 0, len(entries))
+	for _, entry := range entries {
+		fields := strings.Fields(entry)
+		if len(fields) >= 2 {
+			records = append(records, DNSRecord{IP: fields[0], Hostname: fields[1]})
+		}
+	}
+	return records, nil
+}
+
 // readDNSEntries reads the current Corefile and extracts the host entries.
 func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 	data, err := m.Docker.CopyFromContainer(ctx, m.DNSContainerName(), corefilePath)
