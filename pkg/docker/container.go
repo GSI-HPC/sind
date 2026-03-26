@@ -233,10 +233,16 @@ func (c *Client) AppendFile(ctx context.Context, container ContainerName, path, 
 		"sh", "-c", "cat >> "+path)
 }
 
-// CopyToContainer writes files into a container directory via docker cp.
-// Files are provided as a map of filename to content. The container may be
+// File represents a file to copy into a container with explicit permissions.
+type File struct {
+	Content []byte
+	Mode    int64 // e.g. 0644, 0600
+}
+
+// CopyFilesToContainer writes files into a container directory via docker cp.
+// Each file carries its own content and permissions. The container may be
 // running or stopped. Keys are sorted for deterministic tar output.
-func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, destDir string, files map[string][]byte) error {
+func (c *Client) CopyFilesToContainer(ctx context.Context, container ContainerName, destDir string, files map[string]File) error {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -247,15 +253,26 @@ func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, d
 	sort.Strings(names)
 
 	for _, name := range names {
-		content := files[name]
+		f := files[name]
 		// WriteHeader and Write cannot fail on a bytes.Buffer.
-		tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
-		tw.Write(content)
+		tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: f.Mode})
+		tw.Write(f.Content)
 	}
 	tw.Close()
 
 	_, _, err := c.runWithStdin(ctx, &buf, "cp", "-", string(container)+":"+destDir)
 	return err
+}
+
+// CopyToContainer writes files into a container directory via docker cp.
+// All files are written with mode 0644. Use CopyFilesToContainer for
+// explicit per-file permissions.
+func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, destDir string, files map[string][]byte) error {
+	typed := make(map[string]File, len(files))
+	for name, content := range files {
+		typed[name] = File{Content: content, Mode: 0644}
+	}
+	return c.CopyFilesToContainer(ctx, container, destDir, typed)
 }
 
 // CopyFromContainer reads a single file from a container via docker cp.

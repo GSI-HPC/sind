@@ -62,10 +62,10 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 	}
 	defer m.Docker.RemoveContainer(ctx, sshKeygenContainerName) //nolint:errcheck
 
-	err = m.Docker.CopyToContainer(ctx, sshKeygenContainerName, "/ssh", map[string][]byte{
-		"id_ed25519":     privKeyPEM,
-		"id_ed25519.pub": pubKeyLine,
-		"known_hosts":    {},
+	err = m.Docker.CopyFilesToContainer(ctx, sshKeygenContainerName, "/ssh", map[string]docker.File{
+		"id_ed25519":     {Content: privKeyPEM, Mode: 0600},
+		"id_ed25519.pub": {Content: pubKeyLine, Mode: 0644},
+		"known_hosts":    {Content: nil, Mode: 0644},
 	})
 	if err != nil {
 		return fmt.Errorf("writing SSH keys: %w", err)
@@ -86,9 +86,17 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 		return nil
 	}
 
+	// Look up DNS container IP so the SSH container can resolve *.sind.local.
+	dnsInfo, err := m.Docker.InspectContainer(ctx, DNSContainerName)
+	if err != nil {
+		return fmt.Errorf("inspecting DNS container for IP: %w", err)
+	}
+	dnsIP := dnsInfo.IPs[NetworkName]
+
 	_, err = m.Docker.CreateContainer(ctx,
 		"--name", string(SSHContainerName),
 		"--network", string(NetworkName),
+		"--dns", dnsIP,
 		"-v", string(SSHVolumeName)+":/root/.ssh",
 		SSHImage,
 		"sleep", "infinity",
