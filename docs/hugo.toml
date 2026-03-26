@@ -1,0 +1,61 @@
+baseURL = "https://gsi-hpc.github.io/sind/"
+languageCode = "en-us"
+title = "sind"
+enableEmoji = true
+enableGitInfo = true
+
+[module]
+  [module.hugoVersion]
+    extended = true
+    min = "0.140.0"
+  [[module.imports]]
+    path = "github.com/colinwilson/lotusdocs"
+    disable = false
+  [[module.imports]]
+    path = "github.com/gohugoio/hugo-mod-bootstrap-scss/v5"
+    disable = false
+
+[markup]
+  defaultMarkdownHandler = "goldmark"
+  [markup.tableOfContents]
+    endLevel = 3
+    startLevel = 1
+  [markup.goldmark.renderer]
+    unsafe = true
+
+[params]
+  sans_serif_font = "Inter"
+  secondary_font = "Inter"
+  mono_font = "Fira Code"
+  google_fonts = [
+    ["Inter", "300, 400, 600, 700"],
+    ["Fira Code", "500, 700"],
+  ]
+
+  [params.footer]
+    copyright = "© :YEAR: GSI Helmholtzzentrum für Schwerionenforschung GmbH"
+
+  [params.social]
+    github = "GSI-HPC/sind"
+
+  [params.docs]
+    title = "sind"
+    darkMode = true
+    prism = true
+    prismTheme = "solarized-light"
+    repoURL = "https://github.com/GSI-HPC/sind"
+    repoBranch = "main"
+    editPage = true
+    lastMod = true
+    lastModRelative = true
+    sidebarIcons = true
+    breadcrumbs = true
+    backToTop = true
+    toc = true
+    tocMobile = true
+    scrollSpy = true
+    descriptions = true
+    titleIcon = true
+
+  [params.flexsearch]
+    enabled = true
