@@ -167,8 +167,8 @@ func TestContainerLabelsAndList(t *testing.T) {
 
 	if !rec.IsIntegration() {
 		rec.AddResult("abc123\n", "", nil)                                                                                                                                                              // run
-		rec.AddResult(`[{"Id":"abc123","Name":"/`+n+`","State":{"Status":"running"},"Config":{"Labels":{"sind.cluster":"it-test","sind.role":"compute"}},"NetworkSettings":{"Networks":{}}}]`, "", nil) // inspect
-		rec.AddResult(`{"ID":"abc123","Names":"`+n+`","State":"running","Image":"busybox:latest","Labels":"sind.cluster=it-test,sind.role=compute"}`+"\n", "", nil)                                     // list
+		rec.AddResult(`[{"Id":"abc123","Name":"/`+n+`","State":{"Status":"running"},"Config":{"Labels":{"sind.cluster":"it-test","sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`, "", nil) // inspect
+		rec.AddResult(`{"ID":"abc123","Names":"`+n+`","State":"running","Image":"busybox:latest","Labels":"sind.cluster=it-test,sind.role=worker"}`+"\n", "", nil)                                     // list
 		rec.AddResult("", "", nil)                                                                                                                                                                      // list empty
 		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                  // kill (cleanup)
 		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                  // rm (cleanup)
@@ -182,7 +182,7 @@ func TestContainerLabelsAndList(t *testing.T) {
 	_, err := c.RunContainer(ctx,
 		"--name", string(name),
 		"--label", "sind.cluster=it-test",
-		"--label", "sind.role=compute",
+		"--label", "sind.role=worker",
 		"busybox:latest", "sleep", "60",
 	)
 	require.NoError(t, err)
@@ -191,7 +191,7 @@ func TestContainerLabelsAndList(t *testing.T) {
 	info, err := c.InspectContainer(ctx, name)
 	require.NoError(t, err)
 	assert.Equal(t, "it-test", info.Labels["sind.cluster"])
-	assert.Equal(t, "compute", info.Labels["sind.role"])
+	assert.Equal(t, "worker", info.Labels["sind.role"])
 
 	// List by label.
 	entries, err := c.ListContainers(ctx, "label=sind.cluster=it-test")
@@ -459,7 +459,7 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 }
 
 const psJSON = `{"ID":"94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca","Names":"sind-dev-controller","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=controller"}
-{"ID":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2","Names":"sind-dev-compute-0","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=compute"}`
+{"ID":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2","Names":"sind-dev-worker-0","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=worker"}`
 
 func TestListContainers(t *testing.T) {
 	var m MockExecutor
@@ -475,8 +475,8 @@ func TestListContainers(t *testing.T) {
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", entries[0].Image)
 	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "controller"}, entries[0].Labels)
 
-	assert.Equal(t, ContainerName("sind-dev-compute-0"), entries[1].Name)
-	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "compute"}, entries[1].Labels)
+	assert.Equal(t, ContainerName("sind-dev-worker-0"), entries[1].Name)
+	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "worker"}, entries[1].Labels)
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.cluster=dev"}, m.Calls[0].Args)

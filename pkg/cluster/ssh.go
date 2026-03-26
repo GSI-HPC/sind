@@ -14,7 +14,7 @@ import (
 // sind-ssh relay container. The returned args are suitable for passing to
 // docker directly (e.g. "docker exec -i -t sind-ssh ssh ...").
 //
-// node is the short name (e.g. "compute-0"), cluster is the cluster name,
+// node is the short name (e.g. "worker-0"), cluster is the cluster name,
 // isTTY controls whether -t is added to docker exec, sshOptions are passed
 // through to SSH before the target, and command is the optional remote command.
 func BuildSSHArgs(node, cluster string, isTTY bool, sshOptions, command []string) []string {

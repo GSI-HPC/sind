@@ -42,7 +42,7 @@ func TestPowerLifecycle(t *testing.T) {
 	ctx := t.Context()
 	cluster := "cli-pwr-" + testID
 
-	ctrName := docker.ContainerName("sind-" + cluster + "-compute-0")
+	ctrName := docker.ContainerName("sind-" + cluster + "-worker-0")
 
 	t.Cleanup(func() {
 		bg := context.Background()
@@ -53,12 +53,12 @@ func TestPowerLifecycle(t *testing.T) {
 	_, err := c.RunContainer(ctx,
 		"--name", string(ctrName),
 		"--label", "sind.cluster="+cluster,
-		"--label", "sind.role=compute",
+		"--label", "sind.role=worker",
 		"busybox:latest", "sleep", "120",
 	)
 	require.NoError(t, err)
 
-	node := "compute-0." + cluster
+	node := "worker-0." + cluster
 
 	// shutdown (stop)
 	_, _, err = executeWithDocker("power", "shutdown", node)

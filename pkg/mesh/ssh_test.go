@@ -339,7 +339,7 @@ func TestAddKnownHost_Error(t *testing.T) {
 
 func TestRemoveKnownHost(t *testing.T) {
 	existing := "controller.dev.sind.local ssh-ed25519 AAAA...\n" +
-		"compute-0.dev.sind.local ssh-ed25519 BBBB...\n"
+		"worker-0.dev.sind.local ssh-ed25519 BBBB...\n"
 
 	var m docker.MockExecutor
 	// ReadFile → existing content
@@ -353,7 +353,7 @@ func TestRemoveKnownHost(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 2)
-	assert.Equal(t, "compute-0.dev.sind.local ssh-ed25519 BBBB...\n", m.Calls[1].Stdin)
+	assert.Equal(t, "worker-0.dev.sind.local ssh-ed25519 BBBB...\n", m.Calls[1].Stdin)
 }
 
 func TestRemoveKnownHost_LastEntry(t *testing.T) {
@@ -375,7 +375,7 @@ func TestRemoveKnownHost_LastEntry(t *testing.T) {
 func TestRemoveKnownHost_DuplicateHostnames(t *testing.T) {
 	existing := "controller.dev.sind.local ssh-ed25519 AAAA...\n" +
 		"controller.dev.sind.local ssh-ed25519 BBBB...\n" +
-		"compute-0.dev.sind.local ssh-ed25519 CCCC...\n"
+		"worker-0.dev.sind.local ssh-ed25519 CCCC...\n"
 
 	var m docker.MockExecutor
 	m.AddResult(existing, "", nil)
@@ -386,7 +386,7 @@ func TestRemoveKnownHost_DuplicateHostnames(t *testing.T) {
 	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
 
-	assert.Equal(t, "compute-0.dev.sind.local ssh-ed25519 CCCC...\n", m.Calls[1].Stdin)
+	assert.Equal(t, "worker-0.dev.sind.local ssh-ed25519 CCCC...\n", m.Calls[1].Stdin)
 }
 
 func TestRemoveKnownHost_NotFound(t *testing.T) {
@@ -398,7 +398,7 @@ func TestRemoveKnownHost_NotFound(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveKnownHost(t.Context(), "compute-0.dev.sind.local")
+	err := mgr.RemoveKnownHost(t.Context(), "worker-0.dev.sind.local")
 	require.NoError(t, err)
 
 	// Should preserve existing content.

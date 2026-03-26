@@ -93,7 +93,7 @@ func TestClusterLifecycle(t *testing.T) {
 	t.Cleanup(func() {
 		bg := context.Background()
 		// Best-effort cleanup in case test fails partway.
-		for _, name := range []string{"controller", "compute-0", "compute-1"} {
+		for _, name := range []string{"controller", "worker-0", "worker-1"} {
 			cn := docker.ContainerName("sind-" + cluster + "-" + name)
 			_ = c.KillContainer(bg, cn)
 			_ = c.RemoveContainer(bg, cn)
@@ -126,7 +126,7 @@ func TestClusterLifecycle(t *testing.T) {
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "controller."+cluster)
-	assert.Contains(t, stdout, "compute-0."+cluster)
+	assert.Contains(t, stdout, "worker-0."+cluster)
 
 	// --- get networks ---
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "networks")
@@ -153,7 +153,7 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "Cluster: "+cluster)
 	assert.Contains(t, stdout, "NODES")
 	assert.Contains(t, stdout, "controller")
-	assert.Contains(t, stdout, "compute-0")
+	assert.Contains(t, stdout, "worker-0")
 	assert.Contains(t, stdout, "NETWORK")
 	assert.Contains(t, stdout, "VOLUMES")
 
@@ -178,50 +178,50 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Error(t, err)
 
 	// --- power shutdown ---
-	node := "compute-0." + cluster
+	node := "worker-0." + cluster
 	_, _, err = executeWithDockerCtx(ctx, "power", "shutdown", node)
 	require.NoError(t, err)
-	info, err := c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-compute-0"))
+	info, err := c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "exited", info.Status)
 
 	// --- power on ---
 	_, _, err = executeWithDockerCtx(ctx, "power", "on", node)
 	require.NoError(t, err)
-	info, err = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-compute-0"))
+	info, err = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "running", info.Status)
 
 	// --- power freeze / unfreeze ---
 	_, _, err = executeWithDockerCtx(ctx, "power", "freeze", node)
 	require.NoError(t, err)
-	info, _ = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-compute-0"))
+	info, _ = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
 	assert.Equal(t, "paused", info.Status)
 
 	_, _, err = executeWithDockerCtx(ctx, "power", "unfreeze", node)
 	require.NoError(t, err)
-	info, _ = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-compute-0"))
+	info, _ = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
 	assert.Equal(t, "running", info.Status)
 
 	// --- create worker ---
 	stdout, stderr, err = executeWithDockerCtx(ctx, "create", "worker", cluster, "--count", "1")
 	require.NoError(t, err, "create worker failed: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "compute-1")
+	assert.Contains(t, stdout, "worker-1")
 
 	// Verify new node appears.
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "compute-1."+cluster)
+	assert.Contains(t, stdout, "worker-1."+cluster)
 
 	// --- delete worker ---
-	stdout, _, err = executeWithDockerCtx(ctx, "delete", "worker", "compute-1."+cluster)
+	stdout, _, err = executeWithDockerCtx(ctx, "delete", "worker", "worker-1."+cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "Removed")
 
 	// Verify node is gone.
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
 	require.NoError(t, err)
-	assert.NotContains(t, stdout, "compute-1")
+	assert.NotContains(t, stdout, "worker-1")
 
 	// --- delete cluster ---
 	stdout, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)

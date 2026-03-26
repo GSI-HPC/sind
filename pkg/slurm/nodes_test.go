@@ -15,79 +15,79 @@ func boolPtr(b bool) *bool { return &b }
 func TestGenerateNodesConf_Minimal(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "compute", CPUs: 2, Memory: "2g"},
+		{Role: "worker", CPUs: 2, Memory: "2g"},
 	}
 
 	conf := GenerateNodesConf(nodes)
 
-	assert.Contains(t, conf, "NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
-	assert.Contains(t, conf, "PartitionName=all Nodes=compute-0 Default=YES MaxTime=INFINITE State=UP")
+	assert.Contains(t, conf, "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
+	assert.Contains(t, conf, "PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP")
 }
 
 func TestGenerateNodesConf_MultiCompute(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "4g"},
-		{Role: "compute", Count: 3, CPUs: 4, Memory: "8g"},
+		{Role: "worker", Count: 3, CPUs: 4, Memory: "8g"},
 	}
 
 	conf := GenerateNodesConf(nodes)
 
-	assert.Contains(t, conf, "NodeName=compute-0 CPUs=4 RealMemory=8192 State=UNKNOWN")
-	assert.Contains(t, conf, "NodeName=compute-1 CPUs=4 RealMemory=8192 State=UNKNOWN")
-	assert.Contains(t, conf, "NodeName=compute-2 CPUs=4 RealMemory=8192 State=UNKNOWN")
-	assert.Contains(t, conf, "PartitionName=all Nodes=compute-0,compute-1,compute-2 Default=YES MaxTime=INFINITE State=UP")
+	assert.Contains(t, conf, "NodeName=worker-0 CPUs=4 RealMemory=8192 State=UNKNOWN")
+	assert.Contains(t, conf, "NodeName=worker-1 CPUs=4 RealMemory=8192 State=UNKNOWN")
+	assert.Contains(t, conf, "NodeName=worker-2 CPUs=4 RealMemory=8192 State=UNKNOWN")
+	assert.Contains(t, conf, "PartitionName=all Nodes=worker-0,worker-1,worker-2 Default=YES MaxTime=INFINITE State=UP")
 }
 
 func TestGenerateNodesConf_MultipleGroups(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "compute", Count: 2, CPUs: 2, Memory: "2g"},
-		{Role: "compute", Count: 2, CPUs: 4, Memory: "8g"},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
+		{Role: "worker", Count: 2, CPUs: 4, Memory: "8g"},
 	}
 
 	conf := GenerateNodesConf(nodes)
 
-	assert.Contains(t, conf, "NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
-	assert.Contains(t, conf, "NodeName=compute-1 CPUs=2 RealMemory=2048 State=UNKNOWN")
-	assert.Contains(t, conf, "NodeName=compute-2 CPUs=4 RealMemory=8192 State=UNKNOWN")
-	assert.Contains(t, conf, "NodeName=compute-3 CPUs=4 RealMemory=8192 State=UNKNOWN")
-	assert.Contains(t, conf, "Nodes=compute-0,compute-1,compute-2,compute-3")
+	assert.Contains(t, conf, "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
+	assert.Contains(t, conf, "NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN")
+	assert.Contains(t, conf, "NodeName=worker-2 CPUs=4 RealMemory=8192 State=UNKNOWN")
+	assert.Contains(t, conf, "NodeName=worker-3 CPUs=4 RealMemory=8192 State=UNKNOWN")
+	assert.Contains(t, conf, "Nodes=worker-0,worker-1,worker-2,worker-3")
 }
 
 func TestGenerateNodesConf_SkipsUnmanaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "compute", Count: 2, CPUs: 2, Memory: "2g"},
-		{Role: "compute", Count: 2, CPUs: 2, Memory: "2g", Managed: boolPtr(false)},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: boolPtr(false)},
 	}
 
 	conf := GenerateNodesConf(nodes)
 
-	assert.Contains(t, conf, "NodeName=compute-0")
-	assert.Contains(t, conf, "NodeName=compute-1")
-	assert.NotContains(t, conf, "compute-2")
-	assert.NotContains(t, conf, "compute-3")
-	assert.Contains(t, conf, "Nodes=compute-0,compute-1")
+	assert.Contains(t, conf, "NodeName=worker-0")
+	assert.Contains(t, conf, "NodeName=worker-1")
+	assert.NotContains(t, conf, "worker-2")
+	assert.NotContains(t, conf, "worker-3")
+	assert.Contains(t, conf, "Nodes=worker-0,worker-1")
 }
 
 func TestGenerateNodesConf_SkipsNonCompute(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
 		{Role: "submitter", CPUs: 2, Memory: "2g"},
-		{Role: "compute", CPUs: 2, Memory: "2g"},
+		{Role: "worker", CPUs: 2, Memory: "2g"},
 	}
 
 	conf := GenerateNodesConf(nodes)
 
 	assert.NotContains(t, conf, "controller")
 	assert.NotContains(t, conf, "submitter")
-	assert.Contains(t, conf, "NodeName=compute-0")
+	assert.Contains(t, conf, "NodeName=worker-0")
 }
 
 func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "compute", Count: 2, CPUs: 2, Memory: "2g", Managed: boolPtr(false)},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: boolPtr(false)},
 	}
 
 	conf := GenerateNodesConf(nodes)
@@ -99,13 +99,13 @@ func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
 func TestGenerateNodesConf_ExplicitManaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "compute", CPUs: 2, Memory: "2g", Managed: boolPtr(true)},
+		{Role: "worker", CPUs: 2, Memory: "2g", Managed: boolPtr(true)},
 	}
 
 	conf := GenerateNodesConf(nodes)
 
-	assert.Contains(t, conf, "NodeName=compute-0")
-	assert.Contains(t, conf, "PartitionName=all Nodes=compute-0")
+	assert.Contains(t, conf, "NodeName=worker-0")
+	assert.Contains(t, conf, "PartitionName=all Nodes=worker-0")
 }
 
 func TestGenerateNodesConf_EmptyInput(t *testing.T) {
@@ -118,7 +118,7 @@ func TestGenerateNodesConf_EmptyInput(t *testing.T) {
 func TestGenerateNodesConf_MemoryMB(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "compute", CPUs: 2, Memory: "512m"},
+		{Role: "worker", CPUs: 2, Memory: "512m"},
 	}
 
 	conf := GenerateNodesConf(nodes)
@@ -130,38 +130,38 @@ func TestGenerateNodesConf_MemoryMB(t *testing.T) {
 
 func TestAddNodesToConf_AppendOne(t *testing.T) {
 	existing := "# Generated by sind\n" +
-		"NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"PartitionName=all Nodes=compute-0 Default=YES MaxTime=INFINITE State=UP\n"
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
 
 	result := AddNodesToConf(existing, []NodeEntry{
-		{Name: "compute-1", CPUs: 4, MemoryMB: 8192},
+		{Name: "worker-1", CPUs: 4, MemoryMB: 8192},
 	})
 
-	assert.Contains(t, result, "NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
-	assert.Contains(t, result, "NodeName=compute-1 CPUs=4 RealMemory=8192 State=UNKNOWN")
-	assert.Contains(t, result, "PartitionName=all Nodes=compute-0,compute-1 Default=YES MaxTime=INFINITE State=UP")
+	assert.Contains(t, result, "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
+	assert.Contains(t, result, "NodeName=worker-1 CPUs=4 RealMemory=8192 State=UNKNOWN")
+	assert.Contains(t, result, "PartitionName=all Nodes=worker-0,worker-1 Default=YES MaxTime=INFINITE State=UP")
 }
 
 func TestAddNodesToConf_AppendMultiple(t *testing.T) {
 	existing := "# Generated by sind\n" +
-		"NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"PartitionName=all Nodes=compute-0 Default=YES MaxTime=INFINITE State=UP\n"
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
 
 	result := AddNodesToConf(existing, []NodeEntry{
-		{Name: "compute-1", CPUs: 2, MemoryMB: 2048},
-		{Name: "compute-2", CPUs: 2, MemoryMB: 2048},
+		{Name: "worker-1", CPUs: 2, MemoryMB: 2048},
+		{Name: "worker-2", CPUs: 2, MemoryMB: 2048},
 	})
 
-	assert.Contains(t, result, "Nodes=compute-0,compute-1,compute-2")
+	assert.Contains(t, result, "Nodes=worker-0,worker-1,worker-2")
 }
 
 func TestAddNodesToConf_PreservesComment(t *testing.T) {
 	existing := "# Generated by sind\n" +
-		"NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"PartitionName=all Nodes=compute-0 Default=YES MaxTime=INFINITE State=UP\n"
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
 
 	result := AddNodesToConf(existing, []NodeEntry{
-		{Name: "compute-1", CPUs: 2, MemoryMB: 2048},
+		{Name: "worker-1", CPUs: 2, MemoryMB: 2048},
 	})
 
 	assert.True(t, len(result) > 0)
@@ -173,11 +173,11 @@ func TestAddNodesToConf_NoExistingPartition(t *testing.T) {
 	existing := "# Generated by sind\n"
 
 	result := AddNodesToConf(existing, []NodeEntry{
-		{Name: "compute-0", CPUs: 2, MemoryMB: 2048},
+		{Name: "worker-0", CPUs: 2, MemoryMB: 2048},
 	})
 
-	assert.Contains(t, result, "NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
-	assert.Contains(t, result, "PartitionName=all Nodes=compute-0 Default=YES MaxTime=INFINITE State=UP")
+	assert.Contains(t, result, "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
+	assert.Contains(t, result, "PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP")
 }
 
 func splitLines(s string) []string {
@@ -189,23 +189,23 @@ func splitLines(s string) []string {
 
 func TestRemoveNodesFromConf_RemoveOne(t *testing.T) {
 	existing := "# Generated by sind\n" +
-		"NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"NodeName=compute-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"PartitionName=all Nodes=compute-0,compute-1 Default=YES MaxTime=INFINITE State=UP\n"
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0,worker-1 Default=YES MaxTime=INFINITE State=UP\n"
 
-	result := RemoveNodesFromConf(existing, []string{"compute-1"})
+	result := RemoveNodesFromConf(existing, []string{"worker-1"})
 
-	assert.Contains(t, result, "NodeName=compute-0")
-	assert.NotContains(t, result, "compute-1")
-	assert.Contains(t, result, "PartitionName=all Nodes=compute-0 Default=YES MaxTime=INFINITE State=UP")
+	assert.Contains(t, result, "NodeName=worker-0")
+	assert.NotContains(t, result, "worker-1")
+	assert.Contains(t, result, "PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP")
 }
 
 func TestRemoveNodesFromConf_RemoveAll(t *testing.T) {
 	existing := "# Generated by sind\n" +
-		"NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"PartitionName=all Nodes=compute-0 Default=YES MaxTime=INFINITE State=UP\n"
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
 
-	result := RemoveNodesFromConf(existing, []string{"compute-0"})
+	result := RemoveNodesFromConf(existing, []string{"worker-0"})
 
 	assert.NotContains(t, result, "NodeName=")
 	assert.NotContains(t, result, "PartitionName=")
@@ -214,17 +214,17 @@ func TestRemoveNodesFromConf_RemoveAll(t *testing.T) {
 
 func TestRemoveNodesFromConf_PreservesOthers(t *testing.T) {
 	existing := "# Generated by sind\n" +
-		"NodeName=compute-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"NodeName=compute-1 CPUs=4 RealMemory=8192 State=UNKNOWN\n" +
-		"NodeName=compute-2 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
-		"PartitionName=all Nodes=compute-0,compute-1,compute-2 Default=YES MaxTime=INFINITE State=UP\n"
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"NodeName=worker-1 CPUs=4 RealMemory=8192 State=UNKNOWN\n" +
+		"NodeName=worker-2 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0,worker-1,worker-2 Default=YES MaxTime=INFINITE State=UP\n"
 
-	result := RemoveNodesFromConf(existing, []string{"compute-1"})
+	result := RemoveNodesFromConf(existing, []string{"worker-1"})
 
-	assert.Contains(t, result, "NodeName=compute-0")
-	assert.NotContains(t, result, "NodeName=compute-1")
-	assert.Contains(t, result, "NodeName=compute-2")
-	assert.Contains(t, result, "Nodes=compute-0,compute-2")
+	assert.Contains(t, result, "NodeName=worker-0")
+	assert.NotContains(t, result, "NodeName=worker-1")
+	assert.Contains(t, result, "NodeName=worker-2")
+	assert.Contains(t, result, "Nodes=worker-0,worker-2")
 }
 
 // --- ParseMemoryMB (exported) ---

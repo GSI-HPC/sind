@@ -32,8 +32,8 @@ type Node struct {
 
 // UnmarshalJSON supports three YAML forms:
 //   - bare string: "controller"
-//   - shorthand map: "compute: 3"  (role: count)
-//   - full object: "role: compute\n  count: 3\n  cpus: 4"
+//   - shorthand map: "worker: 3"  (role: count)
+//   - full object: "role: worker\n  count: 3\n  cpus: 4"
 func (n *Node) UnmarshalJSON(data []byte) error {
 	// Try bare string: "controller"
 	var s string
@@ -61,7 +61,7 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	// Shorthand map: {"compute": 3}
+	// Shorthand map: {"worker": 3}
 	if len(raw) != 1 {
 		return fmt.Errorf("shorthand node must have exactly one key (role), got %d", len(raw))
 	}
@@ -105,14 +105,14 @@ const (
 )
 
 // ApplyDefaults populates missing fields with defaults.
-// If no nodes are defined, creates a minimal cluster (1 controller + 1 compute).
+// If no nodes are defined, creates a minimal cluster (1 controller + 1 worker).
 // Node-level fields inherit from the Defaults section, which in turn falls back
 // to built-in defaults.
 func (c *Cluster) ApplyDefaults() {
 	if len(c.Nodes) == 0 {
 		c.Nodes = []Node{
 			{Role: "controller"},
-			{Role: "compute"},
+			{Role: "worker"},
 		}
 	}
 
@@ -154,16 +154,16 @@ func (c *Cluster) ApplyDefaults() {
 var validRoles = map[string]bool{
 	"controller": true,
 	"submitter":  true,
-	"compute":    true,
+	"worker":     true,
 }
 
 // Validate checks that the cluster configuration satisfies all constraints.
 // It should be called after ApplyDefaults.
 func (c *Cluster) Validate() error {
-	var controllers, submitters, computes int
+	var controllers, submitters, workers int
 	for _, n := range c.Nodes {
 		if !validRoles[n.Role] {
-			return fmt.Errorf("invalid role %q, must be one of: controller, submitter, compute", n.Role)
+			return fmt.Errorf("invalid role %q, must be one of: controller, submitter, worker", n.Role)
 		}
 
 		switch n.Role {
@@ -171,18 +171,18 @@ func (c *Cluster) Validate() error {
 			controllers++
 		case "submitter":
 			submitters++
-		case "compute":
-			computes++
+		case "worker":
+			workers++
 		}
 
 		if n.Count < 0 {
 			return fmt.Errorf("count must not be negative, got %d", n.Count)
 		}
-		if n.Count > 0 && n.Role != "compute" {
-			return fmt.Errorf("count is only valid for compute nodes, not %q", n.Role)
+		if n.Count > 0 && n.Role != "worker" {
+			return fmt.Errorf("count is only valid for worker nodes, not %q", n.Role)
 		}
-		if n.Managed != nil && n.Role != "compute" {
-			return fmt.Errorf("managed is only valid for compute nodes, not %q", n.Role)
+		if n.Managed != nil && n.Role != "worker" {
+			return fmt.Errorf("managed is only valid for worker nodes, not %q", n.Role)
 		}
 	}
 
@@ -192,8 +192,8 @@ func (c *Cluster) Validate() error {
 	if submitters > 1 {
 		return fmt.Errorf("at most one submitter allowed, got %d", submitters)
 	}
-	if computes < 1 {
-		return fmt.Errorf("at least one compute node required, got %d", computes)
+	if workers < 1 {
+		return fmt.Errorf("at least one worker node required, got %d", workers)
 	}
 
 	return nil

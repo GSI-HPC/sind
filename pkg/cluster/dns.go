@@ -6,7 +6,7 @@ package cluster
 const DNSSuffix = "sind.local"
 
 // DNSName returns the fully qualified DNS name for a node.
-// shortName is the node's hostname, e.g. "controller", "compute-0".
+// shortName is the node's hostname, e.g. "controller", "worker-0".
 func DNSName(shortName, cluster string) string {
 	return shortName + "." + cluster + "." + DNSSuffix
 }

@@ -3,7 +3,7 @@
 package cluster
 
 // ContainerLogArgs builds docker CLI arguments for streaming container logs.
-// node is the short name (e.g. "controller", "compute-0"), cluster is the
+// node is the short name (e.g. "controller", "worker-0"), cluster is the
 // cluster name, and follow controls whether --follow is added.
 func ContainerLogArgs(node, cluster string, follow bool) []string {
 	args := []string{"logs"}

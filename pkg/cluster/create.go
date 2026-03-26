@@ -283,7 +283,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 // the service to become ready — concurrently per node.
 //
 //	┌────────────────────┐ ┌─────────────────────┐
-//	│ controller:        │ │ compute-0:           │
+//	│ controller:        │ │ worker-0:            │
 //	│ enable slurmctld   │ │ enable slurmd        │ ...
 //	│ wait slurmctld     │ │ wait slurmd          │
 //	└─────────┬──────────┘ └──────────┬───────────┘
@@ -298,7 +298,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, clusterName string,
 		case "controller":
 			service = "slurmctld"
 			slurmProbe = probe.Probe{Name: "slurmctld", Check: probe.SlurmctldReady}
-		case "compute":
+		case "worker":
 			if !nc.Managed {
 				continue
 			}
@@ -410,10 +410,10 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, clusterName strin
 }
 
 // NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
-// Compute nodes are indexed sequentially across all compute groups.
+// Worker nodes are indexed sequentially across all worker groups.
 func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig {
 	var configs []RunConfig
-	computeIdx := 0
+	workerIdx := 0
 
 	dataHostPath := ""
 	dataMountPath := ""
@@ -440,7 +440,7 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 				DataHostPath:  dataHostPath,
 				DataMountPath: dataMountPath,
 			})
-		case "compute":
+		case "worker":
 			count := n.Count
 			if count <= 0 {
 				count = 1
@@ -449,8 +449,8 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 			for i := 0; i < count; i++ {
 				configs = append(configs, RunConfig{
 					ClusterName:   cfg.Name,
-					ShortName:     fmt.Sprintf("compute-%d", computeIdx),
-					Role:          "compute",
+					ShortName:     fmt.Sprintf("worker-%d", workerIdx),
+					Role:          "worker",
 					Image:         n.Image,
 					CPUs:          n.CPUs,
 					Memory:        n.Memory,
@@ -461,7 +461,7 @@ func NodeRunConfigs(cfg *config.Cluster, dnsIP, slurmVersion string) []RunConfig
 					DataMountPath: dataMountPath,
 					Managed:       isManaged,
 				})
-				computeIdx++
+				workerIdx++
 			}
 		}
 	}
@@ -481,15 +481,15 @@ func CreateClusterNodes(ctx context.Context, client *docker.Client, configs []Ru
 }
 
 // EnableSlurmServices enables the role-appropriate Slurm daemon on each node.
-// Controller nodes get slurmctld; managed compute nodes get slurmd.
-// Submitter and unmanaged compute nodes are skipped.
+// Controller nodes get slurmctld; managed worker nodes get slurmd.
+// Submitter and unmanaged worker nodes are skipped.
 func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []RunConfig) error {
 	for _, cfg := range configs {
 		var service string
 		switch cfg.Role {
 		case "controller":
 			service = "slurmctld"
-		case "compute":
+		case "worker":
 			if !cfg.Managed {
 				continue
 			}

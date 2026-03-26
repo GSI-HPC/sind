@@ -105,11 +105,11 @@ nodes:
     memory: 4g
     tmpSize: 2g
   - role: submitter
-  - role: compute
+  - role: worker
     count: 3
     cpus: 4
     memory: 8g
-  - role: compute
+  - role: worker
     count: 2
     managed: false`
 
@@ -126,15 +126,15 @@ nodes:
 	// submitter
 	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
 
-	// managed compute
-	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	// managed worker
+	assert.Equal(t, "worker", cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 	assert.Equal(t, 4, cfg.Nodes[2].CPUs)
 	assert.Equal(t, "8g", cfg.Nodes[2].Memory)
 	assert.Nil(t, cfg.Nodes[2].Managed)
 
-	// unmanaged compute
-	assert.Equal(t, "compute", cfg.Nodes[3].Role)
+	// unmanaged worker
+	assert.Equal(t, "worker", cfg.Nodes[3].Role)
 	assert.Equal(t, 2, cfg.Nodes[3].Count)
 	require.NotNil(t, cfg.Nodes[3].Managed)
 	assert.False(t, *cfg.Nodes[3].Managed)
@@ -145,7 +145,7 @@ func TestParse_NodesShorthand(t *testing.T) {
 nodes:
   - controller
   - submitter
-  - compute: 3`
+  - worker: 3`
 
 	cfg, err := Parse([]byte(input))
 	require.NoError(t, err)
@@ -156,7 +156,7 @@ nodes:
 
 	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
 
-	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	assert.Equal(t, "worker", cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }
 
@@ -164,10 +164,10 @@ func TestParse_NodesMixed(t *testing.T) {
 	input := `kind: Cluster
 nodes:
   - controller
-  - role: compute
+  - role: worker
     count: 3
     cpus: 4
-  - compute: 2`
+  - worker: 2`
 
 	cfg, err := Parse([]byte(input))
 	require.NoError(t, err)
@@ -175,11 +175,11 @@ nodes:
 
 	assert.Equal(t, "controller", cfg.Nodes[0].Role)
 
-	assert.Equal(t, "compute", cfg.Nodes[1].Role)
+	assert.Equal(t, "worker", cfg.Nodes[1].Role)
 	assert.Equal(t, 3, cfg.Nodes[1].Count)
 	assert.Equal(t, 4, cfg.Nodes[1].CPUs)
 
-	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	assert.Equal(t, "worker", cfg.Nodes[2].Role)
 	assert.Equal(t, 2, cfg.Nodes[2].Count)
 }
 
@@ -240,7 +240,7 @@ func TestApplyDefaults_MinimalConfig(t *testing.T) {
 
 	require.Len(t, cfg.Nodes, 2)
 	assert.Equal(t, "controller", cfg.Nodes[0].Role)
-	assert.Equal(t, "compute", cfg.Nodes[1].Role)
+	assert.Equal(t, "worker", cfg.Nodes[1].Role)
 }
 
 func TestApplyDefaults_InheritsGlobalDefaults(t *testing.T) {
@@ -255,7 +255,7 @@ func TestApplyDefaults_InheritsGlobalDefaults(t *testing.T) {
 		},
 		Nodes: []Node{
 			{Role: "controller"},
-			{Role: "compute"},
+			{Role: "worker"},
 		},
 	}
 	cfg.ApplyDefaults()
@@ -279,7 +279,7 @@ func TestApplyDefaults_NodeOverridesGlobal(t *testing.T) {
 		},
 		Nodes: []Node{
 			{Role: "controller", CPUs: 8},
-			{Role: "compute", Image: "special:latest"},
+			{Role: "worker", Image: "special:latest"},
 		},
 	}
 	cfg.ApplyDefaults()
@@ -289,7 +289,7 @@ func TestApplyDefaults_NodeOverridesGlobal(t *testing.T) {
 	assert.Equal(t, 8, cfg.Nodes[0].CPUs)
 	assert.Equal(t, "4g", cfg.Nodes[0].Memory)
 
-	// compute: overrides image, inherits rest
+	// worker: overrides image, inherits rest
 	assert.Equal(t, "special:latest", cfg.Nodes[1].Image)
 	assert.Equal(t, 2, cfg.Nodes[1].CPUs)
 	assert.Equal(t, "4g", cfg.Nodes[1].Memory)
@@ -301,7 +301,7 @@ func TestApplyDefaults_BuiltinDefaults(t *testing.T) {
 		Name: "default",
 		Nodes: []Node{
 			{Role: "controller"},
-			{Role: "compute"},
+			{Role: "worker"},
 		},
 	}
 	cfg.ApplyDefaults()
@@ -320,18 +320,18 @@ func TestValidate_Valid(t *testing.T) {
 		nodes []Node
 	}{
 		{
-			name: "controller and compute",
+			name: "controller and worker",
 			nodes: []Node{
 				{Role: "controller"},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
 		},
 		{
-			name: "controller, submitter, and compute",
+			name: "controller, submitter, and worker",
 			nodes: []Node{
 				{Role: "controller"},
 				{Role: "submitter"},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
 		},
 	}
@@ -357,7 +357,7 @@ func TestValidate_RequiredFields(t *testing.T) {
 		{
 			name: "missing controller",
 			nodes: []Node{
-				{Role: "compute"},
+				{Role: "worker"},
 			},
 			wantErr: "exactly one controller",
 		},
@@ -366,16 +366,16 @@ func TestValidate_RequiredFields(t *testing.T) {
 			nodes: []Node{
 				{Role: "controller"},
 				{Role: "controller"},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
 			wantErr: "exactly one controller",
 		},
 		{
-			name: "no compute",
+			name: "no worker",
 			nodes: []Node{
 				{Role: "controller"},
 			},
-			wantErr: "at least one compute",
+			wantErr: "at least one worker",
 		},
 		{
 			name:    "empty nodes",
@@ -410,7 +410,7 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: "controller"},
 				{Role: "submitter"},
 				{Role: "submitter"},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
 			wantErr: "at most one submitter",
 		},
@@ -418,49 +418,49 @@ func TestValidate_Constraints(t *testing.T) {
 			name: "count on controller",
 			nodes: []Node{
 				{Role: "controller", Count: 2},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
-			wantErr: "count is only valid for compute",
+			wantErr: "count is only valid for worker",
 		},
 		{
 			name: "count on submitter",
 			nodes: []Node{
 				{Role: "controller"},
 				{Role: "submitter", Count: 2},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
-			wantErr: "count is only valid for compute",
+			wantErr: "count is only valid for worker",
 		},
 		{
 			name: "invalid role",
 			nodes: []Node{
 				{Role: "controller"},
-				{Role: "worker"},
 				{Role: "compute"},
+				{Role: "worker"},
 			},
-			wantErr: `invalid role "worker"`,
+			wantErr: `invalid role "compute"`,
 		},
 		{
-			name: "managed false on non-compute",
+			name: "managed false on non-worker",
 			nodes: []Node{
 				{Role: "controller", Managed: boolPtr(false)},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
-			wantErr: "managed is only valid for compute",
+			wantErr: "managed is only valid for worker",
 		},
 		{
-			name: "managed true on non-compute",
+			name: "managed true on non-worker",
 			nodes: []Node{
 				{Role: "controller", Managed: boolPtr(true)},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
-			wantErr: "managed is only valid for compute",
+			wantErr: "managed is only valid for worker",
 		},
 		{
 			name: "negative count",
 			nodes: []Node{
 				{Role: "controller"},
-				{Role: "compute", Count: -1},
+				{Role: "worker", Count: -1},
 			},
 			wantErr: "count must not be negative",
 		},
@@ -527,7 +527,7 @@ nodes:
 			name: "shorthand node with multiple keys",
 			input: `kind: Cluster
 nodes:
-  - compute: 3
+  - worker: 3
     memory: 4g`,
 			wantErr: "shorthand node must have exactly one key",
 		},
@@ -535,7 +535,7 @@ nodes:
 			name: "shorthand node with non-integer count",
 			input: `kind: Cluster
 nodes:
-  - compute: abc`,
+  - worker: abc`,
 			wantErr: "shorthand node count",
 		},
 		{
@@ -566,12 +566,12 @@ func TestParse_ShorthandZeroCount(t *testing.T) {
 	input := `kind: Cluster
 nodes:
   - controller
-  - compute: 0`
+  - worker: 0`
 
 	cfg, err := Parse([]byte(input))
 	require.NoError(t, err)
 	require.Len(t, cfg.Nodes, 2)
-	assert.Equal(t, "compute", cfg.Nodes[1].Role)
+	assert.Equal(t, "worker", cfg.Nodes[1].Role)
 	assert.Equal(t, 0, cfg.Nodes[1].Count)
 }
 
@@ -584,7 +584,7 @@ defaults:
 nodes:
   - controller
   - submitter
-  - compute: 3`
+  - worker: 3`
 
 	cfg, err := Parse([]byte(input))
 	require.NoError(t, err)
@@ -599,6 +599,6 @@ nodes:
 	assert.Equal(t, 4, cfg.Nodes[0].CPUs)
 	assert.Equal(t, "2g", cfg.Nodes[0].Memory)
 	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
-	assert.Equal(t, "compute", cfg.Nodes[2].Role)
+	assert.Equal(t, "worker", cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }

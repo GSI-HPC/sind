@@ -21,12 +21,12 @@ func TestGetClusters(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0",
 		},
 		psEntry{
-			ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "sind-node:25.11",
-			Labels: "sind.cluster=dev,sind.role=compute,sind.slurm.version=25.11.0",
+			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
 		psEntry{
-			ID: "c", Names: "sind-dev-compute-1", State: "running", Image: "sind-node:25.11",
-			Labels: "sind.cluster=dev,sind.role=compute,sind.slurm.version=25.11.0",
+			ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
 		psEntry{
 			ID: "d", Names: "sind-prod-controller", State: "running", Image: "sind-node:25.11",
@@ -37,12 +37,12 @@ func TestGetClusters(t *testing.T) {
 			Labels: "sind.cluster=prod,sind.role=submitter,sind.slurm.version=25.11.0",
 		},
 		psEntry{
-			ID: "f", Names: "sind-prod-compute-0", State: "running", Image: "sind-node:25.11",
-			Labels: "sind.cluster=prod,sind.role=compute,sind.slurm.version=25.11.0",
+			ID: "f", Names: "sind-prod-worker-0", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=prod,sind.role=worker,sind.slurm.version=25.11.0",
 		},
 		psEntry{
-			ID: "g", Names: "sind-prod-compute-1", State: "running", Image: "sind-node:25.11",
-			Labels: "sind.cluster=prod,sind.role=compute,sind.slurm.version=25.11.0",
+			ID: "g", Names: "sind-prod-worker-1", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=prod,sind.role=worker,sind.slurm.version=25.11.0",
 		},
 	), "", nil)
 	c := docker.NewClient(&m)
@@ -89,8 +89,8 @@ func TestGetClusters_MixedStatus(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
 		psEntry{
-			ID: "b", Names: "sind-dev-compute-0", State: "exited", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
 	c := docker.NewClient(&m)
@@ -111,8 +111,8 @@ func TestGetClusters_AllStopped(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
 		psEntry{
-			ID: "b", Names: "sind-dev-compute-0", State: "exited", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
 	c := docker.NewClient(&m)
@@ -175,7 +175,7 @@ func TestGetClusters_EmptyClusterLabel(t *testing.T) {
 		},
 		psEntry{
 			ID: "b", Names: "sind-orphan", State: "running", Image: "img",
-			Labels: "sind.cluster=,sind.role=compute",
+			Labels: "sind.cluster=,sind.role=worker",
 		},
 	), "", nil)
 	c := docker.NewClient(&m)
@@ -198,12 +198,12 @@ func TestGetNodes(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
 		psEntry{
-			ID: "b", Names: "sind-dev-compute-1", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "b", Names: "sind-dev-worker-1", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 		psEntry{
-			ID: "c", Names: "sind-dev-compute-0", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "c", Names: "sind-dev-worker-0", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
 	c := docker.NewClient(&m)
@@ -213,16 +213,16 @@ func TestGetNodes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
 
-	// Sorted: controller first, then compute by name.
+	// Sorted: controller first, then worker by name.
 	assert.Equal(t, "controller", nodes[0].Name)
 	assert.Equal(t, "controller", nodes[0].Role)
 	assert.Equal(t, StatusRunning, nodes[0].Status)
 
-	assert.Equal(t, "compute-0", nodes[1].Name)
-	assert.Equal(t, "compute", nodes[1].Role)
+	assert.Equal(t, "worker-0", nodes[1].Name)
+	assert.Equal(t, "worker", nodes[1].Role)
 
-	assert.Equal(t, "compute-1", nodes[2].Name)
-	assert.Equal(t, "compute", nodes[2].Role)
+	assert.Equal(t, "worker-1", nodes[2].Name)
+	assert.Equal(t, "worker", nodes[2].Role)
 }
 
 func TestGetNodes_WithStatus(t *testing.T) {
@@ -233,12 +233,12 @@ func TestGetNodes_WithStatus(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
 		psEntry{
-			ID: "b", Names: "sind-dev-compute-0", State: "exited", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 		psEntry{
-			ID: "c", Names: "sind-dev-compute-1", State: "paused", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "c", Names: "sind-dev-worker-1", State: "paused", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
 	c := docker.NewClient(&m)
@@ -292,8 +292,8 @@ func TestGetNodes_SortOrder(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult(ndjson(
 		psEntry{
-			ID: "a", Names: "sind-dev-compute-0", State: "running", Image: "img",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "a", Names: "sind-dev-worker-0", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 		psEntry{
 			ID: "b", Names: "sind-dev-submitter", State: "running", Image: "img",
@@ -310,10 +310,10 @@ func TestGetNodes_SortOrder(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
-	// Order: controller, submitter, compute
+	// Order: controller, submitter, worker
 	assert.Equal(t, "controller", nodes[0].Role)
 	assert.Equal(t, "submitter", nodes[1].Role)
-	assert.Equal(t, "compute", nodes[2].Role)
+	assert.Equal(t, "worker", nodes[2].Role)
 }
 
 func TestGetNodes_UnknownRole(t *testing.T) {

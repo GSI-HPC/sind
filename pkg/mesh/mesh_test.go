@@ -618,12 +618,12 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.AddDNSRecord(t.Context(), "compute-0.dev.sind.local", "172.18.0.3")
+	err := mgr.AddDNSRecord(t.Context(), "worker-0.dev.sind.local", "172.18.0.3")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.local")
-	assert.Contains(t, corefile, "172.18.0.3 compute-0.dev.sind.local")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.local")
 }
 
 func TestAddDNSRecord_ReadError(t *testing.T) {
@@ -667,7 +667,7 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 func TestRemoveDNSRecord(t *testing.T) {
 	existing := []string{
 		"172.18.0.2 controller.dev.sind.local",
-		"172.18.0.3 compute-0.dev.sind.local",
+		"172.18.0.3 worker-0.dev.sind.local",
 	}
 
 	var m docker.MockExecutor
@@ -683,7 +683,7 @@ func TestRemoveDNSRecord(t *testing.T) {
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.NotContains(t, corefile, "controller.dev.sind.local")
-	assert.Contains(t, corefile, "172.18.0.3 compute-0.dev.sind.local")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.local")
 }
 
 func TestRemoveDNSRecord_LastEntry(t *testing.T) {
@@ -718,7 +718,7 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c)
 
-	err := mgr.RemoveDNSRecord(t.Context(), "compute-0.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "worker-0.dev.sind.local")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
@@ -744,7 +744,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 	existing := []string{
 		"172.18.0.2 controller.dev.sind.local",
 		"172.18.0.5 controller.dev.sind.local",
-		"172.18.0.3 compute-0.dev.sind.local",
+		"172.18.0.3 worker-0.dev.sind.local",
 	}
 
 	var m docker.MockExecutor
@@ -760,7 +760,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.NotContains(t, corefile, "controller.dev.sind.local")
-	assert.Contains(t, corefile, "172.18.0.3 compute-0.dev.sind.local")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.local")
 }
 
 func TestRemoveDNSRecord_ReadError(t *testing.T) {
@@ -799,11 +799,11 @@ func TestGenerateCorefile_Empty(t *testing.T) {
 func TestGenerateCorefile_WithEntries(t *testing.T) {
 	entries := []string{
 		"172.18.0.2 controller.dev.sind.local",
-		"172.18.0.3 compute-0.dev.sind.local",
+		"172.18.0.3 worker-0.dev.sind.local",
 	}
 	cf := generateCorefile(entries)
 	assert.Contains(t, cf, "        172.18.0.2 controller.dev.sind.local\n")
-	assert.Contains(t, cf, "        172.18.0.3 compute-0.dev.sind.local\n")
+	assert.Contains(t, cf, "        172.18.0.3 worker-0.dev.sind.local\n")
 }
 
 func TestParseEntries_Empty(t *testing.T) {
@@ -815,7 +815,7 @@ func TestParseEntries_Empty(t *testing.T) {
 func TestParseEntries_Roundtrip(t *testing.T) {
 	original := []string{
 		"172.18.0.2 controller.dev.sind.local",
-		"172.18.0.3 compute-0.dev.sind.local",
+		"172.18.0.3 worker-0.dev.sind.local",
 	}
 	cf := generateCorefile(original)
 	parsed := parseEntries(cf)

@@ -17,8 +17,8 @@ func TestDNSName(t *testing.T) {
 	}{
 		{"controller", "controller", "dev", "controller.dev.sind.local"},
 		{"submitter", "submitter", "dev", "submitter.dev.sind.local"},
-		{"compute-0", "compute-0", "dev", "compute-0.dev.sind.local"},
-		{"compute-1", "compute-1", "dev", "compute-1.dev.sind.local"},
+		{"worker-0", "worker-0", "dev", "worker-0.dev.sind.local"},
+		{"worker-1", "worker-1", "dev", "worker-1.dev.sind.local"},
 		{"default cluster", "controller", "default", "controller.default.sind.local"},
 	}
 	for _, tt := range tests {

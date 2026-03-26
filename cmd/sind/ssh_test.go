@@ -36,10 +36,10 @@ func TestExec_CommandExists(t *testing.T) {
 }
 
 func TestParseSSHArgs_NodeOnly(t *testing.T) {
-	opts, node, cmd, err := parseSSHArgs([]string{"compute-0"})
+	opts, node, cmd, err := parseSSHArgs([]string{"worker-0"})
 	require.NoError(t, err)
 	assert.Empty(t, opts)
-	assert.Equal(t, "compute-0", node)
+	assert.Equal(t, "worker-0", node)
 	assert.Nil(t, cmd)
 }
 
@@ -52,18 +52,18 @@ func TestParseSSHArgs_WithOptions(t *testing.T) {
 }
 
 func TestParseSSHArgs_WithCommand(t *testing.T) {
-	opts, node, cmd, err := parseSSHArgs([]string{"compute-0", "--", "hostname"})
+	opts, node, cmd, err := parseSSHArgs([]string{"worker-0", "--", "hostname"})
 	require.NoError(t, err)
 	assert.Empty(t, opts)
-	assert.Equal(t, "compute-0", node)
+	assert.Equal(t, "worker-0", node)
 	assert.Equal(t, []string{"hostname"}, cmd)
 }
 
 func TestParseSSHArgs_Full(t *testing.T) {
-	opts, node, cmd, err := parseSSHArgs([]string{"-t", "compute-0.dev", "--", "top", "-b"})
+	opts, node, cmd, err := parseSSHArgs([]string{"-t", "worker-0.dev", "--", "top", "-b"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"-t"}, opts)
-	assert.Equal(t, "compute-0.dev", node)
+	assert.Equal(t, "worker-0.dev", node)
 	assert.Equal(t, []string{"top", "-b"}, cmd)
 }
 

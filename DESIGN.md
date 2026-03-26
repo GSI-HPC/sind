@@ -92,7 +92,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 
-**Nodeset expansion** (e.g., `compute-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
+**Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
 
 ### Docker Interaction
 
@@ -180,14 +180,14 @@ default   4 (1/1/2)       25.11   running
 dev       3 (0/1/2)       25.11   running
 ```
 
-NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker (compute).
+NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker.
 
 ```
 $ sind get nodes dev
 NAME              ROLE        STATUS
 controller.dev    controller  running
-compute-0.dev     compute     ready
-compute-1.dev     compute     ready
+worker-0.dev     workerready
+worker-1.dev     workerready
 ```
 
 ### Cluster Diagnostics
@@ -206,8 +206,8 @@ Status:  running
 NODES
 NAME              ROLE        IP            CONTAINER   MUNGE  SSHD   SERVICES
 controller.dev    controller  172.18.0.2    running     ✓      ✓      slurmctld ✓
-compute-0.dev     compute     172.18.0.3    running     ✓      ✓      slurmd ✓
-compute-1.dev     compute     172.18.0.4    running     ✓      ✓      slurmd ✗
+worker-0.dev     worker172.18.0.3    running     ✓      ✓      slurmd ✓
+worker-1.dev     worker172.18.0.4    running     ✓      ✓      slurmd ✗
 
 NETWORK
 Mesh:     sind-mesh ✓
@@ -235,8 +235,8 @@ NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `default`.
 ### Worker Lifecycle
 
 ```bash
-sind create worker [CLUSTER] [FLAGS]    # add compute nodes
-sind delete worker NODES               # remove compute nodes from cluster
+sind create worker [CLUSTER] [FLAGS]    # add worker nodes
+sind delete worker NODES               # remove worker nodes from cluster
 ```
 
 **create worker flags:**
@@ -264,7 +264,7 @@ sind create worker dev --count 2             # 2 managed nodes in dev cluster
 
 By default (without `--unmanaged`), sind:
 1. Verifies `sind-nodes.conf` exists in `/etc/slurm` (fails if not present)
-2. Creates the compute container(s)
+2. Creates the worker container(s)
 3. Appends node definition(s) to `sind-nodes.conf`
 4. Reconfigures slurmctld (`scontrol reconfigure`)
 5. Starts slurmd on the new node(s)
@@ -308,7 +308,7 @@ Examples:
 ```bash
 sind logs controller --follow          # tail container logs
 sind logs controller slurmctld         # slurmctld journal logs
-sind logs compute-0 slurmd --follow    # follow slurmd logs
+sind logs worker-0 slurmd --follow    # follow slurmd logs
 ```
 
 ### Utilities
@@ -338,32 +338,32 @@ Nodeset notation (as used in Slurm, pdsh, ClusterShell) is supported for specify
 
 | Pattern | Expansion |
 |---------|-----------|
-| `compute-[0-3]` | compute-0, compute-1, compute-2, compute-3 |
-| `compute-[0,2,4]` | compute-0, compute-2, compute-4 |
-| `compute-[0-2,5]` | compute-0, compute-1, compute-2, compute-5 |
-| `compute-[0-1].dev` | compute-0.dev, compute-1.dev |
+| `worker-[0-3]` | worker-0, worker-1, worker-2, worker-3 |
+| `worker-[0,2,4]` | worker-0, worker-2, worker-4 |
+| `worker-[0-2,5]` | worker-0, worker-1, worker-2, worker-5 |
+| `worker-[0-1].dev` | worker-0.dev, worker-1.dev |
 
 Multiple nodesets can be comma-separated:
 
 ```bash
-sind power shutdown controller,compute-[0-3]
-sind power cycle compute-[0-1].dev,compute-[0-3].default
+sind power shutdown controller,worker-[0-3]
+sind power cycle worker-[0-1].dev,worker-[0-3].default
 ```
 
 ### Examples
 
 ```bash
 sind power shutdown controller                    # controller.default
-sind power cycle compute-0                        # compute-0.default
-sind power freeze compute-[0-3].dev               # 4 nodes in dev cluster
-sind power reboot controller,compute-[0-1]        # multiple nodes in default
+sind power cycle worker-0                        # worker-0.default
+sind power freeze worker-[0-3].dev               # 4 nodes in dev cluster
+sind power reboot controller,worker-[0-1]        # multiple nodes in default
 ```
 
 ## Configuration Schema
 
 ### Minimal Configuration
 
-The simplest valid configuration creates a minimal cluster with 1 controller and 1 compute node using the generic sind-node image:
+The simplest valid configuration creates a minimal cluster with 1 controller and 1 worker node using the generic sind-node image:
 
 ```yaml
 kind: Cluster
@@ -378,7 +378,7 @@ defaults:
   image: ghcr.io/gsi-hpc/sind-node:latest
 nodes:
   - role: controller
-  - role: compute
+  - role: worker
 ```
 
 When `defaults.image` is omitted, sind uses the generic image `ghcr.io/gsi-hpc/sind-node:latest`.
@@ -391,7 +391,7 @@ Nodes can be specified in short form when only role (and optionally count) are n
 nodes:
   - controller                           # just the role
   - submitter                            # optional roles work too
-  - compute: 3                           # role with count
+  - worker: 3                           # role with count
 ```
 
 This is equivalent to:
@@ -400,7 +400,7 @@ This is equivalent to:
 nodes:
   - role: controller
   - role: submitter
-  - role: compute
+  - role: worker
     count: 3
 ```
 
@@ -432,12 +432,12 @@ nodes:
 
   - role: submitter                      # optional, at most one
 
-  - role: compute
+  - role: worker
     count: 3                             # default: 1
     cpus: 4
     memory: 8g
 
-  - role: compute
+  - role: worker
     count: 2
     managed: false                       # slurmd not started, not in slurm.conf
 ```
@@ -448,7 +448,7 @@ nodes:
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
 | `submitter` | 0-1 | no | none (clients only) | Job submission node |
-| `compute` | 1+ | yes | slurmd | Compute nodes |
+| `worker` | 1+ | yes | slurmd | Worker nodes |
 
 ### Node Parameters
 
@@ -458,16 +458,16 @@ nodes:
 | `tmpSize` | global + per-node | `1g` | tmpfs size for /tmp |
 | `cpus` | global + per-node | `2` | CPU limit |
 | `memory` | global + per-node | `2g` | Memory limit |
-| `count` | compute only | `1` | Number of compute nodes |
-| `managed` | compute only | `true` | Start slurmd and add to slurm.conf |
+| `count` | worker only | `1` | Number of worker nodes |
+| `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
 
 ### Validation Rules
 
-- `nodes` - optional; if omitted, creates 1 controller + 1 compute
+- `nodes` - optional; if omitted, creates 1 controller + 1 worker
 - `role: controller` - exactly one (auto-created if nodes omitted)
 - `role: submitter` - at most one
-- `role: compute` - at least one (auto-created if nodes omitted)
-- `count` - only valid for compute role
+- `role: worker` - at least one (auto-created if nodes omitted)
+- `count` - only valid for worker role
 
 ## Docker Resources
 
@@ -478,7 +478,7 @@ nodes:
 | Network | `sind-<cluster>-net` | `sind-dev-net` |
 | Controller | `sind-<cluster>-controller` | `sind-dev-controller` |
 | Submitter | `sind-<cluster>-submitter` | `sind-dev-submitter` |
-| Compute | `sind-<cluster>-compute-<N>` | `sind-dev-compute-0` |
+| Worker | `sind-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `sind-<cluster>-config` | `sind-dev-config` |
 | Munge volume | `sind-<cluster>-munge` | `sind-dev-munge` |
 | Data volume | `sind-<cluster>-data` | `sind-dev-data` |
@@ -498,7 +498,7 @@ When `--name` is omitted, the default cluster name is `default`, resulting in pr
 
 ## Volume Mounts
 
-| Volume | Mount Point | Controller | Compute | Submitter |
+| Volume | Mount Point | Controller | Worker | Submitter |
 |--------|-------------|------------|---------|-----------|
 | `sind-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
 | `sind-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
@@ -602,7 +602,7 @@ The key is added to `known_hosts` with the node's DNS name:
 
 ```
 controller.dev.sind.local ssh-ed25519 AAAA...
-compute-0.dev.sind.local ssh-ed25519 AAAA...
+worker-0.dev.sind.local ssh-ed25519 AAAA...
 ```
 
 #### Public Key Injection
@@ -637,11 +637,11 @@ docker exec -it sind-ssh ssh [SSH_OPTIONS] <node>.sind.local [COMMAND [ARGS...]]
 All SSH options and arguments are passed through verbatim. Examples:
 
 ```bash
-sind ssh compute-0                           # interactive shell
-sind ssh compute-0.dev                       # node in dev cluster
-sind ssh -v compute-0                        # verbose SSH
-sind ssh compute-0 -- hostname               # run command
-sind ssh -t compute-0 -- top                 # force TTY allocation
+sind ssh worker-0                           # interactive shell
+sind ssh worker-0.dev                       # node in dev cluster
+sind ssh -v worker-0                        # verbose SSH
+sind ssh worker-0 -- hostname               # run command
+sind ssh -t worker-0 -- top                 # force TTY allocation
 sind ssh -L 8080:localhost:80 controller     # port forwarding
 ```
 
@@ -676,7 +676,7 @@ This allows direct use of standard SSH tools:
 
 ```bash
 ssh controller.default.sind.local
-ssh compute-0.dev.sind.local hostname
+ssh worker-0.dev.sind.local hostname
 scp file.txt controller.dev.sind.local:/tmp/
 ```
 
@@ -736,7 +736,7 @@ Custom images must provide:
 | Role | Additional Requirements |
 |------|------------------------|
 | controller | slurmctld (installed, not enabled) |
-| compute | slurmd (installed, not enabled) |
+| worker | slurmd (installed, not enabled) |
 | submitter | Slurm client tools only |
 
 sind enables Slurm services at container start based on the node's role. Services should be installed but not enabled in the image.
@@ -784,7 +784,7 @@ Nodes with `managed: false` in the cluster config are excluded from `sind-nodes.
 
 #### cgroup.conf
 
-sind generates a `cgroup.conf` for cgroupv2 support on compute nodes. This enables resource isolation and accounting for jobs.
+sind generates a `cgroup.conf` for cgroupv2 support on worker nodes. This enables resource isolation and accounting for jobs.
 
 #### User Customization
 
@@ -840,8 +840,8 @@ The mesh DNS uses a hierarchical namespace with cluster names as subdomains unde
 Examples:
 - `controller.default.sind.local`
 - `submitter.default.sind.local`
-- `compute-0.default.sind.local`
-- `compute-1.default.sind.local`
+- `worker-0.default.sind.local`
+- `worker-1.default.sind.local`
 - `controller.dev.sind.local`
 
 This hierarchical scheme keeps hostnames short while ensuring uniqueness across meshed clusters.
@@ -879,7 +879,7 @@ Planned support for a dedicated database node role:
 nodes:
   - role: db                           # slurmdbd + MariaDB
   - role: controller
-  - role: compute
+  - role: worker
     count: 3
 ```
 

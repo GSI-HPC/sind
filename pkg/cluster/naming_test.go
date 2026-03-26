@@ -34,8 +34,8 @@ func TestContainerName(t *testing.T) {
 	}{
 		{"controller", "dev", "controller", "sind-dev-controller"},
 		{"submitter", "dev", "submitter", "sind-dev-submitter"},
-		{"compute-0", "dev", "compute-0", "sind-dev-compute-0"},
-		{"compute-1", "dev", "compute-1", "sind-dev-compute-1"},
+		{"worker-0", "dev", "worker-0", "sind-dev-worker-0"},
+		{"worker-1", "dev", "worker-1", "sind-dev-worker-1"},
 		{"default cluster", "default", "controller", "sind-default-controller"},
 	}
 	for _, tt := range tests {

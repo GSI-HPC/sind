@@ -12,23 +12,23 @@ import (
 )
 
 // NodeShortNames returns the short hostname for each node defined in the config.
-// Compute nodes are indexed sequentially across all compute groups, matching
+// Worker nodes are indexed sequentially across all worker groups, matching
 // the indexing used in slurm.GenerateNodesConf.
 func NodeShortNames(nodes []config.Node) []string {
 	var names []string
-	computeIdx := 0
+	workerIdx := 0
 	for _, n := range nodes {
 		switch n.Role {
 		case "controller", "submitter":
 			names = append(names, n.Role)
-		case "compute":
+		case "worker":
 			count := n.Count
 			if count <= 0 {
 				count = 1
 			}
 			for i := 0; i < count; i++ {
-				names = append(names, fmt.Sprintf("compute-%d", computeIdx))
-				computeIdx++
+				names = append(names, fmt.Sprintf("worker-%d", workerIdx))
+				workerIdx++
 			}
 		}
 	}

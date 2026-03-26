@@ -19,10 +19,10 @@ func TestLogs_Container(t *testing.T) {
 }
 
 func TestLogs_ContainerFollow(t *testing.T) {
-	args := ContainerLogArgs("compute-0", "dev", true)
+	args := ContainerLogArgs("worker-0", "dev", true)
 
 	assert.Equal(t, []string{
-		"logs", "--follow", "sind-dev-compute-0",
+		"logs", "--follow", "sind-dev-worker-0",
 	}, args)
 }
 
@@ -38,10 +38,10 @@ func TestLogs_Service(t *testing.T) {
 }
 
 func TestLogs_ServiceFollow(t *testing.T) {
-	args := ServiceLogArgs("compute-0", "dev", "slurmd", true)
+	args := ServiceLogArgs("worker-0", "dev", "slurmd", true)
 
 	assert.Equal(t, []string{
-		"exec", "sind-dev-compute-0",
+		"exec", "sind-dev-worker-0",
 		"journalctl", "-u", "slurmd", "--follow",
 	}, args)
 }

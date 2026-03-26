@@ -22,7 +22,7 @@ func TestListClusterResources(t *testing.T) {
 	// ListContainers: returns 2 containers
 	m.AddResult(ndjson(
 		psEntry{ID: "abc123", Names: "sind-dev-controller", State: "running", Image: "sind-node:latest"},
-		psEntry{ID: "def456", Names: "sind-dev-compute-0", State: "running", Image: "sind-node:latest"},
+		psEntry{ID: "def456", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:latest"},
 	), "", nil)
 	// NetworkExists: sind-dev-net exists
 	m.AddResult("", "", nil)
@@ -39,7 +39,7 @@ func TestListClusterResources(t *testing.T) {
 	// Containers
 	require.Len(t, res.Containers, 2)
 	assert.Equal(t, docker.ContainerName("sind-dev-controller"), res.Containers[0].Name)
-	assert.Equal(t, docker.ContainerName("sind-dev-compute-0"), res.Containers[1].Name)
+	assert.Equal(t, docker.ContainerName("sind-dev-worker-0"), res.Containers[1].Name)
 
 	// Network
 	assert.Equal(t, docker.NetworkName("sind-dev-net"), res.Network)
@@ -148,7 +148,7 @@ func TestDeleteContainers(t *testing.T) {
 
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
-		{Name: "sind-dev-compute-0"},
+		{Name: "sind-dev-worker-0"},
 	}
 	err := DeleteContainers(t.Context(), c, containers)
 
@@ -156,8 +156,8 @@ func TestDeleteContainers(t *testing.T) {
 	require.Len(t, m.Calls, 4)
 	assert.Equal(t, []string{"stop", "sind-dev-controller"}, m.Calls[0].Args)
 	assert.Equal(t, []string{"rm", "sind-dev-controller"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"stop", "sind-dev-compute-0"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"rm", "sind-dev-compute-0"}, m.Calls[3].Args)
+	assert.Equal(t, []string{"stop", "sind-dev-worker-0"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"rm", "sind-dev-worker-0"}, m.Calls[3].Args)
 }
 
 func TestDeleteContainers_StopErrorIgnored(t *testing.T) {
@@ -273,14 +273,14 @@ func TestDeleteVolumes_Empty(t *testing.T) {
 func TestDeregisterMesh(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = meshDeregisterOnCall(
-		"controller.dev.sind.local ssh-ed25519 AAAA1\ncompute-0.dev.sind.local ssh-ed25519 AAAA2\n",
+		"controller.dev.sind.local ssh-ed25519 AAAA1\nworker-0.dev.sind.local ssh-ed25519 AAAA2\n",
 	)
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)
 
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
-		{Name: "sind-dev-compute-0"},
+		{Name: "sind-dev-worker-0"},
 	}
 	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
 
@@ -374,7 +374,7 @@ func TestHasOtherClusters_False(t *testing.T) {
 	// Only containers from the same cluster
 	m.AddResult(ndjson(
 		psEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-		psEntry{ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "img"},
+		psEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img"},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -444,12 +444,12 @@ func TestDelete_FullCluster(t *testing.T) {
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []psEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-			{ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "img"},
+			{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img"},
 		},
 		networkExists: true,
 		volumes:       []string{"config", "munge", "data"},
 		otherClusters: false,
-		knownHosts:    "controller.dev.sind.local ssh-ed25519 K1\ncompute-0.dev.sind.local ssh-ed25519 K2\n",
+		knownHosts:    "controller.dev.sind.local ssh-ed25519 K1\nworker-0.dev.sind.local ssh-ed25519 K2\n",
 	})
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c)

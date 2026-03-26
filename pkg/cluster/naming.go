@@ -11,7 +11,7 @@ func NetworkName(cluster string) docker.NetworkName {
 }
 
 // ContainerName returns the Docker container name for a node.
-// shortName is the node's hostname, e.g. "controller", "submitter", "compute-0".
+// shortName is the node's hostname, e.g. "controller", "submitter", "worker-0".
 func ContainerName(cluster, shortName string) docker.ContainerName {
 	return docker.ContainerName("sind-" + cluster + "-" + shortName)
 }

@@ -81,7 +81,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 		Name: clusterName,
 		Nodes: []config.Node{
 			{Role: "controller", CPUs: 2, Memory: "2g", Image: helperImage},
-			{Role: "compute", Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
+			{Role: "worker", Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
 		},
 	}
 	err = WriteClusterConfig(ctx, c, cfg, helperImage)
@@ -174,7 +174,7 @@ func TestWriteClusterConfig(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller"},
-			{Role: "compute", Count: 2, CPUs: 2, Memory: "2g"},
+			{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
 	err := WriteClusterConfig(t.Context(), c, cfg, "busybox:latest")
@@ -311,7 +311,7 @@ func TestWriteMungeKey_ChmodError(t *testing.T) {
 func TestControllerImage(t *testing.T) {
 	cfg := &config.Cluster{
 		Nodes: []config.Node{
-			{Role: "compute", Image: "compute:1"},
+			{Role: "worker", Image: "compute:1"},
 			{Role: "controller", Image: "ctrl:1"},
 		},
 	}
@@ -321,7 +321,7 @@ func TestControllerImage(t *testing.T) {
 func TestControllerImage_Fallback(t *testing.T) {
 	cfg := &config.Cluster{
 		Nodes: []config.Node{
-			{Role: "compute", Image: "compute:1"},
+			{Role: "worker", Image: "compute:1"},
 		},
 	}
 	assert.Equal(t, config.DefaultImage, controllerImage(cfg))
@@ -334,7 +334,7 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -343,9 +343,9 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
 	assert.Equal(t, "controller", configs[0].Role)
-	assert.Equal(t, "compute-0", configs[1].ShortName)
-	assert.Equal(t, "compute", configs[1].Role)
-	assert.True(t, configs[1].Managed, "compute defaults to managed")
+	assert.Equal(t, "worker-0", configs[1].ShortName)
+	assert.Equal(t, "worker", configs[1].Role)
+	assert.True(t, configs[1].Managed, "worker defaults to managed")
 	// Shared fields
 	for _, c := range configs {
 		assert.Equal(t, "dev", c.ClusterName)
@@ -360,19 +360,19 @@ func TestNodeRunConfigs_MultiComputeGroups(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "compute", Count: 2, Image: "img:1", CPUs: 4, Memory: "8g", TmpSize: "1g"},
-			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "worker", Count: 2, Image: "img:1", CPUs: 4, Memory: "8g", TmpSize: "1g"},
+			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
 	configs := NodeRunConfigs(cfg, "", "")
 
 	require.Len(t, configs, 4)
-	assert.Equal(t, "compute-0", configs[1].ShortName)
+	assert.Equal(t, "worker-0", configs[1].ShortName)
 	assert.Equal(t, 4, configs[1].CPUs)
-	assert.Equal(t, "compute-1", configs[2].ShortName)
+	assert.Equal(t, "worker-1", configs[2].ShortName)
 	assert.Equal(t, 4, configs[2].CPUs)
-	assert.Equal(t, "compute-2", configs[3].ShortName)
+	assert.Equal(t, "worker-2", configs[3].ShortName)
 	assert.Equal(t, 2, configs[3].CPUs)
 }
 
@@ -382,7 +382,7 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: "submitter", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -391,7 +391,7 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 	require.Len(t, configs, 3)
 	assert.Equal(t, "controller", configs[0].ShortName)
 	assert.Equal(t, "submitter", configs[1].ShortName)
-	assert.Equal(t, "compute-0", configs[2].ShortName)
+	assert.Equal(t, "worker-0", configs[2].ShortName)
 }
 
 func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
@@ -399,14 +399,14 @@ func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "compute", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "worker", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
 	configs := NodeRunConfigs(cfg, "", "")
 
 	require.Len(t, configs, 2)
-	assert.Equal(t, "compute-0", configs[1].ShortName)
+	assert.Equal(t, "worker-0", configs[1].ShortName)
 }
 
 func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
@@ -414,18 +414,18 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "compute", Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+			{Role: "worker", Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
 				Managed: boolPtr(false)},
-			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
 	configs := NodeRunConfigs(cfg, "", "")
 
 	require.Len(t, configs, 4)
-	assert.False(t, configs[1].Managed, "compute-0 unmanaged")
-	assert.False(t, configs[2].Managed, "compute-1 unmanaged")
-	assert.True(t, configs[3].Managed, "compute-2 managed")
+	assert.False(t, configs[1].Managed, "worker-0 unmanaged")
+	assert.False(t, configs[2].Managed, "worker-1 unmanaged")
+	assert.True(t, configs[3].Managed, "worker-2 managed")
 }
 
 func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
@@ -510,7 +510,7 @@ func TestCreateClusterNodes(t *testing.T) {
 	configs := []RunConfig{
 		{ClusterName: "dev", ShortName: "controller", Role: "controller",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{ClusterName: "dev", ShortName: "compute-0", Role: "compute",
+		{ClusterName: "dev", ShortName: "worker-0", Role: "worker",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
@@ -533,14 +533,14 @@ func TestCreateClusterNodes_Error(t *testing.T) {
 	configs := []RunConfig{
 		{ClusterName: "dev", ShortName: "controller", Role: "controller",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{ClusterName: "dev", ShortName: "compute-0", Role: "compute",
+		{ClusterName: "dev", ShortName: "worker-0", Role: "worker",
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
 	err := CreateClusterNodes(t.Context(), c, configs)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "compute-0")
+	assert.Contains(t, err.Error(), "worker-0")
 	assert.Len(t, m.Calls, 4) // 3 (node1) + 1 (node2 fails on create)
 }
 
@@ -559,12 +559,12 @@ func TestCreateClusterNodes_Empty(t *testing.T) {
 func TestEnableSlurmServices(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", nil) // slurmctld on controller
-	m.AddResult("", "", nil) // slurmd on compute-0
+	m.AddResult("", "", nil) // slurmd on worker-0
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
 		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{ClusterName: "dev", ShortName: "compute-0", Role: "compute", Managed: true},
+		{ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: true},
 	}
 
 	err := EnableSlurmServices(t.Context(), c, configs)
@@ -573,7 +573,7 @@ func TestEnableSlurmServices(t *testing.T) {
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t, []string{"exec", "sind-dev-controller", "systemctl", "enable", "--now", "slurmctld"},
 		m.Calls[0].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-compute-0", "systemctl", "enable", "--now", "slurmd"},
+	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "systemctl", "enable", "--now", "slurmd"},
 		m.Calls[1].Args)
 }
 
@@ -600,19 +600,19 @@ func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
 
 	configs := []RunConfig{
 		{ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{ClusterName: "dev", ShortName: "compute-0", Role: "compute", Managed: false},
-		{ClusterName: "dev", ShortName: "compute-1", Role: "compute", Managed: true},
+		{ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: false},
+		{ClusterName: "dev", ShortName: "worker-1", Role: "worker", Managed: true},
 	}
 
-	// Need result for compute-1 slurmd
+	// Need result for worker-1 slurmd
 	m.AddResult("", "", nil)
 
 	err := EnableSlurmServices(t.Context(), c, configs)
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 2)
-	// Controller + compute-1 only; compute-0 skipped
-	assert.Contains(t, m.Calls[1].Args, "sind-dev-compute-1")
+	// Controller + worker-1 only; worker-0 skipped
+	assert.Contains(t, m.Calls[1].Args, "sind-dev-worker-1")
 }
 
 func TestEnableSlurmServices_Error(t *testing.T) {
@@ -701,7 +701,7 @@ func emptyCorefileTar() string {
 }
 
 // happyOnCall returns an OnCall function that handles the full Create flow
-// for a cluster with controller + 1 managed compute. The optional override
+// for a cluster with controller + 1 managed worker. The optional override
 // function can intercept specific calls; returning (result, true) uses the
 // override result, returning (_, false) falls through to the default.
 func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []string, stdin string) (docker.MockResult, bool)) func([]string, string) docker.MockResult {
@@ -801,13 +801,13 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 	}
 }
 
-// createCfg returns a minimal cluster config with 1 controller + 1 managed compute.
+// createCfg returns a minimal cluster config with 1 controller + 1 managed worker.
 func createCfg() *config.Cluster {
 	return &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 }
@@ -833,8 +833,8 @@ func TestCreate_FullCluster(t *testing.T) {
 	require.Len(t, cluster.Nodes, 2)
 	assert.Equal(t, "controller", cluster.Nodes[0].Name)
 	assert.Equal(t, "controller", cluster.Nodes[0].Role)
-	assert.Equal(t, "compute-0", cluster.Nodes[1].Name)
-	assert.Equal(t, "compute", cluster.Nodes[1].Role)
+	assert.Equal(t, "worker-0", cluster.Nodes[1].Name)
+	assert.Equal(t, "worker", cluster.Nodes[1].Role)
 	assert.Equal(t, StatusRunning, cluster.Nodes[0].Status)
 	assert.Equal(t, StatusRunning, cluster.Nodes[1].Status)
 }
@@ -996,7 +996,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "compute", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
 				Managed: boolPtr(false)},
 		},
 	}
@@ -1019,7 +1019,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, cluster.Nodes, 2)
-	// Only controller should get slurm enabled, not unmanaged compute-0.
+	// Only controller should get slurm enabled, not unmanaged worker-0.
 	assert.Equal(t, []string{"sind-dev-controller"}, slurmCmds)
 }
 

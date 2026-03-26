@@ -12,20 +12,20 @@ import (
 )
 
 func TestSSH_BuildCommand(t *testing.T) {
-	args := BuildSSHArgs("compute-0", "dev", true, nil, nil)
+	args := BuildSSHArgs("worker-0", "dev", true, nil, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", "sind-ssh",
-		"ssh", "compute-0.dev.sind.local",
+		"ssh", "worker-0.dev.sind.local",
 	}, args)
 }
 
 func TestSSH_BuildCommand_NonInteractive(t *testing.T) {
-	args := BuildSSHArgs("compute-0", "dev", false, nil, nil)
+	args := BuildSSHArgs("worker-0", "dev", false, nil, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "sind-ssh",
-		"ssh", "compute-0.dev.sind.local",
+		"ssh", "worker-0.dev.sind.local",
 	}, args)
 }
 
@@ -39,20 +39,20 @@ func TestSSH_BuildCommand_WithCommand(t *testing.T) {
 }
 
 func TestSSH_BuildCommand_WithMultiWordCommand(t *testing.T) {
-	args := BuildSSHArgs("compute-0", "dev", false, nil, []string{"ls", "-la", "/tmp"})
+	args := BuildSSHArgs("worker-0", "dev", false, nil, []string{"ls", "-la", "/tmp"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "sind-ssh",
-		"ssh", "compute-0.dev.sind.local", "ls", "-la", "/tmp",
+		"ssh", "worker-0.dev.sind.local", "ls", "-la", "/tmp",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions(t *testing.T) {
-	args := BuildSSHArgs("compute-0", "dev", true, []string{"-v"}, nil)
+	args := BuildSSHArgs("worker-0", "dev", true, []string{"-v"}, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", "sind-ssh",
-		"ssh", "-v", "compute-0.dev.sind.local",
+		"ssh", "-v", "worker-0.dev.sind.local",
 	}, args)
 }
 
@@ -67,24 +67,24 @@ func TestSSH_PassthroughOptions_PortForwarding(t *testing.T) {
 }
 
 func TestSSH_PassthroughOptions_ForceTTY(t *testing.T) {
-	args := BuildSSHArgs("compute-0", "dev", true,
+	args := BuildSSHArgs("worker-0", "dev", true,
 		[]string{"-t"}, []string{"top"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", "sind-ssh",
-		"ssh", "-t", "compute-0.dev.sind.local", "top",
+		"ssh", "-t", "worker-0.dev.sind.local", "top",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions_Multiple(t *testing.T) {
-	args := BuildSSHArgs("compute-0", "dev", false,
+	args := BuildSSHArgs("worker-0", "dev", false,
 		[]string{"-v", "-o", "StrictHostKeyChecking=no"},
 		[]string{"uptime"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "sind-ssh",
 		"ssh", "-v", "-o", "StrictHostKeyChecking=no",
-		"compute-0.dev.sind.local", "uptime",
+		"worker-0.dev.sind.local", "uptime",
 	}, args)
 }
 
@@ -99,8 +99,8 @@ func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 					Labels: "sind.cluster=dev,sind.role=controller"},
 				psEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=submitter"},
-				psEntry{ID: "c3", Names: "sind-dev-compute-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=compute"},
+				psEntry{ID: "c3", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
 		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
@@ -120,8 +120,8 @@ func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 			return docker.MockResult{Stdout: ndjson(
 				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c2", Names: "sind-dev-compute-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=compute"},
+				psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
 		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
@@ -139,8 +139,8 @@ func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	m.OnCall = func(args []string, _ string) docker.MockResult {
 		if args[0] == "ps" {
 			return docker.MockResult{Stdout: ndjson(
-				psEntry{ID: "c1", Names: "sind-dev-compute-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=compute"},
+				psEntry{ID: "c1", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
 		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
@@ -187,8 +187,8 @@ func TestExec_OneShot(t *testing.T) {
 			return docker.MockResult{Stdout: ndjson(
 				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c2", Names: "sind-dev-compute-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=compute"},
+				psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
 		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}

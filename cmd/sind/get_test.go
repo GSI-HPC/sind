@@ -53,8 +53,8 @@ func TestGetClusters_Output(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0",
 		},
 		psEntry{
-			ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "sind-node:25.11",
-			Labels: "sind.cluster=dev,sind.role=compute,sind.slurm.version=25.11.0",
+			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
 	), "", nil)
 
@@ -86,8 +86,8 @@ func TestGetNodes_Output(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
 		psEntry{
-			ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "sind-node:25.11",
-			Labels: "sind.cluster=dev,sind.role=compute",
+			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
 
@@ -95,7 +95,7 @@ func TestGetNodes_Output(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "NAME")
 	assert.Contains(t, stdout, "controller.dev")
-	assert.Contains(t, stdout, "compute-0.dev")
+	assert.Contains(t, stdout, "worker-0.dev")
 }
 
 func TestGetNetworks_CommandExists(t *testing.T) {

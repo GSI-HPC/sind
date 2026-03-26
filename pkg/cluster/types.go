@@ -25,8 +25,8 @@ type Cluster struct {
 
 // Node represents a running node in a sind cluster.
 type Node struct {
-	Name        string             // short name: "controller", "compute-0"
-	Role        string             // "controller", "submitter", "compute"
+	Name        string             // short name: "controller", "worker-0"
+	Role        string             // "controller", "submitter", "worker"
 	ContainerID docker.ContainerID // Docker container ID
 	IP          string             // container IP address
 	Status      Status

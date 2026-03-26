@@ -61,7 +61,7 @@ func GetClusters(ctx context.Context, client *docker.Client) ([]*ClusterSummary,
 			cd.summary.Controllers++
 		case "submitter":
 			cd.summary.Submitters++
-		case "compute":
+		case "worker":
 			cd.summary.Workers++
 		}
 	}
@@ -80,8 +80,8 @@ func GetClusters(ctx context.Context, client *docker.Client) ([]*ClusterSummary,
 
 // NodeSummary holds summary information about a node in a sind cluster.
 type NodeSummary struct {
-	Name   string // short name: "controller", "compute-0"
-	Role   string // "controller", "submitter", "compute"
+	Name   string // short name: "controller", "worker-0"
+	Role   string // "controller", "submitter", "worker"
 	Status Status
 }
 
@@ -112,13 +112,13 @@ func GetNodes(ctx context.Context, client *docker.Client, clusterName string) ([
 	return result, nil
 }
 
-// nodeOrder returns a sort key that orders nodes by role (controller, submitter, compute)
+// nodeOrder returns a sort key that orders nodes by role (controller, submitter, worker)
 // then by name within each role.
 func nodeOrder(n *NodeSummary) string {
 	return roleSortKey(n.Role, n.Name)
 }
 
-// roleSortKey returns a sort key that orders by role (controller, submitter, compute)
+// roleSortKey returns a sort key that orders by role (controller, submitter, worker)
 // then by name within each role.
 func roleSortKey(role, name string) string {
 	var prefix string
@@ -127,7 +127,7 @@ func roleSortKey(role, name string) string {
 		prefix = "0"
 	case "submitter":
 		prefix = "1"
-	case "compute":
+	case "worker":
 		prefix = "2"
 	default:
 		prefix = "9"

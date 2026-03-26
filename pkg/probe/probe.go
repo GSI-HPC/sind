@@ -30,7 +30,7 @@ func NodeProbes(role string) []Probe {
 	switch role {
 	case "controller":
 		probes = append(probes, Probe{"slurmctld", SlurmctldReady})
-	case "compute":
+	case "worker":
 		probes = append(probes, Probe{"slurmd", SlurmdReady})
 	}
 	return probes

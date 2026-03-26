@@ -15,7 +15,7 @@ import (
 
 // Expand expands a nodeset pattern into a list of individual node names.
 // Patterns can include:
-//   - Simple names: "compute-0" → ["compute-0"]
+//   - Simple names: "worker-0" → ["worker-0"]
 //   - Comma-separated: "a,b,c" → ["a", "b", "c"]
 //   - Ranges: "node-[0-3]" → ["node-0", "node-1", "node-2", "node-3"]
 //   - Padded ranges: "node-[00-03]" → ["node-00", "node-01", "node-02", "node-03"]
@@ -192,7 +192,7 @@ func isDigit(b byte) bool { return '0' <= b && b <= '9' }
 // by finding the last group of consecutive ASCII digits.
 // Examples:
 //
-//	"compute-0.dev" → ("compute-", "0", ".dev")
+//	"worker-0.dev" → ("worker-", "0", ".dev")
 //	"controller"    → ("controller", "", "")
 //	"node-12"       → ("node-", "12", "")
 func parseNodeName(name string) (prefix, indexStr, suffix string) {

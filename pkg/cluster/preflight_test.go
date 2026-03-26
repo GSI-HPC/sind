@@ -23,47 +23,47 @@ func TestNodeShortNames(t *testing.T) {
 		want  []string
 	}{
 		{
-			name: "minimal: controller + 1 compute",
+			name: "minimal: controller + 1 worker",
 			nodes: []config.Node{
 				{Role: "controller"},
-				{Role: "compute", Count: 1},
+				{Role: "worker", Count: 1},
 			},
-			want: []string{"controller", "compute-0"},
+			want: []string{"controller", "worker-0"},
 		},
 		{
 			name: "with submitter",
 			nodes: []config.Node{
 				{Role: "controller"},
 				{Role: "submitter"},
-				{Role: "compute", Count: 2},
+				{Role: "worker", Count: 2},
 			},
-			want: []string{"controller", "submitter", "compute-0", "compute-1"},
+			want: []string{"controller", "submitter", "worker-0", "worker-1"},
 		},
 		{
-			name: "multiple compute groups with sequential indexing",
+			name: "multiple worker groups with sequential indexing",
 			nodes: []config.Node{
 				{Role: "controller"},
-				{Role: "compute", Count: 2},
-				{Role: "compute", Count: 3},
+				{Role: "worker", Count: 2},
+				{Role: "worker", Count: 3},
 			},
-			want: []string{"controller", "compute-0", "compute-1", "compute-2", "compute-3", "compute-4"},
+			want: []string{"controller", "worker-0", "worker-1", "worker-2", "worker-3", "worker-4"},
 		},
 		{
 			name: "unmanaged nodes still get indexed",
 			nodes: []config.Node{
 				{Role: "controller"},
-				{Role: "compute", Count: 2, Managed: boolPtr(false)},
-				{Role: "compute", Count: 1},
+				{Role: "worker", Count: 2, Managed: boolPtr(false)},
+				{Role: "worker", Count: 1},
 			},
-			want: []string{"controller", "compute-0", "compute-1", "compute-2"},
+			want: []string{"controller", "worker-0", "worker-1", "worker-2"},
 		},
 		{
-			name: "compute with default count",
+			name: "worker with default count",
 			nodes: []config.Node{
 				{Role: "controller"},
-				{Role: "compute"},
+				{Role: "worker"},
 			},
-			want: []string{"controller", "compute-0"},
+			want: []string{"controller", "worker-0"},
 		},
 		{
 			name:  "empty nodes",
@@ -128,7 +128,7 @@ func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 	var m docker.MockExecutor
 	addNotFound(t, &m, 4)    // network + 3 volumes
 	m.AddResult("", "", nil) // controller exists
-	addNotFound(t, &m, 1)    // compute-0
+	addNotFound(t, &m, 1)    // worker-0
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -136,7 +136,7 @@ func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "container sind-dev-controller")
-	assert.NotContains(t, err.Error(), "compute")
+	assert.NotContains(t, err.Error(), "worker")
 }
 
 func TestPreflightCheck_MultipleConflicts(t *testing.T) {
@@ -144,7 +144,7 @@ func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 	m.AddResult("", "", nil) // network exists
 	addNotFound(t, &m, 3)    // volumes
 	m.AddResult("", "", nil) // controller exists
-	m.AddResult("", "", nil) // compute-0 exists
+	m.AddResult("", "", nil) // worker-0 exists
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -153,7 +153,7 @@ func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network sind-dev-net")
 	assert.Contains(t, err.Error(), "container sind-dev-controller")
-	assert.Contains(t, err.Error(), "container sind-dev-compute-0")
+	assert.Contains(t, err.Error(), "container sind-dev-worker-0")
 }
 
 func TestPreflightCheck_NetworkCheckError(t *testing.T) {
@@ -195,28 +195,28 @@ func TestPreflightCheck_ContainerCheckError(t *testing.T) {
 }
 
 func TestPreflightCheck_MultiCompute(t *testing.T) {
-	// 1 controller + 3 compute = 4 containers + 1 network + 3 volumes = 8 checks
+	// 1 controller + 3 worker = 4 containers + 1 network + 3 volumes = 8 checks
 	var m docker.MockExecutor
 	addNotFound(t, &m, 4)    // network + volumes
 	addNotFound(t, &m, 1)    // controller
-	m.AddResult("", "", nil) // compute-0 exists
-	addNotFound(t, &m, 1)    // compute-1
-	m.AddResult("", "", nil) // compute-2 exists
+	m.AddResult("", "", nil) // worker-0 exists
+	addNotFound(t, &m, 1)    // worker-1
+	m.AddResult("", "", nil) // worker-2 exists
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller"},
-			{Role: "compute", Count: 3},
+			{Role: "worker", Count: 3},
 		},
 	}
 	err := PreflightCheck(t.Context(), c, cfg)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "container sind-dev-compute-0")
-	assert.Contains(t, err.Error(), "container sind-dev-compute-2")
-	assert.NotContains(t, err.Error(), "compute-1")
+	assert.Contains(t, err.Error(), "container sind-dev-worker-0")
+	assert.Contains(t, err.Error(), "container sind-dev-worker-2")
+	assert.NotContains(t, err.Error(), "worker-1")
 }
 
 // --- helpers ---
@@ -228,7 +228,7 @@ func minimalConfig() *config.Cluster {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: "controller"},
-			{Role: "compute", Count: 1},
+			{Role: "worker", Count: 1},
 		},
 	}
 }

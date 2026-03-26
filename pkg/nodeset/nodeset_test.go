@@ -17,8 +17,8 @@ func TestExpand_SimpleName(t *testing.T) {
 	}{
 		{
 			name:    "single simple name",
-			pattern: "compute-0",
-			want:    []string{"compute-0"},
+			pattern: "worker-0",
+			want:    []string{"worker-0"},
 		},
 		{
 			name:    "single name without number",
@@ -27,8 +27,8 @@ func TestExpand_SimpleName(t *testing.T) {
 		},
 		{
 			name:    "name with dots",
-			pattern: "compute-0.dev",
-			want:    []string{"compute-0.dev"},
+			pattern: "worker-0.dev",
+			want:    []string{"worker-0.dev"},
 		},
 	}
 
@@ -54,13 +54,13 @@ func TestExpand_MultipleSimple(t *testing.T) {
 		},
 		{
 			name:    "two nodes",
-			pattern: "controller,compute-0",
-			want:    []string{"compute-0", "controller"},
+			pattern: "controller,worker-0",
+			want:    []string{"controller", "worker-0"},
 		},
 		{
 			name:    "nodes with cluster suffix",
-			pattern: "controller.dev,compute-0.dev",
-			want:    []string{"compute-0.dev", "controller.dev"},
+			pattern: "controller.dev,worker-0.dev",
+			want:    []string{"controller.dev", "worker-0.dev"},
 		},
 	}
 
@@ -91,8 +91,8 @@ func TestExpand_Range(t *testing.T) {
 		},
 		{
 			name:    "range with prefix and suffix",
-			pattern: "compute-[0-2].dev",
-			want:    []string{"compute-0.dev", "compute-1.dev", "compute-2.dev"},
+			pattern: "worker-[0-2].dev",
+			want:    []string{"worker-0.dev", "worker-1.dev", "worker-2.dev"},
 		},
 	}
 
@@ -150,8 +150,8 @@ func TestExpand_List(t *testing.T) {
 		},
 		{
 			name:    "list with suffix",
-			pattern: "compute-[0,3].dev",
-			want:    []string{"compute-0.dev", "compute-3.dev"},
+			pattern: "worker-[0,3].dev",
+			want:    []string{"worker-0.dev", "worker-3.dev"},
 		},
 	}
 
@@ -209,13 +209,13 @@ func TestExpand_WithCluster(t *testing.T) {
 	}{
 		{
 			name:    "range with cluster suffix",
-			pattern: "compute-[0-1].dev",
-			want:    []string{"compute-0.dev", "compute-1.dev"},
+			pattern: "worker-[0-1].dev",
+			want:    []string{"worker-0.dev", "worker-1.dev"},
 		},
 		{
 			name:    "list with cluster suffix",
-			pattern: "compute-[0,2].prod",
-			want:    []string{"compute-0.prod", "compute-2.prod"},
+			pattern: "worker-[0,2].prod",
+			want:    []string{"worker-0.prod", "worker-2.prod"},
 		},
 	}
 
@@ -241,13 +241,13 @@ func TestExpand_MultipleNodesets(t *testing.T) {
 		},
 		{
 			name:    "nodesets with different clusters",
-			pattern: "compute-[0-1].dev,compute-[0-1].prod",
-			want:    []string{"compute-0.dev", "compute-1.dev", "compute-0.prod", "compute-1.prod"},
+			pattern: "worker-[0-1].dev,worker-[0-1].prod",
+			want:    []string{"worker-0.dev", "worker-1.dev", "worker-0.prod", "worker-1.prod"},
 		},
 		{
 			name:    "mixed simple and range",
-			pattern: "controller,compute-[0-2]",
-			want:    []string{"compute-0", "compute-1", "compute-2", "controller"},
+			pattern: "controller,worker-[0-2]",
+			want:    []string{"controller", "worker-0", "worker-1", "worker-2"},
 		},
 	}
 
@@ -444,8 +444,8 @@ func TestExpand_Sorting(t *testing.T) {
 		},
 		{
 			name:    "mixed prefixes",
-			pattern: "compute-1,alpha-2,compute-0,alpha-1",
-			want:    []string{"alpha-1", "alpha-2", "compute-0", "compute-1"},
+			pattern: "worker-1,alpha-2,worker-0,alpha-1",
+			want:    []string{"alpha-1", "alpha-2", "worker-0", "worker-1"},
 		},
 	}
 
@@ -508,7 +508,7 @@ func TestExpand_NoPrefixWithSuffix(t *testing.T) {
 
 func TestExpand_MultiClusterSort(t *testing.T) {
 	// Full sort-order exercise: prefix, then suffix, then numeric index
-	got, err := Expand("compute-1.prod,compute-0.dev,compute-1.dev,compute-0.prod")
+	got, err := Expand("worker-1.prod,worker-0.dev,worker-1.dev,worker-0.prod")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"compute-0.dev", "compute-1.dev", "compute-0.prod", "compute-1.prod"}, got)
+	assert.Equal(t, []string{"worker-0.dev", "worker-1.dev", "worker-0.prod", "worker-1.prod"}, got)
 }

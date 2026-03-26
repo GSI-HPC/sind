@@ -36,8 +36,8 @@ func NodeLabels(clusterName, role, slurmVersion string) map[string]string {
 // for creating a node container.
 type RunConfig struct {
 	ClusterName   string // cluster name
-	ShortName     string // node hostname: "controller", "compute-0"
-	Role          string // "controller", "submitter", "compute"
+	ShortName     string // node hostname: "controller", "worker-0"
+	Role          string // "controller", "submitter", "worker"
 	Image         string // container image
 	CPUs          int    // CPU limit
 	Memory        string // memory limit (e.g. "2g")
@@ -46,7 +46,7 @@ type RunConfig struct {
 	DNSIP         string // mesh DNS container IP (optional)
 	DataHostPath  string // host path for data volume (empty = use docker volume)
 	DataMountPath string // mount point for data (default: /data)
-	Managed       bool   // start slurmd and add to slurm.conf (compute only)
+	Managed       bool   // start slurmd and add to slurm.conf (worker only)
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.

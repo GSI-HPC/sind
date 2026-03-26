@@ -227,7 +227,7 @@ func TestNodeProbes(t *testing.T) {
 		names []string
 	}{
 		{"controller", []string{"container", "systemd", "sshd", "slurmctld"}},
-		{"compute", []string{"container", "systemd", "sshd", "slurmd"}},
+		{"worker", []string{"container", "systemd", "sshd", "slurmd"}},
 		{"submitter", []string{"container", "systemd", "sshd"}},
 		{"unknown", []string{"container", "systemd", "sshd"}},
 	}

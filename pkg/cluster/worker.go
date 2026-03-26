@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// WorkerAddOptions holds the parameters for adding compute workers to a cluster.
+// WorkerAddOptions holds the parameters for adding worker nodes to a cluster.
 type WorkerAddOptions struct {
 	ClusterName string
 	Count       int
@@ -29,11 +29,11 @@ type WorkerAddOptions struct {
 
 // --- Exported functions ---
 
-// WorkerAdd adds compute workers to an existing cluster.
+// WorkerAdd adds worker nodes to an existing cluster.
 //
 // For managed workers (default), the flow is:
 //  1. Validate: controller exists, sind-nodes.conf present
-//  2. Create compute container(s)
+//  2. Create worker container(s)
 //  3. Wait for readiness, inject SSH keys, collect host keys
 //  4. Register DNS + known_hosts
 //  5. Update sind-nodes.conf with new node definitions
@@ -62,8 +62,8 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}
 	}
 
-	// Compute next index from existing containers.
-	startIdx := nextComputeIndexFromContainers(containers, opts.ClusterName)
+	// Determine next index from existing containers.
+	startIdx := nextWorkerIndexFromContainers(containers, opts.ClusterName)
 
 	// Resolve infrastructure: DNS IP, SSH pubkey, slurm version.
 	dnsIP, sshPubKey, slurmVersion, err := resolveWorkerInfra(ctx, client, controllerName)
@@ -100,8 +100,8 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	for i := range count {
 		nodeConfigs[i] = RunConfig{
 			ClusterName:  opts.ClusterName,
-			ShortName:    fmt.Sprintf("compute-%d", startIdx+i),
-			Role:         "compute",
+			ShortName:    fmt.Sprintf("worker-%d", startIdx+i),
+			Role:         "worker",
 			Image:        image,
 			CPUs:         cpus,
 			Memory:       memory,
@@ -142,7 +142,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	return nodes, nil
 }
 
-// WorkerRemove removes compute workers from a cluster.
+// WorkerRemove removes worker nodes from a cluster.
 //
 // For managed nodes (those present in sind-nodes.conf), the flow is:
 //  1. Update sind-nodes.conf to remove the node definitions
@@ -168,7 +168,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		containerMap[c.Name] = c
 	}
 
-	// Resolve which nodes to remove, checking they exist and are compute nodes.
+	// Resolve which nodes to remove, checking they exist and are worker nodes.
 	seen := make(map[string]bool, len(shortNames))
 	var targets []docker.ContainerListEntry
 	for _, name := range shortNames {
@@ -181,8 +181,8 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		if !ok {
 			return fmt.Errorf("node %q not found in cluster %q", name, clusterName)
 		}
-		if role := c.Labels[LabelRole]; role != "compute" {
-			return fmt.Errorf("node %q has role %q: only compute nodes can be removed with worker remove", name, role)
+		if role := c.Labels[LabelRole]; role != "worker" {
+			return fmt.Errorf("node %q has role %q: only worker nodes can be removed with worker remove", name, role)
 		}
 		targets = append(targets, c)
 	}
@@ -235,15 +235,15 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, opts WorkerAd
 	return nil
 }
 
-// NextComputeIndex determines the next compute node index by examining
+// NextComputeIndex determines the next worker node index by examining
 // existing containers in the cluster. Returns max(existing indices) + 1,
-// or 0 if no compute containers exist.
+// or 0 if no worker containers exist.
 func NextComputeIndex(ctx context.Context, client *docker.Client, clusterName string) (int, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return 0, fmt.Errorf("listing cluster containers: %w", err)
 	}
-	return nextComputeIndexFromContainers(containers, clusterName), nil
+	return nextWorkerIndexFromContainers(containers, clusterName), nil
 }
 
 // --- Unexported helpers ---
@@ -333,10 +333,10 @@ func writeNodesConfAndReconfigure(ctx context.Context, client *docker.Client, co
 	return nil
 }
 
-// nextComputeIndexFromContainers computes the next compute node index from
+// nextComputeIndexFromContainers computes the next worker node index from
 // a pre-fetched container list.
-func nextComputeIndexFromContainers(containers []docker.ContainerListEntry, clusterName string) int {
-	prefix := string(ContainerName(clusterName, "compute-"))
+func nextWorkerIndexFromContainers(containers []docker.ContainerListEntry, clusterName string) int {
+	prefix := string(ContainerName(clusterName, "worker-"))
 	maxIdx := -1
 	for _, c := range containers {
 		name := string(c.Name)

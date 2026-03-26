@@ -26,10 +26,10 @@ func powerContainers() string {
 	return ndjson(
 		psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=controller"},
-		psEntry{ID: "c2", Names: "sind-dev-compute-0", State: "running", Image: "img:1",
-			Labels: "sind.cluster=dev,sind.role=compute"},
-		psEntry{ID: "c3", Names: "sind-dev-compute-1", State: "running", Image: "img:1",
-			Labels: "sind.cluster=dev,sind.role=compute"},
+		psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=worker"},
+		psEntry{ID: "c3", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=worker"},
 	)
 }
 
@@ -48,7 +48,7 @@ func TestPower_Shutdown(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"compute-0", "compute-1"})
+	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -59,7 +59,7 @@ func TestPower_Shutdown(t *testing.T) {
 			stops = append(stops, c.Args[1])
 		}
 	}
-	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-compute-1"}, stops)
+	assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-worker-1"}, stops)
 }
 
 func TestPower_Shutdown_NodeNotFound(t *testing.T) {
@@ -72,10 +72,10 @@ func TestPower_Shutdown_NodeNotFound(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"compute-99"})
+	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-99"})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "compute-99")
+	assert.Contains(t, err.Error(), "worker-99")
 	assert.Contains(t, err.Error(), "not found")
 }
 
@@ -92,7 +92,7 @@ func TestPower_Shutdown_StopError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stopping")
@@ -111,7 +111,7 @@ func TestPower_Shutdown_EmptyNodes(t *testing.T) {
 func TestPower_Shutdown_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerShutdown(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerShutdown(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -132,7 +132,7 @@ func TestPower_Cut(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCut(t.Context(), client, "dev", []string{"compute-0", "controller"})
+	err := PowerCut(t.Context(), client, "dev", []string{"worker-0", "controller"})
 
 	require.NoError(t, err)
 
@@ -142,7 +142,7 @@ func TestPower_Cut(t *testing.T) {
 			kills = append(kills, c.Args[1])
 		}
 	}
-	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-controller"}, kills)
+	assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-controller"}, kills)
 }
 
 func TestPower_Cut_EmptyNodes(t *testing.T) {
@@ -158,7 +158,7 @@ func TestPower_Cut_EmptyNodes(t *testing.T) {
 func TestPower_Cut_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerCut(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerCut(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -177,7 +177,7 @@ func TestPower_Cut_KillError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCut(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerCut(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "killing")
@@ -198,7 +198,7 @@ func TestPower_On(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerOn(t.Context(), client, "dev", []string{"compute-0", "compute-1"})
+	err := PowerOn(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -208,13 +208,13 @@ func TestPower_On(t *testing.T) {
 			starts = append(starts, c.Args[1])
 		}
 	}
-	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-compute-1"}, starts)
+	assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-worker-1"}, starts)
 }
 
 func TestPower_On_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerOn(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerOn(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -233,7 +233,7 @@ func TestPower_On_StartError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerOn(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerOn(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "starting")
@@ -254,7 +254,7 @@ func TestPower_Reboot(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"compute-0", "compute-1"})
+	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -266,17 +266,17 @@ func TestPower_Reboot(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{
-		"stop=sind-dev-compute-0",
-		"start=sind-dev-compute-0",
-		"stop=sind-dev-compute-1",
-		"start=sind-dev-compute-1",
+		"stop=sind-dev-worker-0",
+		"start=sind-dev-worker-0",
+		"stop=sind-dev-worker-1",
+		"start=sind-dev-worker-1",
 	}, ops)
 }
 
 func TestPower_Reboot_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -295,7 +295,7 @@ func TestPower_Reboot_StopError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stopping")
@@ -317,7 +317,7 @@ func TestPower_Reboot_StartError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerReboot(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerReboot(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "starting")
@@ -338,7 +338,7 @@ func TestPower_Cycle(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"compute-0", "compute-1"})
+	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -350,17 +350,17 @@ func TestPower_Cycle(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{
-		"kill=sind-dev-compute-0",
-		"start=sind-dev-compute-0",
-		"kill=sind-dev-compute-1",
-		"start=sind-dev-compute-1",
+		"kill=sind-dev-worker-0",
+		"start=sind-dev-worker-0",
+		"kill=sind-dev-worker-1",
+		"start=sind-dev-worker-1",
 	}, ops)
 }
 
 func TestPower_Cycle_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -379,7 +379,7 @@ func TestPower_Cycle_KillError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "killing")
@@ -401,7 +401,7 @@ func TestPower_Cycle_StartError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerCycle(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerCycle(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "starting")
@@ -422,7 +422,7 @@ func TestPower_Freeze(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerFreeze(t.Context(), client, "dev", []string{"compute-0", "compute-1"})
+	err := PowerFreeze(t.Context(), client, "dev", []string{"worker-0", "worker-1"})
 
 	require.NoError(t, err)
 
@@ -432,13 +432,13 @@ func TestPower_Freeze(t *testing.T) {
 			pauses = append(pauses, c.Args[1])
 		}
 	}
-	assert.ElementsMatch(t, []string{"sind-dev-compute-0", "sind-dev-compute-1"}, pauses)
+	assert.ElementsMatch(t, []string{"sind-dev-worker-0", "sind-dev-worker-1"}, pauses)
 }
 
 func TestPower_Freeze_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerFreeze(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerFreeze(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -457,7 +457,7 @@ func TestPower_Freeze_PauseError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerFreeze(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerFreeze(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pausing")
@@ -478,7 +478,7 @@ func TestPower_Unfreeze(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerUnfreeze(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerUnfreeze(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.NoError(t, err)
 
@@ -488,13 +488,13 @@ func TestPower_Unfreeze(t *testing.T) {
 			unpauses = append(unpauses, c.Args[1])
 		}
 	}
-	assert.Equal(t, []string{"sind-dev-compute-0"}, unpauses)
+	assert.Equal(t, []string{"sind-dev-worker-0"}, unpauses)
 }
 
 func TestPower_Unfreeze_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	err := PowerUnfreeze(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerUnfreeze(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")
@@ -513,7 +513,7 @@ func TestPower_Unfreeze_UnpauseError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := PowerUnfreeze(t.Context(), client, "dev", []string{"compute-0"})
+	err := PowerUnfreeze(t.Context(), client, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unpausing")
@@ -526,14 +526,14 @@ func TestPowerLifecycle(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
 	cluster := "it-pwr"
-	ctrName := ContainerName(cluster, "compute-0")
+	ctrName := ContainerName(cluster, "worker-0")
 
 	if !rec.IsIntegration() {
 		// Create container with labels
 		rec.AddResult("ctr-id\n", "", nil)
 
 		// Each power op: ListContainers (resolve targets) + the operation itself
-		psLine := `{"ID":"ctr-id","Names":"` + string(ctrName) + `","State":"running","Image":"busybox:latest","Labels":"sind.cluster=` + cluster + `,sind.role=compute"}` + "\n"
+		psLine := `{"ID":"ctr-id","Names":"` + string(ctrName) + `","State":"running","Image":"busybox:latest","Labels":"sind.cluster=` + cluster + `,sind.role=worker"}` + "\n"
 
 		// PowerShutdown: ps + stop
 		rec.AddResult(psLine, "", nil)
@@ -575,12 +575,12 @@ func TestPowerLifecycle(t *testing.T) {
 	_, err := c.CreateContainer(ctx,
 		"--name", string(ctrName),
 		"--label", LabelCluster+"="+cluster,
-		"--label", LabelRole+"=compute",
+		"--label", LabelRole+"=worker",
 		"busybox:latest", "sleep", "120",
 	)
 	require.NoError(t, err)
 
-	nodes := []string{"compute-0"}
+	nodes := []string{"worker-0"}
 
 	// Shutdown (stop) + On (start).
 	err = PowerShutdown(ctx, c, cluster, nodes)

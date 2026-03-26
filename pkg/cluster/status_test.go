@@ -64,10 +64,10 @@ func TestGetNodeHealth_Controller(t *testing.T) {
 
 func TestGetNodeHealth_Compute(t *testing.T) {
 	var m docker.MockExecutor
-	m.OnCall = healthyOnCall("sind-dev-compute-0", "172.18.0.3")
+	m.OnCall = healthyOnCall("sind-dev-worker-0", "172.18.0.3")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute", "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", "worker", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -124,7 +124,7 @@ func TestGetNodeHealth_InspectError(t *testing.T) {
 
 func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	var m docker.MockExecutor
-	base := healthyOnCall("sind-dev-compute-0", "172.18.0.3")
+	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
 	m.OnCall = func(args []string, stdin string) docker.MockResult {
 		// slurmd fails
 		if len(args) >= 5 && args[2] == "systemctl" && args[4] == "slurmd" {
@@ -134,7 +134,7 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute", "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", "worker", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -168,13 +168,13 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = func(args []string, _ string) docker.MockResult {
 		if len(args) >= 2 && args[0] == "inspect" {
-			return docker.MockResult{Stdout: statusInspectJSON("sind-dev-compute-0", "exited", "")}
+			return docker.MockResult{Stdout: statusInspectJSON("sind-dev-worker-0", "exited", "")}
 		}
 		return docker.MockResult{Err: fmt.Errorf("container not running")}
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute", "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", "worker", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "exited", health.Container)
@@ -465,12 +465,12 @@ func fullStatusOnCall(t *testing.T) func([]string, string) docker.MockResult {
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
 				psEntry{
-					ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=compute",
+					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=worker",
 				},
 				psEntry{
-					ID: "c", Names: "sind-dev-compute-1", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=compute",
+					ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=worker",
 				},
 			)}
 		}
@@ -482,9 +482,9 @@ func fullStatusOnCall(t *testing.T) func([]string, string) docker.MockResult {
 			switch name {
 			case "sind-dev-controller":
 				ip = "172.18.0.2"
-			case "sind-dev-compute-0":
+			case "sind-dev-worker-0":
 				ip = "172.18.0.3"
-			case "sind-dev-compute-1":
+			case "sind-dev-worker-1":
 				ip = "172.18.0.4"
 			}
 			return docker.MockResult{Stdout: statusInspectJSON(name, "running", ip)}
@@ -532,7 +532,7 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.Equal(t, "dev", status.Name)
 	assert.Equal(t, StatusRunning, status.Status)
 
-	// Nodes sorted: controller, compute-0, compute-1.
+	// Nodes sorted: controller, worker-0, worker-1.
 	require.Len(t, status.Nodes, 3)
 	assert.Equal(t, "controller.dev", status.Nodes[0].Name)
 	assert.Equal(t, "controller", status.Nodes[0].Role)
@@ -542,11 +542,11 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.True(t, status.Nodes[0].Health.SSHD)
 	assert.True(t, status.Nodes[0].Health.Services["slurmctld"])
 
-	assert.Equal(t, "compute-0.dev", status.Nodes[1].Name)
-	assert.Equal(t, "compute", status.Nodes[1].Role)
+	assert.Equal(t, "worker-0.dev", status.Nodes[1].Name)
+	assert.Equal(t, "worker", status.Nodes[1].Role)
 	assert.True(t, status.Nodes[1].Health.Services["slurmd"])
 
-	assert.Equal(t, "compute-1.dev", status.Nodes[2].Name)
+	assert.Equal(t, "worker-1.dev", status.Nodes[2].Name)
 
 	// Network
 	assert.True(t, status.Network.Mesh)
@@ -663,8 +663,8 @@ func TestGetStatus_SortOrder(t *testing.T) {
 		if args[0] == "ps" {
 			return docker.MockResult{Stdout: ndjson(
 				psEntry{
-					ID: "b", Names: "sind-dev-compute-0", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=compute",
+					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=worker",
 				},
 				psEntry{
 					ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
@@ -684,7 +684,7 @@ func TestGetStatus_SortOrder(t *testing.T) {
 				ip = "172.18.0.2"
 			case "sind-dev-submitter":
 				ip = "172.18.0.4"
-			case "sind-dev-compute-0":
+			case "sind-dev-worker-0":
 				ip = "172.18.0.3"
 			}
 			return docker.MockResult{Stdout: statusInspectJSON(name, "running", ip)}
@@ -699,7 +699,7 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	require.Len(t, status.Nodes, 3)
 	assert.Equal(t, "controller", status.Nodes[0].Role)
 	assert.Equal(t, "submitter", status.Nodes[1].Role)
-	assert.Equal(t, "compute", status.Nodes[2].Role)
+	assert.Equal(t, "worker", status.Nodes[2].Role)
 }
 
 func TestGetStatus_MixedStates(t *testing.T) {
@@ -713,8 +713,8 @@ func TestGetStatus_MixedStates(t *testing.T) {
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
 				psEntry{
-					ID: "b", Names: "sind-dev-compute-0", State: "exited", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=compute",
+					ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=worker",
 				},
 			)}
 		}
@@ -723,7 +723,7 @@ func TestGetStatus_MixedStates(t *testing.T) {
 			switch name {
 			case "sind-dev-controller":
 				return docker.MockResult{Stdout: statusInspectJSON(name, "running", "172.18.0.2")}
-			case "sind-dev-compute-0":
+			case "sind-dev-worker-0":
 				return docker.MockResult{Stdout: statusInspectJSON(name, "exited", "")}
 			}
 		}

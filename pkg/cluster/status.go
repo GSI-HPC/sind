@@ -146,7 +146,7 @@ func GetVolumeHealth(ctx context.Context, client *docker.Client, clusterName str
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
 	Name   string // DNS-style name: "controller.dev"
-	Role   string // "controller", "submitter", "compute"
+	Role   string // "controller", "submitter", "worker"
 	Health *NodeHealth
 }
 
@@ -211,7 +211,7 @@ func GetStatus(ctx context.Context, client *docker.Client, clusterName string) (
 	}, nil
 }
 
-// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter, compute).
+// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter, worker).
 func nodeStatusOrder(n *NodeStatus) string {
 	return roleSortKey(n.Role, n.Name)
 }
@@ -221,7 +221,7 @@ func roleServices(role string) []string {
 	switch role {
 	case "controller":
 		return []string{"slurmctld"}
-	case "compute":
+	case "worker":
 		return []string{"slurmd"}
 	default:
 		return nil

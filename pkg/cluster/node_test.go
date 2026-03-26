@@ -43,11 +43,11 @@ func TestNodeLabels(t *testing.T) {
 }
 
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
-	labels := NodeLabels("dev", "compute", "")
+	labels := NodeLabels("dev", "worker", "")
 
 	assert.Equal(t, map[string]string{
 		"sind.cluster": "dev",
-		"sind.role":    "compute",
+		"sind.role":    "worker",
 	}, labels)
 	_, ok := labels[LabelSlurmVersion]
 	assert.False(t, ok, "slurm version label absent")
@@ -93,18 +93,18 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 
 func TestBuildRunArgs_ComputeNode(t *testing.T) {
 	cfg := defaultRunConfig()
-	cfg.ShortName = "compute-0"
-	cfg.Role = "compute"
+	cfg.ShortName = "worker-0"
+	cfg.Role = "worker"
 	args := BuildRunArgs(cfg)
 
 	name, _ := argValue(args, "--name")
-	assert.Equal(t, "sind-dev-compute-0", name)
+	assert.Equal(t, "sind-dev-worker-0", name)
 
 	hostname, _ := argValue(args, "--hostname")
-	assert.Equal(t, "compute-0", hostname)
+	assert.Equal(t, "worker-0", hostname)
 
 	labels := argValues(args, "--label")
-	assert.Contains(t, labels, "sind.role=compute")
+	assert.Contains(t, labels, "sind.role=worker")
 }
 
 func TestBuildRunArgs_NoSlurmVersion(t *testing.T) {
@@ -161,8 +161,8 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 			wantConf: "sind-dev-config:/etc/slurm:rw,z",
 		},
 		{
-			name:     "compute gets ro config",
-			role:     "compute",
+			name:     "worker gets ro config",
+			role:     "worker",
 			wantConf: "sind-dev-config:/etc/slurm:ro,z",
 		},
 		{
