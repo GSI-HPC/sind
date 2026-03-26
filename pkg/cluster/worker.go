@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
@@ -76,6 +77,20 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		image = controller.Image
 	}
 
+	// Apply defaults for unset resource limits.
+	cpus := opts.CPUs
+	if cpus <= 0 {
+		cpus = config.DefaultCPUs
+	}
+	memory := opts.Memory
+	if memory == "" {
+		memory = config.DefaultMemory
+	}
+	tmpSize := opts.TmpSize
+	if tmpSize == "" {
+		tmpSize = config.DefaultTmpSize
+	}
+
 	// Build RunConfig entries for new nodes.
 	count := opts.Count
 	if count <= 0 {
@@ -88,9 +103,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			ShortName:    fmt.Sprintf("compute-%d", startIdx+i),
 			Role:         "compute",
 			Image:        image,
-			CPUs:         opts.CPUs,
-			Memory:       opts.Memory,
-			TmpSize:      opts.TmpSize,
+			CPUs:         cpus,
+			Memory:       memory,
+			TmpSize:      tmpSize,
 			SlurmVersion: slurmVersion,
 			DNSIP:        dnsIP,
 			Managed:      !opts.Unmanaged,
