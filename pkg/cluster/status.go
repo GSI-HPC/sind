@@ -64,10 +64,15 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 }
 
 // NetworkHealth holds the health status of cluster networking.
+// NetworkHealth holds the health and IPAM details of cluster networking.
 type NetworkHealth struct {
-	Mesh    bool // sind-mesh network exists
-	DNS     bool // sind-dns container exists
-	Cluster bool // cluster network exists
+	Mesh    bool   // sind-mesh network exists
+	DNS     bool   // sind-dns container exists
+	Cluster bool   // cluster network exists
+	MeshSubnet    string // mesh network subnet
+	MeshGateway   string // mesh network gateway
+	ClusterSubnet  string // cluster network subnet
+	ClusterGateway string // cluster network gateway
 }
 
 // GetNetworkHealth checks the health of mesh, DNS, and cluster networking.
@@ -79,6 +84,12 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, clusterName st
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
 	health.Mesh = meshExists
+	if meshExists {
+		if info, err := client.InspectNetwork(ctx, "sind-mesh"); err == nil {
+			health.MeshSubnet = info.Subnet
+			health.MeshGateway = info.Gateway
+		}
+	}
 
 	dnsExists, err := client.ContainerExists(ctx, "sind-dns")
 	if err != nil {
@@ -92,6 +103,12 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, clusterName st
 		return nil, fmt.Errorf("checking cluster network: %w", err)
 	}
 	health.Cluster = clusterExists
+	if clusterExists {
+		if info, err := client.InspectNetwork(ctx, docker.NetworkName(clusterNet)); err == nil {
+			health.ClusterSubnet = info.Subnet
+			health.ClusterGateway = info.Gateway
+		}
+	}
 
 	return health, nil
 }

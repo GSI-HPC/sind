@@ -254,11 +254,17 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 
 // exitCode1 is defined in preflight_test.go.
 
+func netInspect(name, subnet, gw string) string {
+	return fmt.Sprintf(`[{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gw)
+}
+
 func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil) // NetworkExists: sind-mesh
-	m.AddResult("[{}]\n", "", nil) // ContainerExists: sind-dns
-	m.AddResult("[{}]\n", "", nil) // NetworkExists: sind-dev-net
+	m.AddResult("[{}]\n", "", nil)                                     // NetworkExists: sind-mesh
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // InspectNetwork: mesh
+	m.AddResult("[{}]\n", "", nil)                                     // ContainerExists: sind-dns
+	m.AddResult("[{}]\n", "", nil)                                     // NetworkExists: sind-dev-net
+	m.AddResult(netInspect("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // InspectNetwork: cluster
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(t.Context(), c, "dev")
@@ -267,12 +273,10 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	assert.True(t, health.Mesh)
 	assert.True(t, health.DNS)
 	assert.True(t, health.Cluster)
-
-	// Verify correct resources were checked.
-	require.Len(t, m.Calls, 3)
-	assert.Equal(t, []string{"network", "inspect", "sind-mesh"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"container", "inspect", "sind-dns"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"network", "inspect", "sind-dev-net"}, m.Calls[2].Args)
+	assert.Equal(t, "172.19.0.0/16", health.MeshSubnet)
+	assert.Equal(t, "172.19.0.1", health.MeshGateway)
+	assert.Equal(t, "172.18.0.0/16", health.ClusterSubnet)
+	assert.Equal(t, "172.18.0.1", health.ClusterGateway)
 }
 
 func TestGetNetworkHealth_NoneExist(t *testing.T) {
@@ -294,9 +298,10 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	var m docker.MockExecutor
 	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
-	m.AddResult("[{}]\n", "", nil)                        // mesh exists
-	m.AddResult("[{}]\n", "", nil)                        // dns exists
-	m.AddResult("", "Error: No such network\n", notFound) // cluster net missing
+	m.AddResult("[{}]\n", "", nil)                                     // mesh exists
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
+	m.AddResult("[{}]\n", "", nil)                                     // dns exists
+	m.AddResult("", "Error: No such network\n", notFound)              // cluster net missing
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(t.Context(), c, "dev")
@@ -320,8 +325,9 @@ func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                         // mesh OK
-	m.AddResult("", "", fmt.Errorf("docker daemon error")) // dns error
+	m.AddResult("[{}]\n", "", nil)                                     // mesh OK
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))             // dns error
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(t.Context(), c, "dev")
@@ -332,9 +338,10 @@ func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                         // mesh OK
-	m.AddResult("[{}]\n", "", nil)                         // dns OK
-	m.AddResult("", "", fmt.Errorf("docker daemon error")) // cluster net error
+	m.AddResult("[{}]\n", "", nil)                                     // mesh OK
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
+	m.AddResult("[{}]\n", "", nil)                                     // dns OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))             // cluster net error
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(t.Context(), c, "dev")
@@ -345,16 +352,18 @@ func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil) // mesh
-	m.AddResult("[{}]\n", "", nil) // dns
-	m.AddResult("[{}]\n", "", nil) // cluster net
+	m.AddResult("[{}]\n", "", nil)                                           // mesh exists
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)       // inspect mesh
+	m.AddResult("[{}]\n", "", nil)                                           // dns
+	m.AddResult("[{}]\n", "", nil)                                           // cluster net exists
+	m.AddResult(netInspect("sind-default-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // inspect cluster
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(t.Context(), c, "default")
 
 	require.NoError(t, err)
 	// Verify cluster network name uses default.
-	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[3].Args)
 }
 
 // --- GetVolumeHealth ---

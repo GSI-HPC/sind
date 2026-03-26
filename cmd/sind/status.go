@@ -61,9 +61,9 @@ func runStatus(cmd *cobra.Command, name string) error {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "NETWORK")
 	net := status.Network
-	fmt.Fprintf(out, "Mesh:     sind-mesh %s\n", checkmark(net.Mesh))
+	fmt.Fprintf(out, "Mesh:     sind-mesh %s  %s  gw %s\n", checkmark(net.Mesh), net.MeshSubnet, net.MeshGateway)
 	fmt.Fprintf(out, "DNS:      sind-dns %s\n", checkmark(net.DNS))
-	fmt.Fprintf(out, "Cluster:  sind-%s-net %s\n", name, checkmark(net.Cluster))
+	fmt.Fprintf(out, "Cluster:  sind-%s-net %s  %s  gw %s\n", name, checkmark(net.Cluster), net.ClusterSubnet, net.ClusterGateway)
 
 	// Volumes section
 	fmt.Fprintln(out)
