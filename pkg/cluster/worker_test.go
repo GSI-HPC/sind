@@ -385,7 +385,7 @@ func TestWorkerAdd_Managed(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -439,7 +439,7 @@ func TestWorkerAdd_Managed_UsesControllerImage(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -474,7 +474,7 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 		return docker.MockResult{}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev",
@@ -494,7 +494,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -605,7 +605,7 @@ func TestWorkerRemove_Managed(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerRemoveOnCall(t, nodesConf)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1"})
 
@@ -647,7 +647,7 @@ func TestWorkerRemove_NodeNotFound(t *testing.T) {
 		return docker.MockResult{}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-99"})
 
@@ -662,7 +662,7 @@ func TestWorkerRemove_Unmanaged(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerRemoveOnCall(t, "") // empty nodesConf → ReadFile fails
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1"})
 
@@ -697,7 +697,7 @@ func TestWorkerAdd_MultipleNodes(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -730,7 +730,7 @@ func TestWorkerAdd_ExplicitImage(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -765,7 +765,7 @@ func TestWorkerAdd_InfraError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev",
@@ -790,7 +790,7 @@ func TestWorkerAdd_SindNodesConfMissing(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev",
@@ -810,7 +810,7 @@ func TestWorkerAdd_InvalidMemory(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -836,7 +836,7 @@ func TestWorkerRemove_MultipleNodes(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerRemoveOnCall(t, nodesConf)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-0", "worker-1"})
 
@@ -865,7 +865,7 @@ func TestWorkerRemove_ListContainersError(t *testing.T) {
 		return docker.MockResult{}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-0"})
 
@@ -878,7 +878,7 @@ func TestWorkerAdd_DefaultCount(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -900,7 +900,7 @@ func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -961,7 +961,7 @@ func TestWorkerRemove_NoController(t *testing.T) {
 		return docker.MockResult{}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-0"})
 
@@ -1019,7 +1019,7 @@ func TestWorkerRemove_RejectsController(t *testing.T) {
 		return docker.MockResult{}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"controller"})
 
@@ -1043,7 +1043,7 @@ func TestWorkerRemove_RejectsSubmitter(t *testing.T) {
 		return docker.MockResult{}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"submitter"})
 
@@ -1056,7 +1056,7 @@ func TestWorkerRemove_DuplicateNames(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerRemoveOnCall(t, "")
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1", "worker-1"})
 
@@ -1078,7 +1078,7 @@ func TestWorkerRemove_EmptyNames(t *testing.T) {
 		return docker.MockResult{Err: fmt.Errorf("should not be called")}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", nil)
 
@@ -1091,7 +1091,7 @@ func TestWorkerAdd_NegativeCount(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1120,7 +1120,7 @@ func TestWorkerAdd_ListError(t *testing.T) {
 		return docker.MockResult{}
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
@@ -1140,7 +1140,7 @@ func TestWorkerAdd_CreateNodeError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1163,7 +1163,7 @@ func TestWorkerAdd_SetupNodesError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
@@ -1186,7 +1186,7 @@ func TestWorkerAdd_RegisterNodesError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1209,7 +1209,7 @@ func TestWorkerAdd_EnableSlurmError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1231,7 +1231,7 @@ func TestWorkerAdd_ControllerInspectError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
@@ -1258,7 +1258,7 @@ func TestWorkerAdd_UpdateNodesConfReadError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1282,7 +1282,7 @@ func TestWorkerAdd_WriteNodesConfError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1305,7 +1305,7 @@ func TestWorkerAdd_ScontrolReconfigureError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1336,7 +1336,7 @@ func TestWorkerRemove_RemoveNodesConfError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1"})
 
@@ -1354,7 +1354,7 @@ func TestWorkerRemove_DeregisterMeshError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1"})
 
@@ -1477,7 +1477,7 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = workerLifecycleOnCall(t)
 	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

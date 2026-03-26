@@ -23,7 +23,7 @@ import (
 func TestMeshLifecycle(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	if !rec.IsIntegration() {
 		// EnsureMesh: create network, DNS, SSH volume, SSH container
@@ -122,7 +122,7 @@ func TestMeshLifecycle(t *testing.T) {
 func TestDNSRecordLifecycle(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	if !rec.IsIntegration() {
 		// EnsureMesh
@@ -220,7 +220,7 @@ func TestEnsureMesh(t *testing.T) {
 	m.AddResult("sind-ssh\n", "", nil)
 
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
@@ -235,7 +235,7 @@ func TestEnsureMesh_AllExist(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // ContainerExists (SSH)
 
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestEnsureMesh_NetworkError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
@@ -258,7 +258,7 @@ func TestEnsureMesh_DNSError(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // network exists
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
@@ -271,7 +271,7 @@ func TestEnsureMesh_SSHVolumeError(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // DNS exists
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
@@ -285,7 +285,7 @@ func TestEnsureMesh_SSHContainerError(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // SSH volume exists
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMesh(t.Context())
 	assert.Error(t, err)
@@ -312,7 +312,7 @@ func TestCleanupMesh(t *testing.T) {
 	m.AddResult("sind-ssh-config\n", "", nil)
 
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestCleanupMesh_NoneExist(t *testing.T) {
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
 
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
@@ -350,7 +350,7 @@ func TestCleanupMesh_SSHContainerError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
@@ -364,7 +364,7 @@ func TestCleanupMesh_DNSContainerError(t *testing.T) {
 	// DNS container check fails
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
@@ -377,7 +377,7 @@ func TestCleanupMesh_NetworkError(t *testing.T) {
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS
 	m.AddResult("", "", fmt.Errorf("connection refused"))                   // network
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
@@ -391,7 +391,7 @@ func TestCleanupMesh_RemoveContainerError(t *testing.T) {
 	m.AddResult("sind-ssh\n", "", nil)
 	m.AddResult("", "Error: removal in progress\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
@@ -405,7 +405,7 @@ func TestCleanupMesh_VolumeError(t *testing.T) {
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network
 	m.AddResult("", "", fmt.Errorf("connection refused"))                   // volume
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.CleanupMesh(t.Context())
 	assert.Error(t, err)
@@ -424,7 +424,7 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	// CreateNetwork → success
 	m.AddResult(networkID+"\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMeshNetwork(t.Context())
 	require.NoError(t, err)
@@ -444,7 +444,7 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 	// NetworkExists → found
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMeshNetwork(t.Context())
 	require.NoError(t, err)
@@ -458,7 +458,7 @@ func TestEnsureMeshNetwork_InspectError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMeshNetwork(t.Context())
 	assert.Error(t, err)
@@ -473,7 +473,7 @@ func TestEnsureMeshNetwork_CreateError(t *testing.T) {
 	// CreateNetwork → error
 	m.AddResult("", "Error: permission denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMeshNetwork(t.Context())
 	assert.Error(t, err)
@@ -496,7 +496,7 @@ func TestEnsureDNS_Creates(t *testing.T) {
 	// StartContainer → success
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureDNS(t.Context())
 	require.NoError(t, err)
@@ -525,7 +525,7 @@ func TestEnsureDNS_AlreadyExists(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureDNS(t.Context())
 	require.NoError(t, err)
@@ -536,7 +536,7 @@ func TestEnsureDNS_InspectError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
@@ -549,7 +549,7 @@ func TestEnsureDNS_CreateError(t *testing.T) {
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
@@ -563,7 +563,7 @@ func TestEnsureDNS_CopyError(t *testing.T) {
 	m.AddResult("abc123\n", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
@@ -578,7 +578,7 @@ func TestEnsureDNS_StartError(t *testing.T) {
 	m.AddResult("", "", nil)
 	m.AddResult("", "Error: cannot start\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
@@ -598,7 +598,7 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	// StartContainer → success
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	require.NoError(t, err)
@@ -623,7 +623,7 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.AddDNSRecord(t.Context(), "worker-0.dev.sind.local", "172.18.0.3")
 	require.NoError(t, err)
@@ -637,7 +637,7 @@ func TestAddDNSRecord_ReadError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	assert.Error(t, err)
@@ -649,7 +649,7 @@ func TestAddDNSRecord_WriteError(t *testing.T) {
 	m.AddResult(corefileTar(t, nil), "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	assert.Error(t, err)
@@ -662,7 +662,7 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 	m.AddResult("", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
 	assert.Error(t, err)
@@ -683,7 +683,7 @@ func TestRemoveDNSRecord(t *testing.T) {
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
@@ -702,7 +702,7 @@ func TestRemoveDNSRecord_LastEntry(t *testing.T) {
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
@@ -723,7 +723,7 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecord(t.Context(), "worker-0.dev.sind.local")
 	require.NoError(t, err)
@@ -740,7 +740,7 @@ func TestRemoveDNSRecord_ReloadError(t *testing.T) {
 	m.AddResult("", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)
@@ -760,7 +760,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
@@ -774,7 +774,7 @@ func TestRemoveDNSRecord_ReadError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)
@@ -786,7 +786,7 @@ func TestRemoveDNSRecord_WriteError(t *testing.T) {
 	m.AddResult(corefileTar(t, []string{"172.18.0.2 x"}), "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c)
+	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecord(t.Context(), "x")
 	assert.Error(t, err)
@@ -832,6 +832,159 @@ func TestParseEntries_Roundtrip(t *testing.T) {
 func TestParseEntries_NoHostsBlock(t *testing.T) {
 	entries := parseEntries(".:53 {\n    forward . /etc/resolv.conf\n}\n")
 	assert.Empty(t, entries)
+}
+
+// --- Custom Realm ---
+
+func TestCustomRealm_ResourceNames(t *testing.T) {
+	c := docker.NewClient(&docker.MockExecutor{})
+	mgr := NewManager(c, "testrealm")
+
+	assert.Equal(t, docker.NetworkName("testrealm-mesh"), mgr.networkName())
+	assert.Equal(t, docker.ContainerName("testrealm-dns"), mgr.dnsContainerName())
+	assert.Equal(t, docker.ContainerName("testrealm-ssh"), mgr.sshContainerName())
+	assert.Equal(t, docker.VolumeName("testrealm-ssh-config"), mgr.sshVolumeName())
+	assert.Equal(t, docker.ContainerName("testrealm-ssh-keygen"), mgr.sshKeygenName())
+	assert.Equal(t, "testrealm-mesh", mgr.composeProject())
+}
+
+func TestCustomRealm_DefaultProducesStandardNames(t *testing.T) {
+	c := docker.NewClient(&docker.MockExecutor{})
+	mgr := NewManager(c, DefaultRealm)
+
+	assert.Equal(t, NetworkName, mgr.networkName())
+	assert.Equal(t, DNSContainerName, mgr.dnsContainerName())
+	assert.Equal(t, SSHContainerName, mgr.sshContainerName())
+	assert.Equal(t, SSHVolumeName, mgr.sshVolumeName())
+}
+
+func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // NetworkExists → no
+	m.AddResult("net-id\n", "", nil)                                        // CreateNetwork
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, "myrealm")
+
+	err := mgr.EnsureMeshNetwork(t.Context())
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"network", "inspect", "myrealm-mesh"}, m.Calls[0].Args)
+	assert.Equal(t, []string{
+		"network", "create",
+		"--label", "com.docker.compose.network=mesh",
+		"--label", "com.docker.compose.project=myrealm-mesh",
+		"myrealm-mesh",
+	}, m.Calls[1].Args)
+}
+
+func TestCustomRealm_EnsureDNS(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // ContainerExists → no
+	m.AddResult("dns-id\n", "", nil)                                        // CreateContainer
+	m.AddResult("", "", nil)                                                // CopyToContainer
+	m.AddResult("myrealm-dns\n", "", nil)                                   // StartContainer
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, "myrealm")
+
+	err := mgr.EnsureDNS(t.Context())
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 4)
+	assert.Equal(t, []string{"container", "inspect", "myrealm-dns"}, m.Calls[0].Args)
+	createArgs := m.Calls[1].Args
+	assert.Equal(t, "--name", createArgs[1])
+	assert.Equal(t, "myrealm-dns", createArgs[2])
+	assert.Equal(t, "--network", createArgs[3])
+	assert.Equal(t, "myrealm-mesh", createArgs[4])
+}
+
+func TestCustomRealm_EnsureSSHVolume(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // VolumeExists → no
+	m.AddResult("myrealm-ssh-config\n", "", nil)                            // CreateVolume
+	m.AddResult("keygen-id\n", "", nil)                                     // CreateContainer
+	m.AddResult("", "", nil)                                                // CopyToContainer
+	m.AddResult("", "", nil)                                                // RemoveContainer
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, "myrealm")
+
+	err := mgr.EnsureSSHVolume(t.Context())
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 5)
+	assert.Equal(t, []string{"volume", "inspect", "myrealm-ssh-config"}, m.Calls[0].Args)
+	assert.Equal(t, []string{
+		"volume", "create",
+		"--label", "com.docker.compose.project=myrealm-mesh",
+		"--label", "com.docker.compose.volume=ssh-config",
+		"myrealm-ssh-config",
+	}, m.Calls[1].Args)
+	assert.Equal(t, []string{
+		"create",
+		"--name", "myrealm-ssh-keygen",
+		"-v", "myrealm-ssh-config:/ssh",
+		sshKeygenImage,
+	}, m.Calls[2].Args)
+}
+
+func TestCustomRealm_EnsureSSH(t *testing.T) {
+	inspectJSON := `[{"Id":"dns123","Name":"/myrealm-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"myrealm-mesh":{"IPAddress":"10.0.0.2"}}}}]`
+
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // ContainerExists → no
+	m.AddResult(inspectJSON, "", nil)                                       // InspectContainer(DNS)
+	m.AddResult("ssh-id\n", "", nil)                                        // CreateContainer
+	m.AddResult("myrealm-ssh\n", "", nil)                                   // StartContainer
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, "myrealm")
+
+	err := mgr.EnsureSSH(t.Context())
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 4)
+	assert.Equal(t, []string{"container", "inspect", "myrealm-ssh"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"inspect", "myrealm-dns"}, m.Calls[1].Args)
+	createArgs := m.Calls[2].Args
+	assert.Equal(t, "--name", createArgs[1])
+	assert.Equal(t, "myrealm-ssh", createArgs[2])
+	assert.Equal(t, "--network", createArgs[3])
+	assert.Equal(t, "myrealm-mesh", createArgs[4])
+	assert.Equal(t, []string{"start", "myrealm-ssh"}, m.Calls[3].Args)
+}
+
+func TestCustomRealm_CleanupMesh(t *testing.T) {
+	var m docker.MockExecutor
+	// SSH container: exists, stop, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("myrealm-ssh\n", "", nil)
+	m.AddResult("myrealm-ssh\n", "", nil)
+	// DNS container: exists, stop, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("myrealm-dns\n", "", nil)
+	m.AddResult("myrealm-dns\n", "", nil)
+	// Network: exists, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("myrealm-mesh\n", "", nil)
+	// Volume: exists, remove
+	m.AddResult("[{}]\n", "", nil)
+	m.AddResult("myrealm-ssh-config\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, "myrealm")
+
+	err := mgr.CleanupMesh(t.Context())
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"container", "inspect", "myrealm-ssh"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"stop", "myrealm-ssh"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", "myrealm-ssh"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"container", "inspect", "myrealm-dns"}, m.Calls[3].Args)
+	assert.Equal(t, []string{"stop", "myrealm-dns"}, m.Calls[4].Args)
+	assert.Equal(t, []string{"rm", "myrealm-dns"}, m.Calls[5].Args)
+	assert.Equal(t, []string{"network", "inspect", "myrealm-mesh"}, m.Calls[6].Args)
+	assert.Equal(t, []string{"network", "rm", "myrealm-mesh"}, m.Calls[7].Args)
+	assert.Equal(t, []string{"volume", "inspect", "myrealm-ssh-config"}, m.Calls[8].Args)
+	assert.Equal(t, []string{"volume", "rm", "myrealm-ssh-config"}, m.Calls[9].Args)
 }
 
 // dnsInspectJSON returns a mock docker inspect result for the DNS container on the mesh network.

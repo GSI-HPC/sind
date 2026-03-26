@@ -41,5 +41,5 @@ func meshMgrFrom(ctx context.Context, client *docker.Client) *mesh.Manager {
 	if m, ok := ctx.Value(meshMgrKey).(*mesh.Manager); ok {
 		return m
 	}
-	return mesh.NewManager(client)
+	return mesh.NewManager(client, mesh.DefaultRealm)
 }

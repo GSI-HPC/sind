@@ -89,7 +89,7 @@ func TestClusterLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c)
+	meshMgr := mesh.NewManager(c, mesh.DefaultRealm)
 	t.Cleanup(func() {
 		bg := context.Background()
 		// Best-effort cleanup in case test fails partway.

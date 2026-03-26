@@ -276,7 +276,7 @@ func TestDeregisterMesh(t *testing.T) {
 		"controller.dev.sind.local ssh-ed25519 AAAA1\nworker-0.dev.sind.local ssh-ed25519 AAAA2\n",
 	)
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
@@ -290,7 +290,7 @@ func TestDeregisterMesh(t *testing.T) {
 func TestDeregisterMesh_Empty(t *testing.T) {
 	var m docker.MockExecutor
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := DeregisterMesh(t.Context(), mgr, "dev", nil)
 
@@ -308,7 +308,7 @@ func TestDeregisterMesh_DNSError(t *testing.T) {
 		return docker.MockResult{}
 	}
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
@@ -341,7 +341,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 		return docker.MockResult{}
 	}
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
@@ -452,7 +452,7 @@ func TestDelete_FullCluster(t *testing.T) {
 		knownHosts:    "controller.dev.sind.local ssh-ed25519 K1\nworker-0.dev.sind.local ssh-ed25519 K2\n",
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -468,7 +468,7 @@ func TestDelete_NonExistent(t *testing.T) {
 		volumes:       nil,
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "gone")
 
@@ -486,7 +486,7 @@ func TestDelete_Partial(t *testing.T) {
 		otherClusters: true,                       // other clusters exist
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -507,7 +507,7 @@ func TestDelete_PreserveMesh(t *testing.T) {
 		knownHosts:    "controller.dev.sind.local ssh-ed25519 K1\n",
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -520,7 +520,7 @@ func TestDelete_ListResourcesError(t *testing.T) {
 		return docker.MockResult{Err: fmt.Errorf("docker ps failed")}
 	}
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -540,7 +540,7 @@ func TestDelete_DeregisterMeshError(t *testing.T) {
 		deregisterFail: true,
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -561,7 +561,7 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 		knownHosts:          "controller.dev.sind.local ssh-ed25519 K1\n",
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -579,7 +579,7 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 		networkRemoveFail: true,
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -609,7 +609,7 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -627,7 +627,7 @@ func TestDelete_VolumeRemoveError(t *testing.T) {
 		volumeRemoveFail: true,
 	})
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
@@ -654,7 +654,7 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 		return inner(args, stdin)
 	}
 	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	err := Delete(t.Context(), c, mgr, "dev")
 

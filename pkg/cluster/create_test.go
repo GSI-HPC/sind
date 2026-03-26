@@ -839,7 +839,7 @@ func TestCreate_FullCluster(t *testing.T) {
 	m.OnCall = happyOnCall(t, exitErr, nil)
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -868,7 +868,7 @@ func TestCreate_PreflightFails(t *testing.T) {
 		m.AddResult("", "Error: No such object\n", exitErr)
 	}
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
@@ -888,7 +888,7 @@ func TestCreate_ResolveInfraFails(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
@@ -908,7 +908,7 @@ func TestCreate_CreateResourcesFails(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
@@ -929,7 +929,7 @@ func TestCreate_NodeCreationFails(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
@@ -952,7 +952,7 @@ func TestCreate_SetupNodesFails(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
@@ -976,7 +976,7 @@ func TestCreate_RegisterMeshFails(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -998,7 +998,7 @@ func TestCreate_EnableSlurmFails(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -1031,7 +1031,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -1064,7 +1064,7 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 	})
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -1254,7 +1254,7 @@ func TestRegisterMesh_DNSError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 	results := []nodeResult{{
 		info:    &docker.ContainerInfo{ID: "id1", IPs: map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"}},
@@ -1295,7 +1295,7 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
 	results := []nodeResult{{
 		info:    &docker.ContainerInfo{ID: "id1", IPs: map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"}},

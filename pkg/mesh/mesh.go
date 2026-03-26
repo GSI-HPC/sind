@@ -12,7 +12,10 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-// Global resource names shared across all clusters.
+// DefaultRealm is the realm name that produces the standard resource names.
+const DefaultRealm = "sind"
+
+// Global resource names for the default realm.
 const (
 	NetworkName      docker.NetworkName   = "sind-mesh"
 	DNSContainerName docker.ContainerName = "sind-dns"
@@ -20,13 +23,10 @@ const (
 	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
 )
 
-// composeProject is the Docker Compose project name for mesh infrastructure.
-const composeProject = "sind-mesh"
-
 // composeLabels returns compose compatibility labels for a mesh container.
-func composeLabels(service string, containerNumber int) map[string]string {
+func composeLabels(project, service string, containerNumber int) map[string]string {
 	return map[string]string{
-		"com.docker.compose.project":          composeProject,
+		"com.docker.compose.project":          project,
 		"com.docker.compose.service":          service,
 		"com.docker.compose.container-number": fmt.Sprintf("%d", containerNumber),
 		"com.docker.compose.oneoff":           "False",
@@ -36,8 +36,8 @@ func composeLabels(service string, containerNumber int) map[string]string {
 }
 
 // composeLabelFlags returns --label flags for a mesh container.
-func composeLabelFlags(service string) []string {
-	labels := composeLabels(service, 1)
+func composeLabelFlags(project, service string) []string {
+	labels := composeLabels(project, service, 1)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
@@ -59,11 +59,44 @@ const corefilePath = "/Corefile"
 // Manager handles global infrastructure resources shared across all clusters.
 type Manager struct {
 	Docker *docker.Client
+	Realm  string
 }
 
-// NewManager returns a Manager that operates on global resources through the given docker client.
-func NewManager(docker *docker.Client) *Manager {
-	return &Manager{Docker: docker}
+// NewManager returns a Manager that operates on global resources through the
+// given docker client. The realm determines resource naming: realm "sind"
+// produces names like "sind-mesh", "sind-dns", etc.
+func NewManager(docker *docker.Client, realm string) *Manager {
+	return &Manager{Docker: docker, Realm: realm}
+}
+
+// networkName returns the mesh network name for this realm.
+func (m *Manager) networkName() docker.NetworkName {
+	return docker.NetworkName(m.Realm + "-mesh")
+}
+
+// dnsContainerName returns the DNS container name for this realm.
+func (m *Manager) dnsContainerName() docker.ContainerName {
+	return docker.ContainerName(m.Realm + "-dns")
+}
+
+// sshContainerName returns the SSH container name for this realm.
+func (m *Manager) sshContainerName() docker.ContainerName {
+	return docker.ContainerName(m.Realm + "-ssh")
+}
+
+// sshVolumeName returns the SSH volume name for this realm.
+func (m *Manager) sshVolumeName() docker.VolumeName {
+	return docker.VolumeName(m.Realm + "-ssh-config")
+}
+
+// sshKeygenName returns the temporary keygen container name for this realm.
+func (m *Manager) sshKeygenName() docker.ContainerName {
+	return docker.ContainerName(m.Realm + "-ssh-keygen")
+}
+
+// composeProject returns the Docker Compose project name for this realm's mesh.
+func (m *Manager) composeProject() string {
+	return m.Realm + "-mesh"
 }
 
 // EnsureMesh creates all global infrastructure resources (mesh network, DNS,
@@ -88,18 +121,18 @@ func (m *Manager) EnsureMesh(ctx context.Context) error {
 // be called when the last cluster is deleted.
 func (m *Manager) CleanupMesh(ctx context.Context) error {
 	// Remove containers first (auto-disconnects from networks).
-	if err := m.removeContainerIfExists(ctx, SSHContainerName); err != nil {
+	if err := m.removeContainerIfExists(ctx, m.sshContainerName()); err != nil {
 		return fmt.Errorf("removing SSH container: %w", err)
 	}
-	if err := m.removeContainerIfExists(ctx, DNSContainerName); err != nil {
+	if err := m.removeContainerIfExists(ctx, m.dnsContainerName()); err != nil {
 		return fmt.Errorf("removing DNS container: %w", err)
 	}
 
-	if err := m.removeNetworkIfExists(ctx, NetworkName); err != nil {
+	if err := m.removeNetworkIfExists(ctx, m.networkName()); err != nil {
 		return fmt.Errorf("removing mesh network: %w", err)
 	}
 
-	if err := m.removeVolumeIfExists(ctx, SSHVolumeName); err != nil {
+	if err := m.removeVolumeIfExists(ctx, m.sshVolumeName()); err != nil {
 		return fmt.Errorf("removing SSH volume: %w", err)
 	}
 
@@ -145,7 +178,8 @@ func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeNa
 
 // EnsureMeshNetwork creates the shared mesh network if it does not already exist.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
-	exists, err := m.Docker.NetworkExists(ctx, NetworkName)
+	name := m.networkName()
+	exists, err := m.Docker.NetworkExists(ctx, name)
 	if err != nil {
 		return fmt.Errorf("checking mesh network: %w", err)
 	}
@@ -153,10 +187,10 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 		return nil
 	}
 	networkLabels := map[string]string{
-		"com.docker.compose.project": composeProject,
+		"com.docker.compose.project": m.composeProject(),
 		"com.docker.compose.network": "mesh",
 	}
-	_, err = m.Docker.CreateNetwork(ctx, NetworkName, networkLabels)
+	_, err = m.Docker.CreateNetwork(ctx, name, networkLabels)
 	if err != nil {
 		return fmt.Errorf("creating mesh network: %w", err)
 	}
@@ -167,7 +201,8 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 // The container runs CoreDNS on the mesh network, serving sind.local records
 // from inline hosts entries in the Corefile.
 func (m *Manager) EnsureDNS(ctx context.Context) error {
-	exists, err := m.Docker.ContainerExists(ctx, DNSContainerName)
+	name := m.dnsContainerName()
+	exists, err := m.Docker.ContainerExists(ctx, name)
 	if err != nil {
 		return fmt.Errorf("checking DNS container: %w", err)
 	}
@@ -176,24 +211,24 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 	}
 
 	args := []string{
-		"--name", string(DNSContainerName),
-		"--network", string(NetworkName),
+		"--name", string(name),
+		"--network", string(m.networkName()),
 	}
-	args = append(args, composeLabelFlags("dns")...)
+	args = append(args, composeLabelFlags(m.composeProject(), "dns")...)
 	args = append(args, DNSImage)
 	_, err = m.Docker.CreateContainer(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("creating DNS container: %w", err)
 	}
 
-	err = m.Docker.CopyToContainer(ctx, DNSContainerName, "/", map[string][]byte{
+	err = m.Docker.CopyToContainer(ctx, name, "/", map[string][]byte{
 		"Corefile": []byte(generateCorefile(nil)),
 	})
 	if err != nil {
 		return fmt.Errorf("writing DNS configuration: %w", err)
 	}
 
-	err = m.Docker.StartContainer(ctx, DNSContainerName)
+	err = m.Docker.StartContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("starting DNS container: %w", err)
 	}
@@ -236,7 +271,7 @@ func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
 
 // readDNSEntries reads the current Corefile and extracts the host entries.
 func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
-	data, err := m.Docker.CopyFromContainer(ctx, DNSContainerName, corefilePath)
+	data, err := m.Docker.CopyFromContainer(ctx, m.dnsContainerName(), corefilePath)
 	if err != nil {
 		return nil, fmt.Errorf("reading DNS Corefile: %w", err)
 	}
@@ -246,17 +281,18 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 // writeDNSEntries generates a new Corefile, writes it to the container, and
 // sends SIGHUP to reload CoreDNS.
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
-	err := m.Docker.CopyToContainer(ctx, DNSContainerName, "/", map[string][]byte{
+	name := m.dnsContainerName()
+	err := m.Docker.CopyToContainer(ctx, name, "/", map[string][]byte{
 		"Corefile": []byte(generateCorefile(entries)),
 	})
 	if err != nil {
 		return fmt.Errorf("writing DNS Corefile: %w", err)
 	}
 
-	if err := m.Docker.KillContainer(ctx, DNSContainerName); err != nil {
+	if err := m.Docker.KillContainer(ctx, name); err != nil {
 		return fmt.Errorf("reloading DNS: %w", err)
 	}
-	if err := m.Docker.StartContainer(ctx, DNSContainerName); err != nil {
+	if err := m.Docker.StartContainer(ctx, name); err != nil {
 		return fmt.Errorf("reloading DNS: %w", err)
 	}
 	return nil

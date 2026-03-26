@@ -51,7 +51,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	}
 
 	clusterName := "it-cluster"
-	meshMgr := mesh.NewManager(c)
+	meshMgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	t.Cleanup(func() {
 		bg := context.Background()

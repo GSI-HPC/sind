@@ -45,7 +45,7 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	ctx := t.Context()
 	cluster := "cli-del-" + testID
 
-	meshMgr := mesh.NewManager(c)
+	meshMgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	netName := docker.NetworkName("sind-" + cluster + "-net")
 	ctrName := docker.ContainerName("sind-" + cluster + "-controller")
