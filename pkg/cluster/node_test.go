@@ -37,15 +37,15 @@ func TestNodeLabels(t *testing.T) {
 	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", 1)
 
 	assert.Equal(t, map[string]string{
-		"sind.realm":                          mesh.DefaultRealm,
-		"sind.cluster":                        "dev",
-		"sind.role":                           "controller",
-		"sind.slurm.version":                  "25.11.0",
-		"com.docker.compose.project":          "sind-dev",
-		"com.docker.compose.service":          "controller",
-		"com.docker.compose.container-number": "1",
-		"com.docker.compose.oneoff":           "False",
-		"com.docker.compose.config-hash":           "",
+		"sind.realm":                              mesh.DefaultRealm,
+		"sind.cluster":                            "dev",
+		"sind.role":                               "controller",
+		"sind.slurm.version":                      "25.11.0",
+		"com.docker.compose.project":              "sind-dev",
+		"com.docker.compose.service":              "controller",
+		"com.docker.compose.container-number":     "1",
+		"com.docker.compose.oneoff":               "False",
+		"com.docker.compose.config-hash":          "",
 		"com.docker.compose.project.config_files": "",
 	}, labels)
 }
@@ -54,14 +54,14 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 	labels := NodeLabels(mesh.DefaultRealm, "dev", "worker", "", 3)
 
 	assert.Equal(t, map[string]string{
-		"sind.realm":                          mesh.DefaultRealm,
-		"sind.cluster":                        "dev",
-		"sind.role":                           "worker",
-		"com.docker.compose.project":          "sind-dev",
-		"com.docker.compose.service":          "worker",
-		"com.docker.compose.container-number": "3",
-		"com.docker.compose.oneoff":           "False",
-		"com.docker.compose.config-hash":           "",
+		"sind.realm":                              mesh.DefaultRealm,
+		"sind.cluster":                            "dev",
+		"sind.role":                               "worker",
+		"com.docker.compose.project":              "sind-dev",
+		"com.docker.compose.service":              "worker",
+		"com.docker.compose.container-number":     "3",
+		"com.docker.compose.oneoff":               "False",
+		"com.docker.compose.config-hash":          "",
 		"com.docker.compose.project.config_files": "",
 	}, labels)
 	_, ok := labels[LabelSlurmVersion]

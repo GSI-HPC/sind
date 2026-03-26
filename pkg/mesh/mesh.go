@@ -15,7 +15,8 @@ import (
 // DefaultRealm is the realm name that produces the standard resource names.
 const DefaultRealm = "sind"
 
-// Global resource names for the default realm.
+// Default-realm resource names. Production code uses Manager methods;
+// these constants are used in tests as expected values for DefaultRealm.
 const (
 	NetworkName      docker.NetworkName   = "sind-mesh"
 	DNSContainerName docker.ContainerName = "sind-dns"
@@ -26,11 +27,11 @@ const (
 // composeLabels returns compose compatibility labels for a mesh container.
 func composeLabels(project, service string, containerNumber int) map[string]string {
 	return map[string]string{
-		"com.docker.compose.project":          project,
-		"com.docker.compose.service":          service,
-		"com.docker.compose.container-number": fmt.Sprintf("%d", containerNumber),
-		"com.docker.compose.oneoff":           "False",
-		"com.docker.compose.config-hash":      "",
+		"com.docker.compose.project":              project,
+		"com.docker.compose.service":              service,
+		"com.docker.compose.container-number":     fmt.Sprintf("%d", containerNumber),
+		"com.docker.compose.oneoff":               "False",
+		"com.docker.compose.config-hash":          "",
 		"com.docker.compose.project.config_files": "",
 	}
 }

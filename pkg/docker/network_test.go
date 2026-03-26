@@ -90,15 +90,15 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 	ctr := itContainerName("conn")
 
 	if !rec.IsIntegration() {
-		rec.AddResult("net-id\n", "", nil)           // create network
-		rec.AddResult("ctr-id\n", "", nil)           // run container
-		rec.AddResult("", "", nil)                    // connect
+		rec.AddResult("net-id\n", "", nil)                  // create network
+		rec.AddResult("ctr-id\n", "", nil)                  // run container
+		rec.AddResult("", "", nil)                          // connect
 		rec.AddResult(inspectRunning(string(ctr)), "", nil) // inspect (has net)
-		rec.AddResult("", "", nil)                    // disconnect
+		rec.AddResult("", "", nil)                          // disconnect
 		rec.AddResult(inspectRunning(string(ctr)), "", nil) // inspect (no net)
-		rec.AddResult(string(ctr)+"\n", "", nil)      // kill (cleanup)
-		rec.AddResult(string(ctr)+"\n", "", nil)      // rm (cleanup)
-		rec.AddResult(string(net)+"\n", "", nil)       // rm network (cleanup)
+		rec.AddResult(string(ctr)+"\n", "", nil)            // kill (cleanup)
+		rec.AddResult(string(ctr)+"\n", "", nil)            // rm (cleanup)
+		rec.AddResult(string(net)+"\n", "", nil)            // rm network (cleanup)
 	}
 	t.Cleanup(func() {
 		bg := context.Background()

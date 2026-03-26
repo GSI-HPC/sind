@@ -166,12 +166,12 @@ func TestContainerLabelsAndList(t *testing.T) {
 	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)                                                                                                                                                              // run
+		rec.AddResult("abc123\n", "", nil)                                                                                                                                                             // run
 		rec.AddResult(`[{"Id":"abc123","Name":"/`+n+`","State":{"Status":"running"},"Config":{"Labels":{"sind.cluster":"it-test","sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`, "", nil) // inspect
 		rec.AddResult(`{"ID":"abc123","Names":"`+n+`","State":"running","Image":"busybox:latest","Labels":"sind.cluster=it-test,sind.role=worker"}`+"\n", "", nil)                                     // list
-		rec.AddResult("", "", nil)                                                                                                                                                                      // list empty
-		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                  // kill (cleanup)
-		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                  // rm (cleanup)
+		rec.AddResult("", "", nil)                                                                                                                                                                     // list empty
+		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                 // kill (cleanup)
+		rec.AddResult(n+"\n", "", nil)                                                                                                                                                                 // rm (cleanup)
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()

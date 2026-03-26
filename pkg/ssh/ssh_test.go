@@ -20,8 +20,8 @@ import (
 // provided by TestClusterCreateDeleteLifecycle (full cluster with sshd).
 func TestInjectAndCollectLifecycle(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("", "", nil)                                             // mkdir .ssh
-	m.AddResult("", "", nil)                                             // append authorized_keys
+	m.AddResult("", "", nil)                                                     // mkdir .ssh
+	m.AddResult("", "", nil)                                                     // append authorized_keys
 	m.AddResult("# comment\nlocalhost ssh-ed25519 AAAA-test-hostkey\n", "", nil) // ssh-keyscan
 	c := docker.NewClient(&m)
 	name := docker.ContainerName("sind-dev-controller")

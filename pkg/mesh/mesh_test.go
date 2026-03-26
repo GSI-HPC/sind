@@ -40,7 +40,7 @@ func TestMeshLifecycle(t *testing.T) {
 		rec.AddResult("", "", nil)                                                // copy keygen script
 		rec.AddResult("", "", nil)                                                // remove keygen container
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
-		rec.AddResult(dnsInspectJSON(), "", nil)                                   // inspect DNS for IP
+		rec.AddResult(dnsInspectJSON(), "", nil)                                  // inspect DNS for IP
 		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
 		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
 
@@ -140,7 +140,7 @@ func TestDNSRecordLifecycle(t *testing.T) {
 		rec.AddResult("", "", nil)                                                // copy keygen script
 		rec.AddResult("", "", nil)                                                // remove keygen container
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
-		rec.AddResult(dnsInspectJSON(), "", nil)                                   // inspect DNS for IP
+		rec.AddResult(dnsInspectJSON(), "", nil)                                  // inspect DNS for IP
 		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
 		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
 

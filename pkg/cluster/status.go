@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
 )
 
@@ -66,11 +67,11 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, ro
 
 // NetworkHealth holds the health and IPAM details of cluster networking.
 type NetworkHealth struct {
-	Mesh    bool   // sind-mesh network exists
-	DNS     bool   // sind-dns container exists
-	Cluster bool   // cluster network exists
-	MeshSubnet    string // mesh network subnet
-	MeshGateway   string // mesh network gateway
+	Mesh           bool   // sind-mesh network exists
+	DNS            bool   // sind-dns container exists
+	Cluster        bool   // cluster network exists
+	MeshSubnet     string // mesh network subnet
+	MeshGateway    string // mesh network gateway
 	ClusterSubnet  string // cluster network subnet
 	ClusterGateway string // cluster network gateway
 }
@@ -79,34 +80,33 @@ type NetworkHealth struct {
 func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
 	health := &NetworkHealth{}
 
-	meshNetName := docker.NetworkName(realm + "-mesh")
-	meshExists, err := client.NetworkExists(ctx, meshNetName)
+	meshMgr := mesh.NewManager(nil, realm)
+	meshExists, err := client.NetworkExists(ctx, meshMgr.NetworkName())
 	if err != nil {
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
 	health.Mesh = meshExists
 	if meshExists {
-		if info, err := client.InspectNetwork(ctx, meshNetName); err == nil {
+		if info, err := client.InspectNetwork(ctx, meshMgr.NetworkName()); err == nil {
 			health.MeshSubnet = info.Subnet
 			health.MeshGateway = info.Gateway
 		}
 	}
 
-	dnsContainerName := docker.ContainerName(realm + "-dns")
-	dnsExists, err := client.ContainerExists(ctx, dnsContainerName)
+	dnsExists, err := client.ContainerExists(ctx, meshMgr.DNSContainerName())
 	if err != nil {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
 	}
 	health.DNS = dnsExists
 
 	clusterNet := NetworkName(realm, clusterName)
-	clusterExists, err := client.NetworkExists(ctx, docker.NetworkName(clusterNet))
+	clusterExists, err := client.NetworkExists(ctx, clusterNet)
 	if err != nil {
 		return nil, fmt.Errorf("checking cluster network: %w", err)
 	}
 	health.Cluster = clusterExists
 	if clusterExists {
-		if info, err := client.InspectNetwork(ctx, docker.NetworkName(clusterNet)); err == nil {
+		if info, err := client.InspectNetwork(ctx, clusterNet); err == nil {
 			health.ClusterSubnet = info.Subnet
 			health.ClusterGateway = info.Gateway
 		}

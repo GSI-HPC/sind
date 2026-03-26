@@ -261,10 +261,10 @@ func netInspect(name, subnet, gw string) string {
 
 func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                                     // NetworkExists: sind-mesh
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // InspectNetwork: mesh
-	m.AddResult("[{}]\n", "", nil)                                     // ContainerExists: sind-dns
-	m.AddResult("[{}]\n", "", nil)                                     // NetworkExists: sind-dev-net
+	m.AddResult("[{}]\n", "", nil)                                                  // NetworkExists: sind-mesh
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)    // InspectNetwork: mesh
+	m.AddResult("[{}]\n", "", nil)                                                  // ContainerExists: sind-dns
+	m.AddResult("[{}]\n", "", nil)                                                  // NetworkExists: sind-dev-net
 	m.AddResult(netInspect("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // InspectNetwork: cluster
 	c := docker.NewClient(&m)
 
@@ -299,10 +299,10 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	var m docker.MockExecutor
 	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
-	m.AddResult("[{}]\n", "", nil)                                     // mesh exists
+	m.AddResult("[{}]\n", "", nil)                                               // mesh exists
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                     // dns exists
-	m.AddResult("", "Error: No such network\n", notFound)              // cluster net missing
+	m.AddResult("[{}]\n", "", nil)                                               // dns exists
+	m.AddResult("", "Error: No such network\n", notFound)                        // cluster net missing
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -326,9 +326,9 @@ func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                                     // mesh OK
+	m.AddResult("[{}]\n", "", nil)                                               // mesh OK
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))             // dns error
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // dns error
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -339,10 +339,10 @@ func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                                     // mesh OK
+	m.AddResult("[{}]\n", "", nil)                                               // mesh OK
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                     // dns OK
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))             // cluster net error
+	m.AddResult("[{}]\n", "", nil)                                               // dns OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // cluster net error
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -353,10 +353,10 @@ func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                                           // mesh exists
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)       // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                           // dns
-	m.AddResult("[{}]\n", "", nil)                                           // cluster net exists
+	m.AddResult("[{}]\n", "", nil)                                                      // mesh exists
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)        // inspect mesh
+	m.AddResult("[{}]\n", "", nil)                                                      // dns
+	m.AddResult("[{}]\n", "", nil)                                                      // cluster net exists
 	m.AddResult(netInspect("sind-default-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // inspect cluster
 	c := docker.NewClient(&m)
 
