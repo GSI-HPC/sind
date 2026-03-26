@@ -157,6 +157,26 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "NETWORK")
 	assert.Contains(t, stdout, "VOLUMES")
 
+	// --- exec ---
+	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", cluster, "--", "hostname")
+	require.NoError(t, err, "exec failed: stdout=%q stderr=%q", stdout, stderr)
+	assert.Contains(t, stdout, "controller")
+
+	// exec with default cluster
+	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "echo", "hello")
+	if err != nil {
+		// Only fails if no "default" cluster exists — expected in isolation.
+		assert.Contains(t, err.Error(), "default")
+	}
+
+	// exec missing separator
+	_, _, err = executeWithDockerCtx(ctx, "exec", "hostname")
+	assert.Error(t, err)
+
+	// exec missing command
+	_, _, err = executeWithDockerCtx(ctx, "exec", "--")
+	assert.Error(t, err)
+
 	// --- power shutdown ---
 	node := "compute-0." + cluster
 	_, _, err = executeWithDockerCtx(ctx, "power", "shutdown", node)
