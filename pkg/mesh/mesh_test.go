@@ -118,6 +118,74 @@ func TestMeshLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestDNSRecordLifecycle(t *testing.T) {
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	mgr := NewManager(c)
+
+	if !rec.IsIntegration() {
+		// EnsureMesh
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network exists → no
+		rec.AddResult("net-id\n", "", nil)                                        // create network
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS exists → no
+		rec.AddResult("dns-id\n", "", nil)                                        // create DNS
+		rec.AddResult("", "", nil)                                                // copy Corefile
+		rec.AddResult("sind-dns\n", "", nil)                                      // start DNS
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH vol exists → no
+		rec.AddResult("sind-ssh-config\n", "", nil)                               // create SSH vol
+		rec.AddResult("keygen-id\n", "", nil)                                     // create keygen container
+		rec.AddResult("", "", nil)                                                // copy keygen script
+		rec.AddResult("", "", nil)                                                // remove keygen container
+		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
+		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
+		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
+
+		// AddDNSRecord "a": read → write → signal
+		rec.AddResult(corefileTar(t, nil), "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+
+		// AddDNSRecord "b": read → write → signal
+		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.local"}), "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+
+		// RemoveDNSRecord "a": read → write → signal
+		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.local", "172.18.0.3 b.test.sind.local"}), "", nil)
+		rec.AddResult("", "", nil)
+		rec.AddResult("", "", nil)
+
+		// CleanupMesh
+		rec.AddResult("[{}]\n", "", nil)            // SSH exists
+		rec.AddResult("sind-ssh\n", "", nil)        // stop SSH
+		rec.AddResult("sind-ssh\n", "", nil)        // rm SSH
+		rec.AddResult("[{}]\n", "", nil)            // DNS exists
+		rec.AddResult("sind-dns\n", "", nil)        // stop DNS
+		rec.AddResult("sind-dns\n", "", nil)        // rm DNS
+		rec.AddResult("[{}]\n", "", nil)            // network exists
+		rec.AddResult("sind-mesh\n", "", nil)       // rm network
+		rec.AddResult("[{}]\n", "", nil)            // SSH vol exists
+		rec.AddResult("sind-ssh-config\n", "", nil) // rm SSH vol
+	}
+	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
+
+	err := mgr.EnsureMesh(ctx)
+	require.NoError(t, err)
+
+	// Add two records.
+	err = mgr.AddDNSRecord(ctx, "a.test.sind.local", "172.18.0.2")
+	require.NoError(t, err)
+
+	err = mgr.AddDNSRecord(ctx, "b.test.sind.local", "172.18.0.3")
+	require.NoError(t, err)
+
+	// Remove first record.
+	err = mgr.RemoveDNSRecord(ctx, "a.test.sind.local")
+	require.NoError(t, err)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 // --- EnsureMesh ---
 
 func TestEnsureMesh(t *testing.T) {
