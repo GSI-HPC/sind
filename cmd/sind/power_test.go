@@ -40,9 +40,10 @@ func TestPower_RequiresArgs(t *testing.T) {
 func TestPowerLifecycle(t *testing.T) {
 	c := realClient(t)
 	ctx := t.Context()
+	t.Setenv("SIND_REALM", testRealm)
 	cluster := "cli-pwr-" + testID
 
-	ctrName := docker.ContainerName("sind-" + cluster + "-worker-0")
+	ctrName := docker.ContainerName(testRealm + "-" + cluster + "-worker-0")
 
 	t.Cleanup(func() {
 		bg := context.Background()

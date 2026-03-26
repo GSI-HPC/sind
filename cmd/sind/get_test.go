@@ -159,13 +159,14 @@ func TestGetClustersEmpty(t *testing.T) {
 func TestGetLifecycle(t *testing.T) {
 	c := realClient(t)
 	ctx := t.Context()
+	t.Setenv("SIND_REALM", testRealm)
 	cluster := "cli-get-" + testID
 
-	netName := docker.NetworkName("sind-" + cluster + "-net")
-	ctrName := docker.ContainerName("sind-" + cluster + "-controller")
-	volConfig := docker.VolumeName("sind-" + cluster + "-config")
-	volMunge := docker.VolumeName("sind-" + cluster + "-munge")
-	volData := docker.VolumeName("sind-" + cluster + "-data")
+	netName := docker.NetworkName(testRealm + "-" + cluster + "-net")
+	ctrName := docker.ContainerName(testRealm + "-" + cluster + "-controller")
+	volConfig := docker.VolumeName(testRealm + "-" + cluster + "-config")
+	volMunge := docker.VolumeName(testRealm + "-" + cluster + "-munge")
+	volData := docker.VolumeName(testRealm + "-" + cluster + "-data")
 
 	t.Cleanup(func() {
 		bg := context.Background()

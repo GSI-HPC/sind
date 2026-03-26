@@ -85,23 +85,25 @@ func TestClusterLifecycle(t *testing.T) {
 	skipIfNoNsdelegate(t)
 	image := skipIfNoImage(t, c)
 
+	t.Setenv("SIND_REALM", testRealm)
+
 	cluster := "e2e-" + testID
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, mesh.DefaultRealm)
+	meshMgr := mesh.NewManager(c, testRealm)
 	t.Cleanup(func() {
 		bg := context.Background()
 		// Best-effort cleanup in case test fails partway.
 		for _, name := range []string{"controller", "worker-0", "worker-1"} {
-			cn := docker.ContainerName("sind-" + cluster + "-" + name)
+			cn := docker.ContainerName(testRealm + "-" + cluster + "-" + name)
 			_ = c.KillContainer(bg, cn)
 			_ = c.RemoveContainer(bg, cn)
 		}
 		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName("sind-"+cluster+"-"+vt))
+			_ = c.RemoveVolume(bg, docker.VolumeName(testRealm+"-"+cluster+"-"+vt))
 		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName("sind-"+cluster+"-net"))
+		_ = c.RemoveNetwork(bg, docker.NetworkName(testRealm+"-"+cluster+"-net"))
 		_ = meshMgr.CleanupMesh(bg)
 	})
 
@@ -131,15 +133,15 @@ func TestClusterLifecycle(t *testing.T) {
 	// --- get networks ---
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "networks")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "sind-"+cluster+"-net")
-	assert.Contains(t, stdout, "sind-mesh")
+	assert.Contains(t, stdout, testRealm+"-"+cluster+"-net")
+	assert.Contains(t, stdout, testRealm+"-mesh")
 
 	// --- get volumes ---
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "volumes")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "sind-"+cluster+"-config")
-	assert.Contains(t, stdout, "sind-"+cluster+"-munge")
-	assert.Contains(t, stdout, "sind-"+cluster+"-data")
+	assert.Contains(t, stdout, testRealm+"-"+cluster+"-config")
+	assert.Contains(t, stdout, testRealm+"-"+cluster+"-munge")
+	assert.Contains(t, stdout, testRealm+"-"+cluster+"-data")
 
 	// --- get munge-key ---
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "munge-key", cluster)
@@ -181,26 +183,26 @@ func TestClusterLifecycle(t *testing.T) {
 	node := "worker-0." + cluster
 	_, _, err = executeWithDockerCtx(ctx, "power", "shutdown", node)
 	require.NoError(t, err)
-	info, err := c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
+	info, err := c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "exited", info.Status)
 
 	// --- power on ---
 	_, _, err = executeWithDockerCtx(ctx, "power", "on", node)
 	require.NoError(t, err)
-	info, err = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
+	info, err = c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "running", info.Status)
 
 	// --- power freeze / unfreeze ---
 	_, _, err = executeWithDockerCtx(ctx, "power", "freeze", node)
 	require.NoError(t, err)
-	info, _ = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
+	info, _ = c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
 	assert.Equal(t, "paused", info.Status)
 
 	_, _, err = executeWithDockerCtx(ctx, "power", "unfreeze", node)
 	require.NoError(t, err)
-	info, _ = c.InspectContainer(ctx, docker.ContainerName("sind-"+cluster+"-worker-0"))
+	info, _ = c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
 	assert.Equal(t, "running", info.Status)
 
 	// --- create worker ---
@@ -229,11 +231,11 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "deleted")
 
 	// Verify everything is gone.
-	exists, err := c.ContainerExists(ctx, docker.ContainerName("sind-"+cluster+"-controller"))
+	exists, err := c.ContainerExists(ctx, docker.ContainerName(testRealm+"-"+cluster+"-controller"))
 	require.NoError(t, err)
 	assert.False(t, exists)
 
-	exists, err = c.NetworkExists(ctx, docker.NetworkName("sind-"+cluster+"-net"))
+	exists, err = c.NetworkExists(ctx, docker.NetworkName(testRealm+"-"+cluster+"-net"))
 	require.NoError(t, err)
 	assert.False(t, exists)
 

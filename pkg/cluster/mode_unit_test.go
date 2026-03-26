@@ -8,7 +8,11 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
+
+// testRealm is DefaultRealm for unit tests; integration tests use a random value.
+var testRealm = mesh.DefaultRealm
 
 func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 	t.Helper()

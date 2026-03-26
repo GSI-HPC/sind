@@ -23,7 +23,7 @@ import (
 func TestKnownHostLifecycle(t *testing.T) {
 	c, rec := newTestClient(t)
 	ctx := t.Context()
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	if !rec.IsIntegration() {
 		// EnsureMesh
@@ -102,7 +102,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 	// RemoveContainer (defer) → success
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSHVolume(t.Context())
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestEnsureSSHVolume_AlreadyExists(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSHVolume(t.Context())
 	require.NoError(t, err)
@@ -151,7 +151,7 @@ func TestEnsureSSHVolume_CheckError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
@@ -166,7 +166,7 @@ func TestEnsureSSHVolume_CreateVolumeError(t *testing.T) {
 	// CreateVolume → error
 	m.AddResult("", "Error: permission denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
@@ -183,7 +183,7 @@ func TestEnsureSSHVolume_CreateContainerError(t *testing.T) {
 	// CreateContainer → error
 	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
@@ -204,7 +204,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	// RemoveContainer (defer) → success
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSHVolume(t.Context())
 	assert.Error(t, err)
@@ -230,7 +230,7 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	// StartContainer → success
 	m.AddResult("sind-ssh\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSH(t.Context())
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestEnsureSSH_AlreadyExists(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSH(t.Context())
 	require.NoError(t, err)
@@ -264,7 +264,7 @@ func TestEnsureSSH_CheckError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSH(t.Context())
 	assert.Error(t, err)
@@ -281,7 +281,7 @@ func TestEnsureSSH_CreateError(t *testing.T) {
 	// CreateContainer → error
 	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSH(t.Context())
 	assert.Error(t, err)
@@ -300,7 +300,7 @@ func TestEnsureSSH_StartError(t *testing.T) {
 	// StartContainer → error
 	m.AddResult("", "Error: cannot start\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.EnsureSSH(t.Context())
 	assert.Error(t, err)
@@ -314,7 +314,7 @@ func TestAddKnownHost(t *testing.T) {
 	// AppendFile → success
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.AddKnownHost(t.Context(),
 		"controller.dev.sind.local", "ssh-ed25519 AAAA...")
@@ -332,7 +332,7 @@ func TestAddKnownHost_Error(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.AddKnownHost(t.Context(),
 		"controller.dev.sind.local", "ssh-ed25519 AAAA...")
@@ -352,7 +352,7 @@ func TestRemoveKnownHost(t *testing.T) {
 	// WriteFile → success
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
@@ -368,7 +368,7 @@ func TestRemoveKnownHost_LastEntry(t *testing.T) {
 	m.AddResult(existing, "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestRemoveKnownHost_DuplicateHostnames(t *testing.T) {
 	m.AddResult(existing, "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	require.NoError(t, err)
@@ -401,7 +401,7 @@ func TestRemoveKnownHost_NotFound(t *testing.T) {
 	m.AddResult(existing, "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.RemoveKnownHost(t.Context(), "worker-0.dev.sind.local")
 	require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestRemoveKnownHost_ReadError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)
@@ -426,7 +426,7 @@ func TestRemoveKnownHost_WriteError(t *testing.T) {
 	m.AddResult("controller.dev.sind.local ssh-ed25519 AAAA...\n", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	mgr := NewManager(c, testRealm)
 
 	err := mgr.RemoveKnownHost(t.Context(), "controller.dev.sind.local")
 	assert.Error(t, err)

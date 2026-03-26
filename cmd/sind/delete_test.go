@@ -43,15 +43,16 @@ func TestDeleteCluster_AllRejectsArgs(t *testing.T) {
 func TestDeleteClusterLifecycle(t *testing.T) {
 	c := realClient(t)
 	ctx := t.Context()
+	t.Setenv("SIND_REALM", testRealm)
 	cluster := "cli-del-" + testID
 
-	meshMgr := mesh.NewManager(c, mesh.DefaultRealm)
+	meshMgr := mesh.NewManager(c, testRealm)
 
-	netName := docker.NetworkName("sind-" + cluster + "-net")
-	ctrName := docker.ContainerName("sind-" + cluster + "-controller")
-	volConfig := docker.VolumeName("sind-" + cluster + "-config")
-	volMunge := docker.VolumeName("sind-" + cluster + "-munge")
-	volData := docker.VolumeName("sind-" + cluster + "-data")
+	netName := docker.NetworkName(testRealm + "-" + cluster + "-net")
+	ctrName := docker.ContainerName(testRealm + "-" + cluster + "-controller")
+	volConfig := docker.VolumeName(testRealm + "-" + cluster + "-config")
+	volMunge := docker.VolumeName(testRealm + "-" + cluster + "-munge")
+	volData := docker.VolumeName(testRealm + "-" + cluster + "-data")
 
 	t.Cleanup(func() {
 		bg := context.Background()

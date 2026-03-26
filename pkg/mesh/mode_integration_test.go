@@ -6,12 +6,22 @@ package mesh
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
+
+// testRealm is a per-process unique realm so parallel integration test
+// runs don't collide on Docker resource names.
+var testRealm = func() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("it-mesh-%x", b)
+}()
 
 func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 	t.Helper()

@@ -25,6 +25,10 @@ var testID = func() string {
 	return fmt.Sprintf("%x", b)
 }()
 
+// testRealm is a per-process unique realm so parallel integration test
+// runs don't collide on Docker resource names.
+var testRealm = "it-cmd-" + testID
+
 // executeWithDocker runs a CLI command backed by a real Docker client.
 // Uses context.Background(); for commands needing a deadline use executeWithDockerCtx.
 func executeWithDocker(args ...string) (string, string, error) {

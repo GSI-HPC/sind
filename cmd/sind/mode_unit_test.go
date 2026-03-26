@@ -12,6 +12,7 @@ import (
 )
 
 var testID = "unit"
+var testRealm = "sind"
 
 func executeWithDocker(_ ...string) (string, string, error) {
 	panic("executeWithDocker called in unit mode")

@@ -6,6 +6,7 @@ package cluster
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +20,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// testRealm is a per-process unique realm so parallel integration test
+// runs don't collide on Docker resource names.
+var testRealm = func() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("it-cluster-%x", b)
+}()
 
 func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 	t.Helper()
@@ -51,7 +60,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	}
 
 	clusterName := "it-cluster"
-	meshMgr := mesh.NewManager(c, mesh.DefaultRealm)
+	meshMgr := mesh.NewManager(c, testRealm)
 
 	t.Cleanup(func() {
 		bg := context.Background()
@@ -80,7 +89,7 @@ defaults:
 	require.Len(t, result.Nodes, 2)
 
 	// GetClusters.
-	clusters, err := GetClusters(ctx, c, mesh.DefaultRealm)
+	clusters, err := GetClusters(ctx, c, testRealm)
 	require.NoError(t, err)
 	var found bool
 	for _, cl := range clusters {
@@ -92,7 +101,7 @@ defaults:
 	assert.True(t, found, "cluster should appear in GetClusters")
 
 	// GetNodes.
-	nodes, err := GetNodes(ctx, c, mesh.DefaultRealm, clusterName)
+	nodes, err := GetNodes(ctx, c, testRealm, clusterName)
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
@@ -101,7 +110,7 @@ defaults:
 	require.NoError(t, err)
 
 	// Verify gone.
-	clusters, err = GetClusters(ctx, c, mesh.DefaultRealm)
+	clusters, err = GetClusters(ctx, c, testRealm)
 	require.NoError(t, err)
 	for _, cl := range clusters {
 		assert.NotEqual(t, clusterName, cl.Name)
