@@ -51,7 +51,7 @@ func TestGetNodeHealth_Controller(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-controller", "172.18.0.2")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -67,7 +67,7 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-compute-0", "172.18.0.3")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -83,7 +83,7 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-submitter", "172.18.0.4")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-submitter", "submitter")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-submitter", "submitter", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -102,7 +102,7 @@ func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "exited", health.Container)
@@ -116,7 +116,7 @@ func TestGetNodeHealth_InspectError(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
+	_, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting container")
@@ -134,7 +134,7 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -155,7 +155,7 @@ func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -174,7 +174,7 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-compute-0", "compute", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "exited", health.Container)
@@ -196,7 +196,7 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -216,7 +216,7 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -244,10 +244,10 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", "dev")
 
 	require.NoError(t, err)
-	assert.NotEmpty(t, health.IP)
+	assert.Equal(t, "172.18.0.2", health.IP)
 }
 
 // --- GetNetworkHealth ---

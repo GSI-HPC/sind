@@ -24,7 +24,8 @@ type NodeHealth struct {
 // GetNodeHealth checks the health of a single node container.
 // If the container is not running, remaining checks are skipped and
 // default to false. The role determines which Slurm services are checked.
-func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role string) (*NodeHealth, error) {
+// clusterName is used to select the cluster network IP.
+func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, role, clusterName string) (*NodeHealth, error) {
 	name := docker.ContainerName(containerName)
 
 	info, err := client.InspectContainer(ctx, name)
@@ -34,7 +35,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 
 	health := &NodeHealth{
 		Container: info.Status,
-		IP:        firstIP(info.IPs),
+		IP:        info.IPs[NetworkName(clusterName)],
 		Services:  make(map[string]bool),
 	}
 
@@ -63,7 +64,6 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 	return health, nil
 }
 
-// NetworkHealth holds the health status of cluster networking.
 // NetworkHealth holds the health and IPAM details of cluster networking.
 type NetworkHealth struct {
 	Mesh    bool   // sind-mesh network exists
@@ -175,7 +175,7 @@ func GetStatus(ctx context.Context, client *docker.Client, clusterName string) (
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := c.Labels[LabelRole]
 
-		health, err := GetNodeHealth(ctx, client, string(c.Name), role)
+		health, err := GetNodeHealth(ctx, client, string(c.Name), role, clusterName)
 		if err != nil {
 			return nil, fmt.Errorf("checking node %s: %w", shortName, err)
 		}
@@ -226,16 +226,4 @@ func roleServices(role string) []string {
 	default:
 		return nil
 	}
-}
-
-// firstIP returns the first IP address from the network map.
-// When multiple networks are present, the result is non-deterministic
-// but always non-empty if any network has an IP.
-func firstIP(ips map[docker.NetworkName]string) string {
-	for _, ip := range ips {
-		if ip != "" {
-			return ip
-		}
-	}
-	return ""
 }
