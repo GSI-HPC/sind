@@ -6,7 +6,11 @@
   --sind-text:      #2D3748;
   --sind-muted:     #94A3B8;
   --sind-dark:      #0F172A;
+}
 
+/* Light mode overrides */
+:root,
+:root[color-theme="light"] {
   --accent-color:      var(--sind-blue);
   --accent-color-lite: rgba(14, 165, 233, 0.15);
 
@@ -18,8 +22,8 @@
   --code-accent-color:      var(--sind-teal);
   --code-accent-color-lite: rgba(20, 184, 166, 0.15);
 
-  --footer-background:      var(--sind-dark);
-  --footer-font-color:      var(--sind-muted);
+  --footer-background:       var(--sind-dark);
+  --footer-font-color:       var(--sind-muted);
   --footer-link-color:       var(--sind-blue);
   --footer-link-color-visited: var(--sind-deep-teal);
 
@@ -30,22 +34,34 @@
 }
 
 /* Dark mode overrides */
-[color-theme="dark"] {
+:root[color-theme="dark"] {
   --body-background:    var(--sind-dark);
   --body-font-color:    #CBD5E1;
   --header-background:  #1E293B;
-  --footer-background:  #020617;
 
-  --accent-color:       var(--sind-blue);
-  --accent-color-lite:  rgba(14, 165, 233, 0.2);
-  --link-color:         var(--sind-blue);
+  --accent-color:       #1E293B;
+  --accent-color-lite:  #1a2332;
+
+  --link-color:         #38BDF8;
   --link-color-visited: var(--sind-teal);
 
-  --code-background:    #1E293B;
-  --code-accent-color:  var(--sind-teal);
-}
+  --code-background:         #1E293B;
+  --code-accent-color:       var(--sind-teal);
+  --code-accent-color-lite:  rgba(20, 184, 166, 0.15);
+  --code-font-color:         #CBD5E1;
+  --code-copy-background:    #1E293B;
+  --code-copy-font-color:    var(--sind-muted);
+  --code-copy-border-color:  #334155;
 
-/* Landing page logo */
-.gdoc-page__header img[alt="sind"] {
-  margin-bottom: 1rem;
+  --mark-color: rgba(14, 165, 233, 0.25);
+
+  --button-background:  var(--sind-blue);
+  --button-border-color: var(--sind-blue);
+
+  --control-icons: var(--sind-muted);
+
+  --footer-background:       #020617;
+  --footer-font-color:       var(--sind-muted);
+  --footer-link-color:       var(--sind-blue);
+  --footer-link-color-visited: var(--sind-teal);
 }
