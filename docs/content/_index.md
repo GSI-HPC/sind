@@ -18,9 +18,9 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offer
 
 {{< columns >}}
 
-### Multi-node & multi-cluster
+### Multi-node, multi-cluster & multi-realm
 
-Run controller, submitter, and worker nodes side by side — or spin up multiple clusters with shared networking.
+Run controller, submitter, and worker nodes side by side — or spin up multiple clusters across isolated realms with shared networking.
 
 <--->
 
