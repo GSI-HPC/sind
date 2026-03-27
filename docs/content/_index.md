@@ -55,3 +55,15 @@ Shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure s
 Just Docker and a sind container image. Usable as both a CLI tool and a Go library.
 
 {{< /columns >}}
+
+{{< columns >}}
+
+### AI-ready via MCP
+
+Built-in [MCP](https://modelcontextprotocol.io/) server lets AI assistants manage your Slurm clusters — just `sind mcp start`.
+
+<--->
+
+<--->
+
+{{< /columns >}}

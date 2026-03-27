@@ -44,6 +44,10 @@ Shutdown, reboot, freeze, and power-cycle individual nodes to simulate real-worl
 
 sind needs nothing but Docker and a container image. Install a single binary and you're ready to go. sind is also usable as a Go library for embedding cluster management into your own tooling.
 
+### AI-ready via MCP
+
+sind includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes all CLI commands as tools for AI assistants. Run `sind mcp start` to let tools like Claude, VS Code Copilot, or Cursor create clusters, check status, and manage nodes on your behalf. Register sind with your editor in one command — `sind mcp claude enable`, `sind mcp vscode enable`, or `sind mcp cursor enable`.
+
 ## Next steps
 
 Ready to try it? Head to the [Getting Started]({{< relref "getting-started" >}}) section to install sind and create your first cluster.

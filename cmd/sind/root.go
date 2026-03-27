@@ -3,6 +3,7 @@
 package main
 
 import (
+	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +33,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newEnterCommand())
 	cmd.AddCommand(newExecCommand())
 	cmd.AddCommand(newLogsCommand())
+	cmd.AddCommand(ophis.Command(nil))
 
 	return cmd
 }
