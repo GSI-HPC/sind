@@ -20,9 +20,9 @@ Setting up a multi-node Slurm cluster for development or testing traditionally r
 
 ## Features
 
-### Multi-node clusters
+### Multi-node & multi-cluster
 
-Each cluster consists of individual containers for controller, submitter, and worker nodes — all running systemd as their init system, just like real Slurm nodes.
+Each cluster consists of individual containers for controller, submitter, and worker nodes. Run multiple clusters simultaneously with shared networking for federation and multi-cluster testing scenarios.
 
 ### System containers
 

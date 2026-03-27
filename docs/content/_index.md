@@ -18,9 +18,9 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offer
 
 {{< columns >}}
 
-### Multi-node clusters
+### Multi-node & multi-cluster
 
-Controller, submitter, and worker nodes as individual containers with systemd init.
+Run controller, submitter, and worker nodes side by side — or spin up multiple clusters with shared networking.
 
 <--->
 

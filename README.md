@@ -16,7 +16,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 
 ## Features
 
-- **Multi-node clusters** — controller, submitter, and worker nodes as individual containers with systemd init
+- **Multi-node & multi-cluster** — run controller, submitter, and worker nodes side by side, or spin up multiple clusters with shared networking
 - **System containers** — full systemd-based nodes that emulate bare metal, compatible with Ansible, Chef, and other config management tools
 - **Cross-cluster networking** — shared mesh network with DNS for multi-cluster setups
 - **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
