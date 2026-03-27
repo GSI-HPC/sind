@@ -1,0 +1,10 @@
+---
+more:
+  - name: Releases
+    ref: "https://github.com/GSI-HPC/sind/releases"
+    external: true
+    icon: "gdoc_download"
+  - name: Source Code
+    ref: "https://github.com/GSI-HPC/sind"
+    external: true
+    icon: "gdoc_github"

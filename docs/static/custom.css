@@ -1,0 +1,51 @@
+/* sind brand colors */
+:root {
+  --sind-blue:      #0EA5E9;
+  --sind-teal:      #14B8A6;
+  --sind-deep-teal: #0D9488;
+  --sind-text:      #2D3748;
+  --sind-muted:     #94A3B8;
+  --sind-dark:      #0F172A;
+
+  --accent-color:      var(--sind-blue);
+  --accent-color-lite: rgba(14, 165, 233, 0.15);
+
+  --link-color:         var(--sind-blue);
+  --link-color-visited: var(--sind-deep-teal);
+
+  --body-font-color:    var(--sind-text);
+
+  --code-accent-color:      var(--sind-teal);
+  --code-accent-color-lite: rgba(20, 184, 166, 0.15);
+
+  --footer-background:      var(--sind-dark);
+  --footer-font-color:      var(--sind-muted);
+  --footer-link-color:       var(--sind-blue);
+  --footer-link-color-visited: var(--sind-deep-teal);
+
+  --mark-color: rgba(14, 165, 233, 0.15);
+
+  --button-background:  var(--sind-blue);
+  --button-border-color: var(--sind-blue);
+}
+
+/* Dark mode overrides */
+[color-theme="dark"] {
+  --body-background:    var(--sind-dark);
+  --body-font-color:    #CBD5E1;
+  --header-background:  #1E293B;
+  --footer-background:  #020617;
+
+  --accent-color:       var(--sind-blue);
+  --accent-color-lite:  rgba(14, 165, 233, 0.2);
+  --link-color:         var(--sind-blue);
+  --link-color-visited: var(--sind-teal);
+
+  --code-background:    #1E293B;
+  --code-accent-color:  var(--sind-teal);
+}
+
+/* Landing page logo */
+.gdoc-page__header img[alt="sind"] {
+  margin-bottom: 1rem;
+}
