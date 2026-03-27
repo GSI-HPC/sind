@@ -29,6 +29,15 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 # Install sind
 go install github.com/GSI-HPC/sind/cmd/sind@latest
 
+# Write a minimal cluster config
+cat > cluster.yaml <<'EOF'
+kind: Cluster
+name: dev
+nodes:
+  - controller
+  - worker: 2
+EOF
+
 # Create a cluster
 sind create cluster --config cluster.yaml
 
