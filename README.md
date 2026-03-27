@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://gsi-hpc.github.io/sind/getting-started/"><strong>🚀 Getting Started</strong></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://gsi-hpc.github.io/sind/"><strong>📖 Documentation</strong></a>
+  <a href="https://gsi-hpc.github.io/sind/getting-started/installation/"><strong>🚀 Getting Started</strong></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://gsi-hpc.github.io/sind/"><strong>📖 Documentation</strong></a>
 </p>
 
 ---
@@ -17,7 +17,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 ## Features
 
 - **Multi-node clusters** — controller, submitter, and worker nodes as individual containers with systemd init
-- **Realistic environment** — munge authentication, SSH access, DNS resolution
+- **System containers** — full systemd-based nodes that emulate bare metal, compatible with Ansible, Chef, and other config management tools
 - **Cross-cluster networking** — shared mesh network with DNS for multi-cluster setups
 - **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
 - **Power simulation** — shutdown, reboot, freeze, and cycle nodes to test Slurm failure handling

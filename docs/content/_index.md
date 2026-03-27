@@ -11,8 +11,8 @@ geekdocAnchor: false
 
 Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offers a familiar CLI experience for quickly spinning up and tearing down Slurm clusters.
 
-{{< button size="large" relref="getting-started/" >}}🚀 Getting Started{{< /button >}}
-{{< button size="large" relref="getting-started/" >}}📖 Documentation{{< /button >}}
+{{< button size="large" relref="getting-started/installation" >}}🚀 Getting Started{{< /button >}}
+{{< button size="large" relref="introduction/" >}}📖 Documentation{{< /button >}}
 
 ---
 
@@ -24,9 +24,9 @@ Controller, submitter, and worker nodes as individual containers with systemd in
 
 <--->
 
-### Realistic environment
+### System containers
 
-Munge authentication, SSH access, DNS resolution — everything you need for real Slurm testing.
+Full systemd-based nodes that emulate bare metal — use the same config management tools you already have.
 
 <--->
 
