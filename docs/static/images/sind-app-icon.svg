@@ -12,22 +12,16 @@
     <!-- Row 2 -->
     <rect x="0"   y="94" width="80" height="80" rx="14" fill="#14B8A6" opacity=".82"/>
     <rect x="94"  y="94" width="80" height="80" rx="14" fill="#0D9488"/>
-    <!-- Play/schedule triangle -->
-    <polygon points="120,114 120,154 148,134" fill="#fff" opacity=".90"/>
+    <!-- Server bars -->
+    <line x1="118" y1="122" x2="150" y2="122" stroke="#fff" stroke-width="3.5" opacity=".90" stroke-linecap="round"/>
+    <line x1="118" y1="134" x2="150" y2="134" stroke="#fff" stroke-width="3.5" opacity=".90" stroke-linecap="round"/>
+    <line x1="118" y1="146" x2="150" y2="146" stroke="#fff" stroke-width="3.5" opacity=".90" stroke-linecap="round"/>
     <rect x="188" y="94" width="80" height="80" rx="14" fill="#14B8A6" opacity=".58"/>
 
     <!-- Row 3 -->
     <rect x="0"   y="188" width="80" height="80" rx="14" fill="#0EA5E9" opacity=".48"/>
     <rect x="94"  y="188" width="80" height="80" rx="14" fill="#0EA5E9" opacity=".34"/>
     <rect x="188" y="188" width="80" height="80" rx="14" fill="#14B8A6" opacity=".40"/>
-
-    <!-- Docker lines on bottom-left block -->
-    <line x1="14" y1="236" x2="66" y2="236" stroke="#fff" stroke-width="3" opacity=".50" stroke-linecap="round"/>
-    <line x1="14" y1="245" x2="50" y2="245" stroke="#fff" stroke-width="3" opacity=".35" stroke-linecap="round"/>
-
-    <!-- Docker lines on bottom-center block -->
-    <line x1="108" y1="236" x2="160" y2="236" stroke="#fff" stroke-width="3" opacity=".38" stroke-linecap="round"/>
-    <line x1="108" y1="245" x2="144" y2="245" stroke="#fff" stroke-width="3" opacity=".26" stroke-linecap="round"/>
 
     <!-- Flow connectors between rows -->
     <line x1="40"  y1="82" x2="40"  y2="92" stroke="#0EA5E9" stroke-width="2.5" opacity=".38" stroke-linecap="round"/>
