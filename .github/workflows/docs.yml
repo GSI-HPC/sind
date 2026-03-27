@@ -37,7 +37,7 @@ jobs:
           curl -sL https://github.com/thegeeklab/hugo-geekdoc/releases/latest/download/hugo-geekdoc.tar.gz | tar -xz -C themes/hugo-geekdoc/
 
       - name: Build
-        run: hugo --minify --baseURL "https://gsi-hpc.github.io/sind/"
+        run: hugo --baseURL "https://gsi-hpc.github.io/sind/"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
