@@ -48,6 +48,10 @@ sind status
 sind delete cluster dev
 ```
 
+## AI disclosure
+
+Parts of this codebase were developed with the assistance of AI tools. All contributions are reviewed by humans.
+
 ## License
 
 sind is licensed under the [GNU Lesser General Public License v3.0](LICENSE).
