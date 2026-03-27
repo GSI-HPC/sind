@@ -26,3 +26,4 @@ dist/
 PLAN*.md
 CLAUDE.md
 /images/
+dockmate-debug.log
