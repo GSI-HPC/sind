@@ -1,0 +1,50 @@
+<p align="center">
+  <img src="docs/static/images/sind-icon-tagline.svg" alt="sind — Slurm in Docker" width="200" />
+</p>
+
+<p align="center">
+  <strong>Create and manage containerized Slurm clusters for development, testing, and CI/CD workflows.</strong>
+</p>
+
+---
+
+Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** offers a familiar CLI experience for quickly spinning up and tearing down Slurm clusters.
+
+## Features
+
+- **Multi-node clusters** — controller, submitter, and worker nodes as individual containers with systemd init
+- **Realistic environment** — munge authentication, SSH access, DNS resolution
+- **Cross-cluster networking** — shared mesh network with DNS for multi-cluster setups
+- **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
+- **Power simulation** — shutdown, reboot, freeze, and cycle nodes to test Slurm failure handling
+- **Minimal dependencies** — just Docker and a sind container image; usable as both a CLI tool and a Go library
+
+## Quick start
+
+```bash
+# Install sind
+go install github.com/GSI-HPC/sind/cmd/sind@latest
+
+# Create a cluster
+sind create cluster --config cluster.yaml
+
+# Check status
+sind status
+
+# Delete cluster
+sind delete cluster dev
+```
+
+## Documentation
+
+Full documentation is available at **[gsi-hpc.github.io/sind](https://gsi-hpc.github.io/sind/)**.
+
+## Contributing
+
+Contributions are welcome! See the [Contributing](https://gsi-hpc.github.io/sind/contributing/) section in the documentation for development setup, testing guidelines, and conventions.
+
+## License
+
+sind is licensed under the [GNU Lesser General Public License v3.0](LICENSE).
+
+Copyright © GSI Helmholtzzentrum für Schwerionenforschung GmbH
