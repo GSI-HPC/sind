@@ -36,9 +36,9 @@ Run multiple clusters simultaneously with a shared mesh network and automatic DN
 
 Dynamically add and remove worker nodes from running clusters. Test how your workloads react to nodes joining and leaving — without touching the controller.
 
-### Power simulation
+### Power cycle simulation
 
-Shutdown, reboot, freeze, and power-cycle individual nodes to test how Slurm and your jobs handle failures. Validate your fault-tolerance strategies before they matter.
+Shutdown, reboot, freeze, and power-cycle individual nodes to simulate real-world failure scenarios. Validate your fault-tolerance strategies before they matter.
 
 ### Minimal dependencies
 

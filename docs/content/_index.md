@@ -44,9 +44,9 @@ Dynamically add and remove worker nodes from running clusters.
 
 <--->
 
-### Power simulation
+### Power cycle simulation
 
-Shutdown, reboot, freeze, and cycle nodes to test Slurm failure handling.
+Shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios.
 
 <--->
 

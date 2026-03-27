@@ -20,7 +20,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 - **System containers** — full systemd-based nodes that emulate bare metal, compatible with Ansible, Chef, and other config management tools
 - **Cross-cluster networking** — shared mesh network with DNS for multi-cluster setups
 - **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
-- **Power simulation** — shutdown, reboot, freeze, and cycle nodes to test Slurm failure handling
+- **Power cycle simulation** — shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios
 - **Minimal dependencies** — just Docker and a sind container image; usable as both a CLI tool and a Go library
 
 ## Quick start
