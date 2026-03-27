@@ -3,7 +3,11 @@
 </p>
 
 <p align="center">
-  <strong>Create and manage containerized Slurm clusters for development, testing, and CI/CD workflows.</strong>
+  <strong>Create and manage containerized <a href="https://slurm.schedmd.com/">Slurm</a> clusters for development, testing, and CI/CD workflows.</strong>
+</p>
+
+<p align="center">
+  <a href="https://gsi-hpc.github.io/sind/getting-started/"><strong>🚀 Getting Started</strong></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://gsi-hpc.github.io/sind/"><strong>📖 Documentation</strong></a>
 </p>
 
 ---
@@ -34,14 +38,6 @@ sind status
 # Delete cluster
 sind delete cluster dev
 ```
-
-## Documentation
-
-Full documentation is available at **[gsi-hpc.github.io/sind](https://gsi-hpc.github.io/sind/)**.
-
-## Contributing
-
-Contributions are welcome! See the [Contributing](https://gsi-hpc.github.io/sind/contributing/) section in the documentation for development setup, testing guidelines, and conventions.
 
 ## License
 

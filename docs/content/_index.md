@@ -7,7 +7,7 @@ geekdocAnchor: false
 
 <img src="images/sind-icon-tagline.svg" alt="sind — Slurm in Docker" width="200" />
 
-**Create and manage containerized Slurm clusters for development, testing, and CI/CD workflows.**
+**Create and manage containerized [Slurm](https://slurm.schedmd.com/) clusters for development, testing, and CI/CD workflows.**
 
 Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offers a familiar CLI experience for quickly spinning up and tearing down Slurm clusters.
 
