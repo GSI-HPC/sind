@@ -4,10 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "image/**"
+      - "Dockerfile"
+      - "docker-bake.hcl"
   pull_request:
     paths:
-      - "image/**"
+      - "Dockerfile"
+      - "docker-bake.hcl"
   workflow_dispatch:
 
 permissions:
@@ -33,7 +35,6 @@ jobs:
       - name: Build and push
         uses: docker/bake-action@v7
         with:
-          workdir: image
           push: ${{ github.event_name != 'pull_request' }}
 
       - name: Tag latest if this is the highest version
@@ -42,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           image=ghcr.io/gsi-hpc/sind-node
-          built=$(grep -m1 -oP 'ARG SLURM_VERSION=\K[0-9.]+' image/Dockerfile)
+          built=$(grep -m1 -oP 'ARG SLURM_VERSION=\K[0-9.]+' Dockerfile)
 
           # Find the highest existing version tag in the registry
           highest=$(gh api --paginate \

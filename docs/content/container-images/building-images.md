@@ -23,13 +23,12 @@ The generic image:
 - Contains all daemons (slurmctld, slurmd, munge, sshd)
 - Uses systemd as init (PID 1)
 
-sind enables the appropriate Slurm services based on node role at container start. The Dockerfile is at `images/generic/Dockerfile`.
+sind enables the appropriate Slurm services based on node role at container start. The `Dockerfile` and `docker-bake.hcl` are in the repository root.
 
 ### Building the generic image
 
 ```bash
-docker build -t sind-node:25.11.4 images/generic/
-docker build -t sind-node:25.11.4 --build-arg SLURM_VERSION=25.11.4 images/generic/
+docker buildx bake
 ```
 
 ## Custom image requirements
@@ -99,4 +98,4 @@ RUN systemctl mask \
 
 ## Example Dockerfiles
 
-See the `images/` directory in the repository for complete examples.
+See the `Dockerfile` in the repository root for a complete example.

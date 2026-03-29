@@ -27,8 +27,7 @@
 #   /data       — user-facing shared data directory
 #
 # Build:
-#   docker buildx bake                          # builds and tags :latest
-#   docker buildx bake --set *.tags=myimg:dev   # custom tag
+#   docker buildx bake
 
 # ==============================================================================
 # Stage 1: Builder — compile Slurm from source

@@ -719,7 +719,7 @@ The generic image:
 - Contains all daemons (slurmctld, slurmd)
 - sind enables the appropriate services based on node role
 
-The Dockerfile is located at `images/generic/Dockerfile`.
+The `Dockerfile` and `docker-bake.hcl` are in the repository root.
 
 ### Custom Images
 
