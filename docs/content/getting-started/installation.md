@@ -6,26 +6,34 @@ description: "Prerequisites and installation instructions"
 toc: true
 ---
 
-## Prerequisites
+## Install
 
-- **Linux host** with cgroupv2 and the `nsdelegate` mount option:
-  ```bash
-  mount -o remount,nsdelegate /sys/fs/cgroup
-  ```
-- **Docker Engine 28.0+** (required for `--security-opt writable-cgroups=true`)
-- **Go 1.21+** (for building from source)
-
-## Install from source
+{{< tabs "install" >}}
+{{< tab "Pre-built binary (linux/amd64)" >}}
+```bash
+curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
+chmod +x ./sind
+sudo mv ./sind /usr/local/bin/sind
+```
+{{< /tab >}}
+{{< tab "From source" >}}
+Build and install with Go:
 
 ```bash
 go install github.com/GSI-HPC/sind/cmd/sind@latest
 ```
+{{< /tab >}}
+{{< /tabs >}}
 
-## Verify installation
+## Verify
+
+Check that sind is installed and your system meets all prerequisites:
 
 ```bash
-sind --version
+sind doctor
 ```
+
+This verifies Docker Engine version and cgroup configuration, and prints fix instructions if anything is missing.
 
 ## Container image
 

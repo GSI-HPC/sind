@@ -30,6 +30,28 @@ func TestImageLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestServerVersion(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("29.3.0\n", "", nil)
+	c := NewClient(&m)
+
+	v, err := c.ServerVersion(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "29.3.0", v)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"version", "--format", "{{.Server.Version}}"}, m.Calls[0].Args)
+}
+
+func TestServerVersion_Error(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "Cannot connect", fmt.Errorf("connection refused"))
+	c := NewClient(&m)
+
+	_, err := c.ServerVersion(t.Context())
+	assert.Error(t, err)
+}
+
 func TestRunEphemeral(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("slurm 25.11.0\n", "", nil)

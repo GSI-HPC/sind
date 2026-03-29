@@ -2,7 +2,19 @@
 
 package docker
 
-import "context"
+import (
+	"context"
+	"strings"
+)
+
+// ServerVersion returns the Docker Engine server version string.
+func (c *Client) ServerVersion(ctx context.Context) (string, error) {
+	stdout, _, err := c.run(ctx, "version", "--format", "{{.Server.Version}}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(stdout), nil
+}
 
 // RunEphemeral runs a command in a temporary container and returns its stdout.
 // The container is removed after the command completes (docker run --rm).

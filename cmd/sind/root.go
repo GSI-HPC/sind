@@ -33,6 +33,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newEnterCommand())
 	cmd.AddCommand(newExecCommand())
 	cmd.AddCommand(newLogsCommand())
+	cmd.AddCommand(newDoctorCommand())
 	cmd.AddCommand(ophis.Command(nil))
 
 	return cmd
