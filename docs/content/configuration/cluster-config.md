@@ -36,7 +36,7 @@ kind: Cluster
 name: test-cluster
 
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:25.11.2
+  image: ghcr.io/gsi-hpc/sind-node:latest
   cpus: 2
   memory: 4g
   tmpSize: 1g

@@ -49,7 +49,7 @@ sind discovers the Slurm version before creating any cluster resources by runnin
 
 ```bash
 docker run --rm <image> scontrol --version
-# Output: "slurm 25.11.0"
+# Output: "slurm 25.11.4"
 ```
 
 This happens once per unique image. The version is stored as a label on cluster resources (`sind.slurm.version`) and used for:
