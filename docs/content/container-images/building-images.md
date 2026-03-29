@@ -2,13 +2,13 @@
 weight: 510
 title: "Building Images"
 icon: "build"
-description: "Generic image and custom image requirements"
+description: "Default image and custom image requirements"
 toc: true
 ---
 
-## Generic image
+## Default image
 
-sind provides a generic multi-role image that works for all node types:
+sind provides a default multi-role image that works for all node types:
 
 ```
 ghcr.io/gsi-hpc/sind-node:latest
@@ -17,15 +17,17 @@ ghcr.io/gsi-hpc/sind-node:<slurm-version>
 
 This is the default image when `defaults.image` is not specified.
 
-The generic image:
+The default image:
 - Is based on Rocky Linux 10
 - Builds Slurm from source
 - Contains all daemons (slurmctld, slurmd, munge, sshd)
 - Uses systemd as init (PID 1)
 
-sind enables the appropriate Slurm services based on node role at container start. The `Dockerfile` and `docker-bake.hcl` are in the repository root.
+sind enables the appropriate Slurm services based on node role at container start.
 
-### Building the generic image
+### Building locally
+
+Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root:
 
 ```bash
 docker buildx bake
@@ -96,6 +98,3 @@ RUN systemctl mask \
     console-getty.service
 ```
 
-## Example Dockerfiles
-
-See the `Dockerfile` in the repository root for a complete example.
