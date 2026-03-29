@@ -6,6 +6,29 @@
   --sind-text:      #2D3748;
   --sind-muted:     #94A3B8;
   --sind-dark:      #0F172A;
+
+  --sind-dark-body-background:         var(--sind-dark);
+  --sind-dark-body-font-color:         #CBD5E1;
+  --sind-dark-header-background:       #1E293B;
+  --sind-dark-accent-color:            #1E293B;
+  --sind-dark-accent-color-lite:       #1a2332;
+  --sind-dark-link-color:              #38BDF8;
+  --sind-dark-link-color-visited:      var(--sind-teal);
+  --sind-dark-code-background:         #1E293B;
+  --sind-dark-code-accent-color:       var(--sind-teal);
+  --sind-dark-code-accent-color-lite:  rgba(20, 184, 166, 0.15);
+  --sind-dark-code-font-color:         #CBD5E1;
+  --sind-dark-code-copy-background:    #1E293B;
+  --sind-dark-code-copy-font-color:    var(--sind-muted);
+  --sind-dark-code-copy-border-color:  #334155;
+  --sind-dark-mark-color:              rgba(14, 165, 233, 0.25);
+  --sind-dark-button-background:       var(--sind-blue);
+  --sind-dark-button-border-color:     var(--sind-blue);
+  --sind-dark-control-icons:           var(--sind-muted);
+  --sind-dark-footer-background:       #020617;
+  --sind-dark-footer-font-color:       var(--sind-muted);
+  --sind-dark-footer-link-color:       var(--sind-blue);
+  --sind-dark-footer-link-color-visited: var(--sind-teal);
 }
 
 /* Light mode overrides */
@@ -33,35 +56,55 @@
   --button-border-color: var(--sind-blue);
 }
 
-/* Dark mode overrides */
+/* Dark mode overrides — explicit toggle and auto (OS preference) */
 :root[color-theme="dark"] {
-  --body-background:    var(--sind-dark);
-  --body-font-color:    #CBD5E1;
-  --header-background:  #1E293B;
+  --body-background:         var(--sind-dark-body-background);
+  --body-font-color:         var(--sind-dark-body-font-color);
+  --header-background:       var(--sind-dark-header-background);
+  --accent-color:            var(--sind-dark-accent-color);
+  --accent-color-lite:       var(--sind-dark-accent-color-lite);
+  --link-color:              var(--sind-dark-link-color);
+  --link-color-visited:      var(--sind-dark-link-color-visited);
+  --code-background:         var(--sind-dark-code-background);
+  --code-accent-color:       var(--sind-dark-code-accent-color);
+  --code-accent-color-lite:  var(--sind-dark-code-accent-color-lite);
+  --code-font-color:         var(--sind-dark-code-font-color);
+  --code-copy-background:    var(--sind-dark-code-copy-background);
+  --code-copy-font-color:    var(--sind-dark-code-copy-font-color);
+  --code-copy-border-color:  var(--sind-dark-code-copy-border-color);
+  --mark-color:              var(--sind-dark-mark-color);
+  --button-background:       var(--sind-dark-button-background);
+  --button-border-color:     var(--sind-dark-button-border-color);
+  --control-icons:           var(--sind-dark-control-icons);
+  --footer-background:       var(--sind-dark-footer-background);
+  --footer-font-color:       var(--sind-dark-footer-font-color);
+  --footer-link-color:       var(--sind-dark-footer-link-color);
+  --footer-link-color-visited: var(--sind-dark-footer-link-color-visited);
+}
 
-  --accent-color:       #1E293B;
-  --accent-color-lite:  #1a2332;
-
-  --link-color:         #38BDF8;
-  --link-color-visited: var(--sind-teal);
-
-  --code-background:         #1E293B;
-  --code-accent-color:       var(--sind-teal);
-  --code-accent-color-lite:  rgba(20, 184, 166, 0.15);
-  --code-font-color:         #CBD5E1;
-  --code-copy-background:    #1E293B;
-  --code-copy-font-color:    var(--sind-muted);
-  --code-copy-border-color:  #334155;
-
-  --mark-color: rgba(14, 165, 233, 0.25);
-
-  --button-background:  var(--sind-blue);
-  --button-border-color: var(--sind-blue);
-
-  --control-icons: var(--sind-muted);
-
-  --footer-background:       #020617;
-  --footer-font-color:       var(--sind-muted);
-  --footer-link-color:       var(--sind-blue);
-  --footer-link-color-visited: var(--sind-teal);
+@media (prefers-color-scheme: dark) {
+  :root:not([color-theme]) {
+    --body-background:         var(--sind-dark-body-background);
+    --body-font-color:         var(--sind-dark-body-font-color);
+    --header-background:       var(--sind-dark-header-background);
+    --accent-color:            var(--sind-dark-accent-color);
+    --accent-color-lite:       var(--sind-dark-accent-color-lite);
+    --link-color:              var(--sind-dark-link-color);
+    --link-color-visited:      var(--sind-dark-link-color-visited);
+    --code-background:         var(--sind-dark-code-background);
+    --code-accent-color:       var(--sind-dark-code-accent-color);
+    --code-accent-color-lite:  var(--sind-dark-code-accent-color-lite);
+    --code-font-color:         var(--sind-dark-code-font-color);
+    --code-copy-background:    var(--sind-dark-code-copy-background);
+    --code-copy-font-color:    var(--sind-dark-code-copy-font-color);
+    --code-copy-border-color:  var(--sind-dark-code-copy-border-color);
+    --mark-color:              var(--sind-dark-mark-color);
+    --button-background:       var(--sind-dark-button-background);
+    --button-border-color:     var(--sind-dark-button-border-color);
+    --control-icons:           var(--sind-dark-control-icons);
+    --footer-background:       var(--sind-dark-footer-background);
+    --footer-font-color:       var(--sind-dark-footer-font-color);
+    --footer-link-color:       var(--sind-dark-footer-link-color);
+    --footer-link-color-visited: var(--sind-dark-footer-link-color-visited);
+  }
 }
