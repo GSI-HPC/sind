@@ -1,0 +1,57 @@
+name: Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/**"
+  pull_request:
+    paths:
+      - "image/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/bake-action@v7
+        with:
+          workdir: image
+          push: ${{ github.event_name != 'pull_request' }}
+
+      - name: Tag latest if this is the highest version
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image=ghcr.io/gsi-hpc/sind-node
+          built=$(grep -m1 -oP 'ARG SLURM_VERSION=\K[0-9.]+' image/Dockerfile)
+
+          # Find the highest existing version tag in the registry
+          highest=$(gh api --paginate \
+            /orgs/GSI-HPC/packages/container/sind-node/versions \
+            --jq '.[].metadata.container.tags[]' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1)
+
+          # Tag as latest only if the built version is >= the highest published
+          if [ -z "$highest" ] || [ "$(printf '%s\n%s' "$highest" "$built" | sort -V | tail -1)" = "$built" ]; then
+            docker buildx imagetools create "$image:$built" --tag "$image:latest"
+          fi
