@@ -55,7 +55,7 @@ func TestDoctorCommand_DockerTooOld(t *testing.T) {
 
 func TestDoctorCommand_DockerNotReachable(t *testing.T) {
 	var m docker.MockExecutor
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(_ []string, _ string) docker.MockResult {
 		return docker.MockResult{Stderr: "Cannot connect to the Docker daemon", Err: assert.AnError}
 	}
 

@@ -80,8 +80,8 @@ func TestMockExecutor_RecordsCalls(t *testing.T) {
 	m.AddResult("ok\n", "", nil)
 	m.AddResult("", "", nil)
 
-	m.Run(t.Context(), "docker", "ps")
-	m.Run(t.Context(), "docker", "run", "--rm", "alpine")
+	_, _, _ = m.Run(t.Context(), "docker", "ps")
+	_, _, _ = m.Run(t.Context(), "docker", "run", "--rm", "alpine")
 
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t, MockCall{Name: "docker", Args: []string{"ps"}}, m.Calls[0])
@@ -123,7 +123,7 @@ func TestMockExecutor_WithStdinError(t *testing.T) {
 
 func TestMockExecutor_OnCall(t *testing.T) {
 	var m MockExecutor
-	m.OnCall = func(args []string, stdin string) MockResult {
+	m.OnCall = func(_ []string, _ string) MockResult {
 		return MockResult{Stdout: "dispatched", Stderr: "", Err: nil}
 	}
 
@@ -138,7 +138,7 @@ func TestMockExecutor_WithStdin(t *testing.T) {
 	m.AddResult("", "", nil)
 
 	stdin := strings.NewReader("key-data")
-	m.RunWithStdin(t.Context(), stdin, "docker", "exec", "-i", "node")
+	_, _, _ = m.RunWithStdin(t.Context(), stdin, "docker", "exec", "-i", "node")
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, "docker", m.Calls[0].Name)

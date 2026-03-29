@@ -8,12 +8,13 @@ import (
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveRealm_FlagOverridesAll(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("realm", "", "")
-	cmd.Flags().Set("realm", "from-flag")
+	require.NoError(t, cmd.Flags().Set("realm", "from-flag"))
 
 	result := resolveRealm(cmd, "from-config")
 	assert.Equal(t, "from-flag", result)

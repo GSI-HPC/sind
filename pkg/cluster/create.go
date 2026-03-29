@@ -177,7 +177,6 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 func createAllNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, nodeConfigs []RunConfig) error {
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
-		nc := nc
 		g.Go(func() error {
 			_, err := CreateNode(gctx, client, meshMgr, nc)
 			if err != nil {
@@ -208,7 +207,6 @@ func setupNodes(ctx context.Context, client *docker.Client, realm, clusterName, 
 
 	g, gctx := errgroup.WithContext(ctx)
 	for i, nc := range nodeConfigs {
-		i, nc := i, nc
 		g.Go(func() error {
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 
@@ -248,7 +246,7 @@ func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurm
 	return &Cluster{
 		Name:         clusterName,
 		SlurmVersion: slurmVersion,
-		Status:       StatusRunning,
+		State:        StateRunning,
 		Nodes:        nodes,
 	}, nil
 }
@@ -275,7 +273,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 			Role:        nc.Role,
 			ContainerID: nr.info.ID,
 			IP:          nr.info.IPs[NetworkName(meshMgr.Realm, clusterName)],
-			Status:      StatusRunning,
+			State:       StateRunning,
 		})
 	}
 	return nodes, nil
@@ -293,7 +291,6 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration) error {
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
-		nc := nc
 		var service string
 		var slurmProbe probe.Probe
 		switch nc.Role {

@@ -129,7 +129,7 @@ func GetVolumeHealth(ctx context.Context, client *docker.Client, realm, clusterN
 
 	for _, vtype := range []string{"config", "munge", "data"} {
 		volName := VolumeName(realm, clusterName, vtype)
-		exists, err := client.VolumeExists(ctx, docker.VolumeName(volName))
+		exists, err := client.VolumeExists(ctx, volName)
 		if err != nil {
 			return nil, fmt.Errorf("checking volume %s: %w", volName, err)
 		}
@@ -153,10 +153,10 @@ type NodeStatus struct {
 	Health *NodeHealth
 }
 
-// ClusterStatus holds the full status of a sind cluster.
-type ClusterStatus struct {
+// Status holds the full status of a sind cluster.
+type Status struct {
 	Name    string
-	Status  Status
+	State   State
 	Nodes   []*NodeStatus
 	Network *NetworkHealth
 	Volumes *VolumeHealth
@@ -164,7 +164,7 @@ type ClusterStatus struct {
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
 // and volume health information.
-func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName string) (*ClusterStatus, error) {
+func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName string) (*Status, error) {
 	// List all containers in this cluster.
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
@@ -207,9 +207,9 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nil, err
 	}
 
-	return &ClusterStatus{
+	return &Status{
 		Name:    clusterName,
-		Status:  aggregateStatus(states),
+		State:   aggregateState(states),
 		Nodes:   nodes,
 		Network: network,
 		Volumes: volumes,

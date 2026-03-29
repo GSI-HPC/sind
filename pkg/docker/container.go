@@ -254,11 +254,16 @@ func (c *Client) CopyFilesToContainer(ctx context.Context, container ContainerNa
 
 	for _, name := range names {
 		f := files[name]
-		// WriteHeader and Write cannot fail on a bytes.Buffer.
-		tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: f.Mode})
-		tw.Write(f.Content)
+		if err := tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: f.Mode}); err != nil {
+			return fmt.Errorf("writing tar header for %s: %w", name, err)
+		}
+		if _, err := tw.Write(f.Content); err != nil {
+			return fmt.Errorf("writing tar content for %s: %w", name, err)
+		}
 	}
-	tw.Close()
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("closing tar writer: %w", err)
+	}
 
 	_, _, err := c.runWithStdin(ctx, &buf, "cp", "-", string(container)+":"+destDir)
 	return err
@@ -283,18 +288,16 @@ func (c *Client) CopyFromContainer(ctx context.Context, container ContainerName,
 		return nil, err
 	}
 	tr := tar.NewReader(strings.NewReader(stdout))
-	for {
-		_, err := tr.Next()
-		if err == io.EOF {
-			return nil, fmt.Errorf("file not found in tar output for %s:%s", container, srcPath)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("reading tar output: %w", err)
-		}
-		data, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, fmt.Errorf("reading file content: %w", err)
-		}
-		return data, nil
+	_, err = tr.Next()
+	if err == io.EOF {
+		return nil, fmt.Errorf("file not found in tar output for %s:%s", container, srcPath)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("reading tar output: %w", err)
+	}
+	data, err := io.ReadAll(tr)
+	if err != nil {
+		return nil, fmt.Errorf("reading file content: %w", err)
+	}
+	return data, nil
 }

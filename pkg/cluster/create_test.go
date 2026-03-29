@@ -707,8 +707,8 @@ func notFoundErr(t *testing.T) *exec.ExitError {
 func tarArchive(name, content string) string {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
-	tw.Write([]byte(content))
+	_ = tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
+	_, _ = tw.Write([]byte(content))
 	tw.Close()
 	return buf.String()
 }
@@ -852,14 +852,14 @@ func TestCreate_FullCluster(t *testing.T) {
 	require.NotNil(t, cluster)
 	assert.Equal(t, "dev", cluster.Name)
 	assert.Equal(t, "25.11.0", cluster.SlurmVersion)
-	assert.Equal(t, StatusRunning, cluster.Status)
+	assert.Equal(t, StateRunning, cluster.State)
 	require.Len(t, cluster.Nodes, 2)
 	assert.Equal(t, "controller", cluster.Nodes[0].Name)
 	assert.Equal(t, "controller", cluster.Nodes[0].Role)
 	assert.Equal(t, "worker-0", cluster.Nodes[1].Name)
 	assert.Equal(t, "worker", cluster.Nodes[1].Role)
-	assert.Equal(t, StatusRunning, cluster.Nodes[0].Status)
-	assert.Equal(t, StatusRunning, cluster.Nodes[1].Status)
+	assert.Equal(t, StateRunning, cluster.Nodes[0].State)
+	assert.Equal(t, StateRunning, cluster.Nodes[1].State)
 }
 
 func TestCreate_PreflightFails(t *testing.T) {

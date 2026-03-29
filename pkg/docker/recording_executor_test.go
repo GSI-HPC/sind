@@ -15,7 +15,7 @@ func TestRecordingExecutor_Calls(t *testing.T) {
 	m.AddResult("out", "", nil)
 	rec := &RecordingExecutor{Inner: &m}
 
-	rec.Run(t.Context(), "docker", "ps")
+	_, _, _ = rec.Run(t.Context(), "docker", "ps")
 
 	calls := rec.Calls()
 	require.Len(t, calls, 1)
@@ -28,7 +28,7 @@ func TestRecordingExecutor_Dump(t *testing.T) {
 	m.AddResult("out", "warn", fmt.Errorf("fail"))
 	rec := &RecordingExecutor{Inner: &m}
 
-	rec.Run(t.Context(), "docker", "ps")
+	_, _, _ = rec.Run(t.Context(), "docker", "ps")
 
 	dump := rec.Dump()
 	assert.Contains(t, dump, "docker ps")

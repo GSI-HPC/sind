@@ -279,7 +279,7 @@ func workerAddOnCall(t *testing.T) func([]string, string) docker.MockResult {
 		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
 		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
 
-	return func(args []string, stdin string) docker.MockResult {
+	return func(args []string, _ string) docker.MockResult {
 		if len(args) == 0 {
 			return docker.MockResult{}
 		}
@@ -402,7 +402,7 @@ func TestWorkerAdd_Managed(t *testing.T) {
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "worker-1", nodes[0].Name)
 	assert.Equal(t, "worker", nodes[0].Role)
-	assert.Equal(t, StatusRunning, nodes[0].Status)
+	assert.Equal(t, StateRunning, nodes[0].State)
 
 	// Verify key docker calls were made.
 	var createArgs, scontrolCalled, slurmdEnabled bool
@@ -512,7 +512,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "worker-1", nodes[0].Name)
 	assert.Equal(t, "worker", nodes[0].Role)
-	assert.Equal(t, StatusRunning, nodes[0].Status)
+	assert.Equal(t, StateRunning, nodes[0].State)
 
 	// Verify slurm config was NOT updated and slurmd was NOT enabled.
 	for _, call := range m.Calls {
@@ -542,7 +542,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 func workerRemoveOnCall(t *testing.T, nodesConf string) func([]string, string) docker.MockResult {
 	t.Helper()
 
-	return func(args []string, stdin string) docker.MockResult {
+	return func(args []string, _ string) docker.MockResult {
 		if len(args) == 0 {
 			return docker.MockResult{}
 		}
@@ -1095,7 +1095,7 @@ func TestWorkerRemove_DuplicateNames(t *testing.T) {
 func TestWorkerRemove_EmptyNames(t *testing.T) {
 	// Empty shortNames is a no-op — no docker calls should be made.
 	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	m.OnCall = func(_ []string, _ string) docker.MockResult {
 		return docker.MockResult{Err: fmt.Errorf("should not be called")}
 	}
 	client := docker.NewClient(&m)
@@ -1397,7 +1397,7 @@ func workerLifecycleOnCall(t *testing.T) func([]string, string) docker.MockResul
 	// Track whether worker-1 has been added so remove can include it.
 	added := false
 
-	return func(args []string, stdin string) docker.MockResult {
+	return func(args []string, _ string) docker.MockResult {
 		if len(args) == 0 {
 			return docker.MockResult{}
 		}
@@ -1516,7 +1516,7 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "worker-1", nodes[0].Name)
 	assert.Equal(t, "worker", nodes[0].Role)
-	assert.Equal(t, StatusRunning, nodes[0].Status)
+	assert.Equal(t, StateRunning, nodes[0].State)
 
 	// Remove the worker.
 	err = WorkerRemove(ctx, client, mgr, "dev", []string{"worker-1"})

@@ -4,14 +4,14 @@ package cluster
 
 import "github.com/GSI-HPC/sind/pkg/docker"
 
-// Status represents the state of a cluster or node.
-type Status string
+// State represents the state of a cluster or node.
+type State string
 
 const (
-	StatusRunning Status = "running"
-	StatusStopped Status = "stopped"
-	StatusPaused  Status = "paused"
-	StatusUnknown Status = "unknown"
+	StateRunning State = "running"
+	StateStopped State = "stopped"
+	StatePaused  State = "paused"
+	StateUnknown State = "unknown"
 )
 
 // Cluster represents a live sind cluster as it exists in Docker.
@@ -19,7 +19,7 @@ const (
 type Cluster struct {
 	Name         string
 	SlurmVersion string
-	Status       Status
+	State        State
 	Nodes        []*Node
 }
 
@@ -29,5 +29,5 @@ type Node struct {
 	Role        string             // "controller", "submitter", "worker"
 	ContainerID docker.ContainerID // Docker container ID
 	IP          string             // container IP address
-	Status      Status
+	State       State
 }

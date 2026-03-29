@@ -1056,9 +1056,9 @@ func corefileTar(t *testing.T, entries []string) string {
 	content := []byte(generateCorefile(entries))
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	tw.WriteHeader(&tar.Header{Name: "Corefile", Size: int64(len(content)), Mode: 0644})
-	tw.Write(content)
-	tw.Close()
+	_ = tw.WriteHeader(&tar.Header{Name: "Corefile", Size: int64(len(content)), Mode: 0644})
+	_, _ = tw.Write(content)
+	_ = tw.Close()
 	return buf.String()
 }
 

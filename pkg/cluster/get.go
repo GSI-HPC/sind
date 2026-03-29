@@ -11,11 +11,11 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-// ClusterSummary holds summary information about a sind cluster.
-type ClusterSummary struct {
+// Summary holds summary information about a sind cluster.
+type Summary struct {
 	Name         string
 	SlurmVersion string
-	Status       Status
+	State        State
 	NodeCount    int
 	Submitters   int
 	Controllers  int
@@ -24,7 +24,7 @@ type ClusterSummary struct {
 
 // GetClusters lists all sind clusters by querying Docker for containers
 // with the sind.cluster label. Containers are grouped by cluster name.
-func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*ClusterSummary, error) {
+func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*Summary, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return nil, fmt.Errorf("listing sind containers: %w", err)
@@ -35,7 +35,7 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*C
 
 	// Group containers by cluster name.
 	type clusterData struct {
-		summary *ClusterSummary
+		summary *Summary
 		states  []string
 	}
 	byCluster := make(map[string]*clusterData)
@@ -47,7 +47,7 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*C
 		cd, ok := byCluster[name]
 		if !ok {
 			cd = &clusterData{
-				summary: &ClusterSummary{
+				summary: &Summary{
 					Name:         name,
 					SlurmVersion: c.Labels[LabelSlurmVersion],
 				},
@@ -67,9 +67,9 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*C
 	}
 
 	// Build sorted result.
-	result := make([]*ClusterSummary, 0, len(byCluster))
+	result := make([]*Summary, 0, len(byCluster))
 	for _, cd := range byCluster {
-		cd.summary.Status = aggregateStatus(cd.states)
+		cd.summary.State = aggregateState(cd.states)
 		result = append(result, cd.summary)
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -80,9 +80,9 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*C
 
 // NodeSummary holds summary information about a node in a sind cluster.
 type NodeSummary struct {
-	Name   string // short name: "controller", "worker-0"
-	Role   string // "controller", "submitter", "worker"
-	Status Status
+	Name  string // short name: "controller", "worker-0"
+	Role  string // "controller", "submitter", "worker"
+	State State
 }
 
 // GetNodes lists all nodes in the named cluster.
@@ -101,9 +101,9 @@ func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName str
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		result = append(result, &NodeSummary{
-			Name:   shortName,
-			Role:   c.Labels[LabelRole],
-			Status: containerStateToStatus(c.State),
+			Name:  shortName,
+			Role:  c.Labels[LabelRole],
+			State: containerStateToState(c.State),
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -219,32 +219,32 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 	return key, nil
 }
 
-// aggregateStatus determines the overall cluster status from node states.
+// aggregateState determines the overall cluster status from node states.
 // If all nodes share the same status, that status is returned. Otherwise,
 // the cluster status is unknown.
-func aggregateStatus(states []string) Status {
+func aggregateState(states []string) State {
 	if len(states) == 0 {
-		return StatusUnknown
+		return StateUnknown
 	}
-	first := containerStateToStatus(states[0])
+	first := containerStateToState(states[0])
 	for _, s := range states[1:] {
-		if containerStateToStatus(s) != first {
-			return StatusUnknown
+		if containerStateToState(s) != first {
+			return StateUnknown
 		}
 	}
 	return first
 }
 
-// containerStateToStatus maps a docker container state string to a Status.
-func containerStateToStatus(state string) Status {
+// containerStateToState maps a docker container state string to a Status.
+func containerStateToState(state string) State {
 	switch state {
 	case "running":
-		return StatusRunning
+		return StateRunning
 	case "paused":
-		return StatusPaused
+		return StatePaused
 	case "exited", "dead", "created":
-		return StatusStopped
+		return StateStopped
 	default:
-		return StatusUnknown
+		return StateUnknown
 	}
 }

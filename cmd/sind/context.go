@@ -23,11 +23,6 @@ func withClient(ctx context.Context, c *docker.Client) context.Context {
 	return context.WithValue(ctx, clientKey, c)
 }
 
-// withMeshManager stores a mesh.Manager in the context.
-func withMeshManager(ctx context.Context, m *mesh.Manager) context.Context {
-	return context.WithValue(ctx, meshMgrKey, m)
-}
-
 // clientFrom retrieves the docker.Client from the context,
 // falling back to a real OSExecutor-based client.
 func clientFrom(ctx context.Context) *docker.Client {

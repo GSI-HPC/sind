@@ -509,7 +509,7 @@ func TestListContainers_MultipleFilters(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	c.ListContainers(t.Context(), "label=sind.cluster=dev", "label=sind.role=controller")
+	_, _ = c.ListContainers(t.Context(), "label=sind.cluster=dev", "label=sind.role=controller")
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{
@@ -766,8 +766,9 @@ func TestCopyFromContainer(t *testing.T) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	content := []byte("172.18.0.2 controller.default.sind.local\n")
-	tw.WriteHeader(&tar.Header{Name: "hosts", Size: int64(len(content)), Mode: 0644})
-	tw.Write(content)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "hosts", Size: int64(len(content)), Mode: 0644}))
+	_, err := tw.Write(content)
+	require.NoError(t, err)
 	tw.Close()
 
 	var m MockExecutor
@@ -807,8 +808,9 @@ func TestCopyFromContainer_TruncatedTar(t *testing.T) {
 	// Build a tar with a header claiming 100 bytes but only 5 bytes of data
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	tw.WriteHeader(&tar.Header{Name: "hosts", Size: 100, Mode: 0644})
-	tw.Write([]byte("short"))
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "hosts", Size: 100, Mode: 0644}))
+	_, err := tw.Write([]byte("short"))
+	require.NoError(t, err)
 	// Don't close properly — leaves a truncated entry
 
 	var m MockExecutor

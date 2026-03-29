@@ -90,7 +90,7 @@ func runGetClusters(cmd *cobra.Command) error {
 			c.Name,
 			c.NodeCount, c.Submitters, c.Controllers, c.Workers,
 			c.SlurmVersion,
-			c.Status,
+			c.State,
 		)
 	}
 	return w.Flush()
@@ -106,7 +106,7 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 	w := newTabWriter(cmd.OutOrStdout())
 	fmt.Fprintln(w, "NAME\tROLE\tSTATUS")
 	for _, n := range nodes {
-		fmt.Fprintf(w, "%s.%s\t%s\t%s\n", n.Name, name, n.Role, n.Status)
+		fmt.Fprintf(w, "%s.%s\t%s\t%s\n", n.Name, name, n.Role, n.State)
 	}
 	return w.Flush()
 }

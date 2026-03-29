@@ -321,7 +321,7 @@ func TestDeregisterMesh_DNSError(t *testing.T) {
 
 func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	var m docker.MockExecutor
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, _ string) docker.MockResult {
 		// CopyFromContainer (read Corefile) → return valid Corefile
 		if len(args) >= 2 && args[0] == "cp" && strings.Contains(args[1], "sind-dns") {
 			return docker.MockResult{Stdout: tarArchive("Corefile", emptyCorefileContent())}
@@ -516,7 +516,7 @@ func TestDelete_PreserveMesh(t *testing.T) {
 
 func TestDelete_ListResourcesError(t *testing.T) {
 	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	m.OnCall = func(_ []string, _ string) docker.MockResult {
 		return docker.MockResult{Err: fmt.Errorf("docker ps failed")}
 	}
 	c := docker.NewClient(&m)
@@ -695,7 +695,7 @@ func indexOf(slice []string, s string) int {
 // meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecord
 // and RemoveKnownHost operations for DeregisterMesh tests.
 func meshDeregisterOnCall(knownHostsContent string) func([]string, string) docker.MockResult {
-	return func(args []string, stdin string) docker.MockResult {
+	return func(args []string, _ string) docker.MockResult {
 		if len(args) == 0 {
 			return docker.MockResult{}
 		}
@@ -750,7 +750,7 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 	// Track which phase we're in based on calls.
 	listClusterDone := false
 
-	return func(args []string, stdin string) docker.MockResult {
+	return func(args []string, _ string) docker.MockResult {
 		if len(args) == 0 {
 			return docker.MockResult{}
 		}

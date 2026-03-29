@@ -56,7 +56,7 @@ func TestGetClusters(t *testing.T) {
 	// Results should be sorted by name.
 	assert.Equal(t, "dev", clusters[0].Name)
 	assert.Equal(t, "25.11.0", clusters[0].SlurmVersion)
-	assert.Equal(t, StatusRunning, clusters[0].Status)
+	assert.Equal(t, StateRunning, clusters[0].State)
 	assert.Equal(t, 3, clusters[0].NodeCount)
 	assert.Equal(t, 0, clusters[0].Submitters)
 	assert.Equal(t, 1, clusters[0].Controllers)
@@ -64,7 +64,7 @@ func TestGetClusters(t *testing.T) {
 
 	assert.Equal(t, "prod", clusters[1].Name)
 	assert.Equal(t, "25.11.0", clusters[1].SlurmVersion)
-	assert.Equal(t, StatusRunning, clusters[1].Status)
+	assert.Equal(t, StateRunning, clusters[1].State)
 	assert.Equal(t, 4, clusters[1].NodeCount)
 	assert.Equal(t, 1, clusters[1].Submitters)
 	assert.Equal(t, 1, clusters[1].Controllers)
@@ -101,7 +101,7 @@ func TestGetClusters_MixedStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
 	// Mixed states result in unknown status.
-	assert.Equal(t, StatusUnknown, clusters[0].Status)
+	assert.Equal(t, StateUnknown, clusters[0].State)
 }
 
 func TestGetClusters_AllStopped(t *testing.T) {
@@ -122,7 +122,7 @@ func TestGetClusters_AllStopped(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
-	assert.Equal(t, StatusStopped, clusters[0].Status)
+	assert.Equal(t, StateStopped, clusters[0].State)
 }
 
 func TestGetClusters_Error(t *testing.T) {
@@ -217,7 +217,7 @@ func TestGetNodes(t *testing.T) {
 	// Sorted: controller first, then worker by name.
 	assert.Equal(t, "controller", nodes[0].Name)
 	assert.Equal(t, "controller", nodes[0].Role)
-	assert.Equal(t, StatusRunning, nodes[0].Status)
+	assert.Equal(t, StateRunning, nodes[0].State)
 
 	assert.Equal(t, "worker-0", nodes[1].Name)
 	assert.Equal(t, "worker", nodes[1].Role)
@@ -248,9 +248,9 @@ func TestGetNodes_WithStatus(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
-	assert.Equal(t, StatusRunning, nodes[0].Status)
-	assert.Equal(t, StatusStopped, nodes[1].Status)
-	assert.Equal(t, StatusPaused, nodes[2].Status)
+	assert.Equal(t, StateRunning, nodes[0].State)
+	assert.Equal(t, StateStopped, nodes[1].State)
+	assert.Equal(t, StatePaused, nodes[2].State)
 }
 
 func TestGetNodes_Empty(t *testing.T) {
@@ -340,31 +340,31 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 	assert.Equal(t, "mystery", nodes[1].Role)
 }
 
-func TestContainerStateToStatus(t *testing.T) {
+func TestContainerStateToState(t *testing.T) {
 	tests := []struct {
 		state  string
-		status Status
+		status State
 	}{
-		{"running", StatusRunning},
-		{"paused", StatusPaused},
-		{"exited", StatusStopped},
-		{"dead", StatusStopped},
-		{"created", StatusStopped},
-		{"restarting", StatusUnknown},
+		{"running", StateRunning},
+		{"paused", StatePaused},
+		{"exited", StateStopped},
+		{"dead", StateStopped},
+		{"created", StateStopped},
+		{"restarting", StateUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.state, func(t *testing.T) {
-			assert.Equal(t, tt.status, containerStateToStatus(tt.state))
+			assert.Equal(t, tt.status, containerStateToState(tt.state))
 		})
 	}
 }
 
-func TestAggregateStatus_Empty(t *testing.T) {
-	assert.Equal(t, StatusUnknown, aggregateStatus(nil))
+func TestAggregateState_Empty(t *testing.T) {
+	assert.Equal(t, StateUnknown, aggregateState(nil))
 }
 
-func TestAggregateStatus_Single(t *testing.T) {
-	assert.Equal(t, StatusRunning, aggregateStatus([]string{"running"}))
+func TestAggregateState_Single(t *testing.T) {
+	assert.Equal(t, StateRunning, aggregateState([]string{"running"}))
 }
 
 // --- GetNetworks ---

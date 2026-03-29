@@ -36,7 +36,7 @@ func runStatus(cmd *cobra.Command, name string) error {
 	out := cmd.OutOrStdout()
 
 	fmt.Fprintf(out, "Cluster: %s\n", status.Name)
-	fmt.Fprintf(out, "Status:  %s\n", status.Status)
+	fmt.Fprintf(out, "Status:  %s\n", status.State)
 
 	// Nodes table
 	fmt.Fprintln(out)

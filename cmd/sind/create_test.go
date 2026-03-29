@@ -165,7 +165,7 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "controller")
 
 	// exec with default cluster
-	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "echo", "hello")
+	_, _, err = executeWithDockerCtx(ctx, "exec", "--", "echo", "hello")
 	if err != nil {
 		// Only fails if no "default" cluster exists — expected in isolation.
 		assert.Contains(t, err.Error(), "default")

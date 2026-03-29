@@ -16,7 +16,7 @@ import (
 // listErrorMock returns a mock that fails on any call, simulating docker daemon unavailability.
 func listErrorMock() *docker.MockExecutor {
 	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	m.OnCall = func(_ []string, _ string) docker.MockResult {
 		return docker.MockResult{Err: fmt.Errorf("docker daemon unavailable")}
 	}
 	return &m
