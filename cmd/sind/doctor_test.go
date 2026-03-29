@@ -75,6 +75,24 @@ func TestDoctorCommand_DockerNotReachable(t *testing.T) {
 	assert.Contains(t, output, "Docker Engine")
 }
 
+func TestDoctorCommand_UnparseableVersion(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("bogus", "", nil)
+
+	cmd := NewRootCommand()
+	out := new(bytes.Buffer)
+	cmd.SetOut(out)
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{"doctor"})
+
+	ctx := withClient(context.Background(), docker.NewClient(&m))
+	cmd.SetContext(ctx)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, out.String(), "unable to parse")
+}
+
 func TestParseVersion(t *testing.T) {
 	tests := []struct {
 		input string
@@ -91,4 +109,12 @@ func TestParseVersion(t *testing.T) {
 		assert.Equal(t, tt.major, major, tt.input)
 		assert.Equal(t, tt.minor, minor, tt.input)
 	}
+}
+
+func TestParseVersion_Invalid(t *testing.T) {
+	_, _, err := parseVersion("bogus")
+	assert.Error(t, err)
+
+	_, _, err = parseVersion("28")
+	assert.Error(t, err)
 }

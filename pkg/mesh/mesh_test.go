@@ -1008,6 +1008,45 @@ func dnsInspectJSON() string {
 	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 }
 
+// --- GetDNSRecords ---
+
+func TestGetDNSRecords(t *testing.T) {
+	var m docker.MockExecutor
+	entries := []string{"172.18.0.2 controller.dev.sind.local", "172.18.0.3 worker-0.dev.sind.local"}
+	m.AddResult(corefileTar(t, entries), "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	records, err := mgr.GetDNSRecords(t.Context())
+	require.NoError(t, err)
+	require.Len(t, records, 2)
+	assert.Equal(t, "172.18.0.2", records[0].IP)
+	assert.Equal(t, "controller.dev.sind.local", records[0].Hostname)
+	assert.Equal(t, "172.18.0.3", records[1].IP)
+	assert.Equal(t, "worker-0.dev.sind.local", records[1].Hostname)
+}
+
+func TestGetDNSRecords_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult(corefileTar(t, nil), "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	records, err := mgr.GetDNSRecords(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, records)
+}
+
+func TestGetDNSRecords_ReadError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error\n", fmt.Errorf("container not found"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetDNSRecords(t.Context())
+	assert.Error(t, err)
+}
+
 // --- test helpers ---
 
 // corefileTar builds a tar archive containing a Corefile with the given entries,

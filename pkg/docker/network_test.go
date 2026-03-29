@@ -293,6 +293,26 @@ func TestInspectNetwork_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestInspectNetwork_EmptyResult(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("[]", "", nil)
+	c := NewClient(&m)
+
+	_, err := c.InspectNetwork(t.Context(), testNetworkName)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no results")
+}
+
+func TestInspectNetwork_InvalidJSON(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("not-json", "", nil)
+	c := NewClient(&m)
+
+	_, err := c.InspectNetwork(t.Context(), testNetworkName)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing")
+}
+
 const networkLsJSON = `{"Name":"sind-dev-net","Driver":"bridge","ID":"abc123","Scope":"local"}
 {"Name":"sind-mesh","Driver":"bridge","ID":"def456","Scope":"local"}
 {"Name":"sind-prod-net","Driver":"bridge","ID":"ghi789","Scope":"local"}`
