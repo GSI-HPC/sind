@@ -82,16 +82,13 @@ func skipIfNoNsdelegate(t *testing.T) {
 	t.Skip("host cgroup mount lacks nsdelegate")
 }
 
-// skipIfNoImage skips the test if the sind-node image is not available.
-func skipIfNoImage(t *testing.T, c *docker.Client) string {
+// testImage returns the sind-node image to use for integration tests.
+// Docker pulls the image automatically during container creation.
+func testImage(t *testing.T) string {
 	t.Helper()
 	image := os.Getenv("SIND_TEST_IMAGE")
 	if image == "" {
 		image = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-	exists, err := c.ImageExists(t.Context(), image)
-	if err != nil || !exists {
-		t.Skipf("image %s not available", image)
 	}
 	return image
 }

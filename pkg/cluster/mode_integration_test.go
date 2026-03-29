@@ -62,11 +62,6 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	if img == "" {
 		img = "ghcr.io/gsi-hpc/sind-node:latest"
 	}
-	exists, err := c.ImageExists(ctx, img)
-	require.NoError(t, err)
-	if !exists {
-		t.Skipf("image %s not available", img)
-	}
 
 	realm := lifecycleRealm()
 	clusterName := "it-cluster"
@@ -78,7 +73,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 		_ = meshMgr.CleanupMesh(bg)
 	})
 
-	err = meshMgr.EnsureMesh(ctx)
+	err := meshMgr.EnsureMesh(ctx)
 	require.NoError(t, err)
 
 	cfg, err := config.Parse([]byte(fmt.Sprintf(`

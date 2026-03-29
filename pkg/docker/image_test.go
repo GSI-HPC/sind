@@ -20,61 +20,14 @@ func TestImageLifecycle(t *testing.T) {
 	ctx := t.Context()
 
 	if !rec.IsIntegration() {
-		rec.AddResult("[{}]\n", "", nil)                                          // exists busybox → true
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists nonexistent → false
-		rec.AddResult("ephemeral-test\n", "", nil)                                // run ephemeral
+		rec.AddResult("ephemeral-test\n", "", nil) // run ephemeral
 	}
 
-	// Exists → true (busybox is pulled by other tests).
-	exists, err := c.ImageExists(ctx, "busybox:latest")
-	require.NoError(t, err)
-	assert.True(t, exists)
-
-	// Exists → false.
-	exists, err = c.ImageExists(ctx, "nonexistent-image:v999.999")
-	require.NoError(t, err)
-	assert.False(t, exists)
-
-	// RunEphemeral.
 	stdout, err := c.RunEphemeral(ctx, "busybox:latest", "echo", "ephemeral-test")
 	require.NoError(t, err)
 	assert.Equal(t, "ephemeral-test\n", stdout)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
-}
-
-func TestImageExists_True(t *testing.T) {
-	var m MockExecutor
-	m.AddResult("[{}]\n", "", nil)
-	c := NewClient(&m)
-
-	exists, err := c.ImageExists(t.Context(), testImage)
-	require.NoError(t, err)
-	assert.True(t, exists)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"image", "inspect", testImage}, m.Calls[0].Args)
-}
-
-func TestImageExists_False(t *testing.T) {
-	var m MockExecutor
-	m.AddResult("", "Error response from daemon: No such image: "+testImage+"\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
-	c := NewClient(&m)
-
-	exists, err := c.ImageExists(t.Context(), testImage)
-	require.NoError(t, err)
-	assert.False(t, exists)
-}
-
-func TestImageExists_OtherError(t *testing.T) {
-	var m MockExecutor
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := NewClient(&m)
-
-	exists, err := c.ImageExists(t.Context(), testImage)
-	assert.Error(t, err)
-	assert.False(t, exists)
 }
 
 func TestRunEphemeral(t *testing.T) {

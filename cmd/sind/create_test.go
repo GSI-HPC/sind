@@ -83,7 +83,7 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 func TestClusterLifecycle(t *testing.T) {
 	c := realClient(t)
 	skipIfNoNsdelegate(t)
-	image := skipIfNoImage(t, c)
+	image := testImage(t)
 
 	t.Setenv("SIND_REALM", testRealm)
 

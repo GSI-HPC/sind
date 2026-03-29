@@ -33,7 +33,7 @@ func skipIfNoNsdelegate(t *testing.T) {
 	t.Skip("integration test")
 }
 
-func skipIfNoImage(t *testing.T, _ *docker.Client) string {
+func testImage(t *testing.T) string {
 	t.Helper()
 	t.Skip("integration test")
 	return ""

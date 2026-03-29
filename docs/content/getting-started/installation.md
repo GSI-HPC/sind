@@ -29,16 +29,6 @@ sind --version
 
 ## Container image
 
-sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is:
-
-```
-ghcr.io/gsi-hpc/sind-node:latest
-```
-
-Pull it before creating your first cluster:
-
-```bash
-docker pull ghcr.io/gsi-hpc/sind-node:latest
-```
+sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image (`ghcr.io/gsi-hpc/sind-node:latest`) is pulled automatically when creating your first cluster.
 
 See [Container Images](../../container-images/building-images/) for details on building custom images.
