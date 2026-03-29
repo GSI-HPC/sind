@@ -17,7 +17,7 @@ toc: true
 ```bash
 git clone https://github.com/GSI-HPC/sind.git
 cd sind
-go build -o sind ./cmd/sind/
+make build
 ```
 
 The binary is built at `./sind`.
@@ -27,6 +27,27 @@ The binary is built at `./sind`.
 ```bash
 ./sind --version
 ./sind create cluster
+```
+
+## Make targets
+
+All common tasks are available via `make`:
+
+| Target | Description |
+|--------|-------------|
+| `make build` | Build the sind binary |
+| `make test` | Run unit tests with race detector |
+| `make test-integration` | Run integration tests (requires Docker) |
+| `make coverage` | Generate HTML coverage report |
+| `make lint` | Run golangci-lint |
+| `make image` | Build the container image via docker buildx bake |
+| `make clean` | Remove build artifacts and coverage files |
+| `make help` | Show all available targets |
+
+The build version defaults to `dev` and can be overridden:
+
+```bash
+make build VERSION=v1.0.0
 ```
 
 ## Dependencies
@@ -47,13 +68,13 @@ sind uses a minimal set of dependencies:
 Unit tests (no Docker required):
 
 ```bash
-go test ./...
+make test
 ```
 
 Integration tests (requires Docker):
 
 ```bash
-go test -tags integration ./...
+make test-integration
 ```
 
 See [Testing](../testing/) for details on the test infrastructure.

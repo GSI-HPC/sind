@@ -30,7 +30,7 @@ sind enables the appropriate Slurm services based on node role at container star
 Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root:
 
 ```bash
-docker buildx bake
+make image
 ```
 
 ## Custom image requirements
