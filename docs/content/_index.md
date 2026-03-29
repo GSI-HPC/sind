@@ -13,7 +13,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offer
 
 {{< button size="large" relref="getting-started/installation" >}}🚀 Getting Started{{< /button >}}
 {{< button size="large" relref="introduction/" >}}📖 Documentation{{< /button >}}
-<a href="https://github.com/GSI-HPC/sind" style="white-space: nowrap"><i class="gdoc-icon" style="width: 1em; height: 1em; vertical-align: -0.15em">gdoc_github</i> Source Code</a>
+{{< button size="large" relhref="https://github.com/GSI-HPC/sind" style="white-space: nowrap">}}<i class="gdoc-icon" style="width: 1em; height: 1em; vertical-align: -0.15em">gdoc_github</i> Source Code{{< /button >}}
 
 ---
 
