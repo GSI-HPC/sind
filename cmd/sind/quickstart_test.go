@@ -141,7 +141,7 @@ func TestQuickstart(t *testing.T) {
 	assert.Contains(t, stdout, "deleted")
 
 	// ## Create a larger cluster (via stdin)
-	devYAML := "kind: Cluster\nname: dev\ndefaults:\n  image: " + image + "\n  cpus: 2\n  memory: 2g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n"
+	devYAML := "kind: Cluster\nname: dev\ndefaults:\n  image: " + image + "\n  cpus: 2\n  memory: 1g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n"
 
 	stdout, stderr, err = executeWithStdin(ctx, devYAML, "create", "cluster")
 	require.NoError(t, err, "create dev cluster: stdout=%q stderr=%q", stdout, stderr)

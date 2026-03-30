@@ -134,8 +134,8 @@ sind create cluster << 'EOF'
 kind: Cluster
 name: dev
 defaults:
-  cpus: 4
-  memory: 8g
+  cpus: 2
+  memory: 1g
 nodes:
   - controller
   - submitter

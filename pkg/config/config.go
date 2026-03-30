@@ -105,9 +105,9 @@ type Cluster struct {
 // Default resource values for cluster nodes.
 const (
 	DefaultImage   = "ghcr.io/gsi-hpc/sind-node:latest"
-	DefaultCPUs    = 2
-	DefaultMemory  = "2g"
-	DefaultTmpSize = "1g"
+	DefaultCPUs    = 1
+	DefaultMemory  = "512m"
+	DefaultTmpSize = "256m"
 )
 
 // ApplyDefaults populates missing fields with defaults.

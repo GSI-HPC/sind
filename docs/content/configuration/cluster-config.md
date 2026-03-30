@@ -21,9 +21,9 @@ kind: Cluster
 name: default
 defaults:
   image: ghcr.io/gsi-hpc/sind-node:latest
-  cpus: 2
-  memory: 2g
-  tmpSize: 1g
+  cpus: 1
+  memory: 512m
+  tmpSize: 256m
 nodes:
   - role: controller
   - role: worker
@@ -37,9 +37,9 @@ name: test-cluster
 
 defaults:
   image: ghcr.io/gsi-hpc/sind-node:latest
-  cpus: 2
-  memory: 4g
-  tmpSize: 1g
+  cpus: 1
+  memory: 512m
+  tmpSize: 256m
 
 storage:
   dataStorage:
@@ -48,16 +48,16 @@ storage:
 
 nodes:
   - role: controller
-    cpus: 4
-    memory: 8g
-    tmpSize: 2g
+    cpus: 2
+    memory: 1g
+    tmpSize: 512m
 
   - role: submitter
 
   - role: worker
     count: 3
-    cpus: 4
-    memory: 8g
+    cpus: 2
+    memory: 1g
 
   - role: worker
     count: 2
@@ -82,9 +82,9 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 | Field | Default | Description |
 |-------|---------|-------------|
 | `image` | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `cpus` | `2` | CPU limit per container |
-| `memory` | `"2g"` | Memory limit per container |
-| `tmpSize` | `"1g"` | tmpfs size for `/tmp` |
+| `cpus` | `1` | CPU limit per container |
+| `memory` | `"512m"` | Memory limit per container |
+| `tmpSize` | `"256m"` | tmpfs size for `/tmp` |
 
 ## Storage section
 

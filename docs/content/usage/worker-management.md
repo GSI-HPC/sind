@@ -16,9 +16,9 @@ sind create worker [CLUSTER] [FLAGS]
 |------|---------|-------------|
 | `--count` | `1` | Number of nodes to add |
 | `--image` | cluster default | Container image |
-| `--cpus` | cluster default (2) | CPU limit per node |
-| `--memory` | cluster default (2g) | Memory limit |
-| `--tmp-size` | `1g` | `/tmp` tmpfs size |
+| `--cpus` | cluster default (1) | CPU limit per node |
+| `--memory` | cluster default (512m) | Memory limit |
+| `--tmp-size` | `256m` | `/tmp` tmpfs size |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf |
 | `--pull` | `false` | Pull images before creating containers |
 
@@ -35,7 +35,7 @@ sind create worker --count 3
 sind create worker dev --count 2
 
 # With resource limits
-sind create worker --cpus 4 --memory 8g
+sind create worker --cpus 2 --memory 1g
 
 # Unmanaged workers (slurmd not started)
 sind create worker --count 2 --unmanaged

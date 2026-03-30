@@ -47,7 +47,7 @@ All volume mounts include the `:z` SELinux label for compatibility with SELinux-
 -v sind-dev-config:/etc/slurm:ro,z    # all others
 -v sind-dev-munge:/etc/munge:ro,z     # all nodes
 -v sind-dev-data:/data:rw,z           # all nodes
---tmpfs /tmp:rw,nosuid,nodev,size=1g  # configurable size
+--tmpfs /tmp:rw,nosuid,nodev,size=256m  # configurable size
 ```
 
 ### Host path storage

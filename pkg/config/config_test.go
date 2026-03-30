@@ -308,9 +308,9 @@ func TestApplyDefaults_BuiltinDefaults(t *testing.T) {
 
 	for _, n := range cfg.Nodes {
 		assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", n.Image, "node %s", n.Role)
-		assert.Equal(t, 2, n.CPUs, "node %s", n.Role)
-		assert.Equal(t, "2g", n.Memory, "node %s", n.Role)
-		assert.Equal(t, "1g", n.TmpSize, "node %s", n.Role)
+		assert.Equal(t, 1, n.CPUs, "node %s", n.Role)
+		assert.Equal(t, "512m", n.Memory, "node %s", n.Role)
+		assert.Equal(t, "256m", n.TmpSize, "node %s", n.Role)
 	}
 }
 
@@ -597,7 +597,7 @@ nodes:
 	assert.Equal(t, "controller", cfg.Nodes[0].Role)
 	assert.Equal(t, "custom:latest", cfg.Nodes[0].Image)
 	assert.Equal(t, 4, cfg.Nodes[0].CPUs)
-	assert.Equal(t, "2g", cfg.Nodes[0].Memory)
+	assert.Equal(t, "512m", cfg.Nodes[0].Memory)
 	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
 	assert.Equal(t, "worker", cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)

@@ -248,9 +248,9 @@ sind delete worker NODES               # remove worker nodes from cluster
 |------|---------|-------------|
 | `--count N` | 1 | Number of nodes to add |
 | `--image IMAGE` | cluster default | Container image |
-| `--cpus N` | cluster default (2) | CPU limit per node |
-| `--memory SIZE` | cluster default (2g) | Memory limit |
-| `--tmp-size SIZE` | 1g | /tmp tmpfs size |
+| `--cpus N` | cluster default (1) | CPU limit per node |
+| `--memory SIZE` | cluster default (512m) | Memory limit |
+| `--tmp-size SIZE` | 256m | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf |
 | `--pull` | false | Pull images before creating containers |
 
@@ -260,7 +260,7 @@ Examples:
 sind create worker                           # 1 managed node with cluster defaults
 sind create worker --count 3                 # 3 managed nodes
 sind create worker --count 2 --unmanaged     # 2 unmanaged nodes (slurmd not started)
-sind create worker --cpus 4 --memory 8g      # 1 managed node with resource limits
+sind create worker --cpus 2 --memory 1g      # 1 managed node with resource limits
 sind create worker dev --count 2             # 2 managed nodes in dev cluster
 ```
 
@@ -421,9 +421,9 @@ name: test-cluster                       # default: "default"
 
 defaults:
   image: ghcr.io/gsi-hpc/sind-node:25.11.2  # default: sind-node:latest
-  tmpSize: 1g                            # per-node /tmp tmpfs size
-  cpus: 2                                # container CPU limit
-  memory: 4g                             # container memory limit
+  tmpSize: 256m                          # per-node /tmp tmpfs size
+  cpus: 1                                # container CPU limit
+  memory: 512m                           # container memory limit
 
 storage:
   dataStorage:
@@ -433,16 +433,16 @@ storage:
 
 nodes:
   - role: controller
-    tmpSize: 2g                          # override default
-    cpus: 2
-    memory: 4g
+    tmpSize: 512m                        # override default
+    cpus: 1
+    memory: 1g
 
   - role: submitter                      # optional, at most one
 
   - role: worker
     count: 3                             # default: 1
-    cpus: 4
-    memory: 8g
+    cpus: 2
+    memory: 1g
 
   - role: worker
     count: 2

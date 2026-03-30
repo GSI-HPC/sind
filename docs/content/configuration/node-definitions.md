@@ -19,9 +19,9 @@ toc: true
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
 | `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `cpus` | global + per-node | `2` | CPU limit |
-| `memory` | global + per-node | `"2g"` | Memory limit |
-| `tmpSize` | global + per-node | `"1g"` | tmpfs size for `/tmp` |
+| `cpus` | global + per-node | `1` | CPU limit |
+| `memory` | global + per-node | `"512m"` | Memory limit |
+| `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp` |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
 
