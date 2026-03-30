@@ -133,6 +133,105 @@ The git history follows [Conventional Commits](https://www.conventionalcommits.o
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`, `ci`
 
+## CLI Design Guidelines
+
+Rules for maintaining consistency when adding new commands, flags, and output.
+
+### Command Structure
+
+Commands follow **verb-noun** ordering with a two-level hierarchy:
+
+```
+sind <verb> <noun> [ARGS] [FLAGS]
+```
+
+- Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
+- Single-purpose verbs (`status`, `ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
+- Standalone verbs are reserved for frequently-used operations that justify a short path
+
+### Argument Conventions
+
+| Pattern | Positional | Default | Examples |
+|---------|-----------|---------|---------|
+| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `status`, `enter`, `get nodes` |
+| Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
+| Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
+| Nodeset expansion | bracket patterns | — | `worker-[0-2].dev` |
+| Pass-through | after `--` separator | — | `ssh NODE -- cmd`, `exec -- cmd` |
+
+Rules:
+- Cluster names are **always positional**, never flags
+- Node targets support nodeset expansion and comma-separated specs
+- Use `cobra.MaximumNArgs(1)` for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
+
+### Flag Conventions
+
+- **Long-form only** by default; add short flags (`-f`) only for frequently-typed flags
+- **Kebab-case** for multi-word flags: `--tmp-size`, `--munge-key`
+- **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
+- **One global flag**: `--realm` (persistent on root)
+- **One global counter**: `-v` (repeatable, controls log verbosity)
+
+### Output Conventions
+
+| Command type | Output | Target |
+|-------------|--------|--------|
+| List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
+| Single value (`get munge-key`) | raw value, one line | stdout |
+| Mutation success (`create`, `delete`) | confirmation sentence | stdout |
+| Node power operations | silent on success | — |
+| Errors | plain error message (no prefix) | stderr |
+| Warnings | `Warning: ...` prefix | stderr |
+| Logs (`-v`) | structured key=value via slog | stderr |
+
+Rules:
+- No colors, no ANSI escapes — monochrome and terminal-agnostic
+- Unicode checkmarks (✓/✗) only in `status` and `doctor` output
+- Mutations that change topology confirm; power state changes are silent
+- No `--json` or `--format` yet — human-readable only
+
+### Logging Conventions
+
+Logging uses `pkg/log` with context-based injection. Silent by default.
+
+| Level | Flag | What to log |
+|-------|------|------------|
+| (off) | — | Nothing; errors propagate via return values |
+| Info | `-v` | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
+| Debug | `-vv` | Individual operations: "waiting for node", "creating network", "enabling slurmd" |
+| Trace | `-vvv` | Docker commands, probe retry attempts with error details |
+
+Rules:
+- Use `sindlog.From(ctx)` to extract the logger — never `slog.Default()`
+- In errgroup goroutines, log with `gctx` not the outer `ctx`
+- Log messages use lowercase, present tense: "creating network", not "Created network"
+- Include identifying attrs: `"node", shortName`, `"name", netName`, `"service", svcName`
+
+### Shell Completion
+
+All commands that accept cluster names or node names must set `ValidArgsFunction`:
+
+- **Cluster name commands** → `completeClusterNames`
+- **Node name commands** → `completeNodeNames`
+- **Commands with DisableFlagParsing** (ssh, exec) → skip (cobra can't complete)
+
+When adding a `get` subcommand with positional arg completion for a second argument
+(like `logs NODE SERVICE`), write a dedicated completion function that switches on `len(args)`.
+
+### New Command Checklist
+
+When introducing a new command:
+
+1. **Structure**: verb-noun ordering, consistent with existing hierarchy
+2. **Args**: cluster as optional positional (default "default"), nodes as required positional
+3. **Flags**: long-form, kebab-case, minimal short flags
+4. **Completion**: add `ValidArgsFunction` for cluster/node args
+5. **Output**: table for lists, confirmation for mutations, silence for passthrough
+6. **Logging**: info for phases, debug for operations, trace for raw commands
+7. **Errors**: wrap with `fmt.Errorf("context: %w", err)`, no error prefixes
+8. **Tests**: unit test with mock executor, integration test in lifecycle test
+9. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
+
 ## Testing
 
 Development follows Test-Driven Development (TDD) style:
