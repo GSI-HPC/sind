@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -116,14 +117,30 @@ func applyDataFlag(cfg *config.Cluster, value string) error {
 }
 
 func loadConfig(path string) (*config.Cluster, error) {
-	if path == "" {
-		return config.Parse([]byte("kind: Cluster\n"))
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading config: %w", err)
+		}
+		return config.Parse(data)
 	}
 
-	data, err := os.ReadFile(path)
+	if stdinHasData() {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("reading config from stdin: %w", err)
+		}
+		return config.Parse(data)
+	}
+
+	return config.Parse([]byte("kind: Cluster\n"))
+}
+
+// stdinHasData reports whether stdin is a pipe or file (not a terminal).
+func stdinHasData() bool {
+	fi, err := os.Stdin.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("reading config: %w", err)
+		return false
 	}
-
-	return config.Parse(data)
+	return fi.Mode()&os.ModeCharDevice == 0
 }

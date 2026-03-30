@@ -48,6 +48,38 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestLoadConfig_FromStdin(t *testing.T) {
+	// Replace os.Stdin with a pipe containing YAML config.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	_, err = w.WriteString("kind: Cluster\nname: from-stdin\n")
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	cfg, err := loadConfig("")
+	require.NoError(t, err)
+	assert.Equal(t, "from-stdin", cfg.Name)
+}
+
+func TestLoadConfig_StdinInvalidYAML(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	_, err = w.WriteString("not: valid: yaml: [")
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	_, err = loadConfig("")
+	assert.Error(t, err)
+}
+
 func TestCreateCluster_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	createCmd, _, err := cmd.Find([]string{"create", "cluster"})

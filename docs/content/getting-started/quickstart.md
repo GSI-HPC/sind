@@ -127,9 +127,10 @@ sind ssh worker-0
 
 ## Create a larger cluster
 
-Use a configuration file for more complex setups:
+Pipe a configuration directly into `sind create cluster`:
 
-```yaml
+```bash
+sind create cluster << 'EOF'
 kind: Cluster
 name: dev
 defaults:
@@ -139,7 +140,10 @@ nodes:
   - controller
   - submitter
   - worker: 5
+EOF
 ```
+
+Or use a configuration file:
 
 ```bash
 sind create cluster --config cluster.yaml

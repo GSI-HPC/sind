@@ -140,13 +140,10 @@ func TestQuickstart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "deleted")
 
-	// ## Create a larger cluster
-	devCfg := filepath.Join(cfgDir, "dev.yaml")
-	require.NoError(t, os.WriteFile(devCfg, []byte(
-		"kind: Cluster\nname: dev\ndefaults:\n  image: "+image+"\n  cpus: 2\n  memory: 2g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n",
-	), 0o644))
+	// ## Create a larger cluster (via stdin)
+	devYAML := "kind: Cluster\nname: dev\ndefaults:\n  image: " + image + "\n  cpus: 2\n  memory: 2g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n"
 
-	stdout, stderr, err = executeWithDockerCtx(ctx, "create", "cluster", "--config", devCfg)
+	stdout, stderr, err = executeWithStdin(ctx, devYAML, "create", "cluster")
 	require.NoError(t, err, "create dev cluster: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "5 node(s)")
 

@@ -23,7 +23,7 @@ sind creates and manages containerized Slurm clusters for development, testing, 
 
 While the cluster configuration file resembles a Kubernetes manifest, sind is **not** a reconciling controller. The configuration is a one-shot, one-way input for cluster creation:
 
-- `sind create cluster` interprets the manifest once to generate the cluster
+- `sind create cluster` interprets the manifest once to generate the cluster (via `--config FILE` or piped to stdin)
 - sind does not continuously watch or reconcile cluster state
 - sind does not automatically repair drift or failures
 
@@ -152,7 +152,7 @@ Development follows Test-Driven Development (TDD) style:
 ### Cluster Management
 
 ```bash
-sind create cluster [--name NAME] [--config FILE] [--pull]
+sind create cluster [--name NAME] [--config FILE] [--data PATH] [--pull]
 sind delete cluster [NAME]
 sind delete cluster --all
 sind get clusters

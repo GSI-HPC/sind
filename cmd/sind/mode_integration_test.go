@@ -53,6 +53,23 @@ func executeWithDockerCtx(ctx context.Context, args ...string) (string, string, 
 	return stdout.String(), stderr.String(), err
 }
 
+// executeWithStdin runs a CLI command with the given string piped to stdin.
+// This temporarily replaces os.Stdin so that loadConfig can detect piped data.
+func executeWithStdin(ctx context.Context, stdin string, args ...string) (string, string, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return "", "", err
+	}
+	_, _ = w.WriteString(stdin)
+	w.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	return executeWithDockerCtx(ctx, args...)
+}
+
 // realClient returns a docker.Client backed by a real executor.
 func realClient(t *testing.T) *docker.Client {
 	t.Helper()
