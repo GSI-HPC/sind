@@ -153,7 +153,7 @@ Development follows Test-Driven Development (TDD) style:
 ```bash
 sind create cluster [--name NAME] [--config FILE] [--pull]
 sind delete cluster [NAME]
-sind delete clusters --all
+sind delete cluster --all
 sind get clusters
 sind get nodes [CLUSTER]
 sind get networks
