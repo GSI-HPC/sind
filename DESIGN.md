@@ -186,8 +186,8 @@ NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / *
 $ sind get nodes dev
 NAME              ROLE        STATUS
 controller.dev    controller  running
-worker-0.dev     workerready
-worker-1.dev     workerready
+worker-0.dev      worker      running
+worker-1.dev      worker      running
 ```
 
 ### Cluster Diagnostics
