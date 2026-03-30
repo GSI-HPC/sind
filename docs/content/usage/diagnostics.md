@@ -23,7 +23,7 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 | `-vv` | debug | Individual operations: "waiting for node", "enabling slurmd", "creating network" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |
 
-Log output goes to stderr in structured `key=value` format, keeping stdout clean for parseable output:
+Log output goes to stderr in structured `key=value` format with colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.
 
 ```bash
 # Capture logs while piping output
@@ -33,22 +33,22 @@ sind -v get munge-key 2>create.log | base64 -d > munge.key
 sind -vv create cluster --config cluster.yaml
 ```
 
-Example output at `-vv`:
+Example output at `-vv` (colorized on interactive terminals):
 
 ```
-level=INFO msg="ensuring mesh infrastructure" realm=sind
-level=INFO msg="creating cluster" name=dev nodes=3
-level=DEBUG msg="preflight check passed"
-level=INFO msg="resolved infrastructure" slurm=25.11.4
-level=DEBUG msg="cluster resources created"
-level=DEBUG msg="waiting for node" node=controller
-level=DEBUG msg="waiting for node" node=worker-0
-level=DEBUG msg="starting readiness probes" node=sind-dev-controller probes=container,systemd,sshd
-level=DEBUG msg="all probes passed" node=sind-dev-controller
-level=INFO msg="nodes ready" count=3
-level=DEBUG msg="enabling slurm service" node=controller service=slurmctld
-level=DEBUG msg="enabling slurm service" node=worker-0 service=slurmd
-level=INFO msg="slurm services enabled"
+INFO ensuring mesh infrastructure realm=sind
+INFO creating cluster name=dev nodes=3
+DEBU preflight check passed
+INFO resolved infrastructure slurm=25.11.4
+DEBU cluster resources created
+DEBU waiting for node node=controller
+DEBU waiting for node node=worker-0
+DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd
+DEBU all probes passed node=sind-dev-controller
+INFO nodes ready count=3
+DEBU enabling slurm service node=controller service=slurmctld
+DEBU enabling slurm service node=worker-0 service=slurmd
+INFO slurm services enabled
 ```
 
 The `-v` flag is global and works with any command.

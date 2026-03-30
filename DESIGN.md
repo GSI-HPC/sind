@@ -88,7 +88,8 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
 | `sigs.k8s.io/yaml` | YAML configuration parsing |
-| `log/slog` (stdlib) | Structured logging |
+| `log/slog` (stdlib) | Structured logging interface |
+| `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
@@ -181,12 +182,13 @@ Rules:
 | Mutations (`create`, `delete`, `power`) | silent on success | — |
 | Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
-| Logs (`-v`) | structured key=value via slog | stderr |
+| Logs (`-v`) | structured key=value, colorized on TTYs | stderr |
 
 Rules:
 - Mutations are silent — `exit 0` is the confirmation; use `-v` for progress
 - Errors are always visible (slog error level is always enabled, even without `-v`)
-- No colors, no ANSI escapes — monochrome and terminal-agnostic
+- Command output (tables, status, doctor) is monochrome — no ANSI escapes
+- Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗) only in `status` and `doctor` output
 - No `--json` or `--format` yet — human-readable only
 

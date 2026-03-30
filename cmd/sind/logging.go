@@ -6,34 +6,36 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/charmbracelet/lipgloss"
+	charmlog "github.com/charmbracelet/log"
+
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // newLogger builds a slog.Logger for the given verbosity level.
 // At verbosity 0, only errors are shown. Higher levels add info, debug, and trace output.
+// Uses charmbracelet/log for colorized, human-friendly output on TTYs.
 func newLogger(w io.Writer, verbosity int) *slog.Logger {
-	level := slog.LevelError
+	level := charmlog.ErrorLevel
 	switch {
 	case verbosity >= 3:
-		level = sindlog.LevelTrace
+		level = charmlog.Level(sindlog.LevelTrace)
 	case verbosity >= 2:
-		level = slog.LevelDebug
+		level = charmlog.DebugLevel
 	case verbosity >= 1:
-		level = slog.LevelInfo
+		level = charmlog.InfoLevel
 	}
 
-	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{
+	handler := charmlog.NewWithOptions(w, charmlog.Options{
 		Level: level,
-		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				return slog.Attr{}
-			}
-			if a.Key == slog.LevelKey {
-				if l, ok := a.Value.Any().(slog.Level); ok && l == sindlog.LevelTrace {
-					a.Value = slog.StringValue("TRAC")
-				}
-			}
-			return a
-		},
-	}))
+	})
+
+	styles := charmlog.DefaultStyles()
+	styles.Levels[charmlog.Level(sindlog.LevelTrace)] = lipgloss.NewStyle().
+		SetString("TRAC").
+		Bold(true).
+		MaxWidth(4)
+	handler.SetStyles(styles)
+
+	return slog.New(handler)
 }

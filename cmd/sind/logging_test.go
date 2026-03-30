@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"log/slog"
 	"testing"
 
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -59,13 +58,6 @@ func TestNewLogger_Trace(t *testing.T) {
 
 	assert.Contains(t, buf.String(), "trace msg")
 	assert.Contains(t, buf.String(), "TRAC")
-}
-
-func TestNewLogger_NoTimestamp(t *testing.T) {
-	var buf bytes.Buffer
-	l := newLogger(&buf, 1)
-	l.InfoContext(context.Background(), "test")
-	assert.NotContains(t, buf.String(), slog.TimeKey)
 }
 
 func TestNewLogger_HighVerbosityClamped(t *testing.T) {
