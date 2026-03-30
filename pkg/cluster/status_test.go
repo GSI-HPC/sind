@@ -624,7 +624,7 @@ func TestGetStatus_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "dev", status.Name)
-	assert.Equal(t, StateUnknown, status.State)
+	assert.Equal(t, StateEmpty, status.State)
 	assert.Empty(t, status.Nodes)
 }
 
@@ -779,7 +779,7 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
-	assert.Equal(t, StateUnknown, status.State)
+	assert.Equal(t, StateMixed, status.State)
 	require.Len(t, status.Nodes, 2)
 	assert.Equal(t, "running", status.Nodes[0].Health.Container)
 	assert.Equal(t, "exited", status.Nodes[1].Health.Container)

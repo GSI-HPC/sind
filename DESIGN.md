@@ -202,8 +202,8 @@ Displays detailed health information for a cluster:
 
 ```
 $ sind status dev
-CLUSTER   STATUS
-dev       running
+CLUSTER   STATUS (R/S/P/T)
+dev       running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS

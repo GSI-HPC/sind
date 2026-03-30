@@ -37,8 +37,8 @@ func runStatus(cmd *cobra.Command, name string) error {
 
 	// Header table
 	w := newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "CLUSTER\tSTATUS")
-	_, _ = fmt.Fprintf(w, "%s\t%s\n", status.Name, status.State)
+	_, _ = fmt.Fprintln(w, "CLUSTER\tSTATUS (R/S/P/T)")
+	_, _ = fmt.Fprintf(w, "%s\t%s\n", status.Name, formatState(status))
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -99,6 +99,22 @@ func runStatus(cmd *cobra.Command, name string) error {
 	}
 
 	return nil
+}
+
+func formatState(status *cluster.Status) string {
+	var running, stopped, paused int
+	for _, n := range status.Nodes {
+		switch n.Health.Container {
+		case "running":
+			running++
+		case "paused":
+			paused++
+		default: // exited, dead, created, etc.
+			stopped++
+		}
+	}
+	total := running + stopped + paused
+	return fmt.Sprintf("%s (%d/%d/%d/%d)", status.State, running, stopped, paused, total)
 }
 
 func checkmark(ok bool) string {

@@ -220,16 +220,16 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 }
 
 // aggregateState determines the overall cluster status from node states.
-// If all nodes share the same status, that status is returned. Otherwise,
-// the cluster status is unknown.
+// If all nodes share the same status, that status is returned.
+// Mixed states return StateMixed; no nodes returns StateEmpty.
 func aggregateState(states []string) State {
 	if len(states) == 0 {
-		return StateUnknown
+		return StateEmpty
 	}
 	first := containerStateToState(states[0])
 	for _, s := range states[1:] {
 		if containerStateToState(s) != first {
-			return StateUnknown
+			return StateMixed
 		}
 	}
 	return first

@@ -7,12 +7,14 @@ import "github.com/GSI-HPC/sind/pkg/docker"
 // State represents the state of a cluster or node.
 type State string
 
-// Possible cluster states.
+// Possible cluster/node states.
 const (
 	StateRunning State = "running"
 	StateStopped State = "stopped"
 	StatePaused  State = "paused"
-	StateUnknown State = "unknown"
+	StateMixed   State = "mixed"   // cluster: nodes in different states
+	StateEmpty   State = "empty"   // cluster: no nodes exist
+	StateUnknown State = "unknown" // node: unrecognised container state
 )
 
 // Cluster represents a live sind cluster as it exists in Docker.

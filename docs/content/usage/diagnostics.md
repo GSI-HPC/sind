@@ -15,8 +15,8 @@ sind status [CLUSTER]
 Displays detailed health information:
 
 ```
-CLUSTER   STATUS
-dev       running
+CLUSTER   STATUS (R/S/P/T)
+dev       running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -39,6 +39,18 @@ controller.dev    controller  172.18.0.2    running     ✓      ✓      slurmc
 worker-0.dev      worker      172.18.0.3    running     ✓      ✓      slurmd ✓
 worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd ✗
 ```
+
+The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
+
+| Status    | Meaning                                               |
+|-----------|-------------------------------------------------------|
+| `running` | All containers are running                            |
+| `stopped` | All containers are stopped (exited, dead, or created) |
+| `paused`  | All containers are paused                             |
+| `mixed`   | Containers are in different states                    |
+| `empty`   | No nodes exist                                        |
+
+The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
 > **Tip:** Run `watch sind status` for a simple live dashboard that refreshes every two seconds.
 

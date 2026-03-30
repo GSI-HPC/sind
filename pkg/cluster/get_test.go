@@ -100,8 +100,8 @@ func TestGetClusters_MixedStatus(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, clusters, 1)
-	// Mixed states result in unknown status.
-	assert.Equal(t, StateUnknown, clusters[0].State)
+	// Mixed states result in mixed status.
+	assert.Equal(t, StateMixed, clusters[0].State)
 }
 
 func TestGetClusters_AllStopped(t *testing.T) {
@@ -360,7 +360,7 @@ func TestContainerStateToState(t *testing.T) {
 }
 
 func TestAggregateState_Empty(t *testing.T) {
-	assert.Equal(t, StateUnknown, aggregateState(nil))
+	assert.Equal(t, StateEmpty, aggregateState(nil))
 }
 
 func TestAggregateState_Single(t *testing.T) {
