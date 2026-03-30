@@ -48,6 +48,30 @@ func TestLevelTrace(t *testing.T) {
 	assert.Contains(t, buf.String(), "trace message")
 }
 
+func TestDiscardHandler_WithAttrs(t *testing.T) {
+	h := discardHandler{}
+	got := h.WithAttrs([]slog.Attr{slog.String("key", "val")})
+	assert.Equal(t, h, got)
+}
+
+func TestDiscardHandler_WithGroup(t *testing.T) {
+	h := discardHandler{}
+	got := h.WithGroup("group")
+	assert.Equal(t, h, got)
+}
+
+func TestDiscardHandler_Handle(_ *testing.T) {
+	h := discardHandler{}
+	// Handle must not panic and must return nil.
+	_ = h.Handle(context.Background(), slog.Record{})
+}
+
+func TestNop(t *testing.T) {
+	l := Nop()
+	require.NotNil(t, l)
+	assert.False(t, l.Enabled(context.Background(), slog.LevelInfo))
+}
+
 func TestLevelTrace_FilteredAtDebug(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
