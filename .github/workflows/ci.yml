@@ -70,7 +70,7 @@ jobs:
         run: go build -trimpath -o sind-linux-amd64-debug ./cmd/sind
 
       - name: Upload debug binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sind-linux-amd64-debug
           path: sind-linux-amd64-debug
