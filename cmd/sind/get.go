@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"path/filepath"
 	"text/tabwriter"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -24,6 +25,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetVolumesCommand())
 	cmd.AddCommand(newGetMungeKeyCommand())
 	cmd.AddCommand(newGetDNSCommand())
+	cmd.AddCommand(newGetSSHConfigCommand())
 
 	return cmd
 }
@@ -193,6 +195,23 @@ func runGetMungeKey(cmd *cobra.Command, name string) error {
 	}
 	cmd.Println(base64.StdEncoding.EncodeToString(key))
 	return nil
+}
+
+func newGetSSHConfigCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ssh-config",
+		Short: "Show SSH config path for the current realm",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			realm := realmFromFlag(cmd)
+			dir, err := sindStateDir(realm)
+			if err != nil {
+				return err
+			}
+			cmd.Println(filepath.Join(dir, "ssh_config"))
+			return nil
+		},
+	}
 }
 
 func newTabWriter(out io.Writer) *tabwriter.Writer {

@@ -34,6 +34,40 @@ func ndjson(entries ...psEntry) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+func TestGetSSHConfig_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"get", "ssh-config"})
+	require.NoError(t, err)
+	assert.Equal(t, "ssh-config", c.Use)
+}
+
+func TestGetSSHConfig_RejectsArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "ssh-config", "extra")
+	assert.Error(t, err)
+}
+
+func TestGetSSHConfig_Output(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/xdg/state")
+	stdout, _, err := executeCommand("get", "ssh-config")
+	require.NoError(t, err)
+	assert.Equal(t, "/xdg/state/sind/sind/ssh_config\n", stdout)
+}
+
+func TestGetSSHConfig_CustomRealm(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/xdg/state")
+	stdout, _, err := executeCommand("--realm", "ci-42", "get", "ssh-config")
+	require.NoError(t, err)
+	assert.Equal(t, "/xdg/state/sind/ci-42/ssh_config\n", stdout)
+}
+
+func TestGetSSHConfig_XDGFallback(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "/home/user")
+	stdout, _, err := executeCommand("get", "ssh-config")
+	require.NoError(t, err)
+	assert.Equal(t, "/home/user/.local/state/sind/sind/ssh_config\n", stdout)
+}
+
 func TestGetClusters_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"get", "clusters"})
