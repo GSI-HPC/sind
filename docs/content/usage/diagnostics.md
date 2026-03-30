@@ -6,6 +6,53 @@ description: "Cluster health, logs, and resource inspection"
 toc: true
 ---
 
+## Verbose logging
+
+By default, sind operates silently — only command output and errors are shown. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
+
+```bash
+sind -v  create cluster          # info: phase summaries
+sind -vv create cluster          # debug: individual operations
+sind -vvv create cluster         # trace: docker commands, probe retries
+```
+
+| Flag | Level | What's logged |
+|------|-------|---------------|
+| (none) | off | Nothing — errors via exit code only |
+| `-v` | info | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
+| `-vv` | debug | Individual operations: "waiting for node", "enabling slurmd", "creating network" |
+| `-vvv` | trace | Docker commands, probe retry attempts with error details |
+
+Log output goes to stderr in structured `key=value` format, keeping stdout clean for parseable output:
+
+```bash
+# Capture logs while piping output
+sind -v get munge-key 2>create.log | base64 -d > munge.key
+
+# Watch creation progress
+sind -vv create cluster --config cluster.yaml
+```
+
+Example output at `-vv`:
+
+```
+level=INFO msg="ensuring mesh infrastructure" realm=sind
+level=INFO msg="creating cluster" name=dev nodes=3
+level=DEBUG msg="preflight check passed"
+level=INFO msg="resolved infrastructure" slurm=25.11.4
+level=DEBUG msg="cluster resources created"
+level=DEBUG msg="waiting for node" node=controller
+level=DEBUG msg="waiting for node" node=worker-0
+level=DEBUG msg="starting readiness probes" node=sind-dev-controller probes=container,systemd,sshd
+level=DEBUG msg="all probes passed" node=sind-dev-controller
+level=INFO msg="nodes ready" count=3
+level=DEBUG msg="enabling slurm service" node=controller service=slurmctld
+level=DEBUG msg="enabling slurm service" node=worker-0 service=slurmd
+level=INFO msg="slurm services enabled"
+```
+
+The `-v` flag is global and works with any command.
+
 ## Cluster status
 
 ```bash

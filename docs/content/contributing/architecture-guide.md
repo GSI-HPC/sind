@@ -11,8 +11,10 @@ toc: true
 ```
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
-  ├── root.go      Root command, --realm flag
+  ├── root.go      Root command, --realm flag, -v flag
   ├── context.go   Dependency injection via context
+  ├── logging.go   Logger construction from -v verbosity
+  ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing
   └── *.go         One file per command group
 
@@ -39,6 +41,7 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
+pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS, SSH)
 pkg/probe/         Node readiness probes
 pkg/nodeset/       Nodeset expansion (worker-[0-3])
@@ -51,6 +54,7 @@ pkg/ssh/           SSH key generation and injection
 ```
 cmd/sind → pkg/cluster → pkg/docker
                        → pkg/config
+                       → pkg/log
                        → pkg/mesh   → pkg/docker
                        → pkg/probe  → pkg/docker
                        → pkg/slurm  → pkg/docker
@@ -105,9 +109,23 @@ The CLI layer injects dependencies via Go context:
 ```go
 ctx = withClient(ctx, client)
 ctx = withMeshManager(ctx, meshMgr)
+ctx = sindlog.With(ctx, logger)     // injected by PersistentPreRunE
 ```
 
-Commands retrieve them with `clientFrom(ctx)` and `meshMgrFrom(ctx, ...)`.
+Commands retrieve them with `clientFrom(ctx)` and `meshMgrFrom(ctx, ...)`. The logger is injected automatically by the root command's `PersistentPreRunE` based on the `-v` flag count.
+
+### Structured logging
+
+The `pkg/log` package provides context-based logging via `slog`. All `pkg/` code extracts the logger from context — never from `slog.Default()`:
+
+```go
+log := sindlog.From(ctx)
+log.InfoContext(ctx, "creating cluster", "name", cfg.Name)
+log.DebugContext(ctx, "waiting for node", "node", shortName)
+log.Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
+```
+
+When no logger is in the context (library use without the CLI), `From` returns a no-op logger. In errgroup goroutines, use `gctx` (not the outer `ctx`) for log calls.
 
 ### Resource naming
 
