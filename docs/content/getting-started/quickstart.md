@@ -71,20 +71,52 @@ Open an interactive shell on the controller (or submitter, if configured):
 sind enter
 ```
 
-From there, use standard Slurm commands:
-
-```bash
-sinfo
-srun hostname
-sbatch my-job.sh
-```
-
-Or run a one-shot command without an interactive session:
+Or run one-shot commands without an interactive session:
 
 ```bash
 sind exec -- sinfo
 sind exec -- srun hostname
 ```
+
+### Submit a batch job
+
+Create a batch script in your working directory:
+
+```bash
+cat > job.sh << 'EOF'
+#!/bin/bash
+#SBATCH --job-name=hello
+echo "Hello from $(hostname)"
+EOF
+```
+
+Submit and monitor:
+
+```bash
+sind exec -- sbatch job.sh
+```
+
+```
+Submitted batch job 2
+```
+
+Check the job queue:
+
+```bash
+sind exec -- squeue
+```
+
+View the output after the job completes:
+
+```bash
+cat slurm-2.out
+```
+
+```
+Hello from worker-0
+```
+
+By default, `sind create cluster` bind-mounts the current directory as `/data` inside all nodes. Batch scripts and output files are shared across the cluster and accessible directly on your host.
 
 ## SSH into a node
 

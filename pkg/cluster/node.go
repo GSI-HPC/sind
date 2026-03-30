@@ -18,6 +18,7 @@ const (
 	LabelCluster      = "sind.cluster"
 	LabelRole         = "sind.role"
 	LabelSlurmVersion = "sind.slurm.version"
+	LabelDataHostPath = "sind.data.hostpath"
 )
 
 // Docker Compose compatibility labels.
@@ -40,7 +41,8 @@ func ComposeProject(realm, clusterName string) string {
 // NodeLabels returns the standard labels for a node container.
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is omitted when slurmVersion is empty.
-func NodeLabels(realm, clusterName, role, slurmVersion string, containerNumber int) map[string]string {
+// The data host path label is omitted when dataHostPath is empty (Docker volume mode).
+func NodeLabels(realm, clusterName, role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
 	labels := map[string]string{
 		LabelRealm:                  realm,
 		LabelCluster:                clusterName,
@@ -54,6 +56,9 @@ func NodeLabels(realm, clusterName, role, slurmVersion string, containerNumber i
 	}
 	if slurmVersion != "" {
 		labels[LabelSlurmVersion] = slurmVersion
+	}
+	if dataHostPath != "" {
+		labels[LabelDataHostPath] = dataHostPath
 	}
 	return labels
 }
@@ -139,7 +144,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	)
 
 	// Labels
-	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.SlurmVersion, cfg.ContainerNumber)
+	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)

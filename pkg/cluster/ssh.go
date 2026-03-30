@@ -51,13 +51,20 @@ func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 	return "", fmt.Errorf("no submitter or controller found in cluster %q", clusterName)
 }
 
-// ExecArgs builds docker CLI arguments for a one-shot command execution on
-// the cluster's submitter (or controller). The returned args are suitable for
-// passing to docker directly.
-func ExecArgs(ctx context.Context, client *docker.Client, realm string, sshContainer docker.ContainerName, clusterName string, command []string) ([]string, error) {
-	target, err := EnterTarget(ctx, client, realm, clusterName)
-	if err != nil {
-		return nil, err
+// BuildContainerExecArgs builds docker CLI arguments for running a command
+// directly inside a cluster container via docker exec. The working directory
+// is set to /data (the shared data mount). When command is nil, an interactive
+// login shell is started.
+func BuildContainerExecArgs(container docker.ContainerName, isTTY bool, command []string) []string {
+	args := []string{"exec", "-i"}
+	if isTTY {
+		args = append(args, "-t")
 	}
-	return BuildSSHArgs(sshContainer, target, clusterName, false, nil, command), nil
+	args = append(args, "-w", "/data", string(container))
+	if len(command) == 0 {
+		args = append(args, "bash", "-l")
+	} else {
+		args = append(args, command...)
+	}
+	return args
 }

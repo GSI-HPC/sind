@@ -116,34 +116,53 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 	return health, nil
 }
 
-// VolumeHealth holds the existence status of cluster volumes.
-type VolumeHealth struct {
-	Config bool // sind-<cluster>-config volume exists
-	Munge  bool // sind-<cluster>-munge volume exists
-	Data   bool // sind-<cluster>-data volume exists
+// MountPoint describes a volume or bind mount on cluster containers.
+type MountPoint struct {
+	Path   string // mount path inside the container (e.g. "/etc/slurm")
+	Source string // volume name or host path
+	Type   string // "volume" or "hostPath"
+	OK     bool   // true if the Docker volume exists (always true for hostPath)
 }
 
-// GetVolumeHealth checks whether the cluster's config, munge, and data volumes exist.
-func GetVolumeHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*VolumeHealth, error) {
-	health := &VolumeHealth{}
-
-	for _, vtype := range []string{"config", "munge", "data"} {
-		volName := VolumeName(realm, clusterName, vtype)
-		exists, err := client.VolumeExists(ctx, volName)
-		if err != nil {
-			return nil, fmt.Errorf("checking volume %s: %w", volName, err)
-		}
-		switch vtype {
-		case "config":
-			health.Config = exists
-		case "munge":
-			health.Munge = exists
-		case "data":
-			health.Data = exists
+// GetMountPoints returns the mount points for a cluster, checking volume
+// existence for Docker volumes. The data mount source is determined from
+// the sind.data.hostpath label on cluster containers: when present it is
+// a host-path bind mount, otherwise it is a Docker volume.
+func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []docker.ContainerListEntry) ([]MountPoint, error) {
+	// Determine data mount source from container labels.
+	dataHostPath := ""
+	for _, c := range containers {
+		if hp := c.Labels[LabelDataHostPath]; hp != "" {
+			dataHostPath = hp
+			break
 		}
 	}
 
-	return health, nil
+	// Config and munge are always Docker volumes.
+	mounts := []MountPoint{
+		{Path: "/etc/slurm", Source: string(VolumeName(realm, clusterName, "config")), Type: "volume"},
+		{Path: "/etc/munge", Source: string(VolumeName(realm, clusterName, "munge")), Type: "volume"},
+	}
+
+	if dataHostPath != "" {
+		mounts = append(mounts, MountPoint{Path: "/data", Source: dataHostPath, Type: "hostPath", OK: true})
+	} else {
+		mounts = append(mounts, MountPoint{Path: "/data", Source: string(VolumeName(realm, clusterName, "data")), Type: "volume"})
+	}
+
+	// Check existence of Docker volumes.
+	for i := range mounts {
+		if mounts[i].Type != "volume" {
+			continue
+		}
+		exists, err := client.VolumeExists(ctx, docker.VolumeName(mounts[i].Source))
+		if err != nil {
+			return nil, fmt.Errorf("checking volume %s: %w", mounts[i].Source, err)
+		}
+		mounts[i].OK = exists
+	}
+
+	return mounts, nil
 }
 
 // NodeStatus combines node identity with health information.
@@ -159,7 +178,7 @@ type Status struct {
 	State   State
 	Nodes   []*NodeStatus
 	Network *NetworkHealth
-	Volumes *VolumeHealth
+	Mounts  []MountPoint
 }
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
@@ -202,7 +221,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nil, err
 	}
 
-	volumes, err := GetVolumeHealth(ctx, client, realm, clusterName)
+	mounts, err := GetMountPoints(ctx, client, realm, clusterName, containers)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +231,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		State:   aggregateState(states),
 		Nodes:   nodes,
 		Network: network,
-		Volumes: volumes,
+		Mounts:  mounts,
 	}, nil
 }
 

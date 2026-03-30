@@ -69,7 +69,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create volumes.
-	err = CreateClusterVolumes(ctx, c, mesh.DefaultRealm, clusterName)
+	err = CreateClusterVolumes(ctx, c, mesh.DefaultRealm, clusterName, true)
 	require.NoError(t, err)
 
 	// Write config.
@@ -144,7 +144,7 @@ func TestCreateClusterVolumes(t *testing.T) {
 	m.AddResult("", "", nil) // data
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev")
+	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev", true)
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -168,13 +168,27 @@ func TestCreateClusterVolumes(t *testing.T) {
 	}, m.Calls[2].Args)
 }
 
+func TestCreateClusterVolumes_SkipData(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // config
+	m.AddResult("", "", nil) // munge
+	c := docker.NewClient(&m)
+
+	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev", false)
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 2)
+	assert.Contains(t, m.Calls[0].Args[len(m.Calls[0].Args)-1], "config")
+	assert.Contains(t, m.Calls[1].Args[len(m.Calls[1].Args)-1], "munge")
+}
+
 func TestCreateClusterVolumes_Error(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", nil)                                // config OK
 	m.AddResult("", "", fmt.Errorf("volume create failed")) // munge fails
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev")
+	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev", true)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "munge")

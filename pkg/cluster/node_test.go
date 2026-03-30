@@ -34,7 +34,7 @@ func argValues(args []string, flag string) []string {
 }
 
 func TestNodeLabels(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", "", 1)
 
 	assert.Equal(t, map[string]string{
 		"sind.realm":                              mesh.DefaultRealm,
@@ -51,7 +51,7 @@ func TestNodeLabels(t *testing.T) {
 }
 
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", "worker", "", 3)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", "worker", "", "", 3)
 
 	assert.Equal(t, map[string]string{
 		"sind.realm":                              mesh.DefaultRealm,
@@ -66,6 +66,19 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 	}, labels)
 	_, ok := labels[LabelSlurmVersion]
 	assert.False(t, ok, "slurm version label absent")
+}
+
+func TestNodeLabels_WithDataHostPath(t *testing.T) {
+	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", "/home/user/project", 1)
+
+	assert.Equal(t, "/home/user/project", labels[LabelDataHostPath])
+}
+
+func TestNodeLabels_NoDataHostPath(t *testing.T) {
+	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", "", 1)
+
+	_, ok := labels[LabelDataHostPath]
+	assert.False(t, ok, "data host path label absent when empty")
 }
 
 func defaultRunConfig() RunConfig {

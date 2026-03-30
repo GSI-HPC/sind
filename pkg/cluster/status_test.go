@@ -367,21 +367,32 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[3].Args)
 }
 
-// --- GetVolumeHealth ---
+// --- GetMountPoints ---
 
-func TestGetVolumeHealth_AllExist(t *testing.T) {
+func TestGetMountPoints_AllVolumes(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("[{}]\n", "", nil) // config
 	m.AddResult("[{}]\n", "", nil) // munge
 	m.AddResult("[{}]\n", "", nil) // data
 	c := docker.NewClient(&m)
 
-	health, err := GetVolumeHealth(t.Context(), c, mesh.DefaultRealm, "dev")
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller", Labels: map[string]string{"sind.role": "controller"}},
+	}
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
 
 	require.NoError(t, err)
-	assert.True(t, health.Config)
-	assert.True(t, health.Munge)
-	assert.True(t, health.Data)
+	require.Len(t, mounts, 3)
+	assert.Equal(t, "/etc/slurm", mounts[0].Path)
+	assert.Equal(t, "sind-dev-config", mounts[0].Source)
+	assert.Equal(t, "volume", mounts[0].Type)
+	assert.True(t, mounts[0].OK)
+	assert.Equal(t, "/etc/munge", mounts[1].Path)
+	assert.True(t, mounts[1].OK)
+	assert.Equal(t, "/data", mounts[2].Path)
+	assert.Equal(t, "sind-dev-data", mounts[2].Source)
+	assert.Equal(t, "volume", mounts[2].Type)
+	assert.True(t, mounts[2].OK)
 
 	// Verify correct volume names were checked.
 	require.Len(t, m.Calls, 3)
@@ -390,7 +401,33 @@ func TestGetVolumeHealth_AllExist(t *testing.T) {
 	assert.Equal(t, []string{"volume", "inspect", "sind-dev-data"}, m.Calls[2].Args)
 }
 
-func TestGetVolumeHealth_NoneExist(t *testing.T) {
+func TestGetMountPoints_HostPath(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("[{}]\n", "", nil) // config
+	m.AddResult("[{}]\n", "", nil) // munge
+	// no data volume check — host path used
+	c := docker.NewClient(&m)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller", Labels: map[string]string{
+			"sind.role":          "controller",
+			"sind.data.hostpath": "/home/user/project",
+		}},
+	}
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
+
+	require.NoError(t, err)
+	require.Len(t, mounts, 3)
+	assert.Equal(t, "/data", mounts[2].Path)
+	assert.Equal(t, "/home/user/project", mounts[2].Source)
+	assert.Equal(t, "hostPath", mounts[2].Type)
+	assert.True(t, mounts[2].OK)
+
+	// Only config and munge volumes checked.
+	require.Len(t, m.Calls, 2)
+}
+
+func TestGetMountPoints_NoneExist(t *testing.T) {
 	var m docker.MockExecutor
 	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("", "Error: No such volume\n", notFound) // config
@@ -398,54 +435,49 @@ func TestGetVolumeHealth_NoneExist(t *testing.T) {
 	m.AddResult("", "Error: No such volume\n", notFound) // data
 	c := docker.NewClient(&m)
 
-	health, err := GetVolumeHealth(t.Context(), c, mesh.DefaultRealm, "dev")
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
 
 	require.NoError(t, err)
-	assert.False(t, health.Config)
-	assert.False(t, health.Munge)
-	assert.False(t, health.Data)
+	assert.False(t, mounts[0].OK)
+	assert.False(t, mounts[1].OK)
+	assert.False(t, mounts[2].OK)
 }
 
-func TestGetVolumeHealth_PartialExist(t *testing.T) {
-	var m docker.MockExecutor
-	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
-	m.AddResult("[{}]\n", "", nil)                       // config exists
-	m.AddResult("", "Error: No such volume\n", notFound) // munge missing
-	m.AddResult("[{}]\n", "", nil)                       // data exists
-	c := docker.NewClient(&m)
-
-	health, err := GetVolumeHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.True(t, health.Config)
-	assert.False(t, health.Munge)
-	assert.True(t, health.Data)
-}
-
-func TestGetVolumeHealth_CheckError(t *testing.T) {
+func TestGetMountPoints_CheckError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumeHealth(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checking volume sind-dev-config")
 }
 
-func TestGetVolumeHealth_DefaultCluster(t *testing.T) {
+func TestGetMountPoints_MungeCheckError(t *testing.T) {
 	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	m.AddResult("[{}]\n", "", nil) // data
+	m.AddResult("[{}]\n", "", nil)                         // config OK
+	m.AddResult("", "", fmt.Errorf("docker daemon error")) // munge error
 	c := docker.NewClient(&m)
 
-	_, err := GetVolumeHealth(t.Context(), c, mesh.DefaultRealm, "default")
+	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
 
-	require.NoError(t, err)
-	assert.Equal(t, []string{"volume", "inspect", "sind-default-config"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"volume", "inspect", "sind-default-munge"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"volume", "inspect", "sind-default-data"}, m.Calls[2].Args)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking volume sind-dev-munge")
+}
+
+func TestGetMountPoints_DataCheckError(t *testing.T) {
+	var m docker.MockExecutor
+	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
+	m.AddResult("[{}]\n", "", nil)                         // config OK
+	m.AddResult("", "Error: No such volume\n", notFound)   // munge missing
+	m.AddResult("", "", fmt.Errorf("docker daemon error")) // data error
+	c := docker.NewClient(&m)
+
+	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking volume sind-dev-data")
 }
 
 // --- GetStatus ---
@@ -554,10 +586,14 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.True(t, status.Network.DNS)
 	assert.True(t, status.Network.Cluster)
 
-	// Volumes
-	assert.True(t, status.Volumes.Config)
-	assert.True(t, status.Volumes.Munge)
-	assert.True(t, status.Volumes.Data)
+	// Mounts
+	require.Len(t, status.Mounts, 3)
+	assert.Equal(t, "/etc/slurm", status.Mounts[0].Path)
+	assert.True(t, status.Mounts[0].OK)
+	assert.Equal(t, "/etc/munge", status.Mounts[1].Path)
+	assert.True(t, status.Mounts[1].OK)
+	assert.Equal(t, "/data", status.Mounts[2].Path)
+	assert.True(t, status.Mounts[2].OK)
 }
 
 func TestGetStatus_Empty(t *testing.T) {
@@ -739,30 +775,4 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	require.Len(t, status.Nodes, 2)
 	assert.Equal(t, "running", status.Nodes[0].Health.Container)
 	assert.Equal(t, "exited", status.Nodes[1].Health.Container)
-}
-
-func TestGetVolumeHealth_MungeCheckError(t *testing.T) {
-	var m docker.MockExecutor
-	m.AddResult("[{}]\n", "", nil)                         // config OK
-	m.AddResult("", "", fmt.Errorf("docker daemon error")) // munge error
-	c := docker.NewClient(&m)
-
-	_, err := GetVolumeHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volume sind-dev-munge")
-}
-
-func TestGetVolumeHealth_DataCheckError(t *testing.T) {
-	var m docker.MockExecutor
-	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
-	m.AddResult("[{}]\n", "", nil)                         // config OK
-	m.AddResult("", "Error: No such volume\n", notFound)   // munge not found
-	m.AddResult("", "", fmt.Errorf("docker daemon error")) // data error
-	c := docker.NewClient(&m)
-
-	_, err := GetVolumeHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volume sind-dev-data")
 }

@@ -89,6 +89,44 @@ func TestSSH_PassthroughOptions_Multiple(t *testing.T) {
 	}, args)
 }
 
+// --- BuildContainerExecArgs ---
+
+func TestContainerExec_InteractiveShell(t *testing.T) {
+	args := BuildContainerExecArgs("sind-dev-controller", true, nil)
+
+	assert.Equal(t, []string{
+		"exec", "-i", "-t", "-w", "/data", "sind-dev-controller",
+		"bash", "-l",
+	}, args)
+}
+
+func TestContainerExec_NonInteractiveShell(t *testing.T) {
+	args := BuildContainerExecArgs("sind-dev-controller", false, nil)
+
+	assert.Equal(t, []string{
+		"exec", "-i", "-w", "/data", "sind-dev-controller",
+		"bash", "-l",
+	}, args)
+}
+
+func TestContainerExec_WithCommand(t *testing.T) {
+	args := BuildContainerExecArgs("sind-dev-controller", false, []string{"sinfo"})
+
+	assert.Equal(t, []string{
+		"exec", "-i", "-w", "/data", "sind-dev-controller",
+		"sinfo",
+	}, args)
+}
+
+func TestContainerExec_WithMultiWordCommand(t *testing.T) {
+	args := BuildContainerExecArgs("sind-dev-worker-0", false, []string{"srun", "hostname"})
+
+	assert.Equal(t, []string{
+		"exec", "-i", "-w", "/data", "sind-dev-worker-0",
+		"srun", "hostname",
+	}, args)
+}
+
 // --- EnterTarget ---
 
 func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
@@ -174,65 +212,6 @@ func TestEnter_TargetSelection_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
 	_, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
-}
-
-// --- ExecArgs ---
-
-func TestExec_OneShot(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
-		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
-				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=worker"},
-			)}
-		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
-	client := docker.NewClient(&m)
-
-	args, err := ExecArgs(t.Context(), client, mesh.DefaultRealm, mesh.SSHContainerName, "dev", []string{"sinfo", "-N"})
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{
-		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "controller.dev.sind.local", "sinfo", "-N",
-	}, args)
-}
-
-func TestExec_OneShotWithSubmitter(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
-		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
-				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=submitter"},
-			)}
-		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
-	client := docker.NewClient(&m)
-
-	args, err := ExecArgs(t.Context(), client, mesh.DefaultRealm, mesh.SSHContainerName, "dev", []string{"hostname"})
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{
-		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "submitter.dev.sind.local", "hostname",
-	}, args)
-}
-
-func TestExec_ListError(t *testing.T) {
-	client := docker.NewClient(listErrorMock())
-
-	_, err := ExecArgs(t.Context(), client, mesh.DefaultRealm, mesh.SSHContainerName, "dev", []string{"hostname"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")

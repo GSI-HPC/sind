@@ -78,7 +78,7 @@ func TestQuickstart(t *testing.T) {
 	assert.Contains(t, stdout, "Cluster: default")
 	assert.Contains(t, stdout, "NODES")
 	assert.Contains(t, stdout, "NETWORK")
-	assert.Contains(t, stdout, "VOLUMES")
+	assert.Contains(t, stdout, "MOUNTS")
 
 	// ## Run Slurm commands
 	// sind exec -- sinfo
@@ -89,6 +89,26 @@ func TestQuickstart(t *testing.T) {
 	// sind exec -- srun hostname
 	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "srun", "hostname")
 	require.NoError(t, err, "exec srun hostname: stdout=%q stderr=%q", stdout, stderr)
+	assert.Contains(t, stdout, "worker-0")
+
+	// ### Submit a batch job
+	// Create batch script via exec (lands in /data = test temp dir)
+	_, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", `printf '#!/bin/sh\nhostname\n' > job.sh`)
+	require.NoError(t, err, "create job script: stderr=%q", stderr)
+
+	// sind exec -- sbatch --wait job.sh
+	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sbatch", "--wait", "job.sh")
+	require.NoError(t, err, "sbatch: stdout=%q stderr=%q", stdout, stderr)
+	assert.Contains(t, stdout, "Submitted batch job")
+
+	// sind exec -- squeue
+	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "squeue")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "JOBID")
+
+	// Verify output file
+	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", "cat slurm-*.out")
+	require.NoError(t, err)
 	assert.Contains(t, stdout, "worker-0")
 
 	// ## SSH into a node

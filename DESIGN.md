@@ -216,10 +216,11 @@ Mesh:     sind-mesh ✓  172.18.0.0/16  gw 172.18.0.1
 DNS:      sind-dns ✓
 Cluster:  sind-dev-net ✓  172.19.0.0/16  gw 172.19.0.1
 
-VOLUMES
-sind-dev-config ✓
-sind-dev-munge ✓
-sind-dev-data ✓
+MOUNTS
+MOUNT        SOURCE                    TYPE       STATUS
+/etc/slurm   sind-dev-config           volume     ✓
+/etc/munge   sind-dev-munge            volume     ✓
+/data        /home/user/project        hostPath   ✓
 ```
 
 ### Node Access
@@ -526,12 +527,29 @@ Container mount flags:
 --tmpfs /run/lock                          # systemd lock files
 ```
 
-### Host Path Storage
+### Data Mount
 
-When `dataStorage.type: hostPath` is specified:
+By default, `sind create cluster` bind-mounts the current working directory as `/data` on all nodes:
 ```
--v /path/on/host:/data:rw,z
+-v /absolute/path/to/cwd:/data:rw,z
 ```
+
+The `--data` flag controls the mount source:
+- `--data .` (default) — bind-mount the current working directory
+- `--data /path` — bind-mount a specific host directory
+- `--data volume` — use a Docker-managed volume (`sind-<cluster>-data`)
+
+When a YAML config specifies `storage.dataStorage`, the config takes precedence over `--data`.
+
+The resolved host path is stored on each container as the `sind.data.hostpath` label so that
+dynamically added workers (`sind create worker`) inherit the same mount.
+
+### Enter and Exec
+
+`sind enter` and `sind exec` run commands directly inside the target container via `docker exec`
+with the working directory set to `/data`. This means commands operate on the shared data mount.
+
+`sind ssh` continues to use the SSH relay container for full SSH access (port forwarding, etc.).
 
 ## Networking
 

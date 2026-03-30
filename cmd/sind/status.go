@@ -65,13 +65,17 @@ func runStatus(cmd *cobra.Command, name string) error {
 	cmd.Printf("DNS:      sind-dns %s\n", checkmark(net.DNS))
 	cmd.Printf("Cluster:  sind-%s-net %s  %s  gw %s\n", name, checkmark(net.Cluster), net.ClusterSubnet, net.ClusterGateway)
 
-	// Volumes section
+	// Mounts section
 	cmd.Println()
-	cmd.Println("VOLUMES")
-	vol := status.Volumes
-	cmd.Printf("sind-%s-config %s\n", name, checkmark(vol.Config))
-	cmd.Printf("sind-%s-munge %s\n", name, checkmark(vol.Munge))
-	cmd.Printf("sind-%s-data %s\n", name, checkmark(vol.Data))
+	cmd.Println("MOUNTS")
+	w = newTabWriter(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(w, "MOUNT\tSOURCE\tTYPE\tSTATUS")
+	for _, m := range status.Mounts {
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.Path, m.Source, m.Type, checkmark(m.OK))
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
 
 	return nil
 }

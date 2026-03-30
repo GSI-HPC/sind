@@ -153,9 +153,10 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 //	     │  └────┬───┘ └───┬────┘
 //	     └───────┼─────────┘
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
+	useDataVolume := cfg.Storage.DataStorage.HostPath == ""
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return CreateClusterNetwork(gctx, client, realm, cfg.Name) })
-	g.Go(func() error { return CreateClusterVolumes(gctx, client, realm, cfg.Name) })
+	g.Go(func() error { return CreateClusterVolumes(gctx, client, realm, cfg.Name, useDataVolume) })
 	if err := g.Wait(); err != nil {
 		return err
 	}
@@ -331,9 +332,15 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 	return nil
 }
 
-// CreateClusterVolumes creates the config, munge, and data volumes for a cluster.
-func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clusterName string) error {
-	for _, vtype := range []string{"config", "munge", "data"} {
+// CreateClusterVolumes creates the config and munge volumes for a cluster.
+// When useDataVolume is true, a data volume is also created; otherwise the
+// caller is expected to use a host-path bind mount for /data.
+func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clusterName string, useDataVolume bool) error {
+	types := []string{"config", "munge"}
+	if useDataVolume {
+		types = append(types, "data")
+	}
+	for _, vtype := range types {
 		labels := map[string]string{
 			LabelComposeProject: ComposeProject(realm, clusterName),
 			LabelComposeVolume:  vtype,

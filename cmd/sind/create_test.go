@@ -57,7 +57,39 @@ func TestCreateCluster_CommandExists(t *testing.T) {
 	// Check flags exist with correct defaults
 	assert.NotNil(t, createCmd.Flags().Lookup("name"))
 	assert.NotNil(t, createCmd.Flags().Lookup("config"))
+	assert.NotNil(t, createCmd.Flags().Lookup("data"))
 	assert.Equal(t, "default", createCmd.Flags().Lookup("name").DefValue)
+	assert.Equal(t, ".", createCmd.Flags().Lookup("data").DefValue)
+}
+
+func TestApplyDataFlag_HostPath(t *testing.T) {
+	cfg, err := loadConfig("")
+	require.NoError(t, err)
+
+	require.NoError(t, applyDataFlag(cfg, "/tmp/my-project"))
+
+	assert.Equal(t, "hostPath", cfg.Storage.DataStorage.Type)
+	assert.Equal(t, "/tmp/my-project", cfg.Storage.DataStorage.HostPath)
+}
+
+func TestApplyDataFlag_RelativePath(t *testing.T) {
+	cfg, err := loadConfig("")
+	require.NoError(t, err)
+
+	require.NoError(t, applyDataFlag(cfg, "."))
+
+	assert.Equal(t, "hostPath", cfg.Storage.DataStorage.Type)
+	assert.True(t, filepath.IsAbs(cfg.Storage.DataStorage.HostPath), "path should be absolute")
+}
+
+func TestApplyDataFlag_Volume(t *testing.T) {
+	cfg, err := loadConfig("")
+	require.NoError(t, err)
+
+	require.NoError(t, applyDataFlag(cfg, "volume"))
+
+	assert.Empty(t, cfg.Storage.DataStorage.Type)
+	assert.Empty(t, cfg.Storage.DataStorage.HostPath)
 }
 
 func TestCreateCluster_RejectsArgs(t *testing.T) {
@@ -137,11 +169,11 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, testRealm+"-mesh")
 
 	// --- get volumes ---
+	// Data volume is not created when using host-path bind mount (default).
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "volumes")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, testRealm+"-"+cluster+"-config")
 	assert.Contains(t, stdout, testRealm+"-"+cluster+"-munge")
-	assert.Contains(t, stdout, testRealm+"-"+cluster+"-data")
 
 	// --- get munge-key ---
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "munge-key", cluster)
@@ -157,7 +189,7 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "controller")
 	assert.Contains(t, stdout, "worker-0")
 	assert.Contains(t, stdout, "NETWORK")
-	assert.Contains(t, stdout, "VOLUMES")
+	assert.Contains(t, stdout, "MOUNTS")
 
 	// --- exec ---
 	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", cluster, "--", "hostname")

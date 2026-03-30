@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -42,6 +43,7 @@ func newCreateClusterCommand() *cobra.Command {
 
 	cmd.Flags().String("name", "default", "cluster name")
 	cmd.Flags().StringVar(&configFile, "config", "", "path to cluster configuration file")
+	cmd.Flags().String("data", ".", `host directory to mount as /data (use "volume" for Docker volume)`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
 
 	return cmd
@@ -55,6 +57,14 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	if cmd.Flags().Changed("name") {
 		cfg.Name = name
+	}
+
+	// Apply --data flag when config doesn't already specify data storage.
+	if cfg.Storage.DataStorage.Type == "" && cfg.Storage.DataStorage.HostPath == "" {
+		dataFlag, _ := cmd.Flags().GetString("data")
+		if err := applyDataFlag(cfg, dataFlag); err != nil {
+			return err
+		}
 	}
 
 	pull, _ := cmd.Flags().GetBool("pull")
@@ -86,6 +96,22 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	}
 
 	cmd.Printf("Cluster %q created with %d node(s)\n", result.Name, len(result.Nodes))
+	return nil
+}
+
+// applyDataFlag sets the data storage config from the --data CLI flag.
+// "volume" means use a Docker-managed volume; any other value is treated
+// as a host directory path and resolved to an absolute path.
+func applyDataFlag(cfg *config.Cluster, value string) error {
+	if value == "volume" {
+		return nil
+	}
+	abs, err := filepath.Abs(value)
+	if err != nil {
+		return fmt.Errorf("resolving data path %q: %w", value, err)
+	}
+	cfg.Storage.DataStorage.Type = "hostPath"
+	cfg.Storage.DataStorage.HostPath = abs
 	return nil
 }
 
