@@ -59,7 +59,8 @@ sind waits for each node to become ready before returning success:
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
-| Slurm daemon ready | Role-specific daemon responding (slurmctld, slurmd) |
+| slurmctld ready | `scontrol ping` succeeds (controller only) |
+| slurmd ready | slurmd service active (worker only) |
 
 If any node fails to become ready within the timeout, `sind create cluster` fails and reports which nodes/checks failed. Partial clusters are not automatically cleaned up—use `sind delete cluster` to remove.
 
