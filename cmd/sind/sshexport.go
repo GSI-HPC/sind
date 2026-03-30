@@ -33,6 +33,8 @@ func syncSSHExport(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 	for _, name := range sshExportFiles {
 		_ = fs.Remove(filepath.Join(dir, name))
 	}
+	// Remove the realm directory if empty.
+	_ = fs.Remove(dir)
 	return nil
 }
 

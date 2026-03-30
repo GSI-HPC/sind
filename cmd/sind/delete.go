@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +58,12 @@ func runDeleteCluster(cmd *cobra.Command, name string) error {
 		return err
 	}
 
+	if dir, dirErr := sindStateDir(realm); dirErr == nil {
+		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
+			cmd.PrintErrln("Warning: could not update SSH config:", exportErr)
+		}
+	}
+
 	cmd.Printf("Cluster %q deleted\n", name)
 	return nil
 }
@@ -77,6 +84,12 @@ func runDeleteClustersAll(cmd *cobra.Command) error {
 			return err
 		}
 		cmd.Printf("Cluster %q deleted\n", c.Name)
+	}
+
+	if dir, dirErr := sindStateDir(realm); dirErr == nil {
+		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
+			cmd.PrintErrln("Warning: could not update SSH config:", exportErr)
+		}
 	}
 
 	return nil

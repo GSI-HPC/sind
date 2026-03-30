@@ -110,10 +110,10 @@ func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
 		assert.False(t, exists, "%s should be removed", name)
 	}
 
-	// Directory should still exist.
+	// Empty realm directory should be removed.
 	exists, err := afero.DirExists(fs, dir)
 	require.NoError(t, err)
-	assert.True(t, exists, "directory should be preserved")
+	assert.False(t, exists, "empty realm directory should be removed")
 }
 
 func TestSyncSSHExport_NoFilesToClean(t *testing.T) {

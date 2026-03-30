@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -56,11 +57,18 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	meshMgr := meshMgrFrom(ctx, client, realmFromFlag(cmd))
+	realm := realmFromFlag(cmd)
+	meshMgr := meshMgrFrom(ctx, client, realm)
 
 	nodes, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, defaultReadinessInterval)
 	if err != nil {
 		return err
+	}
+
+	if dir, dirErr := sindStateDir(realm); dirErr == nil {
+		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
+			cmd.PrintErrln("Warning: could not update SSH config:", exportErr)
+		}
 	}
 
 	names := make([]string, len(nodes))
@@ -90,7 +98,8 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	meshMgr := meshMgrFrom(ctx, client, realmFromFlag(cmd))
+	realm := realmFromFlag(cmd)
+	meshMgr := meshMgrFrom(ctx, client, realm)
 
 	for clusterName, shortNames := range groupByCluster(targets) {
 		if err := cluster.WorkerRemove(ctx, client, meshMgr, clusterName, shortNames); err != nil {
@@ -98,5 +107,12 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 		}
 		cmd.Printf("Removed %d worker(s) from cluster %q\n", len(shortNames), clusterName)
 	}
+
+	if dir, dirErr := sindStateDir(realm); dirErr == nil {
+		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
+			cmd.PrintErrln("Warning: could not update SSH config:", exportErr)
+		}
+	}
+
 	return nil
 }
