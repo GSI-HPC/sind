@@ -40,6 +40,8 @@ worker-0.dev      worker      172.18.0.3    running     ✓      ✓      slurmd
 worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd ✗
 ```
 
+> **Tip:** Run `watch sind status` for a simple live dashboard that refreshes every two seconds.
+
 ## Logs
 
 ```bash
