@@ -1,9 +1,9 @@
+version: "2"
+
 linters:
   enable:
     - copyloopvar
     - errcheck
-    - gofmt
-    - goimports
     - govet
     - ineffassign
     - misspell
@@ -11,3 +11,8 @@ linters:
     - staticcheck
     - unconvert
     - unused
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
