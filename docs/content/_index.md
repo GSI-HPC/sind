@@ -19,19 +19,19 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offer
 
 {{< columns >}}
 
-### Multi-node, multi-cluster & multi-realm
+## Multi-node, multi-cluster & multi-realm
 
 Run controller, submitter, and worker nodes side by side — or spin up multiple clusters across isolated realms with shared networking.
 
 <--->
 
-### System containers
+## System containers
 
 Full systemd-based nodes that emulate bare metal — use the same config management tools you already have.
 
 <--->
 
-### Cross-cluster networking
+## Cross-cluster networking
 
 Shared mesh network with DNS for multi-cluster setups and inter-cluster communication.
 
@@ -39,19 +39,19 @@ Shared mesh network with DNS for multi-cluster setups and inter-cluster communic
 
 {{< columns >}}
 
-### Worker lifecycle
+## Worker lifecycle
 
 Dynamically add and remove worker nodes from running clusters.
 
 <--->
 
-### Power cycle simulation
+## Power cycle simulation
 
 Shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios.
 
 <--->
 
-### Minimal dependencies
+## Minimal dependencies
 
 Just Docker and a sind container image. Usable as both a CLI tool and a Go library.
 
@@ -59,7 +59,7 @@ Just Docker and a sind container image. Usable as both a CLI tool and a Go libra
 
 {{< columns >}}
 
-### AI-ready via MCP
+## AI-ready via MCP
 
 Built-in [MCP](https://modelcontextprotocol.io/) server lets AI assistants manage your Slurm clusters — just `sind mcp start`.
 

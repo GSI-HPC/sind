@@ -66,11 +66,13 @@ The `pkg/docker` package is the foundation — all other packages depend on it f
 2. **Define the cobra command** with `Use`, `Short`, `Args`, and `RunE`
 3. **Wire it up** in `root.go` via `cmd.AddCommand(newMyCommand())`
 4. **Use context helpers** to get the Docker client and mesh manager:
+
    ```go
    client := clientFrom(cmd.Context())
    realm := realmFromFlag(cmd)
    meshMgr := meshMgrFrom(ctx, client, realm)
    ```
+
 5. **Implement the operation** in `pkg/cluster/` (not in `cmd/sind/`)
 6. **Write tests** for both the CLI layer and the cluster operation
 

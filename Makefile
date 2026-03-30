@@ -5,13 +5,16 @@ CMD       := ./cmd/sind
 VERSION   ?= dev
 LDFLAGS   := -X main.version=$(VERSION)
 
-.PHONY: build lint test test-integration coverage image clean help
+.PHONY: build lint lint-docs test test-integration coverage image clean help
 
 build: ## Build the sind binary
 	CGO_ENABLED=0 go build -trimpath -ldflags='$(LDFLAGS)' -o $(BINARY) $(CMD)
 
 lint: ## Run golangci-lint
 	golangci-lint run
+
+lint-docs: ## Lint documentation markdown files
+	npx markdownlint-cli2 "docs/content/**/*.md"
 
 test: ## Run unit tests
 	go test -race ./...

@@ -25,6 +25,7 @@ nodes:
 ```
 
 sind will:
+
 1. Set up mesh infrastructure (network, DNS, SSH) if not already present
 2. Create a cluster network and volumes
 3. Generate munge keys and Slurm configuration

@@ -4,7 +4,7 @@ title: "Introduction"
 description: "What is sind and why use it?"
 ---
 
-# What is sind?
+## What is sind?
 
 **sind** (Slurm-IN-Docker) creates and manages containerized [Slurm](https://slurm.schedmd.com/) clusters for development, testing, and CI/CD workflows. Each node runs as a separate Docker container with systemd as init, providing a realistic multi-node Slurm environment without requiring bare-metal infrastructure.
 

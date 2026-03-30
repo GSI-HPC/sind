@@ -40,6 +40,7 @@ All common tasks are available via `make`:
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
 | `make lint` | Run golangci-lint |
+| `make lint-docs` | Lint documentation markdown files |
 | `make image` | Build the container image via docker buildx bake |
 | `make clean` | Remove build artifacts and coverage files |
 | `make help` | Show all available targets |

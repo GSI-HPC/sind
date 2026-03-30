@@ -33,10 +33,12 @@ The `sind-dns` container runs CoreDNS and provides name resolution across all cl
 ```
 
 Examples:
+
 - `controller.default.sind.local`
 - `worker-0.dev.sind.local`
 
 Nodes are configured with:
+
 ```
 --dns <sind-dns-ip>
 --dns-search <cluster>.sind.local

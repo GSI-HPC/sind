@@ -18,6 +18,7 @@ ghcr.io/gsi-hpc/sind-node:<slurm-version>
 This is the default image when `defaults.image` is not specified.
 
 The default image:
+
 - Is based on Rocky Linux 10
 - Builds Slurm from source
 - Contains all daemons (slurmctld, slurmd, munge, sshd)
@@ -97,4 +98,3 @@ RUN systemctl mask \
     getty.target \
     console-getty.service
 ```
-

@@ -10,11 +10,13 @@ toc: true
 
 {{< tabs "install" >}}
 {{< tab "Pre-built binary (linux/amd64)" >}}
+
 ```bash
 curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
 chmod +x ./sind
 sudo mv ./sind /usr/local/bin/sind
 ```
+
 {{< /tab >}}
 {{< tab "From source" >}}
 Build and install with Go:
@@ -22,6 +24,7 @@ Build and install with Go:
 ```bash
 go install github.com/GSI-HPC/sind/cmd/sind@latest
 ```
+
 {{< /tab >}}
 {{< /tabs >}}
 
