@@ -151,7 +151,7 @@ Development follows Test-Driven Development (TDD) style:
 ### Cluster Management
 
 ```bash
-sind create cluster [--name NAME] [--config FILE]
+sind create cluster [--name NAME] [--config FILE] [--pull]
 sind delete cluster [NAME]
 sind delete clusters --all
 sind get clusters
@@ -249,6 +249,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--memory SIZE` | cluster default (2g) | Memory limit |
 | `--tmp-size SIZE` | 1g | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf |
+| `--pull` | false | Pull images before creating containers |
 
 Examples:
 

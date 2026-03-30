@@ -18,6 +18,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// argValue returns the value following the first occurrence of flag in args.
+func argValue(args []string, flag string) (string, bool) {
+	for i, a := range args {
+		if a == flag && i+1 < len(args) {
+			return args[i+1], true
+		}
+	}
+	return "", false
+}
+
 // --- Lifecycle ---
 
 func TestMeshLifecycle(t *testing.T) {
@@ -585,6 +595,26 @@ func TestEnsureDNS_StartError(t *testing.T) {
 	err := mgr.EnsureDNS(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting DNS container")
+}
+
+func TestEnsureDNS_Pull(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error: No such container: sind-dns\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("abc123\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("sind-dns\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.Pull = true
+
+	err := mgr.EnsureDNS(t.Context())
+	require.NoError(t, err)
+
+	createArgs := m.Calls[1].Args
+	pull, ok := argValue(createArgs, "--pull")
+	assert.True(t, ok, "--pull flag present")
+	assert.Equal(t, "always", pull)
 }
 
 // --- AddDNSRecord ---

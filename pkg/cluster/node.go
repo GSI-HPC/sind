@@ -75,6 +75,7 @@ type RunConfig struct {
 	DataMountPath   string // mount point for data (default: /data)
 	Managed         bool   // start slurmd and add to slurm.conf (worker only)
 	ContainerNumber int    // 1-based compose container instance number
+	Pull            bool   // force fresh image pull (--pull always)
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.
@@ -146,6 +147,11 @@ func BuildRunArgs(cfg RunConfig) []string {
 	sort.Strings(keys)
 	for _, k := range keys {
 		args = append(args, "--label", k+"="+labels[k])
+	}
+
+	// Pull policy
+	if cfg.Pull {
+		args = append(args, "--pull", "always")
 	}
 
 	// Image (must be last for docker create/run)

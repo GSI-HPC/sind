@@ -215,6 +215,27 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	assert.Equal(t, []string{"rm", string(mgr.SSHKeygenName())}, m.Calls[4].Args)
 }
 
+func TestEnsureSSHVolume_Pull(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
+	m.AddResult("abc123\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.Pull = true
+
+	err := mgr.EnsureSSHVolume(t.Context())
+	require.NoError(t, err)
+
+	createArgs := m.Calls[2].Args
+	pull, ok := argValue(createArgs, "--pull")
+	assert.True(t, ok, "--pull flag present in keygen container")
+	assert.Equal(t, "always", pull)
+}
+
 // --- EnsureSSH ---
 
 func TestEnsureSSH_Creates(t *testing.T) {
@@ -321,6 +342,26 @@ func TestEnsureSSH_StartError(t *testing.T) {
 	err := mgr.EnsureSSH(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting SSH container")
+}
+
+func TestEnsureSSH_Pull(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "Error: No such container: sind-ssh\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult(dnsInspectJSON(), "", nil)
+	m.AddResult("def456\n", "", nil)
+	m.AddResult("sind-ssh\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.Pull = true
+
+	err := mgr.EnsureSSH(t.Context())
+	require.NoError(t, err)
+
+	createArgs := m.Calls[2].Args
+	pull, ok := argValue(createArgs, "--pull")
+	assert.True(t, ok, "--pull flag present in SSH container")
+	assert.Equal(t, "always", pull)
 }
 
 // --- AddKnownHost ---

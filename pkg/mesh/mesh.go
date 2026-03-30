@@ -61,6 +61,7 @@ const corefilePath = "/Corefile"
 type Manager struct {
 	Docker *docker.Client
 	Realm  string
+	Pull   bool // force fresh image pull (--pull always)
 }
 
 // NewManager returns a Manager that operates on global resources through the
@@ -216,6 +217,9 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 		"--network", string(m.NetworkName()),
 	}
 	args = append(args, composeLabelFlags(m.ComposeProject(), "dns")...)
+	if m.Pull {
+		args = append(args, "--pull", "always")
+	}
 	args = append(args, DNSImage)
 	_, err = m.Docker.CreateContainer(ctx, args...)
 	if err != nil {

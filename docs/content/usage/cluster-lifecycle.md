@@ -9,13 +9,14 @@ toc: true
 ## Create a cluster
 
 ```bash
-sind create cluster [--name NAME] [--config FILE]
+sind create cluster [--name NAME] [--config FILE] [--pull]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--name` | `default` | Cluster name |
 | `--config` | — | Path to YAML configuration file |
+| `--pull` | `false` | Pull images before creating containers |
 
 Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image.
 

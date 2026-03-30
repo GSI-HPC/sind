@@ -287,6 +287,27 @@ func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 	assert.Equal(t, "private", cgroupns)
 }
 
+func TestBuildRunArgs_Pull(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.Pull = true
+	args := BuildRunArgs(cfg)
+
+	pull, ok := argValue(args, "--pull")
+	assert.True(t, ok, "--pull flag present")
+	assert.Equal(t, "always", pull)
+
+	// Image is still the last element
+	assert.Equal(t, cfg.Image, args[len(args)-1])
+}
+
+func TestBuildRunArgs_NoPull(t *testing.T) {
+	cfg := defaultRunConfig()
+	args := BuildRunArgs(cfg)
+
+	_, ok := argValue(args, "--pull")
+	assert.False(t, ok, "--pull flag absent by default")
+}
+
 func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.ClusterName = "default"

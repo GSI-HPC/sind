@@ -18,8 +18,14 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 
 // RunEphemeral runs a command in a temporary container and returns its stdout.
 // The container is removed after the command completes (docker run --rm).
-func (c *Client) RunEphemeral(ctx context.Context, image string, command ...string) (string, error) {
-	args := append([]string{"run", "--rm", image}, command...)
+// When pull is true, --pull always is added to force a fresh image pull.
+func (c *Client) RunEphemeral(ctx context.Context, image string, pull bool, command ...string) (string, error) {
+	args := []string{"run", "--rm"}
+	if pull {
+		args = append(args, "--pull", "always")
+	}
+	args = append(args, image)
+	args = append(args, command...)
 	stdout, _, err := c.run(ctx, args...)
 	if err != nil {
 		return "", err

@@ -83,7 +83,7 @@ func TestDiscoverVersionLifecycle(t *testing.T) {
 		rec.AddResult("slurm 25.11.4\n", "", nil)
 	}
 
-	version, err := DiscoverVersion(t.Context(), c, image)
+	version, err := DiscoverVersion(t.Context(), c, image, false)
 	require.NoError(t, err)
 	assert.Contains(t, version, "25.11")
 
@@ -97,7 +97,7 @@ func TestDiscoverVersion(t *testing.T) {
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := docker.NewClient(&m)
 
-	version, err := DiscoverVersion(t.Context(), c, image)
+	version, err := DiscoverVersion(t.Context(), c, image, false)
 	require.NoError(t, err)
 	assert.Equal(t, "25.11.0", version)
 
@@ -105,12 +105,27 @@ func TestDiscoverVersion(t *testing.T) {
 	assert.Equal(t, []string{"run", "--rm", image, "slurmctld", "-V"}, m.Calls[0].Args)
 }
 
+func TestDiscoverVersion_Pull(t *testing.T) {
+	const image = "ghcr.io/gsi-hpc/sind-node:25.11"
+
+	var m docker.MockExecutor
+	m.AddResult("slurm 25.11.0\n", "", nil)
+	c := docker.NewClient(&m)
+
+	version, err := DiscoverVersion(t.Context(), c, image, true)
+	require.NoError(t, err)
+	assert.Equal(t, "25.11.0", version)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"run", "--rm", "--pull", "always", image, "slurmctld", "-V"}, m.Calls[0].Args)
+}
+
 func TestDiscoverVersion_RunError(t *testing.T) {
 	var m docker.MockExecutor
 	m.AddResult("", "Unable to find image\n", fmt.Errorf("exit status 125"))
 	c := docker.NewClient(&m)
 
-	version, err := DiscoverVersion(t.Context(), c, "missing:latest")
+	version, err := DiscoverVersion(t.Context(), c, "missing:latest", false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "running slurmctld -V")
 	assert.Empty(t, version)
@@ -121,7 +136,7 @@ func TestDiscoverVersion_ParseError(t *testing.T) {
 	m.AddResult("unexpected output\n", "", nil)
 	c := docker.NewClient(&m)
 
-	version, err := DiscoverVersion(t.Context(), c, "bad:image")
+	version, err := DiscoverVersion(t.Context(), c, "bad:image", false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected slurmctld -V output")
 	assert.Empty(t, version)

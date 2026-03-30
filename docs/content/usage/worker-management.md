@@ -20,6 +20,7 @@ sind create worker [CLUSTER] [FLAGS]
 | `--memory` | cluster default (2g) | Memory limit |
 | `--tmp-size` | `1g` | `/tmp` tmpfs size |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf |
+| `--pull` | `false` | Pull images before creating containers |
 
 ### Examples
 

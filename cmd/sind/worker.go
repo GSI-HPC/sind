@@ -29,6 +29,7 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd.Flags().String("memory", "", "memory limit")
 	cmd.Flags().String("tmp-size", "", "/tmp tmpfs size")
 	cmd.Flags().Bool("unmanaged", false, "don't start slurmd, don't add to slurm.conf")
+	cmd.Flags().Bool("pull", false, "pull images before creating containers")
 
 	return cmd
 }
@@ -40,6 +41,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	memory, _ := cmd.Flags().GetString("memory")
 	tmpSize, _ := cmd.Flags().GetString("tmp-size")
 	unmanaged, _ := cmd.Flags().GetBool("unmanaged")
+	pull, _ := cmd.Flags().GetBool("pull")
 
 	opts := cluster.WorkerAddOptions{
 		ClusterName: clusterName,
@@ -49,6 +51,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		Memory:      memory,
 		TmpSize:     tmpSize,
 		Unmanaged:   unmanaged,
+		Pull:        pull,
 	}
 
 	ctx := cmd.Context()

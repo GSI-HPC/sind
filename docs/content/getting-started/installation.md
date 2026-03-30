@@ -40,6 +40,16 @@ This verifies Docker Engine version and cgroup configuration, and prints fix ins
 
 ## Container image
 
-sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image (`ghcr.io/gsi-hpc/sind-node:latest`) is pulled automatically when creating your first cluster.
+sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is:
+
+```
+ghcr.io/gsi-hpc/sind-node:latest
+```
+
+Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use `--pull` to force a fresh pull:
+
+```bash
+sind create cluster --pull
+```
 
 See [Container Images](../../container-images/building-images/) for details on building custom images.

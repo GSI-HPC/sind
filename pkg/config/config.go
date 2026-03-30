@@ -96,6 +96,10 @@ type Cluster struct {
 	Defaults Defaults `json:"defaults,omitempty"`
 	Storage  Storage  `json:"storage,omitempty"`
 	Nodes    []Node   `json:"nodes,omitempty"`
+
+	// Pull is a runtime flag (not part of the config file) that forces
+	// fresh image pulls when creating containers.
+	Pull bool `json:"-" yaml:"-"`
 }
 
 // Default resource values for cluster nodes.

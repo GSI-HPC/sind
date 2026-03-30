@@ -55,11 +55,15 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 	// is created (not started) with the volume mounted, files are copied
 	// in via docker cp, then the container is removed.
 	keygenName := m.SSHKeygenName()
-	_, err = m.Docker.CreateContainer(ctx,
+	keygenArgs := []string{
 		"--name", string(keygenName),
-		"-v", string(volName)+":/ssh",
-		sshKeygenImage,
-	)
+		"-v", string(volName) + ":/ssh",
+	}
+	if m.Pull {
+		keygenArgs = append(keygenArgs, "--pull", "always")
+	}
+	keygenArgs = append(keygenArgs, sshKeygenImage)
+	_, err = m.Docker.CreateContainer(ctx, keygenArgs...)
 	if err != nil {
 		return fmt.Errorf("creating temporary container: %w", err)
 	}
@@ -105,6 +109,9 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 		"-v", string(m.SSHVolumeName()) + ":/root/.ssh",
 	}
 	sshArgs = append(sshArgs, composeLabelFlags(m.ComposeProject(), "ssh")...)
+	if m.Pull {
+		sshArgs = append(sshArgs, "--pull", "always")
+	}
 	sshArgs = append(sshArgs, SSHImage, "sleep", "infinity")
 	_, err = m.Docker.CreateContainer(ctx, sshArgs...)
 	if err != nil {

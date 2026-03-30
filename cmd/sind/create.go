@@ -41,6 +41,7 @@ func newCreateClusterCommand() *cobra.Command {
 
 	cmd.Flags().String("name", "default", "cluster name")
 	cmd.Flags().StringVar(&configFile, "config", "", "path to cluster configuration file")
+	cmd.Flags().Bool("pull", false, "pull images before creating containers")
 
 	return cmd
 }
@@ -55,6 +56,9 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		cfg.Name = name
 	}
 
+	pull, _ := cmd.Flags().GetBool("pull")
+	cfg.Pull = pull
+
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -64,6 +68,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	client := clientFrom(ctx)
 	realm := resolveRealm(cmd, cfg.Realm)
 	meshMgr := meshMgrFrom(ctx, client, realm)
+	meshMgr.Pull = pull
 	if err := meshMgr.EnsureMesh(ctx); err != nil {
 		return fmt.Errorf("setting up mesh: %w", err)
 	}

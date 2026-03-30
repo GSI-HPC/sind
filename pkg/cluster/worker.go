@@ -25,6 +25,7 @@ type WorkerAddOptions struct {
 	Memory      string
 	TmpSize     string
 	Unmanaged   bool
+	Pull        bool
 }
 
 // --- Exported functions ---
@@ -113,6 +114,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			DNSIP:           dnsIP,
 			Managed:         !opts.Unmanaged,
 			ContainerNumber: startIdx + i + 1,
+			Pull:            opts.Pull,
 		}
 	}
 

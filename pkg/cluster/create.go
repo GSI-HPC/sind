@@ -131,7 +131,7 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		return meshErr
 	})
 	g.Go(func() error {
-		ver, err := slurm.DiscoverVersion(gctx, client, image)
+		ver, err := slurm.DiscoverVersion(gctx, client, image, cfg.Pull)
 		if err != nil {
 			return fmt.Errorf("discovering Slurm version: %w", err)
 		}
@@ -163,8 +163,8 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 	g, gctx = errgroup.WithContext(ctx)
-	g.Go(func() error { return WriteClusterConfig(gctx, client, realm, cfg, image) })
-	g.Go(func() error { return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image) })
+	g.Go(func() error { return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull) })
+	g.Go(func() error { return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull) })
 	return g.Wait()
 }
 
@@ -348,15 +348,19 @@ func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clu
 // WriteClusterConfig generates and writes slurm.conf, sind-nodes.conf, and
 // cgroup.conf to the config volume. Uses a temporary container to access the
 // volume.
-func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) error {
+func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string, pull bool) error {
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
 	volName := VolumeName(realm, cfg.Name, "config")
 
-	_, err := client.CreateContainer(ctx,
+	args := []string{
 		"--name", string(helperName),
-		"-v", string(volName)+":/etc/slurm",
-		image,
-	)
+		"-v", string(volName) + ":/etc/slurm",
+	}
+	if pull {
+		args = append(args, "--pull", "always")
+	}
+	args = append(args, image)
+	_, err := client.CreateContainer(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("creating config helper container: %w", err)
 	}
@@ -378,16 +382,19 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 
 // WriteMungeKey writes the given munge key to the munge volume.
 // Uses a temporary container to access the volume.
-func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string) error {
+func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string, pull bool) error {
 	helperName := ContainerName(realm, clusterName, "munge-helper")
 	volName := VolumeName(realm, clusterName, "munge")
 
-	_, err := client.RunContainer(ctx,
+	args := []string{
 		"--name", string(helperName),
-		"-v", string(volName)+":/etc/munge",
-		image,
-		"sleep", "30",
-	)
+		"-v", string(volName) + ":/etc/munge",
+	}
+	if pull {
+		args = append(args, "--pull", "always")
+	}
+	args = append(args, image, "sleep", "30")
+	_, err := client.RunContainer(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("creating munge helper container: %w", err)
 	}
@@ -448,6 +455,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				DataHostPath:    dataHostPath,
 				DataMountPath:   dataMountPath,
 				ContainerNumber: 1,
+				Pull:            cfg.Pull,
 			})
 		case "worker":
 			count := n.Count
@@ -471,6 +479,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 					DataMountPath:   dataMountPath,
 					Managed:         isManaged,
 					ContainerNumber: workerIdx + 1,
+					Pull:            cfg.Pull,
 				})
 				workerIdx++
 			}
