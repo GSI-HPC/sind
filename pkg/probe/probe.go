@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // Func is a probe function that checks a single readiness condition.
@@ -42,8 +43,15 @@ func NodeProbes(role string) []Probe {
 // delay between polling attempts. On timeout, the error includes the name and
 // message of the last failing probe.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
+	log := sindlog.From(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+
+	probeNames := make([]string, len(probes))
+	for i, p := range probes {
+		probeNames[i] = p.Name
+	}
+	log.DebugContext(ctx, "starting readiness probes", "node", string(name), "probes", strings.Join(probeNames, ","))
 
 	var lastErr error
 	for {
@@ -51,11 +59,13 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 		for _, p := range probes {
 			if err := p.Check(ctx, client, name); err != nil {
 				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
+				log.Log(ctx, sindlog.LevelTrace, "probe failed", "node", string(name), "probe", p.Name, "err", err)
 				failed = true
 				break
 			}
 		}
 		if !failed {
+			log.DebugContext(ctx, "all probes passed", "node", string(name))
 			return nil
 		}
 		select {

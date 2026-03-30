@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // DefaultRealm is the realm name that produces the standard resource names.
@@ -104,6 +105,8 @@ func (m *Manager) ComposeProject() string {
 // EnsureMesh creates all global infrastructure resources (mesh network, DNS,
 // SSH volume, SSH container) if they do not already exist.
 func (m *Manager) EnsureMesh(ctx context.Context) error {
+	log := sindlog.From(ctx)
+	log.InfoContext(ctx, "ensuring mesh infrastructure", "realm", m.Realm)
 	if err := m.EnsureMeshNetwork(ctx); err != nil {
 		return err
 	}
@@ -116,12 +119,14 @@ func (m *Manager) EnsureMesh(ctx context.Context) error {
 	if err := m.EnsureSSH(ctx); err != nil {
 		return err
 	}
+	log.DebugContext(ctx, "mesh infrastructure ready")
 	return nil
 }
 
 // CleanupMesh removes all global infrastructure resources. This should only
 // be called when the last cluster is deleted.
 func (m *Manager) CleanupMesh(ctx context.Context) error {
+	sindlog.From(ctx).InfoContext(ctx, "cleaning up mesh infrastructure", "realm", m.Realm)
 	// Remove containers first (auto-disconnects from networks).
 	if err := m.removeContainerIfExists(ctx, m.SSHContainerName()); err != nil {
 		return fmt.Errorf("removing SSH container: %w", err)

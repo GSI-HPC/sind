@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
 
@@ -35,7 +36,10 @@ var volumeTypes = []string{"config", "munge", "data"}
 //	    yes → done
 //	    no  → CleanupMesh
 func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
+	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
+
+	log.InfoContext(ctx, "deleting cluster", "name", clusterName)
 
 	res, err := ListClusterResources(ctx, client, realm, clusterName)
 	if err != nil {
@@ -44,6 +48,7 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	// Nothing to delete.
 	if len(res.Containers) == 0 && !res.NetworkExists && len(res.Volumes) == 0 {
+		log.DebugContext(ctx, "no resources found, nothing to delete")
 		return nil
 	}
 
@@ -52,16 +57,19 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return err
 	}
 
+	log.DebugContext(ctx, "deleting containers", "count", len(res.Containers))
 	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
 		return err
 	}
 
 	if res.NetworkExists {
+		log.DebugContext(ctx, "deleting network", "name", string(res.Network))
 		if err := DeleteNetwork(ctx, client, res.Network); err != nil {
 			return err
 		}
 	}
 
+	log.DebugContext(ctx, "deleting volumes", "count", len(res.Volumes))
 	if err := DeleteVolumes(ctx, client, res.Volumes); err != nil {
 		return err
 	}
@@ -72,6 +80,7 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return err
 	}
 	if !hasOther {
+		log.InfoContext(ctx, "last cluster deleted, cleaning up mesh")
 		return meshMgr.CleanupMesh(ctx)
 	}
 

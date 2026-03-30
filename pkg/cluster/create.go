@@ -9,6 +9,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
@@ -54,39 +55,49 @@ type nodeResult struct {
 //	      │
 //	  *Cluster
 func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (*Cluster, error) {
+	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
+
+	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(cfg.Nodes))
 
 	if err := PreflightCheck(ctx, client, realm, cfg); err != nil {
 		return nil, err
 	}
+	log.DebugContext(ctx, "preflight check passed")
 
 	dnsIP, sshPubKey, slurmVersion, err := resolveInfra(ctx, client, meshMgr, cfg)
 	if err != nil {
 		return nil, err
 	}
+	log.InfoContext(ctx, "resolved infrastructure", "slurm", slurmVersion)
 
 	if err := createResources(ctx, client, realm, cfg); err != nil {
 		return nil, err
 	}
+	log.DebugContext(ctx, "cluster resources created")
 
 	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion)
 	if err := createAllNodes(ctx, client, meshMgr, nodeConfigs); err != nil {
 		return nil, err
 	}
+	log.InfoContext(ctx, "node containers started", "count", len(nodeConfigs))
 
 	nodeResults, err := setupNodes(ctx, client, realm, cfg.Name, sshPubKey, nodeConfigs, readinessInterval)
 	if err != nil {
 		return nil, err
 	}
+	log.InfoContext(ctx, "nodes ready", "count", len(nodeConfigs))
 
 	cluster, err := registerMesh(ctx, meshMgr, cfg.Name, slurmVersion, nodeConfigs, nodeResults)
 	if err != nil {
 		return nil, err
 	}
+	log.DebugContext(ctx, "mesh registration complete")
 
 	if err := enableSlurm(ctx, client, realm, cfg.Name, nodeConfigs, readinessInterval); err != nil {
 		return nil, err
 	}
+	log.InfoContext(ctx, "slurm services enabled")
 
 	return cluster, nil
 }
@@ -199,6 +210,7 @@ func createAllNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 //	└───────┬───────┘ └───────┬───────┘     └───────┬───────┘
 //	        └─────────────────┼─────────────────────┘
 func setupNodes(ctx context.Context, client *docker.Client, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration) ([]nodeResult, error) {
+	log := sindlog.From(ctx)
 	baseProbes := []probe.Probe{
 		{Name: "container", Check: probe.ContainerRunning},
 		{Name: "systemd", Check: probe.SystemdReady},
@@ -211,6 +223,7 @@ func setupNodes(ctx context.Context, client *docker.Client, realm, clusterName, 
 		g.Go(func() error {
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 
+			log.DebugContext(gctx, "waiting for node", "node", nc.ShortName)
 			if err := probe.UntilReady(gctx, client, containerName, baseProbes, interval); err != nil {
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
 			}
@@ -290,6 +303,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	└─────────┬──────────┘ └──────────┬───────────┘
 //	          └───────────┬───────────┘
 func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration) error {
+	log := sindlog.From(ctx)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
 		var service string
@@ -309,6 +323,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		}
 		g.Go(func() error {
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
+			log.DebugContext(gctx, "enabling slurm service", "node", nc.ShortName, "service", service)
 			_, err := client.Exec(gctx, containerName, "systemctl", "enable", "--now", service)
 			if err != nil {
 				return fmt.Errorf("enabling %s on %s: %w", service, nc.ShortName, err)

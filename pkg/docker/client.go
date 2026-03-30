@@ -9,6 +9,9 @@ import (
 	"io"
 	"os/exec"
 	"sort"
+	"strings"
+
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // ContainerID is a Docker container identifier (64 hex characters).
@@ -38,6 +41,7 @@ func NewClient(executor Executor) *Client {
 }
 
 func (c *Client) run(ctx context.Context, args ...string) (string, string, error) {
+	sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
 	return c.Executor.Run(ctx, c.Command, args...)
 }
 

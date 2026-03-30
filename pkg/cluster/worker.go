@@ -11,6 +11,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
@@ -43,7 +44,10 @@ type WorkerAddOptions struct {
 //
 // For unmanaged workers (Unmanaged=true), steps 5–7 are skipped.
 func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) ([]*Node, error) {
+	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
+
+	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
 	// List cluster containers once for validation + index + image resolution.
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+opts.ClusterName)
@@ -162,11 +166,14 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 //
 // For unmanaged nodes, only steps 3–4 are performed.
 func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
+	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 
 	if len(shortNames) == 0 {
 		return nil
 	}
+
+	log.InfoContext(ctx, "removing workers", "cluster", clusterName, "nodes", strings.Join(shortNames, ","))
 
 	// List cluster containers to find controller and validate targets.
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
