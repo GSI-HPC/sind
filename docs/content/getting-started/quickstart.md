@@ -87,6 +87,7 @@ cat > job.sh << 'EOF'
 #!/bin/bash
 #SBATCH --job-name=hello
 echo "Hello from $(hostname)"
+sleep 30
 EOF
 ```
 
@@ -97,7 +98,7 @@ sind exec -- sbatch job.sh
 ```
 
 ```
-Submitted batch job 2
+Submitted batch job <JOBID>
 ```
 
 Check the job queue:
@@ -109,7 +110,7 @@ sind exec -- squeue
 View the output after the job completes:
 
 ```bash
-cat slurm-2.out
+cat slurm-<JOBID>.out
 ```
 
 ```
@@ -125,7 +126,33 @@ sind ssh controller
 sind ssh worker-0
 ```
 
-## Create a larger cluster
+## Scale up
+
+Add more workers to the running cluster:
+
+```bash
+sind create worker --count 3
+```
+
+## Tear down
+
+Delete the cluster:
+
+```bash
+sind delete cluster default
+```
+
+Or delete all clusters at once:
+
+```bash
+sind delete cluster --all
+```
+
+When the last cluster is deleted, sind automatically cleans up the shared mesh infrastructure.
+
+## Going further
+
+### Named clusters with custom configuration
 
 Pipe a configuration directly into `sind create cluster`:
 
@@ -139,7 +166,7 @@ defaults:
 nodes:
   - controller
   - submitter
-  - worker: 5
+  - worker: 3
 EOF
 ```
 
@@ -149,24 +176,4 @@ Or use a configuration file:
 sind create cluster --config cluster.yaml
 ```
 
-## Add workers dynamically
-
-```bash
-sind create worker --count 3
-```
-
-## Tear down
-
-Delete a specific cluster:
-
-```bash
-sind delete cluster default
-```
-
-Or delete all clusters:
-
-```bash
-sind delete cluster --all
-```
-
-When the last cluster is deleted, sind automatically cleans up the shared mesh infrastructure.
+Multiple clusters can run side by side — each gets its own network, volumes, and DNS namespace. See [Cluster Configuration](../../configuration/cluster-config/) for all available options.

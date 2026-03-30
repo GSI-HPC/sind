@@ -95,20 +95,23 @@ func TestQuickstart(t *testing.T) {
 
 	// ### Submit a batch job
 	// Create batch script via exec (lands in /data = test temp dir)
-	_, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", `printf '#!/bin/sh\nhostname\n' > job.sh`)
+	_, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", `printf '#!/bin/sh\n#SBATCH --job-name=hello\nhostname\nsleep 30\n' > job.sh`)
 	require.NoError(t, err, "create job script: stderr=%q", stderr)
 
-	// sind exec -- sbatch --wait job.sh
-	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sbatch", "--wait", "job.sh")
+	// sind exec -- sbatch job.sh
+	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sbatch", "job.sh")
 	require.NoError(t, err, "sbatch: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "Submitted batch job")
 
-	// sind exec -- squeue
+	// sind exec -- squeue (job should still be running thanks to sleep)
 	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "squeue")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "JOBID")
+	assert.Contains(t, stdout, "hello")
 
-	// Verify output file
+	// Wait for job to finish, then verify output file
+	_, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", "while squeue -h -n hello | grep -q hello; do sleep 2; done")
+	require.NoError(t, err, "wait for job: stderr=%q", stderr)
+
 	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", "cat slurm-*.out")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "worker-0")
@@ -124,7 +127,7 @@ func TestQuickstart(t *testing.T) {
 	require.NoError(t, err, "ssh worker-0: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "worker-0")
 
-	// ## Add workers dynamically
+	// ## Scale up
 	// sind create worker --count 3
 	stdout, stderr, err = executeWithDockerCtx(ctx, "create", "worker", "--count", "3")
 	require.NoError(t, err, "create worker: stdout=%q stderr=%q", stdout, stderr)
@@ -142,7 +145,7 @@ func TestQuickstart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "deleted")
 
-	// ## Create a larger cluster (via stdin)
+	// ## Going further — named clusters with custom configuration
 	devYAML := "kind: Cluster\nname: dev\ndefaults:\n  image: " + image + "\n  cpus: 2\n  memory: 1g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n"
 
 	stdout, stderr, err = executeWithStdin(ctx, devYAML, "create", "cluster")
@@ -154,7 +157,7 @@ func TestQuickstart(t *testing.T) {
 	require.NoError(t, err, "exec dev hostname: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "submitter")
 
-	// ## Tear down with --all
+	// Cleanup: delete remaining cluster
 	// sind delete cluster --all
 	stdout, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "--all")
 	require.NoError(t, err)
