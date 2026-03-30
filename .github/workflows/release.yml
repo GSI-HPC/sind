@@ -18,15 +18,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Build binary
-        env:
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: amd64
-        run: |
-          go build -trimpath \
-            -ldflags="-s -w -X main.version=${{ github.event.release.tag_name }}" \
-            -o sind-linux-amd64 \
-            ./cmd/sind
+        run: make LDFLAGS="-s -w -X main.version=${{ github.event.release.tag_name }}" build
 
       - name: Upload release asset
         env:

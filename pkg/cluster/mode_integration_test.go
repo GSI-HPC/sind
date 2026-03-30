@@ -90,7 +90,7 @@ defaults:
 	result, err := Create(ctx, c, meshMgr, cfg, 500*time.Millisecond)
 	require.NoError(t, err)
 	assert.Equal(t, clusterName, result.Name)
-	assert.Equal(t, StatusRunning, result.Status)
+	assert.Equal(t, StateRunning, result.State)
 	require.Len(t, result.Nodes, 2)
 
 	// GetClusters.

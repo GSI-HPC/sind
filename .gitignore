@@ -1,5 +1,5 @@
 # Binary
-/sind
+/sind-*
 
 # Test coverage
 *.out
