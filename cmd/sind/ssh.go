@@ -50,9 +50,10 @@ func runSSH(cmd *cobra.Command, args []string) error {
 
 func newEnterCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "enter [CLUSTER]",
-		Short: "Interactive shell on submitter or controller",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "enter [CLUSTER]",
+		Short:             "Interactive shell on submitter or controller",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := "default"
 			if len(args) > 0 {

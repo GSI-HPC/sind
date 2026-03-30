@@ -43,9 +43,10 @@ func newGetClustersCommand() *cobra.Command {
 
 func newGetNodesCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "nodes [CLUSTER]",
-		Short: "List nodes in a cluster",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "nodes [CLUSTER]",
+		Short:             "List nodes in a cluster",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := "default"
 			if len(args) > 0 {
@@ -174,9 +175,10 @@ func runGetDNS(cmd *cobra.Command) error {
 
 func newGetMungeKeyCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "munge-key [CLUSTER]",
-		Short: "Output munge key (base64)",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "munge-key [CLUSTER]",
+		Short:             "Output munge key (base64)",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := "default"
 			if len(args) > 0 {

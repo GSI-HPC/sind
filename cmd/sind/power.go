@@ -36,9 +36,10 @@ func newPowerCommand() *cobra.Command {
 	for _, c := range cmds {
 		fn := c.fn
 		cmd.AddCommand(&cobra.Command{
-			Use:   c.use,
-			Short: c.short,
-			Args:  cobra.MinimumNArgs(1),
+			Use:               c.use,
+			Short:             c.short,
+			Args:              cobra.MinimumNArgs(1),
+			ValidArgsFunction: completeNodeNames,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return runPower(cmd, strings.Join(args, ","), fn)
 			},

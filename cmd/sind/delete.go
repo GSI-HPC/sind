@@ -24,9 +24,10 @@ func newDeleteCommand() *cobra.Command {
 
 func newDeleteClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "cluster [NAME]",
-		Short: "Delete a cluster",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "cluster [NAME]",
+		Short:             "Delete a cluster",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			all, _ := cmd.Flags().GetBool("all")
 			if all {

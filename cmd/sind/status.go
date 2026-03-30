@@ -13,9 +13,10 @@ import (
 
 func newStatusCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status [CLUSTER]",
-		Short: "Show cluster health status",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "status [CLUSTER]",
+		Short:             "Show cluster health status",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := "default"
 			if len(args) > 0 {

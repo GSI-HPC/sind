@@ -33,9 +33,10 @@ func newCreateClusterCommand() *cobra.Command {
 	var configFile string
 
 	cmd := &cobra.Command{
-		Use:   "cluster [NAME] [--config FILE]",
-		Short: "Create a Slurm cluster",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "cluster [NAME] [--config FILE]",
+		Short:             "Create a Slurm cluster",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var name string
 			if len(args) > 0 {

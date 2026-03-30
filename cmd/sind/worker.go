@@ -12,9 +12,10 @@ import (
 
 func newCreateWorkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "worker [CLUSTER]",
-		Short: "Add worker nodes to a cluster",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "worker [CLUSTER]",
+		Short:             "Add worker nodes to a cluster",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := "default"
 			if len(args) > 0 {
@@ -81,9 +82,10 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 func newDeleteWorkerCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "worker NODES",
-		Short: "Remove worker nodes from a cluster",
-		Args:  cobra.MinimumNArgs(1),
+		Use:               "worker NODES",
+		Short:             "Remove worker nodes from a cluster",
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: completeNodeNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDeleteWorker(cmd, strings.Join(args, ","))
 		},

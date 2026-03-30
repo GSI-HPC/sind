@@ -17,7 +17,8 @@ func newLogsCommand() *cobra.Command {
 
 Without a SERVICE argument, shows container logs.
 With a SERVICE argument, shows journalctl output for that systemd unit.`,
-		Args: cobra.RangeArgs(1, 2),
+		Args:              cobra.RangeArgs(1, 2),
+		ValidArgsFunction: completeLogsArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			follow, _ := cmd.Flags().GetBool("follow")
 			return runLogs(cmd, args, follow)
