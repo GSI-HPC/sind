@@ -75,18 +75,32 @@ sind exec dev -- sbatch job.sh
 
 ## User SSH client integration
 
-sind can export SSH configuration for use with your own SSH client. The files are stored in `~/.sind/`:
+sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`):
 
 | File | Description |
 |------|-------------|
-| `~/.sind/ssh_config` | SSH config snippet |
-| `~/.sind/id_ed25519` | Private key |
-| `~/.sind/known_hosts` | Host keys |
+| `ssh_config` | SSH config snippet |
+| `id_ed25519` | Private key |
+| `known_hosts` | Host keys |
 
-Add to your `~/.ssh/config`:
+These files are updated on every create/delete operation and removed when the last cluster in a realm is deleted.
 
+To find the path for your current realm:
+
+```bash
+sind get ssh-config
 ```
-Include ~/.sind/ssh_config
+
+Add to your `~/.ssh/config` for a single realm:
+
+```bash
+Include ~/.local/state/sind/sind/ssh_config
+```
+
+Or include all realms at once using a wildcard:
+
+```bash
+Include ~/.local/state/sind/*/ssh_config
 ```
 
 Then use standard SSH tools directly:

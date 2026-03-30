@@ -159,6 +159,7 @@ sind get clusters
 sind get nodes [CLUSTER]
 sind get networks
 sind get volumes
+sind get ssh-config
 ```
 
 NAME/CLUSTER defaults to `default` if omitted.
@@ -317,9 +318,12 @@ sind logs worker-0 slurmd --follow    # follow slurmd logs
 
 ```bash
 sind get munge-key [CLUSTER]           # output munge key (base64)
+sind get ssh-config                    # show SSH config path for Include
 ```
 
 `sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
+
+`sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
 ## Node Arguments
 
@@ -649,29 +653,35 @@ sind ssh -L 8080:localhost:80 controller     # port forwarding
 
 #### User SSH Client Integration
 
-sind exports SSH configuration to `~/.sind/` for integration with the user's SSH client:
+sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`) for integration with the user's SSH client:
 
 | File | Description |
 |------|-------------|
-| `~/.sind/ssh_config` | SSH config snippet |
-| `~/.sind/id_ed25519` | Private key (copy from volume) |
-| `~/.sind/known_hosts` | Host keys (copy from volume) |
+| `ssh_config` | SSH config snippet |
+| `id_ed25519` | Private key (copy from volume) |
+| `known_hosts` | Host keys (copy from volume) |
 
-The generated `~/.sind/ssh_config`:
+The generated `ssh_config`:
 
 ```
 Host *.sind.local
     ProxyCommand docker exec -i sind-ssh nc %h 22
-    IdentityFile ~/.sind/id_ed25519
-    UserKnownHostsFile ~/.sind/known_hosts
+    IdentityFile ~/.local/state/sind/sind/id_ed25519
+    UserKnownHostsFile ~/.local/state/sind/sind/known_hosts
     User root
     StrictHostKeyChecking yes
 ```
 
-To enable, add to `~/.ssh/config`:
+To find the path for a realm, use `sind get ssh-config`. Add to `~/.ssh/config` for a single realm:
 
 ```
-Include ~/.sind/ssh_config
+Include ~/.local/state/sind/sind/ssh_config
+```
+
+Or include all realms at once using a wildcard (supported by OpenSSH's `Include`):
+
+```
+Include ~/.local/state/sind/*/ssh_config
 ```
 
 This allows direct use of standard SSH tools:
@@ -682,7 +692,7 @@ ssh worker-0.dev.sind.local hostname
 scp file.txt controller.dev.sind.local:/tmp/
 ```
 
-sind updates `~/.sind/` files when clusters or nodes are created/deleted.
+sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, the files and realm directory are removed.
 
 ## Command Routing
 

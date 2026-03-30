@@ -111,3 +111,11 @@ sind get munge-key [CLUSTER]
 ```
 
 Outputs the cluster's munge key encoded as base64, suitable for injection into external tooling.
+
+## SSH config path
+
+```bash
+sind get ssh-config
+```
+
+Outputs the path to the realm's SSH config file. See [Node Access](../node-access/) for how to include it in `~/.ssh/config`.
