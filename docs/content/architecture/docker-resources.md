@@ -10,24 +10,24 @@ toc: true
 
 | Type | Name pattern | Example (`--name dev`) |
 |------|-------------|------------------------|
-| Network | `sind-<cluster>-net` | `sind-dev-net` |
-| Controller | `sind-<cluster>-controller` | `sind-dev-controller` |
-| Submitter | `sind-<cluster>-submitter` | `sind-dev-submitter` |
-| Worker | `sind-<cluster>-worker-<N>` | `sind-dev-worker-0` |
-| Config volume | `sind-<cluster>-config` | `sind-dev-config` |
-| Munge volume | `sind-<cluster>-munge` | `sind-dev-munge` |
-| Data volume | `sind-<cluster>-data` | `sind-dev-data` |
+| Network | `<realm>-<cluster>-net` | `sind-dev-net` |
+| Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
+| Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
+| Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
+| Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
+| Munge volume | `<realm>-<cluster>-munge` | `sind-dev-munge` |
+| Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
 
-When `--name` is omitted, the default cluster name is `default`, resulting in prefixes like `sind-default-*`.
+The default realm is `sind` and the default cluster name is `default`, resulting in prefixes like `sind-default-*`. See [Realms](../../configuration/realms/) for custom realm naming.
 
 ## Global resources (mesh)
 
-| Type | Name |
-|------|------|
-| Mesh network | `sind-mesh` |
-| DNS container | `sind-dns` |
-| SSH container | `sind-ssh` |
-| SSH volume | `sind-ssh-config` |
+| Type | Name pattern | Example |
+|------|-------------|---------|
+| Mesh network | `<realm>-mesh` | `sind-mesh` |
+| DNS container | `<realm>-dns` | `sind-dns` |
+| SSH container | `<realm>-ssh` | `sind-ssh` |
+| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` |
 
 ## Volume mounts
 
