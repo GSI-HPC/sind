@@ -769,7 +769,7 @@ func TestCopyFromContainer(t *testing.T) {
 	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "hosts", Size: int64(len(content)), Mode: 0644}))
 	_, err := tw.Write(content)
 	require.NoError(t, err)
-	tw.Close()
+	require.NoError(t, tw.Close())
 
 	var m MockExecutor
 	m.AddResult(buf.String(), "", nil)
@@ -827,7 +827,7 @@ func TestCopyFromContainer_EmptyTar(t *testing.T) {
 	// Empty tar archive (no entries)
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	tw.Close()
+	require.NoError(t, tw.Close())
 
 	var m MockExecutor
 	m.AddResult(buf.String(), "", nil)

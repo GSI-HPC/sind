@@ -36,10 +36,12 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	return outBuf.String(), errBuf.String(), err
 }
 
+// Run implements Executor.
 func (e *OSExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	return e.run(ctx, nil, name, args...)
 }
 
+// RunWithStdin implements Executor.
 func (e *OSExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	return e.run(ctx, stdin, name, args...)
 }
@@ -104,10 +106,12 @@ func (m *MockExecutor) record(name string, args []string, stdin string) (string,
 	return r.Stdout, r.Stderr, r.Err
 }
 
+// Run implements Executor.
 func (m *MockExecutor) Run(_ context.Context, name string, args ...string) (string, string, error) {
 	return m.record(name, args, "")
 }
 
+// RunWithStdin implements Executor.
 func (m *MockExecutor) RunWithStdin(_ context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	data, err := io.ReadAll(stdin)
 	if err != nil {

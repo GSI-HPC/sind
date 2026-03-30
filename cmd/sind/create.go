@@ -73,7 +73,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Cluster %q created with %d node(s)\n", result.Name, len(result.Nodes))
+	cmd.Printf("Cluster %q created with %d node(s)\n", result.Name, len(result.Nodes))
 	return nil
 }
 

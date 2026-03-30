@@ -33,19 +33,17 @@ func runStatus(cmd *cobra.Command, name string) error {
 		return err
 	}
 
-	out := cmd.OutOrStdout()
-
-	fmt.Fprintf(out, "Cluster: %s\n", status.Name)
-	fmt.Fprintf(out, "Status:  %s\n", status.State)
+	cmd.Printf("Cluster: %s\n", status.Name)
+	cmd.Printf("Status:  %s\n", status.State)
 
 	// Nodes table
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "NODES")
-	w := newTabWriter(out)
-	fmt.Fprintln(w, "NAME\tROLE\tIP\tCONTAINER\tMUNGE\tSSHD\tSERVICES")
+	cmd.Println()
+	cmd.Println("NODES")
+	w := newTabWriter(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tCONTAINER\tMUNGE\tSSHD\tSERVICES")
 	for _, n := range status.Nodes {
 		h := n.Health
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			n.Name,
 			n.Role,
 			h.IP,
@@ -55,23 +53,25 @@ func runStatus(cmd *cobra.Command, name string) error {
 			formatServices(h.Services),
 		)
 	}
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
 
 	// Network section
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "NETWORK")
+	cmd.Println()
+	cmd.Println("NETWORK")
 	net := status.Network
-	fmt.Fprintf(out, "Mesh:     sind-mesh %s  %s  gw %s\n", checkmark(net.Mesh), net.MeshSubnet, net.MeshGateway)
-	fmt.Fprintf(out, "DNS:      sind-dns %s\n", checkmark(net.DNS))
-	fmt.Fprintf(out, "Cluster:  sind-%s-net %s  %s  gw %s\n", name, checkmark(net.Cluster), net.ClusterSubnet, net.ClusterGateway)
+	cmd.Printf("Mesh:     sind-mesh %s  %s  gw %s\n", checkmark(net.Mesh), net.MeshSubnet, net.MeshGateway)
+	cmd.Printf("DNS:      sind-dns %s\n", checkmark(net.DNS))
+	cmd.Printf("Cluster:  sind-%s-net %s  %s  gw %s\n", name, checkmark(net.Cluster), net.ClusterSubnet, net.ClusterGateway)
 
 	// Volumes section
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "VOLUMES")
+	cmd.Println()
+	cmd.Println("VOLUMES")
 	vol := status.Volumes
-	fmt.Fprintf(out, "sind-%s-config %s\n", name, checkmark(vol.Config))
-	fmt.Fprintf(out, "sind-%s-munge %s\n", name, checkmark(vol.Munge))
-	fmt.Fprintf(out, "sind-%s-data %s\n", name, checkmark(vol.Data))
+	cmd.Printf("sind-%s-config %s\n", name, checkmark(vol.Config))
+	cmd.Printf("sind-%s-munge %s\n", name, checkmark(vol.Munge))
+	cmd.Printf("sind-%s-data %s\n", name, checkmark(vol.Data))
 
 	return nil
 }

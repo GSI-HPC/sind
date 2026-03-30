@@ -7,6 +7,7 @@ import "github.com/GSI-HPC/sind/pkg/docker"
 // State represents the state of a cluster or node.
 type State string
 
+// Possible cluster states.
 const (
 	StateRunning State = "running"
 	StateStopped State = "stopped"

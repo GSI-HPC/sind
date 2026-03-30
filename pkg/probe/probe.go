@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
+// Package probe implements readiness probes for cluster services.
 package probe
 
 import (

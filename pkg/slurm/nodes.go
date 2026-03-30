@@ -40,15 +40,15 @@ func GenerateNodesConf(nodes []config.Node) string {
 				continue
 			}
 
-			b.WriteString(fmt.Sprintf("NodeName=%s CPUs=%d RealMemory=%d State=UNKNOWN\n",
-				name, n.CPUs, memMB))
+			fmt.Fprintf(&b, "NodeName=%s CPUs=%d RealMemory=%d State=UNKNOWN\n",
+				name, n.CPUs, memMB)
 			managed = append(managed, name)
 		}
 	}
 
 	if len(managed) > 0 {
-		b.WriteString(fmt.Sprintf("PartitionName=all Nodes=%s Default=YES MaxTime=INFINITE State=UP\n",
-			strings.Join(managed, ",")))
+		fmt.Fprintf(&b, "PartitionName=all Nodes=%s Default=YES MaxTime=INFINITE State=UP\n",
+			strings.Join(managed, ","))
 	}
 
 	return b.String()

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -65,7 +64,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	for i, n := range nodes {
 		names[i] = n.Name
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Added %d worker(s): %s\n", len(nodes), strings.Join(names, ", "))
+	cmd.Printf("Added %d worker(s): %s\n", len(nodes), strings.Join(names, ", "))
 	return nil
 }
 
@@ -94,7 +93,7 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 		if err := cluster.WorkerRemove(ctx, client, meshMgr, clusterName, shortNames); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Removed %d worker(s) from cluster %q\n", len(shortNames), clusterName)
+		cmd.Printf("Removed %d worker(s) from cluster %q\n", len(shortNames), clusterName)
 	}
 	return nil
 }

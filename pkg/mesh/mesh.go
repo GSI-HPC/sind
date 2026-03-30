@@ -70,32 +70,32 @@ func NewManager(docker *docker.Client, realm string) *Manager {
 	return &Manager{Docker: docker, Realm: realm}
 }
 
-// networkName returns the mesh network name for this realm.
+// NetworkName returns the mesh network name for this realm.
 func (m *Manager) NetworkName() docker.NetworkName {
 	return docker.NetworkName(m.Realm + "-mesh")
 }
 
-// dnsContainerName returns the DNS container name for this realm.
+// DNSContainerName returns the DNS container name for this realm.
 func (m *Manager) DNSContainerName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-dns")
 }
 
-// sshContainerName returns the SSH container name for this realm.
+// SSHContainerName returns the SSH container name for this realm.
 func (m *Manager) SSHContainerName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-ssh")
 }
 
-// sshVolumeName returns the SSH volume name for this realm.
+// SSHVolumeName returns the SSH volume name for this realm.
 func (m *Manager) SSHVolumeName() docker.VolumeName {
 	return docker.VolumeName(m.Realm + "-ssh-config")
 }
 
-// sshKeygenName returns the temporary keygen container name for this realm.
+// SSHKeygenName returns the temporary keygen container name for this realm.
 func (m *Manager) SSHKeygenName() docker.ContainerName {
 	return docker.ContainerName(m.Realm + "-ssh-keygen")
 }
 
-// composeProject returns the Docker Compose project name for this realm's mesh.
+// ComposeProject returns the Docker Compose project name for this realm's mesh.
 func (m *Manager) ComposeProject() string {
 	return m.Realm + "-mesh"
 }

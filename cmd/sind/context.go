@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
+// Package main implements the sind CLI.
 package main
 
 import (

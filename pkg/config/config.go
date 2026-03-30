@@ -98,6 +98,7 @@ type Cluster struct {
 	Nodes    []Node   `json:"nodes,omitempty"`
 }
 
+// Default resource values for cluster nodes.
 const (
 	DefaultImage   = "ghcr.io/gsi-hpc/sind-node:latest"
 	DefaultCPUs    = 2

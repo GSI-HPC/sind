@@ -28,12 +28,14 @@ type RecordedCall struct {
 	Err    error
 }
 
+// Run implements Executor.
 func (r *RecordingExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	stdout, stderr, err := r.Inner.Run(ctx, name, args...)
 	r.record(RecordedCall{Name: name, Args: args, Stdout: stdout, Stderr: stderr, Err: err})
 	return stdout, stderr, err
 }
 
+// RunWithStdin implements Executor.
 func (r *RecordingExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	stdout, stderr, err := r.Inner.RunWithStdin(ctx, stdin, name, args...)
 	r.record(RecordedCall{Name: name, Args: args, Stdout: stdout, Stderr: stderr, Err: err})

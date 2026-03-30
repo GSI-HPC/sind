@@ -57,7 +57,7 @@ func runDeleteCluster(cmd *cobra.Command, name string) error {
 		return err
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Cluster %q deleted\n", name)
+	cmd.Printf("Cluster %q deleted\n", name)
 	return nil
 }
 
@@ -76,7 +76,7 @@ func runDeleteClustersAll(cmd *cobra.Command) error {
 		if err := cluster.Delete(ctx, client, meshMgr, c.Name); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Cluster %q deleted\n", c.Name)
+		cmd.Printf("Cluster %q deleted\n", c.Name)
 	}
 
 	return nil

@@ -84,9 +84,9 @@ func runGetClusters(cmd *cobra.Command) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "NAME\tNODES (S/C/W)\tSLURM\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/W)\tSLURM\tSTATUS")
 	for _, c := range clusters {
-		fmt.Fprintf(w, "%s\t%d (%d/%d/%d)\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d)\t%s\t%s\n",
 			c.Name,
 			c.NodeCount, c.Submitters, c.Controllers, c.Workers,
 			c.SlurmVersion,
@@ -104,9 +104,9 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "NAME\tROLE\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tROLE\tSTATUS")
 	for _, n := range nodes {
-		fmt.Fprintf(w, "%s.%s\t%s\t%s\n", n.Name, name, n.Role, n.State)
+		_, _ = fmt.Fprintf(w, "%s.%s\t%s\t%s\n", n.Name, name, n.Role, n.State)
 	}
 	return w.Flush()
 }
@@ -119,9 +119,9 @@ func runGetNetworks(cmd *cobra.Command) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
+	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
 	for _, n := range networks {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", n.Name, n.Driver, n.Subnet, n.Gateway)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", n.Name, n.Driver, n.Subnet, n.Gateway)
 	}
 	return w.Flush()
 }
@@ -134,9 +134,9 @@ func runGetVolumes(cmd *cobra.Command) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "NAME\tDRIVER")
+	_, _ = fmt.Fprintln(w, "NAME\tDRIVER")
 	for _, v := range volumes {
-		fmt.Fprintf(w, "%s\t%s\n", v.Name, v.Driver)
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", v.Name, v.Driver)
 	}
 	return w.Flush()
 }
@@ -163,9 +163,9 @@ func runGetDNS(cmd *cobra.Command) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "HOSTNAME\tIP")
+	_, _ = fmt.Fprintln(w, "HOSTNAME\tIP")
 	for _, r := range records {
-		fmt.Fprintf(w, "%s\t%s\n", r.Hostname, r.IP)
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", r.Hostname, r.IP)
 	}
 	return w.Flush()
 }
@@ -191,7 +191,7 @@ func runGetMungeKey(cmd *cobra.Command, name string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), base64.StdEncoding.EncodeToString(key))
+	cmd.Println(base64.StdEncoding.EncodeToString(key))
 	return nil
 }
 

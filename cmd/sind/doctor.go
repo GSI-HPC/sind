@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -24,47 +23,46 @@ func newDoctorCommand() *cobra.Command {
 }
 
 func runDoctor(cmd *cobra.Command) error {
-	out := cmd.OutOrStdout()
 	client := clientFrom(cmd.Context())
 	var failed bool
 
 	// Check Docker Engine version.
 	version, err := client.ServerVersion(cmd.Context())
 	if err != nil {
-		printResult(out, false, "Docker Engine: not reachable")
+		printResult(cmd, false, "Docker Engine: not reachable")
 		failed = true
 	} else {
 		major, _, parseErr := parseVersion(version)
 		if parseErr != nil {
-			printResult(out, false, "Docker Engine: %s (unable to parse version)", version)
+			printResult(cmd, false, "Docker Engine: %s (unable to parse version)", version)
 			failed = true
 		} else if major < 28 {
-			printResult(out, false, "Docker Engine: %s (requires >= 28.0)", version)
+			printResult(cmd, false, "Docker Engine: %s (requires >= 28.0)", version)
 			failed = true
 		} else {
-			printResult(out, true, "Docker Engine: %s (>= 28.0)", version)
+			printResult(cmd, true, "Docker Engine: %s (>= 28.0)", version)
 		}
 	}
 
 	// Check cgroup2 with nsdelegate.
 	mountPath, hasV2, hasNsd := cgroupInfo()
 	if !hasV2 {
-		printResult(out, false, "cgroup: v2 not mounted (sind requires cgroupv2)")
+		printResult(cmd, false, "cgroup: v2 not mounted (sind requires cgroupv2)")
 		failed = true
 	} else if !hasNsd {
-		printResult(out, false, "cgroupv2: nsdelegate not found")
-		fmt.Fprintln(out)
-		fmt.Fprintln(out, "  Enable nsdelegate temporarily:")
-		fmt.Fprintf(out, "    sudo mount -o remount,nsdelegate %s\n", mountPath)
-		fmt.Fprintln(out)
-		fmt.Fprintln(out, "  Enable nsdelegate on boot (systemd):")
-		fmt.Fprintln(out, "    sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d")
-		fmt.Fprintln(out, "    echo -e '[Mount]\\nOptions=nsdelegate' \\")
-		fmt.Fprintln(out, "      | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf")
-		fmt.Fprintln(out, "    sudo systemctl daemon-reload")
+		printResult(cmd, false, "cgroupv2: nsdelegate not found")
+		cmd.Println()
+		cmd.Println("  Enable nsdelegate temporarily:")
+		cmd.Printf("    sudo mount -o remount,nsdelegate %s\n", mountPath)
+		cmd.Println()
+		cmd.Println("  Enable nsdelegate on boot (systemd):")
+		cmd.Println("    sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d")
+		cmd.Println("    echo -e '[Mount]\\nOptions=nsdelegate' \\")
+		cmd.Println("      | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf")
+		cmd.Println("    sudo systemctl daemon-reload")
 		failed = true
 	} else {
-		printResult(out, true, "cgroupv2: nsdelegate enabled (%s)", mountPath)
+		printResult(cmd, true, "cgroupv2: nsdelegate enabled (%s)", mountPath)
 	}
 
 	if failed {
@@ -73,8 +71,8 @@ func runDoctor(cmd *cobra.Command) error {
 	return nil
 }
 
-func printResult(out io.Writer, ok bool, format string, args ...any) {
-	fmt.Fprintf(out, "%s %s\n", checkmark(ok), fmt.Sprintf(format, args...))
+func printResult(cmd *cobra.Command, ok bool, format string, args ...any) {
+	cmd.Printf("%s %s\n", checkmark(ok), fmt.Sprintf(format, args...))
 }
 
 func parseVersion(s string) (major, minor int, err error) {

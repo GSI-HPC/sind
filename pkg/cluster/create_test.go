@@ -709,7 +709,7 @@ func tarArchive(name, content string) string {
 	tw := tar.NewWriter(&buf)
 	_ = tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
 	_, _ = tw.Write([]byte(content))
-	tw.Close()
+	_ = tw.Close()
 	return buf.String()
 }
 
