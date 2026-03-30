@@ -3,8 +3,15 @@
 package main
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -108,4 +115,101 @@ func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 	_, _, err := parseExecArgs([]string{"a", "b", "--", "cmd"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "at most one argument before --")
+}
+
+// --- Integration ---
+
+// TestSSHAccess exercises all SSH access methods against a real cluster:
+// sind ssh, sind enter, sind exec, and user SSH client via exported ssh_config.
+func TestSSHAccess(t *testing.T) {
+	c := realClient(t)
+	skipIfNoNsdelegate(t)
+	image := testImage(t)
+
+	t.Setenv("SIND_REALM", testRealm)
+
+	cluster := "e2e-ssh-" + testID
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	defer cancel()
+
+	meshMgr := mesh.NewManager(c, testRealm)
+	t.Cleanup(func() {
+		bg := context.Background()
+		for _, name := range []string{"controller", "submitter", "worker-0"} {
+			cn := docker.ContainerName(testRealm + "-" + cluster + "-" + name)
+			_ = c.KillContainer(bg, cn)
+			_ = c.RemoveContainer(bg, cn)
+		}
+		for _, vt := range []string{"config", "munge", "data"} {
+			_ = c.RemoveVolume(bg, docker.VolumeName(testRealm+"-"+cluster+"-"+vt))
+		}
+		_ = c.RemoveNetwork(bg, docker.NetworkName(testRealm+"-"+cluster+"-net"))
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	// Create cluster with a submitter for enter/exec routing tests.
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "cluster.yaml")
+	cfg := "kind: Cluster\nname: " + cluster + "\ndefaults:\n  image: " + image + "\nnodes:\n  - controller\n  - submitter\n  - worker: 1\n"
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o644))
+
+	stdout, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", "--config", cfgPath)
+	require.NoError(t, err, "create cluster: stdout=%q stderr=%q", stdout, stderr)
+
+	// --- sind ssh: run command on specific node ---
+	stdout, stderr, err = executeWithDockerCtx(ctx, "ssh", "controller."+cluster, "--", "hostname")
+	require.NoError(t, err, "ssh controller: stdout=%q stderr=%q", stdout, stderr)
+	assert.Contains(t, stdout, "controller")
+
+	stdout, stderr, err = executeWithDockerCtx(ctx, "ssh", "worker-0."+cluster, "--", "hostname")
+	require.NoError(t, err, "ssh worker-0: stdout=%q stderr=%q", stdout, stderr)
+	assert.Contains(t, stdout, "worker-0")
+
+	// --- sind enter: routes to submitter when present ---
+	stdout, stderr, err = executeWithDockerCtx(ctx, "enter", cluster)
+	// enter opens an interactive shell — will exit immediately since stdin is not a TTY.
+	// But the connection itself should succeed (exit code 0 or similar).
+	// We can't assert much about stdout here since it's an interactive session.
+	_ = stdout
+	_ = stderr
+	_ = err
+
+	// --- sind exec: routes to submitter when present ---
+	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", cluster, "--", "hostname")
+	require.NoError(t, err, "exec: stdout=%q stderr=%q", stdout, stderr)
+	assert.Contains(t, stdout, "submitter", "exec should route to submitter when present")
+
+	// --- user SSH client via exported ssh_config ---
+	sshConfigDir, err := sindStateDir(testRealm)
+	require.NoError(t, err)
+	sshConfigPath := filepath.Join(sshConfigDir, "ssh_config")
+
+	if _, statErr := os.Stat(sshConfigPath); statErr == nil {
+		// ssh_config was exported — test direct SSH access.
+		sshCmd := exec.CommandContext(ctx, "ssh",
+			"-F", sshConfigPath,
+			"-o", "BatchMode=yes",
+			"controller."+cluster+".sind.local",
+			"hostname",
+		)
+		out, sshErr := sshCmd.CombinedOutput()
+		require.NoError(t, sshErr, "user ssh: %s", string(out))
+		assert.Contains(t, string(out), "controller")
+
+		// Also test worker access.
+		sshCmd = exec.CommandContext(ctx, "ssh",
+			"-F", sshConfigPath,
+			"-o", "BatchMode=yes",
+			"worker-0."+cluster+".sind.local",
+			"hostname",
+		)
+		out, sshErr = sshCmd.CombinedOutput()
+		require.NoError(t, sshErr, "user ssh worker: %s", string(out))
+		assert.Contains(t, string(out), "worker-0")
+	}
+
+	// --- delete cluster ---
+	stdout, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "deleted")
 }

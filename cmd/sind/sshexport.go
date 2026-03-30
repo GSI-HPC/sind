@@ -51,16 +51,3 @@ func sindStateDir(realm string) (string, error) {
 	}
 	return filepath.Join(base, "sind", realm), nil
 }
-
-// sindStateBase returns the base directory for all realm SSH exports.
-func sindStateBase() (string, error) {
-	base := os.Getenv("XDG_STATE_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		base = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(base, "sind"), nil
-}
