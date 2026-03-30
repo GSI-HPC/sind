@@ -18,7 +18,7 @@ sind create cluster [--name NAME] [--config FILE] [--pull]
 | `--config` | — | Path to YAML configuration file |
 | `--pull` | `false` | Pull images before creating containers |
 
-Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image.
+Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image. Configuration can also be piped via stdin instead of using `--config`.
 
 ```bash
 # Minimal cluster
@@ -32,6 +32,15 @@ sind create cluster --config cluster.yaml
 
 # Config file with name override
 sind create cluster --config cluster.yaml --name staging
+
+# Pipe config from stdin
+sind create cluster << 'EOF'
+kind: Cluster
+name: dev
+nodes:
+  - controller
+  - worker: 3
+EOF
 ```
 
 ### What happens during creation
