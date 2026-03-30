@@ -42,7 +42,7 @@ jobs:
         run: gotestsum --junitfile integration-tests.xml -- -race -tags integration ./cmd/sind/
 
       - name: Test report
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         if: always()
         with:
           name: Test Results
