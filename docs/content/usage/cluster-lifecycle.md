@@ -9,29 +9,31 @@ toc: true
 ## Create a cluster
 
 ```bash
-sind create cluster [--name NAME] [--config FILE] [--pull]
+sind create cluster [NAME] [--config FILE] [--pull]
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--name` | `default` | Cluster name |
+| Argument/Flag | Default | Description |
+|---------------|---------|-------------|
+| `NAME` | `default` | Cluster name (positional, optional) |
 | `--config` | — | Path to YAML configuration file |
 | `--pull` | `false` | Pull images before creating containers |
 
 Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image. Configuration can also be piped via stdin instead of using `--config`.
 
+When both a positional `NAME` and a config file with a `name:` field are provided, the positional argument takes precedence.
+
 ```bash
-# Minimal cluster
+# Minimal cluster (named "default")
 sind create cluster
 
 # Named cluster
-sind create cluster --name dev
+sind create cluster dev
 
 # From config file
 sind create cluster --config cluster.yaml
 
 # Config file with name override
-sind create cluster --config cluster.yaml --name staging
+sind create cluster staging --config cluster.yaml
 
 # Pipe config from stdin
 sind create cluster << 'EOF'

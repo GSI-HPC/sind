@@ -8,7 +8,7 @@ toc: true
 
 ## Per-cluster resources
 
-| Type | Name pattern | Example (`--name dev`) |
+| Type | Name pattern | Example (`sind create cluster dev`) |
 |------|-------------|------------------------|
 | Network | `<realm>-<cluster>-net` | `sind-dev-net` |
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |

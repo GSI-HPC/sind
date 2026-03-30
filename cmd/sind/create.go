@@ -33,16 +33,18 @@ func newCreateClusterCommand() *cobra.Command {
 	var configFile string
 
 	cmd := &cobra.Command{
-		Use:   "cluster [--name NAME] [--config FILE]",
+		Use:   "cluster [NAME] [--config FILE]",
 		Short: "Create a Slurm cluster",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			name, _ := cmd.Flags().GetString("name")
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var name string
+			if len(args) > 0 {
+				name = args[0]
+			}
 			return runCreateCluster(cmd, name, configFile)
 		},
 	}
 
-	cmd.Flags().String("name", "default", "cluster name")
 	cmd.Flags().StringVar(&configFile, "config", "", "path to cluster configuration file")
 	cmd.Flags().String("data", ".", `host directory to mount as /data (use "volume" for Docker volume)`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
@@ -56,7 +58,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	if cmd.Flags().Changed("name") {
+	if name != "" {
 		cfg.Name = name
 	}
 

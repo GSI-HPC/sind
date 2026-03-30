@@ -152,7 +152,7 @@ Development follows Test-Driven Development (TDD) style:
 ### Cluster Management
 
 ```bash
-sind create cluster [--name NAME] [--config FILE] [--data PATH] [--pull]
+sind create cluster [NAME] [--config FILE] [--data PATH] [--pull]
 sind delete cluster [NAME]
 sind delete cluster --all
 sind get clusters
@@ -484,7 +484,7 @@ nodes:
 
 ### Per-Cluster Resources
 
-| Type | Name Pattern | Example (`--name dev`) |
+| Type | Name Pattern | Example (`sind create cluster dev`) |
 |------|--------------|------------------------|
 | Network | `sind-<cluster>-net` | `sind-dev-net` |
 | Controller | `sind-<cluster>-controller` | `sind-dev-controller` |
@@ -505,7 +505,7 @@ nodes:
 
 ### Default Cluster Name
 
-When `--name` is omitted, the default cluster name is `default`, resulting in prefixes like `sind-default-*`.
+When `NAME` is omitted, the default cluster name is `default`, resulting in prefixes like `sind-default-*`.
 
 ## Volume Mounts
 

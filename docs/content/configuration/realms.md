@@ -45,8 +45,8 @@ With realm `ci-42`, resources are prefixed accordingly:
 
 ```bash
 # Create two isolated environments
-sind --realm dev create cluster --name app
-sind --realm staging create cluster --name app
+sind --realm dev create cluster app
+sind --realm staging create cluster app
 
 # Each has its own mesh, DNS, and clusters
 sind --realm dev get clusters

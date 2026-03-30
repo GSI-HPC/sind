@@ -84,13 +84,12 @@ func TestCreateCluster_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	createCmd, _, err := cmd.Find([]string{"create", "cluster"})
 	require.NoError(t, err)
-	assert.Equal(t, "cluster [--name NAME] [--config FILE]", createCmd.Use)
+	assert.Equal(t, "cluster [NAME] [--config FILE]", createCmd.Use)
 
 	// Check flags exist with correct defaults
-	assert.NotNil(t, createCmd.Flags().Lookup("name"))
+	assert.Nil(t, createCmd.Flags().Lookup("name"), "--name flag should not exist")
 	assert.NotNil(t, createCmd.Flags().Lookup("config"))
 	assert.NotNil(t, createCmd.Flags().Lookup("data"))
-	assert.Equal(t, "default", createCmd.Flags().Lookup("name").DefValue)
 	assert.Equal(t, ".", createCmd.Flags().Lookup("data").DefValue)
 }
 
@@ -124,8 +123,8 @@ func TestApplyDataFlag_Volume(t *testing.T) {
 	assert.Empty(t, cfg.Storage.DataStorage.HostPath)
 }
 
-func TestCreateCluster_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("create", "cluster", "extra-arg")
+func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {
+	_, _, err := executeCommand("create", "cluster", "name", "extra")
 	assert.Error(t, err)
 }
 
@@ -174,10 +173,10 @@ func TestClusterLifecycle(t *testing.T) {
 	// Write a config file.
 	cfgDir := t.TempDir()
 	cfgPath := filepath.Join(cfgDir, "cluster.yaml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte("kind: Cluster\nname: "+cluster+"\ndefaults:\n  image: "+image+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(cfgPath, []byte("kind: Cluster\ndefaults:\n  image: "+image+"\n"), 0o644))
 
 	// --- create cluster ---
-	stdout, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", "--config", cfgPath)
+	stdout, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", cluster, "--config", cfgPath)
 	require.NoError(t, err, "create cluster failed: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "created")
 	assert.Contains(t, stdout, "2 node(s)")
