@@ -42,14 +42,12 @@ docker exec -it sind-ssh ssh <node>.sind.local
 sind enter [CLUSTER]
 ```
 
-Opens an interactive shell on the cluster's submitter node. If no submitter is configured, it connects to the controller instead.
+Opens an interactive shell on the cluster's submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is `/data`.
 
 ```bash
 sind enter          # default cluster
 sind enter dev      # dev cluster
 ```
-
-This is a convenience wrapper — equivalent to `sind ssh submitter` or `sind ssh controller`.
 
 ## exec
 
@@ -57,13 +55,37 @@ This is a convenience wrapper — equivalent to `sind ssh submitter` or `sind ss
 sind exec [CLUSTER] -- COMMAND [ARGS...]
 ```
 
-Runs a one-shot command on the submitter (or controller). The `--` separator is required.
+Runs a one-shot command on the submitter (or controller). The `--` separator is required. The working directory inside the container is `/data`.
 
 ```bash
 sind exec -- sinfo
 sind exec -- srun hostname
 sind exec dev -- sbatch job.sh
 ```
+
+## Data mount
+
+By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` set `/data` as the working directory, so files from the host are immediately accessible.
+
+Use the `--data` flag to change this behavior:
+
+| Flag value | Behavior |
+|------------|----------|
+| `--data .` (default) | Bind-mount CWD as `/data` |
+| `--data /path/to/dir` | Bind-mount the given directory as `/data` |
+| `--data volume` | Use a Docker-managed volume instead of a host mount |
+
+```bash
+# Mount a specific directory
+sind create cluster --data /home/user/shared
+
+# Use a Docker volume instead
+sind create cluster --data volume
+```
+
+{{< hint info >}}
+`sind ssh` connects via SSH and starts in the user's home directory, not `/data`. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in `/data` directly.
+{{< /hint >}}
 
 ## Command routing
 
