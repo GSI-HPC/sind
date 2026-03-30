@@ -207,13 +207,13 @@ Status:  running
 NODES
 NAME              ROLE        IP            CONTAINER   MUNGE  SSHD   SERVICES
 controller.dev    controller  172.18.0.2    running     ✓      ✓      slurmctld ✓
-worker-0.dev     worker172.18.0.3    running     ✓      ✓      slurmd ✓
-worker-1.dev     worker172.18.0.4    running     ✓      ✓      slurmd ✗
+worker-0.dev      worker      172.18.0.3    running     ✓      ✓      slurmd ✓
+worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd ✗
 
 NETWORK
-Mesh:     sind-mesh ✓
+Mesh:     sind-mesh ✓  172.18.0.0/16  gw 172.18.0.1
 DNS:      sind-dns ✓
-Cluster:  sind-dev-net ✓
+Cluster:  sind-dev-net ✓  172.19.0.0/16  gw 172.19.0.1
 
 VOLUMES
 sind-dev-config ✓
