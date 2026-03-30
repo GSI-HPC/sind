@@ -6,6 +6,8 @@ description: "Create your first Slurm cluster in minutes"
 toc: true
 ---
 
+<!-- Keep in sync with TestQuickstart in cmd/sind/quickstart_test.go -->
+
 ## Create a cluster
 
 The simplest command creates a cluster named `default` with one controller and one worker:
