@@ -752,6 +752,82 @@ func TestCopyToContainer(t *testing.T) {
 	assert.Equal(t, "", string(content))
 }
 
+func TestCopyFilesToContainer(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	files := map[string]File{
+		"munge.key": {Content: []byte("secret"), Mode: 0600},
+		"config":    {Content: []byte("data"), Mode: 0644},
+	}
+	err := c.CopyFilesToContainer(t.Context(), testContainerName, "/etc", files)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"cp", "-", string(testContainerName) + ":/etc"}, m.Calls[0].Args)
+
+	// Verify tar content and permissions (sorted order: config, munge.key)
+	tr := tar.NewReader(strings.NewReader(m.Calls[0].Stdin))
+
+	hdr, err := tr.Next()
+	require.NoError(t, err)
+	assert.Equal(t, "config", hdr.Name)
+	assert.Equal(t, int64(0644), hdr.Mode)
+
+	hdr, err = tr.Next()
+	require.NoError(t, err)
+	assert.Equal(t, "munge.key", hdr.Name)
+	assert.Equal(t, int64(0600), hdr.Mode)
+}
+
+func TestBuildFilesTar_HeaderError(t *testing.T) {
+	// Fail immediately — tar header write fails.
+	w := &failWriter{failAfter: 0}
+	files := map[string]File{
+		"test": {Content: []byte("data"), Mode: 0644},
+	}
+	err := buildFilesTar(w, files)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "writing tar header")
+}
+
+func TestBuildFilesTar_ContentError(t *testing.T) {
+	// Allow header to succeed, fail on content write.
+	w := &failWriter{failAfter: 512}
+	files := map[string]File{
+		"test": {Content: []byte("data"), Mode: 0644},
+	}
+	err := buildFilesTar(w, files)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "writing tar content")
+}
+
+func TestBuildFilesTar_CloseError(t *testing.T) {
+	// Allow header + content, fail on close (two 512-byte blocks written).
+	w := &failWriter{failAfter: 1024}
+	files := map[string]File{
+		"test": {Content: []byte("data"), Mode: 0644},
+	}
+	err := buildFilesTar(w, files)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "closing tar writer")
+}
+
+// failWriter is an io.Writer that fails after a configurable number of bytes.
+type failWriter struct {
+	written   int
+	failAfter int
+}
+
+func (w *failWriter) Write(p []byte) (int, error) {
+	if w.written+len(p) > w.failAfter {
+		return 0, fmt.Errorf("write failed")
+	}
+	w.written += len(p)
+	return len(p), nil
+}
+
 func TestCopyToContainer_Error(t *testing.T) {
 	var m MockExecutor
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))

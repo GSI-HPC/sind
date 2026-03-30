@@ -244,7 +244,16 @@ type File struct {
 // running or stopped. Keys are sorted for deterministic tar output.
 func (c *Client) CopyFilesToContainer(ctx context.Context, container ContainerName, destDir string, files map[string]File) error {
 	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
+	// buildFilesTar cannot fail when writing to bytes.Buffer.
+	_ = buildFilesTar(&buf, files)
+	_, _, err := c.runWithStdin(ctx, &buf, "cp", "-", string(container)+":"+destDir)
+	return err
+}
+
+// buildFilesTar writes files into a tar archive on the given writer.
+// Keys are sorted for deterministic output.
+func buildFilesTar(w io.Writer, files map[string]File) error {
+	tw := tar.NewWriter(w)
 
 	names := make([]string, 0, len(files))
 	for name := range files {
@@ -264,9 +273,7 @@ func (c *Client) CopyFilesToContainer(ctx context.Context, container ContainerNa
 	if err := tw.Close(); err != nil {
 		return fmt.Errorf("closing tar writer: %w", err)
 	}
-
-	_, _, err := c.runWithStdin(ctx, &buf, "cp", "-", string(container)+":"+destDir)
-	return err
+	return nil
 }
 
 // CopyToContainer writes files into a container directory via docker cp.
