@@ -14,11 +14,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewLogger_Silent(t *testing.T) {
+func TestNewLogger_ErrorOnly(t *testing.T) {
 	var buf bytes.Buffer
 	l := newLogger(&buf, 0)
-	l.InfoContext(context.Background(), "should not appear")
+
+	ctx := context.Background()
+	l.InfoContext(ctx, "should not appear")
 	assert.Empty(t, buf.String())
+
+	l.ErrorContext(ctx, "should appear")
+	assert.Contains(t, buf.String(), "should appear")
 }
 
 func TestNewLogger_Info(t *testing.T) {

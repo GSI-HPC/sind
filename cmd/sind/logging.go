@@ -10,18 +10,16 @@ import (
 )
 
 // newLogger builds a slog.Logger for the given verbosity level.
-// At verbosity 0, a no-op logger is returned.
+// At verbosity 0, only errors are shown. Higher levels add info, debug, and trace output.
 func newLogger(w io.Writer, verbosity int) *slog.Logger {
-	if verbosity == 0 {
-		return sindlog.Nop()
-	}
-
-	level := slog.LevelInfo
+	level := slog.LevelError
 	switch {
 	case verbosity >= 3:
 		level = sindlog.LevelTrace
 	case verbosity >= 2:
 		level = slog.LevelDebug
+	case verbosity >= 1:
+		level = slog.LevelInfo
 	}
 
 	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{

@@ -61,7 +61,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	realm := realmFromFlag(cmd)
 	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	nodes, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, defaultReadinessInterval)
+	_, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, defaultReadinessInterval)
 	if err != nil {
 		return err
 	}
@@ -72,11 +72,6 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		}
 	}
 
-	names := make([]string, len(nodes))
-	for i, n := range nodes {
-		names[i] = n.Name
-	}
-	cmd.Printf("Added %d worker(s): %s\n", len(nodes), strings.Join(names, ", "))
 	return nil
 }
 
@@ -107,7 +102,6 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 		if err := cluster.WorkerRemove(ctx, client, meshMgr, clusterName, shortNames); err != nil {
 			return err
 		}
-		cmd.Printf("Removed %d worker(s) from cluster %q\n", len(shortNames), clusterName)
 	}
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {

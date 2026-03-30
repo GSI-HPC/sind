@@ -55,12 +55,12 @@ func TestQuickstart(t *testing.T) {
 	minimalCfg := filepath.Join(cfgDir, "minimal.yaml")
 	require.NoError(t, os.WriteFile(minimalCfg, []byte("kind: Cluster\ndefaults:\n  image: "+image+"\n"), 0o644))
 
-	stdout, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", "--config", minimalCfg)
-	require.NoError(t, err, "create cluster: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "2 node(s)")
+	_, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", "--config", minimalCfg)
+	require.NoError(t, err, "create cluster: stderr=%q", stderr)
 
 	// ## Check cluster status
 	// sind get clusters
+	var stdout string
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "clusters")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "default")
@@ -129,9 +129,8 @@ func TestQuickstart(t *testing.T) {
 
 	// ## Scale up
 	// sind create worker --count 3
-	stdout, stderr, err = executeWithDockerCtx(ctx, "create", "worker", "--count", "3")
-	require.NoError(t, err, "create worker: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "3 worker(s)")
+	_, stderr, err = executeWithDockerCtx(ctx, "create", "worker", "--count", "3")
+	require.NoError(t, err, "create worker: stderr=%q", stderr)
 
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes")
 	require.NoError(t, err)
@@ -141,16 +140,14 @@ func TestQuickstart(t *testing.T) {
 
 	// ## Tear down
 	// sind delete cluster default
-	stdout, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "default")
+	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "default")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "deleted")
 
 	// ## Going further — named clusters with custom configuration
 	devYAML := "kind: Cluster\nname: dev\ndefaults:\n  image: " + image + "\n  cpus: 2\n  memory: 1g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n"
 
-	stdout, stderr, err = executeWithStdin(ctx, devYAML, "create", "cluster")
-	require.NoError(t, err, "create dev cluster: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "5 node(s)")
+	_, stderr, err = executeWithStdin(ctx, devYAML, "create", "cluster")
+	require.NoError(t, err, "create dev cluster: stderr=%q", stderr)
 
 	// Verify submitter is present and exec routes to it.
 	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "dev", "--", "hostname")
@@ -159,9 +156,8 @@ func TestQuickstart(t *testing.T) {
 
 	// Cleanup: delete remaining cluster
 	// sind delete cluster --all
-	stdout, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "--all")
+	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "--all")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "deleted")
 
 	// Verify everything is gone.
 	exists, err := c.ContainerExists(ctx, docker.ContainerName(realm+"-dev-controller"))

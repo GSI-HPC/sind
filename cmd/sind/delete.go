@@ -3,7 +3,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/afero"
@@ -32,7 +32,7 @@ func newDeleteClusterCommand() *cobra.Command {
 			all, _ := cmd.Flags().GetBool("all")
 			if all {
 				if len(args) > 0 {
-					return fmt.Errorf("--all does not accept arguments")
+					return errors.New("--all does not accept arguments")
 				}
 				return runDeleteClustersAll(cmd)
 			}
@@ -65,7 +65,6 @@ func runDeleteCluster(cmd *cobra.Command, name string) error {
 		}
 	}
 
-	cmd.Printf("Cluster %q deleted\n", name)
 	return nil
 }
 
@@ -84,7 +83,6 @@ func runDeleteClustersAll(cmd *cobra.Command) error {
 		if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
 			return err
 		}
-		cmd.Printf("Cluster %q deleted\n", name)
 	}
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {

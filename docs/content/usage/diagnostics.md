@@ -18,7 +18,7 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 
 | Flag | Level | What's logged |
 |------|-------|---------------|
-| (none) | off | Nothing — errors via exit code only |
+| (none) | error | Errors only — commands are silent on success |
 | `-v` | info | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
 | `-vv` | debug | Individual operations: "waiting for node", "enabling slurmd", "creating network" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |

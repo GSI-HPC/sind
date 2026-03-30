@@ -88,7 +88,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return fmt.Errorf("setting up mesh: %w", err)
 	}
 
-	result, err := cluster.Create(ctx, client, meshMgr, cfg, defaultReadinessInterval)
+	_, err = cluster.Create(ctx, client, meshMgr, cfg, defaultReadinessInterval)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,6 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		}
 	}
 
-	cmd.Printf("Cluster %q created with %d node(s)\n", result.Name, len(result.Nodes))
 	return nil
 }
 

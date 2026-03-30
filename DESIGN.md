@@ -178,16 +178,16 @@ Rules:
 |-------------|--------|--------|
 | List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
 | Single value (`get munge-key`) | raw value, one line | stdout |
-| Mutation success (`create`, `delete`) | confirmation sentence | stdout |
-| Node power operations | silent on success | — |
-| Errors | plain error message (no prefix) | stderr |
+| Mutations (`create`, `delete`, `power`) | silent on success | — |
+| Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
 | Logs (`-v`) | structured key=value via slog | stderr |
 
 Rules:
+- Mutations are silent — `exit 0` is the confirmation; use `-v` for progress
+- Errors are always visible (slog error level is always enabled, even without `-v`)
 - No colors, no ANSI escapes — monochrome and terminal-agnostic
 - Unicode checkmarks (✓/✗) only in `status` and `doctor` output
-- Mutations that change topology confirm; power state changes are silent
 - No `--json` or `--format` yet — human-readable only
 
 ### Logging Conventions
@@ -196,7 +196,7 @@ Logging uses `pkg/log` with context-based injection. Silent by default.
 
 | Level | Flag | What to log |
 |-------|------|------------|
-| (off) | — | Nothing; errors propagate via return values |
+| Error | — | Always visible; command failures |
 | Info | `-v` | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
 | Debug | `-vv` | Individual operations: "waiting for node", "creating network", "enabling slurmd" |
 | Trace | `-vvv` | Docker commands, probe retry attempts with error details |

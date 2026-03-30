@@ -85,9 +85,8 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete via CLI.
-	stdout, _, err := executeWithDocker("delete", "cluster", cluster)
+	_, _, err = executeWithDocker("delete", "cluster", cluster)
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "deleted")
 
 	// Verify cluster resources are gone.
 	exists, err := c.ContainerExists(ctx, ctrName)

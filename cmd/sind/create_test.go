@@ -176,12 +176,11 @@ func TestClusterLifecycle(t *testing.T) {
 	require.NoError(t, os.WriteFile(cfgPath, []byte("kind: Cluster\ndefaults:\n  image: "+image+"\n"), 0o644))
 
 	// --- create cluster ---
-	stdout, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", cluster, "--config", cfgPath)
-	require.NoError(t, err, "create cluster failed: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "created")
-	assert.Contains(t, stdout, "2 node(s)")
+	_, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", cluster, "--config", cfgPath)
+	require.NoError(t, err, "create cluster failed: stderr=%q", stderr)
 
 	// --- get clusters ---
+	var stdout string
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "clusters")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, cluster)
@@ -271,9 +270,8 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Equal(t, "running", info.Status)
 
 	// --- create worker ---
-	stdout, stderr, err = executeWithDockerCtx(ctx, "create", "worker", cluster, "--count", "1")
-	require.NoError(t, err, "create worker failed: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "worker-1")
+	_, stderr, err = executeWithDockerCtx(ctx, "create", "worker", cluster, "--count", "1")
+	require.NoError(t, err, "create worker failed: stderr=%q", stderr)
 
 	// Verify new node appears.
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
@@ -281,9 +279,8 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "worker-1."+cluster)
 
 	// --- delete worker ---
-	stdout, _, err = executeWithDockerCtx(ctx, "delete", "worker", "worker-1."+cluster)
+	_, _, err = executeWithDockerCtx(ctx, "delete", "worker", "worker-1."+cluster)
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "Removed")
 
 	// Verify node is gone.
 	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
@@ -291,9 +288,8 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.NotContains(t, stdout, "worker-1")
 
 	// --- delete cluster ---
-	stdout, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)
+	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "deleted")
 
 	// Verify everything is gone.
 	exists, err := c.ContainerExists(ctx, docker.ContainerName(testRealm+"-"+cluster+"-controller"))

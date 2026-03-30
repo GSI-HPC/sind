@@ -209,7 +209,6 @@ func TestSSHAccess(t *testing.T) {
 	}
 
 	// --- delete cluster ---
-	stdout, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)
+	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "deleted")
 }
