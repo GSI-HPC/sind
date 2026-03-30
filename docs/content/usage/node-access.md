@@ -91,15 +91,15 @@ To find the path for your current realm:
 sind get ssh-config
 ```
 
-Add to your `~/.ssh/config` for a single realm:
+Add to the **top** of your `~/.ssh/config` (before any `Host` or `Match` blocks) for a single realm:
 
-```bash
+```
 Include ~/.local/state/sind/sind/ssh_config
 ```
 
 Or include all realms at once using a wildcard:
 
-```bash
+```
 Include ~/.local/state/sind/*/ssh_config
 ```
 

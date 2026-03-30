@@ -665,14 +665,14 @@ The generated `ssh_config`:
 
 ```
 Host *.sind.local
-    ProxyCommand docker exec -i sind-ssh nc %h 22
+    ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/%h/22; cat <&3 & cat >&3; kill $!'
     IdentityFile ~/.local/state/sind/sind/id_ed25519
     UserKnownHostsFile ~/.local/state/sind/sind/known_hosts
     User root
     StrictHostKeyChecking yes
 ```
 
-To find the path for a realm, use `sind get ssh-config`. Add to `~/.ssh/config` for a single realm:
+To find the path for a realm, use `sind get ssh-config`. Add to the **top** of `~/.ssh/config` (before any `Host` or `Match` blocks) for a single realm:
 
 ```
 Include ~/.local/state/sind/sind/ssh_config

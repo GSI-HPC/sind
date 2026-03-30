@@ -179,7 +179,7 @@ func TestGenerateSSHConfig(t *testing.T) {
 	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind")
 
 	assert.Contains(t, config, "Host *.sind.local")
-	assert.Contains(t, config, "ProxyCommand docker exec -i sind-ssh nc %h 22")
+	assert.Contains(t, config, `ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/%h/22; cat <&3 & cat >&3; kill $!'`)
 	assert.Contains(t, config, "IdentityFile /home/user/.sind/id_ed25519")
 	assert.Contains(t, config, "UserKnownHostsFile /home/user/.sind/known_hosts")
 	assert.Contains(t, config, "User root")

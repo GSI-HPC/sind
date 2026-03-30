@@ -63,7 +63,7 @@ func CollectHostKey(ctx context.Context, client *docker.Client, container docker
 // sshConfigTemplate is the SSH config snippet for user SSH client integration.
 // The placeholders are: SSH container name, dir, dir.
 const sshConfigTemplate = `Host *.sind.local
-    ProxyCommand docker exec -i %s nc %%h 22
+    ProxyCommand docker exec -i %s bash -c 'exec 3<>/dev/tcp/%%h/22; cat <&3 & cat >&3; kill $!'
     IdentityFile %s/id_ed25519
     UserKnownHostsFile %s/known_hosts
     User root
