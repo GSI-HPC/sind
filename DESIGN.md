@@ -88,8 +88,8 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/spf13/cobra` | CLI framework |
 | `sigs.k8s.io/yaml` | YAML configuration parsing |
 | `log/slog` (stdlib) | Structured logging |
-| `al.essio.dev/pkg/shellescape` | Safe shell command construction |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
+| `github.com/njayp/ophis` | MCP server framework |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 
 **Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
