@@ -64,6 +64,7 @@ sind applies labels to containers for filtering and metadata:
 
 | Label | Example | Description |
 |-------|---------|-------------|
+| `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
 | `sind.slurm.version` | `25.11.4` | Slurm version |
