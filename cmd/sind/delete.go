@@ -74,16 +74,16 @@ func runDeleteClustersAll(cmd *cobra.Command) error {
 	realm := realmFromFlag(cmd)
 	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	clusters, err := cluster.GetClusters(ctx, client, realm)
+	names, err := cluster.DiscoverClusterNames(ctx, client, realm)
 	if err != nil {
 		return err
 	}
 
-	for _, c := range clusters {
-		if err := cluster.Delete(ctx, client, meshMgr, c.Name); err != nil {
+	for _, name := range names {
+		if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
 			return err
 		}
-		cmd.Printf("Cluster %q deleted\n", c.Name)
+		cmd.Printf("Cluster %q deleted\n", name)
 	}
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {

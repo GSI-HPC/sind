@@ -662,6 +662,90 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 	assert.Contains(t, err.Error(), "removing SSH container")
 }
 
+// --- DiscoverClusterNames ---
+
+func TestDiscoverClusterNames_FromNetworks(t *testing.T) {
+	var m docker.MockExecutor
+	// ListNetworks: returns cluster network + mesh network
+	m.AddResult(`{"Name":"sind-default-net","Driver":"bridge","ID":"a","Scope":"local"}
+{"Name":"sind-mesh","Driver":"bridge","ID":"b","Scope":"local"}`, "", nil)
+	// ListVolumes: empty
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"default"}, names)
+}
+
+func TestDiscoverClusterNames_FromVolumes(t *testing.T) {
+	var m docker.MockExecutor
+	// ListNetworks: empty
+	m.AddResult("", "", nil)
+	// ListVolumes: orphaned volumes
+	m.AddResult(`{"Name":"sind-default-config","Driver":"local","Mountpoint":"/data","Scope":"local"}
+{"Name":"sind-default-munge","Driver":"local","Mountpoint":"/data","Scope":"local"}
+{"Name":"sind-ssh-config","Driver":"local","Mountpoint":"/data","Scope":"local"}`, "", nil)
+	c := docker.NewClient(&m)
+
+	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"default"}, names)
+}
+
+func TestDiscoverClusterNames_MultipleClusters(t *testing.T) {
+	var m docker.MockExecutor
+	// ListNetworks: two cluster networks
+	m.AddResult(`{"Name":"sind-dev-net","Driver":"bridge","ID":"a","Scope":"local"}
+{"Name":"sind-prod-net","Driver":"bridge","ID":"b","Scope":"local"}
+{"Name":"sind-mesh","Driver":"bridge","ID":"c","Scope":"local"}`, "", nil)
+	// ListVolumes: volumes for dev only
+	m.AddResult(`{"Name":"sind-dev-config","Driver":"local","Mountpoint":"/data","Scope":"local"}`, "", nil)
+	c := docker.NewClient(&m)
+
+	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dev", "prod"}, names)
+}
+
+func TestDiscoverClusterNames_Empty(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // ListNetworks
+	m.AddResult("", "", nil) // ListVolumes
+	c := docker.NewClient(&m)
+
+	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Empty(t, names)
+}
+
+func TestDiscoverClusterNames_NetworkError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+	c := docker.NewClient(&m)
+
+	_, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing networks")
+}
+
+func TestDiscoverClusterNames_VolumeError(t *testing.T) {
+	var m docker.MockExecutor
+	m.AddResult("", "", nil) // ListNetworks: ok
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+	c := docker.NewClient(&m)
+
+	_, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing volumes")
+}
+
 // --- helpers ---
 
 type psEntry struct {
