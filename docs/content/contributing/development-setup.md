@@ -8,7 +8,7 @@ toc: true
 
 ## Prerequisites
 
-- **Go 1.21+**
+- **Go 1.25+**
 - **Docker Engine 28.0+**
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
 
