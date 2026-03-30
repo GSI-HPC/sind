@@ -256,7 +256,7 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 // exitCode1 is defined in preflight_test.go.
 
 func netInspect(name, subnet, gw string) string {
-	return fmt.Sprintf(`[{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gw)
+	return fmt.Sprintf(`[{"Name":%q,"Driver":"bridge","IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gw)
 }
 
 func TestGetNetworkHealth_AllHealthy(t *testing.T) {
@@ -272,10 +272,15 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, health.Mesh)
-	assert.True(t, health.DNS)
-	assert.True(t, health.Cluster)
+	assert.Equal(t, "sind-mesh", health.MeshName)
+	assert.Equal(t, "bridge", health.MeshDriver)
 	assert.Equal(t, "172.19.0.0/16", health.MeshSubnet)
 	assert.Equal(t, "172.19.0.1", health.MeshGateway)
+	assert.True(t, health.DNS)
+	assert.Equal(t, "sind-dns", health.DNSName)
+	assert.True(t, health.Cluster)
+	assert.Equal(t, "sind-dev-net", health.ClusterName)
+	assert.Equal(t, "bridge", health.ClusterDriver)
 	assert.Equal(t, "172.18.0.0/16", health.ClusterSubnet)
 	assert.Equal(t, "172.18.0.1", health.ClusterGateway)
 }
@@ -292,8 +297,11 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, health.Mesh)
+	assert.Equal(t, "sind-mesh", health.MeshName)
 	assert.False(t, health.DNS)
+	assert.Equal(t, "sind-dns", health.DNSName)
 	assert.False(t, health.Cluster)
+	assert.Equal(t, "sind-dev-net", health.ClusterName)
 }
 
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {

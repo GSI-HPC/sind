@@ -15,24 +15,29 @@ sind status [CLUSTER]
 Displays detailed health information:
 
 ```
-Cluster: dev
-Status:  running
+CLUSTER   STATUS
+dev       running
+
+NETWORKS
+NAME             DRIVER   SUBNET           GATEWAY        STATUS
+sind-mesh        bridge   172.18.0.0/16    172.18.0.1     ✓
+sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
+
+MESH SERVICES
+NAME   CONTAINER   STATUS
+dns    sind-dns    ✓
+
+MOUNTS
+MOUNT        SOURCE               TYPE       STATUS
+/etc/slurm   sind-dev-config      volume     ✓
+/etc/munge   sind-dev-munge       volume     ✓
+/data        /home/user/project   hostPath   ✓
 
 NODES
 NAME              ROLE        IP            CONTAINER   MUNGE  SSHD   SERVICES
 controller.dev    controller  172.18.0.2    running     ✓      ✓      slurmctld ✓
 worker-0.dev      worker      172.18.0.3    running     ✓      ✓      slurmd ✓
 worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd ✗
-
-NETWORK
-Mesh:     sind-mesh ✓  172.18.0.0/16  gw 172.18.0.1
-DNS:      sind-dns ✓
-Cluster:  sind-dev-net ✓  172.19.0.0/16  gw 172.19.0.1
-
-VOLUMES
-sind-dev-config ✓
-sind-dev-munge ✓
-sind-dev-data ✓
 ```
 
 ## Logs

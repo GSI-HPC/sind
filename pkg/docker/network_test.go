@@ -263,12 +263,13 @@ func TestDisconnectNetwork_Error(t *testing.T) {
 
 func TestInspectNetwork(t *testing.T) {
 	var m MockExecutor
-	m.AddResult(`[{"Name":"sind-dev-net","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}}]`, "", nil)
+	m.AddResult(`[{"Name":"sind-dev-net","Driver":"bridge","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}}]`, "", nil)
 	c := NewClient(&m)
 
 	info, err := c.InspectNetwork(t.Context(), testNetworkName)
 	require.NoError(t, err)
 	assert.Equal(t, testNetworkName, info.Name)
+	assert.Equal(t, "bridge", info.Driver)
 	assert.Equal(t, "172.18.0.0/16", info.Subnet)
 	assert.Equal(t, "172.18.0.1", info.Gateway)
 }

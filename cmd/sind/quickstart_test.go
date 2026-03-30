@@ -75,9 +75,11 @@ func TestQuickstart(t *testing.T) {
 	// sind status
 	stdout, _, err = executeWithDockerCtx(ctx, "status")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "Cluster: default")
+	assert.Contains(t, stdout, "CLUSTER")
+	assert.Contains(t, stdout, "default")
 	assert.Contains(t, stdout, "NODES")
-	assert.Contains(t, stdout, "NETWORK")
+	assert.Contains(t, stdout, "NETWORKS")
+	assert.Contains(t, stdout, "MESH SERVICES")
 	assert.Contains(t, stdout, "MOUNTS")
 
 	// ## Run Slurm commands

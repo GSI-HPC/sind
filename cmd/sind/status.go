@@ -33,13 +33,54 @@ func runStatus(cmd *cobra.Command, name string) error {
 		return err
 	}
 
-	cmd.Printf("Cluster: %s\n", status.Name)
-	cmd.Printf("Status:  %s\n", status.State)
+	out := cmd.OutOrStdout()
 
-	// Nodes table
+	// Header table
+	w := newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "CLUSTER\tSTATUS")
+	_, _ = fmt.Fprintf(w, "%s\t%s\n", status.Name, status.State)
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	// Networks table
+	net := status.Network
+	cmd.Println()
+	cmd.Println("NETWORKS")
+	w = newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY\tSTATUS")
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", net.MeshName, net.MeshDriver, net.MeshSubnet, net.MeshGateway, checkmark(net.Mesh))
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", net.ClusterName, net.ClusterDriver, net.ClusterSubnet, net.ClusterGateway, checkmark(net.Cluster))
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	// Mesh services table
+	cmd.Println()
+	cmd.Println("MESH SERVICES")
+	w = newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
+	_, _ = fmt.Fprintf(w, "dns\t%s\t%s\n", net.DNSName, checkmark(net.DNS))
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	// Mounts table
+	cmd.Println()
+	cmd.Println("MOUNTS")
+	w = newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "MOUNT\tSOURCE\tTYPE\tSTATUS")
+	for _, m := range status.Mounts {
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.Path, m.Source, m.Type, checkmark(m.OK))
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	// Nodes table (last, as it can be the longest)
 	cmd.Println()
 	cmd.Println("NODES")
-	w := newTabWriter(cmd.OutOrStdout())
+	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tCONTAINER\tMUNGE\tSSHD\tSERVICES")
 	for _, n := range status.Nodes {
 		h := n.Health
@@ -52,26 +93,6 @@ func runStatus(cmd *cobra.Command, name string) error {
 			checkmark(h.SSHD),
 			formatServices(h.Services),
 		)
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-
-	// Network section
-	cmd.Println()
-	cmd.Println("NETWORK")
-	net := status.Network
-	cmd.Printf("Mesh:     sind-mesh %s  %s  gw %s\n", checkmark(net.Mesh), net.MeshSubnet, net.MeshGateway)
-	cmd.Printf("DNS:      sind-dns %s\n", checkmark(net.DNS))
-	cmd.Printf("Cluster:  sind-%s-net %s  %s  gw %s\n", name, checkmark(net.Cluster), net.ClusterSubnet, net.ClusterGateway)
-
-	// Mounts section
-	cmd.Println()
-	cmd.Println("MOUNTS")
-	w = newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "MOUNT\tSOURCE\tTYPE\tSTATUS")
-	for _, m := range status.Mounts {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.Path, m.Source, m.Type, checkmark(m.OK))
 	}
 	if err := w.Flush(); err != nil {
 		return err

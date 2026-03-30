@@ -216,11 +216,13 @@ func TestClusterLifecycle(t *testing.T) {
 	// --- status ---
 	stdout, _, err = executeWithDockerCtx(ctx, "status", cluster)
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "Cluster: "+cluster)
+	assert.Contains(t, stdout, "CLUSTER")
+	assert.Contains(t, stdout, cluster)
 	assert.Contains(t, stdout, "NODES")
 	assert.Contains(t, stdout, "controller")
 	assert.Contains(t, stdout, "worker-0")
-	assert.Contains(t, stdout, "NETWORK")
+	assert.Contains(t, stdout, "NETWORKS")
+	assert.Contains(t, stdout, "MESH SERVICES")
 	assert.Contains(t, stdout, "MOUNTS")
 
 	// --- exec ---
