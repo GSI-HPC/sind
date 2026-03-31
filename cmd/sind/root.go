@@ -18,19 +18,20 @@ func NewRootCommand() *cobra.Command {
 		Short: "Slurm in Docker",
 		Long:  "sind creates and manages containerized Slurm clusters for development, testing, and CI/CD workflows.",
 
-		Version:       version,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Version:          version,
+		SilenceUsage:     true,
+		SilenceErrors:    true,
+		TraverseChildren: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			v, _ := cmd.Flags().GetCount("verbose")
+			v, _ := cmd.Root().Flags().GetCount("verbose")
 			logger := newLogger(cmd.ErrOrStderr(), v)
 			cmd.SetContext(sindlog.With(cmd.Context(), logger))
 			return nil
 		},
 	}
 
-	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
-	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
+	cmd.Flags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
+	cmd.Flags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
 
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newDeleteCommand())

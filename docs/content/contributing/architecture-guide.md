@@ -11,7 +11,7 @@ toc: true
 ```
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
-  ├── root.go      Root command, --realm flag, -v flag
+  ├── root.go      Root command, --realm and -v flags (root-local, TraverseChildren)
   ├── context.go   Dependency injection via context
   ├── logging.go   Logger construction from -v verbosity
   ├── completion.go Shell completion for cluster/node names

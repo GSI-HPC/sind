@@ -51,7 +51,7 @@ DEBU enabling slurm service node=worker-0 service=slurmd
 INFO slurm services enabled
 ```
 
-The `-v` flag is global and works with any command.
+The `-v` flag belongs to the root command and must appear before the subcommand (e.g., `sind -v create cluster`).
 
 ## Cluster status
 

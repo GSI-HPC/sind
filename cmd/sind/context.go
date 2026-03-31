@@ -46,8 +46,8 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 //
 //	--realm flag > config file > SIND_REALM env var > mesh.DefaultRealm
 func resolveRealm(cmd *cobra.Command, configRealm string) string {
-	if cmd.Flags().Changed("realm") {
-		r, _ := cmd.Flags().GetString("realm")
+	if cmd.Root().Flags().Changed("realm") {
+		r, _ := cmd.Root().Flags().GetString("realm")
 		return r
 	}
 	if configRealm != "" {
