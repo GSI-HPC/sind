@@ -170,8 +170,8 @@ Rules:
 - **Long-form only** by default; add short flags (`-f`) only for frequently-typed flags
 - **Kebab-case** for multi-word flags: `--tmp-size`, `--munge-key`
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
-- **One global flag**: `--realm` (persistent on root)
-- **One global counter**: `-v` (repeatable, controls log verbosity)
+- **One root-local flag**: `--realm` (local to root, inherited via `TraverseChildren`)
+- **One root-local counter**: `-v` (repeatable, controls log verbosity)
 
 ### Output Conventions
 
@@ -215,7 +215,7 @@ All commands that accept cluster names or node names must set `ValidArgsFunction
 
 - **Cluster name commands** → `completeClusterNames`
 - **Node name commands** → `completeNodeNames`
-- **Commands with DisableFlagParsing** (ssh, exec) → skip (cobra can't complete)
+- **Commands with DisableFlagParsing** (ssh, exec) → `ValidArgsFunction` with heuristics (best-effort despite cobra limitations)
 
 When adding a `get` subcommand with positional arg completion for a second argument
 (like `logs NODE SERVICE`), write a dedicated completion function that switches on `len(args)`.
@@ -677,16 +677,21 @@ All clusters automatically join a shared mesh network for cross-cluster communic
 
 ### DNS
 
-The `sind-dns` container (CoreDNS) provides name resolution across meshed clusters:
+The `sind-dns` container (CoreDNS) provides name resolution across meshed clusters using a realm-aware zone:
 
 ```
-<role>.<cluster>.sind.local → container IP
+<realm>.sind:53
+```
+
+Records follow the pattern:
+```
+<role>.<cluster>.<realm>.sind → container IP
 ```
 
 Nodes are configured with:
 ```
 --dns <sind-dns-ip>
---dns-search <cluster>.sind.local
+--dns-search <cluster>.<realm>.sind
 ```
 
 The DNS container is lightweight and does not run systemd/sshd.
@@ -730,8 +735,8 @@ docker exec <node> cat /etc/ssh/ssh_host_ed25519_key.pub
 The key is added to `known_hosts` with the node's DNS name:
 
 ```
-controller.dev.sind.local ssh-ed25519 AAAA...
-worker-0.dev.sind.local ssh-ed25519 AAAA...
+controller.dev.sind.sind ssh-ed25519 AAAA...
+worker-0.dev.sind.sind ssh-ed25519 AAAA...
 ```
 
 #### Public Key Injection
@@ -760,7 +765,7 @@ sind ssh [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]
 Internally:
 
 ```bash
-docker exec -it sind-ssh ssh [SSH_OPTIONS] <node>.sind.local [COMMAND [ARGS...]]
+docker exec -it sind-ssh ssh [SSH_OPTIONS] <node>.<realm>.sind [COMMAND [ARGS...]]
 ```
 
 All SSH options and arguments are passed through verbatim. Examples:
@@ -784,16 +789,21 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 | `id_ed25519` | Private key (copy from volume) |
 | `known_hosts` | Host keys (copy from volume) |
 
-The generated `ssh_config`:
+The generated `ssh_config` (for default realm `sind`):
 
 ```
-Host *.sind.local
+Host *.sind.sind
     ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/%h/22; cat <&3 & cat >&3; kill $!'
     IdentityFile ~/.local/state/sind/sind/id_ed25519
     UserKnownHostsFile ~/.local/state/sind/sind/known_hosts
     User root
     StrictHostKeyChecking yes
+    CanonicalizeHostname yes
+    CanonicalDomains default.sind.sind sind.sind
+    CanonicalizeMaxDots 2
 ```
+
+The `Canonicalize*` directives enable short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. For custom realms, the `CanonicalDomains` list reflects that realm's clusters.
 
 To find the path for a realm, use `sind get ssh-config`. Add to the **top** of `~/.ssh/config` (before any `Host` or `Match` blocks) for a single realm:
 
@@ -810,9 +820,9 @@ Include ~/.local/state/sind/*/ssh_config
 This allows direct use of standard SSH tools:
 
 ```bash
-ssh controller.default.sind.local
-ssh worker-0.dev.sind.local hostname
-scp file.txt controller.dev.sind.local:/tmp/
+ssh controller.default.sind.sind
+ssh worker-0.dev.sind.sind hostname
+scp file.txt controller.dev.sind.sind:/tmp/
 ```
 
 sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, the files and realm directory are removed.
@@ -965,21 +975,29 @@ sind maintains awareness of version-specific configuration changes and generates
 
 ## DNS Naming Convention
 
-The mesh DNS uses a hierarchical namespace with cluster names as subdomains under `sind.local`:
+The mesh DNS uses a realm-aware hierarchical namespace:
 
 ```
-<role>.<cluster>.sind.local
-<role>-<N>.<cluster>.sind.local
+<role>.<cluster>.<realm>.sind
+<role>-<N>.<cluster>.<realm>.sind
 ```
 
-Examples:
-- `controller.default.sind.local`
-- `submitter.default.sind.local`
-- `worker-0.default.sind.local`
-- `worker-1.default.sind.local`
-- `controller.dev.sind.local`
+The hierarchy is: `node . cluster . realm . sind`
 
-This hierarchical scheme keeps hostnames short while ensuring uniqueness across meshed clusters.
+Each realm gets its own CoreDNS zone (`<realm>.sind`), and nodes within a cluster are configured with `--dns-search <cluster>.<realm>.sind` so short names resolve within the cluster.
+
+Examples (default realm `sind`):
+- `controller.default.sind.sind`
+- `submitter.default.sind.sind`
+- `worker-0.default.sind.sind`
+- `worker-1.default.sind.sind`
+- `controller.dev.sind.sind`
+
+Examples (custom realm `ci-42`):
+- `controller.default.ci-42.sind`
+- `worker-0.dev.ci-42.sind`
+
+Within a cluster, short names resolve via the search domain: a node in the `dev` cluster of realm `sind` can reach `controller` without the full `controller.dev.sind.sind`.
 
 ## Future Features
 

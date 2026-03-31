@@ -580,7 +580,7 @@ func workerRemoveOnCall(t *testing.T, nodesConf string) func([]string, string) d
 
 		// Known hosts: exec on sind-ssh
 		case args[0] == "exec" && args[1] == "sind-ssh":
-			return docker.MockResult{Stdout: "worker-1.dev.sind.local ssh-ed25519 AAAA\n"}
+			return docker.MockResult{Stdout: "worker-1.dev.sind.sind ssh-ed25519 AAAA\n"}
 		case args[0] == "exec" && args[1] == "-i":
 			return docker.MockResult{}
 
@@ -971,7 +971,7 @@ func TestWorkerRemove_NoController(t *testing.T) {
 		case args[0] == "kill":
 			return docker.MockResult{}
 		case args[0] == "exec" && args[1] == "sind-ssh":
-			return docker.MockResult{Stdout: "worker-0.dev.sind.local ssh-ed25519 AAAA\n"}
+			return docker.MockResult{Stdout: "worker-0.dev.sind.sind ssh-ed25519 AAAA\n"}
 		case args[0] == "exec" && args[1] == "-i":
 			return docker.MockResult{}
 		case args[0] == "stop":

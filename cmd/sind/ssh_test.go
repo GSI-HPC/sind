@@ -189,7 +189,7 @@ func TestSSHAccess(t *testing.T) {
 		sshCmd := exec.CommandContext(ctx, "ssh",
 			"-F", sshConfigPath,
 			"-o", "BatchMode=yes",
-			"controller."+cluster+".sind.local",
+			"controller."+cluster+"."+testRealm+".sind",
 			"hostname",
 		)
 		out, sshErr := sshCmd.CombinedOutput()
@@ -200,7 +200,7 @@ func TestSSHAccess(t *testing.T) {
 		sshCmd = exec.CommandContext(ctx, "ssh",
 			"-F", sshConfigPath,
 			"-o", "BatchMode=yes",
-			"worker-0."+cluster+".sind.local",
+			"worker-0."+cluster+"."+testRealm+".sind",
 			"hostname",
 		)
 		out, sshErr = sshCmd.CombinedOutput()

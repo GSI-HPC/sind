@@ -100,7 +100,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	if cfg.DNSIP != "" {
 		args = append(args, "--dns", cfg.DNSIP)
 	}
-	args = append(args, "--dns-search", DNSSearchDomain(cfg.ClusterName))
+	args = append(args, "--dns-search", DNSSearchDomain(cfg.ClusterName, cfg.Realm))
 
 	// Volume mounts
 	configMode := "ro"

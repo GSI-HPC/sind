@@ -166,8 +166,8 @@ sind get dns
 
 ```
 HOSTNAME                              IP
-controller.default.sind.local         172.19.0.2
-worker-0.default.sind.local           172.19.0.3
+controller.default.sind.sind         172.19.0.2
+worker-0.default.sind.sind           172.19.0.3
 ```
 
 ## Munge key

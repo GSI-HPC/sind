@@ -13,79 +13,79 @@ import (
 )
 
 func TestSSH_BuildCommand(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", true, nil, nil)
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, true, nil, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "worker-0.dev.sind.local",
+		"ssh", "worker-0.dev.sind.sind",
 	}, args)
 }
 
 func TestSSH_BuildCommand_NonInteractive(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", false, nil, nil)
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, false, nil, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "worker-0.dev.sind.local",
+		"ssh", "worker-0.dev.sind.sind",
 	}, args)
 }
 
 func TestSSH_BuildCommand_WithCommand(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", false, nil, []string{"hostname"})
+	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", mesh.DefaultRealm, false, nil, []string{"hostname"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "controller.default.sind.local", "hostname",
+		"ssh", "controller.default.sind.sind", "hostname",
 	}, args)
 }
 
 func TestSSH_BuildCommand_WithMultiWordCommand(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", false, nil, []string{"ls", "-la", "/tmp"})
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, false, nil, []string{"ls", "-la", "/tmp"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", string(mesh.SSHContainerName),
-		"ssh", "worker-0.dev.sind.local", "ls", "-la", "/tmp",
+		"ssh", "worker-0.dev.sind.sind", "ls", "-la", "/tmp",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", true, []string{"-v"}, nil)
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, true, []string{"-v"}, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "-v", "worker-0.dev.sind.local",
+		"ssh", "-v", "worker-0.dev.sind.sind",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions_PortForwarding(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", true,
+	args := BuildSSHArgs(mesh.SSHContainerName, "controller", "default", mesh.DefaultRealm, true,
 		[]string{"-L", "8080:localhost:80"}, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "-L", "8080:localhost:80", "controller.default.sind.local",
+		"ssh", "-L", "8080:localhost:80", "controller.default.sind.sind",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions_ForceTTY(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", true,
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, true,
 		[]string{"-t"}, []string{"top"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", string(mesh.SSHContainerName),
-		"ssh", "-t", "worker-0.dev.sind.local", "top",
+		"ssh", "-t", "worker-0.dev.sind.sind", "top",
 	}, args)
 }
 
 func TestSSH_PassthroughOptions_Multiple(t *testing.T) {
-	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", false,
+	args := BuildSSHArgs(mesh.SSHContainerName, "worker-0", "dev", mesh.DefaultRealm, false,
 		[]string{"-v", "-o", "StrictHostKeyChecking=no"},
 		[]string{"uptime"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", string(mesh.SSHContainerName),
 		"ssh", "-v", "-o", "StrictHostKeyChecking=no",
-		"worker-0.dev.sind.local", "uptime",
+		"worker-0.dev.sind.sind", "uptime",
 	}, args)
 }
 

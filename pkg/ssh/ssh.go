@@ -60,25 +60,43 @@ func CollectHostKey(ctx context.Context, client *docker.Client, container docker
 	return "", fmt.Errorf("no ed25519 host key found")
 }
 
+// defaultRealm is the realm that gets short-name canonicalization in the SSH config.
+const defaultRealm = "sind"
+
 // sshConfigTemplate is the SSH config snippet for user SSH client integration.
-// The placeholders are: SSH container name, dir, dir.
-const sshConfigTemplate = `Host *.sind.local
-    ProxyCommand docker exec -i %s bash -c 'exec 3<>/dev/tcp/%%h/22; cat <&3 & cat >&3; kill $!'
-    IdentityFile %s/id_ed25519
-    UserKnownHostsFile %s/known_hosts
+// Placeholders: realm, SSH container name, dir, dir.
+const sshConfigTemplate = `Host *.%[1]s.sind
+    ProxyCommand docker exec -i %[2]s bash -c 'exec 3<>/dev/tcp/%%h/22; cat <&3 & cat >&3; kill $!'
+    IdentityFile %[3]s/id_ed25519
+    UserKnownHostsFile %[3]s/known_hosts
     User root
     StrictHostKeyChecking yes
 `
 
+// sshCanonicalTemplate is appended for the default realm to enable short-name
+// resolution via OpenSSH hostname canonicalization.
+// Placeholders: realm.
+const sshCanonicalTemplate = `
+CanonicalizeHostname yes
+CanonicalDomains default.%[1]s.sind %[1]s.sind
+CanonicalizeMaxDots 2
+`
+
 // GenerateSSHConfig returns the SSH config snippet pointing to files in dir.
-func GenerateSSHConfig(sshContainer docker.ContainerName, dir string) string {
-	return fmt.Sprintf(sshConfigTemplate, string(sshContainer), dir, dir)
+// For the default realm, it includes hostname canonicalization directives
+// that enable short-name SSH access (e.g. "ssh controller").
+func GenerateSSHConfig(sshContainer docker.ContainerName, dir, realm string) string {
+	config := fmt.Sprintf(sshConfigTemplate, realm, string(sshContainer), dir)
+	if realm == defaultRealm {
+		config += fmt.Sprintf(sshCanonicalTemplate, realm)
+	}
+	return config
 }
 
 // ExportConfig exports SSH configuration to the given directory by reading
 // the private key and known_hosts from the SSH relay container and writing
 // ssh_config, id_ed25519, and known_hosts to dir.
-func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir string, sshContainer docker.ContainerName) error {
+func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir, realm string, sshContainer docker.ContainerName) error {
 	privKey, err := client.ReadFile(ctx, sshContainer, "/root/.ssh/id_ed25519")
 	if err != nil {
 		return fmt.Errorf("reading private key: %w", err)
@@ -93,7 +111,7 @@ func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir s
 		return fmt.Errorf("creating directory %s: %w", dir, err)
 	}
 
-	if err := afero.WriteFile(fs, filepath.Join(dir, "ssh_config"), []byte(GenerateSSHConfig(sshContainer, dir)), 0644); err != nil {
+	if err := afero.WriteFile(fs, filepath.Join(dir, "ssh_config"), []byte(GenerateSSHConfig(sshContainer, dir, realm)), 0644); err != nil {
 		return fmt.Errorf("writing ssh_config: %w", err)
 	}
 

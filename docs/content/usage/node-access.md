@@ -33,7 +33,7 @@ sind ssh -L 8080:localhost:80 controller
 Internally, `sind ssh` executes SSH via the mesh SSH container:
 
 ```bash
-docker exec -it sind-ssh ssh <node>.sind.local
+docker exec -it sind-ssh ssh <node>.<realm>.sind
 ```
 
 ## enter
@@ -128,6 +128,6 @@ Include ~/.local/state/sind/*/ssh_config
 Then use standard SSH tools directly:
 
 ```bash
-ssh controller.default.sind.local
-scp file.txt worker-0.dev.sind.local:/tmp/
+ssh controller.default.sind.sind
+scp file.txt worker-0.dev.sind.sind:/tmp/
 ```

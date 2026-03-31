@@ -27,7 +27,7 @@ func syncSSHExport(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 	}
 
 	if exists {
-		return ssh.ExportConfig(ctx, client, fs, dir, meshMgr.SSHContainerName())
+		return ssh.ExportConfig(ctx, client, fs, dir, meshMgr.Realm, meshMgr.SSHContainerName())
 	}
 
 	for _, name := range sshExportFiles {

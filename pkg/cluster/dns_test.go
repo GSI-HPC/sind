@@ -13,32 +13,37 @@ func TestDNSName(t *testing.T) {
 		name      string
 		shortName string
 		cluster   string
+		realm     string
 		want      string
 	}{
-		{"controller", "controller", "dev", "controller.dev.sind.local"},
-		{"submitter", "submitter", "dev", "submitter.dev.sind.local"},
-		{"worker-0", "worker-0", "dev", "worker-0.dev.sind.local"},
-		{"worker-1", "worker-1", "dev", "worker-1.dev.sind.local"},
-		{"default cluster", "controller", "default", "controller.default.sind.local"},
+		{"controller", "controller", "dev", "sind", "controller.dev.sind.sind"},
+		{"submitter", "submitter", "dev", "sind", "submitter.dev.sind.sind"},
+		{"worker-0", "worker-0", "dev", "sind", "worker-0.dev.sind.sind"},
+		{"worker-1", "worker-1", "dev", "sind", "worker-1.dev.sind.sind"},
+		{"default cluster", "controller", "default", "sind", "controller.default.sind.sind"},
+		{"custom realm", "worker-0", "dev", "ci-42", "worker-0.dev.ci-42.sind"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, DNSName(tt.shortName, tt.cluster))
+			assert.Equal(t, tt.want, DNSName(tt.shortName, tt.cluster, tt.realm))
 		})
 	}
 }
 
 func TestDNSSearchDomain(t *testing.T) {
 	tests := []struct {
+		name    string
 		cluster string
+		realm   string
 		want    string
 	}{
-		{"dev", "dev.sind.local"},
-		{"default", "default.sind.local"},
+		{"default realm", "dev", "sind", "dev.sind.sind"},
+		{"default cluster", "default", "sind", "default.sind.sind"},
+		{"custom realm", "dev", "ci-42", "dev.ci-42.sind"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.cluster, func(t *testing.T) {
-			assert.Equal(t, tt.want, DNSSearchDomain(tt.cluster))
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, DNSSearchDomain(tt.cluster, tt.realm))
 		})
 	}
 }

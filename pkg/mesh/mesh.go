@@ -60,9 +60,10 @@ const corefilePath = "/Corefile"
 
 // Manager handles global infrastructure resources shared across all clusters.
 type Manager struct {
-	Docker *docker.Client
-	Realm  string
-	Pull   bool // force fresh image pull (--pull always)
+	Docker  *docker.Client
+	Realm   string
+	Pull    bool // force fresh image pull (--pull always)
+	HostDNS bool // configure host DNS resolution via systemd-resolved
 }
 
 // NewManager returns a Manager that operates on global resources through the
@@ -119,6 +120,16 @@ func (m *Manager) EnsureMesh(ctx context.Context) error {
 	if err := m.EnsureSSH(ctx); err != nil {
 		return err
 	}
+
+	// Best-effort: configure host DNS resolution via systemd-resolved.
+	if m.HostDNS {
+		if ok, err := m.configureHostDNS(ctx); err != nil {
+			log.InfoContext(ctx, "host DNS configuration failed", "error", err)
+		} else if ok {
+			log.InfoContext(ctx, "host DNS resolution enabled")
+		}
+	}
+
 	log.DebugContext(ctx, "mesh infrastructure ready")
 	return nil
 }
@@ -126,7 +137,14 @@ func (m *Manager) EnsureMesh(ctx context.Context) error {
 // CleanupMesh removes all global infrastructure resources. This should only
 // be called when the last cluster is deleted.
 func (m *Manager) CleanupMesh(ctx context.Context) error {
-	sindlog.From(ctx).InfoContext(ctx, "cleaning up mesh infrastructure", "realm", m.Realm)
+	log := sindlog.From(ctx)
+	log.InfoContext(ctx, "cleaning up mesh infrastructure", "realm", m.Realm)
+
+	// Revert host DNS before removing the bridge.
+	if m.HostDNS {
+		m.revertHostDNS(ctx)
+	}
+
 	// Remove containers first (auto-disconnects from networks).
 	if err := m.removeContainerIfExists(ctx, m.SSHContainerName()); err != nil {
 		return fmt.Errorf("removing SSH container: %w", err)
@@ -205,7 +223,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 }
 
 // EnsureDNS creates the mesh DNS container if it does not already exist.
-// The container runs CoreDNS on the mesh network, serving sind.local records
+// The container runs CoreDNS on the mesh network, serving <realm>.sind records
 // from inline hosts entries in the Corefile.
 func (m *Manager) EnsureDNS(ctx context.Context) error {
 	name := m.DNSContainerName()
@@ -232,7 +250,7 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 	}
 
 	err = m.Docker.CopyToContainer(ctx, name, "/", map[string][]byte{
-		"Corefile": []byte(generateCorefile(nil)),
+		"Corefile": []byte(generateCorefile(m.Realm, nil)),
 	})
 	if err != nil {
 		return fmt.Errorf("writing DNS configuration: %w", err)
@@ -247,7 +265,7 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 }
 
 // AddDNSRecord adds an A record to the mesh DNS Corefile and reloads CoreDNS.
-// The hostname should be a fully qualified sind DNS name (e.g. "controller.dev.sind.local").
+// The hostname should be a fully qualified sind DNS name (e.g. "controller.dev.sind.sind").
 func (m *Manager) AddDNSRecord(ctx context.Context, hostname, ip string) error {
 	entries, err := m.readDNSEntries(ctx)
 	if err != nil {
@@ -315,7 +333,7 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	name := m.DNSContainerName()
 	err := m.Docker.CopyToContainer(ctx, name, "/", map[string][]byte{
-		"Corefile": []byte(generateCorefile(entries)),
+		"Corefile": []byte(generateCorefile(m.Realm, entries)),
 	})
 	if err != nil {
 		return fmt.Errorf("writing DNS Corefile: %w", err)
@@ -332,9 +350,10 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 
 // generateCorefile builds a complete CoreDNS Corefile with the given host entries
 // inlined in the hosts block. Each entry is an "IP hostname" string.
-func generateCorefile(entries []string) string {
+// The zone is derived from the realm: "<realm>.sind".
+func generateCorefile(realm string, entries []string) string {
 	var b strings.Builder
-	b.WriteString("sind.local:53 {\n    hosts {\n")
+	b.WriteString(realm + ".sind:53 {\n    hosts {\n")
 	for _, entry := range entries {
 		b.WriteString("        " + entry + "\n")
 	}

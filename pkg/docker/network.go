@@ -47,6 +47,7 @@ func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, con
 
 // NetworkInfo holds detailed information about a Docker network.
 type NetworkInfo struct {
+	ID      string
 	Name    NetworkName
 	Driver  string
 	Subnet  string
@@ -55,6 +56,7 @@ type NetworkInfo struct {
 
 // networkInspectResult maps the subset of docker network inspect JSON we need.
 type networkInspectResult struct {
+	ID     string `json:"Id"`
 	Name   string `json:"Name"`
 	Driver string `json:"Driver"`
 	IPAM   struct {
@@ -78,7 +80,7 @@ func (c *Client) InspectNetwork(ctx context.Context, name NetworkName) (*Network
 	if len(results) == 0 {
 		return nil, fmt.Errorf("network inspect returned no results for %q", name)
 	}
-	info := &NetworkInfo{Name: NetworkName(results[0].Name), Driver: results[0].Driver}
+	info := &NetworkInfo{ID: results[0].ID, Name: NetworkName(results[0].Name), Driver: results[0].Driver}
 	if len(results[0].IPAM.Config) > 0 {
 		info.Subnet = results[0].IPAM.Config[0].Subnet
 		info.Gateway = results[0].IPAM.Config[0].Gateway

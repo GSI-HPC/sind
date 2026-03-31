@@ -841,7 +841,7 @@ func TestCopyFromContainer(t *testing.T) {
 	// Build a tar archive containing one file as docker cp would return
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	content := []byte("172.18.0.2 controller.default.sind.local\n")
+	content := []byte("172.18.0.2 controller.default.sind.sind\n")
 	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "hosts", Size: int64(len(content)), Mode: 0644}))
 	_, err := tw.Write(content)
 	require.NoError(t, err)

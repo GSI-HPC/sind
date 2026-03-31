@@ -273,7 +273,7 @@ func TestDeleteVolumes_Empty(t *testing.T) {
 func TestDeregisterMesh(t *testing.T) {
 	var m docker.MockExecutor
 	m.OnCall = meshDeregisterOnCall(
-		"controller.dev.sind.local ssh-ed25519 AAAA1\nworker-0.dev.sind.local ssh-ed25519 AAAA2\n",
+		"controller.dev.sind.sind ssh-ed25519 AAAA1\nworker-0.dev.sind.sind ssh-ed25519 AAAA2\n",
 	)
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
@@ -449,7 +449,7 @@ func TestDelete_FullCluster(t *testing.T) {
 		networkExists: true,
 		volumes:       []string{"config", "munge", "data"},
 		otherClusters: false,
-		knownHosts:    "controller.dev.sind.local ssh-ed25519 K1\nworker-0.dev.sind.local ssh-ed25519 K2\n",
+		knownHosts:    "controller.dev.sind.sind ssh-ed25519 K1\nworker-0.dev.sind.sind ssh-ed25519 K2\n",
 	})
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
@@ -504,7 +504,7 @@ func TestDelete_PreserveMesh(t *testing.T) {
 		networkExists: true,
 		volumes:       []string{"config", "munge", "data"},
 		otherClusters: true,
-		knownHosts:    "controller.dev.sind.local ssh-ed25519 K1\n",
+		knownHosts:    "controller.dev.sind.sind ssh-ed25519 K1\n",
 	})
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
@@ -558,7 +558,7 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 		networkExists:       true,
 		volumes:             []string{"config", "munge", "data"},
 		containerRemoveFail: true,
-		knownHosts:          "controller.dev.sind.local ssh-ed25519 K1\n",
+		knownHosts:          "controller.dev.sind.sind ssh-ed25519 K1\n",
 	})
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)

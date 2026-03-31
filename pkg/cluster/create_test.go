@@ -765,7 +765,7 @@ func tarArchive(name, content string) string {
 
 // emptyCorefileContent returns a Corefile with no host entries.
 func emptyCorefileContent() string {
-	return "sind.local:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
+	return "sind.sind:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 }
 
 // emptyCorefileTar returns a tar archive containing an empty Corefile (no host entries).

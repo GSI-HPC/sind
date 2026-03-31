@@ -80,7 +80,7 @@ func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
 
 	data, err = afero.ReadFile(fs, filepath.Join(dir, "ssh_config"))
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "Host *.sind.local")
+	assert.Contains(t, string(data), "Host *.sind.sind")
 	assert.Contains(t, string(data), "ProxyCommand docker exec -i sind-ssh")
 }
 

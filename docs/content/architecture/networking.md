@@ -26,25 +26,25 @@ All clusters join a shared mesh network for cross-cluster communication:
 
 ## DNS
 
-The `sind-dns` container runs CoreDNS and provides name resolution across all clusters:
+The `sind-dns` container runs CoreDNS and provides name resolution across all clusters using a realm-aware zone:
 
 ```
-<role>.<cluster>.sind.local → container IP
+<role>.<cluster>.<realm>.sind → container IP
 ```
 
-Examples:
+Examples (default realm `sind`):
 
-- `controller.default.sind.local`
-- `worker-0.dev.sind.local`
+- `controller.default.sind.sind`
+- `worker-0.dev.sind.sind`
 
 Nodes are configured with:
 
 ```
 --dns <sind-dns-ip>
---dns-search <cluster>.sind.local
+--dns-search <cluster>.<realm>.sind
 ```
 
-Within a cluster, short names work: a node in the `dev` cluster can reach `controller` without the full `controller.dev.sind.local`.
+Within a cluster, short names work via the search domain: a node in the `dev` cluster can reach `controller` without the full `controller.dev.sind.sind`.
 
 The DNS container is lightweight — no systemd or sshd.
 
@@ -92,7 +92,7 @@ docker exec <node> cat /etc/ssh/ssh_host_ed25519_key.pub
 And stored in `known_hosts` with the node's DNS name:
 
 ```
-controller.dev.sind.local ssh-ed25519 AAAA...
+controller.dev.sind.sind ssh-ed25519 AAAA...
 ```
 
 ### Access model

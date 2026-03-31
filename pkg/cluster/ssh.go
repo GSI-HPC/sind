@@ -16,14 +16,14 @@ import (
 // node is the short name (e.g. "worker-0"), cluster is the cluster name,
 // isTTY controls whether -t is added to docker exec, sshOptions are passed
 // through to SSH before the target, and command is the optional remote command.
-func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster string, isTTY bool, sshOptions, command []string) []string {
+func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster, realm string, isTTY bool, sshOptions, command []string) []string {
 	args := []string{"exec", "-i"}
 	if isTTY {
 		args = append(args, "-t")
 	}
 	args = append(args, string(sshContainer), "ssh")
 	args = append(args, sshOptions...)
-	args = append(args, DNSName(node, cluster))
+	args = append(args, DNSName(node, cluster, realm))
 	args = append(args, command...)
 	return args
 }

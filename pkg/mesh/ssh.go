@@ -94,7 +94,7 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 		return nil
 	}
 
-	// Look up DNS container IP so the SSH container can resolve *.sind.local.
+	// Look up DNS container IP so the SSH container can resolve *.<realm>.sind.
 	dnsInfo, err := m.Docker.InspectContainer(ctx, m.DNSContainerName())
 	if err != nil {
 		return fmt.Errorf("inspecting DNS container for IP: %w", err)

@@ -171,7 +171,7 @@ func TestBuildRunArgs_Network(t *testing.T) {
 
 	search, ok := argValue(args, "--dns-search")
 	assert.True(t, ok, "--dns-search flag present")
-	assert.Equal(t, "dev.sind.local", search)
+	assert.Equal(t, "dev.sind.sind", search)
 }
 
 func TestBuildRunArgs_Network_NoDNSIP(t *testing.T) {
@@ -333,7 +333,7 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	assert.Equal(t, "sind-default-net", network)
 
 	search, _ := argValue(args, "--dns-search")
-	assert.Equal(t, "default.sind.local", search)
+	assert.Equal(t, "default.sind.sind", search)
 }
 
 // --- CreateNode ---

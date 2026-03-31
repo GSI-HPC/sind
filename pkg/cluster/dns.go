@@ -3,15 +3,15 @@
 package cluster
 
 // DNSSuffix is the base domain for all sind DNS names.
-const DNSSuffix = "sind.local"
+const DNSSuffix = "sind"
 
 // DNSName returns the fully qualified DNS name for a node.
 // shortName is the node's hostname, e.g. "controller", "worker-0".
-func DNSName(shortName, cluster string) string {
-	return shortName + "." + cluster + "." + DNSSuffix
+func DNSName(shortName, cluster, realm string) string {
+	return shortName + "." + cluster + "." + realm + "." + DNSSuffix
 }
 
 // DNSSearchDomain returns the DNS search domain for a cluster.
-func DNSSearchDomain(cluster string) string {
-	return cluster + "." + DNSSuffix
+func DNSSearchDomain(cluster, realm string) string {
+	return cluster + "." + realm + "." + DNSSuffix
 }

@@ -235,7 +235,7 @@ func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName stri
 	prefix := ContainerPrefix(meshMgr.Realm, clusterName)
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
-		dnsName := DNSName(shortName, clusterName)
+		dnsName := DNSName(shortName, clusterName, meshMgr.Realm)
 
 		if err := meshMgr.RemoveDNSRecord(ctx, dnsName); err != nil {
 			return fmt.Errorf("removing DNS record for %s: %w", shortName, err)

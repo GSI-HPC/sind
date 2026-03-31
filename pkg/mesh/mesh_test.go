@@ -82,6 +82,7 @@ func TestMeshLifecycle(t *testing.T) {
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS
 		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH
+
 	}
 	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
 
@@ -161,18 +162,21 @@ func TestDNSRecordLifecycle(t *testing.T) {
 		rec.AddResult("sind-dns\n", "", nil)
 
 		// AddDNSRecord "b": read → write → kill → start
-		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.local"}), "", nil)
+		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.sind"}), "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 
 		// RemoveDNSRecord "a": read → write → kill → start
-		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.local", "172.18.0.3 b.test.sind.local"}), "", nil)
+		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.sind", "172.18.0.3 b.test.sind.sind"}), "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 
 		// CleanupMesh
+		if resolvedActive() {
+			rec.AddResult(`[{"Id":"mock-net-id-000000","Name":"sind-mesh"}]`, "", nil) // revertHostDNS: inspect network
+		}
 		rec.AddResult("[{}]\n", "", nil)            // SSH exists
 		rec.AddResult("sind-ssh\n", "", nil)        // stop SSH
 		rec.AddResult("sind-ssh\n", "", nil)        // rm SSH
@@ -190,14 +194,14 @@ func TestDNSRecordLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add two records.
-	err = mgr.AddDNSRecord(ctx, "a.test.sind.local", "172.18.0.2")
+	err = mgr.AddDNSRecord(ctx, "a.test.sind.sind", "172.18.0.2")
 	require.NoError(t, err)
 
-	err = mgr.AddDNSRecord(ctx, "b.test.sind.local", "172.18.0.3")
+	err = mgr.AddDNSRecord(ctx, "b.test.sind.sind", "172.18.0.3")
 	require.NoError(t, err)
 
 	// Remove first record.
-	err = mgr.RemoveDNSRecord(ctx, "a.test.sind.local")
+	err = mgr.RemoveDNSRecord(ctx, "a.test.sind.sind")
 	require.NoError(t, err)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
@@ -530,7 +534,7 @@ func TestEnsureDNS_Creates(t *testing.T) {
 	corefile := extractTarFile(t, m.Calls[2].Stdin, "Corefile")
 	assert.Contains(t, corefile, "hosts {")
 	assert.Contains(t, corefile, "fallthrough")
-	assert.NotContains(t, corefile, "sind.local\n")
+	assert.NotContains(t, corefile, "sind.sind\n")
 }
 
 func TestEnsureDNS_AlreadyExists(t *testing.T) {
@@ -632,7 +636,7 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 4)
@@ -640,14 +644,14 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	assert.Equal(t, []string{"cp", string(DNSContainerName) + ":/Corefile", "-"}, m.Calls[0].Args)
 	// Verify written Corefile contains the record
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.local")
+	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
 	// Verify restart
 	assert.Equal(t, []string{"kill", string(DNSContainerName)}, m.Calls[2].Args)
 	assert.Equal(t, []string{"start", string(DNSContainerName)}, m.Calls[3].Args)
 }
 
 func TestAddDNSRecord_Appends(t *testing.T) {
-	existing := []string{"172.18.0.2 controller.dev.sind.local"}
+	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
 	var m docker.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
@@ -657,12 +661,12 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.AddDNSRecord(t.Context(), "worker-0.dev.sind.local", "172.18.0.3")
+	err := mgr.AddDNSRecord(t.Context(), "worker-0.dev.sind.sind", "172.18.0.3")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.local")
-	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.local")
+	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
 }
 
 func TestAddDNSRecord_ReadError(t *testing.T) {
@@ -671,7 +675,7 @@ func TestAddDNSRecord_ReadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading DNS Corefile")
 }
@@ -683,7 +687,7 @@ func TestAddDNSRecord_WriteError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "writing DNS Corefile")
 }
@@ -696,7 +700,7 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reloading DNS")
 }
@@ -710,7 +714,7 @@ func TestAddDNSRecord_RestartError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.local", "172.18.0.2")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reloading DNS")
 }
@@ -719,8 +723,8 @@ func TestAddDNSRecord_RestartError(t *testing.T) {
 
 func TestRemoveDNSRecord(t *testing.T) {
 	existing := []string{
-		"172.18.0.2 controller.dev.sind.local",
-		"172.18.0.3 worker-0.dev.sind.local",
+		"172.18.0.2 controller.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
 	}
 
 	var m docker.MockExecutor
@@ -731,16 +735,16 @@ func TestRemoveDNSRecord(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.sind")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.NotContains(t, corefile, "controller.dev.sind.local")
-	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.local")
+	assert.NotContains(t, corefile, "controller.dev.sind.sind")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
 }
 
 func TestRemoveDNSRecord_LastEntry(t *testing.T) {
-	existing := []string{"172.18.0.2 controller.dev.sind.local"}
+	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
 	var m docker.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
@@ -750,18 +754,18 @@ func TestRemoveDNSRecord_LastEntry(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.sind")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.NotContains(t, corefile, "controller.dev.sind.local")
+	assert.NotContains(t, corefile, "controller.dev.sind.sind")
 	// Should still have valid Corefile structure
 	assert.Contains(t, corefile, "hosts {")
 	assert.Contains(t, corefile, "fallthrough")
 }
 
 func TestRemoveDNSRecord_NotFound(t *testing.T) {
-	existing := []string{"172.18.0.2 controller.dev.sind.local"}
+	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
 	var m docker.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
@@ -771,15 +775,15 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.RemoveDNSRecord(t.Context(), "worker-0.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "worker-0.dev.sind.sind")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.local")
+	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
 }
 
 func TestRemoveDNSRecord_ReloadError(t *testing.T) {
-	existing := []string{"172.18.0.2 controller.dev.sind.local"}
+	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
 	var m docker.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
@@ -788,16 +792,16 @@ func TestRemoveDNSRecord_ReloadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.sind")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reloading DNS")
 }
 
 func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 	existing := []string{
-		"172.18.0.2 controller.dev.sind.local",
-		"172.18.0.5 controller.dev.sind.local",
-		"172.18.0.3 worker-0.dev.sind.local",
+		"172.18.0.2 controller.dev.sind.sind",
+		"172.18.0.5 controller.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
 	}
 
 	var m docker.MockExecutor
@@ -808,12 +812,12 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.sind")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.NotContains(t, corefile, "controller.dev.sind.local")
-	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.local")
+	assert.NotContains(t, corefile, "controller.dev.sind.sind")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
 }
 
 func TestRemoveDNSRecord_ReadError(t *testing.T) {
@@ -822,7 +826,7 @@ func TestRemoveDNSRecord_ReadError(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.local")
+	err := mgr.RemoveDNSRecord(t.Context(), "controller.dev.sind.sind")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading DNS Corefile")
 }
@@ -842,8 +846,8 @@ func TestRemoveDNSRecord_WriteError(t *testing.T) {
 // --- generateCorefile / parseEntries ---
 
 func TestGenerateCorefile_Empty(t *testing.T) {
-	cf := generateCorefile(nil)
-	assert.Contains(t, cf, "sind.local:53")
+	cf := generateCorefile(DefaultRealm, nil)
+	assert.Contains(t, cf, "sind.sind:53")
 	assert.Contains(t, cf, "hosts {")
 	assert.Contains(t, cf, "fallthrough")
 	assert.Contains(t, cf, "forward . /etc/resolv.conf")
@@ -851,26 +855,31 @@ func TestGenerateCorefile_Empty(t *testing.T) {
 
 func TestGenerateCorefile_WithEntries(t *testing.T) {
 	entries := []string{
-		"172.18.0.2 controller.dev.sind.local",
-		"172.18.0.3 worker-0.dev.sind.local",
+		"172.18.0.2 controller.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
 	}
-	cf := generateCorefile(entries)
-	assert.Contains(t, cf, "        172.18.0.2 controller.dev.sind.local\n")
-	assert.Contains(t, cf, "        172.18.0.3 worker-0.dev.sind.local\n")
+	cf := generateCorefile(DefaultRealm, entries)
+	assert.Contains(t, cf, "        172.18.0.2 controller.dev.sind.sind\n")
+	assert.Contains(t, cf, "        172.18.0.3 worker-0.dev.sind.sind\n")
+}
+
+func TestGenerateCorefile_CustomRealm(t *testing.T) {
+	cf := generateCorefile("ci42", nil)
+	assert.Contains(t, cf, "ci42.sind:53")
 }
 
 func TestParseEntries_Empty(t *testing.T) {
-	cf := generateCorefile(nil)
+	cf := generateCorefile(DefaultRealm, nil)
 	entries := parseEntries(cf)
 	assert.Empty(t, entries)
 }
 
 func TestParseEntries_Roundtrip(t *testing.T) {
 	original := []string{
-		"172.18.0.2 controller.dev.sind.local",
-		"172.18.0.3 worker-0.dev.sind.local",
+		"172.18.0.2 controller.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
 	}
-	cf := generateCorefile(original)
+	cf := generateCorefile(DefaultRealm, original)
 	parsed := parseEntries(cf)
 	assert.Equal(t, original, parsed)
 }
@@ -1042,7 +1051,7 @@ func dnsInspectJSON() string {
 
 func TestGetDNSRecords(t *testing.T) {
 	var m docker.MockExecutor
-	entries := []string{"172.18.0.2 controller.dev.sind.local", "172.18.0.3 worker-0.dev.sind.local"}
+	entries := []string{"172.18.0.2 controller.dev.sind.sind", "172.18.0.3 worker-0.dev.sind.sind"}
 	m.AddResult(corefileTar(t, entries), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -1051,9 +1060,9 @@ func TestGetDNSRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, records, 2)
 	assert.Equal(t, "172.18.0.2", records[0].IP)
-	assert.Equal(t, "controller.dev.sind.local", records[0].Hostname)
+	assert.Equal(t, "controller.dev.sind.sind", records[0].Hostname)
 	assert.Equal(t, "172.18.0.3", records[1].IP)
-	assert.Equal(t, "worker-0.dev.sind.local", records[1].Hostname)
+	assert.Equal(t, "worker-0.dev.sind.sind", records[1].Hostname)
 }
 
 func TestGetDNSRecords_Empty(t *testing.T) {
@@ -1083,7 +1092,7 @@ func TestGetDNSRecords_ReadError(t *testing.T) {
 // matching the format returned by docker cp.
 func corefileTar(t *testing.T, entries []string) string {
 	t.Helper()
-	content := []byte(generateCorefile(entries))
+	content := []byte(generateCorefile(DefaultRealm, entries))
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	_ = tw.WriteHeader(&tar.Header{Name: "Corefile", Size: int64(len(content)), Mode: 0644})
