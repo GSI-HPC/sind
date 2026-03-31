@@ -8,3 +8,7 @@ more:
     ref: "https://github.com/GSI-HPC/sind"
     external: true
     icon: "gdoc_github"
+  - name: Reference
+    ref: "https://pkg.go.dev/github.com/GSI-HPC/sind"
+    external: true
+    icon: "gdoc_go"
