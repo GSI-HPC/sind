@@ -46,8 +46,8 @@ func runStatus(cmd *cobra.Command, name string) error {
 
 	// Networks table
 	net := status.Network
-	cmd.Println()
-	cmd.Println("NETWORKS")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "NETWORKS")
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY\tSTATUS")
 	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", net.MeshName, net.MeshDriver, net.MeshSubnet, net.MeshGateway, checkmark(net.Mesh))
@@ -57,8 +57,8 @@ func runStatus(cmd *cobra.Command, name string) error {
 	}
 
 	// Mesh services table
-	cmd.Println()
-	cmd.Println("MESH SERVICES")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "MESH SERVICES")
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
 	_, _ = fmt.Fprintf(w, "dns\t%s\t%s\n", net.DNSName, checkmark(net.DNS))
@@ -67,8 +67,8 @@ func runStatus(cmd *cobra.Command, name string) error {
 	}
 
 	// Mounts table
-	cmd.Println()
-	cmd.Println("MOUNTS")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "MOUNTS")
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "MOUNT\tSOURCE\tTYPE\tSTATUS")
 	for _, m := range status.Mounts {
@@ -79,8 +79,8 @@ func runStatus(cmd *cobra.Command, name string) error {
 	}
 
 	// Nodes table (last, as it can be the longest)
-	cmd.Println()
-	cmd.Println("NODES")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "NODES")
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tCONTAINER\tMUNGE\tSSHD\tSERVICES")
 	for _, n := range status.Nodes {

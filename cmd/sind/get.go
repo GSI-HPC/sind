@@ -195,7 +195,7 @@ func runGetMungeKey(cmd *cobra.Command, name string) error {
 	if err != nil {
 		return err
 	}
-	cmd.Println(base64.StdEncoding.EncodeToString(key))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), base64.StdEncoding.EncodeToString(key))
 	return nil
 }
 
@@ -210,7 +210,7 @@ func newGetSSHConfigCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.Println(filepath.Join(dir, "ssh_config"))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), filepath.Join(dir, "ssh_config"))
 			return nil
 		},
 	}
