@@ -39,7 +39,9 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 	if m, ok := ctx.Value(meshMgrKey).(*mesh.Manager); ok {
 		return m
 	}
-	return mesh.NewManager(client, realm)
+	mgr := mesh.NewManager(client, realm)
+	mgr.HostDNS = true
+	return mgr
 }
 
 // resolveRealm determines the realm with the following precedence:

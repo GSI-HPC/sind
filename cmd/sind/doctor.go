@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -65,10 +66,59 @@ func runDoctor(cmd *cobra.Command) error {
 		printResult(cmd, true, "cgroupv2: nsdelegate enabled (%s)", mountPath)
 	}
 
+	// Advisory: host DNS resolution via systemd-resolved.
+	if resolvedActive() {
+		if dnsPolkitAuthorized() {
+			printResult(cmd, true, "DNS policy: host resolution available")
+		} else {
+			printResult(cmd, false, "DNS policy: not authorized (optional)")
+			cmd.Println()
+			cmd.Println("Install a polkit rule to enable host DNS resolution for *.sind:")
+			cmd.Println()
+			cmd.Println("sudo tee /etc/polkit-1/rules.d/50-sind-resolved.rules <<'RULES'")
+			cmd.Println("polkit.addRule(function(action, subject) {")
+			cmd.Println("    if ([\"org.freedesktop.resolve1.set-dns-servers\",")
+			cmd.Println("         \"org.freedesktop.resolve1.set-domains\",")
+			cmd.Println("         \"org.freedesktop.resolve1.revert\"].indexOf(action.id) >= 0 &&")
+			cmd.Println("        subject.isInGroup(\"docker\") &&")
+			cmd.Println("        subject.active && subject.local) {")
+			cmd.Println("        return polkit.Result.YES;")
+			cmd.Println("    }")
+			cmd.Println("});")
+			cmd.Println("RULES")
+			cmd.Println()
+		}
+	}
+
 	if failed {
 		return fmt.Errorf("one or more checks failed")
 	}
 	return nil
+}
+
+// resolvedActive checks if systemd-resolved is running.
+func resolvedActive() bool {
+	return exec.Command("systemctl", "is-active", "--quiet", "systemd-resolved").Run() == nil
+}
+
+// dnsPolkitAuthorized checks if the current process can configure per-link DNS
+// without interactive authentication.
+func dnsPolkitAuthorized() bool {
+	pid := strconv.Itoa(os.Getpid())
+	for _, action := range []string{
+		"org.freedesktop.resolve1.set-dns-servers",
+		"org.freedesktop.resolve1.set-domains",
+		"org.freedesktop.resolve1.revert",
+	} {
+		err := exec.Command("pkcheck",
+			"--action-id", action,
+			"--process", pid,
+		).Run()
+		if err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func printResult(cmd *cobra.Command, ok bool, format string, args ...any) {

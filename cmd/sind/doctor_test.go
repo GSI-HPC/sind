@@ -118,3 +118,24 @@ func TestParseVersion_Invalid(t *testing.T) {
 	_, _, err = parseVersion("28")
 	assert.Error(t, err)
 }
+
+func TestDoctorCommand_DNSPolicyShown(t *testing.T) {
+	if !resolvedActive() {
+		t.Skip("systemd-resolved not running")
+	}
+
+	var m docker.MockExecutor
+	m.AddResult("29.0.0", "", nil)
+
+	cmd := NewRootCommand()
+	out := new(bytes.Buffer)
+	cmd.SetOut(out)
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{"doctor"})
+
+	ctx := withClient(context.Background(), docker.NewClient(&m))
+	cmd.SetContext(ctx)
+
+	_ = cmd.Execute()
+	assert.Contains(t, out.String(), "DNS policy")
+}
