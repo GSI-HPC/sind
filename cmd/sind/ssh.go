@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -18,6 +19,7 @@ func newSSHCommand() *cobra.Command {
 		Use:                "ssh [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]",
 		Short:              "SSH into a cluster node",
 		DisableFlagParsing: true,
+		ValidArgsFunction:  completeSSHNodeArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSSH(cmd, args)
 		},
@@ -83,10 +85,10 @@ func runEnter(cmd *cobra.Command, clusterName string) error {
 
 func newExecCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "exec [CLUSTER] -- COMMAND [ARGS...]",
-		Short: "Run a command on submitter or controller",
-		// Flag parsing disabled to allow -- separator handling
+		Use:                "exec [CLUSTER] -- COMMAND [ARGS...]",
+		Short:              "Run a command on submitter or controller",
 		DisableFlagParsing: true,
+		ValidArgsFunction:  completeExecClusterArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExec(cmd, args)
 		},
@@ -185,6 +187,66 @@ func parseExecArgs(args []string) (clusterName string, command []string, err err
 	}
 
 	return clusterName, command, nil
+}
+
+// sshValueFlags lists SSH flags that consume the next argument as a value.
+var sshValueFlags = map[string]bool{
+	"-b": true, "-c": true, "-D": true, "-E": true, "-e": true,
+	"-F": true, "-I": true, "-i": true, "-J": true, "-L": true,
+	"-l": true, "-m": true, "-O": true, "-o": true, "-p": true,
+	"-Q": true, "-R": true, "-S": true, "-W": true, "-w": true,
+}
+
+// completeSSHNodeArg provides completion for the NODE argument of the ssh command.
+// It uses a heuristic to skip SSH option flags and their values.
+func completeSSHNodeArg(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// After --, we're in remote command territory.
+	for _, a := range args {
+		if a == "--" {
+			return nil, cobra.ShellCompDirectiveDefault
+		}
+	}
+
+	// If the previous arg is an SSH flag that takes a value, this position is
+	// the flag's value — not the node name.
+	if len(args) > 0 && sshValueFlags[args[len(args)-1]] {
+		return nil, cobra.ShellCompDirectiveDefault
+	}
+
+	// Check if a node name was already provided (a non-flag arg that isn't a flag value).
+	for i, a := range args {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		if i > 0 && sshValueFlags[args[i-1]] {
+			continue
+		}
+		// Node name already present.
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	if strings.HasPrefix(toComplete, "-") {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	return completeNodeNames(cmd, nil, toComplete)
+}
+
+// completeExecClusterArg provides completion for the CLUSTER argument of the exec command.
+func completeExecClusterArg(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// After --, we're in command territory.
+	for _, a := range args {
+		if a == "--" {
+			return nil, cobra.ShellCompDirectiveDefault
+		}
+	}
+
+	// Cluster name already provided — wait for --.
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	return completeClusterNames(cmd, nil, toComplete)
 }
 
 // dockerExec runs a docker command with stdin/stdout/stderr from the cobra command.

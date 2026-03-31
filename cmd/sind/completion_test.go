@@ -89,6 +89,97 @@ func TestCompleteLogsArgs_Service(t *testing.T) {
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
+func TestCompleteSSHNodeArg_EmptyArgs(t *testing.T) {
+	mock := &docker.MockExecutor{}
+	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult("", "", nil)
+	mock.AddResult(
+		"{\"Names\":\"sind-dev-controller\",\"State\":\"running\",\"Labels\":\"sind.cluster=dev,sind.role=controller\"}",
+		"", nil)
+
+	sub := findCmd(completionCtx(mock), t, "ssh")
+
+	names, directive := completeSSHNodeArg(sub, nil, "")
+	assert.Contains(t, names, "controller.dev")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestCompleteSSHNodeArg_SkipsSSHFlags(t *testing.T) {
+	mock := &docker.MockExecutor{}
+	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult("", "", nil)
+	mock.AddResult(
+		"{\"Names\":\"sind-dev-controller\",\"State\":\"running\",\"Labels\":\"sind.cluster=dev,sind.role=controller\"}",
+		"", nil)
+
+	sub := findCmd(completionCtx(mock), t, "ssh")
+
+	names, directive := completeSSHNodeArg(sub, []string{"-v", "-L", "8080:localhost:80"}, "")
+	assert.Contains(t, names, "controller.dev")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestCompleteSSHNodeArg_AfterFlagValue(t *testing.T) {
+	sub := findCmd(completionCtx(&docker.MockExecutor{}), t, "ssh")
+
+	// -o expects a value — should not offer node completions
+	names, directive := completeSSHNodeArg(sub, []string{"-o"}, "Strict")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveDefault, directive)
+}
+
+func TestCompleteSSHNodeArg_NodeAlreadyProvided(t *testing.T) {
+	sub := findCmd(completionCtx(&docker.MockExecutor{}), t, "ssh")
+
+	names, directive := completeSSHNodeArg(sub, []string{"controller.dev"}, "")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestCompleteSSHNodeArg_AfterDashDash(t *testing.T) {
+	sub := findCmd(completionCtx(&docker.MockExecutor{}), t, "ssh")
+
+	names, directive := completeSSHNodeArg(sub, []string{"controller.dev", "--"}, "")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveDefault, directive)
+}
+
+func TestCompleteSSHNodeArg_DashPrefix(t *testing.T) {
+	sub := findCmd(completionCtx(&docker.MockExecutor{}), t, "ssh")
+
+	names, directive := completeSSHNodeArg(sub, nil, "-")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestCompleteExecClusterArg_EmptyArgs(t *testing.T) {
+	mock := &docker.MockExecutor{}
+	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult("", "", nil)
+
+	sub := findCmd(completionCtx(mock), t, "exec")
+
+	names, directive := completeExecClusterArg(sub, nil, "")
+	assert.ElementsMatch(t, []string{"dev"}, names)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestCompleteExecClusterArg_ClusterAlreadyProvided(t *testing.T) {
+	sub := findCmd(completionCtx(&docker.MockExecutor{}), t, "exec")
+
+	names, directive := completeExecClusterArg(sub, []string{"dev"}, "")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestCompleteExecClusterArg_AfterDashDash(t *testing.T) {
+	sub := findCmd(completionCtx(&docker.MockExecutor{}), t, "exec")
+
+	names, directive := completeExecClusterArg(sub, []string{"dev", "--"}, "")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveDefault, directive)
+}
+
 func TestCompleteClusterNames_DockerError(t *testing.T) {
 	mock := &docker.MockExecutor{}
 	mock.AddResult("", "Error", assert.AnError)
