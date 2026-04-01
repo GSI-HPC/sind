@@ -71,10 +71,13 @@ func (m *Manager) configureDNS(ctx context.Context, iface, dnsIP string) error {
 		return fmt.Errorf("setting DNS server on %s: %w", iface, err)
 	}
 
-	// Routing domain only (~ prefix). This routes *.realm.sind queries to the
+	// ~realm.sind is a routing domain: it routes *.realm.sind queries to the
 	// mesh DNS without making this link a default route for all DNS queries.
-	// Short-name SSH access uses OpenSSH's CanonicalizeHostname instead.
-	domains := []string{"~" + m.Realm + ".sind"}
+	// default.realm.sind is a search domain: systemd-resolved appends it to
+	// single-label lookups so bare "controller" resolves to the FQDN.
+	// Cluster-qualified names (controller.default) need SSH CanonicalizeHostname
+	// because systemd-resolved only appends search domains to single-label names.
+	domains := []string{"~" + m.Realm + ".sind", "default." + m.Realm + ".sind"}
 
 	args := append([]string{"domain", iface}, domains...)
 	if _, _, err := m.Exec.Run(ctx, "resolvectl", args...); err != nil {

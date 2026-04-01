@@ -140,7 +140,7 @@ func TestConfigureDNS(t *testing.T) {
 	assert.Equal(t, "resolvectl", m.Calls[0].Name)
 	assert.Equal(t, []string{"dns", "br-abcdef012345", "172.18.0.2"}, m.Calls[0].Args)
 	assert.Equal(t, "resolvectl", m.Calls[1].Name)
-	assert.Equal(t, []string{"domain", "br-abcdef012345", "~sind.sind"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"domain", "br-abcdef012345", "~sind.sind", "default.sind.sind"}, m.Calls[1].Args)
 }
 
 func TestConfigureDNS_DnsError(t *testing.T) {
@@ -172,7 +172,7 @@ func TestConfigureDNS_CustomRealm(t *testing.T) {
 
 	err := mgr.configureDNS(t.Context(), "br-abc", "172.18.0.2")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"domain", "br-abc", "~myrealm.sind"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"domain", "br-abc", "~myrealm.sind", "default.myrealm.sind"}, m.Calls[1].Args)
 }
 
 // --- revertDNS ---
