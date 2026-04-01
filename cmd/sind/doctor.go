@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +49,10 @@ func runDoctor(cmd *cobra.Command) error {
 	}
 
 	// Check cgroup2 with nsdelegate.
+	log := sindlog.From(ctx)
+	log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
 	mountPath, hasV2, hasNsd := cgroupInfo()
+	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd)
 	if !hasV2 {
 		printResult(cmd, false, "cgroup: v2 not mounted (sind requires cgroupv2)")
 		failed = true
