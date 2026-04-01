@@ -74,6 +74,11 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	if err := createResources(ctx, client, realm, cfg); err != nil {
 		return nil, err
 	}
+	// Connect SSH relay to cluster network so it can reach nodes at cluster IPs.
+	clusterNet := NetworkName(realm, cfg.Name)
+	if err := client.ConnectNetwork(ctx, clusterNet, meshMgr.SSHContainerName()); err != nil {
+		return nil, fmt.Errorf("connecting SSH relay to cluster network: %w", err)
+	}
 	log.DebugContext(ctx, "cluster resources created")
 
 	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion)

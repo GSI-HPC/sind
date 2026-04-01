@@ -971,6 +971,31 @@ func TestCreate_CreateResourcesFails(t *testing.T) {
 	assert.Nil(t, cluster)
 }
 
+func TestCreate_SSHRelayConnectFails(t *testing.T) {
+	exitErr := notFoundErr(t)
+	connectCount := 0
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		// First network connect is SSH relay → cluster network; fail it.
+		if args[0] == "network" && args[1] == "connect" {
+			connectCount++
+			if connectCount == 1 {
+				return cmdexec.MockResult{Err: fmt.Errorf("network connect denied")}, true
+			}
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "connecting SSH relay")
+	assert.Nil(t, cluster)
+}
+
 func TestCreate_NodeCreationFails(t *testing.T) {
 	exitErr := notFoundErr(t)
 	var m cmdexec.MockExecutor

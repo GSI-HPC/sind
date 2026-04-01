@@ -63,6 +63,8 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 
 	if res.NetworkExists {
+		// Disconnect SSH relay from cluster network before removing it.
+		_ = client.DisconnectNetwork(ctx, res.Network, meshMgr.SSHContainerName())
 		log.DebugContext(ctx, "deleting network", "name", string(res.Network))
 		if err := DeleteNetwork(ctx, client, res.Network); err != nil {
 			return err
