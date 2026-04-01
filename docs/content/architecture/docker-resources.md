@@ -40,13 +40,13 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 |
 | tmpfs | `/run/lock` | — | — | — |
 
-All volume mounts include the `:z` SELinux label for compatibility with SELinux-enabled systems:
+SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories.
 
 ```
--v sind-dev-config:/etc/slurm:rw,z    # controller
--v sind-dev-config:/etc/slurm:ro,z    # all others
--v sind-dev-munge:/etc/munge:ro,z     # all nodes
--v sind-dev-data:/data:rw,z           # all nodes
+-v sind-dev-config:/etc/slurm:rw      # controller
+-v sind-dev-config:/etc/slurm:ro      # all others
+-v sind-dev-munge:/etc/munge:ro       # all nodes
+-v sind-dev-data:/data:rw             # all nodes
 --tmpfs /tmp:rw,nosuid,nodev,size=256m  # configurable size
 ```
 
@@ -55,7 +55,7 @@ All volume mounts include the `:z` SELinux label for compatibility with SELinux-
 When `dataStorage.type: hostPath` is specified, the data volume is replaced with a bind mount:
 
 ```
--v /path/on/host:/data:rw,z
+-v /path/on/host:/data:rw
 ```
 
 ## Container labels

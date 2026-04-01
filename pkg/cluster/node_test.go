@@ -196,17 +196,17 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 		{
 			name:     "controller gets rw config",
 			role:     "controller",
-			wantConf: "sind-dev-config:/etc/slurm:rw,z",
+			wantConf: "sind-dev-config:/etc/slurm:rw",
 		},
 		{
 			name:     "worker gets ro config",
 			role:     "worker",
-			wantConf: "sind-dev-config:/etc/slurm:ro,z",
+			wantConf: "sind-dev-config:/etc/slurm:ro",
 		},
 		{
 			name:     "submitter gets ro config",
 			role:     "submitter",
-			wantConf: "sind-dev-config:/etc/slurm:ro,z",
+			wantConf: "sind-dev-config:/etc/slurm:ro",
 		},
 	}
 
@@ -219,8 +219,8 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 
 			volumes := argValues(args, "-v")
 			assert.Contains(t, volumes, tt.wantConf)
-			assert.Contains(t, volumes, "sind-dev-munge:/etc/munge:ro,z")
-			assert.Contains(t, volumes, "sind-dev-data:/data:rw,z")
+			assert.Contains(t, volumes, "sind-dev-munge:/etc/munge:ro")
+			assert.Contains(t, volumes, "sind-dev-data:/data:rw")
 		})
 	}
 }
@@ -232,7 +232,7 @@ func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
 	args := BuildRunArgs(cfg)
 
 	volumes := argValues(args, "-v")
-	assert.Contains(t, volumes, "/home/user/data:/shared:rw,z")
+	assert.Contains(t, volumes, "/home/user/data:/shared:rw")
 	for _, v := range volumes {
 		assert.NotContains(t, v, "sind-dev-data")
 	}
@@ -243,7 +243,7 @@ func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
 	args := BuildRunArgs(cfg)
 
 	volumes := argValues(args, "-v")
-	assert.Contains(t, volumes, "sind-dev-data:/data:rw,z")
+	assert.Contains(t, volumes, "sind-dev-data:/data:rw")
 }
 
 func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
@@ -253,7 +253,7 @@ func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
 	args := BuildRunArgs(cfg)
 
 	volumes := argValues(args, "-v")
-	assert.Contains(t, volumes, "/home/user/data:/data:rw,z")
+	assert.Contains(t, volumes, "/home/user/data:/data:rw")
 }
 
 func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
@@ -263,7 +263,7 @@ func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
 	args := BuildRunArgs(cfg)
 
 	volumes := argValues(args, "-v")
-	assert.Contains(t, volumes, "sind-dev-data:/shared:rw,z")
+	assert.Contains(t, volumes, "sind-dev-data:/shared:rw")
 }
 
 func TestBuildRunArgs_Resources(t *testing.T) {

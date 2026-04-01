@@ -619,14 +619,14 @@ When `NAME` is omitted, the default cluster name is `default`, resulting in pref
 
 ### Mount Options
 
-All volume mounts include the `:z` SELinux label for compatibility with SELinux-enabled systems.
+SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories.
 
 Container mount flags:
 ```
--v sind-<cluster>-config:/etc/slurm:rw,z   # controller
--v sind-<cluster>-config:/etc/slurm:ro,z   # all others
--v sind-<cluster>-munge:/etc/munge:ro,z    # all nodes
--v sind-<cluster>-data:/data:rw,z          # all nodes
+-v sind-<cluster>-config:/etc/slurm:rw     # controller
+-v sind-<cluster>-config:/etc/slurm:ro     # all others
+-v sind-<cluster>-munge:/etc/munge:ro      # all nodes
+-v sind-<cluster>-data:/data:rw            # all nodes
 --tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
 --tmpfs /run:exec,mode=755                 # systemd runtime
 --tmpfs /run/lock                          # systemd lock files
@@ -636,7 +636,7 @@ Container mount flags:
 
 By default, `sind create cluster` bind-mounts the current working directory as `/data` on all nodes:
 ```
--v /absolute/path/to/cwd:/data:rw,z
+-v /absolute/path/to/cwd:/data:rw
 ```
 
 The `--data` flag controls the mount source:

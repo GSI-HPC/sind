@@ -108,8 +108,8 @@ func BuildRunArgs(cfg RunConfig) []string {
 		configMode = "rw"
 	}
 	args = append(args,
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "config"))+":/etc/slurm:"+configMode+",z",
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "munge"))+":/etc/munge:ro,z",
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "config"))+":/etc/slurm:"+configMode,
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "munge"))+":/etc/munge:ro",
 	)
 
 	// Data volume
@@ -118,9 +118,9 @@ func BuildRunArgs(cfg RunConfig) []string {
 		dataMountPath = "/data"
 	}
 	if cfg.DataHostPath != "" {
-		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw,z")
+		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw")
 	} else {
-		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "data"))+":"+dataMountPath+":rw,z")
+		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "data"))+":"+dataMountPath+":rw")
 	}
 
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
