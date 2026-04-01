@@ -104,7 +104,7 @@ sind interacts with Docker by **shelling out to the `docker` CLI** rather than u
 - Wider compatibility across Docker versions
 - Avoids tight coupling to Docker daemon internals
 
-sind wraps command execution in a thin abstraction layer using Go's `os/exec` package, with proper output handling and error reporting.
+sind wraps command execution in a thin abstraction layer (`pkg/cmdexec`) using Go's `os/exec` package, with proper output handling and error reporting. The executor interface is shared across `pkg/docker`, `pkg/mesh`, and `pkg/cluster`.
 
 **Runtime support:** Docker only. Support for alternative runtimes (Podman, nerdctl) may be added later via a provider abstraction pattern.
 
@@ -567,9 +567,9 @@ nodes:
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
 | `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `tmpSize` | global + per-node | `1g` | tmpfs size for /tmp |
-| `cpus` | global + per-node | `2` | CPU limit |
-| `memory` | global + per-node | `2g` | Memory limit |
+| `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp |
+| `cpus` | global + per-node | `1` | CPU limit |
+| `memory` | global + per-node | `512m` | Memory limit |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
 
