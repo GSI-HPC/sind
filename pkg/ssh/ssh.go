@@ -73,23 +73,25 @@ const sshConfigTemplate = `Host *.%[1]s.sind
     StrictHostKeyChecking yes
 `
 
-// sshCanonicalTemplate is appended for the default realm to enable short-name
-// resolution via OpenSSH hostname canonicalization.
+// sshCanonicalTemplate is prepended for the default realm to enable short-name
+// resolution via OpenSSH hostname canonicalization. Must appear before any Host
+// block so SSH processes canonicalization before matching host patterns.
 // Placeholders: realm.
-const sshCanonicalTemplate = `
-CanonicalizeHostname yes
+const sshCanonicalTemplate = `CanonicalizeHostname yes
 CanonicalDomains default.%[1]s.sind %[1]s.sind
 CanonicalizeMaxDots 2
+
 `
 
 // GenerateSSHConfig returns the SSH config snippet pointing to files in dir.
 // For the default realm, it includes hostname canonicalization directives
 // that enable short-name SSH access (e.g. "ssh controller").
 func GenerateSSHConfig(sshContainer docker.ContainerName, dir, realm string) string {
-	config := fmt.Sprintf(sshConfigTemplate, realm, string(sshContainer), dir)
+	config := ""
 	if realm == defaultRealm {
-		config += fmt.Sprintf(sshCanonicalTemplate, realm)
+		config = fmt.Sprintf(sshCanonicalTemplate, realm)
 	}
+	config += fmt.Sprintf(sshConfigTemplate, realm, string(sshContainer), dir)
 	return config
 }
 

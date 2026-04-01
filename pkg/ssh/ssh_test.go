@@ -5,6 +5,7 @@ package ssh
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -188,6 +189,12 @@ func TestGenerateSSHConfig_DefaultRealm(t *testing.T) {
 	assert.Contains(t, config, "CanonicalizeHostname yes")
 	assert.Contains(t, config, "CanonicalDomains default.sind.sind sind.sind")
 	assert.Contains(t, config, "CanonicalizeMaxDots 2")
+
+	// Canonicalize directives must appear before the Host block so OpenSSH
+	// processes them before matching host patterns.
+	canonIdx := strings.Index(config, "CanonicalizeHostname")
+	hostIdx := strings.Index(config, "Host ")
+	assert.Less(t, canonIdx, hostIdx, "Canonicalize directives must precede Host block")
 }
 
 func TestGenerateSSHConfig_NamedRealm(t *testing.T) {
