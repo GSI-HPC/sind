@@ -53,14 +53,16 @@ func runDoctor(cmd *cobra.Command) error {
 	} else if !hasNsd {
 		printResult(cmd, false, "cgroupv2: nsdelegate not found")
 		cmd.Println()
-		cmd.Println("  Enable nsdelegate temporarily:")
-		cmd.Printf("    sudo mount -o remount,nsdelegate %s\n", mountPath)
+		cmd.Println("Enable nsdelegate temporarily:")
 		cmd.Println()
-		cmd.Println("  Enable nsdelegate on boot (systemd):")
-		cmd.Println("    sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d")
-		cmd.Println("    echo -e '[Mount]\\nOptions=nsdelegate' \\")
-		cmd.Println("      | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf")
-		cmd.Println("    sudo systemctl daemon-reload")
+		cmd.Printf("sudo mount -o remount,nsdelegate %s\n", mountPath)
+		cmd.Println()
+		cmd.Println("Enable nsdelegate on boot (systemd):")
+		cmd.Println()
+		cmd.Println("sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d")
+		cmd.Println("echo -e '[Mount]\\nOptions=nsdelegate' \\")
+		cmd.Println("  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf")
+		cmd.Println("sudo systemctl daemon-reload")
 		failed = true
 	} else {
 		printResult(cmd, true, "cgroupv2: nsdelegate enabled (%s)", mountPath)
