@@ -194,7 +194,7 @@ Rules:
 
 ### Logging Conventions
 
-Logging uses `pkg/log` with context-based injection. Silent by default.
+Logging uses `pkg/log` with context-based injection. Silent by default. All log lines include millisecond timestamps (`HH:MM:SS.mmm`) for timing analysis.
 
 | Level | Flag | What to log |
 |-------|------|------------|

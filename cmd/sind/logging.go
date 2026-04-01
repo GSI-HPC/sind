@@ -27,7 +27,9 @@ func newLogger(w io.Writer, verbosity int) *slog.Logger {
 	}
 
 	handler := charmlog.NewWithOptions(w, charmlog.Options{
-		Level: level,
+		Level:           level,
+		TimeFormat:      "15:04:05.000",
+		ReportTimestamp: true,
 	})
 
 	styles := charmlog.DefaultStyles()

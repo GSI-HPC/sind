@@ -62,7 +62,7 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 | `-vv` | debug | Individual operations: "waiting for node", "enabling slurmd", "creating network" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |
 
-Log output goes to stderr in structured `key=value` format with colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.
+Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.
 
 ```bash
 # Capture logs while piping output
@@ -75,19 +75,19 @@ sind -vv create cluster --config cluster.yaml
 Example output at `-vv` (colorized on interactive terminals):
 
 ```
-INFO ensuring mesh infrastructure realm=sind
-INFO creating cluster name=dev nodes=3
-DEBU preflight check passed
-INFO resolved infrastructure slurm=25.11.4
-DEBU cluster resources created
-DEBU waiting for node node=controller
-DEBU waiting for node node=worker-0
-DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd
-DEBU all probes passed node=sind-dev-controller
-INFO nodes ready count=3
-DEBU enabling slurm service node=controller service=slurmctld
-DEBU enabling slurm service node=worker-0 service=slurmd
-INFO slurm services enabled
+00:13:28.438 INFO ensuring mesh infrastructure realm=sind
+00:13:28.826 INFO creating cluster name=dev nodes=3
+00:13:28.921 DEBU preflight check passed
+00:13:29.382 INFO resolved infrastructure slurm=25.11.4
+00:13:30.149 DEBU cluster resources created
+00:13:30.621 DEBU waiting for node node=controller
+00:13:30.622 DEBU waiting for node node=worker-0
+00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd
+00:13:31.252 DEBU all probes passed node=sind-dev-controller
+00:13:31.474 INFO nodes ready count=3
+00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld
+00:13:32.363 DEBU enabling slurm service node=worker-0 service=slurmd
+00:13:32.608 INFO slurm services enabled
 ```
 
 The `-v` flag belongs to the root command and must appear before the subcommand (e.g., `sind -v create cluster`).
