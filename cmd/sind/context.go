@@ -9,6 +9,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
@@ -41,6 +42,12 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 		return m
 	}
 	mgr := mesh.NewManager(client, realm)
+	mgr.Exec = &cmdexec.LoggingExecutor{
+		Inner: mgr.Exec,
+		Log: func(ctx context.Context, cmd string) {
+			sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "exec", "cmd", cmd)
+		},
+	}
 	mgr.HostDNS = true
 	return mgr
 }
