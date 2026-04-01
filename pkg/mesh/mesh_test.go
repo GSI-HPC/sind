@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -175,9 +176,6 @@ func TestDNSRecordLifecycle(t *testing.T) {
 		rec.AddResult("sind-dns\n", "", nil)
 
 		// CleanupMesh
-		if resolvedActive() {
-			rec.AddResult(`[{"Id":"mock-net-id-000000","Name":"sind-mesh"}]`, "", nil) // revertHostDNS: inspect network
-		}
 		rec.AddResult("[{}]\n", "", nil)            // SSH exists
 		rec.AddResult("sind-ssh\n", "", nil)        // stop SSH
 		rec.AddResult("sind-ssh\n", "", nil)        // rm SSH
@@ -1085,6 +1083,116 @@ func TestGetDNSRecords_ReadError(t *testing.T) {
 
 	_, err := mgr.GetDNSRecords(t.Context())
 	assert.Error(t, err)
+}
+
+// --- HostDNS branches ---
+
+// ensureMeshAllExist queues mock results for EnsureMesh where all resources
+// already exist, so the function does nothing but check existence.
+func ensureMeshAllExist(m *cmdexec.MockExecutor) {
+	m.AddResult("[{}]\n", "", nil) // network exists → yes
+	m.AddResult("[{}]\n", "", nil) // DNS exists → yes
+	m.AddResult("[{}]\n", "", nil) // SSH vol exists → yes
+	m.AddResult("[{}]\n", "", nil) // SSH exists → yes
+}
+
+// cleanupMeshAllGone queues mock results for CleanupMesh where no resources exist.
+func cleanupMeshAllGone(m *cmdexec.MockExecutor, ps *os.ProcessState) {
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: ps}) // SSH exists → no
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: ps}) // DNS exists → no
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: ps}) // network exists → no
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: ps}) // SSH vol exists → no
+}
+
+func TestEnsureMesh_HostDNS_Skipped(t *testing.T) {
+	var dm cmdexec.MockExecutor
+	ensureMeshAllExist(&dm)
+
+	var sys cmdexec.MockExecutor
+	sys.AddResult("", "", fmt.Errorf("inactive")) // systemctl → not active
+
+	c := docker.NewClient(&dm)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.HostDNS = true
+	mgr.Exec = &sys
+
+	err := mgr.EnsureMesh(t.Context())
+	require.NoError(t, err)
+}
+
+func TestEnsureMesh_HostDNS_ConfigureFails(t *testing.T) {
+	dir := t.TempDir()
+	old := sysClassNet
+	sysClassNet = dir
+	t.Cleanup(func() { sysClassNet = old })
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+
+	var dm cmdexec.MockExecutor
+	ensureMeshAllExist(&dm)
+	dm.AddResult(inspectNetworkJSON, "", nil)      // configureHostDNS: InspectNetwork
+	dm.AddResult(inspectDNSContainerJSON, "", nil) // configureHostDNS: InspectContainer
+
+	var sys cmdexec.MockExecutor
+	sys.AddResult("", "", nil) // systemctl ok
+	sys.AddResult("", "", nil) // pkcheck x3
+	sys.AddResult("", "", nil)
+	sys.AddResult("", "", nil)
+	sys.AddResult("", "", fmt.Errorf("denied")) // resolvectl dns fails
+
+	c := docker.NewClient(&dm)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.HostDNS = true
+	mgr.Exec = &sys
+
+	// Error is logged, not returned (best-effort).
+	err := mgr.EnsureMesh(t.Context())
+	require.NoError(t, err)
+}
+
+func TestEnsureMesh_HostDNS_Success(t *testing.T) {
+	dir := t.TempDir()
+	old := sysClassNet
+	sysClassNet = dir
+	t.Cleanup(func() { sysClassNet = old })
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+
+	var dm cmdexec.MockExecutor
+	ensureMeshAllExist(&dm)
+	dm.AddResult(inspectNetworkJSON, "", nil)      // configureHostDNS: InspectNetwork
+	dm.AddResult(inspectDNSContainerJSON, "", nil) // configureHostDNS: InspectContainer
+
+	var sys cmdexec.MockExecutor
+	sys.AddResult("", "", nil) // systemctl ok
+	sys.AddResult("", "", nil) // pkcheck x3
+	sys.AddResult("", "", nil)
+	sys.AddResult("", "", nil)
+	sys.AddResult("", "", nil) // resolvectl dns
+	sys.AddResult("", "", nil) // resolvectl domain
+
+	c := docker.NewClient(&dm)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.HostDNS = true
+	mgr.Exec = &sys
+
+	err := mgr.EnsureMesh(t.Context())
+	require.NoError(t, err)
+}
+
+func TestCleanupMesh_HostDNS(t *testing.T) {
+	var dm cmdexec.MockExecutor
+	var sys cmdexec.MockExecutor
+	sys.AddResult("", "", fmt.Errorf("inactive")) // systemctl → not active (revertHostDNS skips)
+
+	ps := exitCode1(t)
+	cleanupMeshAllGone(&dm, ps)
+
+	c := docker.NewClient(&dm)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.HostDNS = true
+	mgr.Exec = &sys
+
+	err := mgr.CleanupMesh(t.Context())
+	require.NoError(t, err)
 }
 
 // --- test helpers ---

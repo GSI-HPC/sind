@@ -6,36 +6,41 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
+// sysClassNet is the base path for network interface lookups.
+// Overridden in tests to point at a temporary directory.
+var sysClassNet = "/sys/class/net"
+
 // resolvedActive checks if systemd-resolved is running.
-func resolvedActive() bool {
-	return exec.Command("systemctl", "is-active", "--quiet", "systemd-resolved").Run() == nil
+func (m *Manager) resolvedActive(ctx context.Context) bool {
+	_, _, err := m.Exec.Run(ctx, "systemctl", "is-active", "--quiet", "systemd-resolved")
+	return err == nil
 }
 
 // polkitAuthorized checks if the current process can perform the given polkit
 // action without interactive authentication.
-func polkitAuthorized(action string) bool {
-	return exec.Command("pkcheck",
+func (m *Manager) polkitAuthorized(ctx context.Context, action string) bool {
+	_, _, err := m.Exec.Run(ctx, "pkcheck",
 		"--action-id", action,
 		"--process", strconv.Itoa(os.Getpid()),
-	).Run() == nil
+	)
+	return err == nil
 }
 
 // dnsPolkitAuthorized checks if the current process can configure per-link DNS
 // without interactive authentication.
-func dnsPolkitAuthorized() bool {
+func (m *Manager) dnsPolkitAuthorized(ctx context.Context) bool {
 	for _, action := range []string{
 		"org.freedesktop.resolve1.set-dns-servers",
 		"org.freedesktop.resolve1.set-domains",
 		"org.freedesktop.resolve1.revert",
 	} {
-		if !polkitAuthorized(action) {
+		if !m.polkitAuthorized(ctx, action) {
 			return false
 		}
 	}
@@ -49,7 +54,7 @@ func findBridgeInterface(networkID string) (string, error) {
 		return "", fmt.Errorf("network ID too short: %q", networkID)
 	}
 	name := "br-" + networkID[:12]
-	if _, err := os.Stat(filepath.Join("/sys/class/net", name)); err != nil {
+	if _, err := os.Stat(filepath.Join(sysClassNet, name)); err != nil {
 		return "", fmt.Errorf("bridge interface %s not found: %w", name, err)
 	}
 	return name, nil
@@ -61,26 +66,26 @@ func findBridgeInterface(networkID string) (string, error) {
 // For the default realm, search domains are added for short-name resolution:
 //   - <realm>.sind (enables "controller.default" → FQDN)
 //   - default.<realm>.sind (enables bare "controller" → FQDN for default cluster)
-func configureDNS(iface, dnsIP, realm string) error {
-	if err := exec.Command("resolvectl", "dns", iface, dnsIP).Run(); err != nil {
+func (m *Manager) configureDNS(ctx context.Context, iface, dnsIP string) error {
+	if _, _, err := m.Exec.Run(ctx, "resolvectl", "dns", iface, dnsIP); err != nil {
 		return fmt.Errorf("setting DNS server on %s: %w", iface, err)
 	}
 
 	// Routing domain only (~ prefix). This routes *.realm.sind queries to the
 	// mesh DNS without making this link a default route for all DNS queries.
 	// Short-name SSH access uses OpenSSH's CanonicalizeHostname instead.
-	domains := []string{"~" + realm + ".sind"}
+	domains := []string{"~" + m.Realm + ".sind"}
 
 	args := append([]string{"domain", iface}, domains...)
-	if err := exec.Command("resolvectl", args...).Run(); err != nil {
+	if _, _, err := m.Exec.Run(ctx, "resolvectl", args...); err != nil {
 		return fmt.Errorf("setting DNS domains on %s: %w", iface, err)
 	}
 	return nil
 }
 
 // revertDNS removes any DNS configuration set on the given interface.
-func revertDNS(iface string) error {
-	if err := exec.Command("resolvectl", "revert", iface).Run(); err != nil {
+func (m *Manager) revertDNS(ctx context.Context, iface string) error {
+	if _, _, err := m.Exec.Run(ctx, "resolvectl", "revert", iface); err != nil {
 		return fmt.Errorf("reverting DNS on %s: %w", iface, err)
 	}
 	return nil
@@ -91,7 +96,7 @@ func revertDNS(iface string) error {
 // Silently skipped when prerequisites are not met (no systemd-resolved, no
 // polkit authorization, no bridge interface).
 func (m *Manager) configureHostDNS(ctx context.Context) (bool, error) {
-	if !resolvedActive() || !dnsPolkitAuthorized() {
+	if !m.resolvedActive(ctx) || !m.dnsPolkitAuthorized(ctx) {
 		return false, nil
 	}
 
@@ -111,7 +116,7 @@ func (m *Manager) configureHostDNS(ctx context.Context) (bool, error) {
 	}
 	dnsIP := dnsInfo.IPs[m.NetworkName()]
 
-	if err := configureDNS(iface, dnsIP, m.Realm); err != nil {
+	if err := m.configureDNS(ctx, iface, dnsIP); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -119,7 +124,7 @@ func (m *Manager) configureHostDNS(ctx context.Context) (bool, error) {
 
 // revertHostDNS reverts host DNS configuration for the mesh bridge. Best-effort.
 func (m *Manager) revertHostDNS(ctx context.Context) {
-	if !resolvedActive() {
+	if !m.resolvedActive(ctx) {
 		return
 	}
 
@@ -133,7 +138,7 @@ func (m *Manager) revertHostDNS(ctx context.Context) {
 		return
 	}
 
-	if err := revertDNS(iface); err != nil {
+	if err := m.revertDNS(ctx, iface); err != nil {
 		sindlog.From(ctx).InfoContext(ctx, "failed to revert host DNS", "error", err)
 	}
 }

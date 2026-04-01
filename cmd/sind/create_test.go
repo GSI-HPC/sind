@@ -144,6 +144,7 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 // TestClusterLifecycle exercises the full user workflow via CLI commands:
 // create cluster → get/status → power ops → add worker → delete worker → delete cluster.
 func TestClusterLifecycle(t *testing.T) {
+	t.Chdir(t.TempDir())
 	c := realClient(t)
 	skipIfNoNsdelegate(t)
 	image := testImage(t)

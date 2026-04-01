@@ -21,6 +21,7 @@ import (
 // Each section comment references the corresponding guide heading.
 // Keep in sync with docs/content/getting-started/quickstart.md.
 func TestQuickstart(t *testing.T) {
+	t.Chdir(t.TempDir())
 	c := realClient(t)
 	skipIfNoNsdelegate(t)
 	image := testImage(t)

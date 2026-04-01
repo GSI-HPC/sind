@@ -122,6 +122,7 @@ func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 // TestSSHAccess exercises all SSH access methods against a real cluster:
 // sind ssh, sind enter, sind exec, and user SSH client via exported ssh_config.
 func TestSSHAccess(t *testing.T) {
+	t.Chdir(t.TempDir())
 	c := realClient(t)
 	skipIfNoNsdelegate(t)
 	image := testImage(t)

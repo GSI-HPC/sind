@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
@@ -61,6 +62,7 @@ const corefilePath = "/Corefile"
 // Manager handles global infrastructure resources shared across all clusters.
 type Manager struct {
 	Docker  *docker.Client
+	Exec    cmdexec.Executor // executor for non-docker system commands (systemctl, resolvectl, etc.)
 	Realm   string
 	Pull    bool // force fresh image pull (--pull always)
 	HostDNS bool // configure host DNS resolution via systemd-resolved
@@ -70,7 +72,7 @@ type Manager struct {
 // given docker client. The realm determines resource naming: realm "sind"
 // produces names like "sind-mesh", "sind-dns", etc.
 func NewManager(docker *docker.Client, realm string) *Manager {
-	return &Manager{Docker: docker, Realm: realm}
+	return &Manager{Docker: docker, Exec: &cmdexec.OSExecutor{}, Realm: realm}
 }
 
 // NetworkName returns the mesh network name for this realm.
