@@ -143,7 +143,6 @@ RUN systemctl enable munge sshd
 RUN systemctl mask \
     dev-hugepages.mount \
     sys-fs-fuse-connections.mount \
-    systemd-logind.service \
     getty.target \
     console-getty.service
 
