@@ -28,9 +28,9 @@ Each cluster consists of individual containers for controller, submitter, and wo
 
 Unlike typical Docker containers that run a single application process, sind nodes are full system containers running systemd as init — closely emulating bare-metal machines. Services like munge, sshd, and slurmctld start and interact exactly as they would on real nodes, with proper service dependencies, process supervision, and signal handling. This means you can apply the same configuration management tools you use on bare metal — Ansible, Chef, Puppet, Salt — directly to sind nodes.
 
-### Cross-cluster networking
+### Designed for CI/CD
 
-Run multiple clusters simultaneously with a shared mesh network and automatic DNS. Test multi-cluster communication and federation scenarios without any manual networking setup.
+sind runs rootless on standard GitHub Actions runners — no privileged containers, no custom runner images. The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in a single workflow step. Use realms to isolate parallel matrix jobs on the same runner.
 
 ### Worker lifecycle
 

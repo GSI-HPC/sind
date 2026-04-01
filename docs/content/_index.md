@@ -31,9 +31,9 @@ Full systemd-based nodes that emulate bare metal — use the same config managem
 
 <--->
 
-## Cross-cluster networking
+## Designed for CI/CD
 
-Shared mesh network with DNS for multi-cluster setups and inter-cluster communication.
+Runs rootless on standard GitHub Actions runners. [sind-action](https://github.com/GSI-HPC/sind-action) sets up clusters in a single step.
 
 {{< /columns >}}
 

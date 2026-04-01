@@ -46,7 +46,28 @@ Nodes are configured with:
 
 Within a cluster, short names work via the search domain: a node in the `dev` cluster can reach `controller` without the full `controller.dev.sind.sind`.
 
+DNS records use each node's **cluster network IP** (not mesh network IP), so traffic between nodes routes through the cluster's isolated network.
+
 The DNS container is lightweight — no systemd or sshd.
+
+### Host DNS resolution
+
+When systemd-resolved is available on the host, sind configures it to route `*.<realm>.sind` queries to the mesh DNS container. This enables resolving cluster node names directly from the host:
+
+```bash
+ping controller.default.sind.sind
+resolvectl query worker-0.dev.sind.sind
+```
+
+For the default realm, a search domain is also configured so that bare hostnames resolve for the default cluster:
+
+```bash
+ping controller    # → controller.default.sind.sind
+```
+
+This feature is **best-effort**: it is silently skipped when systemd-resolved is not running or when the required polkit authorization is missing. Run `sind doctor` to check prerequisites and get a copyable command to install the polkit rule.
+
+Host DNS is configured during `sind create cluster` (first cluster) and reverted during `sind delete cluster` (last cluster).
 
 ## SSH infrastructure
 
@@ -70,9 +91,13 @@ The `sind-ssh-config` volume contains:
 | Event | Result |
 |-------|--------|
 | First cluster created | Generates Ed25519 keypair, starts `sind-ssh` |
+| Cluster created | Connects `sind-ssh` to cluster network |
 | Node created | Public key injected, host key collected and added to `known_hosts` |
 | Node deleted | Entry removed from `known_hosts` |
+| Cluster deleted | Disconnects `sind-ssh` from cluster network |
 | Last cluster deleted | SSH container and volume removed |
+
+The SSH relay connects to each cluster network so it can reach nodes at their cluster network IPs (which are the addresses registered in DNS).
 
 ### Key injection
 

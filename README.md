@@ -18,7 +18,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 
 - **Multi-node, multi-cluster & multi-realm** — run controller, submitter, and worker nodes side by side, or spin up multiple clusters across isolated realms with shared networking
 - **System containers** — full systemd-based nodes that emulate bare metal, compatible with Ansible, Chef, and other config management tools
-- **Cross-cluster networking** — shared mesh network with DNS for multi-cluster setups
+- **Designed for CI/CD** — runs rootless on standard GitHub Actions runners; [sind-action](https://github.com/GSI-HPC/sind-action) sets up clusters in a single step
 - **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
 - **Power cycle simulation** — shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios
 - **Minimal dependencies** — just Docker and a sind container image; usable as both a CLI tool and a Go library

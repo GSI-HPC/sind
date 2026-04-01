@@ -36,6 +36,8 @@ Internally, `sind ssh` executes SSH via the mesh SSH container:
 docker exec -it sind-ssh ssh <node>.<realm>.sind
 ```
 
+Shell completion is available for both `sind ssh` and `sind exec` — press Tab to complete node and cluster names.
+
 ## enter
 
 ```bash
@@ -125,9 +127,15 @@ Or include all realms at once using a wildcard:
 Include ~/.local/state/sind/*/ssh_config
 ```
 
-Then use standard SSH tools directly:
+The generated SSH config includes `CanonicalizeHostname` directives that expand short names automatically:
 
 ```bash
-ssh controller.default.sind.sind
+ssh controller                        # → controller.default.sind.sind
+ssh controller.dev                    # → controller.dev.sind.sind
+ssh controller.default.sind.sind      # full FQDN
 scp file.txt worker-0.dev.sind.sind:/tmp/
 ```
+
+{{< hint info >}}
+Short-name canonicalization (`ssh controller`, `ssh controller.dev`) requires the `Include` line to appear **before** any `Host` or `Match` blocks in your `~/.ssh/config`. OpenSSH processes `CanonicalizeHostname` directives in order — if a `Host *` block appears first, canonicalization is skipped.
+{{< /hint >}}

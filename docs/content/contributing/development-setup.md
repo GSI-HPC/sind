@@ -59,6 +59,7 @@ sind uses a minimal set of dependencies:
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
 | `sigs.k8s.io/yaml` | YAML configuration parsing |
+| `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |

@@ -18,9 +18,14 @@ cmd/sind/          CLI commands (cobra)
   ├── nodeargs.go  Node argument parsing
   └── *.go         One file per command group
 
+pkg/cmdexec/       Command executor abstraction
+  ├── exec.go      Executor interface, OSExecutor, MockExecutor
+  ├── logging.go   LoggingExecutor (TRACE-level command logging)
+  ├── recorder.go  RecordingExecutor for integration tests
+  └── recording.go Recorded call types
+
 pkg/docker/        Docker CLI wrapper
   ├── client.go    Client type, run/exists helpers
-  ├── exec.go      Executor interface, OSExecutor, MockExecutor
   ├── container.go Container operations
   ├── network.go   Network operations
   ├── volume.go    Volume operations
@@ -52,17 +57,18 @@ pkg/ssh/           SSH key generation and injection
 ## Dependency flow
 
 ```
-cmd/sind → pkg/cluster → pkg/docker
+cmd/sind → pkg/cluster → pkg/docker  → pkg/cmdexec
                        → pkg/config
                        → pkg/log
                        → pkg/mesh   → pkg/docker
+                                    → pkg/cmdexec
                        → pkg/probe  → pkg/docker
                        → pkg/slurm  → pkg/docker
                        → pkg/ssh    → pkg/docker
                        → pkg/nodeset
 ```
 
-The `pkg/docker` package is the foundation — all other packages depend on it for Docker operations. The `pkg/cluster` package orchestrates everything.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything.
 
 ## Adding a new CLI command
 
@@ -93,7 +99,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 
 ### Executor abstraction
 
-All Docker commands go through the `Executor` interface, making every operation testable without Docker:
+All external commands go through the `cmdexec.Executor` interface (from `pkg/cmdexec`), making every operation testable:
 
 ```go
 type Executor interface {
@@ -101,6 +107,8 @@ type Executor interface {
     RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (stdout, stderr string, err error)
 }
 ```
+
+`pkg/docker` uses an executor for Docker CLI calls. `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl, pkcheck). The CLI wraps the mesh executor in a `LoggingExecutor` to emit TRACE-level logs for system commands.
 
 ### Context-based dependency injection
 

@@ -6,6 +6,45 @@ description: "Cluster health, logs, and resource inspection"
 toc: true
 ---
 
+## Doctor
+
+```bash
+sind doctor
+```
+
+Checks system prerequisites and reports pass/fail for each:
+
+```
+✓ Docker Engine: 28.1.1 (>= 28.0)
+✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
+✓ DNS policy: host resolution available
+```
+
+| Check | Required | Description |
+|-------|----------|-------------|
+| Docker Engine | yes | Docker >= 28.0 reachable |
+| cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
+| DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
+
+When a required check fails, `sind doctor` exits with a non-zero status and prints remediation steps. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status.
+
+Example output when `nsdelegate` is missing:
+
+```
+✗ cgroupv2: nsdelegate not found
+
+Enable nsdelegate temporarily:
+
+sudo mount -o remount,nsdelegate /sys/fs/cgroup
+
+Enable nsdelegate on boot (systemd):
+
+sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d
+echo -e '[Mount]\nOptions=nsdelegate' \
+  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf
+sudo systemctl daemon-reload
+```
+
 ## Verbose logging
 
 By default, sind operates silently — only command output and errors are shown. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
