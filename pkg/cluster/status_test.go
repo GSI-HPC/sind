@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -25,30 +26,30 @@ func statusInspectJSON(name, status, ip string) string {
 
 // healthyOnCall returns a mock dispatcher where all checks pass.
 // Failed checks can be overridden by wrapping this function.
-func healthyOnCall(containerName, ip string) func([]string, string) docker.MockResult {
-	return func(args []string, _ string) docker.MockResult {
+func healthyOnCall(containerName, ip string) func([]string, string) cmdexec.MockResult {
+	return func(args []string, _ string) cmdexec.MockResult {
 		if len(args) >= 2 && args[0] == "inspect" {
-			return docker.MockResult{Stdout: statusInspectJSON(containerName, "running", ip)}
+			return cmdexec.MockResult{Stdout: statusInspectJSON(containerName, "running", ip)}
 		}
 		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
 			// munge or slurmd
-			return docker.MockResult{Stdout: "active\n"}
+			return cmdexec.MockResult{Stdout: "active\n"}
 		}
 		if len(args) >= 3 && args[2] == "sh" {
-			return docker.MockResult{Stdout: "running\n"}
+			return cmdexec.MockResult{Stdout: "running\n"}
 		}
 		if len(args) >= 3 && args[2] == "bash" {
-			return docker.MockResult{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+			return cmdexec.MockResult{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
 		}
 		if len(args) >= 3 && args[2] == "scontrol" {
-			return docker.MockResult{Stdout: "Slurmctld(primary) at controller is UP\n"}
+			return cmdexec.MockResult{Stdout: "Slurmctld(primary) at controller is UP\n"}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 }
 
 func TestGetNodeHealth_Controller(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.OnCall = healthyOnCall("sind-dev-controller", "172.18.0.2")
 	c := docker.NewClient(&m)
 
@@ -64,7 +65,7 @@ func TestGetNodeHealth_Controller(t *testing.T) {
 }
 
 func TestGetNodeHealth_Compute(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.OnCall = healthyOnCall("sind-dev-worker-0", "172.18.0.3")
 	c := docker.NewClient(&m)
 
@@ -80,7 +81,7 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 }
 
 func TestGetNodeHealth_Submitter(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.OnCall = healthyOnCall("sind-dev-submitter", "172.18.0.4")
 	c := docker.NewClient(&m)
 
@@ -94,12 +95,12 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 }
 
 func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if len(args) >= 2 && args[0] == "inspect" {
-			return docker.MockResult{Stdout: statusInspectJSON("sind-dev-controller", "exited", "")}
+			return cmdexec.MockResult{Stdout: statusInspectJSON("sind-dev-controller", "exited", "")}
 		}
-		return docker.MockResult{Err: fmt.Errorf("container not running")}
+		return cmdexec.MockResult{Err: fmt.Errorf("container not running")}
 	}
 	c := docker.NewClient(&m)
 
@@ -113,7 +114,7 @@ func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 }
 
 func TestGetNodeHealth_InspectError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -124,12 +125,12 @@ func TestGetNodeHealth_InspectError(t *testing.T) {
 }
 
 func TestGetNodeHealth_ServiceFailing(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// slurmd fails
 		if len(args) >= 5 && args[2] == "systemctl" && args[4] == "slurmd" {
-			return docker.MockResult{Err: fmt.Errorf("exit status 1")}
+			return cmdexec.MockResult{Err: fmt.Errorf("exit status 1")}
 		}
 		return base(args, stdin)
 	}
@@ -145,12 +146,12 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 }
 
 func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// scontrol ping fails
 		if len(args) >= 3 && args[2] == "scontrol" {
-			return docker.MockResult{Err: fmt.Errorf("exit status 1")}
+			return cmdexec.MockResult{Err: fmt.Errorf("exit status 1")}
 		}
 		return base(args, stdin)
 	}
@@ -166,12 +167,12 @@ func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
 }
 
 func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if len(args) >= 2 && args[0] == "inspect" {
-			return docker.MockResult{Stdout: statusInspectJSON("sind-dev-worker-0", "exited", "")}
+			return cmdexec.MockResult{Stdout: statusInspectJSON("sind-dev-worker-0", "exited", "")}
 		}
-		return docker.MockResult{Err: fmt.Errorf("container not running")}
+		return cmdexec.MockResult{Err: fmt.Errorf("container not running")}
 	}
 	c := docker.NewClient(&m)
 
@@ -186,12 +187,12 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 }
 
 func TestGetNodeHealth_MungeFailing(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// munge fails
 		if len(args) >= 5 && args[2] == "systemctl" && args[4] == "munge" {
-			return docker.MockResult{Err: fmt.Errorf("exit status 1")}
+			return cmdexec.MockResult{Err: fmt.Errorf("exit status 1")}
 		}
 		return base(args, stdin)
 	}
@@ -207,11 +208,11 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 }
 
 func TestGetNodeHealth_SSHDFailing(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		if len(args) >= 3 && args[2] == "bash" {
-			return docker.MockResult{Err: fmt.Errorf("exit status 1")}
+			return cmdexec.MockResult{Err: fmt.Errorf("exit status 1")}
 		}
 		return base(args, stdin)
 	}
@@ -227,10 +228,10 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 }
 
 func TestGetNodeHealth_MultipleIPs(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		if len(args) >= 2 && args[0] == "inspect" {
-			return docker.MockResult{Stdout: `[{
+			return cmdexec.MockResult{Stdout: `[{
   "Id": "abc123",
   "Name": "/sind-dev-controller",
   "State": {"Status": "running"},
@@ -260,7 +261,7 @@ func netInspect(name, subnet, gw string) string {
 }
 
 func TestGetNetworkHealth_AllHealthy(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)                                                  // NetworkExists: sind-mesh
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)    // InspectNetwork: mesh
 	m.AddResult("[{}]\n", "", nil)                                                  // ContainerExists: sind-dns
@@ -286,7 +287,7 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 }
 
 func TestGetNetworkHealth_NoneExist(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("", "Error: No such network\n", notFound)   // mesh
 	m.AddResult("", "Error: No such container\n", notFound) // dns
@@ -305,7 +306,7 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 }
 
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("[{}]\n", "", nil)                                               // mesh exists
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
@@ -322,7 +323,7 @@ func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 }
 
 func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -333,7 +334,7 @@ func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
 }
 
 func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)                                               // mesh OK
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // dns error
@@ -346,7 +347,7 @@ func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 }
 
 func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)                                               // mesh OK
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
 	m.AddResult("[{}]\n", "", nil)                                               // dns OK
@@ -360,7 +361,7 @@ func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 }
 
 func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)                                                      // mesh exists
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)        // inspect mesh
 	m.AddResult("[{}]\n", "", nil)                                                      // dns
@@ -378,7 +379,7 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 // --- GetMountPoints ---
 
 func TestGetMountPoints_AllVolumes(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil) // config
 	m.AddResult("[{}]\n", "", nil) // munge
 	m.AddResult("[{}]\n", "", nil) // data
@@ -410,7 +411,7 @@ func TestGetMountPoints_AllVolumes(t *testing.T) {
 }
 
 func TestGetMountPoints_HostPath(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil) // config
 	m.AddResult("[{}]\n", "", nil) // munge
 	// no data volume check — host path used
@@ -436,7 +437,7 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 }
 
 func TestGetMountPoints_NoneExist(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("", "Error: No such volume\n", notFound) // config
 	m.AddResult("", "Error: No such volume\n", notFound) // munge
@@ -452,7 +453,7 @@ func TestGetMountPoints_NoneExist(t *testing.T) {
 }
 
 func TestGetMountPoints_CheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))
 	c := docker.NewClient(&m)
 
@@ -463,7 +464,7 @@ func TestGetMountPoints_CheckError(t *testing.T) {
 }
 
 func TestGetMountPoints_MungeCheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)                         // config OK
 	m.AddResult("", "", fmt.Errorf("docker daemon error")) // munge error
 	c := docker.NewClient(&m)
@@ -475,7 +476,7 @@ func TestGetMountPoints_MungeCheckError(t *testing.T) {
 }
 
 func TestGetMountPoints_DataCheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
 	m.AddResult("[{}]\n", "", nil)                         // config OK
 	m.AddResult("", "Error: No such volume\n", notFound)   // munge missing
@@ -491,16 +492,16 @@ func TestGetMountPoints_DataCheckError(t *testing.T) {
 // --- GetStatus ---
 
 // fullStatusOnCall returns a mock dispatcher for GetStatus with all healthy nodes.
-func fullStatusOnCall(t *testing.T) func([]string, string) docker.MockResult {
+func fullStatusOnCall(t *testing.T) func([]string, string) cmdexec.MockResult {
 	t.Helper()
-	return func(args []string, _ string) docker.MockResult {
+	return func(args []string, _ string) cmdexec.MockResult {
 		if len(args) == 0 {
-			return docker.MockResult{Err: fmt.Errorf("empty args")}
+			return cmdexec.MockResult{Err: fmt.Errorf("empty args")}
 		}
 
 		// docker ps (ListContainers)
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
+			return cmdexec.MockResult{Stdout: ndjson(
 				psEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
@@ -528,42 +529,42 @@ func fullStatusOnCall(t *testing.T) func([]string, string) docker.MockResult {
 			case "sind-dev-worker-1":
 				ip = "172.18.0.4"
 			}
-			return docker.MockResult{Stdout: statusInspectJSON(name, "running", ip)}
+			return cmdexec.MockResult{Stdout: statusInspectJSON(name, "running", ip)}
 		}
 
 		// docker exec: service checks (all pass)
 		if args[0] == "exec" {
 			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-				return docker.MockResult{Stdout: "active\n"}
+				return cmdexec.MockResult{Stdout: "active\n"}
 			}
 			if len(args) >= 3 && args[2] == "sh" {
-				return docker.MockResult{Stdout: "running\n"}
+				return cmdexec.MockResult{Stdout: "running\n"}
 			}
 			if len(args) >= 3 && args[2] == "bash" {
-				return docker.MockResult{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+				return cmdexec.MockResult{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
 			}
 			if len(args) >= 3 && args[2] == "scontrol" {
-				return docker.MockResult{Stdout: "Slurmctld(primary) is UP\n"}
+				return cmdexec.MockResult{Stdout: "Slurmctld(primary) is UP\n"}
 			}
 		}
 
 		// docker network inspect / container inspect / volume inspect
 		if args[0] == "network" && args[1] == "inspect" {
-			return docker.MockResult{Stdout: "[{}]\n"}
+			return cmdexec.MockResult{Stdout: "[{}]\n"}
 		}
 		if args[0] == "container" && args[1] == "inspect" {
-			return docker.MockResult{Stdout: "[{}]\n"}
+			return cmdexec.MockResult{Stdout: "[{}]\n"}
 		}
 		if args[0] == "volume" && args[1] == "inspect" {
-			return docker.MockResult{Stdout: "[{}]\n"}
+			return cmdexec.MockResult{Stdout: "[{}]\n"}
 		}
 
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 }
 
 func TestGetStatus_Full(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.OnCall = fullStatusOnCall(t)
 	c := docker.NewClient(&m)
 
@@ -605,18 +606,18 @@ func TestGetStatus_Full(t *testing.T) {
 }
 
 func TestGetStatus_Empty(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ""}
+			return cmdexec.MockResult{Stdout: ""}
 		}
 		if (args[0] == "network" || args[0] == "volume") && args[1] == "inspect" {
-			return docker.MockResult{Stdout: "[{}]\n"}
+			return cmdexec.MockResult{Stdout: "[{}]\n"}
 		}
 		if args[0] == "container" && args[1] == "inspect" {
-			return docker.MockResult{Stdout: "[{}]\n"}
+			return cmdexec.MockResult{Stdout: "[{}]\n"}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	c := docker.NewClient(&m)
 
@@ -629,7 +630,7 @@ func TestGetStatus_Empty(t *testing.T) {
 }
 
 func TestGetStatus_ListError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -640,10 +641,10 @@ func TestGetStatus_ListError(t *testing.T) {
 }
 
 func TestGetStatus_NodeHealthError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
+			return cmdexec.MockResult{Stdout: ndjson(
 				psEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
@@ -652,9 +653,9 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 		}
 		// Inspect fails
 		if args[0] == "inspect" {
-			return docker.MockResult{Err: fmt.Errorf("inspect failed")}
+			return cmdexec.MockResult{Err: fmt.Errorf("inspect failed")}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected: %v", args)}
 	}
 	c := docker.NewClient(&m)
 
@@ -665,12 +666,12 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 }
 
 func TestGetStatus_NetworkHealthError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// Mesh network check fails.
 		if args[0] == "network" && args[1] == "inspect" {
-			return docker.MockResult{Err: fmt.Errorf("docker daemon error")}
+			return cmdexec.MockResult{Err: fmt.Errorf("docker daemon error")}
 		}
 		return base(args, stdin)
 	}
@@ -683,12 +684,12 @@ func TestGetStatus_NetworkHealthError(t *testing.T) {
 }
 
 func TestGetStatus_VolumeHealthError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// Volume check fails.
 		if args[0] == "volume" && args[1] == "inspect" {
-			return docker.MockResult{Err: fmt.Errorf("docker daemon error")}
+			return cmdexec.MockResult{Err: fmt.Errorf("docker daemon error")}
 		}
 		return base(args, stdin)
 	}
@@ -701,12 +702,12 @@ func TestGetStatus_VolumeHealthError(t *testing.T) {
 }
 
 func TestGetStatus_SortOrder(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// Return nodes in non-sorted order including submitter.
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
+			return cmdexec.MockResult{Stdout: ndjson(
 				psEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
@@ -732,7 +733,7 @@ func TestGetStatus_SortOrder(t *testing.T) {
 			case "sind-dev-worker-0":
 				ip = "172.18.0.3"
 			}
-			return docker.MockResult{Stdout: statusInspectJSON(name, "running", ip)}
+			return cmdexec.MockResult{Stdout: statusInspectJSON(name, "running", ip)}
 		}
 		return base(args, stdin)
 	}
@@ -748,11 +749,11 @@ func TestGetStatus_SortOrder(t *testing.T) {
 }
 
 func TestGetStatus_MixedStates(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
+			return cmdexec.MockResult{Stdout: ndjson(
 				psEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
@@ -767,9 +768,9 @@ func TestGetStatus_MixedStates(t *testing.T) {
 			name := args[1]
 			switch name {
 			case "sind-dev-controller":
-				return docker.MockResult{Stdout: statusInspectJSON(name, "running", "172.18.0.2")}
+				return cmdexec.MockResult{Stdout: statusInspectJSON(name, "running", "172.18.0.2")}
 			case "sind-dev-worker-0":
-				return docker.MockResult{Stdout: statusInspectJSON(name, "exited", "")}
+				return cmdexec.MockResult{Stdout: statusInspectJSON(name, "exited", "")}
 			}
 		}
 		return base(args, stdin)

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -210,7 +211,7 @@ func TestDNSRecordLifecycle(t *testing.T) {
 // --- EnsureMesh ---
 
 func TestEnsureMesh(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// EnsureMeshNetwork: NetworkExists → not found, CreateNetwork → success
 	m.AddResult("", "Error: No such network: sind-mesh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -243,7 +244,7 @@ func TestEnsureMesh(t *testing.T) {
 }
 
 func TestEnsureMesh_AllExist(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// All four exist checks return success.
 	m.AddResult("[{}]\n", "", nil) // NetworkExists
 	m.AddResult("[{}]\n", "", nil) // ContainerExists (DNS)
@@ -259,7 +260,7 @@ func TestEnsureMesh_AllExist(t *testing.T) {
 }
 
 func TestEnsureMesh_NetworkError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -270,7 +271,7 @@ func TestEnsureMesh_NetworkError(t *testing.T) {
 }
 
 func TestEnsureMesh_DNSError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil) // network exists
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
@@ -282,7 +283,7 @@ func TestEnsureMesh_DNSError(t *testing.T) {
 }
 
 func TestEnsureMesh_SSHVolumeError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil) // network exists
 	m.AddResult("[{}]\n", "", nil) // DNS exists
 	m.AddResult("", "", fmt.Errorf("connection refused"))
@@ -295,7 +296,7 @@ func TestEnsureMesh_SSHVolumeError(t *testing.T) {
 }
 
 func TestEnsureMesh_SSHContainerError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil) // network exists
 	m.AddResult("[{}]\n", "", nil) // DNS exists
 	m.AddResult("[{}]\n", "", nil) // SSH volume exists
@@ -311,7 +312,7 @@ func TestEnsureMesh_SSHContainerError(t *testing.T) {
 // --- CleanupMesh ---
 
 func TestCleanupMesh(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// removeContainerIfExists(SSH): exists, stop, remove
 	m.AddResult("[{}]\n", "", nil)
 	m.AddResult("sind-ssh\n", "", nil)
@@ -347,7 +348,7 @@ func TestCleanupMesh(t *testing.T) {
 }
 
 func TestCleanupMesh_NoneExist(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// All four exist checks return not found.
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
@@ -363,7 +364,7 @@ func TestCleanupMesh_NoneExist(t *testing.T) {
 }
 
 func TestCleanupMesh_SSHContainerError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -374,7 +375,7 @@ func TestCleanupMesh_SSHContainerError(t *testing.T) {
 }
 
 func TestCleanupMesh_DNSContainerError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// SSH container doesn't exist
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
 	// DNS container check fails
@@ -388,7 +389,7 @@ func TestCleanupMesh_DNSContainerError(t *testing.T) {
 }
 
 func TestCleanupMesh_NetworkError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS
 	m.AddResult("", "", fmt.Errorf("connection refused"))                   // network
@@ -401,7 +402,7 @@ func TestCleanupMesh_NetworkError(t *testing.T) {
 }
 
 func TestCleanupMesh_RemoveContainerError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// SSH container: exists, stop (best-effort), remove fails
 	m.AddResult("[{}]\n", "", nil)
 	m.AddResult("sind-ssh\n", "", nil)
@@ -415,7 +416,7 @@ func TestCleanupMesh_RemoveContainerError(t *testing.T) {
 }
 
 func TestCleanupMesh_VolumeError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network
@@ -433,7 +434,7 @@ func TestCleanupMesh_VolumeError(t *testing.T) {
 func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	const networkID = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// NetworkExists → not found (exit code 1)
 	m.AddResult("", "Error: No such network: sind-mesh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -456,7 +457,7 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 }
 
 func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// NetworkExists → found
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
@@ -471,7 +472,7 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 }
 
 func TestEnsureMeshNetwork_InspectError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -482,7 +483,7 @@ func TestEnsureMeshNetwork_InspectError(t *testing.T) {
 }
 
 func TestEnsureMeshNetwork_CreateError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// NetworkExists → not found
 	m.AddResult("", "Error: No such network: sind-mesh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -501,7 +502,7 @@ func TestEnsureMeshNetwork_CreateError(t *testing.T) {
 func TestEnsureDNS_Creates(t *testing.T) {
 	const containerID = "abc123"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-dns\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -538,7 +539,7 @@ func TestEnsureDNS_Creates(t *testing.T) {
 }
 
 func TestEnsureDNS_AlreadyExists(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -549,7 +550,7 @@ func TestEnsureDNS_AlreadyExists(t *testing.T) {
 }
 
 func TestEnsureDNS_InspectError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -560,7 +561,7 @@ func TestEnsureDNS_InspectError(t *testing.T) {
 }
 
 func TestEnsureDNS_CreateError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: sind-dns\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
@@ -573,7 +574,7 @@ func TestEnsureDNS_CreateError(t *testing.T) {
 }
 
 func TestEnsureDNS_CopyError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: sind-dns\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult("abc123\n", "", nil)
@@ -587,7 +588,7 @@ func TestEnsureDNS_CopyError(t *testing.T) {
 }
 
 func TestEnsureDNS_StartError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: sind-dns\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult("abc123\n", "", nil)
@@ -602,7 +603,7 @@ func TestEnsureDNS_StartError(t *testing.T) {
 }
 
 func TestEnsureDNS_Pull(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: sind-dns\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult("abc123\n", "", nil)
@@ -624,7 +625,7 @@ func TestEnsureDNS_Pull(t *testing.T) {
 // --- AddDNSRecord ---
 
 func TestAddDNSRecord_Empty(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// CopyFromContainer → Corefile with empty hosts block
 	m.AddResult(corefileTar(t, nil), "", nil)
 	// CopyToContainer → success
@@ -653,7 +654,7 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 func TestAddDNSRecord_Appends(t *testing.T) {
 	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
@@ -670,7 +671,7 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 }
 
 func TestAddDNSRecord_ReadError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -681,7 +682,7 @@ func TestAddDNSRecord_ReadError(t *testing.T) {
 }
 
 func TestAddDNSRecord_WriteError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, nil), "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
@@ -693,7 +694,7 @@ func TestAddDNSRecord_WriteError(t *testing.T) {
 }
 
 func TestAddDNSRecord_ReloadError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, nil), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
@@ -706,7 +707,7 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 }
 
 func TestAddDNSRecord_RestartError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, nil), "", nil)               // read
 	m.AddResult("", "", nil)                                // write
 	m.AddResult("sind-dns\n", "", nil)                      // kill succeeds
@@ -727,7 +728,7 @@ func TestRemoveDNSRecord(t *testing.T) {
 		"172.18.0.3 worker-0.dev.sind.sind",
 	}
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
@@ -746,7 +747,7 @@ func TestRemoveDNSRecord(t *testing.T) {
 func TestRemoveDNSRecord_LastEntry(t *testing.T) {
 	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
@@ -767,7 +768,7 @@ func TestRemoveDNSRecord_LastEntry(t *testing.T) {
 func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
@@ -785,7 +786,7 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 func TestRemoveDNSRecord_ReloadError(t *testing.T) {
 	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
@@ -804,7 +805,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 		"172.18.0.3 worker-0.dev.sind.sind",
 	}
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
@@ -821,7 +822,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 }
 
 func TestRemoveDNSRecord_ReadError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -832,7 +833,7 @@ func TestRemoveDNSRecord_ReadError(t *testing.T) {
 }
 
 func TestRemoveDNSRecord_WriteError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, []string{"172.18.0.2 x"}), "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
@@ -892,7 +893,7 @@ func TestParseEntries_NoHostsBlock(t *testing.T) {
 // --- Custom Realm ---
 
 func TestCustomRealm_ResourceNames(t *testing.T) {
-	c := docker.NewClient(&docker.MockExecutor{})
+	c := docker.NewClient(&cmdexec.MockExecutor{})
 	mgr := NewManager(c, "testrealm")
 
 	assert.Equal(t, docker.NetworkName("testrealm-mesh"), mgr.NetworkName())
@@ -904,7 +905,7 @@ func TestCustomRealm_ResourceNames(t *testing.T) {
 }
 
 func TestCustomRealm_DefaultProducesStandardNames(t *testing.T) {
-	c := docker.NewClient(&docker.MockExecutor{})
+	c := docker.NewClient(&cmdexec.MockExecutor{})
 	mgr := NewManager(c, DefaultRealm)
 
 	assert.Equal(t, NetworkName, mgr.NetworkName())
@@ -914,7 +915,7 @@ func TestCustomRealm_DefaultProducesStandardNames(t *testing.T) {
 }
 
 func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // NetworkExists → no
 	m.AddResult("net-id\n", "", nil)                                        // CreateNetwork
 	c := docker.NewClient(&m)
@@ -934,7 +935,7 @@ func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
 }
 
 func TestCustomRealm_EnsureDNS(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // ContainerExists → no
 	m.AddResult("dns-id\n", "", nil)                                        // CreateContainer
 	m.AddResult("", "", nil)                                                // CopyToContainer
@@ -955,7 +956,7 @@ func TestCustomRealm_EnsureDNS(t *testing.T) {
 }
 
 func TestCustomRealm_EnsureSSHVolume(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // VolumeExists → no
 	m.AddResult("myrealm-ssh-config\n", "", nil)                            // CreateVolume
 	m.AddResult("keygen-id\n", "", nil)                                     // CreateContainer
@@ -986,7 +987,7 @@ func TestCustomRealm_EnsureSSHVolume(t *testing.T) {
 func TestCustomRealm_EnsureSSH(t *testing.T) {
 	inspectJSON := `[{"Id":"dns123","Name":"/myrealm-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"myrealm-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // ContainerExists → no
 	m.AddResult(inspectJSON, "", nil)                                       // InspectContainer(DNS)
 	m.AddResult("ssh-id\n", "", nil)                                        // CreateContainer
@@ -1009,7 +1010,7 @@ func TestCustomRealm_EnsureSSH(t *testing.T) {
 }
 
 func TestCustomRealm_CleanupMesh(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// SSH container: exists, stop, remove
 	m.AddResult("[{}]\n", "", nil)
 	m.AddResult("myrealm-ssh\n", "", nil)
@@ -1050,7 +1051,7 @@ func dnsInspectJSON() string {
 // --- GetDNSRecords ---
 
 func TestGetDNSRecords(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	entries := []string{"172.18.0.2 controller.dev.sind.sind", "172.18.0.3 worker-0.dev.sind.sind"}
 	m.AddResult(corefileTar(t, entries), "", nil)
 	c := docker.NewClient(&m)
@@ -1066,7 +1067,7 @@ func TestGetDNSRecords(t *testing.T) {
 }
 
 func TestGetDNSRecords_Empty(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(corefileTar(t, nil), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -1077,7 +1078,7 @@ func TestGetDNSRecords_Empty(t *testing.T) {
 }
 
 func TestGetDNSRecords_ReadError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("container not found"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)

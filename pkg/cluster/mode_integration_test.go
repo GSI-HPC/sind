@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,7 @@ func lifecycleRealm() string {
 	return fmt.Sprintf("it-cluster-%x", b)
 }
 
-func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
+func newTestClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker not found in PATH")
@@ -47,7 +48,7 @@ func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
 		t.Skip("docker daemon not running")
 	}
-	rec := docker.NewIntegrationRecorder()
+	rec := cmdexec.NewIntegrationRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }
 

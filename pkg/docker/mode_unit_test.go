@@ -4,10 +4,14 @@
 
 package docker
 
-import "testing"
+import (
+	"testing"
 
-func newTestClient(t *testing.T) (*Client, *Recorder) {
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
+)
+
+func newTestClient(t *testing.T) (*Client, *cmdexec.Recorder) {
 	t.Helper()
-	rec := NewMockRecorder()
+	rec := cmdexec.NewMockRecorder()
 	return NewClient(rec.RecordingExecutor), rec
 }

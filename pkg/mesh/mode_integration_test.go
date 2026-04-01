@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -25,13 +26,13 @@ var testRealm = func() string {
 
 // lifecycleRealm returns a per-test unique realm for integration tests,
 // allowing lifecycle tests to run in parallel within the package.
-func lifecycleRealm(_ *docker.Recorder) string {
+func lifecycleRealm(_ *cmdexec.Recorder) string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return fmt.Sprintf("it-mesh-%x", b)
 }
 
-func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
+func newTestClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker not found in PATH")
@@ -41,6 +42,6 @@ func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
 		t.Skip("docker daemon not running")
 	}
-	rec := docker.NewIntegrationRecorder()
+	rec := cmdexec.NewIntegrationRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }

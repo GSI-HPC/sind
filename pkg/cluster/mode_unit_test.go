@@ -7,11 +7,12 @@ package cluster
 import (
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-func newTestClient(t *testing.T) (*docker.Client, *docker.Recorder) {
+func newTestClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
 	t.Helper()
-	rec := docker.NewMockRecorder()
+	rec := cmdexec.NewMockRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package docker
+package cmdexec
 
 import (
 	"context"
@@ -13,11 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type failReader struct{}
-
-func (r *failReader) Read([]byte) (int, error) {
-	return 0, fmt.Errorf("read failed")
-}
+// --- OSExecutor ---
 
 func TestOSExecutor_SimpleCommand(t *testing.T) {
 	var e OSExecutor
@@ -73,6 +69,14 @@ func TestOSExecutor_WithStdin(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello from stdin", stdout)
 	assert.Empty(t, stderr)
+}
+
+// --- MockExecutor ---
+
+type failReader struct{}
+
+func (r *failReader) Read([]byte) (int, error) {
+	return 0, fmt.Errorf("read failed")
 }
 
 func TestMockExecutor_RecordsCalls(t *testing.T) {
@@ -144,4 +148,66 @@ func TestMockExecutor_WithStdin(t *testing.T) {
 	assert.Equal(t, "docker", m.Calls[0].Name)
 	assert.Equal(t, []string{"exec", "-i", "node"}, m.Calls[0].Args)
 	assert.Equal(t, "key-data", m.Calls[0].Stdin)
+}
+
+// --- RecordingExecutor ---
+
+func TestRecordingExecutor_Calls(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("out", "", nil)
+	rec := &RecordingExecutor{Inner: &m}
+
+	_, _, _ = rec.Run(t.Context(), "docker", "ps")
+
+	calls := rec.Calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "docker", calls[0].Name)
+	assert.Equal(t, []string{"ps"}, calls[0].Args)
+}
+
+func TestRecordingExecutor_Dump(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("out", "warn", fmt.Errorf("fail"))
+	rec := &RecordingExecutor{Inner: &m}
+
+	_, _, _ = rec.Run(t.Context(), "docker", "ps")
+
+	dump := rec.Dump()
+	assert.Contains(t, dump, "docker ps")
+	assert.Contains(t, dump, "stdout: out")
+	assert.Contains(t, dump, "stderr: warn")
+	assert.Contains(t, dump, "err: fail")
+}
+
+func TestRecordingExecutor_RunWithStdin(t *testing.T) {
+	var m MockExecutor
+	m.AddResult("ok", "", nil)
+	rec := &RecordingExecutor{Inner: &m}
+
+	stdin := strings.NewReader("input")
+	stdout, _, err := rec.RunWithStdin(t.Context(), stdin, "cmd", "arg")
+	require.NoError(t, err)
+	assert.Equal(t, "ok", stdout)
+
+	calls := rec.Calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "cmd", calls[0].Name)
+	assert.Equal(t, []string{"arg"}, calls[0].Args)
+}
+
+// --- Recorder ---
+
+func TestNewMockRecorder(t *testing.T) {
+	rec := NewMockRecorder()
+	assert.False(t, rec.IsIntegration())
+
+	rec.AddResult("out", "", nil)
+	stdout, _, err := rec.Run(t.Context(), "cmd")
+	require.NoError(t, err)
+	assert.Equal(t, "out", stdout)
+}
+
+func TestNewIntegrationRecorder(t *testing.T) {
+	rec := NewIntegrationRecorder()
+	assert.True(t, rec.IsIntegration())
 }

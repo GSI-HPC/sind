@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -130,10 +131,10 @@ func TestContainerExec_WithMultiWordCommand(t *testing.T) {
 // --- EnterTarget ---
 
 func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
+			return cmdexec.MockResult{Stdout: ndjson(
 				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 				psEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
@@ -142,7 +143,7 @@ func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -153,17 +154,17 @@ func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 }
 
 func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
+			return cmdexec.MockResult{Stdout: ndjson(
 				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 				psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -174,15 +175,15 @@ func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 }
 
 func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ndjson(
+			return cmdexec.MockResult{Stdout: ndjson(
 				psEntry{ID: "c1", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -193,12 +194,12 @@ func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 }
 
 func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: ""}
+			return cmdexec.MockResult{Stdout: ""}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 

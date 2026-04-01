@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,7 +82,7 @@ func TestGetClusters_RejectsArgs(t *testing.T) {
 }
 
 func TestGetClusters_Output(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(ndjson(
 		psEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
@@ -114,7 +115,7 @@ func TestGetNodes_TooManyArgs(t *testing.T) {
 }
 
 func TestGetNodes_Output(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(ndjson(
 		psEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
@@ -160,7 +161,7 @@ func TestGetMungeKey_TooManyArgs(t *testing.T) {
 }
 
 func TestGetMungeKey_Output(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(ndjson(psEntry{
 		ID: "a", Names: "sind-dev-controller", State: "running",
 		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
@@ -201,7 +202,7 @@ func TestGetDNS_Output(t *testing.T) {
 		"        fallthrough\n    }\n    reload\n    log\n    errors\n}\n\n" +
 		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(tarArchive("Corefile", corefile), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "dns")
@@ -219,7 +220,7 @@ func TestGetDNS_Empty(t *testing.T) {
 		"        fallthrough\n    }\n    reload\n    log\n    errors\n}\n\n" +
 		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(tarArchive("Corefile", corefile), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "dns")
@@ -229,7 +230,7 @@ func TestGetDNS_Empty(t *testing.T) {
 }
 
 func TestGetDNS_Error(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("container not found"))
 
 	_, _, err := executeWithMock(&m, "get", "dns")

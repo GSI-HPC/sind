@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -45,7 +46,7 @@ func executeWithDockerCtx(ctx context.Context, args ...string) (string, string, 
 	cmd.SetErr(stderr)
 	cmd.SetArgs(args)
 
-	client := docker.NewClient(&docker.OSExecutor{})
+	client := docker.NewClient(&cmdexec.OSExecutor{})
 	ctx = withClient(ctx, client)
 	cmd.SetContext(ctx)
 
@@ -81,7 +82,7 @@ func realClient(t *testing.T) *docker.Client {
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
 		t.Skip("docker daemon not running")
 	}
-	return docker.NewClient(&docker.OSExecutor{})
+	return docker.NewClient(&cmdexec.OSExecutor{})
 }
 
 // skipIfNoNsdelegate skips the test if the host cgroup mount lacks nsdelegate.

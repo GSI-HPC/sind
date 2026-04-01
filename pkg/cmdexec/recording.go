@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package docker
+package cmdexec
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 )
 
 // RecordingExecutor wraps another Executor and records all calls with
-// their results. Useful for observing actual Docker CLI I/O during tests.
+// their results. Useful for observing actual CLI I/O during tests.
 type RecordingExecutor struct {
 	Inner Executor
 

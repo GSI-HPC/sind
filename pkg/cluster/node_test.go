@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -339,7 +340,7 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 // --- CreateNode ---
 
 func TestCreateNode(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil) // CreateContainer
 	m.AddResult("", "", nil)         // ConnectNetwork
 	m.AddResult("", "", nil)         // StartContainer
@@ -366,7 +367,7 @@ func TestCreateNode(t *testing.T) {
 }
 
 func TestCreateNode_CreateError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("image not found"))
 
 	c := docker.NewClient(&m)
@@ -380,7 +381,7 @@ func TestCreateNode_CreateError(t *testing.T) {
 }
 
 func TestCreateNode_ConnectError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil)             // CreateContainer
 	m.AddResult("", "", fmt.Errorf("net error")) // ConnectNetwork
 
@@ -396,7 +397,7 @@ func TestCreateNode_ConnectError(t *testing.T) {
 }
 
 func TestCreateNode_StartError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil)                // CreateContainer
 	m.AddResult("", "", nil)                        // ConnectNetwork
 	m.AddResult("", "", fmt.Errorf("start failed")) // StartContainer

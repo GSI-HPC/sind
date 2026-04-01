@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,7 +94,7 @@ func TestDiscoverVersionLifecycle(t *testing.T) {
 func TestDiscoverVersion(t *testing.T) {
 	const image = "ghcr.io/gsi-hpc/sind-node:25.11"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -108,7 +109,7 @@ func TestDiscoverVersion(t *testing.T) {
 func TestDiscoverVersion_Pull(t *testing.T) {
 	const image = "ghcr.io/gsi-hpc/sind-node:25.11"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -121,7 +122,7 @@ func TestDiscoverVersion_Pull(t *testing.T) {
 }
 
 func TestDiscoverVersion_RunError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Unable to find image\n", fmt.Errorf("exit status 125"))
 	c := docker.NewClient(&m)
 
@@ -132,7 +133,7 @@ func TestDiscoverVersion_RunError(t *testing.T) {
 }
 
 func TestDiscoverVersion_ParseError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("unexpected output\n", "", nil)
 	c := docker.NewClient(&m)
 

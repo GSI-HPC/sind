@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -14,10 +15,10 @@ import (
 )
 
 // listErrorMock returns a mock that fails on any call, simulating docker daemon unavailability.
-func listErrorMock() *docker.MockExecutor {
-	var m docker.MockExecutor
-	m.OnCall = func(_ []string, _ string) docker.MockResult {
-		return docker.MockResult{Err: fmt.Errorf("docker daemon unavailable")}
+func listErrorMock() *cmdexec.MockExecutor {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(_ []string, _ string) cmdexec.MockResult {
+		return cmdexec.MockResult{Err: fmt.Errorf("docker daemon unavailable")}
 	}
 	return &m
 }
@@ -37,15 +38,15 @@ func powerContainers() string {
 // --- PowerShutdown ---
 
 func TestPower_Shutdown(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "stop" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -64,12 +65,12 @@ func TestPower_Shutdown(t *testing.T) {
 }
 
 func TestPower_Shutdown_NodeNotFound(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -81,15 +82,15 @@ func TestPower_Shutdown_NodeNotFound(t *testing.T) {
 }
 
 func TestPower_Shutdown_StopError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "stop" {
-			return docker.MockResult{Err: fmt.Errorf("container already stopped")}
+			return cmdexec.MockResult{Err: fmt.Errorf("container already stopped")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -100,7 +101,7 @@ func TestPower_Shutdown_StopError(t *testing.T) {
 }
 
 func TestPower_Shutdown_EmptyNodes(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	client := docker.NewClient(&m)
 
 	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", nil)
@@ -121,15 +122,15 @@ func TestPower_Shutdown_ListError(t *testing.T) {
 // --- PowerCut ---
 
 func TestPower_Cut(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "kill" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -147,7 +148,7 @@ func TestPower_Cut(t *testing.T) {
 }
 
 func TestPower_Cut_EmptyNodes(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	client := docker.NewClient(&m)
 
 	err := PowerCut(t.Context(), client, mesh.DefaultRealm, "dev", nil)
@@ -166,15 +167,15 @@ func TestPower_Cut_ListError(t *testing.T) {
 }
 
 func TestPower_Cut_KillError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "kill" {
-			return docker.MockResult{Err: fmt.Errorf("container not running")}
+			return cmdexec.MockResult{Err: fmt.Errorf("container not running")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -187,15 +188,15 @@ func TestPower_Cut_KillError(t *testing.T) {
 // --- PowerOn ---
 
 func TestPower_On(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "start" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -222,15 +223,15 @@ func TestPower_On_ListError(t *testing.T) {
 }
 
 func TestPower_On_StartError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "start" {
-			return docker.MockResult{Err: fmt.Errorf("container already running")}
+			return cmdexec.MockResult{Err: fmt.Errorf("container already running")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -243,15 +244,15 @@ func TestPower_On_StartError(t *testing.T) {
 // --- PowerReboot ---
 
 func TestPower_Reboot(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "stop" || args[0] == "start" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -284,15 +285,15 @@ func TestPower_Reboot_ListError(t *testing.T) {
 }
 
 func TestPower_Reboot_StopError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "stop" {
-			return docker.MockResult{Err: fmt.Errorf("stop failed")}
+			return cmdexec.MockResult{Err: fmt.Errorf("stop failed")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -303,18 +304,18 @@ func TestPower_Reboot_StopError(t *testing.T) {
 }
 
 func TestPower_Reboot_StartError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "stop" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "start" {
-			return docker.MockResult{Err: fmt.Errorf("start failed")}
+			return cmdexec.MockResult{Err: fmt.Errorf("start failed")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -327,15 +328,15 @@ func TestPower_Reboot_StartError(t *testing.T) {
 // --- PowerCycle ---
 
 func TestPower_Cycle(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "kill" || args[0] == "start" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -368,15 +369,15 @@ func TestPower_Cycle_ListError(t *testing.T) {
 }
 
 func TestPower_Cycle_KillError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "kill" {
-			return docker.MockResult{Err: fmt.Errorf("kill failed")}
+			return cmdexec.MockResult{Err: fmt.Errorf("kill failed")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -387,18 +388,18 @@ func TestPower_Cycle_KillError(t *testing.T) {
 }
 
 func TestPower_Cycle_StartError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "kill" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "start" {
-			return docker.MockResult{Err: fmt.Errorf("start failed")}
+			return cmdexec.MockResult{Err: fmt.Errorf("start failed")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -411,15 +412,15 @@ func TestPower_Cycle_StartError(t *testing.T) {
 // --- PowerFreeze ---
 
 func TestPower_Freeze(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "pause" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -446,15 +447,15 @@ func TestPower_Freeze_ListError(t *testing.T) {
 }
 
 func TestPower_Freeze_PauseError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "pause" {
-			return docker.MockResult{Err: fmt.Errorf("container is not running")}
+			return cmdexec.MockResult{Err: fmt.Errorf("container is not running")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -467,15 +468,15 @@ func TestPower_Freeze_PauseError(t *testing.T) {
 // --- PowerUnfreeze ---
 
 func TestPower_Unfreeze(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "unpause" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 	client := docker.NewClient(&m)
 
@@ -502,15 +503,15 @@ func TestPower_Unfreeze_ListError(t *testing.T) {
 }
 
 func TestPower_Unfreeze_UnpauseError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return docker.MockResult{Stdout: powerContainers()}
+			return cmdexec.MockResult{Stdout: powerContainers()}
 		}
 		if args[0] == "unpause" {
-			return docker.MockResult{Err: fmt.Errorf("container is not paused")}
+			return cmdexec.MockResult{Err: fmt.Errorf("container is not paused")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 

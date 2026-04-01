@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,7 @@ func inspectJSON(status string) string {
 }
 
 func TestContainerRunning(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(inspectJSON("running"), "", nil)
 	c := docker.NewClient(&m)
 
@@ -40,7 +41,7 @@ func TestContainerRunning(t *testing.T) {
 func TestContainerRunning_NotRunning(t *testing.T) {
 	for _, status := range []string{"exited", "created", "paused", "dead"} {
 		t.Run(status, func(t *testing.T) {
-			var m docker.MockExecutor
+			var m cmdexec.MockExecutor
 			m.AddResult(inspectJSON(status), "", nil)
 			c := docker.NewClient(&m)
 
@@ -53,7 +54,7 @@ func TestContainerRunning_NotRunning(t *testing.T) {
 }
 
 func TestContainerRunning_InspectError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -63,7 +64,7 @@ func TestContainerRunning_InspectError(t *testing.T) {
 }
 
 func TestSystemdReady_Running(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("running\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -77,7 +78,7 @@ func TestSystemdReady_Running(t *testing.T) {
 }
 
 func TestSystemdReady_Degraded(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// The sh wrapper always exits 0, so stdout contains "degraded".
 	m.AddResult("degraded\n", "", nil)
 	c := docker.NewClient(&m)
@@ -89,7 +90,7 @@ func TestSystemdReady_Degraded(t *testing.T) {
 func TestSystemdReady_NotReady(t *testing.T) {
 	for _, state := range []string{"starting", "initializing", "stopping"} {
 		t.Run(state, func(t *testing.T) {
-			var m docker.MockExecutor
+			var m cmdexec.MockExecutor
 			m.AddResult(state+"\n", "", nil)
 			c := docker.NewClient(&m)
 
@@ -101,7 +102,7 @@ func TestSystemdReady_NotReady(t *testing.T) {
 }
 
 func TestSystemdReady_ExecError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 
@@ -111,7 +112,7 @@ func TestSystemdReady_ExecError(t *testing.T) {
 }
 
 func TestSSHDReady(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("SSH-2.0-OpenSSH_9.8\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -125,7 +126,7 @@ func TestSSHDReady(t *testing.T) {
 }
 
 func TestSSHDReady_UnexpectedBanner(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("HTTP/1.1 400 Bad Request\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -135,7 +136,7 @@ func TestSSHDReady_UnexpectedBanner(t *testing.T) {
 }
 
 func TestSSHDReady_EmptyBanner(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -145,7 +146,7 @@ func TestSSHDReady_EmptyBanner(t *testing.T) {
 }
 
 func TestSSHDReady_ConnectionRefused(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -155,7 +156,7 @@ func TestSSHDReady_ConnectionRefused(t *testing.T) {
 }
 
 func TestSlurmctldReady(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("Slurmctld(primary) at controller is UP\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -167,7 +168,7 @@ func TestSlurmctldReady(t *testing.T) {
 }
 
 func TestSlurmctldReady_NotReady(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "slurm_persist_conn_open_without_init: failed to open persistent connection\n",
 		fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
@@ -178,7 +179,7 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 }
 
 func TestMungeReady(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("active\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -190,7 +191,7 @@ func TestMungeReady(t *testing.T) {
 }
 
 func TestMungeReady_NotReady(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -200,7 +201,7 @@ func TestMungeReady_NotReady(t *testing.T) {
 }
 
 func TestSlurmdReady(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("active\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -212,7 +213,7 @@ func TestSlurmdReady(t *testing.T) {
 }
 
 func TestSlurmdReady_NotReady(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -244,7 +245,7 @@ func TestNodeProbes(t *testing.T) {
 }
 
 func TestUntilReady_AllPass(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// Single probe that succeeds immediately.
 	m.AddResult(inspectJSON("running"), "", nil)
 	c := docker.NewClient(&m)
@@ -259,7 +260,7 @@ func TestUntilReady_AllPass(t *testing.T) {
 }
 
 func TestUntilReady_RetryThenPass(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// First attempt: not running. Second attempt: running.
 	m.AddResult(inspectJSON("created"), "", nil)
 	m.AddResult(inspectJSON("running"), "", nil)
@@ -275,7 +276,7 @@ func TestUntilReady_RetryThenPass(t *testing.T) {
 }
 
 func TestUntilReady_Timeout(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// Always fail — queue enough results to cover polling attempts.
 	for i := 0; i < 100; i++ {
 		m.AddResult(inspectJSON("created"), "", nil)
@@ -293,7 +294,7 @@ func TestUntilReady_Timeout(t *testing.T) {
 }
 
 func TestUntilReady_MultipleProbes(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// Two probes, both pass on first attempt.
 	m.AddResult(inspectJSON("running"), "", nil)
 	m.AddResult("running\n", "", nil)
@@ -312,7 +313,7 @@ func TestUntilReady_MultipleProbes(t *testing.T) {
 }
 
 func TestUntilReady_SecondProbeFails(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// First attempt: container OK, systemd not ready.
 	// Second attempt: container OK, systemd ready.
 	m.AddResult(inspectJSON("running"), "", nil)
@@ -334,7 +335,7 @@ func TestUntilReady_SecondProbeFails(t *testing.T) {
 }
 
 func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// Container always passes, systemd always fails.
 	for i := 0; i < 100; i++ {
 		m.AddResult(inspectJSON("running"), "", nil)
@@ -356,7 +357,7 @@ func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
 }
 
 func TestUntilReady_EmptyProbes(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	c := docker.NewClient(&m)
 
 	err := UntilReady(t.Context(), c, testContainer, nil, time.Millisecond)
@@ -365,7 +366,7 @@ func TestUntilReady_EmptyProbes(t *testing.T) {
 }
 
 func TestUntilReady_ContextCanceled(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	for i := 0; i < 100; i++ {
 		m.AddResult(inspectJSON("created"), "", nil)
 	}

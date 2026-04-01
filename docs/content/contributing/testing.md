@@ -31,14 +31,14 @@ mode_integration_test.go  // build tag: integration
 
 ## Mock executor
 
-The `docker.MockExecutor` replaces the real Docker CLI in unit tests. It supports two dispatch modes:
+The `cmdexec.MockExecutor` (from `pkg/cmdexec`) replaces real CLI calls in unit tests. It supports two dispatch modes:
 
 ### FIFO mode
 
 Queue results in order with `AddResult()`:
 
 ```go
-mock := &docker.MockExecutor{}
+mock := &cmdexec.MockExecutor{}
 mock.AddResult(`{"Id":"abc123"}`, "", nil)  // first call returns this
 mock.AddResult("", "", nil)                  // second call returns this
 
@@ -50,12 +50,12 @@ client := docker.NewClient(mock)
 Use `OnCall` for concurrent tests or when result dispatch depends on the command:
 
 ```go
-mock := &docker.MockExecutor{
-    OnCall: func(args []string, stdin string) docker.MockResult {
+mock := &cmdexec.MockExecutor{
+    OnCall: func(args []string, stdin string) cmdexec.MockResult {
         if args[0] == "inspect" {
-            return docker.MockResult{Stdout: `[{"Id":"abc"}]`}
+            return cmdexec.MockResult{Stdout: `[{"Id":"abc"}]`}
         }
-        return docker.MockResult{}
+        return cmdexec.MockResult{}
     },
 }
 ```
@@ -81,10 +81,10 @@ The `exitCode1(t)` helper runs `sh -c "exit 1"` to obtain a real `*os.ProcessSta
 
 ## Recording executor
 
-The `docker.RecordingExecutor` wraps a real executor and records all calls with their results. Useful for observing actual Docker CLI I/O during integration tests:
+The `cmdexec.RecordingExecutor` wraps a real executor and records all calls with their results. Useful for observing actual CLI I/O during integration tests:
 
 ```go
-rec := &docker.RecordingExecutor{Inner: &docker.OSExecutor{}}
+rec := &cmdexec.RecordingExecutor{Inner: &cmdexec.OSExecutor{}}
 client := docker.NewClient(rec)
 
 // ... run operations ...

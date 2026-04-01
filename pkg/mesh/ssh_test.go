@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,7 +91,7 @@ func TestKnownHostLifecycle(t *testing.T) {
 func TestEnsureSSHVolume_Creates(t *testing.T) {
 	const containerID = "abc123"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -138,7 +139,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 }
 
 func TestEnsureSSHVolume_AlreadyExists(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -149,7 +150,7 @@ func TestEnsureSSHVolume_AlreadyExists(t *testing.T) {
 }
 
 func TestEnsureSSHVolume_CheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -160,7 +161,7 @@ func TestEnsureSSHVolume_CheckError(t *testing.T) {
 }
 
 func TestEnsureSSHVolume_CreateVolumeError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -175,7 +176,7 @@ func TestEnsureSSHVolume_CreateVolumeError(t *testing.T) {
 }
 
 func TestEnsureSSHVolume_CreateContainerError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -192,7 +193,7 @@ func TestEnsureSSHVolume_CreateContainerError(t *testing.T) {
 }
 
 func TestEnsureSSHVolume_CopyError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -216,7 +217,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 }
 
 func TestEnsureSSHVolume_Pull(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
@@ -241,7 +242,7 @@ func TestEnsureSSHVolume_Pull(t *testing.T) {
 func TestEnsureSSH_Creates(t *testing.T) {
 	const containerID = "def456"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -272,7 +273,7 @@ func TestEnsureSSH_Creates(t *testing.T) {
 }
 
 func TestEnsureSSH_AlreadyExists(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -283,7 +284,7 @@ func TestEnsureSSH_AlreadyExists(t *testing.T) {
 }
 
 func TestEnsureSSH_CheckError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -294,7 +295,7 @@ func TestEnsureSSH_CheckError(t *testing.T) {
 }
 
 func TestEnsureSSH_InspectDNSError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -309,7 +310,7 @@ func TestEnsureSSH_InspectDNSError(t *testing.T) {
 }
 
 func TestEnsureSSH_CreateError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -326,7 +327,7 @@ func TestEnsureSSH_CreateError(t *testing.T) {
 }
 
 func TestEnsureSSH_StartError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
@@ -345,7 +346,7 @@ func TestEnsureSSH_StartError(t *testing.T) {
 }
 
 func TestEnsureSSH_Pull(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: sind-ssh\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	m.AddResult(dnsInspectJSON(), "", nil)
@@ -367,7 +368,7 @@ func TestEnsureSSH_Pull(t *testing.T) {
 // --- AddKnownHost ---
 
 func TestAddKnownHost(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// AppendFile → success
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
@@ -386,7 +387,7 @@ func TestAddKnownHost(t *testing.T) {
 }
 
 func TestAddKnownHost_Error(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -403,7 +404,7 @@ func TestRemoveKnownHost(t *testing.T) {
 	existing := "controller.dev.sind.sind ssh-ed25519 AAAA...\n" +
 		"worker-0.dev.sind.sind ssh-ed25519 BBBB...\n"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// ReadFile → existing content
 	m.AddResult(existing, "", nil)
 	// WriteFile → success
@@ -421,7 +422,7 @@ func TestRemoveKnownHost(t *testing.T) {
 func TestRemoveKnownHost_LastEntry(t *testing.T) {
 	existing := "controller.dev.sind.sind ssh-ed25519 AAAA...\n"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(existing, "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
@@ -439,7 +440,7 @@ func TestRemoveKnownHost_DuplicateHostnames(t *testing.T) {
 		"controller.dev.sind.sind ssh-ed25519 BBBB...\n" +
 		"worker-0.dev.sind.sind ssh-ed25519 CCCC...\n"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(existing, "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
@@ -454,7 +455,7 @@ func TestRemoveKnownHost_DuplicateHostnames(t *testing.T) {
 func TestRemoveKnownHost_NotFound(t *testing.T) {
 	existing := "controller.dev.sind.sind ssh-ed25519 AAAA...\n"
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(existing, "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
@@ -468,7 +469,7 @@ func TestRemoveKnownHost_NotFound(t *testing.T) {
 }
 
 func TestRemoveKnownHost_ReadError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -479,7 +480,7 @@ func TestRemoveKnownHost_ReadError(t *testing.T) {
 }
 
 func TestRemoveKnownHost_WriteError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("controller.dev.sind.sind ssh-ed25519 AAAA...\n", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)

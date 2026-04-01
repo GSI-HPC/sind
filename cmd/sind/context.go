@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
@@ -30,7 +31,7 @@ func clientFrom(ctx context.Context) *docker.Client {
 	if c, ok := ctx.Value(clientKey).(*docker.Client); ok {
 		return c
 	}
-	return docker.NewClient(&docker.OSExecutor{})
+	return docker.NewClient(&cmdexec.OSExecutor{})
 }
 
 // meshMgrFrom retrieves the mesh.Manager from the context,

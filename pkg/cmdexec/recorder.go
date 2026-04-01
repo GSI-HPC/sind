@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package docker
+package cmdexec
 
 // Recorder holds a RecordingExecutor and the underlying mock (if any).
 // In unit mode, mock is non-nil and AddResult configures responses.
@@ -33,7 +33,7 @@ func (r *Recorder) AddResult(stdout, stderr string, err error) {
 	}
 }
 
-// IsIntegration returns true when running against real Docker.
+// IsIntegration returns true when running against real executors.
 func (r *Recorder) IsIntegration() bool {
 	return r.mock == nil
 }

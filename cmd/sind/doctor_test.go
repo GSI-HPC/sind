@@ -7,13 +7,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDoctorCommand_AllPass(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("29.0.0", "", nil) // docker version
 
 	cmd := NewRootCommand()
@@ -34,7 +35,7 @@ func TestDoctorCommand_AllPass(t *testing.T) {
 }
 
 func TestDoctorCommand_DockerTooOld(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("27.5.0", "", nil) // docker version
 
 	cmd := NewRootCommand()
@@ -54,9 +55,9 @@ func TestDoctorCommand_DockerTooOld(t *testing.T) {
 }
 
 func TestDoctorCommand_DockerNotReachable(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(_ []string, _ string) docker.MockResult {
-		return docker.MockResult{Stderr: "Cannot connect to the Docker daemon", Err: assert.AnError}
+	var m cmdexec.MockExecutor
+	m.OnCall = func(_ []string, _ string) cmdexec.MockResult {
+		return cmdexec.MockResult{Stderr: "Cannot connect to the Docker daemon", Err: assert.AnError}
 	}
 
 	cmd := NewRootCommand()
@@ -76,7 +77,7 @@ func TestDoctorCommand_DockerNotReachable(t *testing.T) {
 }
 
 func TestDoctorCommand_UnparseableVersion(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("bogus", "", nil)
 
 	cmd := NewRootCommand()
@@ -124,7 +125,7 @@ func TestDoctorCommand_DNSPolicyShown(t *testing.T) {
 		t.Skip("systemd-resolved not running")
 	}
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("29.0.0", "", nil)
 
 	cmd := NewRootCommand()

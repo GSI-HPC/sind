@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -108,7 +109,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 // --- CreateClusterNetwork ---
 
 func TestCreateClusterNetwork(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("net-id-123\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -125,7 +126,7 @@ func TestCreateClusterNetwork(t *testing.T) {
 }
 
 func TestCreateClusterNetwork_Error(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("network already exists"))
 	c := docker.NewClient(&m)
 
@@ -138,7 +139,7 @@ func TestCreateClusterNetwork_Error(t *testing.T) {
 // --- CreateClusterVolumes ---
 
 func TestCreateClusterVolumes(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil) // config
 	m.AddResult("", "", nil) // munge
 	m.AddResult("", "", nil) // data
@@ -169,7 +170,7 @@ func TestCreateClusterVolumes(t *testing.T) {
 }
 
 func TestCreateClusterVolumes_SkipData(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil) // config
 	m.AddResult("", "", nil) // munge
 	c := docker.NewClient(&m)
@@ -183,7 +184,7 @@ func TestCreateClusterVolumes_SkipData(t *testing.T) {
 }
 
 func TestCreateClusterVolumes_Error(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)                                // config OK
 	m.AddResult("", "", fmt.Errorf("volume create failed")) // munge fails
 	c := docker.NewClient(&m)
@@ -198,7 +199,7 @@ func TestCreateClusterVolumes_Error(t *testing.T) {
 // --- WriteClusterConfig ---
 
 func TestWriteClusterConfig(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
@@ -230,7 +231,7 @@ func TestWriteClusterConfig(t *testing.T) {
 }
 
 func TestWriteClusterConfig_Pull(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
@@ -247,7 +248,7 @@ func TestWriteClusterConfig_Pull(t *testing.T) {
 }
 
 func TestWriteClusterConfig_CreateError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("create failed"))
 	c := docker.NewClient(&m)
 
@@ -259,7 +260,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 }
 
 func TestWriteClusterConfig_CopyError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil)             // CreateContainer
 	m.AddResult("", "", fmt.Errorf("cp failed")) // CopyToContainer
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
@@ -276,7 +277,7 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 // --- WriteMungeKey ---
 
 func TestWriteMungeKey(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // Exec chown
@@ -301,7 +302,7 @@ func TestWriteMungeKey(t *testing.T) {
 }
 
 func TestWriteMungeKey_Pull(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // Exec chown
@@ -320,7 +321,7 @@ func TestWriteMungeKey_Pull(t *testing.T) {
 }
 
 func TestWriteMungeKey_RunError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("run failed"))
 	c := docker.NewClient(&m)
 
@@ -331,7 +332,7 @@ func TestWriteMungeKey_RunError(t *testing.T) {
 }
 
 func TestWriteMungeKey_CopyError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil)             // RunContainer
 	m.AddResult("", "", fmt.Errorf("cp failed")) // CopyToContainer
 	m.AddResult("", "", nil)                     // KillContainer (defer)
@@ -346,7 +347,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 }
 
 func TestWriteMungeKey_ChownError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil)                // RunContainer
 	m.AddResult("", "", nil)                        // CopyToContainer
 	m.AddResult("", "", fmt.Errorf("chown failed")) // Exec chown
@@ -361,7 +362,7 @@ func TestWriteMungeKey_ChownError(t *testing.T) {
 }
 
 func TestWriteMungeKey_ChmodError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("abc123\n", "", nil)                // RunContainer
 	m.AddResult("", "", nil)                        // CopyToContainer
 	m.AddResult("", "", nil)                        // Exec chown
@@ -566,7 +567,7 @@ func TestNodeRunConfigs_EmptyNodes(t *testing.T) {
 // --- CreateClusterNodes ---
 
 func TestCreateClusterNodes(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// Node 1: CreateContainer + ConnectNetwork + StartContainer
 	m.AddResult("id1\n", "", nil)
 	m.AddResult("", "", nil)
@@ -592,7 +593,7 @@ func TestCreateClusterNodes(t *testing.T) {
 }
 
 func TestCreateClusterNodes_Error(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	// Node 1: success
 	m.AddResult("id1\n", "", nil)
 	m.AddResult("", "", nil)
@@ -617,7 +618,7 @@ func TestCreateClusterNodes_Error(t *testing.T) {
 }
 
 func TestCreateClusterNodes_Empty(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
@@ -630,7 +631,7 @@ func TestCreateClusterNodes_Empty(t *testing.T) {
 // --- EnableSlurmServices ---
 
 func TestEnableSlurmServices(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil) // slurmctld on controller
 	m.AddResult("", "", nil) // slurmd on worker-0
 	c := docker.NewClient(&m)
@@ -651,7 +652,7 @@ func TestEnableSlurmServices(t *testing.T) {
 }
 
 func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil) // slurmctld on controller
 	c := docker.NewClient(&m)
 
@@ -667,7 +668,7 @@ func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
 }
 
 func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil) // slurmctld on controller
 	c := docker.NewClient(&m)
 
@@ -689,7 +690,7 @@ func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
 }
 
 func TestEnableSlurmServices_Error(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("systemctl failed"))
 	c := docker.NewClient(&m)
 
@@ -777,9 +778,9 @@ func emptyCorefileTar() string {
 // for a cluster with controller + 1 managed worker. The optional override
 // function can intercept specific calls; returning (result, true) uses the
 // override result, returning (_, false) falls through to the default.
-func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []string, stdin string) (docker.MockResult, bool)) func([]string, string) docker.MockResult {
+func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []string, stdin string) (cmdexec.MockResult, bool)) func([]string, string) cmdexec.MockResult {
 	t.Helper()
-	return func(args []string, stdin string) docker.MockResult {
+	return func(args []string, stdin string) cmdexec.MockResult {
 		if override != nil {
 			if r, ok := override(args, stdin); ok {
 				return r
@@ -791,86 +792,86 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 		if len(args) >= 2 && args[1] == "inspect" {
 			switch args[0] {
 			case "network", "volume", "container":
-				return docker.MockResult{Stderr: "Error: No such object\n", Err: exitErr}
+				return cmdexec.MockResult{Stderr: "Error: No such object\n", Err: exitErr}
 			}
 		}
 
 		// resolveInfra
 		if args[0] == "inspect" && args[1] == "sind-dns" {
-			return docker.MockResult{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
+			return cmdexec.MockResult{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.0.2",
 			})}
 		}
 		if args[0] == "exec" && args[1] == "sind-ssh" && len(args) > 2 && args[2] == "cat" {
-			return docker.MockResult{Stdout: "ssh-ed25519 AAAA-test-key\n"}
+			return cmdexec.MockResult{Stdout: "ssh-ed25519 AAAA-test-key\n"}
 		}
 		if args[0] == "run" && args[1] == "--rm" {
-			return docker.MockResult{Stdout: "slurm 25.11.0\n"}
+			return cmdexec.MockResult{Stdout: "slurm 25.11.0\n"}
 		}
 
 		// createResources
 		if args[0] == "network" && args[1] == "create" {
-			return docker.MockResult{Stdout: "net-id\n"}
+			return cmdexec.MockResult{Stdout: "net-id\n"}
 		}
 		if args[0] == "volume" && args[1] == "create" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "create" {
-			return docker.MockResult{Stdout: "cid\n"}
+			return cmdexec.MockResult{Stdout: "cid\n"}
 		}
 		if args[0] == "run" {
-			return docker.MockResult{Stdout: "cid\n"}
+			return cmdexec.MockResult{Stdout: "cid\n"}
 		}
 		if args[0] == "cp" {
 			if len(args) == 3 && args[2] == "-" && strings.Contains(args[1], ":") {
-				return docker.MockResult{Stdout: emptyCorefileTar()}
+				return cmdexec.MockResult{Stdout: emptyCorefileTar()}
 			}
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "rm" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "network" && args[1] == "connect" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "start" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "inspect" {
-			return docker.MockResult{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
+			return cmdexec.MockResult{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.1.1",
 			})}
 		}
 		if args[0] == "exec" {
 			if args[1] == "-i" {
-				return docker.MockResult{}
+				return cmdexec.MockResult{}
 			}
 			container := args[1]
 			if len(args) > 2 {
 				switch cmd := args[2]; {
 				case cmd == "sh" && strings.Contains(joined, "is-system-running"):
-					return docker.MockResult{Stdout: "running\n"}
+					return cmdexec.MockResult{Stdout: "running\n"}
 				case cmd == "bash" && strings.Contains(joined, "/dev/tcp"):
-					return docker.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+					return cmdexec.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
 				case cmd == "mkdir":
-					return docker.MockResult{}
+					return cmdexec.MockResult{}
 				case cmd == "ssh-keyscan":
-					return docker.MockResult{Stdout: "localhost ssh-ed25519 AAAA-hostkey-" + container + "\n"}
+					return cmdexec.MockResult{Stdout: "localhost ssh-ed25519 AAAA-hostkey-" + container + "\n"}
 				case cmd == "systemctl" && len(args) > 3 && args[3] == "enable":
-					return docker.MockResult{}
+					return cmdexec.MockResult{}
 				case cmd == "scontrol":
-					return docker.MockResult{Stdout: "Slurmctld(primary) at controller is UP\n"}
+					return cmdexec.MockResult{Stdout: "Slurmctld(primary) at controller is UP\n"}
 				case cmd == "systemctl" && len(args) > 3 && args[3] == "is-active":
-					return docker.MockResult{Stdout: "active\n"}
+					return cmdexec.MockResult{Stdout: "active\n"}
 				}
 			}
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		if args[0] == "kill" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		t.Errorf("unexpected docker call: %v", args)
-		return docker.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
+		return cmdexec.MockResult{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 }
 
@@ -888,7 +889,7 @@ func createCfg() *config.Cluster {
 func TestCreate_FullCluster(t *testing.T) {
 	exitErr := notFoundErr(t)
 
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.OnCall = happyOnCall(t, exitErr, nil)
 
 	client := docker.NewClient(&m)
@@ -914,7 +915,7 @@ func TestCreate_FullCluster(t *testing.T) {
 
 func TestCreate_PreflightFails(t *testing.T) {
 	// Network already exists → preflight returns conflict error.
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil) // network exists (no error = exists)
 	exitErr := notFoundErr(t)
 	for i := 0; i < 5; i++ {
@@ -932,12 +933,12 @@ func TestCreate_PreflightFails(t *testing.T) {
 
 func TestCreate_ResolveInfraFails(t *testing.T) {
 	exitErr := notFoundErr(t)
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		if args[0] == "inspect" && args[1] == "sind-dns" {
-			return docker.MockResult{Err: fmt.Errorf("container not running")}, true
+			return cmdexec.MockResult{Err: fmt.Errorf("container not running")}, true
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -952,12 +953,12 @@ func TestCreate_ResolveInfraFails(t *testing.T) {
 
 func TestCreate_CreateResourcesFails(t *testing.T) {
 	exitErr := notFoundErr(t)
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		if args[0] == "network" && args[1] == "create" {
-			return docker.MockResult{Err: fmt.Errorf("network quota exceeded")}, true
+			return cmdexec.MockResult{Err: fmt.Errorf("network quota exceeded")}, true
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -972,13 +973,13 @@ func TestCreate_CreateResourcesFails(t *testing.T) {
 
 func TestCreate_NodeCreationFails(t *testing.T) {
 	exitErr := notFoundErr(t)
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		// Let helper containers succeed, fail node containers
 		if args[0] == "create" && !strings.Contains(strings.Join(args, " "), "helper") && !strings.Contains(strings.Join(args, " "), "busybox") {
-			return docker.MockResult{Err: fmt.Errorf("image not found")}, true
+			return cmdexec.MockResult{Err: fmt.Errorf("image not found")}, true
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -993,15 +994,15 @@ func TestCreate_NodeCreationFails(t *testing.T) {
 
 func TestCreate_SetupNodesFails(t *testing.T) {
 	exitErr := notFoundErr(t)
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		// Probes inspect the node: return "created" instead of "running" to fail ContainerRunning
 		if args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-") {
-			return docker.MockResult{Stdout: inspectJSON(t, args[1], "created", map[docker.NetworkName]string{
+			return cmdexec.MockResult{Stdout: inspectJSON(t, args[1], "created", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.1.1",
 			})}, true
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -1019,13 +1020,13 @@ func TestCreate_SetupNodesFails(t *testing.T) {
 
 func TestCreate_RegisterMeshFails(t *testing.T) {
 	exitErr := notFoundErr(t)
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		// CopyFromContainer for Corefile fails
 		if args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns") {
-			return docker.MockResult{Err: fmt.Errorf("dns container stopped")}, true
+			return cmdexec.MockResult{Err: fmt.Errorf("dns container stopped")}, true
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -1042,12 +1043,12 @@ func TestCreate_RegisterMeshFails(t *testing.T) {
 
 func TestCreate_EnableSlurmFails(t *testing.T) {
 	exitErr := notFoundErr(t)
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return docker.MockResult{Err: fmt.Errorf("systemctl failed")}, true
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}, true
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -1075,12 +1076,12 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 	}
 
 	var slurmCmds []string
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
 			slurmCmds = append(slurmCmds, args[1])
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -1108,12 +1109,12 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 	}
 
 	var slurmCmds []string
-	var m docker.MockExecutor
-	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (docker.MockResult, bool) {
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
 			slurmCmds = append(slurmCmds, args[1])
 		}
-		return docker.MockResult{}, false
+		return cmdexec.MockResult{}, false
 	})
 
 	client := docker.NewClient(&m)
@@ -1133,20 +1134,20 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 // --- Direct tests for unexported helpers ---
 
 func TestResolveInfra_SSHKeyError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "inspect" && args[1] == "sind-dns" {
-			return docker.MockResult{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
+			return cmdexec.MockResult{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.0.2",
 			})}
 		}
 		if args[0] == "exec" && args[1] == "sind-ssh" {
-			return docker.MockResult{Err: fmt.Errorf("ssh container crashed")}
+			return cmdexec.MockResult{Err: fmt.Errorf("ssh container crashed")}
 		}
 		if args[0] == "run" && args[1] == "--rm" {
-			return docker.MockResult{Stdout: "slurm 25.11.0\n"}
+			return cmdexec.MockResult{Stdout: "slurm 25.11.0\n"}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 	cfg := createCfg()
@@ -1159,20 +1160,20 @@ func TestResolveInfra_SSHKeyError(t *testing.T) {
 }
 
 func TestResolveInfra_SlurmVersionError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "inspect" && args[1] == "sind-dns" {
-			return docker.MockResult{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
+			return cmdexec.MockResult{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.0.2",
 			})}
 		}
 		if args[0] == "exec" && args[1] == "sind-ssh" {
-			return docker.MockResult{Stdout: "ssh-ed25519 AAAA-key\n"}
+			return cmdexec.MockResult{Stdout: "ssh-ed25519 AAAA-key\n"}
 		}
 		if args[0] == "run" && args[1] == "--rm" {
-			return docker.MockResult{Err: fmt.Errorf("image pull failed")}
+			return cmdexec.MockResult{Err: fmt.Errorf("image pull failed")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 	client := docker.NewClient(&m)
 
@@ -1184,33 +1185,33 @@ func TestResolveInfra_SlurmVersionError(t *testing.T) {
 }
 
 func TestSetupNodes_InspectError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "inspect" {
 			// First call: ContainerRunning probe → running
 			name := args[1]
-			return docker.MockResult{Stdout: inspectJSON(t, name, "running", nil)}
+			return cmdexec.MockResult{Stdout: inspectJSON(t, name, "running", nil)}
 		}
 		if args[0] == "exec" {
 			joined := strings.Join(args, " ")
 			if strings.Contains(joined, "is-system-running") {
-				return docker.MockResult{Stdout: "running\n"}
+				return cmdexec.MockResult{Stdout: "running\n"}
 			}
 			if strings.Contains(joined, "/dev/tcp") {
-				return docker.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+				return cmdexec.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
 			}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 
 	// Override: after probes pass, the second inspect (for IP collection) fails.
 	callCount := 0
 	origOnCall := m.OnCall
-	m.OnCall = func(args []string, stdin string) docker.MockResult {
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		if args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-") {
 			callCount++
 			if callCount > 1 {
-				return docker.MockResult{Err: fmt.Errorf("inspect network error")}
+				return cmdexec.MockResult{Err: fmt.Errorf("inspect network error")}
 			}
 		}
 		return origOnCall(args, stdin)
@@ -1228,10 +1229,10 @@ func TestSetupNodes_InspectError(t *testing.T) {
 }
 
 func TestSetupNodes_InjectKeyError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "inspect" {
-			return docker.MockResult{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
+			return cmdexec.MockResult{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.1.1",
 			})}
 		}
@@ -1239,14 +1240,14 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 			joined := strings.Join(args, " ")
 			switch {
 			case strings.Contains(joined, "is-system-running"):
-				return docker.MockResult{Stdout: "running\n"}
+				return cmdexec.MockResult{Stdout: "running\n"}
 			case strings.Contains(joined, "/dev/tcp"):
-				return docker.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+				return cmdexec.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
 			case args[2] == "mkdir":
-				return docker.MockResult{Err: fmt.Errorf("permission denied")}
+				return cmdexec.MockResult{Err: fmt.Errorf("permission denied")}
 			}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 
 	client := docker.NewClient(&m)
@@ -1261,30 +1262,30 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 }
 
 func TestSetupNodes_HostKeyError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "inspect" {
-			return docker.MockResult{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
+			return cmdexec.MockResult{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.1.1",
 			})}
 		}
 		if args[0] == "exec" {
 			if args[1] == "-i" {
-				return docker.MockResult{}
+				return cmdexec.MockResult{}
 			}
 			joined := strings.Join(args, " ")
 			switch {
 			case strings.Contains(joined, "is-system-running"):
-				return docker.MockResult{Stdout: "running\n"}
+				return cmdexec.MockResult{Stdout: "running\n"}
 			case strings.Contains(joined, "/dev/tcp"):
-				return docker.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+				return cmdexec.MockResult{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
 			case args[2] == "mkdir":
-				return docker.MockResult{}
+				return cmdexec.MockResult{}
 			case args[2] == "ssh-keyscan":
-				return docker.MockResult{Err: fmt.Errorf("keyscan failed")}
+				return cmdexec.MockResult{Err: fmt.Errorf("keyscan failed")}
 			}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 
 	client := docker.NewClient(&m)
@@ -1299,13 +1300,13 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 }
 
 func TestRegisterMesh_DNSError(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		// CopyFromContainer (read Corefile) fails
 		if args[0] == "cp" && len(args) == 3 && args[2] == "-" {
-			return docker.MockResult{Err: fmt.Errorf("dns container not running")}
+			return cmdexec.MockResult{Err: fmt.Errorf("dns container not running")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 
 	client := docker.NewClient(&m)
@@ -1323,30 +1324,30 @@ func TestRegisterMesh_DNSError(t *testing.T) {
 }
 
 func TestRegisterMesh_KnownHostError(t *testing.T) {
-	var m docker.MockExecutor
+	var m cmdexec.MockExecutor
 	callIdx := 0
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		// CopyFromContainer (read Corefile)
 		if args[0] == "cp" && len(args) == 3 && args[2] == "-" {
-			return docker.MockResult{Stdout: emptyCorefileTar()}
+			return cmdexec.MockResult{Stdout: emptyCorefileTar()}
 		}
 		// CopyToContainer (write Corefile)
 		if args[0] == "cp" && args[1] == "-" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		// SignalContainer
 		if args[0] == "kill" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		// AppendFile → ExecWithStdin (exec -i)
 		if args[0] == "exec" && args[1] == "-i" {
 			callIdx++
 			if callIdx == 1 {
-				return docker.MockResult{Err: fmt.Errorf("container stopped")}
+				return cmdexec.MockResult{Err: fmt.Errorf("container stopped")}
 			}
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 
 	client := docker.NewClient(&m)
@@ -1364,16 +1365,16 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 }
 
 func TestEnableSlurm_ProbeTimeout(t *testing.T) {
-	var m docker.MockExecutor
-	m.OnCall = func(args []string, _ string) docker.MockResult {
+	var m cmdexec.MockExecutor
+	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
-			return docker.MockResult{}
+			return cmdexec.MockResult{}
 		}
 		// scontrol ping always fails → probe times out
 		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
-			return docker.MockResult{Err: fmt.Errorf("slurmctld not responding")}
+			return cmdexec.MockResult{Err: fmt.Errorf("slurmctld not responding")}
 		}
-		return docker.MockResult{}
+		return cmdexec.MockResult{}
 	}
 
 	client := docker.NewClient(&m)

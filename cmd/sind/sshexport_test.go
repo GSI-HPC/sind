@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
@@ -53,7 +54,7 @@ func TestSindStateDir_CustomRealm(t *testing.T) {
 // --- syncSSHExport ---
 
 func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
-	mock := &docker.MockExecutor{}
+	mock := &cmdexec.MockExecutor{}
 	// ContainerExists: docker container inspect sind-ssh → success
 	mock.AddResult("[{}]", "", nil)
 	// ExportConfig: ReadFile private key
@@ -85,7 +86,7 @@ func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
 }
 
 func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
-	mock := &docker.MockExecutor{}
+	mock := &cmdexec.MockExecutor{}
 	// ContainerExists: not found
 	mock.AddResult("", "Error: No such container", exitCode1(t))
 
@@ -117,7 +118,7 @@ func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
 }
 
 func TestSyncSSHExport_NoFilesToClean(t *testing.T) {
-	mock := &docker.MockExecutor{}
+	mock := &cmdexec.MockExecutor{}
 	mock.AddResult("", "Error: No such container", exitCode1(t))
 
 	client := docker.NewClient(mock)
@@ -130,7 +131,7 @@ func TestSyncSSHExport_NoFilesToClean(t *testing.T) {
 }
 
 func TestSyncSSHExport_ContainerCheckError(t *testing.T) {
-	mock := &docker.MockExecutor{}
+	mock := &cmdexec.MockExecutor{}
 	mock.AddResult("", "", fmt.Errorf("connection refused"))
 
 	client := docker.NewClient(mock)
@@ -141,7 +142,7 @@ func TestSyncSSHExport_ContainerCheckError(t *testing.T) {
 }
 
 func TestSyncSSHExport_ExportError(t *testing.T) {
-	mock := &docker.MockExecutor{}
+	mock := &cmdexec.MockExecutor{}
 	mock.AddResult("[{}]", "", nil)
 	mock.AddResult("", "Error", fmt.Errorf("exec failed"))
 

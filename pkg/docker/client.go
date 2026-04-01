@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -31,12 +32,12 @@ type VolumeName string
 
 // Client provides operations against the Docker CLI.
 type Client struct {
-	Executor Executor
+	Executor cmdexec.Executor
 	Command  string // docker executable path (default: "docker")
 }
 
 // NewClient returns a Client that runs docker commands through the given executor.
-func NewClient(executor Executor) *Client {
+func NewClient(executor cmdexec.Executor) *Client {
 	return &Client{Executor: executor, Command: "docker"}
 }
 

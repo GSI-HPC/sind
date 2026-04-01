@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-// Package docker provides a thin abstraction over the Docker CLI.
-package docker
+// Package cmdexec provides a testable abstraction for running external commands.
+package cmdexec
 
 import (
 	"bytes"
@@ -71,7 +71,7 @@ type MockResult struct {
 // result dispatch must be based on command arguments rather than call order.
 type MockExecutor struct {
 	// OnCall, if set, is called to produce a result for each invocation.
-	// The args slice contains the docker subcommand and its arguments
+	// The args slice contains the subcommand and its arguments
 	// (e.g. ["inspect", "sind-dns"]). Stdin is non-empty for RunWithStdin calls.
 	OnCall func(args []string, stdin string) MockResult
 

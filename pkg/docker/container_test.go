@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -210,7 +211,7 @@ func TestContainerLabelsAndList(t *testing.T) {
 func TestRunContainer(t *testing.T) {
 	const containerID ContainerID = "b98dd34e3931dd738dd597ca2ae6fdc30a955be1c0662a321c634a82e5348ee9"
 
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(containerID)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -233,7 +234,7 @@ func TestRunContainer(t *testing.T) {
 }
 
 func TestRunContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "docker: Error response from daemon: Conflict.\n", fmt.Errorf("exit status 125"))
 	c := NewClient(&m)
 
@@ -243,7 +244,7 @@ func TestRunContainer_Error(t *testing.T) {
 }
 
 func TestStartContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -255,7 +256,7 @@ func TestStartContainer(t *testing.T) {
 }
 
 func TestStartContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -264,7 +265,7 @@ func TestStartContainer_Error(t *testing.T) {
 }
 
 func TestStopContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -276,7 +277,7 @@ func TestStopContainer(t *testing.T) {
 }
 
 func TestStopContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -285,7 +286,7 @@ func TestStopContainer_Error(t *testing.T) {
 }
 
 func TestRemoveContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -297,7 +298,7 @@ func TestRemoveContainer(t *testing.T) {
 }
 
 func TestRemoveContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -306,7 +307,7 @@ func TestRemoveContainer_Error(t *testing.T) {
 }
 
 func TestPauseContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -318,7 +319,7 @@ func TestPauseContainer(t *testing.T) {
 }
 
 func TestPauseContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: container is not running\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -327,7 +328,7 @@ func TestPauseContainer_Error(t *testing.T) {
 }
 
 func TestUnpauseContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -339,7 +340,7 @@ func TestUnpauseContainer(t *testing.T) {
 }
 
 func TestUnpauseContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: container is not paused\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -348,7 +349,7 @@ func TestUnpauseContainer_Error(t *testing.T) {
 }
 
 func TestKillContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(testContainerName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -360,7 +361,7 @@ func TestKillContainer(t *testing.T) {
 }
 
 func TestKillContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -369,7 +370,7 @@ func TestKillContainer_Error(t *testing.T) {
 }
 
 func TestSignalContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -381,7 +382,7 @@ func TestSignalContainer(t *testing.T) {
 }
 
 func TestSignalContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -403,7 +404,7 @@ const inspectJSON = `[{
 }]`
 
 func TestInspectContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(inspectJSON, "", nil)
 	c := NewClient(&m)
 
@@ -427,7 +428,7 @@ func TestInspectContainer(t *testing.T) {
 }
 
 func TestInspectContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such object: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -437,7 +438,7 @@ func TestInspectContainer_Error(t *testing.T) {
 }
 
 func TestInspectContainer_InvalidJSON(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("not json", "", nil)
 	c := NewClient(&m)
 
@@ -448,7 +449,7 @@ func TestInspectContainer_InvalidJSON(t *testing.T) {
 }
 
 func TestInspectContainer_EmptyResult(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[]", "", nil)
 	c := NewClient(&m)
 
@@ -462,7 +463,7 @@ const psJSON = `{"ID":"94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50
 {"ID":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2","Names":"sind-dev-worker-0","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=worker"}`
 
 func TestListContainers(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(psJSON, "", nil)
 	c := NewClient(&m)
 
@@ -484,7 +485,7 @@ func TestListContainers(t *testing.T) {
 
 func TestListContainers_NoLabels(t *testing.T) {
 	const noLabelsJSON = `{"ID":"abc123","Names":"sind-dev-controller","State":"running","Image":"img"}`
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(noLabelsJSON, "", nil)
 	c := NewClient(&m)
 
@@ -495,7 +496,7 @@ func TestListContainers_NoLabels(t *testing.T) {
 }
 
 func TestListContainers_Empty(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -505,7 +506,7 @@ func TestListContainers_Empty(t *testing.T) {
 }
 
 func TestListContainers_MultipleFilters(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -520,7 +521,7 @@ func TestListContainers_MultipleFilters(t *testing.T) {
 }
 
 func TestListContainers_InvalidJSON(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("not json\n", "", nil)
 	c := NewClient(&m)
 
@@ -531,7 +532,7 @@ func TestListContainers_InvalidJSON(t *testing.T) {
 }
 
 func TestListContainers_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -541,7 +542,7 @@ func TestListContainers_Error(t *testing.T) {
 }
 
 func TestExec(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("ssh-ed25519 AAAA...\n", "", nil)
 	c := NewClient(&m)
 
@@ -554,7 +555,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestExec_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "OCI runtime exec failed\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -564,7 +565,7 @@ func TestExec_Error(t *testing.T) {
 }
 
 func TestExecWithStdin(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -578,7 +579,7 @@ func TestExecWithStdin(t *testing.T) {
 }
 
 func TestExecWithStdin_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -588,7 +589,7 @@ func TestExecWithStdin_Error(t *testing.T) {
 }
 
 func TestReadFile(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("line1\nline2\n", "", nil)
 	c := NewClient(&m)
 
@@ -601,7 +602,7 @@ func TestReadFile(t *testing.T) {
 }
 
 func TestReadFile_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "cat: /missing: No such file\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -610,7 +611,7 @@ func TestReadFile_Error(t *testing.T) {
 }
 
 func TestWriteFile(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -623,7 +624,7 @@ func TestWriteFile(t *testing.T) {
 }
 
 func TestWriteFile_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -632,7 +633,7 @@ func TestWriteFile_Error(t *testing.T) {
 }
 
 func TestAppendFile(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -645,7 +646,7 @@ func TestAppendFile(t *testing.T) {
 }
 
 func TestAppendFile_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -654,7 +655,7 @@ func TestAppendFile_Error(t *testing.T) {
 }
 
 func TestContainerExists_True(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("[{}]\n", "", nil)
 	c := NewClient(&m)
 
@@ -667,7 +668,7 @@ func TestContainerExists_True(t *testing.T) {
 }
 
 func TestContainerExists_False(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: "+string(testContainerName)+"\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	c := NewClient(&m)
@@ -678,7 +679,7 @@ func TestContainerExists_False(t *testing.T) {
 }
 
 func TestContainerExists_OtherError(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
@@ -690,7 +691,7 @@ func TestContainerExists_OtherError(t *testing.T) {
 func TestCreateContainer(t *testing.T) {
 	const containerID ContainerID = "b98dd34e3931dd738dd597ca2ae6fdc30a955be1c0662a321c634a82e5348ee9"
 
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(string(containerID)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -712,7 +713,7 @@ func TestCreateContainer(t *testing.T) {
 }
 
 func TestCreateContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "docker: Error response from daemon: Conflict.\n", fmt.Errorf("exit status 125"))
 	c := NewClient(&m)
 
@@ -722,7 +723,7 @@ func TestCreateContainer_Error(t *testing.T) {
 }
 
 func TestCopyToContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -753,7 +754,7 @@ func TestCopyToContainer(t *testing.T) {
 }
 
 func TestCopyFilesToContainer(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -829,7 +830,7 @@ func (w *failWriter) Write(p []byte) (int, error) {
 }
 
 func TestCopyToContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -847,7 +848,7 @@ func TestCopyFromContainer(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tw.Close())
 
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(buf.String(), "", nil)
 	c := NewClient(&m)
 
@@ -860,7 +861,7 @@ func TestCopyFromContainer(t *testing.T) {
 }
 
 func TestCopyFromContainer_Error(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -870,7 +871,7 @@ func TestCopyFromContainer_Error(t *testing.T) {
 }
 
 func TestCopyFromContainer_InvalidTar(t *testing.T) {
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult("not a tar archive", "", nil)
 	c := NewClient(&m)
 
@@ -889,7 +890,7 @@ func TestCopyFromContainer_TruncatedTar(t *testing.T) {
 	require.NoError(t, err)
 	// Don't close properly — leaves a truncated entry
 
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(buf.String(), "", nil)
 	c := NewClient(&m)
 
@@ -905,7 +906,7 @@ func TestCopyFromContainer_EmptyTar(t *testing.T) {
 	tw := tar.NewWriter(&buf)
 	require.NoError(t, tw.Close())
 
-	var m MockExecutor
+	var m cmdexec.MockExecutor
 	m.AddResult(buf.String(), "", nil)
 	c := NewClient(&m)
 

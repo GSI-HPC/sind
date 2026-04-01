@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func executeCommand(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
-func executeWithMock(mock *docker.MockExecutor, args ...string) (string, string, error) {
+func executeWithMock(mock *cmdexec.MockExecutor, args ...string) (string, string, error) {
 	cmd := NewRootCommand()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
