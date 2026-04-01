@@ -17,8 +17,8 @@ import (
 // Overridden in tests to point at a temporary directory.
 var sysClassNet = "/sys/class/net"
 
-// resolvedActive checks if systemd-resolved is running.
-func (m *Manager) resolvedActive(ctx context.Context) bool {
+// ResolvedActive checks if systemd-resolved is running.
+func (m *Manager) ResolvedActive(ctx context.Context) bool {
 	log := sindlog.From(ctx)
 	_, _, err := m.Exec.Run(ctx, "systemctl", "is-active", "--quiet", "systemd-resolved")
 	active := err == nil
@@ -36,9 +36,9 @@ func (m *Manager) polkitAuthorized(ctx context.Context, action string) bool {
 	return err == nil
 }
 
-// dnsPolkitAuthorized checks if the current process can configure per-link DNS
+// DNSPolkitAuthorized checks if the current process can configure per-link DNS
 // without interactive authentication.
-func (m *Manager) dnsPolkitAuthorized(ctx context.Context) bool {
+func (m *Manager) DNSPolkitAuthorized(ctx context.Context) bool {
 	log := sindlog.From(ctx)
 	for _, action := range []string{
 		"org.freedesktop.resolve1.set-dns-servers",
@@ -112,7 +112,7 @@ func (m *Manager) revertDNS(ctx context.Context, iface string) error {
 // polkit authorization, no bridge interface).
 func (m *Manager) configureHostDNS(ctx context.Context) (bool, error) {
 	log := sindlog.From(ctx)
-	if !m.resolvedActive(ctx) || !m.dnsPolkitAuthorized(ctx) {
+	if !m.ResolvedActive(ctx) || !m.DNSPolkitAuthorized(ctx) {
 		log.DebugContext(ctx, "host DNS skipped (prerequisites not met)")
 		return false, nil
 	}
@@ -146,7 +146,7 @@ func (m *Manager) configureHostDNS(ctx context.Context) (bool, error) {
 // revertHostDNS reverts host DNS configuration for the mesh bridge. Best-effort.
 func (m *Manager) revertHostDNS(ctx context.Context) {
 	log := sindlog.From(ctx)
-	if !m.resolvedActive(ctx) {
+	if !m.ResolvedActive(ctx) {
 		return
 	}
 

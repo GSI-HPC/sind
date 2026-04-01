@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -24,11 +23,14 @@ func newDoctorCommand() *cobra.Command {
 }
 
 func runDoctor(cmd *cobra.Command) error {
-	client := clientFrom(cmd.Context())
+	ctx := cmd.Context()
+	client := clientFrom(ctx)
+	realm := realmFromFlag(cmd)
+	mgr := meshMgrFrom(ctx, client, realm)
 	var failed bool
 
 	// Check Docker Engine version.
-	version, err := client.ServerVersion(cmd.Context())
+	version, err := client.ServerVersion(ctx)
 	if err != nil {
 		printResult(cmd, false, "Docker Engine: not reachable")
 		failed = true
@@ -69,8 +71,8 @@ func runDoctor(cmd *cobra.Command) error {
 	}
 
 	// Advisory: host DNS resolution via systemd-resolved.
-	if resolvedActive() {
-		if dnsPolkitAuthorized() {
+	if mgr.ResolvedActive(ctx) {
+		if mgr.DNSPolkitAuthorized(ctx) {
 			printResult(cmd, true, "DNS policy: host resolution available")
 		} else {
 			printResult(cmd, false, "DNS policy: not authorized (optional)")
@@ -96,31 +98,6 @@ func runDoctor(cmd *cobra.Command) error {
 		return fmt.Errorf("one or more checks failed")
 	}
 	return nil
-}
-
-// resolvedActive checks if systemd-resolved is running.
-func resolvedActive() bool {
-	return exec.Command("systemctl", "is-active", "--quiet", "systemd-resolved").Run() == nil
-}
-
-// dnsPolkitAuthorized checks if the current process can configure per-link DNS
-// without interactive authentication.
-func dnsPolkitAuthorized() bool {
-	pid := strconv.Itoa(os.Getpid())
-	for _, action := range []string{
-		"org.freedesktop.resolve1.set-dns-servers",
-		"org.freedesktop.resolve1.set-domains",
-		"org.freedesktop.resolve1.revert",
-	} {
-		err := exec.Command("pkcheck",
-			"--action-id", action,
-			"--process", pid,
-		).Run()
-		if err != nil {
-			return false
-		}
-	}
-	return true
 }
 
 func printResult(cmd *cobra.Command, ok bool, format string, args ...any) {

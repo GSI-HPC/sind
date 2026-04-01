@@ -9,6 +9,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,12 +122,17 @@ func TestParseVersion_Invalid(t *testing.T) {
 }
 
 func TestDoctorCommand_DNSPolicyShown(t *testing.T) {
-	if !resolvedActive() {
-		t.Skip("systemd-resolved not running")
-	}
+	var sys cmdexec.MockExecutor
+	sys.AddResult("", "", nil) // systemctl is-active → resolved running
+	sys.AddResult("", "", nil) // pkcheck x3
+	sys.AddResult("", "", nil)
+	sys.AddResult("", "", nil)
 
 	var m cmdexec.MockExecutor
-	m.AddResult("29.0.0", "", nil)
+	m.AddResult("29.0.0", "", nil) // docker version
+
+	mgr := mesh.NewManager(docker.NewClient(&m), mesh.DefaultRealm)
+	mgr.Exec = &sys
 
 	cmd := NewRootCommand()
 	out := new(bytes.Buffer)
@@ -135,6 +141,7 @@ func TestDoctorCommand_DNSPolicyShown(t *testing.T) {
 	cmd.SetArgs([]string{"doctor"})
 
 	ctx := withClient(context.Background(), docker.NewClient(&m))
+	ctx = context.WithValue(ctx, meshMgrKey, mgr)
 	cmd.SetContext(ctx)
 
 	_ = cmd.Execute()

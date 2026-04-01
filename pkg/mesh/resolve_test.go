@@ -33,7 +33,7 @@ func TestResolvedActive_True(t *testing.T) {
 	m.AddResult("", "", nil)
 	mgr := &Manager{Exec: &m}
 
-	assert.True(t, mgr.resolvedActive(t.Context()))
+	assert.True(t, mgr.ResolvedActive(t.Context()))
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, "systemctl", m.Calls[0].Name)
 	assert.Equal(t, []string{"is-active", "--quiet", "systemd-resolved"}, m.Calls[0].Args)
@@ -44,7 +44,7 @@ func TestResolvedActive_False(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("inactive"))
 	mgr := &Manager{Exec: &m}
 
-	assert.False(t, mgr.resolvedActive(t.Context()))
+	assert.False(t, mgr.ResolvedActive(t.Context()))
 }
 
 // --- polkitAuthorized ---
@@ -77,7 +77,7 @@ func TestDnsPolkitAuthorized_AllPass(t *testing.T) {
 	m.AddResult("", "", nil) // revert
 	mgr := &Manager{Exec: &m}
 
-	assert.True(t, mgr.dnsPolkitAuthorized(t.Context()))
+	assert.True(t, mgr.DNSPolkitAuthorized(t.Context()))
 	require.Len(t, m.Calls, 3)
 }
 
@@ -87,7 +87,7 @@ func TestDnsPolkitAuthorized_SecondFails(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("not allowed")) // set-domains: fail
 	mgr := &Manager{Exec: &m}
 
-	assert.False(t, mgr.dnsPolkitAuthorized(t.Context()))
+	assert.False(t, mgr.DNSPolkitAuthorized(t.Context()))
 	require.Len(t, m.Calls, 2) // short-circuits after second
 }
 
