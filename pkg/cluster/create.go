@@ -272,7 +272,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 	nodes := make([]*Node, 0, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
 		nr := results[i]
-		nodeIP := nr.info.IPs[meshMgr.NetworkName()]
+		nodeIP := nr.info.IPs[NetworkName(meshMgr.Realm, clusterName)]
 		dnsName := DNSName(nc.ShortName, clusterName, meshMgr.Realm)
 
 		if err := meshMgr.AddDNSRecord(ctx, dnsName, nodeIP); err != nil {
