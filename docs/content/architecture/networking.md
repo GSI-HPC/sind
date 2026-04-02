@@ -65,9 +65,54 @@ For the default realm, a search domain is also configured so that bare hostnames
 ping controller    # → controller.default.sind.sind
 ```
 
-This feature is **best-effort**: it is silently skipped when systemd-resolved is not running or when the required polkit authorization is missing. Run `sind doctor` to check prerequisites and get a copyable command to install the polkit rule.
+This feature is **best-effort**: it is silently skipped when systemd-resolved is not running or when the required polkit authorization is missing. Run `sind doctor` to check prerequisites and get a copyable install command.
 
 Host DNS is configured during `sind create cluster` (first cluster) and reverted during `sind delete cluster` (last cluster).
+
+#### Polkit policy
+
+sind needs polkit authorization to configure systemd-resolved. Install one of these rules depending on how you access the Docker host:
+
+{{< tabs "polkit" >}}
+{{< tab "Desktop" >}}
+
+Allows docker group members to configure DNS from local sessions only (direct keyboard/display access, not SSH):
+
+```bash
+sudo tee /etc/polkit-1/rules.d/50-sind-resolved.rules <<'RULES'
+polkit.addRule(function(action, subject) {
+    if (["org.freedesktop.resolve1.set-dns-servers",
+         "org.freedesktop.resolve1.set-domains",
+         "org.freedesktop.resolve1.revert"].includes(action.id) &&
+        subject.isInGroup("docker") &&
+        subject.active && subject.local) {
+        return polkit.Result.YES;
+    }
+});
+RULES
+```
+
+{{< /tab >}}
+{{< tab "Server" >}}
+
+Allows docker group members to configure DNS from any active session, including SSH:
+
+```bash
+sudo tee /etc/polkit-1/rules.d/50-sind-resolved.rules <<'RULES'
+polkit.addRule(function(action, subject) {
+    if (["org.freedesktop.resolve1.set-dns-servers",
+         "org.freedesktop.resolve1.set-domains",
+         "org.freedesktop.resolve1.revert"].includes(action.id) &&
+        subject.isInGroup("docker") &&
+        subject.active) {
+        return polkit.Result.YES;
+    }
+});
+RULES
+```
+
+{{< /tab >}}
+{{< /tabs >}}
 
 ## SSH infrastructure
 
