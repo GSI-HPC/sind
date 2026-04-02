@@ -83,6 +83,12 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name); err != nil {
 				log.ErrorContext(ctx, "cleanup failed", "error", err)
 			}
+			if meshMgr.Created() {
+				log.InfoContext(ctx, "cleaning up mesh created by this invocation")
+				if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
+					log.ErrorContext(ctx, "mesh cleanup failed", "error", err)
+				}
+			}
 		}
 	}()
 

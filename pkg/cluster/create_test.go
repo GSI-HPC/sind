@@ -1139,6 +1139,81 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 	assert.Equal(t, 1, psCalls, "cleanup should call ListContainers once")
 }
 
+func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
+	// When mesh was freshly created and Create fails, mesh should also be cleaned up.
+	exitErr := notFoundErr(t)
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	// Simulate freshly created mesh by calling EnsureMeshNetwork on a "new" network.
+	// The happyOnCall mock returns "not found" for network inspect, triggering creation.
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+	require.True(t, meshMgr.Created())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	// Verify mesh cleanup ran: CleanupMesh calls ContainerExists (container inspect)
+	// for sind-ssh and sind-dns after the cluster cleanup's "docker ps" call.
+	var containerInspectAfterPs int
+	seenPs := false
+	for _, call := range m.Calls {
+		if len(call.Args) > 0 && call.Args[0] == "ps" {
+			seenPs = true
+		}
+		if seenPs && len(call.Args) >= 2 && call.Args[0] == "container" && call.Args[1] == "inspect" {
+			containerInspectAfterPs++
+		}
+	}
+	assert.GreaterOrEqual(t, containerInspectAfterPs, 1, "mesh cleanup should check mesh containers")
+}
+
+func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
+	// When mesh already existed, cleanup should NOT remove it.
+	exitErr := notFoundErr(t)
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	// Don't call EnsureMeshNetwork → Created() stays false (pre-existing mesh).
+	require.False(t, meshMgr.Created())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	// After the "docker ps" cleanup call, there should be NO container inspect
+	// calls for mesh cleanup.
+	seenPs := false
+	for _, call := range m.Calls {
+		if len(call.Args) > 0 && call.Args[0] == "ps" {
+			seenPs = true
+			continue
+		}
+		if seenPs && len(call.Args) >= 2 && call.Args[0] == "container" && call.Args[1] == "inspect" {
+			t.Fatal("mesh cleanup should not run when mesh was pre-existing")
+		}
+	}
+}
+
 func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 	// When preflight fails (before any resources), cleanup should NOT run.
 	var m cmdexec.MockExecutor

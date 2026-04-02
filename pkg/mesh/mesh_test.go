@@ -441,8 +441,10 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
+	assert.False(t, mgr.Created(), "Created() before EnsureMeshNetwork")
 	err := mgr.EnsureMeshNetwork(t.Context())
 	require.NoError(t, err)
+	assert.True(t, mgr.Created(), "Created() after creating mesh network")
 
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
@@ -463,6 +465,7 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 
 	err := mgr.EnsureMeshNetwork(t.Context())
 	require.NoError(t, err)
+	assert.False(t, mgr.Created(), "Created() when mesh already existed")
 
 	// Only inspect, no create
 	require.Len(t, m.Calls, 1)
