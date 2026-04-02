@@ -83,7 +83,7 @@ sudo tee /etc/polkit-1/rules.d/50-sind-resolved.rules <<'RULES'
 polkit.addRule(function(action, subject) {
     if (["org.freedesktop.resolve1.set-dns-servers",
          "org.freedesktop.resolve1.set-domains",
-         "org.freedesktop.resolve1.revert"].includes(action.id) &&
+         "org.freedesktop.resolve1.revert"].indexOf(action.id) >= 0 &&
         subject.isInGroup("docker") &&
         subject.active && subject.local) {
         return polkit.Result.YES;
@@ -102,7 +102,7 @@ sudo tee /etc/polkit-1/rules.d/50-sind-resolved.rules <<'RULES'
 polkit.addRule(function(action, subject) {
     if (["org.freedesktop.resolve1.set-dns-servers",
          "org.freedesktop.resolve1.set-domains",
-         "org.freedesktop.resolve1.revert"].includes(action.id) &&
+         "org.freedesktop.resolve1.revert"].indexOf(action.id) >= 0 &&
         subject.isInGroup("docker") &&
         subject.active) {
         return polkit.Result.YES;
