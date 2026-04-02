@@ -381,6 +381,8 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 
 	args := []string{
 		"--name", string(helperName),
+		"--label", LabelRealm + "=" + realm,
+		"--label", LabelCluster + "=" + cfg.Name,
 		"-v", string(volName) + ":/etc/slurm",
 	}
 	if pull {
@@ -415,6 +417,8 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 
 	args := []string{
 		"--name", string(helperName),
+		"--label", LabelRealm + "=" + realm,
+		"--label", LabelCluster + "=" + clusterName,
 		"-v", string(volName) + ":/etc/munge",
 	}
 	if pull {

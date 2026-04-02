@@ -217,10 +217,12 @@ func TestWriteClusterConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
 
-	// CreateContainer mounts config volume
+	// CreateContainer mounts config volume and labels for cleanup
 	assert.Equal(t, "create", m.Calls[0].Args[0])
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-config:/etc/slurm")
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-config-helper")
+	assert.Contains(t, m.Calls[0].Args, LabelRealm+"=sind")
+	assert.Contains(t, m.Calls[0].Args, LabelCluster+"=dev")
 
 	// CopyToContainer writes to /etc/slurm
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
@@ -291,9 +293,11 @@ func TestWriteMungeKey(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// RunContainer mounts munge volume
+	// RunContainer mounts munge volume and labels for cleanup
 	assert.Equal(t, "run", m.Calls[0].Args[0])
 	assert.Contains(t, m.Calls[0].Args, "sind-dev-munge:/etc/munge")
+	assert.Contains(t, m.Calls[0].Args, LabelRealm+"=sind")
+	assert.Contains(t, m.Calls[0].Args, LabelCluster+"=dev")
 
 	// CopyToContainer + chown + chmod
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
