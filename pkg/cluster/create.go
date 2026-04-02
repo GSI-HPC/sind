@@ -54,7 +54,7 @@ type nodeResult struct {
 //	enableSlurm         (enable + probe) per eligible node
 //	      │
 //	  *Cluster
-func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (*Cluster, error) {
+func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (result *Cluster, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 
@@ -70,6 +70,21 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return nil, err
 	}
 	log.InfoContext(ctx, "resolved infrastructure", "slurm", slurmVersion)
+
+	// From this point on, Docker resources may exist. Clean them up on failure
+	// so the user does not have to run "sind delete cluster" manually before
+	// retrying. WithoutCancel keeps the cleanup running when the parent context
+	// is cancelled (e.g. Ctrl+C).
+	needsCleanup := true
+	defer func() {
+		if retErr != nil && needsCleanup {
+			log.InfoContext(ctx, "cleaning up after failed create", "name", cfg.Name)
+			cleanupCtx := context.WithoutCancel(ctx)
+			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name); err != nil {
+				log.ErrorContext(ctx, "cleanup failed", "error", err)
+			}
+		}
+	}()
 
 	if err := createResources(ctx, client, realm, cfg); err != nil {
 		return nil, err
@@ -104,6 +119,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	log.InfoContext(ctx, "slurm services enabled")
 
+	needsCleanup = false
 	return cluster, nil
 }
 
