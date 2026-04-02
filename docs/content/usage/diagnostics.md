@@ -26,7 +26,7 @@ Checks system prerequisites and reports pass/fail for each:
 | cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-When a required check fails, `sind doctor` exits with a non-zero status and prints remediation steps. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status.
+When a required check fails, `sind doctor` exits with a non-zero status and prints remediation steps. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
