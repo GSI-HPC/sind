@@ -43,7 +43,7 @@ type WorkerAddOptions struct {
 //  7. Enable slurmd on new nodes
 //
 // For unmanaged workers (Unmanaged=true), steps 5–7 are skipped.
-func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) ([]*Node, error) {
+func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (result []*Node, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 
@@ -126,6 +126,17 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}
 	}
 
+	// From this point on, worker containers may exist. Clean them up on failure
+	// so the user does not have to remove them manually before retrying.
+	needsCleanup := true
+	defer func() {
+		if retErr != nil && needsCleanup {
+			log.InfoContext(ctx, "cleaning up after failed worker add", "cluster", opts.ClusterName)
+			cleanupCtx := context.WithoutCancel(ctx)
+			cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs)
+		}
+	}()
+
 	// Create and start node containers.
 	if err := createAllNodes(ctx, client, meshMgr, nodeConfigs); err != nil {
 		return nil, err
@@ -153,6 +164,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}
 	}
 
+	needsCleanup = false
 	return nodes, nil
 }
 
@@ -372,4 +384,26 @@ func nextWorkerIndexFromContainers(containers []docker.ContainerListEntry, realm
 		}
 	}
 	return maxIdx + 1
+}
+
+// cleanupWorkers removes containers and mesh registrations for the given
+// worker node configs. Used to roll back a failed WorkerAdd. Errors are
+// logged but not returned — this is best-effort cleanup.
+func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName string, nodeConfigs []RunConfig) {
+	log := sindlog.From(ctx)
+	for _, nc := range nodeConfigs {
+		containerName := ContainerName(realm, clusterName, nc.ShortName)
+		dnsName := DNSName(nc.ShortName, clusterName, meshMgr.Realm)
+
+		if err := meshMgr.RemoveDNSRecord(ctx, dnsName); err != nil {
+			log.DebugContext(ctx, "cleanup: removing DNS record", "node", nc.ShortName, "error", err)
+		}
+		if err := meshMgr.RemoveKnownHost(ctx, dnsName); err != nil {
+			log.DebugContext(ctx, "cleanup: removing known host", "node", nc.ShortName, "error", err)
+		}
+		_ = client.StopContainer(ctx, containerName)
+		if err := client.RemoveContainer(ctx, containerName); err != nil {
+			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
+		}
+	}
 }
