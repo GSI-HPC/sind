@@ -372,10 +372,6 @@ func workerAddOnCall(t *testing.T) func([]string, string) cmdexec.MockResult {
 		case args[0] == "kill":
 			return cmdexec.MockResult{}
 
-		// StopContainer (cleanup)
-		case args[0] == "stop":
-			return cmdexec.MockResult{}
-
 		// RemoveContainer (helper cleanup or worker cleanup)
 		case args[0] == "rm":
 			return cmdexec.MockResult{}
@@ -589,9 +585,11 @@ func workerRemoveOnCall(t *testing.T, nodesConf string) func([]string, string) c
 		case args[0] == "exec" && args[1] == "-i":
 			return cmdexec.MockResult{}
 
-		// Stop + remove containers
-		case args[0] == "stop":
+		// Start (DNS reload after kill)
+		case args[0] == "start":
 			return cmdexec.MockResult{}
+
+		// RemoveContainer (rm -f)
 		case args[0] == "rm":
 			return cmdexec.MockResult{}
 		}
@@ -617,7 +615,7 @@ func TestWorkerRemove_Managed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify key operations.
-	var scontrolCalled, containerStopped, containerRemoved bool
+	var scontrolCalled, containerRemoved bool
 	var writeStdin string
 	for _, call := range m.Calls {
 		args := call.Args
@@ -628,16 +626,12 @@ func TestWorkerRemove_Managed(t *testing.T) {
 		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
 			scontrolCalled = true
 		}
-		if args[0] == "stop" && strings.Contains(joined, "worker-1") {
-			containerStopped = true
-		}
 		if args[0] == "rm" && strings.Contains(joined, "worker-1") {
 			containerRemoved = true
 		}
 	}
 
 	assert.True(t, scontrolCalled, "scontrol reconfigure should be called")
-	assert.True(t, containerStopped, "container should be stopped")
 	assert.True(t, containerRemoved, "container should be removed")
 	assert.Contains(t, writeStdin, "worker-0", "updated conf should still have worker-0")
 	assert.NotContains(t, writeStdin, "worker-1", "updated conf should not have worker-1")
@@ -681,18 +675,14 @@ func TestWorkerRemove_Unmanaged(t *testing.T) {
 		}
 	}
 
-	// Verify container was still stopped and removed.
-	var stopped, removed bool
+	// Verify container was removed (rm -f handles kill internally).
+	var removed bool
 	for _, call := range m.Calls {
 		joined := strings.Join(call.Args, " ")
-		if call.Args[0] == "stop" && strings.Contains(joined, "worker-1") {
-			stopped = true
-		}
 		if call.Args[0] == "rm" && strings.Contains(joined, "worker-1") {
 			removed = true
 		}
 	}
-	assert.True(t, stopped, "container should be stopped")
 	assert.True(t, removed, "container should be removed")
 }
 
@@ -847,18 +837,14 @@ func TestWorkerRemove_MultipleNodes(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Verify both containers were stopped and removed.
-	var stopped, removed int
+	// Verify both worker containers were removed (rm -f handles kill internally).
+	var removeCount int
 	for _, call := range m.Calls {
-		if call.Args[0] == "stop" {
-			stopped++
-		}
-		if call.Args[0] == "rm" {
-			removed++
+		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
+			removeCount++
 		}
 	}
-	assert.Equal(t, 2, stopped, "both containers should be stopped")
-	assert.Equal(t, 2, removed, "both containers should be removed")
+	assert.Equal(t, 2, removeCount, "both containers should be removed")
 }
 
 func TestWorkerRemove_ListContainersError(t *testing.T) {
@@ -978,8 +964,6 @@ func TestWorkerRemove_NoController(t *testing.T) {
 		case args[0] == "exec" && args[1] == "sind-ssh":
 			return cmdexec.MockResult{Stdout: "worker-0.dev.sind.sind ssh-ed25519 AAAA\n"}
 		case args[0] == "exec" && args[1] == "-i":
-			return cmdexec.MockResult{}
-		case args[0] == "stop":
 			return cmdexec.MockResult{}
 		case args[0] == "rm":
 			return cmdexec.MockResult{}
@@ -1269,14 +1253,14 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
-	// Verify cleanup ran: look for "docker stop" call on the new worker.
-	var stopCalls int
+	// Verify cleanup ran: look for "docker rm -f" on the new worker container.
+	var removed bool
 	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "stop" {
-			stopCalls++
+		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
+			removed = true
 		}
 	}
-	assert.Equal(t, 1, stopCalls, "cleanup should stop the new worker container")
+	assert.True(t, removed, "cleanup should remove the new worker container")
 }
 
 func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
@@ -1297,9 +1281,9 @@ func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
-	// No "docker stop" calls → cleanup did not run.
+	// No "docker rm" calls on worker containers → cleanup did not run.
 	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "stop" {
+		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
 			t.Fatal("cleanup should not run when validation fails")
 		}
 	}
@@ -1545,9 +1529,6 @@ func workerLifecycleOnCall(t *testing.T) func([]string, string) cmdexec.MockResu
 		case args[0] == "kill":
 			return cmdexec.MockResult{}
 
-		case args[0] == "stop":
-			return cmdexec.MockResult{}
-
 		case args[0] == "rm":
 			return cmdexec.MockResult{}
 		}
@@ -1586,21 +1567,17 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify both add and remove operations happened.
-	var created, stopped, removed bool
+	var created, removed bool
 	for _, call := range m.Calls {
 		args := call.Args
 		joined := strings.Join(args, " ")
 		if args[0] == "create" && strings.Contains(joined, "sind-dev-worker-1") {
 			created = true
 		}
-		if args[0] == "stop" && strings.Contains(joined, "worker-1") {
-			stopped = true
-		}
 		if args[0] == "rm" && strings.Contains(joined, "worker-1") {
 			removed = true
 		}
 	}
 	assert.True(t, created, "worker-1 should be created during add")
-	assert.True(t, stopped, "worker-1 should be stopped during remove")
 	assert.True(t, removed, "worker-1 should be removed during remove")
 }

@@ -139,12 +139,8 @@ func TestListClusterResources_LabelFilter(t *testing.T) {
 
 func TestDeleteContainers(t *testing.T) {
 	var m cmdexec.MockExecutor
-	// Container 1: stop + rm
-	m.AddResult("", "", nil) // stop
-	m.AddResult("", "", nil) // rm
-	// Container 2: stop + rm
-	m.AddResult("", "", nil) // stop
-	m.AddResult("", "", nil) // rm
+	m.AddResult("", "", nil) // rm -f container 1
+	m.AddResult("", "", nil) // rm -f container 2
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -154,33 +150,14 @@ func TestDeleteContainers(t *testing.T) {
 	err := DeleteContainers(t.Context(), c, containers)
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"stop", "sind-dev-controller"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"rm", "sind-dev-controller"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"stop", "sind-dev-worker-0"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"rm", "sind-dev-worker-0"}, m.Calls[3].Args)
-}
-
-func TestDeleteContainers_StopErrorIgnored(t *testing.T) {
-	var m cmdexec.MockExecutor
-	// stop fails (already stopped) but rm succeeds
-	m.AddResult("", "Error\n", fmt.Errorf("container already stopped"))
-	m.AddResult("", "", nil) // rm
-	c := docker.NewClient(&m)
-
-	containers := []docker.ContainerListEntry{
-		{Name: "sind-dev-controller"},
-	}
-	err := DeleteContainers(t.Context(), c, containers)
-
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 2)
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"rm", "-f", "sind-dev-controller"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "-f", "sind-dev-worker-0"}, m.Calls[1].Args)
 }
 
 func TestDeleteContainers_RemoveError(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult("", "", nil)                            // stop
-	m.AddResult("", "", fmt.Errorf("container in use")) // rm fails
+	m.AddResult("", "", fmt.Errorf("container in use")) // rm -f fails
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -646,7 +623,8 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 		volumes:       []string{"config"},
 		otherClusters: false,
 	})
-	// Override: make CleanupMesh's ContainerExists (container inspect sind-ssh) fail.
+	// Override: make CleanupMesh's ContainerExists (container inspect) fail.
+	// The first container inspect in CleanupMesh is for the keygen container.
 	inner := m.OnCall
 	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		if args[0] == "container" && len(args) >= 3 && args[1] == "inspect" {
@@ -660,7 +638,7 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing SSH container")
+	assert.Contains(t, err.Error(), "removing SSH keygen container")
 }
 
 // --- DiscoverClusterNames ---
@@ -892,8 +870,8 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 			}
 			return cmdexec.MockResult{}
 
-		// docker stop (DeleteContainers - best effort)
-		case args[0] == "stop":
+		// docker kill (DeleteContainers - best effort)
+		case args[0] == "kill":
 			return cmdexec.MockResult{}
 
 		// docker rm (DeleteContainers or CleanupMesh)

@@ -60,6 +60,31 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(cfg.Nodes))
 
+	// Register cleanup before any fallible operation. Mesh cleanup runs
+	// whenever this invocation created the mesh. Cluster resource cleanup
+	// runs only after createResources starts. WithoutCancel keeps the
+	// cleanup running when the parent context is cancelled (e.g. Ctrl+C).
+	resourcesCreated := false
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		log.ErrorContext(ctx, "cleaning up partial resources, please wait")
+		cleanupCtx := context.WithoutCancel(ctx)
+		if resourcesCreated {
+			log.DebugContext(ctx, "removing cluster resources", "name", cfg.Name)
+			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name); err != nil {
+				log.ErrorContext(ctx, "cleanup failed", "error", err)
+			}
+		}
+		if meshMgr.Created() {
+			log.DebugContext(ctx, "removing mesh created by this invocation")
+			if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
+				log.ErrorContext(ctx, "mesh cleanup failed", "error", err)
+			}
+		}
+	}()
+
 	if err := PreflightCheck(ctx, client, realm, cfg); err != nil {
 		return nil, err
 	}
@@ -71,27 +96,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	log.InfoContext(ctx, "resolved infrastructure", "slurm", slurmVersion)
 
-	// From this point on, Docker resources may exist. Clean them up on failure
-	// so the user does not have to run "sind delete cluster" manually before
-	// retrying. WithoutCancel keeps the cleanup running when the parent context
-	// is cancelled (e.g. Ctrl+C).
-	needsCleanup := true
-	defer func() {
-		if retErr != nil && needsCleanup {
-			log.InfoContext(ctx, "cleaning up after failed create", "name", cfg.Name)
-			cleanupCtx := context.WithoutCancel(ctx)
-			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name); err != nil {
-				log.ErrorContext(ctx, "cleanup failed", "error", err)
-			}
-			if meshMgr.Created() {
-				log.InfoContext(ctx, "cleaning up mesh created by this invocation")
-				if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
-					log.ErrorContext(ctx, "mesh cleanup failed", "error", err)
-				}
-			}
-		}
-	}()
-
+	resourcesCreated = true
 	if err := createResources(ctx, client, realm, cfg); err != nil {
 		return nil, err
 	}
@@ -125,7 +130,6 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	log.InfoContext(ctx, "slurm services enabled")
 
-	needsCleanup = false
 	return cluster, nil
 }
 

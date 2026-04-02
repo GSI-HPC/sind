@@ -131,7 +131,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	needsCleanup := true
 	defer func() {
 		if retErr != nil && needsCleanup {
-			log.InfoContext(ctx, "cleaning up after failed worker add", "cluster", opts.ClusterName)
+			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
 			cleanupCtx := context.WithoutCancel(ctx)
 			cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs)
 		}
@@ -401,7 +401,6 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 		if err := meshMgr.RemoveKnownHost(ctx, dnsName); err != nil {
 			log.DebugContext(ctx, "cleanup: removing known host", "node", nc.ShortName, "error", err)
 		}
-		_ = client.StopContainer(ctx, containerName)
 		if err := client.RemoveContainer(ctx, containerName); err != nil {
 			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
 		}

@@ -85,21 +85,20 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 		return err
 	}
 
-	log.DebugContext(ctx, "deleting containers", "count", len(res.Containers))
+	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
 	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
 		return err
 	}
 
 	if res.NetworkExists {
-		// Disconnect SSH relay from cluster network before removing it.
 		_ = client.DisconnectNetwork(ctx, res.Network, meshMgr.SSHContainerName())
-		log.DebugContext(ctx, "deleting network", "name", string(res.Network))
+		log.DebugContext(ctx, "removing network", "name", string(res.Network))
 		if err := DeleteNetwork(ctx, client, res.Network); err != nil {
 			return err
 		}
 	}
 
-	log.DebugContext(ctx, "deleting volumes", "count", len(res.Volumes))
+	log.DebugContext(ctx, "removing volumes", "count", len(res.Volumes))
 	if err := DeleteVolumes(ctx, client, res.Volumes); err != nil {
 		return err
 	}
@@ -152,11 +151,9 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 	return res, nil
 }
 
-// DeleteContainers stops and removes the given containers. Stop errors are
-// ignored (the container may already be stopped), but remove errors are fatal.
+// DeleteContainers force-removes the given containers (docker rm -f).
 func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
 	for _, c := range containers {
-		_ = client.StopContainer(ctx, c.Name) // best-effort
 		if err := client.RemoveContainer(ctx, c.Name); err != nil {
 			return fmt.Errorf("removing container %s: %w", c.Name, err)
 		}
