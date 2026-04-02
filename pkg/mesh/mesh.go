@@ -66,6 +66,7 @@ type Manager struct {
 	Realm   string
 	Pull    bool // force fresh image pull (--pull always)
 	HostDNS bool // configure host DNS resolution via systemd-resolved
+	created bool // set by EnsureMesh when mesh infrastructure is freshly created
 }
 
 // NewManager returns a Manager that operates on global resources through the
@@ -203,6 +204,13 @@ func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeNa
 	return m.Docker.RemoveVolume(ctx, name)
 }
 
+// Created reports whether EnsureMesh created new mesh infrastructure in this
+// invocation (i.e. the mesh did not already exist). This is used to decide
+// whether cleanup should also tear down the mesh after a failed cluster create.
+func (m *Manager) Created() bool {
+	return m.created
+}
+
 // EnsureMeshNetwork creates the shared mesh network if it does not already exist.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	name := m.NetworkName()
@@ -213,6 +221,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	if exists {
 		return nil
 	}
+	m.created = true
 	networkLabels := map[string]string{
 		"com.docker.compose.project": m.ComposeProject(),
 		"com.docker.compose.network": "mesh",

@@ -372,7 +372,11 @@ func workerAddOnCall(t *testing.T) func([]string, string) cmdexec.MockResult {
 		case args[0] == "kill":
 			return cmdexec.MockResult{}
 
-		// RemoveContainer (helper cleanup)
+		// StopContainer (cleanup)
+		case args[0] == "stop":
+			return cmdexec.MockResult{}
+
+		// RemoveContainer (helper cleanup or worker cleanup)
 		case args[0] == "rm":
 			return cmdexec.MockResult{}
 		}
@@ -1241,6 +1245,64 @@ func TestWorkerAdd_EnableSlurmError(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
+}
+
+func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
+	// When enableSlurm fails (after containers exist), cleanup should run.
+	var m cmdexec.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
+		if args[0] == "exec" && len(args) > 3 &&
+			strings.Contains(args[1], "worker") && args[2] == "systemctl" && args[3] == "enable" {
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	// Verify cleanup ran: look for "docker stop" call on the new worker.
+	var stopCalls int
+	for _, call := range m.Calls {
+		if len(call.Args) > 0 && call.Args[0] == "stop" {
+			stopCalls++
+		}
+	}
+	assert.Equal(t, 1, stopCalls, "cleanup should stop the new worker container")
+}
+
+func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
+	// When validation fails (before containers), cleanup should NOT run.
+	var m cmdexec.MockExecutor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
+		if args[0] == "inspect" && args[1] == "sind-dev-controller" {
+			return cmdexec.MockResult{Err: fmt.Errorf("container not running")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	// No "docker stop" calls → cleanup did not run.
+	for _, call := range m.Calls {
+		if len(call.Args) > 0 && call.Args[0] == "stop" {
+			t.Fatal("cleanup should not run when validation fails")
+		}
+	}
 }
 
 func TestWorkerAdd_ControllerInspectError(t *testing.T) {

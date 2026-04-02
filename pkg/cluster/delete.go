@@ -22,15 +22,7 @@ var volumeTypes = []string{"config", "munge", "data"}
 // partial clusters (e.g., from a failed creation) by removing whatever
 // resources exist.
 //
-//	ListClusterResources
-//	      │
-//	DeregisterMesh        DNS + known_hosts per node
-//	      │
-//	DeleteContainers      stop + rm per container
-//	      │
-//	DeleteNetwork         rm cluster network
-//	      │
-//	DeleteVolumes         rm cluster volumes
+//	deleteClusterResources
 //	      │
 //	HasOtherClusters?
 //	    yes → done
@@ -40,6 +32,42 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	realm := meshMgr.Realm
 
 	log.InfoContext(ctx, "deleting cluster", "name", clusterName)
+
+	if err := deleteClusterResources(ctx, client, meshMgr, clusterName); err != nil {
+		return err
+	}
+
+	// Clean up mesh infrastructure if this was the last cluster.
+	hasOther, err := HasOtherClusters(ctx, client, realm, clusterName)
+	if err != nil {
+		return err
+	}
+	if !hasOther {
+		log.InfoContext(ctx, "last cluster deleted, cleaning up mesh")
+		return meshMgr.CleanupMesh(ctx)
+	}
+
+	return nil
+}
+
+// deleteClusterResources removes containers, network, and volumes for a
+// cluster. It also deregisters DNS records and known_hosts entries. Does NOT
+// clean up mesh infrastructure — that decision belongs to the caller.
+//
+// Removing a non-existent cluster is not an error.
+//
+//	ListClusterResources
+//	      │
+//	DeregisterMesh        DNS + known_hosts per node
+//	      │
+//	DeleteContainers      stop + rm per container
+//	      │
+//	DeleteNetwork         rm cluster network
+//	      │
+//	DeleteVolumes         rm cluster volumes
+func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
+	log := sindlog.From(ctx)
+	realm := meshMgr.Realm
 
 	res, err := ListClusterResources(ctx, client, realm, clusterName)
 	if err != nil {
@@ -74,16 +102,6 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	log.DebugContext(ctx, "deleting volumes", "count", len(res.Volumes))
 	if err := DeleteVolumes(ctx, client, res.Volumes); err != nil {
 		return err
-	}
-
-	// Clean up mesh infrastructure if this was the last cluster.
-	hasOther, err := HasOtherClusters(ctx, client, realm, clusterName)
-	if err != nil {
-		return err
-	}
-	if !hasOther {
-		log.InfoContext(ctx, "last cluster deleted, cleaning up mesh")
-		return meshMgr.CleanupMesh(ctx)
 	}
 
 	return nil
