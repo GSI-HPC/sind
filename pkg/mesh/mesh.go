@@ -149,6 +149,11 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 	}
 
 	// Remove containers first (auto-disconnects from networks).
+	// Include the keygen container which may be orphaned if a previous
+	// EnsureSSHVolume was interrupted.
+	if err := m.removeContainerIfExists(ctx, m.SSHKeygenName()); err != nil {
+		return fmt.Errorf("removing SSH keygen container: %w", err)
+	}
 	if err := m.removeContainerIfExists(ctx, m.SSHContainerName()); err != nil {
 		return fmt.Errorf("removing SSH container: %w", err)
 	}
@@ -176,7 +181,6 @@ func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.Conta
 	if !exists {
 		return nil
 	}
-	_ = m.Docker.StopContainer(ctx, name) // best-effort; may already be stopped
 	return m.Docker.RemoveContainer(ctx, name)
 }
 

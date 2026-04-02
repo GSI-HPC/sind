@@ -67,7 +67,7 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("creating temporary container: %w", err)
 	}
-	defer m.Docker.RemoveContainer(ctx, keygenName) //nolint:errcheck
+	defer m.Docker.RemoveContainer(context.WithoutCancel(ctx), keygenName) //nolint:errcheck
 
 	err = m.Docker.CopyFilesToContainer(ctx, keygenName, "/ssh", map[string]docker.File{
 		"id_ed25519":     {Content: privKeyPEM, Mode: 0600},

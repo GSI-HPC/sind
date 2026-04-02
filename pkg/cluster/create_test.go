@@ -229,7 +229,7 @@ func TestWriteClusterConfig(t *testing.T) {
 	assert.Contains(t, m.Calls[1].Args[len(m.Calls[1].Args)-1], "sind-dev-config-helper:/etc/slurm")
 
 	// RemoveContainer cleans up
-	assert.Equal(t, []string{"rm", "sind-dev-config-helper"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"rm", "-f", "sind-dev-config-helper"}, m.Calls[2].Args)
 }
 
 func TestWriteClusterConfig_Pull(t *testing.T) {
@@ -797,9 +797,6 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 			return cmdexec.MockResult{Stdout: ""}
 		}
 		// Cleanup: resource removal (best-effort during rollback)
-		if args[0] == "stop" {
-			return cmdexec.MockResult{}
-		}
 		if args[0] == "network" && args[1] == "disconnect" {
 			return cmdexec.MockResult{}
 		}
@@ -1236,8 +1233,9 @@ func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 	}
 }
 
-func TestCreate_NoCleanupOnResolveInfraFailure(t *testing.T) {
-	// When resolveInfra fails (before resource creation), cleanup should NOT run.
+func TestCreate_NoClusterCleanupOnResolveInfraFailure(t *testing.T) {
+	// When resolveInfra fails, cluster resource cleanup should NOT run
+	// (no "docker ps" call), but mesh cleanup should run if freshly created.
 	exitErr := notFoundErr(t)
 	var m cmdexec.MockExecutor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
@@ -1255,9 +1253,38 @@ func TestCreate_NoCleanupOnResolveInfraFailure(t *testing.T) {
 	require.Error(t, err)
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			t.Fatal("cleanup should not run when resolveInfra fails")
+			t.Fatal("cluster cleanup should not run when resolveInfra fails")
 		}
 	}
+}
+
+func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
+	// When resolveInfra fails and mesh was freshly created, mesh should be cleaned up.
+	exitErr := notFoundErr(t)
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		if args[0] == "inspect" && args[1] == "sind-dns" {
+			return cmdexec.MockResult{Err: fmt.Errorf("container not running")}, true
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+	require.True(t, meshMgr.Created())
+
+	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	// Mesh cleanup should run: ContainerExists (container inspect) for mesh containers.
+	var meshInspects int
+	for _, call := range m.Calls {
+		if len(call.Args) >= 2 && call.Args[0] == "container" && call.Args[1] == "inspect" {
+			meshInspects++
+		}
+	}
+	assert.GreaterOrEqual(t, meshInspects, 1, "mesh cleanup should run on resolveInfra failure")
 }
 
 func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {

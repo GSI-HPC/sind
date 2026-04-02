@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -85,6 +87,14 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	meshMgr := meshMgrFrom(ctx, client, realm)
 	meshMgr.Pull = pull
 	if err := meshMgr.EnsureMesh(ctx); err != nil {
+		if meshMgr.Created() {
+			log := sindlog.From(ctx)
+			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
+			cleanupCtx := context.WithoutCancel(ctx)
+			if cleanupErr := meshMgr.CleanupMesh(cleanupCtx); cleanupErr != nil {
+				log.ErrorContext(ctx, "mesh cleanup failed", "error", cleanupErr)
+			}
+		}
 		return fmt.Errorf("setting up mesh: %w", err)
 	}
 

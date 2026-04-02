@@ -53,9 +53,10 @@ func (c *Client) StopContainer(ctx context.Context, name ContainerName) error {
 	return err
 }
 
-// RemoveContainer removes a container.
+// RemoveContainer force-removes a container. If the container is running it
+// is killed first. This is equivalent to docker rm -f.
 func (c *Client) RemoveContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "rm", string(name))
+	_, _, err := c.run(ctx, "rm", "-f", string(name))
 	return err
 }
 
