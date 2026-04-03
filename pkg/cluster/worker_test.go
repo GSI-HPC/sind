@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -18,17 +19,17 @@ import (
 
 // workerContainers returns a standard set of cluster containers for worker tests.
 func workerContainers(computes ...string) string {
-	entries := []psEntry{
+	entries := []testutil.PsEntry{
 		{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=controller"},
 	}
 	for _, c := range computes {
-		entries = append(entries, psEntry{
+		entries = append(entries, testutil.PsEntry{
 			ID: "c" + c, Names: "sind-dev-" + c, State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		})
 	}
-	return ndjson(entries...)
+	return testutil.NDJSON(entries...)
 }
 
 // --- ValidateWorkerAdd ---
@@ -40,8 +41,8 @@ func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		// ListContainers: controller exists
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -67,8 +68,8 @@ func TestWorkerAdd_RequiresSindNodes_Present(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -92,8 +93,8 @@ func TestWorkerAdd_AllowsUnmanaged(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -181,8 +182,8 @@ func TestNextComputeIndex_Empty(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -235,10 +236,10 @@ func TestNextComputeIndex_NonComputeIgnored(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "def", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "def", Names: "sind-dev-submitter", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=submitter"},
 			)}
 		}
@@ -951,8 +952,8 @@ func TestWorkerRemove_NoController(t *testing.T) {
 		switch {
 		case args[0] == "ps":
 			// Only worker nodes, no controller.
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		case args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns"):
@@ -1000,12 +1001,12 @@ func TestNextComputeIndex_NonNumericSuffix(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
-				psEntry{ID: "cx", Names: "sind-dev-worker-abc", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "cx", Names: "sind-dev-worker-abc", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
@@ -1041,12 +1042,12 @@ func TestWorkerRemove_RejectsSubmitter(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "sub", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "sub", Names: "sind-dev-submitter", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=submitter"},
-				psEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}

@@ -6,33 +6,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// argValue returns the value following the first occurrence of flag in args.
-func argValue(args []string, flag string) (string, bool) {
-	for i, a := range args {
-		if a == flag && i+1 < len(args) {
-			return args[i+1], true
-		}
-	}
-	return "", false
-}
-
-// argValues returns all values following each occurrence of flag in args.
-func argValues(args []string, flag string) []string {
-	var values []string
-	for i, a := range args {
-		if a == flag && i+1 < len(args) {
-			values = append(values, args[i+1])
-		}
-	}
-	return values
-}
 
 func TestNodeLabels(t *testing.T) {
 	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", "", 1)
@@ -103,12 +83,12 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	args := BuildRunArgs(cfg)
 
 	// Container name
-	name, ok := argValue(args, "--name")
+	name, ok := testutil.ArgValue(args, "--name")
 	assert.True(t, ok, "--name flag present")
 	assert.Equal(t, "sind-dev-controller", name)
 
 	// Hostname
-	hostname, ok := argValue(args, "--hostname")
+	hostname, ok := testutil.ArgValue(args, "--hostname")
 	assert.True(t, ok, "--hostname flag present")
 	assert.Equal(t, "controller", hostname)
 
@@ -116,7 +96,7 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", args[len(args)-1])
 
 	// Labels
-	labels := argValues(args, "--label")
+	labels := testutil.ArgValues(args, "--label")
 	assert.Contains(t, labels, "sind.realm="+mesh.DefaultRealm)
 	assert.Contains(t, labels, "sind.cluster=dev")
 	assert.Contains(t, labels, "sind.role=controller")
@@ -135,13 +115,13 @@ func TestBuildRunArgs_ComputeNode(t *testing.T) {
 	cfg.Role = "worker"
 	args := BuildRunArgs(cfg)
 
-	name, _ := argValue(args, "--name")
+	name, _ := testutil.ArgValue(args, "--name")
 	assert.Equal(t, "sind-dev-worker-0", name)
 
-	hostname, _ := argValue(args, "--hostname")
+	hostname, _ := testutil.ArgValue(args, "--hostname")
 	assert.Equal(t, "worker-0", hostname)
 
-	labels := argValues(args, "--label")
+	labels := testutil.ArgValues(args, "--label")
 	assert.Contains(t, labels, "sind.role=worker")
 }
 
@@ -150,7 +130,7 @@ func TestBuildRunArgs_NoSlurmVersion(t *testing.T) {
 	cfg.SlurmVersion = ""
 	args := BuildRunArgs(cfg)
 
-	labels := argValues(args, "--label")
+	labels := testutil.ArgValues(args, "--label")
 	assert.Contains(t, labels, "sind.cluster=dev")
 	assert.Contains(t, labels, "sind.role=controller")
 	for _, l := range labels {
@@ -162,15 +142,15 @@ func TestBuildRunArgs_Network(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 
-	network, ok := argValue(args, "--network")
+	network, ok := testutil.ArgValue(args, "--network")
 	assert.True(t, ok, "--network flag present")
 	assert.Equal(t, "sind-dev-net", network)
 
-	dns, ok := argValue(args, "--dns")
+	dns, ok := testutil.ArgValue(args, "--dns")
 	assert.True(t, ok, "--dns flag present")
 	assert.Equal(t, "172.18.0.2", dns)
 
-	search, ok := argValue(args, "--dns-search")
+	search, ok := testutil.ArgValue(args, "--dns-search")
 	assert.True(t, ok, "--dns-search flag present")
 	assert.Equal(t, "dev.sind.sind", search)
 }
@@ -180,10 +160,10 @@ func TestBuildRunArgs_Network_NoDNSIP(t *testing.T) {
 	cfg.DNSIP = ""
 	args := BuildRunArgs(cfg)
 
-	_, ok := argValue(args, "--dns")
+	_, ok := testutil.ArgValue(args, "--dns")
 	assert.False(t, ok, "--dns flag absent when DNSIP empty")
 
-	_, ok = argValue(args, "--dns-search")
+	_, ok = testutil.ArgValue(args, "--dns-search")
 	assert.True(t, ok, "--dns-search still present")
 }
 
@@ -217,7 +197,7 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 			cfg.ShortName = tt.role
 			args := BuildRunArgs(cfg)
 
-			volumes := argValues(args, "-v")
+			volumes := testutil.ArgValues(args, "-v")
 			assert.Contains(t, volumes, tt.wantConf)
 			assert.Contains(t, volumes, "sind-dev-munge:/etc/munge:ro")
 			assert.Contains(t, volumes, "sind-dev-data:/data:rw")
@@ -231,7 +211,7 @@ func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
 	cfg.DataMountPath = "/shared"
 	args := BuildRunArgs(cfg)
 
-	volumes := argValues(args, "-v")
+	volumes := testutil.ArgValues(args, "-v")
 	assert.Contains(t, volumes, "/home/user/data:/shared:rw")
 	for _, v := range volumes {
 		assert.NotContains(t, v, "sind-dev-data")
@@ -242,7 +222,7 @@ func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 
-	volumes := argValues(args, "-v")
+	volumes := testutil.ArgValues(args, "-v")
 	assert.Contains(t, volumes, "sind-dev-data:/data:rw")
 }
 
@@ -252,7 +232,7 @@ func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
 	// DataMountPath left empty — should default to /data
 	args := BuildRunArgs(cfg)
 
-	volumes := argValues(args, "-v")
+	volumes := testutil.ArgValues(args, "-v")
 	assert.Contains(t, volumes, "/home/user/data:/data:rw")
 }
 
@@ -262,7 +242,7 @@ func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
 	// DataHostPath left empty — should use docker volume
 	args := BuildRunArgs(cfg)
 
-	volumes := argValues(args, "-v")
+	volumes := testutil.ArgValues(args, "-v")
 	assert.Contains(t, volumes, "sind-dev-data:/shared:rw")
 }
 
@@ -273,15 +253,15 @@ func TestBuildRunArgs_Resources(t *testing.T) {
 	cfg.TmpSize = "2g"
 	args := BuildRunArgs(cfg)
 
-	cpus, ok := argValue(args, "--cpus")
+	cpus, ok := testutil.ArgValue(args, "--cpus")
 	assert.True(t, ok)
 	assert.Equal(t, "4", cpus)
 
-	memory, ok := argValue(args, "--memory")
+	memory, ok := testutil.ArgValue(args, "--memory")
 	assert.True(t, ok)
 	assert.Equal(t, "8g", memory)
 
-	tmpfs := argValues(args, "--tmpfs")
+	tmpfs := testutil.ArgValues(args, "--tmpfs")
 	assert.Contains(t, tmpfs, "/tmp:rw,nosuid,nodev,size=2g")
 	assert.Contains(t, tmpfs, "/run:exec,mode=755")
 	assert.Contains(t, tmpfs, "/run/lock")
@@ -291,12 +271,12 @@ func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 
-	secOpts := argValues(args, "--security-opt")
+	secOpts := testutil.ArgValues(args, "--security-opt")
 	assert.Contains(t, secOpts, "writable-cgroups=true")
 	assert.Contains(t, secOpts, "label=disable")
 
 	// Private cgroup namespace for systemd
-	cgroupns, ok := argValue(args, "--cgroupns")
+	cgroupns, ok := testutil.ArgValue(args, "--cgroupns")
 	assert.True(t, ok)
 	assert.Equal(t, "private", cgroupns)
 }
@@ -306,7 +286,7 @@ func TestBuildRunArgs_Pull(t *testing.T) {
 	cfg.Pull = true
 	args := BuildRunArgs(cfg)
 
-	pull, ok := argValue(args, "--pull")
+	pull, ok := testutil.ArgValue(args, "--pull")
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 
@@ -318,7 +298,7 @@ func TestBuildRunArgs_NoPull(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 
-	_, ok := argValue(args, "--pull")
+	_, ok := testutil.ArgValue(args, "--pull")
 	assert.False(t, ok, "--pull flag absent by default")
 }
 
@@ -327,13 +307,13 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	cfg.ClusterName = "default"
 	args := BuildRunArgs(cfg)
 
-	name, _ := argValue(args, "--name")
+	name, _ := testutil.ArgValue(args, "--name")
 	assert.Equal(t, "sind-default-controller", name)
 
-	network, _ := argValue(args, "--network")
+	network, _ := testutil.ArgValue(args, "--network")
 	assert.Equal(t, "sind-default-net", network)
 
-	search, _ := argValue(args, "--dns-search")
+	search, _ := testutil.ArgValue(args, "--dns-search")
 	assert.Equal(t, "default.sind.sind", search)
 }
 

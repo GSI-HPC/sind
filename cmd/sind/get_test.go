@@ -3,37 +3,16 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// psEntry mirrors docker ps --format json output.
-type psEntry struct {
-	ID     string `json:"ID"`
-	Names  string `json:"Names"`
-	State  string `json:"State"`
-	Image  string `json:"Image"`
-	Labels string `json:"Labels,omitempty"`
-}
-
-func ndjson(entries ...psEntry) string {
-	var lines []string
-	for _, e := range entries {
-		data, _ := json.Marshal(e)
-		lines = append(lines, string(data))
-	}
-	return strings.Join(lines, "\n") + "\n"
-}
 
 func TestGetSSHConfig_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
@@ -83,12 +62,12 @@ func TestGetClusters_RejectsArgs(t *testing.T) {
 
 func TestGetClusters_Output(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
@@ -116,12 +95,12 @@ func TestGetNodes_TooManyArgs(t *testing.T) {
 
 func TestGetNodes_Output(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
@@ -162,25 +141,15 @@ func TestGetMungeKey_TooManyArgs(t *testing.T) {
 
 func TestGetMungeKey_Output(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(psEntry{
+	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "a", Names: "sind-dev-controller", State: "running",
 		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
 	}), "", nil)
-	m.AddResult(tarArchive("munge.key", "secret-key"), "", nil)
+	m.AddResult(testutil.TarArchive("munge.key", "secret-key"), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "munge-key", "dev")
 	require.NoError(t, err)
 	assert.Equal(t, "c2VjcmV0LWtleQ==\n", stdout)
-}
-
-func tarArchive(name, content string) string {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	data := []byte(content)
-	_ = tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(data)), Mode: 0644})
-	_, _ = tw.Write(data)
-	_ = tw.Close()
-	return buf.String()
 }
 
 func TestGetDNS_CommandExists(t *testing.T) {
@@ -203,7 +172,7 @@ func TestGetDNS_Output(t *testing.T) {
 		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 
 	var m cmdexec.MockExecutor
-	m.AddResult(tarArchive("Corefile", corefile), "", nil)
+	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "dns")
 	require.NoError(t, err)
@@ -221,7 +190,7 @@ func TestGetDNS_Empty(t *testing.T) {
 		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 
 	var m cmdexec.MockExecutor
-	m.AddResult(tarArchive("Corefile", corefile), "", nil)
+	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "dns")
 	require.NoError(t, err)

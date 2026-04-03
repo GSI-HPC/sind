@@ -3,11 +3,10 @@
 package cluster
 
 import (
-	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -17,32 +16,32 @@ import (
 
 func TestGetClusters(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "d", Names: "sind-prod-controller", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=prod,sind.role=controller,sind.slurm.version=25.11.0",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "e", Names: "sind-prod-submitter", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=prod,sind.role=submitter,sind.slurm.version=25.11.0",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "f", Names: "sind-prod-worker-0", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=prod,sind.role=worker,sind.slurm.version=25.11.0",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "g", Names: "sind-prod-worker-1", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=prod,sind.role=worker,sind.slurm.version=25.11.0",
 		},
@@ -85,12 +84,12 @@ func TestGetClusters_Empty(t *testing.T) {
 
 func TestGetClusters_MixedStatus(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
@@ -107,12 +106,12 @@ func TestGetClusters_MixedStatus(t *testing.T) {
 
 func TestGetClusters_AllStopped(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "exited", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
@@ -153,8 +152,8 @@ func TestGetClusters_LabelFilter(t *testing.T) {
 
 func TestGetClusters_NoSlurmVersion(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
@@ -170,12 +169,12 @@ func TestGetClusters_NoSlurmVersion(t *testing.T) {
 
 func TestGetClusters_EmptyClusterLabel(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-orphan", State: "running", Image: "img",
 			Labels: "sind.cluster=,sind.role=worker",
 		},
@@ -194,16 +193,16 @@ func TestGetClusters_EmptyClusterLabel(t *testing.T) {
 
 func TestGetNodes(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-1", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "c", Names: "sind-dev-worker-0", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
@@ -229,16 +228,16 @@ func TestGetNodes(t *testing.T) {
 
 func TestGetNodes_WithStatus(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "c", Names: "sind-dev-worker-1", State: "paused", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
@@ -292,16 +291,16 @@ func TestGetNodes_LabelFilter(t *testing.T) {
 
 func TestGetNodes_SortOrder(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-worker-0", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-submitter", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=submitter",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
@@ -320,12 +319,12 @@ func TestGetNodes_SortOrder(t *testing.T) {
 
 func TestGetNodes_UnknownRole(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
-		psEntry{
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-mystery", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=mystery",
 		},
@@ -375,22 +374,13 @@ type networkEntry struct {
 	Driver string `json:"Driver"`
 }
 
-func ndjsonNetworks(entries ...networkEntry) string {
-	var lines []string
-	for _, e := range entries {
-		data, _ := json.Marshal(e)
-		lines = append(lines, string(data))
-	}
-	return strings.Join(lines, "\n") + "\n"
-}
-
 func networkInspectJSON(name, subnet, gateway string) string {
 	return fmt.Sprintf(`[{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gateway)
 }
 
 func TestGetNetworks(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjsonNetworks(
+	m.AddResult(testutil.NDJSON(
 		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
 		networkEntry{Name: "sind-mesh", Driver: "bridge"},
 		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
@@ -442,18 +432,9 @@ type volumeEntry struct {
 	Driver string `json:"Driver"`
 }
 
-func ndjsonVolumes(entries ...volumeEntry) string {
-	var lines []string
-	for _, e := range entries {
-		data, _ := json.Marshal(e)
-		lines = append(lines, string(data))
-	}
-	return strings.Join(lines, "\n") + "\n"
-}
-
 func TestGetVolumes(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjsonVolumes(
+	m.AddResult(testutil.NDJSON(
 		volumeEntry{Name: "sind-dev-data", Driver: "local"},
 		volumeEntry{Name: "sind-dev-config", Driver: "local"},
 		volumeEntry{Name: "sind-dev-munge", Driver: "local"},
@@ -499,12 +480,12 @@ func TestGetVolumes_Error(t *testing.T) {
 
 func TestGetMungeKey(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(psEntry{
+	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "c1", Names: "sind-dev-controller", State: "running",
 		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
 	}), "", nil)
 	keyData := "secret-munge-key-bytes"
-	m.AddResult(tarArchive("munge.key", keyData), "", nil)
+	m.AddResult(testutil.TarArchive("munge.key", keyData), "", nil)
 	c := docker.NewClient(&m)
 
 	key, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -537,7 +518,7 @@ func TestGetMungeKey_ListError(t *testing.T) {
 
 func TestGetMungeKey_CopyError(t *testing.T) {
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(psEntry{
+	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "c1", Names: "sind-dev-controller", State: "running",
 		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
 	}), "", nil)

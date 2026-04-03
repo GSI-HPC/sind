@@ -232,7 +232,7 @@ func TestEnsureSSHVolume_Pull(t *testing.T) {
 	require.NoError(t, err)
 
 	createArgs := m.Calls[2].Args
-	pull, ok := argValue(createArgs, "--pull")
+	pull, ok := testutil.ArgValue(createArgs, "--pull")
 	assert.True(t, ok, "--pull flag present in keygen container")
 	assert.Equal(t, "always", pull)
 }
@@ -360,7 +360,7 @@ func TestEnsureSSH_Pull(t *testing.T) {
 	require.NoError(t, err)
 
 	createArgs := m.Calls[2].Args
-	pull, ok := argValue(createArgs, "--pull")
+	pull, ok := testutil.ArgValue(createArgs, "--pull")
 	assert.True(t, ok, "--pull flag present in SSH container")
 	assert.Equal(t, "always", pull)
 }

@@ -20,16 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// argValue returns the value following the first occurrence of flag in args.
-func argValue(args []string, flag string) (string, bool) {
-	for i, a := range args {
-		if a == flag && i+1 < len(args) {
-			return args[i+1], true
-		}
-	}
-	return "", false
-}
-
 // --- Lifecycle ---
 
 func TestMeshLifecycle(t *testing.T) {
@@ -624,7 +614,7 @@ func TestEnsureDNS_Pull(t *testing.T) {
 	require.NoError(t, err)
 
 	createArgs := m.Calls[1].Args
-	pull, ok := argValue(createArgs, "--pull")
+	pull, ok := testutil.ArgValue(createArgs, "--pull")
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 }

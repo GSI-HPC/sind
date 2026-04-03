@@ -26,12 +26,12 @@ func listErrorMock() *cmdexec.MockExecutor {
 
 // powerContainers returns a standard set of cluster containers for power tests.
 func powerContainers() string {
-	return ndjson(
-		psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+	return testutil.NDJSON(
+		testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=controller"},
-		psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+		testutil.PsEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=worker"},
-		psEntry{ID: "c3", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
+		testutil.PsEntry{ID: "c3", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=worker"},
 	)
 }

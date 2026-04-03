@@ -3,12 +3,12 @@
 package cluster
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -21,9 +21,9 @@ import (
 func TestListClusterResources(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// ListContainers: returns 2 containers
-	m.AddResult(ndjson(
-		psEntry{ID: "abc123", Names: "sind-dev-controller", State: "running", Image: "sind-node:latest"},
-		psEntry{ID: "def456", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:latest"},
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "abc123", Names: "sind-dev-controller", State: "running", Image: "sind-node:latest"},
+		testutil.PsEntry{ID: "def456", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:latest"},
 	), "", nil)
 	// NetworkExists: sind-dev-net exists
 	m.AddResult("", "", nil)
@@ -302,7 +302,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		// CopyFromContainer (read Corefile) → return valid Corefile
 		if len(args) >= 2 && args[0] == "cp" && strings.Contains(args[1], "sind-dns") {
-			return cmdexec.MockResult{Stdout: tarArchive("Corefile", emptyCorefileContent())}
+			return cmdexec.MockResult{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 		}
 		// CopyToContainer (write Corefile) → success
 		if len(args) >= 2 && args[0] == "cp" && args[1] == "-" {
@@ -335,9 +335,9 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 func TestHasOtherClusters_True(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// ListContainers returns containers from two clusters
-	m.AddResult(ndjson(
-		psEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-		psEntry{ID: "b", Names: "sind-prod-controller", State: "running", Image: "img"},
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		testutil.PsEntry{ID: "b", Names: "sind-prod-controller", State: "running", Image: "img"},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -350,9 +350,9 @@ func TestHasOtherClusters_True(t *testing.T) {
 func TestHasOtherClusters_False(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// Only containers from the same cluster
-	m.AddResult(ndjson(
-		psEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-		psEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img"},
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img"},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -402,9 +402,9 @@ func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 	// Cluster "dev" must not match container "sind-dev2-controller".
 	// The prefix includes the trailing dash: "sind-dev-".
 	var m cmdexec.MockExecutor
-	m.AddResult(ndjson(
-		psEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-		psEntry{ID: "b", Names: "sind-dev2-controller", State: "running", Image: "img"},
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev2-controller", State: "running", Image: "img"},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -420,7 +420,7 @@ func TestDelete_FullCluster(t *testing.T) {
 	var m cmdexec.MockExecutor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
-		containers: []psEntry{
+		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 			{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img"},
 		},
@@ -476,7 +476,7 @@ func TestDelete_PreserveMesh(t *testing.T) {
 	var m cmdexec.MockExecutor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
-		containers: []psEntry{
+		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
 		networkExists: true,
@@ -510,7 +510,7 @@ func TestDelete_DeregisterMeshError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
-		containers: []psEntry{
+		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
 		networkExists:  true,
@@ -530,7 +530,7 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
-		containers: []psEntry{
+		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
 		networkExists:       true,
@@ -727,24 +727,6 @@ func TestDiscoverClusterNames_VolumeError(t *testing.T) {
 
 // --- helpers ---
 
-type psEntry struct {
-	ID     string `json:"ID"`
-	Names  string `json:"Names"`
-	State  string `json:"State"`
-	Image  string `json:"Image"`
-	Labels string `json:"Labels,omitempty"`
-}
-
-// ndjson builds newline-delimited JSON from the given entries.
-func ndjson(entries ...psEntry) string {
-	var lines []string
-	for _, e := range entries {
-		data, _ := json.Marshal(e)
-		lines = append(lines, string(data))
-	}
-	return strings.Join(lines, "\n") + "\n"
-}
-
 // indexOf returns the index of s in slice, or -1 if not found.
 func indexOf(slice []string, s string) int {
 	for i, v := range slice {
@@ -765,7 +747,7 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) cmdex
 		switch {
 		// CopyFromContainer: docker cp sind-dns:/Corefile -
 		case args[0] == "cp" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
-			return cmdexec.MockResult{Stdout: tarArchive("Corefile", emptyCorefileContent())}
+			return cmdexec.MockResult{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 		// CopyToContainer: docker cp - sind-dns:/
 		case args[0] == "cp" && len(args) >= 2 && args[1] == "-":
 			return cmdexec.MockResult{}
@@ -785,7 +767,7 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) cmdex
 
 // deleteOnCallOpts configures the behavior of deleteOnCall.
 type deleteOnCallOpts struct {
-	containers          []psEntry
+	containers          []testutil.PsEntry
 	networkExists       bool
 	volumes             []string // volume type suffixes that exist, e.g. ["config", "munge", "data"]
 	otherClusters       bool
@@ -802,7 +784,7 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 	t.Helper()
 	containerJSON := ""
 	if len(opts.containers) > 0 {
-		containerJSON = ndjson(opts.containers...)
+		containerJSON = testutil.NDJSON(opts.containers...)
 	}
 	// Build set of existing volumes for quick lookup.
 	existingVolumes := map[string]bool{}
@@ -835,8 +817,8 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 			}
 			// HasOtherClusters: return other cluster containers
 			if opts.otherClusters {
-				return cmdexec.MockResult{Stdout: ndjson(
-					psEntry{ID: "x", Names: "sind-other-controller", State: "running", Image: "img"},
+				return cmdexec.MockResult{Stdout: testutil.NDJSON(
+					testutil.PsEntry{ID: "x", Names: "sind-other-controller", State: "running", Image: "img"},
 				)}
 			}
 			return cmdexec.MockResult{Stdout: ""}
@@ -887,7 +869,7 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 				return cmdexec.MockResult{Err: fmt.Errorf("DNS container not running")}
 			}
 			if len(args) >= 2 && strings.Contains(args[1], "sind-dns") {
-				return cmdexec.MockResult{Stdout: tarArchive("Corefile", emptyCorefileContent())}
+				return cmdexec.MockResult{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 			}
 			return cmdexec.MockResult{}
 

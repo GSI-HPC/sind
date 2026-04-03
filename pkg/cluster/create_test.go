@@ -3,8 +3,6 @@
 package cluster
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -245,7 +243,7 @@ func TestWriteClusterConfig_Pull(t *testing.T) {
 
 	require.NoError(t, err)
 	createArgs := m.Calls[0].Args
-	pull, ok := argValue(createArgs, "--pull")
+	pull, ok := testutil.ArgValue(createArgs, "--pull")
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 }
@@ -320,7 +318,7 @@ func TestWriteMungeKey_Pull(t *testing.T) {
 
 	require.NoError(t, err)
 	runArgs := m.Calls[0].Args
-	pull, ok := argValue(runArgs, "--pull")
+	pull, ok := testutil.ArgValue(runArgs, "--pull")
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 }
@@ -759,16 +757,6 @@ func notFoundErr(t *testing.T) *exec.ExitError {
 	return exitErr
 }
 
-// tarArchive builds a tar archive containing a single file with the given name and content.
-func tarArchive(name, content string) string {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	_ = tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
-	_, _ = tw.Write([]byte(content))
-	_ = tw.Close()
-	return buf.String()
-}
-
 // emptyCorefileContent returns a Corefile with no host entries.
 func emptyCorefileContent() string {
 	return "sind.sind:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
@@ -776,7 +764,7 @@ func emptyCorefileContent() string {
 
 // emptyCorefileTar returns a tar archive containing an empty Corefile (no host entries).
 func emptyCorefileTar() string {
-	return tarArchive("Corefile", emptyCorefileContent())
+	return testutil.TarArchive("Corefile", emptyCorefileContent())
 }
 
 // happyOnCall returns an OnCall function that handles the full Create flow

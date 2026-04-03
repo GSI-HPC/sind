@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -134,12 +135,12 @@ func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=submitter"},
-				psEntry{ID: "c3", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "c3", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
@@ -157,10 +158,10 @@ func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
@@ -178,8 +179,8 @@ func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "c1", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "c1", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}

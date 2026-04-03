@@ -499,16 +499,16 @@ func fullStatusOnCall(t *testing.T) func([]string, string) cmdexec.MockResult {
 
 		// docker ps (ListContainers)
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},
@@ -642,8 +642,8 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
@@ -705,16 +705,16 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// Return nodes in non-sorted order including submitter.
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=submitter",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
@@ -751,12 +751,12 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	base := fullStatusOnCall(t)
 	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},
