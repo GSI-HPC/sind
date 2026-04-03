@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +19,7 @@ import (
 // --- DeleteContainers ---
 
 func TestDeleteContainers(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // rm -f container 1
 	m.AddResult("", "", nil) // rm -f container 2
 	c := docker.NewClient(&m)
@@ -37,7 +37,7 @@ func TestDeleteContainers(t *testing.T) {
 }
 
 func TestDeleteContainers_RemoveError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("container in use")) // rm -f fails
 	c := docker.NewClient(&m)
 
@@ -51,7 +51,7 @@ func TestDeleteContainers_RemoveError(t *testing.T) {
 }
 
 func TestDeleteContainers_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	c := docker.NewClient(&m)
 
 	err := DeleteContainers(t.Context(), c, nil)
@@ -63,7 +63,7 @@ func TestDeleteContainers_Empty(t *testing.T) {
 // --- DeleteNetwork ---
 
 func TestDeleteNetwork(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // network rm
 	c := docker.NewClient(&m)
 
@@ -75,7 +75,7 @@ func TestDeleteNetwork(t *testing.T) {
 }
 
 func TestDeleteNetwork_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("network has active endpoints"))
 	c := docker.NewClient(&m)
 
@@ -88,7 +88,7 @@ func TestDeleteNetwork_Error(t *testing.T) {
 // --- DeleteVolumes ---
 
 func TestDeleteVolumes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // config
 	m.AddResult("", "", nil) // munge
 	m.AddResult("", "", nil) // data
@@ -105,7 +105,7 @@ func TestDeleteVolumes(t *testing.T) {
 }
 
 func TestDeleteVolumes_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)                         // config OK
 	m.AddResult("", "", fmt.Errorf("volume in use")) // munge fails
 	c := docker.NewClient(&m)
@@ -118,7 +118,7 @@ func TestDeleteVolumes_Error(t *testing.T) {
 }
 
 func TestDeleteVolumes_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	c := docker.NewClient(&m)
 
 	err := DeleteVolumes(t.Context(), c, nil)
@@ -130,7 +130,7 @@ func TestDeleteVolumes_Empty(t *testing.T) {
 // --- DeregisterMesh ---
 
 func TestDeregisterMesh(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.OnCall = meshDeregisterOnCall(
 		"controller.dev.sind.sind ssh-ed25519 AAAA1\nworker-0.dev.sind.sind ssh-ed25519 AAAA2\n",
 	)
@@ -147,7 +147,7 @@ func TestDeregisterMesh(t *testing.T) {
 }
 
 func TestDeregisterMesh_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
@@ -158,13 +158,13 @@ func TestDeregisterMesh_Empty(t *testing.T) {
 }
 
 func TestDeregisterMesh_DNSError(t *testing.T) {
-	var m cmdexec.MockExecutor
-	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
 		// CopyFromContainer (read Corefile) fails
 		if len(args) > 0 && args[0] == "cp" {
-			return cmdexec.MockResult{Err: fmt.Errorf("DNS container not running")}
+			return mock.Result{Err: fmt.Errorf("DNS container not running")}
 		}
-		return cmdexec.MockResult{}
+		return mock.Result{}
 	}
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
@@ -179,25 +179,25 @@ func TestDeregisterMesh_DNSError(t *testing.T) {
 }
 
 func TestDeregisterMesh_KnownHostError(t *testing.T) {
-	var m cmdexec.MockExecutor
-	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
 		// CopyFromContainer (read Corefile) → return valid Corefile
 		if len(args) >= 2 && args[0] == "cp" && strings.Contains(args[1], "sind-dns") {
-			return cmdexec.MockResult{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
+			return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 		}
 		// CopyToContainer (write Corefile) → success
 		if len(args) >= 2 && args[0] == "cp" && args[1] == "-" {
-			return cmdexec.MockResult{}
+			return mock.Result{}
 		}
 		// Signal DNS → success
 		if len(args) >= 2 && args[0] == "kill" {
-			return cmdexec.MockResult{}
+			return mock.Result{}
 		}
 		// ReadFile (known_hosts via exec cat) → fail
 		if len(args) >= 2 && args[0] == "exec" {
-			return cmdexec.MockResult{Err: fmt.Errorf("SSH container not running")}
+			return mock.Result{Err: fmt.Errorf("SSH container not running")}
 		}
-		return cmdexec.MockResult{}
+		return mock.Result{}
 	}
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
@@ -214,7 +214,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 // --- Delete Orchestrator ---
 
 func TestDelete_FullCluster(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
@@ -235,7 +235,7 @@ func TestDelete_FullCluster(t *testing.T) {
 }
 
 func TestDelete_NonExistent(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "gone", deleteOnCallOpts{
 		containers:    nil,
@@ -252,7 +252,7 @@ func TestDelete_NonExistent(t *testing.T) {
 
 func TestDelete_Partial(t *testing.T) {
 	// Partial cluster: containers gone, but network and some volumes remain
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
@@ -270,7 +270,7 @@ func TestDelete_Partial(t *testing.T) {
 
 func TestDelete_PreserveMesh(t *testing.T) {
 	// Other clusters exist, mesh should be preserved
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
@@ -290,9 +290,9 @@ func TestDelete_PreserveMesh(t *testing.T) {
 }
 
 func TestDelete_ListResourcesError(t *testing.T) {
-	var m cmdexec.MockExecutor
-	m.OnCall = func(_ []string, _ string) cmdexec.MockResult {
-		return cmdexec.MockResult{Err: fmt.Errorf("docker ps failed")}
+	var m mock.Executor
+	m.OnCall = func(_ []string, _ string) mock.Result {
+		return mock.Result{Err: fmt.Errorf("docker ps failed")}
 	}
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
@@ -304,7 +304,7 @@ func TestDelete_ListResourcesError(t *testing.T) {
 }
 
 func TestDelete_DeregisterMeshError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
@@ -324,7 +324,7 @@ func TestDelete_DeregisterMeshError(t *testing.T) {
 }
 
 func TestDelete_ContainerRemoveError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
@@ -345,7 +345,7 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 }
 
 func TestDelete_NetworkRemoveError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:        nil,
@@ -363,7 +363,7 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 }
 
 func TestDelete_HasOtherClustersError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
@@ -373,12 +373,12 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 	// Override OnCall to make HasOtherClusters fail.
 	inner := m.OnCall
 	callCount := 0
-	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
+	m.OnCall = func(args []string, stdin string) mock.Result {
 		// The second "ps" call is HasOtherClusters (the first is ListClusterResources).
 		if args[0] == "ps" {
 			callCount++
 			if callCount == 2 {
-				return cmdexec.MockResult{Err: fmt.Errorf("docker daemon unreachable")}
+				return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
 			}
 		}
 		return inner(args, stdin)
@@ -393,7 +393,7 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 }
 
 func TestDelete_VolumeRemoveError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:       nil,
@@ -412,7 +412,7 @@ func TestDelete_VolumeRemoveError(t *testing.T) {
 
 func TestDelete_CleanupMeshError(t *testing.T) {
 	// No other clusters → CleanupMesh runs and fails.
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	exitErr := notFoundErr(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
@@ -423,9 +423,9 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 	// Override: make CleanupMesh's ContainerExists (container inspect) fail.
 	// The first container inspect in CleanupMesh is for the keygen container.
 	inner := m.OnCall
-	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
+	m.OnCall = func(args []string, stdin string) mock.Result {
 		if args[0] == "container" && len(args) >= 3 && args[1] == "inspect" {
-			return cmdexec.MockResult{Err: fmt.Errorf("docker daemon unreachable")}
+			return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
 		}
 		return inner(args, stdin)
 	}
@@ -452,29 +452,29 @@ func indexOf(slice []string, s string) int {
 
 // meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecord
 // and RemoveKnownHost operations for DeregisterMesh tests.
-func meshDeregisterOnCall(knownHostsContent string) func([]string, string) cmdexec.MockResult {
-	return func(args []string, _ string) cmdexec.MockResult {
+func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.Result {
+	return func(args []string, _ string) mock.Result {
 		if len(args) == 0 {
-			return cmdexec.MockResult{}
+			return mock.Result{}
 		}
 		switch {
 		// CopyFromContainer: docker cp sind-dns:/Corefile -
 		case args[0] == "cp" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
-			return cmdexec.MockResult{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
+			return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 		// CopyToContainer: docker cp - sind-dns:/
 		case args[0] == "cp" && len(args) >= 2 && args[1] == "-":
-			return cmdexec.MockResult{}
+			return mock.Result{}
 		// Signal: docker kill -s HUP sind-dns
 		case args[0] == "kill":
-			return cmdexec.MockResult{}
+			return mock.Result{}
 		// ReadFile: docker exec sind-ssh cat /root/.ssh/known_hosts
 		case args[0] == "exec" && len(args) >= 3 && args[2] == "cat":
-			return cmdexec.MockResult{Stdout: knownHostsContent}
+			return mock.Result{Stdout: knownHostsContent}
 		// WriteFile: docker exec -i sind-ssh sh -c 'cat > ...'
 		case args[0] == "exec" && len(args) >= 2 && args[1] == "-i":
-			return cmdexec.MockResult{}
+			return mock.Result{}
 		}
-		return cmdexec.MockResult{}
+		return mock.Result{}
 	}
 }
 
@@ -493,7 +493,7 @@ type deleteOnCallOpts struct {
 
 // deleteOnCall returns a mock OnCall handler for the Delete orchestrator tests.
 // It dispatches based on docker command arguments to simulate the full delete flow.
-func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opts deleteOnCallOpts) func([]string, string) cmdexec.MockResult {
+func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opts deleteOnCallOpts) func([]string, string) mock.Result {
 	t.Helper()
 	containerJSON := ""
 	if len(opts.containers) > 0 {
@@ -508,9 +508,9 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 	// Track which phase we're in based on calls.
 	listClusterDone := false
 
-	return func(args []string, _ string) cmdexec.MockResult {
+	return func(args []string, _ string) mock.Result {
 		if len(args) == 0 {
-			return cmdexec.MockResult{}
+			return mock.Result{}
 		}
 
 		switch {
@@ -526,87 +526,87 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 			if !listClusterDone && strings.Contains(filterVal, "="+clusterName) {
 				// ListClusterResources: return cluster containers
 				listClusterDone = true
-				return cmdexec.MockResult{Stdout: containerJSON}
+				return mock.Result{Stdout: containerJSON}
 			}
 			// HasOtherClusters: return other cluster containers
 			if opts.otherClusters {
-				return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				return mock.Result{Stdout: testutil.NDJSON(
 					testutil.PsEntry{ID: "x", Names: "sind-other-controller", State: "running", Image: "img"},
 				)}
 			}
-			return cmdexec.MockResult{Stdout: ""}
+			return mock.Result{Stdout: ""}
 
 		// docker network inspect (NetworkExists check)
 		case args[0] == "network" && args[1] == "inspect":
 			if opts.networkExists {
-				return cmdexec.MockResult{}
+				return mock.Result{}
 			}
-			return cmdexec.MockResult{Stderr: "Error: No such network\n", Err: exitErr}
+			return mock.Result{Stderr: "Error: No such network\n", Err: exitErr}
 
 		// docker network rm (DeleteNetwork)
 		case args[0] == "network" && args[1] == "rm":
 			if opts.networkRemoveFail {
-				return cmdexec.MockResult{Err: fmt.Errorf("network has active endpoints")}
+				return mock.Result{Err: fmt.Errorf("network has active endpoints")}
 			}
-			return cmdexec.MockResult{}
+			return mock.Result{}
 
 		// docker volume inspect (VolumeExists check)
 		case args[0] == "volume" && args[1] == "inspect":
 			volName := args[2]
 			if existingVolumes[volName] {
-				return cmdexec.MockResult{}
+				return mock.Result{}
 			}
-			return cmdexec.MockResult{Stderr: "Error: No such volume\n", Err: exitErr}
+			return mock.Result{Stderr: "Error: No such volume\n", Err: exitErr}
 
 		// docker volume rm (DeleteVolumes)
 		case args[0] == "volume" && args[1] == "rm":
 			if opts.volumeRemoveFail {
-				return cmdexec.MockResult{Err: fmt.Errorf("volume in use")}
+				return mock.Result{Err: fmt.Errorf("volume in use")}
 			}
-			return cmdexec.MockResult{}
+			return mock.Result{}
 
 		// docker kill (DeleteContainers - best effort)
 		case args[0] == "kill":
-			return cmdexec.MockResult{}
+			return mock.Result{}
 
 		// docker rm (DeleteContainers or CleanupMesh)
 		case args[0] == "rm":
 			if opts.containerRemoveFail {
-				return cmdexec.MockResult{Err: fmt.Errorf("removal failed")}
+				return mock.Result{Err: fmt.Errorf("removal failed")}
 			}
-			return cmdexec.MockResult{}
+			return mock.Result{}
 
 		// docker cp (DNS Corefile read/write for DeregisterMesh)
 		case args[0] == "cp":
 			if opts.deregisterFail && strings.Contains(args[1], "sind-dns") {
-				return cmdexec.MockResult{Err: fmt.Errorf("DNS container not running")}
+				return mock.Result{Err: fmt.Errorf("DNS container not running")}
 			}
 			if len(args) >= 2 && strings.Contains(args[1], "sind-dns") {
-				return cmdexec.MockResult{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
+				return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 			}
-			return cmdexec.MockResult{}
+			return mock.Result{}
 
 		// docker kill -s HUP (DNS reload)
 		case args[0] == "kill":
-			return cmdexec.MockResult{}
+			return mock.Result{}
 
 		// docker exec (known_hosts read/write for DeregisterMesh or CleanupMesh)
 		case args[0] == "exec":
 			if len(args) >= 3 && args[2] == "cat" {
-				return cmdexec.MockResult{Stdout: opts.knownHosts}
+				return mock.Result{Stdout: opts.knownHosts}
 			}
-			return cmdexec.MockResult{}
+			return mock.Result{}
 
 		// docker container inspect (ContainerExists for CleanupMesh)
 		case args[0] == "container" && args[1] == "inspect":
 			if !opts.otherClusters {
 				// Mesh containers exist during cleanup
-				return cmdexec.MockResult{}
+				return mock.Result{}
 			}
-			return cmdexec.MockResult{Stderr: "Error\n", Err: exitErr}
+			return mock.Result{Stderr: "Error\n", Err: exitErr}
 		}
 
 		t.Logf("unhandled mock call: %v", args)
-		return cmdexec.MockResult{}
+		return mock.Result{}
 	}
 }

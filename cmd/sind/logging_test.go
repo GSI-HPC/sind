@@ -7,9 +7,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 )
@@ -78,7 +78,7 @@ func TestVerboseFlag_AcceptedByRoot(t *testing.T) {
 }
 
 func TestVerboseFlag_InjectsLogger(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	// get clusters with empty result
 	mock.AddResult("", "", nil)
 

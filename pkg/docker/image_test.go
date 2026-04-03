@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +32,7 @@ func TestImageLifecycle(t *testing.T) {
 }
 
 func TestServerVersion(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("29.3.0\n", "", nil)
 	c := NewClient(&m)
 
@@ -45,7 +45,7 @@ func TestServerVersion(t *testing.T) {
 }
 
 func TestServerVersion_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Cannot connect", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
@@ -54,7 +54,7 @@ func TestServerVersion_Error(t *testing.T) {
 }
 
 func TestRunEphemeral(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := NewClient(&m)
 
@@ -67,7 +67,7 @@ func TestRunEphemeral(t *testing.T) {
 }
 
 func TestRunEphemeral_Pull(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := NewClient(&m)
 
@@ -80,7 +80,7 @@ func TestRunEphemeral_Pull(t *testing.T) {
 }
 
 func TestRunEphemeral_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Unable to find image\n", fmt.Errorf("exit status 125"))
 	c := NewClient(&m)
 

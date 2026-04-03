@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +17,7 @@ import (
 // --- ListClusterResources ---
 
 func TestListClusterResources(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// ListContainers: returns 2 containers
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{ID: "abc123", Names: "sind-dev-controller", State: "running", Image: "sind-node:latest"},
@@ -49,7 +49,7 @@ func TestListClusterResources(t *testing.T) {
 }
 
 func TestListClusterResources_NoResources(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // ListContainers: empty
 	addNotFound(t, &m, 1)    // NetworkExists: not found
 	addNotFound(t, &m, 3)    // VolumeExists: config, munge, data
@@ -64,7 +64,7 @@ func TestListClusterResources_NoResources(t *testing.T) {
 }
 
 func TestListClusterResources_PartialVolumes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // ListContainers: empty
 	m.AddResult("", "", nil) // NetworkExists: exists
 	m.AddResult("", "", nil) // VolumeExists: config exists
@@ -80,7 +80,7 @@ func TestListClusterResources_PartialVolumes(t *testing.T) {
 }
 
 func TestListClusterResources_ListContainersError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker ps failed"))
 	c := docker.NewClient(&m)
 
@@ -91,7 +91,7 @@ func TestListClusterResources_ListContainersError(t *testing.T) {
 }
 
 func TestListClusterResources_NetworkCheckError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)                                  // ListContainers: empty
 	m.AddResult("", "", fmt.Errorf("network inspect failed")) // non-exit error
 	c := docker.NewClient(&m)
@@ -103,7 +103,7 @@ func TestListClusterResources_NetworkCheckError(t *testing.T) {
 }
 
 func TestListClusterResources_VolumeCheckError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)                                 // ListContainers: empty
 	m.AddResult("", "", nil)                                 // NetworkExists: exists
 	m.AddResult("", "", fmt.Errorf("volume inspect failed")) // config check fails
@@ -116,7 +116,7 @@ func TestListClusterResources_VolumeCheckError(t *testing.T) {
 }
 
 func TestListClusterResources_LabelFilter(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // ListContainers: empty
 	addNotFound(t, &m, 4)    // network + 3 volumes
 	c := docker.NewClient(&m)
@@ -136,7 +136,7 @@ func TestListClusterResources_LabelFilter(t *testing.T) {
 // --- HasOtherClusters ---
 
 func TestHasOtherClusters_True(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// ListContainers returns containers from two clusters
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -151,7 +151,7 @@ func TestHasOtherClusters_True(t *testing.T) {
 }
 
 func TestHasOtherClusters_False(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// Only containers from the same cluster
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -166,7 +166,7 @@ func TestHasOtherClusters_False(t *testing.T) {
 }
 
 func TestHasOtherClusters_NoContainers(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // empty list
 	c := docker.NewClient(&m)
 
@@ -177,7 +177,7 @@ func TestHasOtherClusters_NoContainers(t *testing.T) {
 }
 
 func TestHasOtherClusters_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -188,7 +188,7 @@ func TestHasOtherClusters_Error(t *testing.T) {
 }
 
 func TestHasOtherClusters_LabelFilter(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -204,7 +204,7 @@ func TestHasOtherClusters_LabelFilter(t *testing.T) {
 func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 	// Cluster "dev" must not match container "sind-dev2-controller".
 	// The prefix includes the trailing dash: "sind-dev-".
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		testutil.PsEntry{ID: "b", Names: "sind-dev2-controller", State: "running", Image: "img"},
@@ -220,7 +220,7 @@ func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 // --- DiscoverClusterNames ---
 
 func TestDiscoverClusterNames_FromNetworks(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// ListNetworks: returns cluster network + mesh network
 	m.AddResult(`{"Name":"sind-default-net","Driver":"bridge","ID":"a","Scope":"local"}
 {"Name":"sind-mesh","Driver":"bridge","ID":"b","Scope":"local"}`, "", nil)
@@ -235,7 +235,7 @@ func TestDiscoverClusterNames_FromNetworks(t *testing.T) {
 }
 
 func TestDiscoverClusterNames_FromVolumes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// ListNetworks: empty
 	m.AddResult("", "", nil)
 	// ListVolumes: orphaned volumes
@@ -251,7 +251,7 @@ func TestDiscoverClusterNames_FromVolumes(t *testing.T) {
 }
 
 func TestDiscoverClusterNames_MultipleClusters(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// ListNetworks: two cluster networks
 	m.AddResult(`{"Name":"sind-dev-net","Driver":"bridge","ID":"a","Scope":"local"}
 {"Name":"sind-prod-net","Driver":"bridge","ID":"b","Scope":"local"}
@@ -267,7 +267,7 @@ func TestDiscoverClusterNames_MultipleClusters(t *testing.T) {
 }
 
 func TestDiscoverClusterNames_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // ListNetworks
 	m.AddResult("", "", nil) // ListVolumes
 	c := docker.NewClient(&m)
@@ -279,7 +279,7 @@ func TestDiscoverClusterNames_Empty(t *testing.T) {
 }
 
 func TestDiscoverClusterNames_NetworkError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
 	c := docker.NewClient(&m)
 
@@ -290,7 +290,7 @@ func TestDiscoverClusterNames_NetworkError(t *testing.T) {
 }
 
 func TestDiscoverClusterNames_VolumeError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // ListNetworks: ok
 	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
 	c := docker.NewClient(&m)

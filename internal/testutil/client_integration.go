@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -30,7 +30,7 @@ const dockerInfoTimeout = 5 * time.Second
 
 // NewClient returns a docker.Client backed by a real OSExecutor.
 // The test is skipped when docker is not available.
-func NewClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
+func NewClient(t *testing.T) (*docker.Client, *mock.Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker not found in PATH")
@@ -40,6 +40,6 @@ func NewClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
 		t.Skip("docker daemon not running")
 	}
-	rec := cmdexec.NewIntegrationRecorder()
+	rec := mock.NewIntegrationRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }

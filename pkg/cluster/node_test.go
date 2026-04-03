@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -321,7 +321,7 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 // --- CreateNode ---
 
 func TestCreateNode(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // CreateContainer
 	m.AddResult("", "", nil)         // ConnectNetwork
 	m.AddResult("", "", nil)         // StartContainer
@@ -348,7 +348,7 @@ func TestCreateNode(t *testing.T) {
 }
 
 func TestCreateNode_CreateError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("image not found"))
 
 	c := docker.NewClient(&m)
@@ -362,7 +362,7 @@ func TestCreateNode_CreateError(t *testing.T) {
 }
 
 func TestCreateNode_ConnectError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil)             // CreateContainer
 	m.AddResult("", "", fmt.Errorf("net error")) // ConnectNetwork
 
@@ -378,7 +378,7 @@ func TestCreateNode_ConnectError(t *testing.T) {
 }
 
 func TestCreateNode_StartError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil)                // CreateContainer
 	m.AddResult("", "", nil)                        // ConnectNetwork
 	m.AddResult("", "", fmt.Errorf("start failed")) // StartContainer
@@ -562,7 +562,7 @@ func TestNodeRunConfigs_EmptyNodes(t *testing.T) {
 // --- CreateClusterNodes ---
 
 func TestCreateClusterNodes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// Node 1: CreateContainer + ConnectNetwork + StartContainer
 	m.AddResult("id1\n", "", nil)
 	m.AddResult("", "", nil)
@@ -588,7 +588,7 @@ func TestCreateClusterNodes(t *testing.T) {
 }
 
 func TestCreateClusterNodes_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// Node 1: success
 	m.AddResult("id1\n", "", nil)
 	m.AddResult("", "", nil)
@@ -613,7 +613,7 @@ func TestCreateClusterNodes_Error(t *testing.T) {
 }
 
 func TestCreateClusterNodes_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
@@ -626,7 +626,7 @@ func TestCreateClusterNodes_Empty(t *testing.T) {
 // --- EnableSlurmServices ---
 
 func TestEnableSlurmServices(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // slurmctld on controller
 	m.AddResult("", "", nil) // slurmd on worker-0
 	c := docker.NewClient(&m)
@@ -647,7 +647,7 @@ func TestEnableSlurmServices(t *testing.T) {
 }
 
 func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // slurmctld on controller
 	c := docker.NewClient(&m)
 
@@ -663,7 +663,7 @@ func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
 }
 
 func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // slurmctld on controller
 	c := docker.NewClient(&m)
 
@@ -685,7 +685,7 @@ func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
 }
 
 func TestEnableSlurmServices_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("systemctl failed"))
 	c := docker.NewClient(&m)
 

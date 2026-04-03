@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,8 +16,8 @@ import (
 
 // resolveTestManager returns a Manager with both Docker and system executors
 // set to mocks. The Docker mock is returned for queuing Docker responses.
-func resolveTestManager(sysExec *cmdexec.MockExecutor) (*Manager, *cmdexec.MockExecutor) {
-	var dockerMock cmdexec.MockExecutor
+func resolveTestManager(sysExec *mock.Executor) (*Manager, *mock.Executor) {
+	var dockerMock mock.Executor
 	mgr := &Manager{
 		Docker: docker.NewClient(&dockerMock),
 		Exec:   sysExec,
@@ -29,7 +29,7 @@ func resolveTestManager(sysExec *cmdexec.MockExecutor) (*Manager, *cmdexec.MockE
 // --- resolvedActive ---
 
 func TestResolvedActive_True(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	mgr := &Manager{Exec: &m}
 
@@ -40,7 +40,7 @@ func TestResolvedActive_True(t *testing.T) {
 }
 
 func TestResolvedActive_False(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("inactive"))
 	mgr := &Manager{Exec: &m}
 
@@ -50,7 +50,7 @@ func TestResolvedActive_False(t *testing.T) {
 // --- polkitAuthorized ---
 
 func TestPolkitAuthorized_True(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	mgr := &Manager{Exec: &m}
 
@@ -61,7 +61,7 @@ func TestPolkitAuthorized_True(t *testing.T) {
 }
 
 func TestPolkitAuthorized_False(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("not authorized"))
 	mgr := &Manager{Exec: &m}
 
@@ -71,7 +71,7 @@ func TestPolkitAuthorized_False(t *testing.T) {
 // --- dnsPolkitAuthorized ---
 
 func TestDnsPolkitAuthorized_AllPass(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // set-dns-servers
 	m.AddResult("", "", nil) // set-domains
 	m.AddResult("", "", nil) // revert
@@ -82,7 +82,7 @@ func TestDnsPolkitAuthorized_AllPass(t *testing.T) {
 }
 
 func TestDnsPolkitAuthorized_SecondFails(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)                       // set-dns-servers: ok
 	m.AddResult("", "", fmt.Errorf("not allowed")) // set-domains: fail
 	mgr := &Manager{Exec: &m}
@@ -128,7 +128,7 @@ func TestFindBridgeInterface_IDTooShort(t *testing.T) {
 // --- configureDNS ---
 
 func TestConfigureDNS(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // resolvectl dns
 	m.AddResult("", "", nil) // resolvectl domain
 	mgr := &Manager{Exec: &m, Realm: DefaultRealm}
@@ -144,7 +144,7 @@ func TestConfigureDNS(t *testing.T) {
 }
 
 func TestConfigureDNS_DnsError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("permission denied"))
 	mgr := &Manager{Exec: &m, Realm: DefaultRealm}
 
@@ -154,7 +154,7 @@ func TestConfigureDNS_DnsError(t *testing.T) {
 }
 
 func TestConfigureDNS_DomainError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)                       // dns ok
 	m.AddResult("", "", fmt.Errorf("link failed")) // domain fails
 	mgr := &Manager{Exec: &m, Realm: DefaultRealm}
@@ -165,7 +165,7 @@ func TestConfigureDNS_DomainError(t *testing.T) {
 }
 
 func TestConfigureDNS_CustomRealm(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // resolvectl dns
 	m.AddResult("", "", nil) // resolvectl domain
 	mgr := &Manager{Exec: &m, Realm: "myrealm"}
@@ -178,7 +178,7 @@ func TestConfigureDNS_CustomRealm(t *testing.T) {
 // --- revertDNS ---
 
 func TestRevertDNS(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	mgr := &Manager{Exec: &m}
 
@@ -191,7 +191,7 @@ func TestRevertDNS(t *testing.T) {
 }
 
 func TestRevertDNS_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("no such link"))
 	mgr := &Manager{Exec: &m}
 
@@ -213,7 +213,7 @@ func TestConfigureHostDNS_Success(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
 
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl is-active
 	sys.AddResult("", "", nil) // pkcheck set-dns-servers
 	sys.AddResult("", "", nil) // pkcheck set-domains
@@ -231,7 +231,7 @@ func TestConfigureHostDNS_Success(t *testing.T) {
 }
 
 func TestConfigureHostDNS_ResolvedNotActive(t *testing.T) {
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", fmt.Errorf("inactive")) // systemctl fails
 	mgr, _ := resolveTestManager(&sys)
 
@@ -241,7 +241,7 @@ func TestConfigureHostDNS_ResolvedNotActive(t *testing.T) {
 }
 
 func TestConfigureHostDNS_PolkitDenied(t *testing.T) {
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil)                          // systemctl ok
 	sys.AddResult("", "", fmt.Errorf("not authorized")) // pkcheck fails
 	mgr, _ := resolveTestManager(&sys)
@@ -252,7 +252,7 @@ func TestConfigureHostDNS_PolkitDenied(t *testing.T) {
 }
 
 func TestConfigureHostDNS_InspectNetworkFails(t *testing.T) {
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl
 	sys.AddResult("", "", nil) // pkcheck x3
 	sys.AddResult("", "", nil)
@@ -272,7 +272,7 @@ func TestConfigureHostDNS_BridgeNotFound(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	// No bridge directory created.
 
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl
 	sys.AddResult("", "", nil) // pkcheck x3
 	sys.AddResult("", "", nil)
@@ -292,7 +292,7 @@ func TestConfigureHostDNS_InspectContainerFails(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
 
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl
 	sys.AddResult("", "", nil) // pkcheck x3
 	sys.AddResult("", "", nil)
@@ -313,7 +313,7 @@ func TestConfigureHostDNS_ConfigureDNSFails(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
 
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil)                  // systemctl
 	sys.AddResult("", "", nil)                  // pkcheck x3
 	sys.AddResult("", "", nil)                  //
@@ -338,7 +338,7 @@ func TestRevertHostDNS_Success(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
 
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl is-active
 	sys.AddResult("", "", nil) // resolvectl revert
 
@@ -352,7 +352,7 @@ func TestRevertHostDNS_Success(t *testing.T) {
 }
 
 func TestRevertHostDNS_ResolvedNotActive(t *testing.T) {
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", fmt.Errorf("inactive"))
 	mgr, _ := resolveTestManager(&sys)
 
@@ -361,7 +361,7 @@ func TestRevertHostDNS_ResolvedNotActive(t *testing.T) {
 }
 
 func TestRevertHostDNS_InspectNetworkFails(t *testing.T) {
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl ok
 	mgr, dockerMock := resolveTestManager(&sys)
 	dockerMock.AddResult("", "Error\n", fmt.Errorf("not found"))
@@ -375,7 +375,7 @@ func TestRevertHostDNS_BridgeNotFound(t *testing.T) {
 	sysClassNet = dir
 	t.Cleanup(func() { sysClassNet = old })
 
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl ok
 	mgr, dockerMock := resolveTestManager(&sys)
 	dockerMock.AddResult(inspectNetworkJSON, "", nil)
@@ -390,7 +390,7 @@ func TestRevertHostDNS_RevertError(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
 
-	var sys cmdexec.MockExecutor
+	var sys mock.Executor
 	sys.AddResult("", "", nil)                         // systemctl ok
 	sys.AddResult("", "", fmt.Errorf("revert failed")) // resolvectl revert fails
 

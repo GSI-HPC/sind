@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +21,7 @@ import (
 // in sequence on a container. Integration coverage for these functions is
 // provided by TestClusterCreateDeleteLifecycle (full cluster with sshd).
 func TestInjectAndCollectLifecycle(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)                                                     // mkdir .ssh
 	m.AddResult("", "", nil)                                                     // append authorized_keys
 	m.AddResult("# comment\nlocalhost ssh-ed25519 AAAA-test-hostkey\n", "", nil) // ssh-keyscan
@@ -41,7 +41,7 @@ func TestInjectAndCollectLifecycle(t *testing.T) {
 // --- InjectPublicKey ---
 
 func TestInjectPublicKey(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// Exec mkdir → success
 	m.AddResult("", "", nil)
 	// AppendFile → success
@@ -65,7 +65,7 @@ func TestInjectPublicKey(t *testing.T) {
 }
 
 func TestInjectPublicKey_AddsNewline(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
@@ -79,7 +79,7 @@ func TestInjectPublicKey_AddsNewline(t *testing.T) {
 }
 
 func TestInjectPublicKey_MkdirError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -90,7 +90,7 @@ func TestInjectPublicKey_MkdirError(t *testing.T) {
 }
 
 func TestInjectPublicKey_WriteError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// Exec mkdir → success
 	m.AddResult("", "", nil)
 	// AppendFile → error
@@ -106,7 +106,7 @@ func TestInjectPublicKey_WriteError(t *testing.T) {
 // --- CollectHostKey ---
 
 func TestCollectHostKey(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// ssh-keyscan output includes comments and the key line
 	m.AddResult("# localhost:22 SSH-2.0-OpenSSH_9.6\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n", "", nil)
 	c := docker.NewClient(&m)
@@ -123,7 +123,7 @@ func TestCollectHostKey(t *testing.T) {
 }
 
 func TestCollectHostKey_NoKey(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// ssh-keyscan returns only comments (e.g. sshd not serving ed25519)
 	m.AddResult("# localhost:22 SSH-2.0-OpenSSH_9.6\n", "", nil)
 	c := docker.NewClient(&m)
@@ -134,7 +134,7 @@ func TestCollectHostKey_NoKey(t *testing.T) {
 }
 
 func TestCollectHostKey_MalformedLine(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// Non-comment line with no space (malformed, skipped)
 	m.AddResult("malformed\n", "", nil)
 	c := docker.NewClient(&m)
@@ -145,7 +145,7 @@ func TestCollectHostKey_MalformedLine(t *testing.T) {
 }
 
 func TestCollectHostKey_MalformedThenValid(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	// Malformed line skipped, valid key returned from next line
 	m.AddResult("malformed\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n", "", nil)
 	c := docker.NewClient(&m)
@@ -156,7 +156,7 @@ func TestCollectHostKey_MalformedThenValid(t *testing.T) {
 }
 
 func TestCollectHostKey_EmptyOutput(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -166,7 +166,7 @@ func TestCollectHostKey_EmptyOutput(t *testing.T) {
 }
 
 func TestCollectHostKey_ExecError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -209,15 +209,15 @@ func TestGenerateSSHConfig_NamedRealm(t *testing.T) {
 
 const testExportDir = "/home/user/.sind"
 
-func exportDockerMock() (*cmdexec.MockExecutor, *docker.Client) {
-	var m cmdexec.MockExecutor
+func exportDockerMock() (*mock.Executor, *docker.Client) {
+	var m mock.Executor
 	m.AddResult("PRIVATE-KEY-DATA", "", nil)
 	m.AddResult("known-hosts-data\n", "", nil)
 	return &m, docker.NewClient(&m)
 }
 
 func TestExportConfig(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("PRIVATE-KEY-DATA", "", nil)
 	m.AddResult("host1 ssh-ed25519 AAAA...\n", "", nil)
 	c := docker.NewClient(&m)
@@ -272,7 +272,7 @@ func TestExportConfig_FilePermissions(t *testing.T) {
 }
 
 func TestExportConfig_ReadPrivKeyError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
@@ -282,7 +282,7 @@ func TestExportConfig_ReadPrivKeyError(t *testing.T) {
 }
 
 func TestExportConfig_ReadKnownHostsError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("PRIVATE-KEY-DATA", "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)

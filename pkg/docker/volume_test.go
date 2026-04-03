@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +70,7 @@ func TestVolumeLifecycle(t *testing.T) {
 }
 
 func TestVolumeExists_True(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil)
 	c := NewClient(&m)
 
@@ -83,7 +83,7 @@ func TestVolumeExists_True(t *testing.T) {
 }
 
 func TestVolumeExists_False(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error: No such volume: "+string(testVolumeName)+"\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	c := NewClient(&m)
@@ -94,7 +94,7 @@ func TestVolumeExists_False(t *testing.T) {
 }
 
 func TestVolumeExists_OtherError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
@@ -104,7 +104,7 @@ func TestVolumeExists_OtherError(t *testing.T) {
 }
 
 func TestCreateVolume(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(string(testVolumeName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -116,7 +116,7 @@ func TestCreateVolume(t *testing.T) {
 }
 
 func TestCreateVolume_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error response from daemon: create volume failed\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -125,7 +125,7 @@ func TestCreateVolume_Error(t *testing.T) {
 }
 
 func TestRemoveVolume(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(string(testVolumeName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -137,7 +137,7 @@ func TestRemoveVolume(t *testing.T) {
 }
 
 func TestRemoveVolume_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error: No such volume: "+string(testVolumeName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -150,7 +150,7 @@ const volumeLsJSON = `{"Name":"sind-dev-config","Driver":"local","Mountpoint":"/
 {"Name":"sind-dev-data","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-dev-data/_data","Scope":"local"}`
 
 func TestListVolumes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(volumeLsJSON, "", nil)
 	c := NewClient(&m)
 
@@ -168,7 +168,7 @@ func TestListVolumes(t *testing.T) {
 }
 
 func TestListVolumes_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -178,7 +178,7 @@ func TestListVolumes_Empty(t *testing.T) {
 }
 
 func TestListVolumes_InvalidJSON(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("not json\n", "", nil)
 	c := NewClient(&m)
 
@@ -189,7 +189,7 @@ func TestListVolumes_InvalidJSON(t *testing.T) {
 }
 
 func TestListVolumes_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
