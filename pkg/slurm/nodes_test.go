@@ -6,11 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
-
-func boolPtr(b bool) *bool { return &b }
 
 func TestGenerateNodesConf_Minimal(t *testing.T) {
 	nodes := []config.Node{
@@ -58,7 +57,7 @@ func TestGenerateNodesConf_SkipsUnmanaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
 		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
-		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: boolPtr(false)},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: testutil.Ptr(false)},
 	}
 
 	conf := GenerateNodesConf(nodes)
@@ -87,7 +86,7 @@ func TestGenerateNodesConf_SkipsNonCompute(t *testing.T) {
 func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: boolPtr(false)},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: testutil.Ptr(false)},
 	}
 
 	conf := GenerateNodesConf(nodes)
@@ -99,7 +98,7 @@ func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
 func TestGenerateNodesConf_ExplicitManaged(t *testing.T) {
 	nodes := []config.Node{
 		{Role: "controller", CPUs: 2, Memory: "2g"},
-		{Role: "worker", CPUs: 2, Memory: "2g", Managed: boolPtr(true)},
+		{Role: "worker", CPUs: 2, Memory: "2g", Managed: testutil.Ptr(true)},
 	}
 
 	conf := GenerateNodesConf(nodes)

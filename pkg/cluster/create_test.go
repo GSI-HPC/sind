@@ -489,7 +489,7 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: "worker", Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
-				Managed: boolPtr(false)},
+				Managed: testutil.Ptr(false)},
 			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
@@ -1284,7 +1284,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
-				Managed: boolPtr(false)},
+				Managed: testutil.Ptr(false)},
 		},
 	}
 

@@ -46,6 +46,9 @@ func TarArchive(name, content string) string {
 	return buf.String()
 }
 
+// Ptr returns a pointer to the given value.
+func Ptr[T any](v T) *T { return &v }
+
 // Pairs yields adjacent pairs from a string slice.
 func Pairs(s []string) iter.Seq2[string, string] {
 	return func(yield func(string, string) bool) {

@@ -53,7 +53,7 @@ func TestNodeShortNames(t *testing.T) {
 			name: "unmanaged nodes still get indexed",
 			nodes: []config.Node{
 				{Role: "controller"},
-				{Role: "worker", Count: 2, Managed: boolPtr(false)},
+				{Role: "worker", Count: 2, Managed: testutil.Ptr(false)},
 				{Role: "worker", Count: 1},
 			},
 			want: []string{"controller", "worker-0", "worker-1", "worker-2"},
@@ -221,8 +221,6 @@ func TestPreflightCheck_MultiCompute(t *testing.T) {
 }
 
 // --- helpers ---
-
-func boolPtr(b bool) *bool { return &b }
 
 func minimalConfig() *config.Cluster {
 	return &config.Cluster{

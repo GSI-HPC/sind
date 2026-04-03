@@ -5,6 +5,7 @@ package config
 import (
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -443,7 +444,7 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed false on non-worker",
 			nodes: []Node{
-				{Role: "controller", Managed: boolPtr(false)},
+				{Role: "controller", Managed: testutil.Ptr(false)},
 				{Role: "worker"},
 			},
 			wantErr: "managed is only valid for worker",
@@ -451,7 +452,7 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed true on non-worker",
 			nodes: []Node{
-				{Role: "controller", Managed: boolPtr(true)},
+				{Role: "controller", Managed: testutil.Ptr(true)},
 				{Role: "worker"},
 			},
 			wantErr: "managed is only valid for worker",
@@ -479,8 +480,6 @@ func TestValidate_Constraints(t *testing.T) {
 		})
 	}
 }
-
-func boolPtr(b bool) *bool { return &b }
 
 func TestParse_Errors(t *testing.T) {
 	tests := []struct {
