@@ -6,6 +6,8 @@ package testutil
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"os/exec"
 	"testing"
 	"time"
@@ -13,6 +15,14 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
+
+// Realm returns a unique random realm with the given prefix.
+// Each call produces a different value, suitable for parallel tests.
+func Realm(prefix string) string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%s-%x", prefix, b)
+}
 
 // dockerInfoTimeout is the maximum time to wait for docker info to respond
 // when checking whether the Docker daemon is available.

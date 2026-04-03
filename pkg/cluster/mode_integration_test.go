@@ -6,7 +6,6 @@ package cluster
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"os"
 	"strings"
@@ -20,22 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testRealm is a per-process unique realm so parallel integration test
-// runs don't collide on Docker resource names.
-var testRealm = func() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("it-cluster-%x", b)
-}()
-
-// lifecycleRealm returns a per-test unique realm for integration tests,
-// allowing lifecycle tests to run in parallel within the package.
-func lifecycleRealm() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("it-cluster-%x", b)
-}
-
 func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
@@ -48,7 +31,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 		img = "ghcr.io/gsi-hpc/sind-node:latest"
 	}
 
-	realm := lifecycleRealm()
+	realm := testutil.Realm("it-cluster")
 	clusterName := "it-cluster"
 	meshMgr := mesh.NewManager(c, realm)
 

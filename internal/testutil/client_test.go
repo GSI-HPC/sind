@@ -8,6 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRealm(t *testing.T) {
+	r := Realm("it-test")
+	require.NotEmpty(t, r)
+}
+
 func TestNewClient(t *testing.T) {
 	client, rec := NewClient(t)
 	require.NotNil(t, client)
