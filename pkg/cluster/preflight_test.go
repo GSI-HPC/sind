@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -95,7 +95,7 @@ func TestPreflightCheck_NoConflicts(t *testing.T) {
 }
 
 func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // network exists
 	addNotFound(t, &m, 5)    // volumes + containers
 	c := docker.NewClient(&m)
@@ -108,7 +108,7 @@ func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
 }
 
 func TestPreflightCheck_ConflictingVolumes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	addNotFound(t, &m, 1)    // network
 	m.AddResult("", "", nil) // config volume exists
 	addNotFound(t, &m, 1)    // munge volume
@@ -126,7 +126,7 @@ func TestPreflightCheck_ConflictingVolumes(t *testing.T) {
 }
 
 func TestPreflightCheck_ConflictingContainers(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	addNotFound(t, &m, 4)    // network + 3 volumes
 	m.AddResult("", "", nil) // controller exists
 	addNotFound(t, &m, 1)    // worker-0
@@ -141,7 +141,7 @@ func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 }
 
 func TestPreflightCheck_MultipleConflicts(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // network exists
 	addNotFound(t, &m, 3)    // volumes
 	m.AddResult("", "", nil) // controller exists
@@ -158,7 +158,7 @@ func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 }
 
 func TestPreflightCheck_NetworkCheckError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -170,7 +170,7 @@ func TestPreflightCheck_NetworkCheckError(t *testing.T) {
 }
 
 func TestPreflightCheck_VolumeCheckError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	addNotFound(t, &m, 1) // network
 	m.AddResult("", "", fmt.Errorf("permission denied"))
 	c := docker.NewClient(&m)
@@ -183,7 +183,7 @@ func TestPreflightCheck_VolumeCheckError(t *testing.T) {
 }
 
 func TestPreflightCheck_ContainerCheckError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	addNotFound(t, &m, 4) // network + volumes
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
@@ -197,7 +197,7 @@ func TestPreflightCheck_ContainerCheckError(t *testing.T) {
 
 func TestPreflightCheck_MultiCompute(t *testing.T) {
 	// 1 controller + 3 worker = 4 containers + 1 network + 3 volumes = 8 checks
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	addNotFound(t, &m, 4)    // network + volumes
 	addNotFound(t, &m, 1)    // controller
 	m.AddResult("", "", nil) // worker-0 exists
@@ -234,9 +234,9 @@ func minimalConfig() *config.Cluster {
 
 // preflightMock returns a MockExecutor with n "not found" results (exit code 1).
 // If existAll is true, all results return success instead.
-func preflightMock(t *testing.T, n int, existAll bool) *cmdexec.MockExecutor {
+func preflightMock(t *testing.T, n int, existAll bool) *mock.Executor {
 	t.Helper()
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	for i := 0; i < n; i++ {
 		if existAll {
 			m.AddResult("", "", nil)
@@ -248,7 +248,7 @@ func preflightMock(t *testing.T, n int, existAll bool) *cmdexec.MockExecutor {
 }
 
 // addNotFound adds n "not found" results (exit code 1) to the mock.
-func addNotFound(t *testing.T, m *cmdexec.MockExecutor, n int) {
+func addNotFound(t *testing.T, m *mock.Executor, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		m.AddResult("", "Error: No such object\n",

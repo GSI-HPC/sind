@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 )
 
-func newTestClient(t *testing.T) (*Client, *cmdexec.Recorder) {
+func newTestClient(t *testing.T) (*Client, *mock.Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker not found in PATH")
@@ -23,6 +23,6 @@ func newTestClient(t *testing.T) (*Client, *cmdexec.Recorder) {
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
 		t.Skip("docker daemon not running")
 	}
-	rec := cmdexec.NewIntegrationRecorder()
+	rec := mock.NewIntegrationRecorder()
 	return NewClient(rec.RecordingExecutor), rec
 }

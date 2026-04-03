@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -139,7 +139,7 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 }
 
 func TestNetworkExists_True(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil)
 	c := NewClient(&m)
 
@@ -152,7 +152,7 @@ func TestNetworkExists_True(t *testing.T) {
 }
 
 func TestNetworkExists_False(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n",
 		&exec.ExitError{ProcessState: exitCode1(t)})
 	c := NewClient(&m)
@@ -163,7 +163,7 @@ func TestNetworkExists_False(t *testing.T) {
 }
 
 func TestNetworkExists_OtherError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := NewClient(&m)
 
@@ -175,7 +175,7 @@ func TestNetworkExists_OtherError(t *testing.T) {
 func TestCreateNetwork(t *testing.T) {
 	const networkID NetworkID = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
 
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(string(networkID)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -188,7 +188,7 @@ func TestCreateNetwork(t *testing.T) {
 }
 
 func TestCreateNetwork_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error response from daemon: network with name "+string(testNetworkName)+" already exists\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -198,7 +198,7 @@ func TestCreateNetwork_Error(t *testing.T) {
 }
 
 func TestRemoveNetwork(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(string(testNetworkName)+"\n", "", nil)
 	c := NewClient(&m)
 
@@ -210,7 +210,7 @@ func TestRemoveNetwork(t *testing.T) {
 }
 
 func TestRemoveNetwork_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -219,7 +219,7 @@ func TestRemoveNetwork_Error(t *testing.T) {
 }
 
 func TestConnectNetwork(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -231,7 +231,7 @@ func TestConnectNetwork(t *testing.T) {
 }
 
 func TestConnectNetwork_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -240,7 +240,7 @@ func TestConnectNetwork_Error(t *testing.T) {
 }
 
 func TestDisconnectNetwork(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -252,7 +252,7 @@ func TestDisconnectNetwork(t *testing.T) {
 }
 
 func TestDisconnectNetwork_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -263,7 +263,7 @@ func TestDisconnectNetwork_Error(t *testing.T) {
 // --- InspectNetwork ---
 
 func TestInspectNetwork(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(`[{"Name":"sind-dev-net","Driver":"bridge","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}}]`, "", nil)
 	c := NewClient(&m)
 
@@ -276,7 +276,7 @@ func TestInspectNetwork(t *testing.T) {
 }
 
 func TestInspectNetwork_NoIPAM(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(`[{"Name":"sind-dev-net","IPAM":{"Config":[]}}]`, "", nil)
 	c := NewClient(&m)
 
@@ -287,7 +287,7 @@ func TestInspectNetwork_NoIPAM(t *testing.T) {
 }
 
 func TestInspectNetwork_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
@@ -296,7 +296,7 @@ func TestInspectNetwork_Error(t *testing.T) {
 }
 
 func TestInspectNetwork_EmptyResult(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("[]", "", nil)
 	c := NewClient(&m)
 
@@ -306,7 +306,7 @@ func TestInspectNetwork_EmptyResult(t *testing.T) {
 }
 
 func TestInspectNetwork_InvalidJSON(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("not-json", "", nil)
 	c := NewClient(&m)
 
@@ -320,7 +320,7 @@ const networkLsJSON = `{"Name":"sind-dev-net","Driver":"bridge","ID":"abc123","S
 {"Name":"sind-prod-net","Driver":"bridge","ID":"ghi789","Scope":"local"}`
 
 func TestListNetworks(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(networkLsJSON, "", nil)
 	c := NewClient(&m)
 
@@ -338,7 +338,7 @@ func TestListNetworks(t *testing.T) {
 }
 
 func TestListNetworks_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
@@ -348,7 +348,7 @@ func TestListNetworks_Empty(t *testing.T) {
 }
 
 func TestListNetworks_InvalidJSON(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("not json\n", "", nil)
 	c := NewClient(&m)
 
@@ -359,7 +359,7 @@ func TestListNetworks_InvalidJSON(t *testing.T) {
 }
 
 func TestListNetworks_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 

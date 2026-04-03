@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cmdexec
+package cmdexec_test
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +18,7 @@ import (
 // --- OSExecutor ---
 
 func TestOSExecutor_SimpleCommand(t *testing.T) {
-	var e OSExecutor
+	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(t.Context(), "echo", "hello")
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", stdout)
@@ -24,7 +26,7 @@ func TestOSExecutor_SimpleCommand(t *testing.T) {
 }
 
 func TestOSExecutor_CapturesStderr(t *testing.T) {
-	var e OSExecutor
+	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(t.Context(), "sh", "-c", "echo error >&2")
 	require.NoError(t, err)
 	assert.Empty(t, stdout)
@@ -32,7 +34,7 @@ func TestOSExecutor_CapturesStderr(t *testing.T) {
 }
 
 func TestOSExecutor_ExitError(t *testing.T) {
-	var e OSExecutor
+	var e cmdexec.OSExecutor
 	_, _, err := e.Run(t.Context(), "sh", "-c", "exit 1")
 	require.Error(t, err)
 	var exitErr *exec.ExitError
@@ -41,7 +43,7 @@ func TestOSExecutor_ExitError(t *testing.T) {
 }
 
 func TestOSExecutor_ExitErrorPreservesOutput(t *testing.T) {
-	var e OSExecutor
+	var e cmdexec.OSExecutor
 	stdout, stderr, err := e.Run(t.Context(), "sh", "-c", "echo out; echo err >&2; exit 2")
 	require.Error(t, err)
 	assert.Equal(t, "out\n", stdout)
@@ -49,7 +51,7 @@ func TestOSExecutor_ExitErrorPreservesOutput(t *testing.T) {
 }
 
 func TestOSExecutor_CommandNotFound(t *testing.T) {
-	var e OSExecutor
+	var e cmdexec.OSExecutor
 	_, _, err := e.Run(t.Context(), "nonexistent-command-xyz")
 	require.Error(t, err)
 }
@@ -57,13 +59,13 @@ func TestOSExecutor_CommandNotFound(t *testing.T) {
 func TestOSExecutor_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	var e OSExecutor
+	var e cmdexec.OSExecutor
 	_, _, err := e.Run(ctx, "sleep", "10")
 	require.Error(t, err)
 }
 
 func TestOSExecutor_WithStdin(t *testing.T) {
-	var e OSExecutor
+	var e cmdexec.OSExecutor
 	stdin := strings.NewReader("hello from stdin")
 	stdout, stderr, err := e.RunWithStdin(t.Context(), stdin, "cat")
 	require.NoError(t, err)
@@ -80,7 +82,7 @@ func (r *failReader) Read([]byte) (int, error) {
 }
 
 func TestMockExecutor_RecordsCalls(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("ok\n", "", nil)
 	m.AddResult("", "", nil)
 
@@ -88,12 +90,12 @@ func TestMockExecutor_RecordsCalls(t *testing.T) {
 	_, _, _ = m.Run(t.Context(), "docker", "run", "--rm", "alpine")
 
 	require.Len(t, m.Calls, 2)
-	assert.Equal(t, MockCall{Name: "docker", Args: []string{"ps"}}, m.Calls[0])
-	assert.Equal(t, MockCall{Name: "docker", Args: []string{"run", "--rm", "alpine"}}, m.Calls[1])
+	assert.Equal(t, mock.Call{Name: "docker", Args: []string{"ps"}}, m.Calls[0])
+	assert.Equal(t, mock.Call{Name: "docker", Args: []string{"run", "--rm", "alpine"}}, m.Calls[1])
 }
 
 func TestMockExecutor_ReturnsResults(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("out1", "err1", nil)
 	m.AddResult("out2", "", fmt.Errorf("fail"))
 
@@ -109,14 +111,14 @@ func TestMockExecutor_ReturnsResults(t *testing.T) {
 }
 
 func TestMockExecutor_UnexpectedCall(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	_, _, err := m.Run(t.Context(), "docker", "ps")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected call")
 }
 
 func TestMockExecutor_WithStdinError(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 
 	r := &failReader{}
@@ -126,9 +128,9 @@ func TestMockExecutor_WithStdinError(t *testing.T) {
 }
 
 func TestMockExecutor_OnCall(t *testing.T) {
-	var m MockExecutor
-	m.OnCall = func(_ []string, _ string) MockResult {
-		return MockResult{Stdout: "dispatched", Stderr: "", Err: nil}
+	var m mock.Executor
+	m.OnCall = func(_ []string, _ string) mock.Result {
+		return mock.Result{Stdout: "dispatched", Stderr: "", Err: nil}
 	}
 
 	stdout, _, err := m.Run(t.Context(), "docker", "ps")
@@ -138,7 +140,7 @@ func TestMockExecutor_OnCall(t *testing.T) {
 }
 
 func TestMockExecutor_WithStdin(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 
 	stdin := strings.NewReader("key-data")
@@ -153,9 +155,9 @@ func TestMockExecutor_WithStdin(t *testing.T) {
 // --- RecordingExecutor ---
 
 func TestRecordingExecutor_Calls(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("out", "", nil)
-	rec := &RecordingExecutor{Inner: &m}
+	rec := &mock.RecordingExecutor{Inner: &m}
 
 	_, _, _ = rec.Run(t.Context(), "docker", "ps")
 
@@ -166,9 +168,9 @@ func TestRecordingExecutor_Calls(t *testing.T) {
 }
 
 func TestRecordingExecutor_Dump(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("out", "warn", fmt.Errorf("fail"))
-	rec := &RecordingExecutor{Inner: &m}
+	rec := &mock.RecordingExecutor{Inner: &m}
 
 	_, _, _ = rec.Run(t.Context(), "docker", "ps")
 
@@ -180,9 +182,9 @@ func TestRecordingExecutor_Dump(t *testing.T) {
 }
 
 func TestRecordingExecutor_RunWithStdin(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("ok", "", nil)
-	rec := &RecordingExecutor{Inner: &m}
+	rec := &mock.RecordingExecutor{Inner: &m}
 
 	stdin := strings.NewReader("input")
 	stdout, _, err := rec.RunWithStdin(t.Context(), stdin, "cmd", "arg")
@@ -197,8 +199,8 @@ func TestRecordingExecutor_RunWithStdin(t *testing.T) {
 
 // --- Recorder ---
 
-func TestNewMockRecorder(t *testing.T) {
-	rec := NewMockRecorder()
+func TestNewRecorder(t *testing.T) {
+	rec := mock.NewRecorder()
 	assert.False(t, rec.IsIntegration())
 
 	rec.AddResult("out", "", nil)
@@ -208,6 +210,6 @@ func TestNewMockRecorder(t *testing.T) {
 }
 
 func TestNewIntegrationRecorder(t *testing.T) {
-	rec := NewIntegrationRecorder()
+	rec := mock.NewIntegrationRecorder()
 	assert.True(t, rec.IsIntegration())
 }

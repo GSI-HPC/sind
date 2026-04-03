@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +15,7 @@ import (
 )
 
 func TestGetClusters(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
@@ -72,7 +72,7 @@ func TestGetClusters(t *testing.T) {
 }
 
 func TestGetClusters_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -83,7 +83,7 @@ func TestGetClusters_Empty(t *testing.T) {
 }
 
 func TestGetClusters_MixedStatus(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
@@ -105,7 +105,7 @@ func TestGetClusters_MixedStatus(t *testing.T) {
 }
 
 func TestGetClusters_AllStopped(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "exited", Image: "img",
@@ -126,7 +126,7 @@ func TestGetClusters_AllStopped(t *testing.T) {
 }
 
 func TestGetClusters_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -137,7 +137,7 @@ func TestGetClusters_Error(t *testing.T) {
 }
 
 func TestGetClusters_LabelFilter(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -151,7 +151,7 @@ func TestGetClusters_LabelFilter(t *testing.T) {
 }
 
 func TestGetClusters_NoSlurmVersion(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
@@ -168,7 +168,7 @@ func TestGetClusters_NoSlurmVersion(t *testing.T) {
 }
 
 func TestGetClusters_EmptyClusterLabel(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
@@ -192,7 +192,7 @@ func TestGetClusters_EmptyClusterLabel(t *testing.T) {
 // --- GetNodes ---
 
 func TestGetNodes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
@@ -227,7 +227,7 @@ func TestGetNodes(t *testing.T) {
 }
 
 func TestGetNodes_WithStatus(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
@@ -254,7 +254,7 @@ func TestGetNodes_WithStatus(t *testing.T) {
 }
 
 func TestGetNodes_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -265,7 +265,7 @@ func TestGetNodes_Empty(t *testing.T) {
 }
 
 func TestGetNodes_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker ps failed"))
 	c := docker.NewClient(&m)
 
@@ -276,7 +276,7 @@ func TestGetNodes_Error(t *testing.T) {
 }
 
 func TestGetNodes_LabelFilter(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -290,7 +290,7 @@ func TestGetNodes_LabelFilter(t *testing.T) {
 }
 
 func TestGetNodes_SortOrder(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-worker-0", State: "running", Image: "img",
@@ -318,7 +318,7 @@ func TestGetNodes_SortOrder(t *testing.T) {
 }
 
 func TestGetNodes_UnknownRole(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
 			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
@@ -379,7 +379,7 @@ func networkInspectJSON(name, subnet, gateway string) string {
 }
 
 func TestGetNetworks(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
 		networkEntry{Name: "sind-mesh", Driver: "bridge"},
@@ -404,7 +404,7 @@ func TestGetNetworks(t *testing.T) {
 }
 
 func TestGetNetworks_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -415,7 +415,7 @@ func TestGetNetworks_Empty(t *testing.T) {
 }
 
 func TestGetNetworks_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -433,7 +433,7 @@ type volumeEntry struct {
 }
 
 func TestGetVolumes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		volumeEntry{Name: "sind-dev-data", Driver: "local"},
 		volumeEntry{Name: "sind-dev-config", Driver: "local"},
@@ -455,7 +455,7 @@ func TestGetVolumes(t *testing.T) {
 }
 
 func TestGetVolumes_Empty(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -466,7 +466,7 @@ func TestGetVolumes_Empty(t *testing.T) {
 }
 
 func TestGetVolumes_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -479,7 +479,7 @@ func TestGetVolumes_Error(t *testing.T) {
 // --- GetMungeKey ---
 
 func TestGetMungeKey(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "c1", Names: "sind-dev-controller", State: "running",
 		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
@@ -495,7 +495,7 @@ func TestGetMungeKey(t *testing.T) {
 }
 
 func TestGetMungeKey_NoContainers(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
@@ -506,7 +506,7 @@ func TestGetMungeKey_NoContainers(t *testing.T) {
 }
 
 func TestGetMungeKey_ListError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
@@ -517,7 +517,7 @@ func TestGetMungeKey_ListError(t *testing.T) {
 }
 
 func TestGetMungeKey_CopyError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "c1", Names: "sind-dev-controller", State: "running",
 		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",

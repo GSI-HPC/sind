@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -104,7 +104,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 // --- CreateClusterNetwork ---
 
 func TestCreateClusterNetwork(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("net-id-123\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -121,7 +121,7 @@ func TestCreateClusterNetwork(t *testing.T) {
 }
 
 func TestCreateClusterNetwork_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("network already exists"))
 	c := docker.NewClient(&m)
 
@@ -134,7 +134,7 @@ func TestCreateClusterNetwork_Error(t *testing.T) {
 // --- CreateClusterVolumes ---
 
 func TestCreateClusterVolumes(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // config
 	m.AddResult("", "", nil) // munge
 	m.AddResult("", "", nil) // data
@@ -165,7 +165,7 @@ func TestCreateClusterVolumes(t *testing.T) {
 }
 
 func TestCreateClusterVolumes_SkipData(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil) // config
 	m.AddResult("", "", nil) // munge
 	c := docker.NewClient(&m)
@@ -179,7 +179,7 @@ func TestCreateClusterVolumes_SkipData(t *testing.T) {
 }
 
 func TestCreateClusterVolumes_Error(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", nil)                                // config OK
 	m.AddResult("", "", fmt.Errorf("volume create failed")) // munge fails
 	c := docker.NewClient(&m)
@@ -194,7 +194,7 @@ func TestCreateClusterVolumes_Error(t *testing.T) {
 // --- WriteClusterConfig ---
 
 func TestWriteClusterConfig(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
@@ -228,7 +228,7 @@ func TestWriteClusterConfig(t *testing.T) {
 }
 
 func TestWriteClusterConfig_Pull(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
@@ -245,7 +245,7 @@ func TestWriteClusterConfig_Pull(t *testing.T) {
 }
 
 func TestWriteClusterConfig_CreateError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("create failed"))
 	c := docker.NewClient(&m)
 
@@ -257,7 +257,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 }
 
 func TestWriteClusterConfig_CopyError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil)             // CreateContainer
 	m.AddResult("", "", fmt.Errorf("cp failed")) // CopyToContainer
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
@@ -274,7 +274,7 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 // --- WriteMungeKey ---
 
 func TestWriteMungeKey(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // Exec chown
@@ -301,7 +301,7 @@ func TestWriteMungeKey(t *testing.T) {
 }
 
 func TestWriteMungeKey_Pull(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // Exec chown
@@ -320,7 +320,7 @@ func TestWriteMungeKey_Pull(t *testing.T) {
 }
 
 func TestWriteMungeKey_RunError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("run failed"))
 	c := docker.NewClient(&m)
 
@@ -331,7 +331,7 @@ func TestWriteMungeKey_RunError(t *testing.T) {
 }
 
 func TestWriteMungeKey_CopyError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil)             // RunContainer
 	m.AddResult("", "", fmt.Errorf("cp failed")) // CopyToContainer
 	m.AddResult("", "", nil)                     // KillContainer (defer)
@@ -346,7 +346,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 }
 
 func TestWriteMungeKey_ChownError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil)                // RunContainer
 	m.AddResult("", "", nil)                        // CopyToContainer
 	m.AddResult("", "", fmt.Errorf("chown failed")) // Exec chown
@@ -361,7 +361,7 @@ func TestWriteMungeKey_ChownError(t *testing.T) {
 }
 
 func TestWriteMungeKey_ChmodError(t *testing.T) {
-	var m cmdexec.MockExecutor
+	var m mock.Executor
 	m.AddResult("abc123\n", "", nil)                // RunContainer
 	m.AddResult("", "", nil)                        // CopyToContainer
 	m.AddResult("", "", nil)                        // Exec chown

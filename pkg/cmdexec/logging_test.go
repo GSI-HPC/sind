@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cmdexec
+package cmdexec_test
 
 import (
 	"context"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLoggingExecutor_Run(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("ok", "", nil)
 
 	var logged string
-	l := &LoggingExecutor{
+	l := &cmdexec.LoggingExecutor{
 		Inner: &m,
 		Log:   func(_ context.Context, cmd string) { logged = cmd },
 	}
@@ -28,11 +30,11 @@ func TestLoggingExecutor_Run(t *testing.T) {
 }
 
 func TestLoggingExecutor_RunWithStdin(t *testing.T) {
-	var m MockExecutor
+	var m mock.Executor
 	m.AddResult("ok", "", nil)
 
 	var logged string
-	l := &LoggingExecutor{
+	l := &cmdexec.LoggingExecutor{
 		Inner: &m,
 		Log:   func(_ context.Context, cmd string) { logged = cmd },
 	}

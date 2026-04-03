@@ -7,11 +7,11 @@ package docker
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 )
 
-func newTestClient(t *testing.T) (*Client, *cmdexec.Recorder) {
+func newTestClient(t *testing.T) (*Client, *mock.Recorder) {
 	t.Helper()
-	rec := cmdexec.NewMockRecorder()
+	rec := mock.NewRecorder()
 	return NewClient(rec.RecordingExecutor), rec
 }

@@ -7,7 +7,7 @@ package testutil
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -16,8 +16,8 @@ import (
 func Realm(string) string { return "sind" }
 
 // NewClient returns a docker.Client backed by a MockExecutor.
-func NewClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
+func NewClient(t *testing.T) (*docker.Client, *mock.Recorder) {
 	t.Helper()
-	rec := cmdexec.NewMockRecorder()
+	rec := mock.NewRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
 }

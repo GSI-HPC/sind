@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cmdexec
+package mock
 
 import (
 	"context"
@@ -8,12 +8,14 @@ import (
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
 // RecordingExecutor wraps another Executor and records all calls with
 // their results. Useful for observing actual CLI I/O during tests.
 type RecordingExecutor struct {
-	Inner Executor
+	Inner cmdexec.Executor
 
 	mu    sync.Mutex
 	calls []RecordedCall
@@ -28,14 +30,14 @@ type RecordedCall struct {
 	Err    error
 }
 
-// Run implements Executor.
+// Run implements cmdexec.Executor.
 func (r *RecordingExecutor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
 	stdout, stderr, err := r.Inner.Run(ctx, name, args...)
 	r.record(RecordedCall{Name: name, Args: args, Stdout: stdout, Stderr: stderr, Err: err})
 	return stdout, stderr, err
 }
 
-// RunWithStdin implements Executor.
+// RunWithStdin implements cmdexec.Executor.
 func (r *RecordingExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	stdout, stderr, err := r.Inner.RunWithStdin(ctx, stdin, name, args...)
 	r.record(RecordedCall{Name: name, Args: args, Stdout: stdout, Stderr: stderr, Err: err})

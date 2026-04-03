@@ -6,14 +6,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func completionCtx(mock *cmdexec.MockExecutor) context.Context {
+func completionCtx(mock *mock.Executor) context.Context {
 	client := docker.NewClient(mock)
 	return withClient(context.Background(), client)
 }
@@ -28,7 +28,7 @@ func findCmd(ctx context.Context, t *testing.T, path ...string) *cobra.Command {
 }
 
 func TestCompleteClusterNames(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	// DiscoverClusterNames calls ListNetworks (NDJSON) then ListVolumes (NDJSON).
 	mock.AddResult(
 		"{\"Name\":\"sind-dev-net\"}\n{\"Name\":\"sind-prod-net\"}", "", nil)
@@ -42,7 +42,7 @@ func TestCompleteClusterNames(t *testing.T) {
 }
 
 func TestCompleteClusterNames_AlreadyHasArg(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "status")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "status")
 
 	names, directive := sub.ValidArgsFunction(sub, []string{"existing"}, "")
 	assert.Nil(t, names)
@@ -50,7 +50,7 @@ func TestCompleteClusterNames_AlreadyHasArg(t *testing.T) {
 }
 
 func TestCompleteNodeNames(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	// DiscoverClusterNames: ListNetworks + ListVolumes
 	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
 	mock.AddResult("", "", nil)
@@ -68,7 +68,7 @@ func TestCompleteNodeNames(t *testing.T) {
 }
 
 func TestCompleteLogsArgs_Node(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
 	mock.AddResult("", "", nil)
 	mock.AddResult(
@@ -83,7 +83,7 @@ func TestCompleteLogsArgs_Node(t *testing.T) {
 }
 
 func TestCompleteLogsArgs_Service(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "logs")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "logs")
 
 	names, directive := sub.ValidArgsFunction(sub, []string{"controller.dev"}, "")
 	assert.ElementsMatch(t, []string{"slurmctld", "slurmd", "sshd", "munge"}, names)
@@ -91,7 +91,7 @@ func TestCompleteLogsArgs_Service(t *testing.T) {
 }
 
 func TestCompleteSSHNodeArg_EmptyArgs(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
 	mock.AddResult("", "", nil)
 	mock.AddResult(
@@ -106,7 +106,7 @@ func TestCompleteSSHNodeArg_EmptyArgs(t *testing.T) {
 }
 
 func TestCompleteSSHNodeArg_SkipsSSHFlags(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
 	mock.AddResult("", "", nil)
 	mock.AddResult(
@@ -121,7 +121,7 @@ func TestCompleteSSHNodeArg_SkipsSSHFlags(t *testing.T) {
 }
 
 func TestCompleteSSHNodeArg_AfterFlagValue(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "ssh")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "ssh")
 
 	// -o expects a value — should not offer node completions
 	names, directive := completeSSHNodeArg(sub, []string{"-o"}, "Strict")
@@ -130,7 +130,7 @@ func TestCompleteSSHNodeArg_AfterFlagValue(t *testing.T) {
 }
 
 func TestCompleteSSHNodeArg_NodeAlreadyProvided(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "ssh")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "ssh")
 
 	names, directive := completeSSHNodeArg(sub, []string{"controller.dev"}, "")
 	assert.Nil(t, names)
@@ -138,7 +138,7 @@ func TestCompleteSSHNodeArg_NodeAlreadyProvided(t *testing.T) {
 }
 
 func TestCompleteSSHNodeArg_AfterDashDash(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "ssh")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "ssh")
 
 	names, directive := completeSSHNodeArg(sub, []string{"controller.dev", "--"}, "")
 	assert.Nil(t, names)
@@ -146,7 +146,7 @@ func TestCompleteSSHNodeArg_AfterDashDash(t *testing.T) {
 }
 
 func TestCompleteSSHNodeArg_DashPrefix(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "ssh")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "ssh")
 
 	names, directive := completeSSHNodeArg(sub, nil, "-")
 	assert.Nil(t, names)
@@ -154,7 +154,7 @@ func TestCompleteSSHNodeArg_DashPrefix(t *testing.T) {
 }
 
 func TestCompleteExecClusterArg_EmptyArgs(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
 	mock.AddResult("", "", nil)
 
@@ -166,7 +166,7 @@ func TestCompleteExecClusterArg_EmptyArgs(t *testing.T) {
 }
 
 func TestCompleteExecClusterArg_ClusterAlreadyProvided(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "exec")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "exec")
 
 	names, directive := completeExecClusterArg(sub, []string{"dev"}, "")
 	assert.Nil(t, names)
@@ -174,7 +174,7 @@ func TestCompleteExecClusterArg_ClusterAlreadyProvided(t *testing.T) {
 }
 
 func TestCompleteExecClusterArg_AfterDashDash(t *testing.T) {
-	sub := findCmd(completionCtx(&cmdexec.MockExecutor{}), t, "exec")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "exec")
 
 	names, directive := completeExecClusterArg(sub, []string{"dev", "--"}, "")
 	assert.Nil(t, names)
@@ -182,7 +182,7 @@ func TestCompleteExecClusterArg_AfterDashDash(t *testing.T) {
 }
 
 func TestCompleteClusterNames_DockerError(t *testing.T) {
-	mock := &cmdexec.MockExecutor{}
+	mock := &mock.Executor{}
 	mock.AddResult("", "Error", assert.AnError)
 
 	sub := findCmd(completionCtx(mock), t, "status")

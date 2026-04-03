@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package cmdexec
+package mock
+
+import "github.com/GSI-HPC/sind/pkg/cmdexec"
 
 // Recorder holds a RecordingExecutor and the underlying mock (if any).
 // In unit mode, mock is non-nil and AddResult configures responses.
 // In integration mode, mock is nil and AddResult is a no-op.
 type Recorder struct {
 	*RecordingExecutor
-	mock *MockExecutor
+	mock *Executor
 }
 
-// NewMockRecorder returns a Recorder backed by a MockExecutor.
-func NewMockRecorder() *Recorder {
-	m := &MockExecutor{}
+// NewRecorder returns a Recorder backed by a Executor.
+func NewRecorder() *Recorder {
+	m := &Executor{}
 	return &Recorder{
 		RecordingExecutor: &RecordingExecutor{Inner: m},
 		mock:              m,
@@ -22,7 +24,7 @@ func NewMockRecorder() *Recorder {
 // NewIntegrationRecorder returns a Recorder backed by an OSExecutor.
 func NewIntegrationRecorder() *Recorder {
 	return &Recorder{
-		RecordingExecutor: &RecordingExecutor{Inner: &OSExecutor{}},
+		RecordingExecutor: &RecordingExecutor{Inner: &cmdexec.OSExecutor{}},
 	}
 }
 
