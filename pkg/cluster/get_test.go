@@ -133,7 +133,7 @@ func TestGetClusters_Error(t *testing.T) {
 	_, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing sind containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 func TestGetClusters_LabelFilter(t *testing.T) {

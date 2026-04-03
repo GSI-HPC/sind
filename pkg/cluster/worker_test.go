@@ -172,7 +172,7 @@ func TestWorkerAdd_ListContainersError(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 // --- NextComputeIndex ---
@@ -266,7 +266,7 @@ func TestNextComputeIndex_ListError(t *testing.T) {
 	_, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 // --- WorkerAdd (managed) ---
@@ -862,7 +862,7 @@ func TestWorkerRemove_ListContainersError(t *testing.T) {
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 func TestWorkerAdd_DefaultCount(t *testing.T) {
@@ -1138,7 +1138,7 @@ func TestWorkerAdd_ListError(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 func TestWorkerAdd_CreateNodeError(t *testing.T) {

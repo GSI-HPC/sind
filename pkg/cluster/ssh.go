@@ -35,7 +35,7 @@ func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
-		return "", fmt.Errorf("listing cluster containers: %w", err)
+		return "", fmt.Errorf("listing containers: %w", err)
 	}
 
 	for _, e := range entries {

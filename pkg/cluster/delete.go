@@ -232,7 +232,7 @@ func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm stri
 func HasOtherClusters(ctx context.Context, client *docker.Client, realm, clusterName string) (bool, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
-		return false, fmt.Errorf("listing sind containers: %w", err)
+		return false, fmt.Errorf("listing containers: %w", err)
 	}
 	for _, c := range containers {
 		// Check if any container belongs to a different cluster by inspecting

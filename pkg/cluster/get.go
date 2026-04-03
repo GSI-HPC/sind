@@ -27,7 +27,7 @@ type Summary struct {
 func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*Summary, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
-		return nil, fmt.Errorf("listing sind containers: %w", err)
+		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	if len(containers) == 0 {
 		return nil, nil

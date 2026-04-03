@@ -381,7 +381,7 @@ func TestHasOtherClusters_Error(t *testing.T) {
 	_, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing sind containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 func TestHasOtherClusters_LabelFilter(t *testing.T) {
@@ -592,7 +592,7 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing sind containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 func TestDelete_VolumeRemoveError(t *testing.T) {
