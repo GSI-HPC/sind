@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 )
@@ -173,4 +174,108 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 	}
 
 	return id, nil
+}
+
+// NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
+// Worker nodes are indexed sequentially across all worker groups.
+func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []RunConfig {
+	var configs []RunConfig
+	workerIdx := 0
+
+	dataHostPath := ""
+	dataMountPath := ""
+	if cfg.Storage.DataStorage.Type == "hostPath" {
+		dataHostPath = cfg.Storage.DataStorage.HostPath
+	}
+	if cfg.Storage.DataStorage.MountPath != "" {
+		dataMountPath = cfg.Storage.DataStorage.MountPath
+	}
+
+	for _, n := range cfg.Nodes {
+		switch n.Role {
+		case "controller", "submitter":
+			configs = append(configs, RunConfig{
+				Realm:           realm,
+				ClusterName:     cfg.Name,
+				ShortName:       n.Role,
+				Role:            n.Role,
+				Image:           n.Image,
+				CPUs:            n.CPUs,
+				Memory:          n.Memory,
+				TmpSize:         n.TmpSize,
+				SlurmVersion:    slurmVersion,
+				DNSIP:           dnsIP,
+				DataHostPath:    dataHostPath,
+				DataMountPath:   dataMountPath,
+				ContainerNumber: 1,
+				Pull:            cfg.Pull,
+			})
+		case "worker":
+			count := n.Count
+			if count <= 0 {
+				count = 1
+			}
+			isManaged := n.Managed == nil || *n.Managed
+			for i := 0; i < count; i++ {
+				configs = append(configs, RunConfig{
+					Realm:           realm,
+					ClusterName:     cfg.Name,
+					ShortName:       fmt.Sprintf("worker-%d", workerIdx),
+					Role:            "worker",
+					Image:           n.Image,
+					CPUs:            n.CPUs,
+					Memory:          n.Memory,
+					TmpSize:         n.TmpSize,
+					SlurmVersion:    slurmVersion,
+					DNSIP:           dnsIP,
+					DataHostPath:    dataHostPath,
+					DataMountPath:   dataMountPath,
+					Managed:         isManaged,
+					ContainerNumber: workerIdx + 1,
+					Pull:            cfg.Pull,
+				})
+				workerIdx++
+			}
+		}
+	}
+	return configs
+}
+
+// CreateClusterNodes creates all node containers for the cluster.
+// Each node is created, connected to the mesh network, and started.
+func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, configs []RunConfig) error {
+	for _, cfg := range configs {
+		_, err := CreateNode(ctx, client, meshMgr, cfg)
+		if err != nil {
+			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
+		}
+	}
+	return nil
+}
+
+// EnableSlurmServices enables the role-appropriate Slurm daemon on each node.
+// Controller nodes get slurmctld; managed worker nodes get slurmd.
+// Submitter and unmanaged worker nodes are skipped.
+func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []RunConfig) error {
+	for _, cfg := range configs {
+		var service string
+		switch cfg.Role {
+		case "controller":
+			service = "slurmctld"
+		case "worker":
+			if !cfg.Managed {
+				continue
+			}
+			service = "slurmd"
+		default:
+			continue
+		}
+
+		containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
+		_, err := client.Exec(ctx, containerName, "systemctl", "enable", "--now", service)
+		if err != nil {
+			return fmt.Errorf("enabling %s on %s: %w", service, cfg.ShortName, err)
+		}
+	}
+	return nil
 }
