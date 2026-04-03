@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -25,12 +26,12 @@ func listErrorMock() *cmdexec.MockExecutor {
 
 // powerContainers returns a standard set of cluster containers for power tests.
 func powerContainers() string {
-	return ndjson(
-		psEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+	return testutil.NDJSON(
+		testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=controller"},
-		psEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+		testutil.PsEntry{ID: "c2", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=worker"},
-		psEntry{ID: "c3", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
+		testutil.PsEntry{ID: "c3", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=worker"},
 	)
 }
@@ -525,7 +526,7 @@ func TestPower_Unfreeze_UnpauseError(t *testing.T) {
 
 func TestPowerLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	cluster := "it-pwr"
 	ctrName := ContainerName(mesh.DefaultRealm, cluster, "worker-0")

@@ -4,10 +4,9 @@ package cluster
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -54,7 +53,7 @@ func TestNodeShortNames(t *testing.T) {
 			name: "unmanaged nodes still get indexed",
 			nodes: []config.Node{
 				{Role: "controller"},
-				{Role: "worker", Count: 2, Managed: boolPtr(false)},
+				{Role: "worker", Count: 2, Managed: testutil.Ptr(false)},
 				{Role: "worker", Count: 1},
 			},
 			want: []string{"controller", "worker-0", "worker-1", "worker-2"},
@@ -223,8 +222,6 @@ func TestPreflightCheck_MultiCompute(t *testing.T) {
 
 // --- helpers ---
 
-func boolPtr(b bool) *bool { return &b }
-
 func minimalConfig() *config.Cluster {
 	return &config.Cluster{
 		Name: "dev",
@@ -255,16 +252,8 @@ func addNotFound(t *testing.T, m *cmdexec.MockExecutor, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		m.AddResult("", "Error: No such object\n",
-			&exec.ExitError{ProcessState: exitCode1(t)})
+			testutil.ExitCode1(t))
 	}
 }
 
 // exitCode1 runs a command that exits with code 1 and returns its ProcessState.
-func exitCode1(t *testing.T) *os.ProcessState {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr.ProcessState
-}

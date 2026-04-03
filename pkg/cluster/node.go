@@ -21,18 +21,6 @@ const (
 	LabelDataHostPath = "sind.data.hostpath"
 )
 
-// Docker Compose compatibility labels.
-const (
-	LabelComposeProject         = "com.docker.compose.project"
-	LabelComposeService         = "com.docker.compose.service"
-	LabelComposeContainerNumber = "com.docker.compose.container-number"
-	LabelComposeOneoff          = "com.docker.compose.oneoff"
-	LabelComposeConfigHash      = "com.docker.compose.config-hash"
-	LabelComposeConfigFiles     = "com.docker.compose.project.config_files"
-	LabelComposeNetwork         = "com.docker.compose.network"
-	LabelComposeVolume          = "com.docker.compose.volume"
-)
-
 // ComposeProject returns the Docker Compose project name for a cluster.
 func ComposeProject(realm, clusterName string) string {
 	return realm + "-" + clusterName
@@ -44,15 +32,15 @@ func ComposeProject(realm, clusterName string) string {
 // The data host path label is omitted when dataHostPath is empty (Docker volume mode).
 func NodeLabels(realm, clusterName, role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
 	labels := map[string]string{
-		LabelRealm:                  realm,
-		LabelCluster:                clusterName,
-		LabelRole:                   role,
-		LabelComposeProject:         ComposeProject(realm, clusterName),
-		LabelComposeService:         role,
-		LabelComposeContainerNumber: strconv.Itoa(containerNumber),
-		LabelComposeOneoff:          "False",
-		LabelComposeConfigHash:      "",
-		LabelComposeConfigFiles:     "",
+		LabelRealm:                         realm,
+		LabelCluster:                       clusterName,
+		LabelRole:                          role,
+		docker.ComposeProjectLabel:         ComposeProject(realm, clusterName),
+		docker.ComposeServiceLabel:         role,
+		docker.ComposeContainerNumberLabel: strconv.Itoa(containerNumber),
+		docker.ComposeOneoffLabel:          "False",
+		docker.ComposeConfigHashLabel:      "",
+		docker.ComposeConfigFilesLabel:     "",
 	}
 	if slurmVersion != "" {
 		labels[LabelSlurmVersion] = slurmVersion

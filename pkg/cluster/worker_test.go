@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -18,17 +19,17 @@ import (
 
 // workerContainers returns a standard set of cluster containers for worker tests.
 func workerContainers(computes ...string) string {
-	entries := []psEntry{
+	entries := []testutil.PsEntry{
 		{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=controller"},
 	}
 	for _, c := range computes {
-		entries = append(entries, psEntry{
+		entries = append(entries, testutil.PsEntry{
 			ID: "c" + c, Names: "sind-dev-" + c, State: "running", Image: "img:1",
 			Labels: "sind.cluster=dev,sind.role=worker",
 		})
 	}
-	return ndjson(entries...)
+	return testutil.NDJSON(entries...)
 }
 
 // --- ValidateWorkerAdd ---
@@ -40,8 +41,8 @@ func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		// ListContainers: controller exists
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -67,8 +68,8 @@ func TestWorkerAdd_RequiresSindNodes_Present(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -92,8 +93,8 @@ func TestWorkerAdd_AllowsUnmanaged(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -171,7 +172,7 @@ func TestWorkerAdd_ListContainersError(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 // --- NextComputeIndex ---
@@ -181,8 +182,8 @@ func TestNextComputeIndex_Empty(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
 			)}
 		}
@@ -235,10 +236,10 @@ func TestNextComputeIndex_NonComputeIgnored(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "def", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "def", Names: "sind-dev-submitter", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=submitter"},
 			)}
 		}
@@ -265,7 +266,7 @@ func TestNextComputeIndex_ListError(t *testing.T) {
 	_, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 // --- WorkerAdd (managed) ---
@@ -861,7 +862,7 @@ func TestWorkerRemove_ListContainersError(t *testing.T) {
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-0"})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 func TestWorkerAdd_DefaultCount(t *testing.T) {
@@ -951,8 +952,8 @@ func TestWorkerRemove_NoController(t *testing.T) {
 		switch {
 		case args[0] == "ps":
 			// Only worker nodes, no controller.
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		case args[0] == "cp" && len(args) == 3 && args[2] == "-" && strings.Contains(args[1], "sind-dns"):
@@ -1000,12 +1001,12 @@ func TestNextComputeIndex_NonNumericSuffix(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
-				psEntry{ID: "cx", Names: "sind-dev-worker-abc", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "cx", Names: "sind-dev-worker-abc", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
@@ -1041,12 +1042,12 @@ func TestWorkerRemove_RejectsSubmitter(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=controller"},
-				psEntry{ID: "sub", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "sub", Names: "sind-dev-submitter", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=submitter"},
-				psEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
 					Labels: "sind.cluster=dev,sind.role=worker"},
 			)}
 		}
@@ -1137,7 +1138,7 @@ func TestWorkerAdd_ListError(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
+	assert.Contains(t, err.Error(), "listing containers")
 }
 
 func TestWorkerAdd_CreateNodeError(t *testing.T) {
@@ -1261,6 +1262,45 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 		}
 	}
 	assert.True(t, removed, "cleanup should remove the new worker container")
+}
+
+func TestWorkerAdd_CleanupErrors(t *testing.T) {
+	// When cleanup itself encounters errors (RemoveKnownHost, RemoveContainer),
+	// those errors are logged but do not mask the original failure.
+	var m cmdexec.MockExecutor
+	inner := workerAddOnCall(t)
+	inCleanup := false
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
+		// Make enableSlurm fail to trigger cleanup.
+		if args[0] == "exec" && len(args) > 3 &&
+			strings.Contains(args[1], "worker") && args[2] == "systemctl" && args[3] == "enable" {
+			inCleanup = true
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}
+		}
+		if !inCleanup {
+			return inner(args, stdin)
+		}
+		// During cleanup: make RemoveKnownHost and RemoveContainer fail.
+		if args[0] == "exec" && args[1] == "-i" {
+			return cmdexec.MockResult{Err: fmt.Errorf("write failed")}
+		}
+		if args[0] == "rm" {
+			return cmdexec.MockResult{Err: fmt.Errorf("container locked")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl failed")
 }
 
 func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {

@@ -29,12 +29,12 @@ const (
 // composeLabels returns compose compatibility labels for a mesh container.
 func composeLabels(project, service string, containerNumber int) map[string]string {
 	return map[string]string{
-		"com.docker.compose.project":              project,
-		"com.docker.compose.service":              service,
-		"com.docker.compose.container-number":     fmt.Sprintf("%d", containerNumber),
-		"com.docker.compose.oneoff":               "False",
-		"com.docker.compose.config-hash":          "",
-		"com.docker.compose.project.config_files": "",
+		docker.ComposeProjectLabel:         project,
+		docker.ComposeServiceLabel:         service,
+		docker.ComposeContainerNumberLabel: fmt.Sprintf("%d", containerNumber),
+		docker.ComposeOneoffLabel:          "False",
+		docker.ComposeConfigHashLabel:      "",
+		docker.ComposeConfigFilesLabel:     "",
 	}
 }
 
@@ -227,8 +227,8 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	}
 	m.created = true
 	networkLabels := map[string]string{
-		"com.docker.compose.project": m.ComposeProject(),
-		"com.docker.compose.network": "mesh",
+		docker.ComposeProjectLabel: m.ComposeProject(),
+		docker.ComposeNetworkLabel: "mesh",
 	}
 	_, err = m.Docker.CreateNetwork(ctx, name, networkLabels)
 	if err != nil {

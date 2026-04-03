@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -52,7 +53,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// List cluster containers once for validation + index + image resolution.
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+opts.ClusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing cluster containers: %w", err)
+		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
 	controller, ok := findController(containers, realm, opts.ClusterName)
@@ -190,7 +191,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	// List cluster containers to find controller and validate targets.
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
 	if err != nil {
-		return fmt.Errorf("listing cluster containers: %w", err)
+		return fmt.Errorf("listing containers: %w", err)
 	}
 
 	controller, hasController := findController(containers, realm, clusterName)
@@ -246,7 +247,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string, opts WorkerAddOptions) error {
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+opts.ClusterName)
 	if err != nil {
-		return fmt.Errorf("listing cluster containers: %w", err)
+		return fmt.Errorf("listing containers: %w", err)
 	}
 
 	controller, ok := findController(containers, realm, opts.ClusterName)
@@ -272,7 +273,7 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string,
 func NextComputeIndex(ctx context.Context, client *docker.Client, realm, clusterName string) (int, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
 	if err != nil {
-		return 0, fmt.Errorf("listing cluster containers: %w", err)
+		return 0, fmt.Errorf("listing containers: %w", err)
 	}
 	return nextWorkerIndexFromContainers(containers, realm, clusterName), nil
 }
@@ -291,7 +292,7 @@ func findController(containers []docker.ContainerListEntry, realm, clusterName s
 	return docker.ContainerListEntry{}, false
 }
 
-var errSindNodesConfMissing = fmt.Errorf("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
+var errSindNodesConfMissing = errors.New("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
 
 // resolveWorkerInfra fetches DNS IP, SSH public key, and slurm version
 // concurrently. The Slurm version is read from the controller's labels

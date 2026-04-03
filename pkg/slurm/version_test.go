@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestParseVersion(t *testing.T) {
 
 func TestDiscoverVersionLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	image := "ghcr.io/gsi-hpc/sind-node:latest"
 
 	if !rec.IsIntegration() {

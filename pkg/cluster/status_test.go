@@ -4,9 +4,9 @@ package cluster
 
 import (
 	"fmt"
-	"os/exec"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -254,8 +254,6 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 
 // --- GetNetworkHealth ---
 
-// exitCode1 is defined in preflight_test.go.
-
 func netInspect(name, subnet, gw string) string {
 	return fmt.Sprintf(`[{"Name":%q,"Driver":"bridge","IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gw)
 }
@@ -288,7 +286,7 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 
 func TestGetNetworkHealth_NoneExist(t *testing.T) {
 	var m cmdexec.MockExecutor
-	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
+	notFound := testutil.ExitCode1(t)
 	m.AddResult("", "Error: No such network\n", notFound)   // mesh
 	m.AddResult("", "Error: No such container\n", notFound) // dns
 	m.AddResult("", "Error: No such network\n", notFound)   // cluster net
@@ -307,7 +305,7 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	var m cmdexec.MockExecutor
-	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
+	notFound := testutil.ExitCode1(t)
 	m.AddResult("[{}]\n", "", nil)                                               // mesh exists
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
 	m.AddResult("[{}]\n", "", nil)                                               // dns exists
@@ -438,7 +436,7 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 
 func TestGetMountPoints_NoneExist(t *testing.T) {
 	var m cmdexec.MockExecutor
-	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
+	notFound := testutil.ExitCode1(t)
 	m.AddResult("", "Error: No such volume\n", notFound) // config
 	m.AddResult("", "Error: No such volume\n", notFound) // munge
 	m.AddResult("", "Error: No such volume\n", notFound) // data
@@ -477,7 +475,7 @@ func TestGetMountPoints_MungeCheckError(t *testing.T) {
 
 func TestGetMountPoints_DataCheckError(t *testing.T) {
 	var m cmdexec.MockExecutor
-	notFound := &exec.ExitError{ProcessState: exitCode1(t)}
+	notFound := testutil.ExitCode1(t)
 	m.AddResult("[{}]\n", "", nil)                         // config OK
 	m.AddResult("", "Error: No such volume\n", notFound)   // munge missing
 	m.AddResult("", "", fmt.Errorf("docker daemon error")) // data error
@@ -501,16 +499,16 @@ func fullStatusOnCall(t *testing.T) func([]string, string) cmdexec.MockResult {
 
 		// docker ps (ListContainers)
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},
@@ -644,8 +642,8 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.OnCall = func(args []string, _ string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
@@ -707,16 +705,16 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		// Return nodes in non-sorted order including submitter.
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=submitter",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
@@ -753,12 +751,12 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	base := fullStatusOnCall(t)
 	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
 		if args[0] == "ps" {
-			return cmdexec.MockResult{Stdout: ndjson(
-				psEntry{
+			return cmdexec.MockResult{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
-				psEntry{
+				testutil.PsEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=worker",
 				},

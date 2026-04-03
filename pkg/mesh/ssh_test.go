@@ -9,10 +9,10 @@ import (
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
@@ -23,27 +23,27 @@ import (
 
 func TestKnownHostLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
-	mgr := NewManager(c, lifecycleRealm(rec))
+	mgr := NewManager(c, testutil.Realm("it-mesh"))
 
 	if !rec.IsIntegration() {
 		// EnsureMesh
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // network exists → no
-		rec.AddResult("net-id\n", "", nil)                                        // create network
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS exists → no
-		rec.AddResult("dns-id\n", "", nil)                                        // create DNS
-		rec.AddResult("", "", nil)                                                // copy Corefile
-		rec.AddResult("sind-dns\n", "", nil)                                      // start DNS
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH vol exists → no
-		rec.AddResult("sind-ssh-config\n", "", nil)                               // create SSH vol
-		rec.AddResult("keygen-id\n", "", nil)                                     // create keygen container
-		rec.AddResult("", "", nil)                                                // copy keygen script
-		rec.AddResult("", "", nil)                                                // remove keygen container
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // SSH exists → no
-		rec.AddResult(dnsInspectJSON(), "", nil)                                  // inspect DNS for IP
-		rec.AddResult("ssh-id\n", "", nil)                                        // create SSH
-		rec.AddResult("sind-ssh\n", "", nil)                                      // start SSH
+		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // network exists → no
+		rec.AddResult("net-id\n", "", nil)                  // create network
+		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // DNS exists → no
+		rec.AddResult("dns-id\n", "", nil)                  // create DNS
+		rec.AddResult("", "", nil)                          // copy Corefile
+		rec.AddResult("sind-dns\n", "", nil)                // start DNS
+		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // SSH vol exists → no
+		rec.AddResult("sind-ssh-config\n", "", nil)         // create SSH vol
+		rec.AddResult("keygen-id\n", "", nil)               // create keygen container
+		rec.AddResult("", "", nil)                          // copy keygen script
+		rec.AddResult("", "", nil)                          // remove keygen container
+		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // SSH exists → no
+		rec.AddResult(dnsInspectJSON(), "", nil)            // inspect DNS for IP
+		rec.AddResult("ssh-id\n", "", nil)                  // create SSH
+		rec.AddResult("sind-ssh\n", "", nil)                // start SSH
 
 		// AddKnownHost "a"
 		rec.AddResult("", "", nil)
@@ -94,7 +94,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// CreateVolume → success
 	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
 	// CreateContainer → success
@@ -164,7 +164,7 @@ func TestEnsureSSHVolume_CreateVolumeError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// CreateVolume → error
 	m.AddResult("", "Error: permission denied\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
@@ -179,7 +179,7 @@ func TestEnsureSSHVolume_CreateContainerError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// CreateVolume → success
 	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
 	// CreateContainer → error
@@ -196,7 +196,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// VolumeExists → not found
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// CreateVolume → success
 	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
 	// CreateContainer → success
@@ -219,7 +219,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 func TestEnsureSSHVolume_Pull(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
 	m.AddResult("abc123\n", "", nil)
 	m.AddResult("", "", nil)
@@ -232,7 +232,7 @@ func TestEnsureSSHVolume_Pull(t *testing.T) {
 	require.NoError(t, err)
 
 	createArgs := m.Calls[2].Args
-	pull, ok := argValue(createArgs, "--pull")
+	pull, ok := testutil.ArgValue(createArgs, "--pull")
 	assert.True(t, ok, "--pull flag present in keygen container")
 	assert.Equal(t, "always", pull)
 }
@@ -245,7 +245,7 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// InspectContainer(DNS) → mesh IP
 	m.AddResult(dnsInspectJSON(), "", nil)
 	// CreateContainer → success
@@ -298,7 +298,7 @@ func TestEnsureSSH_InspectDNSError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// InspectContainer(DNS) → error
 	m.AddResult("", "Error: No such container: sind-dns\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
@@ -313,7 +313,7 @@ func TestEnsureSSH_CreateError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// InspectContainer(DNS) → success
 	m.AddResult(dnsInspectJSON(), "", nil)
 	// CreateContainer → error
@@ -330,7 +330,7 @@ func TestEnsureSSH_StartError(t *testing.T) {
 	var m cmdexec.MockExecutor
 	// ContainerExists → not found
 	m.AddResult("", "Error: No such container: sind-ssh\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	// InspectContainer(DNS) → success
 	m.AddResult(dnsInspectJSON(), "", nil)
 	// CreateContainer → success
@@ -348,7 +348,7 @@ func TestEnsureSSH_StartError(t *testing.T) {
 func TestEnsureSSH_Pull(t *testing.T) {
 	var m cmdexec.MockExecutor
 	m.AddResult("", "Error: No such container: sind-ssh\n",
-		&exec.ExitError{ProcessState: exitCode1(t)})
+		testutil.ExitCode1(t))
 	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("def456\n", "", nil)
 	m.AddResult("sind-ssh\n", "", nil)
@@ -360,7 +360,7 @@ func TestEnsureSSH_Pull(t *testing.T) {
 	require.NoError(t, err)
 
 	createArgs := m.Calls[2].Args
-	pull, ok := argValue(createArgs, "--pull")
+	pull, ok := testutil.ArgValue(createArgs, "--pull")
 	assert.True(t, ok, "--pull flag present in SSH container")
 	assert.Equal(t, "always", pull)
 }

@@ -6,55 +6,22 @@ package cluster
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
-	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// testRealm is a per-process unique realm so parallel integration test
-// runs don't collide on Docker resource names.
-var testRealm = func() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("it-cluster-%x", b)
-}()
-
-// lifecycleRealm returns a per-test unique realm for integration tests,
-// allowing lifecycle tests to run in parallel within the package.
-func lifecycleRealm() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("it-cluster-%x", b)
-}
-
-func newTestClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
-	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker not found in PATH")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-		t.Skip("docker daemon not running")
-	}
-	rec := cmdexec.NewIntegrationRecorder()
-	return docker.NewClient(rec.RecordingExecutor), rec
-}
-
 func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
 	skipIfNoNsdelegate(t)
@@ -64,7 +31,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 		img = "ghcr.io/gsi-hpc/sind-node:latest"
 	}
 
-	realm := lifecycleRealm()
+	realm := testutil.Realm("it-cluster")
 	clusterName := "it-cluster"
 	meshMgr := mesh.NewManager(c, realm)
 

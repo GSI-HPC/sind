@@ -3,8 +3,6 @@
 package cluster
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -24,7 +23,7 @@ import (
 // --- Resource Lifecycle ---
 
 func TestClusterResourceLifecycle(t *testing.T) {
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	clusterName := "it-res"
 
@@ -244,7 +243,7 @@ func TestWriteClusterConfig_Pull(t *testing.T) {
 
 	require.NoError(t, err)
 	createArgs := m.Calls[0].Args
-	pull, ok := argValue(createArgs, "--pull")
+	pull, ok := testutil.ArgValue(createArgs, "--pull")
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 }
@@ -319,7 +318,7 @@ func TestWriteMungeKey_Pull(t *testing.T) {
 
 	require.NoError(t, err)
 	runArgs := m.Calls[0].Args
-	pull, ok := argValue(runArgs, "--pull")
+	pull, ok := testutil.ArgValue(runArgs, "--pull")
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 }
@@ -490,7 +489,7 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: "worker", Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
-				Managed: boolPtr(false)},
+				Managed: testutil.Ptr(false)},
 			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
@@ -758,16 +757,6 @@ func notFoundErr(t *testing.T) *exec.ExitError {
 	return exitErr
 }
 
-// tarArchive builds a tar archive containing a single file with the given name and content.
-func tarArchive(name, content string) string {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	_ = tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644})
-	_, _ = tw.Write([]byte(content))
-	_ = tw.Close()
-	return buf.String()
-}
-
 // emptyCorefileContent returns a Corefile with no host entries.
 func emptyCorefileContent() string {
 	return "sind.sind:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
@@ -775,7 +764,7 @@ func emptyCorefileContent() string {
 
 // emptyCorefileTar returns a tar archive containing an empty Corefile (no host entries).
 func emptyCorefileTar() string {
-	return tarArchive("Corefile", emptyCorefileContent())
+	return testutil.TarArchive("Corefile", emptyCorefileContent())
 }
 
 // happyOnCall returns an OnCall function that handles the full Create flow
@@ -1287,6 +1276,69 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	assert.GreaterOrEqual(t, meshInspects, 1, "mesh cleanup should run on resolveInfra failure")
 }
 
+func TestCreate_CleanupResourcesError(t *testing.T) {
+	// When Create fails and the cleanup itself fails, the error from Create
+	// should still be the original failure (cleanup errors are logged, not returned).
+	exitErr := notFoundErr(t)
+	inCleanup := false
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		// Make enableSlurm fail to trigger cleanup.
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			inCleanup = true
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		// Make deleteClusterResources fail: ListContainers errors during cleanup.
+		if inCleanup && args[0] == "ps" {
+			return cmdexec.MockResult{Err: fmt.Errorf("docker daemon unavailable")}, true
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl failed")
+}
+
+func TestCreate_CleanupMeshError(t *testing.T) {
+	// When Create fails with freshly-created mesh and mesh cleanup also fails,
+	// the original error should still be returned.
+	exitErr := notFoundErr(t)
+	inCleanup := false
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		// Make enableSlurm fail to trigger cleanup.
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			inCleanup = true
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		// Make mesh cleanup fail: ContainerExists errors for mesh containers.
+		if inCleanup && args[0] == "container" && args[1] == "inspect" {
+			return cmdexec.MockResult{Err: fmt.Errorf("docker daemon unavailable")}, true
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+	require.True(t, meshMgr.Created())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl failed")
+}
+
 func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 	exitErr := notFoundErr(t)
 
@@ -1295,7 +1347,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
-				Managed: boolPtr(false)},
+				Managed: testutil.Ptr(false)},
 		},
 	}
 
