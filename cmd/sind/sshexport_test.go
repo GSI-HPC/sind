@@ -4,10 +4,10 @@ package main
 
 import (
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -15,17 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// exitCode1 returns a *exec.ExitError with exit code 1 for mocking
-// ContainerExists returning false.
-func exitCode1(t *testing.T) *exec.ExitError {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr
-}
 
 // --- sindStateDir ---
 
@@ -88,7 +77,7 @@ func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
 func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
 	mock := &cmdexec.MockExecutor{}
 	// ContainerExists: not found
-	mock.AddResult("", "Error: No such container", exitCode1(t))
+	mock.AddResult("", "Error: No such container", testutil.ExitCode1(t))
 
 	client := docker.NewClient(mock)
 	meshMgr := mesh.NewManager(client, "sind")
@@ -119,7 +108,7 @@ func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
 
 func TestSyncSSHExport_NoFilesToClean(t *testing.T) {
 	mock := &cmdexec.MockExecutor{}
-	mock.AddResult("", "Error: No such container", exitCode1(t))
+	mock.AddResult("", "Error: No such container", testutil.ExitCode1(t))
 
 	client := docker.NewClient(mock)
 	meshMgr := mesh.NewManager(client, "sind")
