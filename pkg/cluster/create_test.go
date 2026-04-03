@@ -1276,6 +1276,69 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	assert.GreaterOrEqual(t, meshInspects, 1, "mesh cleanup should run on resolveInfra failure")
 }
 
+func TestCreate_CleanupResourcesError(t *testing.T) {
+	// When Create fails and the cleanup itself fails, the error from Create
+	// should still be the original failure (cleanup errors are logged, not returned).
+	exitErr := notFoundErr(t)
+	inCleanup := false
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		// Make enableSlurm fail to trigger cleanup.
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			inCleanup = true
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		// Make deleteClusterResources fail: ListContainers errors during cleanup.
+		if inCleanup && args[0] == "ps" {
+			return cmdexec.MockResult{Err: fmt.Errorf("docker daemon unavailable")}, true
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl failed")
+}
+
+func TestCreate_CleanupMeshError(t *testing.T) {
+	// When Create fails with freshly-created mesh and mesh cleanup also fails,
+	// the original error should still be returned.
+	exitErr := notFoundErr(t)
+	inCleanup := false
+	var m cmdexec.MockExecutor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (cmdexec.MockResult, bool) {
+		// Make enableSlurm fail to trigger cleanup.
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			inCleanup = true
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		// Make mesh cleanup fail: ContainerExists errors for mesh containers.
+		if inCleanup && args[0] == "container" && args[1] == "inspect" {
+			return cmdexec.MockResult{Err: fmt.Errorf("docker daemon unavailable")}, true
+		}
+		return cmdexec.MockResult{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+	require.True(t, meshMgr.Created())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl failed")
+}
+
 func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 	exitErr := notFoundErr(t)
 

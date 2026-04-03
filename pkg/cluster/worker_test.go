@@ -1264,6 +1264,45 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 	assert.True(t, removed, "cleanup should remove the new worker container")
 }
 
+func TestWorkerAdd_CleanupErrors(t *testing.T) {
+	// When cleanup itself encounters errors (RemoveKnownHost, RemoveContainer),
+	// those errors are logged but do not mask the original failure.
+	var m cmdexec.MockExecutor
+	inner := workerAddOnCall(t)
+	inCleanup := false
+	m.OnCall = func(args []string, stdin string) cmdexec.MockResult {
+		// Make enableSlurm fail to trigger cleanup.
+		if args[0] == "exec" && len(args) > 3 &&
+			strings.Contains(args[1], "worker") && args[2] == "systemctl" && args[3] == "enable" {
+			inCleanup = true
+			return cmdexec.MockResult{Err: fmt.Errorf("systemctl failed")}
+		}
+		if !inCleanup {
+			return inner(args, stdin)
+		}
+		// During cleanup: make RemoveKnownHost and RemoveContainer fail.
+		if args[0] == "exec" && args[1] == "-i" {
+			return cmdexec.MockResult{Err: fmt.Errorf("write failed")}
+		}
+		if args[0] == "rm" {
+			return cmdexec.MockResult{Err: fmt.Errorf("container locked")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
+	}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl failed")
+}
+
 func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
 	// When validation fails (before containers), cleanup should NOT run.
 	var m cmdexec.MockExecutor
