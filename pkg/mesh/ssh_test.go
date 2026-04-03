@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ import (
 
 func TestKnownHostLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	mgr := NewManager(c, lifecycleRealm(rec))
 

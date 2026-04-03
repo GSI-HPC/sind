@@ -9,14 +9,12 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/cmdexec"
-	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,23 +36,9 @@ func lifecycleRealm() string {
 	return fmt.Sprintf("it-cluster-%x", b)
 }
 
-func newTestClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
-	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker not found in PATH")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-		t.Skip("docker daemon not running")
-	}
-	rec := cmdexec.NewIntegrationRecorder()
-	return docker.NewClient(rec.RecordingExecutor), rec
-}
-
 func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
 	skipIfNoNsdelegate(t)

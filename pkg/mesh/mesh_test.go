@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
@@ -34,7 +35,7 @@ func argValue(args []string, flag string) (string, bool) {
 
 func TestMeshLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	mgr := NewManager(c, lifecycleRealm(rec))
 
@@ -134,7 +135,7 @@ func TestMeshLifecycle(t *testing.T) {
 
 func TestDNSRecordLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	mgr := NewManager(c, lifecycleRealm(rec))
 

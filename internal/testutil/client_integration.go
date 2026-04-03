@@ -2,7 +2,7 @@
 
 //go:build integration
 
-package slurm
+package testutil
 
 import (
 	"context"
@@ -14,12 +14,18 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-func newTestClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
+// dockerInfoTimeout is the maximum time to wait for docker info to respond
+// when checking whether the Docker daemon is available.
+const dockerInfoTimeout = 5 * time.Second
+
+// NewClient returns a docker.Client backed by a real OSExecutor.
+// The test is skipped when docker is not available.
+func NewClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker not found in PATH")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), dockerInfoTimeout)
 	defer cancel()
 	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
 		t.Skip("docker daemon not running")

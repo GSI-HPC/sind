@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -525,7 +526,7 @@ func TestPower_Unfreeze_UnpauseError(t *testing.T) {
 
 func TestPowerLifecycle(t *testing.T) {
 	t.Parallel()
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	cluster := "it-pwr"
 	ctrName := ContainerName(mesh.DefaultRealm, cluster, "worker-0")

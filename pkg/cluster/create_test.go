@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -24,7 +25,7 @@ import (
 // --- Resource Lifecycle ---
 
 func TestClusterResourceLifecycle(t *testing.T) {
-	c, rec := newTestClient(t)
+	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 	clusterName := "it-res"
 

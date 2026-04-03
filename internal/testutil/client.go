@@ -2,7 +2,7 @@
 
 //go:build !integration
 
-package cluster
+package testutil
 
 import (
 	"testing"
@@ -11,7 +11,8 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-func newTestClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
+// NewClient returns a docker.Client backed by a MockExecutor.
+func NewClient(t *testing.T) (*docker.Client, *cmdexec.Recorder) {
 	t.Helper()
 	rec := cmdexec.NewMockRecorder()
 	return docker.NewClient(rec.RecordingExecutor), rec
