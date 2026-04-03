@@ -368,8 +368,8 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
 func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
 	labels := map[string]string{
-		LabelComposeProject: ComposeProject(realm, clusterName),
-		LabelComposeNetwork: "net",
+		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
+		docker.ComposeNetworkLabel: "net",
 	}
 	_, err := client.CreateNetwork(ctx, NetworkName(realm, clusterName), labels)
 	if err != nil {
@@ -388,8 +388,8 @@ func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clu
 	}
 	for _, vtype := range types {
 		labels := map[string]string{
-			LabelComposeProject: ComposeProject(realm, clusterName),
-			LabelComposeVolume:  vtype,
+			docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
+			docker.ComposeVolumeLabel:  vtype,
 		}
 		if err := client.CreateVolume(ctx, VolumeName(realm, clusterName, vtype), labels); err != nil {
 			return fmt.Errorf("creating %s volume: %w", vtype, err)
