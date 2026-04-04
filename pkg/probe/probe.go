@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
@@ -23,16 +24,16 @@ type Probe struct {
 }
 
 // NodeProbes returns the probes applicable to a node with the given role.
-func NodeProbes(role string) []Probe {
+func NodeProbes(role config.Role) []Probe {
 	probes := []Probe{
 		{"container", ContainerRunning},
 		{"systemd", SystemdReady},
 		{"sshd", SSHDReady},
 	}
 	switch role {
-	case "controller":
+	case config.RoleController:
 		probes = append(probes, Probe{"slurmctld", SlurmctldReady})
-	case "worker":
+	case config.RoleWorker:
 		probes = append(probes, Probe{"slurmd", SlurmdReady})
 	}
 	return probes

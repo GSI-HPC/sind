@@ -25,8 +25,8 @@ import (
 func TestControllerImage(t *testing.T) {
 	cfg := &config.Cluster{
 		Nodes: []config.Node{
-			{Role: "worker", Image: "compute:1"},
-			{Role: "controller", Image: "ctrl:1"},
+			{Role: config.RoleWorker, Image: "compute:1"},
+			{Role: config.RoleController, Image: "ctrl:1"},
 		},
 	}
 	assert.Equal(t, "ctrl:1", controllerImage(cfg))
@@ -35,7 +35,7 @@ func TestControllerImage(t *testing.T) {
 func TestControllerImage_Fallback(t *testing.T) {
 	cfg := &config.Cluster{
 		Nodes: []config.Node{
-			{Role: "worker", Image: "compute:1"},
+			{Role: config.RoleWorker, Image: "compute:1"},
 		},
 	}
 	assert.Equal(t, config.DefaultImage, controllerImage(cfg))
@@ -222,8 +222,8 @@ func createCfg() *config.Cluster {
 	return &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 }
@@ -248,9 +248,9 @@ func TestCreate_FullCluster(t *testing.T) {
 	assert.Equal(t, StateRunning, cluster.State)
 	require.Len(t, cluster.Nodes, 2)
 	assert.Equal(t, "controller", cluster.Nodes[0].Name)
-	assert.Equal(t, "controller", cluster.Nodes[0].Role)
+	assert.Equal(t, config.RoleController, cluster.Nodes[0].Role)
 	assert.Equal(t, "worker-0", cluster.Nodes[1].Name)
-	assert.Equal(t, "worker", cluster.Nodes[1].Role)
+	assert.Equal(t, config.RoleWorker, cluster.Nodes[1].Role)
 	assert.Equal(t, StateRunning, cluster.Nodes[0].State)
 	assert.Equal(t, StateRunning, cluster.Nodes[1].State)
 }
@@ -679,8 +679,8 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
 				Managed: testutil.Ptr(false)},
 		},
 	}
@@ -713,8 +713,8 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "submitter", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -828,7 +828,7 @@ func TestSetupNodes_InspectError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -861,7 +861,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -899,7 +899,7 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -921,7 +921,7 @@ func TestRegisterMesh_DNSError(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 	results := []nodeResult{{
 		info:    &docker.ContainerInfo{ID: "id1", IPs: map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"}},
 		hostKey: "ssh-ed25519 AAAA-key",
@@ -962,7 +962,7 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 	results := []nodeResult{{
 		info:    &docker.ContainerInfo{ID: "id1", IPs: map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"}},
 		hostKey: "ssh-ed25519 AAAA-key",
@@ -988,7 +988,7 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()

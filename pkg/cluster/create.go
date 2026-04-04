@@ -20,7 +20,7 @@ import (
 // controllerImage returns the image configured for the controller node.
 func controllerImage(cfg *config.Cluster) string {
 	for _, n := range cfg.Nodes {
-		if n.Role == "controller" {
+		if n.Role == config.RoleController {
 			return n.Image
 		}
 	}
@@ -340,10 +340,10 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		var service string
 		var slurmProbe probe.Probe
 		switch nc.Role {
-		case "controller":
+		case config.RoleController:
 			service = "slurmctld"
 			slurmProbe = probe.Probe{Name: "slurmctld", Check: probe.SlurmctldReady}
-		case "worker":
+		case config.RoleWorker:
 			if !nc.Managed {
 				continue
 			}

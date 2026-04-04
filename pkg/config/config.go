@@ -19,9 +19,19 @@ type Defaults struct {
 	TmpSize string `json:"tmpSize,omitempty"`
 }
 
+// Role identifies the function of a node within a cluster.
+type Role string
+
+// Valid node roles.
+const (
+	RoleController Role = "controller"
+	RoleSubmitter  Role = "submitter"
+	RoleWorker     Role = "worker"
+)
+
 // Node represents a single node or node group in the cluster configuration.
 type Node struct {
-	Role    string `json:"role"`
+	Role    Role   `json:"role"`
 	Count   int    `json:"count,omitempty"`
 	Image   string `json:"image,omitempty"`
 	CPUs    int    `json:"cpus,omitempty"`
@@ -38,7 +48,7 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 	// Try bare string: "controller"
 	var s string
 	if err := json.Unmarshal(data, &s); err == nil {
-		n.Role = s
+		n.Role = Role(s)
 		return nil
 	}
 
@@ -66,7 +76,7 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("shorthand node must have exactly one key (role), got %d", len(raw))
 	}
 	for role, countRaw := range raw {
-		n.Role = role
+		n.Role = Role(role)
 		var count int
 		if err := json.Unmarshal(countRaw, &count); err != nil {
 			return fmt.Errorf("shorthand node count for %q: %w", role, err)
@@ -117,8 +127,8 @@ const (
 func (c *Cluster) ApplyDefaults() {
 	if len(c.Nodes) == 0 {
 		c.Nodes = []Node{
-			{Role: "controller"},
-			{Role: "worker"},
+			{Role: RoleController},
+			{Role: RoleWorker},
 		}
 	}
 
@@ -157,37 +167,29 @@ func (c *Cluster) ApplyDefaults() {
 	}
 }
 
-var validRoles = map[string]bool{
-	"controller": true,
-	"submitter":  true,
-	"worker":     true,
-}
-
 // Validate checks that the cluster configuration satisfies all constraints.
 // It should be called after ApplyDefaults.
 func (c *Cluster) Validate() error {
 	var controllers, submitters, workers int
 	for _, n := range c.Nodes {
-		if !validRoles[n.Role] {
-			return fmt.Errorf("invalid role %q, must be one of: controller, submitter, worker", n.Role)
-		}
-
 		switch n.Role {
-		case "controller":
+		case RoleController:
 			controllers++
-		case "submitter":
+		case RoleSubmitter:
 			submitters++
-		case "worker":
+		case RoleWorker:
 			workers++
+		default:
+			return fmt.Errorf("invalid role %q, must be one of: controller, submitter, worker", n.Role)
 		}
 
 		if n.Count < 0 {
 			return fmt.Errorf("count must not be negative, got %d", n.Count)
 		}
-		if n.Count > 0 && n.Role != "worker" {
+		if n.Count > 0 && n.Role != RoleWorker {
 			return fmt.Errorf("count is only valid for worker nodes, not %q", n.Role)
 		}
-		if n.Managed != nil && n.Role != "worker" {
+		if n.Managed != nil && n.Role != RoleWorker {
 			return fmt.Errorf("managed is only valid for worker nodes, not %q", n.Role)
 		}
 	}

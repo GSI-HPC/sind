@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -56,12 +57,12 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 		}
 		cd.summary.NodeCount++
 		cd.states = append(cd.states, c.State)
-		switch c.Labels[LabelRole] {
-		case "controller":
+		switch config.Role(c.Labels[LabelRole]) {
+		case config.RoleController:
 			cd.summary.Controllers++
-		case "submitter":
+		case config.RoleSubmitter:
 			cd.summary.Submitters++
-		case "worker":
+		case config.RoleWorker:
 			cd.summary.Workers++
 		}
 	}
@@ -80,8 +81,8 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 
 // NodeSummary holds summary information about a node in a sind cluster.
 type NodeSummary struct {
-	Name  string // short name: "controller", "worker-0"
-	Role  string // "controller", "submitter", "worker"
+	Name  string      // short name: "controller", "worker-0"
+	Role  config.Role // "controller", "submitter", "worker"
 	State State
 }
 
@@ -102,7 +103,7 @@ func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName str
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		result = append(result, &NodeSummary{
 			Name:  shortName,
-			Role:  c.Labels[LabelRole],
+			Role:  config.Role(c.Labels[LabelRole]),
 			State: containerStateToState(c.State),
 		})
 	}
@@ -120,14 +121,14 @@ func nodeOrder(n *NodeSummary) string {
 
 // roleSortKey returns a sort key that orders by role (controller, submitter, worker)
 // then by name within each role.
-func roleSortKey(role, name string) string {
+func roleSortKey(role config.Role, name string) string {
 	var prefix string
 	switch role {
-	case "controller":
+	case config.RoleController:
 		prefix = "0"
-	case "submitter":
+	case config.RoleSubmitter:
 		prefix = "1"
-	case "worker":
+	case config.RoleWorker:
 		prefix = "2"
 	default:
 		prefix = "9"

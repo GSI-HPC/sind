@@ -8,6 +8,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -216,14 +217,14 @@ func TestGetNodes(t *testing.T) {
 
 	// Sorted: controller first, then worker by name.
 	assert.Equal(t, "controller", nodes[0].Name)
-	assert.Equal(t, "controller", nodes[0].Role)
+	assert.Equal(t, config.RoleController, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
 	assert.Equal(t, "worker-0", nodes[1].Name)
-	assert.Equal(t, "worker", nodes[1].Role)
+	assert.Equal(t, config.RoleWorker, nodes[1].Role)
 
 	assert.Equal(t, "worker-1", nodes[2].Name)
-	assert.Equal(t, "worker", nodes[2].Role)
+	assert.Equal(t, config.RoleWorker, nodes[2].Role)
 }
 
 func TestGetNodes_WithStatus(t *testing.T) {
@@ -312,9 +313,9 @@ func TestGetNodes_SortOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodes, 3)
 	// Order: controller, submitter, worker
-	assert.Equal(t, "controller", nodes[0].Role)
-	assert.Equal(t, "submitter", nodes[1].Role)
-	assert.Equal(t, "worker", nodes[2].Role)
+	assert.Equal(t, config.RoleController, nodes[0].Role)
+	assert.Equal(t, config.RoleSubmitter, nodes[1].Role)
+	assert.Equal(t, config.RoleWorker, nodes[2].Role)
 }
 
 func TestGetNodes_UnknownRole(t *testing.T) {
@@ -336,8 +337,8 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
 	// controller (prefix "0") sorts before unknown role (prefix "9").
-	assert.Equal(t, "controller", nodes[0].Role)
-	assert.Equal(t, "mystery", nodes[1].Role)
+	assert.Equal(t, config.RoleController, nodes[0].Role)
+	assert.Equal(t, config.Role("mystery"), nodes[1].Role)
 }
 
 func TestContainerStateToState(t *testing.T) {

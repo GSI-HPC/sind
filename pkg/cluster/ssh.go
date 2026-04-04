@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -39,13 +40,13 @@ func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 	}
 
 	for _, e := range entries {
-		if e.Labels[LabelRole] == "submitter" {
-			return "submitter", nil
+		if config.Role(e.Labels[LabelRole]) == config.RoleSubmitter {
+			return string(config.RoleSubmitter), nil
 		}
 	}
 	for _, e := range entries {
-		if e.Labels[LabelRole] == "controller" {
-			return "controller", nil
+		if config.Role(e.Labels[LabelRole]) == config.RoleController {
+			return string(config.RoleController), nil
 		}
 	}
 	return "", fmt.Errorf("no submitter or controller found in cluster %q", clusterName)

@@ -2,7 +2,10 @@
 
 package cluster
 
-import "github.com/GSI-HPC/sind/pkg/docker"
+import (
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
+)
 
 // State represents the state of a cluster or node.
 type State string
@@ -29,7 +32,7 @@ type Cluster struct {
 // Node represents a running node in a sind cluster.
 type Node struct {
 	Name        string             // short name: "controller", "worker-0"
-	Role        string             // "controller", "submitter", "worker"
+	Role        config.Role        // "controller", "submitter", "worker"
 	ContainerID docker.ContainerID // Docker container ID
 	IP          string             // container IP address
 	State       State

@@ -113,7 +113,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			Realm:           realm,
 			ClusterName:     opts.ClusterName,
 			ShortName:       fmt.Sprintf("worker-%d", startIdx+i),
-			Role:            "worker",
+			Role:            config.RoleWorker,
 			Image:           image,
 			CPUs:            cpus,
 			Memory:          memory,
@@ -212,7 +212,7 @@ func NextComputeIndex(ctx context.Context, client *docker.Client, realm, cluster
 // findController returns the controller's container entry from the list.
 // Returns false if no controller exists for the given cluster.
 func findController(containers []docker.ContainerListEntry, realm, clusterName string) (docker.ContainerListEntry, bool) {
-	controllerName := ContainerName(realm, clusterName, "controller")
+	controllerName := ContainerName(realm, clusterName, string(config.RoleController))
 	for _, c := range containers {
 		if c.Name == controllerName {
 			return c, true

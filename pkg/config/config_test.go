@@ -119,23 +119,23 @@ nodes:
 	require.Len(t, cfg.Nodes, 4)
 
 	// controller
-	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, RoleController, cfg.Nodes[0].Role)
 	assert.Equal(t, 2, cfg.Nodes[0].CPUs)
 	assert.Equal(t, "4g", cfg.Nodes[0].Memory)
 	assert.Equal(t, "2g", cfg.Nodes[0].TmpSize)
 
 	// submitter
-	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
+	assert.Equal(t, RoleSubmitter, cfg.Nodes[1].Role)
 
 	// managed worker
-	assert.Equal(t, "worker", cfg.Nodes[2].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 	assert.Equal(t, 4, cfg.Nodes[2].CPUs)
 	assert.Equal(t, "8g", cfg.Nodes[2].Memory)
 	assert.Nil(t, cfg.Nodes[2].Managed)
 
 	// unmanaged worker
-	assert.Equal(t, "worker", cfg.Nodes[3].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[3].Role)
 	assert.Equal(t, 2, cfg.Nodes[3].Count)
 	require.NotNil(t, cfg.Nodes[3].Managed)
 	assert.False(t, *cfg.Nodes[3].Managed)
@@ -152,12 +152,12 @@ nodes:
 	require.NoError(t, err)
 	require.Len(t, cfg.Nodes, 3)
 
-	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, RoleController, cfg.Nodes[0].Role)
 	assert.Equal(t, 0, cfg.Nodes[0].Count)
 
-	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
+	assert.Equal(t, RoleSubmitter, cfg.Nodes[1].Role)
 
-	assert.Equal(t, "worker", cfg.Nodes[2].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }
 
@@ -174,13 +174,13 @@ nodes:
 	require.NoError(t, err)
 	require.Len(t, cfg.Nodes, 3)
 
-	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, RoleController, cfg.Nodes[0].Role)
 
-	assert.Equal(t, "worker", cfg.Nodes[1].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[1].Role)
 	assert.Equal(t, 3, cfg.Nodes[1].Count)
 	assert.Equal(t, 4, cfg.Nodes[1].CPUs)
 
-	assert.Equal(t, "worker", cfg.Nodes[2].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[2].Role)
 	assert.Equal(t, 2, cfg.Nodes[2].Count)
 }
 
@@ -240,8 +240,8 @@ func TestApplyDefaults_MinimalConfig(t *testing.T) {
 	cfg.ApplyDefaults()
 
 	require.Len(t, cfg.Nodes, 2)
-	assert.Equal(t, "controller", cfg.Nodes[0].Role)
-	assert.Equal(t, "worker", cfg.Nodes[1].Role)
+	assert.Equal(t, RoleController, cfg.Nodes[0].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[1].Role)
 }
 
 func TestApplyDefaults_InheritsGlobalDefaults(t *testing.T) {
@@ -255,8 +255,8 @@ func TestApplyDefaults_InheritsGlobalDefaults(t *testing.T) {
 			TmpSize: "2g",
 		},
 		Nodes: []Node{
-			{Role: "controller"},
-			{Role: "worker"},
+			{Role: RoleController},
+			{Role: RoleWorker},
 		},
 	}
 	cfg.ApplyDefaults()
@@ -279,8 +279,8 @@ func TestApplyDefaults_NodeOverridesGlobal(t *testing.T) {
 			Memory: "4g",
 		},
 		Nodes: []Node{
-			{Role: "controller", CPUs: 8},
-			{Role: "worker", Image: "special:latest"},
+			{Role: RoleController, CPUs: 8},
+			{Role: RoleWorker, Image: "special:latest"},
 		},
 	}
 	cfg.ApplyDefaults()
@@ -301,8 +301,8 @@ func TestApplyDefaults_BuiltinDefaults(t *testing.T) {
 		Kind: "Cluster",
 		Name: "default",
 		Nodes: []Node{
-			{Role: "controller"},
-			{Role: "worker"},
+			{Role: RoleController},
+			{Role: RoleWorker},
 		},
 	}
 	cfg.ApplyDefaults()
@@ -323,16 +323,16 @@ func TestValidate_Valid(t *testing.T) {
 		{
 			name: "controller and worker",
 			nodes: []Node{
-				{Role: "controller"},
-				{Role: "worker"},
+				{Role: RoleController},
+				{Role: RoleWorker},
 			},
 		},
 		{
 			name: "controller, submitter, and worker",
 			nodes: []Node{
-				{Role: "controller"},
-				{Role: "submitter"},
-				{Role: "worker"},
+				{Role: RoleController},
+				{Role: RoleSubmitter},
+				{Role: RoleWorker},
 			},
 		},
 	}
@@ -358,23 +358,23 @@ func TestValidate_RequiredFields(t *testing.T) {
 		{
 			name: "missing controller",
 			nodes: []Node{
-				{Role: "worker"},
+				{Role: RoleWorker},
 			},
 			wantErr: "exactly one controller",
 		},
 		{
 			name: "multiple controllers",
 			nodes: []Node{
-				{Role: "controller"},
-				{Role: "controller"},
-				{Role: "worker"},
+				{Role: RoleController},
+				{Role: RoleController},
+				{Role: RoleWorker},
 			},
 			wantErr: "exactly one controller",
 		},
 		{
 			name: "no worker",
 			nodes: []Node{
-				{Role: "controller"},
+				{Role: RoleController},
 			},
 			wantErr: "at least one worker",
 		},
@@ -408,60 +408,60 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "multiple submitters",
 			nodes: []Node{
-				{Role: "controller"},
-				{Role: "submitter"},
-				{Role: "submitter"},
-				{Role: "worker"},
+				{Role: RoleController},
+				{Role: RoleSubmitter},
+				{Role: RoleSubmitter},
+				{Role: RoleWorker},
 			},
 			wantErr: "at most one submitter",
 		},
 		{
 			name: "count on controller",
 			nodes: []Node{
-				{Role: "controller", Count: 2},
-				{Role: "worker"},
+				{Role: RoleController, Count: 2},
+				{Role: RoleWorker},
 			},
 			wantErr: "count is only valid for worker",
 		},
 		{
 			name: "count on submitter",
 			nodes: []Node{
-				{Role: "controller"},
-				{Role: "submitter", Count: 2},
-				{Role: "worker"},
+				{Role: RoleController},
+				{Role: RoleSubmitter, Count: 2},
+				{Role: RoleWorker},
 			},
 			wantErr: "count is only valid for worker",
 		},
 		{
 			name: "invalid role",
 			nodes: []Node{
-				{Role: "controller"},
+				{Role: RoleController},
 				{Role: "compute"},
-				{Role: "worker"},
+				{Role: RoleWorker},
 			},
 			wantErr: `invalid role "compute"`,
 		},
 		{
 			name: "managed false on non-worker",
 			nodes: []Node{
-				{Role: "controller", Managed: testutil.Ptr(false)},
-				{Role: "worker"},
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleWorker},
 			},
 			wantErr: "managed is only valid for worker",
 		},
 		{
 			name: "managed true on non-worker",
 			nodes: []Node{
-				{Role: "controller", Managed: testutil.Ptr(true)},
-				{Role: "worker"},
+				{Role: RoleController, Managed: testutil.Ptr(true)},
+				{Role: RoleWorker},
 			},
 			wantErr: "managed is only valid for worker",
 		},
 		{
 			name: "negative count",
 			nodes: []Node{
-				{Role: "controller"},
-				{Role: "worker", Count: -1},
+				{Role: RoleController},
+				{Role: RoleWorker, Count: -1},
 			},
 			wantErr: "count must not be negative",
 		},
@@ -570,7 +570,7 @@ nodes:
 	cfg, err := Parse([]byte(input))
 	require.NoError(t, err)
 	require.Len(t, cfg.Nodes, 2)
-	assert.Equal(t, "worker", cfg.Nodes[1].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[1].Role)
 	assert.Equal(t, 0, cfg.Nodes[1].Count)
 }
 
@@ -593,12 +593,12 @@ nodes:
 
 	assert.Equal(t, "test", cfg.Name)
 	require.Len(t, cfg.Nodes, 3)
-	assert.Equal(t, "controller", cfg.Nodes[0].Role)
+	assert.Equal(t, RoleController, cfg.Nodes[0].Role)
 	assert.Equal(t, "custom:latest", cfg.Nodes[0].Image)
 	assert.Equal(t, 4, cfg.Nodes[0].CPUs)
 	assert.Equal(t, "512m", cfg.Nodes[0].Memory)
-	assert.Equal(t, "submitter", cfg.Nodes[1].Role)
-	assert.Equal(t, "worker", cfg.Nodes[2].Role)
+	assert.Equal(t, RoleSubmitter, cfg.Nodes[1].Role)
+	assert.Equal(t, RoleWorker, cfg.Nodes[2].Role)
 	assert.Equal(t, 3, cfg.Nodes[2].Count)
 }
 

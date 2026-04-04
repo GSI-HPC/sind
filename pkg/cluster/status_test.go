@@ -8,6 +8,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -53,7 +54,7 @@ func TestGetNodeHealth_Controller(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-controller", "172.18.0.2")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -69,7 +70,7 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-worker-0", "172.18.0.3")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", "worker", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -85,7 +86,7 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-submitter", "172.18.0.4")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-submitter", "submitter", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-submitter", config.RoleSubmitter, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -104,7 +105,7 @@ func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "exited", health.Container)
@@ -118,7 +119,7 @@ func TestGetNodeHealth_InspectError(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	_, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", mesh.DefaultRealm, "dev")
+	_, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting container")
@@ -136,7 +137,7 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", "worker", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -157,7 +158,7 @@ func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -176,7 +177,7 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", "worker", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "exited", health.Container)
@@ -198,7 +199,7 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -218,7 +219,7 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "running", health.Container)
@@ -246,7 +247,7 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", "controller", mesh.DefaultRealm, "dev")
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "172.18.0.2", health.IP)
@@ -575,7 +576,7 @@ func TestGetStatus_Full(t *testing.T) {
 	// Nodes sorted: controller, worker-0, worker-1.
 	require.Len(t, status.Nodes, 3)
 	assert.Equal(t, "controller.dev", status.Nodes[0].Name)
-	assert.Equal(t, "controller", status.Nodes[0].Role)
+	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
 	assert.Equal(t, "running", status.Nodes[0].Health.Container)
 	assert.Equal(t, "172.18.0.2", status.Nodes[0].Health.IP)
 	assert.True(t, status.Nodes[0].Health.Munge)
@@ -583,7 +584,7 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.True(t, status.Nodes[0].Health.Services["slurmctld"])
 
 	assert.Equal(t, "worker-0.dev", status.Nodes[1].Name)
-	assert.Equal(t, "worker", status.Nodes[1].Role)
+	assert.Equal(t, config.RoleWorker, status.Nodes[1].Role)
 	assert.True(t, status.Nodes[1].Health.Services["slurmd"])
 
 	assert.Equal(t, "worker-1.dev", status.Nodes[2].Name)
@@ -741,9 +742,9 @@ func TestGetStatus_SortOrder(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, status.Nodes, 3)
-	assert.Equal(t, "controller", status.Nodes[0].Role)
-	assert.Equal(t, "submitter", status.Nodes[1].Role)
-	assert.Equal(t, "worker", status.Nodes[2].Role)
+	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
+	assert.Equal(t, config.RoleSubmitter, status.Nodes[1].Role)
+	assert.Equal(t, config.RoleWorker, status.Nodes[2].Role)
 }
 
 func TestGetStatus_MixedStates(t *testing.T) {

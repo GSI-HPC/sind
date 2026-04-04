@@ -31,13 +31,13 @@ func ComposeProject(realm, clusterName string) string {
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is omitted when slurmVersion is empty.
 // The data host path label is omitted when dataHostPath is empty (Docker volume mode).
-func NodeLabels(realm, clusterName, role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
+func NodeLabels(realm, clusterName string, role config.Role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
 	labels := map[string]string{
 		LabelRealm:                         realm,
 		LabelCluster:                       clusterName,
-		LabelRole:                          role,
+		LabelRole:                          string(role),
 		docker.ComposeProjectLabel:         ComposeProject(realm, clusterName),
-		docker.ComposeServiceLabel:         role,
+		docker.ComposeServiceLabel:         string(role),
 		docker.ComposeContainerNumberLabel: strconv.Itoa(containerNumber),
 		docker.ComposeOneoffLabel:          "False",
 		docker.ComposeConfigHashLabel:      "",
@@ -55,21 +55,21 @@ func NodeLabels(realm, clusterName, role, slurmVersion, dataHostPath string, con
 // RunConfig holds the parameters needed to build docker run arguments
 // for creating a node container.
 type RunConfig struct {
-	Realm           string // realm name (e.g. "sind")
-	ClusterName     string // cluster name
-	ShortName       string // node hostname: "controller", "worker-0"
-	Role            string // "controller", "submitter", "worker"
-	Image           string // container image
-	CPUs            int    // CPU limit
-	Memory          string // memory limit (e.g. "2g")
-	TmpSize         string // /tmp tmpfs size (e.g. "1g")
-	SlurmVersion    string // slurm version for labels (optional)
-	DNSIP           string // mesh DNS container IP (optional)
-	DataHostPath    string // host path for data volume (empty = use docker volume)
-	DataMountPath   string // mount point for data (default: /data)
-	Managed         bool   // start slurmd and add to slurm.conf (worker only)
-	ContainerNumber int    // 1-based compose container instance number
-	Pull            bool   // force fresh image pull (--pull always)
+	Realm           string      // realm name (e.g. "sind")
+	ClusterName     string      // cluster name
+	ShortName       string      // node hostname: "controller", "worker-0"
+	Role            config.Role // "controller", "submitter", "worker"
+	Image           string      // container image
+	CPUs            int         // CPU limit
+	Memory          string      // memory limit (e.g. "2g")
+	TmpSize         string      // /tmp tmpfs size (e.g. "1g")
+	SlurmVersion    string      // slurm version for labels (optional)
+	DNSIP           string      // mesh DNS container IP (optional)
+	DataHostPath    string      // host path for data volume (empty = use docker volume)
+	DataMountPath   string      // mount point for data (default: /data)
+	Managed         bool        // start slurmd and add to slurm.conf (worker only)
+	ContainerNumber int         // 1-based compose container instance number
+	Pull            bool        // force fresh image pull (--pull always)
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.
@@ -93,7 +93,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 
 	// Volume mounts
 	configMode := "ro"
-	if cfg.Role == "controller" {
+	if cfg.Role == config.RoleController {
 		configMode = "rw"
 	}
 	args = append(args,
@@ -193,11 +193,11 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
-		case "controller", "submitter":
+		case config.RoleController, config.RoleSubmitter:
 			configs = append(configs, RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
-				ShortName:       n.Role,
+				ShortName:       string(n.Role),
 				Role:            n.Role,
 				Image:           n.Image,
 				CPUs:            n.CPUs,
@@ -210,7 +210,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				ContainerNumber: 1,
 				Pull:            cfg.Pull,
 			})
-		case "worker":
+		case config.RoleWorker:
 			count := n.Count
 			if count <= 0 {
 				count = 1
@@ -221,7 +221,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 					Realm:           realm,
 					ClusterName:     cfg.Name,
 					ShortName:       fmt.Sprintf("worker-%d", workerIdx),
-					Role:            "worker",
+					Role:            config.RoleWorker,
 					Image:           n.Image,
 					CPUs:            n.CPUs,
 					Memory:          n.Memory,
@@ -260,9 +260,9 @@ func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []R
 	for _, cfg := range configs {
 		var service string
 		switch cfg.Role {
-		case "controller":
+		case config.RoleController:
 			service = "slurmctld"
-		case "worker":
+		case config.RoleWorker:
 			if !cfg.Managed {
 				continue
 			}

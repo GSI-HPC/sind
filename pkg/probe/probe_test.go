@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -224,16 +225,16 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 
 func TestNodeProbes(t *testing.T) {
 	tests := []struct {
-		role  string
+		role  config.Role
 		names []string
 	}{
-		{"controller", []string{"container", "systemd", "sshd", "slurmctld"}},
-		{"worker", []string{"container", "systemd", "sshd", "slurmd"}},
-		{"submitter", []string{"container", "systemd", "sshd"}},
+		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}},
+		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}},
+		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}},
 		{"unknown", []string{"container", "systemd", "sshd"}},
 	}
 	for _, tt := range tests {
-		t.Run(tt.role, func(t *testing.T) {
+		t.Run(string(tt.role), func(t *testing.T) {
 			probes := NodeProbes(tt.role)
 			var names []string
 			for _, p := range probes {

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
@@ -15,7 +16,7 @@ import (
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	Container string          // container state: "running", "exited", etc.
+	Container string          // container state from Docker (e.g. "running", "exited")
 	IP        string          // container IP address
 	Munge     bool            // munge service healthy
 	SSHD      bool            // sshd accepting connections
@@ -26,7 +27,7 @@ type NodeHealth struct {
 // If the container is not running, remaining checks are skipped and
 // default to false. The role determines which Slurm services are checked.
 // clusterName is used to select the cluster network IP.
-func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, role, realm, clusterName string) (*NodeHealth, error) {
+func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
 	name := docker.ContainerName(containerName)
 
 	info, err := client.InspectContainer(ctx, name)
@@ -179,8 +180,8 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
-	Name   string // DNS-style name: "controller.dev"
-	Role   string // "controller", "submitter", "worker"
+	Name   string      // DNS-style name: "controller.dev"
+	Role   config.Role // "controller", "submitter", "worker"
 	Health *NodeHealth
 }
 
@@ -209,7 +210,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	var states []string
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
-		role := c.Labels[LabelRole]
+		role := config.Role(c.Labels[LabelRole])
 
 		health, err := GetNodeHealth(ctx, client, string(c.Name), role, realm, clusterName)
 		if err != nil {
@@ -253,11 +254,11 @@ func nodeStatusOrder(n *NodeStatus) string {
 }
 
 // roleServices returns the Slurm service names for the given role.
-func roleServices(role string) []string {
+func roleServices(role config.Role) []string {
 	switch role {
-	case "controller":
+	case config.RoleController:
 		return []string{"slurmctld"}
-	case "worker":
+	case config.RoleWorker:
 		return []string{"slurmd"}
 	default:
 		return nil
