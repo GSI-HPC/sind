@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Func is a probe function that checks a single readiness condition.
@@ -21,6 +22,18 @@ type Func func(ctx context.Context, client *docker.Client, name docker.Container
 type Probe struct {
 	Name  string
 	Check Func
+}
+
+// ForService returns the readiness probe for a Slurm service.
+func ForService(svc slurm.Service) Probe {
+	switch svc {
+	case slurm.Slurmctld:
+		return Probe{Name: string(svc), Check: SlurmctldReady}
+	case slurm.Slurmd:
+		return Probe{Name: string(svc), Check: SlurmdReady}
+	default:
+		return Probe{Name: string(svc)}
+	}
 }
 
 // NodeProbes returns the probes applicable to a node with the given role.

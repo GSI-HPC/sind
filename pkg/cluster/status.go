@@ -256,12 +256,8 @@ func nodeStatusOrder(n *NodeStatus) string {
 
 // roleServices returns the Slurm service names for the given role.
 func roleServices(role config.Role) []string {
-	switch role {
-	case config.RoleController:
-		return []string{"slurmctld"}
-	case config.RoleWorker:
-		return []string{"slurmd"}
-	default:
-		return nil
+	if svc, ok := slurm.ServiceForRole(role); ok {
+		return []string{string(svc)}
 	}
+	return nil
 }

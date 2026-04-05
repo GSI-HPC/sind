@@ -337,25 +337,18 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 	log := sindlog.From(ctx)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
-		var service string
-		var slurmProbe probe.Probe
-		switch nc.Role {
-		case config.RoleController:
-			service = "slurmctld"
-			slurmProbe = probe.Probe{Name: "slurmctld", Check: probe.SlurmctldReady}
-		case config.RoleWorker:
-			if !nc.Managed {
-				continue
-			}
-			service = "slurmd"
-			slurmProbe = probe.Probe{Name: "slurmd", Check: probe.SlurmdReady}
-		default:
+		if nc.Role == config.RoleWorker && !nc.Managed {
 			continue
 		}
+		service, ok := slurm.ServiceForRole(nc.Role)
+		if !ok {
+			continue
+		}
+		slurmProbe := probe.ForService(service)
 		g.Go(func() error {
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 			log.DebugContext(gctx, "enabling slurm service", "node", nc.ShortName, "service", service)
-			_, err := client.Exec(gctx, containerName, "systemctl", "enable", "--now", service)
+			_, err := client.Exec(gctx, containerName, "systemctl", "enable", "--now", string(service))
 			if err != nil {
 				return fmt.Errorf("enabling %s on %s: %w", service, nc.ShortName, err)
 			}
