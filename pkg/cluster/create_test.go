@@ -44,7 +44,7 @@ func TestControllerImage_Fallback(t *testing.T) {
 // --- Create (end-to-end) ---
 
 // inspectJSONLabels builds docker inspect JSON output with custom labels.
-func inspectJSONLabels(t *testing.T, name, status string, networks map[docker.NetworkName]string, labels map[string]string) string {
+func inspectJSONLabels(t *testing.T, name, status string, networks map[docker.NetworkName]string, labels docker.Labels) string {
 	t.Helper()
 	type netInfo struct {
 		IPAddress string `json:"IPAddress"`
@@ -78,7 +78,7 @@ func inspectJSONLabels(t *testing.T, name, status string, networks map[docker.Ne
 // inspectJSON builds the JSON output that docker inspect returns for a container.
 func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkName]string) string {
 	t.Helper()
-	return inspectJSONLabels(t, name, status, networks, map[string]string{})
+	return inspectJSONLabels(t, name, status, networks, docker.Labels{})
 }
 
 // notFoundErr returns an exec.ExitError with exit code 1 for "not found" mocking.

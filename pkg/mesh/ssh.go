@@ -40,7 +40,7 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 		return nil
 	}
 
-	volumeLabels := map[string]string{
+	volumeLabels := docker.Labels{
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeVolumeLabel:  "ssh-config",
 	}

@@ -16,7 +16,7 @@ func (c *Client) VolumeExists(ctx context.Context, name VolumeName) (bool, error
 
 // CreateVolume creates a Docker volume.
 // Labels are applied as --label flags when non-nil.
-func (c *Client) CreateVolume(ctx context.Context, name VolumeName, labels map[string]string) error {
+func (c *Client) CreateVolume(ctx context.Context, name VolumeName, labels Labels) error {
 	args := []string{"volume", "create"}
 	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))

@@ -20,8 +20,8 @@ const (
 // ComposeLabels returns the standard Docker Compose compatibility labels
 // for a container. These labels make sind containers appear as part of a
 // compose project.
-func ComposeLabels(project, service string, containerNumber int) map[string]string {
-	return map[string]string{
+func ComposeLabels(project, service string, containerNumber int) Labels {
+	return Labels{
 		ComposeProjectLabel:         project,
 		ComposeServiceLabel:         service,
 		ComposeContainerNumberLabel: strconv.Itoa(containerNumber),

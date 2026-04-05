@@ -203,7 +203,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 		return nil
 	}
 	m.created = true
-	networkLabels := map[string]string{
+	networkLabels := docker.Labels{
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeNetworkLabel: "mesh",
 	}
@@ -241,7 +241,7 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 		return fmt.Errorf("creating DNS container: %w", err)
 	}
 
-	err = m.Docker.CopyToContainer(ctx, name, "/", map[string][]byte{
+	err = m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
 		"Corefile": []byte(generateCorefile(m.Realm, nil)),
 	})
 	if err != nil {
@@ -324,7 +324,7 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 // sends SIGHUP to reload CoreDNS.
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	name := m.DNSContainerName()
-	err := m.Docker.CopyToContainer(ctx, name, "/", map[string][]byte{
+	err := m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
 		"Corefile": []byte(generateCorefile(m.Realm, entries)),
 	})
 	if err != nil {

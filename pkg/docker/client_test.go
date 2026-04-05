@@ -25,11 +25,11 @@ func TestSortedLabelFlags_Nil(t *testing.T) {
 }
 
 func TestSortedLabelFlags_Empty(t *testing.T) {
-	assert.Nil(t, SortedLabelFlags(map[string]string{}))
+	assert.Nil(t, SortedLabelFlags(Labels{}))
 }
 
 func TestSortedLabelFlags_Sorted(t *testing.T) {
-	labels := map[string]string{
+	labels := Labels{
 		"z.label": "last",
 		"a.label": "first",
 	}

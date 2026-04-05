@@ -30,6 +30,9 @@ type NetworkName string
 // VolumeName is a human-readable Docker volume name.
 type VolumeName string
 
+// Labels is a set of key-value metadata pairs applied to Docker resources.
+type Labels map[string]string
+
 // Client provides operations against the Docker CLI.
 type Client struct {
 	Executor cmdexec.Executor
@@ -52,7 +55,7 @@ func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...stri
 
 // SortedLabelFlags returns --label k=v flag pairs in sorted key order.
 // Returns nil when labels is nil or empty.
-func SortedLabelFlags(labels map[string]string) []string {
+func SortedLabelFlags(labels Labels) []string {
 	if len(labels) == 0 {
 		return nil
 	}

@@ -101,7 +101,7 @@ type ContainerInfo struct {
 	ID     ContainerID
 	Name   ContainerName
 	Status ContainerState
-	Labels map[string]string
+	Labels Labels
 	IPs    map[NetworkName]string
 }
 
@@ -155,7 +155,7 @@ type ContainerListEntry struct {
 	Name   ContainerName
 	State  ContainerState
 	Image  string
-	Labels map[string]string
+	Labels Labels
 }
 
 // psEntry maps the docker ps --format json output.
@@ -200,11 +200,11 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 }
 
 // parseLabels parses the comma-separated key=value label string from docker ps JSON output.
-func parseLabels(s string) map[string]string {
+func parseLabels(s string) Labels {
 	if s == "" {
 		return nil
 	}
-	labels := make(map[string]string)
+	labels := make(Labels)
 	for _, pair := range strings.Split(s, ",") {
 		k, v, _ := strings.Cut(pair, "=")
 		labels[k] = v
@@ -245,6 +245,9 @@ func (c *Client) AppendFile(ctx context.Context, container ContainerName, path, 
 	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
 		"sh", "-c", "cat >> "+path)
 }
+
+// FileContents maps file paths to their raw content for copying into containers.
+type FileContents map[string][]byte
 
 // File represents a file to copy into a container with explicit permissions.
 type File struct {
@@ -292,7 +295,7 @@ func buildFilesTar(w io.Writer, files map[string]File) error {
 // CopyToContainer writes files into a container directory via docker cp.
 // All files are written with mode 0644. Use CopyFilesToContainer for
 // explicit per-file permissions.
-func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, destDir string, files map[string][]byte) error {
+func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, destDir string, files FileContents) error {
 	typed := make(map[string]File, len(files))
 	for name, content := range files {
 		typed[name] = File{Content: content, Mode: 0644}
