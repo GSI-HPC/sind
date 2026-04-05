@@ -84,6 +84,13 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 	realm := resolveRealm(cmd, cfg.Realm)
+
+	unlock, err := acquireRealmLock(ctx, realm, "")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	meshMgr := meshMgrFrom(ctx, client, realm)
 	meshMgr.Pull = pull
 	if err := meshMgr.EnsureMesh(ctx); err != nil {
