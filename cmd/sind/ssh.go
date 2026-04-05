@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -57,7 +58,7 @@ func newEnterCommand() *cobra.Command {
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := "default"
+			name := config.DefaultClusterName
 			if len(args) > 0 {
 				name = args[0]
 			}

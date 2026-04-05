@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -36,7 +37,7 @@ func newDeleteClusterCommand() *cobra.Command {
 				}
 				return runDeleteClustersAll(cmd)
 			}
-			name := "default"
+			name := config.DefaultClusterName
 			if len(args) > 0 {
 				name = args[0]
 			}

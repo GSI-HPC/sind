@@ -114,10 +114,11 @@ type Cluster struct {
 
 // Default resource values for cluster nodes.
 const (
-	DefaultImage   = "ghcr.io/gsi-hpc/sind-node:latest"
-	DefaultCPUs    = 1
-	DefaultMemory  = "512m"
-	DefaultTmpSize = "256m"
+	DefaultClusterName = "default"
+	DefaultImage       = "ghcr.io/gsi-hpc/sind-node:latest"
+	DefaultCPUs        = 1
+	DefaultMemory      = "512m"
+	DefaultTmpSize     = "256m"
 )
 
 // ApplyDefaults populates missing fields with defaults.
@@ -223,7 +224,7 @@ func Parse(data []byte) (*Cluster, error) {
 	}
 
 	if cfg.Name == "" {
-		cfg.Name = "default"
+		cfg.Name = DefaultClusterName
 	}
 
 	return &cfg, nil
