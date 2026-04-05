@@ -622,3 +622,106 @@ func TestParse_Realm(t *testing.T) {
 		assert.Equal(t, "testrealm", cfg.Realm)
 	})
 }
+
+func TestParse_Slurm(t *testing.T) {
+	t.Run("single extra entry", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  extra:
+    scheduling: |
+      SchedulerType=sched/backfill`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		require.Len(t, cfg.Slurm.Extra, 1)
+		assert.Contains(t, cfg.Slurm.Extra["scheduling"], "SchedulerType=sched/backfill")
+	})
+
+	t.Run("multiple extra entries", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  extra:
+    scheduling: |
+      SchedulerType=sched/backfill
+    resources: |
+      SelectType=select/cons_tres
+      SelectTypeParameters=CR_Core_Memory`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		require.Len(t, cfg.Slurm.Extra, 2)
+		assert.Contains(t, cfg.Slurm.Extra["scheduling"], "SchedulerType=sched/backfill")
+		assert.Contains(t, cfg.Slurm.Extra["resources"], "SelectType=select/cons_tres")
+	})
+
+	t.Run("no slurm section", func(t *testing.T) {
+		cfg, err := Parse([]byte("kind: Cluster"))
+		require.NoError(t, err)
+		assert.Empty(t, cfg.Slurm.Extra)
+	})
+}
+
+func TestSlurm_ExtraNames(t *testing.T) {
+	s := &Slurm{Extra: map[string]string{
+		"zebra":  "z",
+		"alpha":  "a",
+		"middle": "m",
+	}}
+	assert.Equal(t, []string{"alpha", "middle", "zebra"}, s.ExtraNames())
+}
+
+func TestSlurm_ExtraNamesEmpty(t *testing.T) {
+	s := &Slurm{}
+	assert.Empty(t, s.ExtraNames())
+}
+
+func TestValidate_SlurmExtra(t *testing.T) {
+	base := func() *Cluster {
+		return &Cluster{
+			Kind: "Cluster",
+			Name: "default",
+			Nodes: []Node{
+				{Role: "controller"},
+				{Role: "worker"},
+			},
+		}
+	}
+
+	t.Run("valid extra", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Extra = map[string]string{
+			"scheduling": "SchedulerType=sched/backfill\n",
+		}
+		require.NoError(t, cfg.Validate())
+	})
+
+	t.Run("empty name", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Extra = map[string]string{
+			"": "content",
+		}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must not be empty")
+	})
+
+	t.Run("name with path separator", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Extra = map[string]string{
+			"../escape": "content",
+		}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "plain filename")
+	})
+
+	t.Run("empty content", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Extra = map[string]string{
+			"scheduling": "",
+		}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must not be empty")
+	})
+}
