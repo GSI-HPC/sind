@@ -13,7 +13,7 @@ import (
 
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
 func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
-	labels := map[string]string{
+	labels := docker.Labels{
 		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
 		docker.ComposeNetworkLabel: "net",
 	}
@@ -33,7 +33,7 @@ func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clu
 		types = append(types, VolumeData)
 	}
 	for _, vtype := range types {
-		labels := map[string]string{
+		labels := docker.Labels{
 			docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
 			docker.ComposeVolumeLabel:  string(vtype),
 		}

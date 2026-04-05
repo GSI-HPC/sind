@@ -303,7 +303,7 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		case args[0] == "inspect" && args[1] == "sind-dev-controller":
 			return mock.Result{Stdout: inspectJSONLabels(t, "sind-dev-controller", "running",
 				map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"},
-				map[string]string{"sind.slurm.version": "25.11.0"})}
+				docker.Labels{"sind.slurm.version": "25.11.0"})}
 
 		// InspectContainer: new worker node
 		case args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-worker-"):
@@ -1506,7 +1506,7 @@ func workerLifecycleOnCall(t *testing.T) func([]string, string) mock.Result {
 		case args[0] == "inspect" && args[1] == "sind-dev-controller":
 			return mock.Result{Stdout: inspectJSONLabels(t, "sind-dev-controller", "running",
 				map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"},
-				map[string]string{"sind.slurm.version": "25.11.0"})}
+				docker.Labels{"sind.slurm.version": "25.11.0"})}
 
 		case args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-worker-"):
 			return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{

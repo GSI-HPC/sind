@@ -35,7 +35,7 @@ func ComposeProject(realm, clusterName string) string {
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is omitted when slurmVersion is empty.
 // The data host path label is omitted when dataHostPath is empty (Docker volume mode).
-func NodeLabels(realm, clusterName string, role config.Role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
+func NodeLabels(realm, clusterName string, role config.Role, slurmVersion, dataHostPath string, containerNumber int) docker.Labels {
 	labels := docker.ComposeLabels(ComposeProject(realm, clusterName), string(role), containerNumber)
 	labels[LabelRealm] = realm
 	labels[LabelCluster] = clusterName

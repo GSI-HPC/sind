@@ -101,7 +101,7 @@ type ContainerInfo struct {
 	ID     ContainerID
 	Name   ContainerName
 	Status ContainerState
-	Labels map[string]string
+	Labels Labels
 	IPs    map[NetworkName]string
 }
 
@@ -155,7 +155,7 @@ type ContainerListEntry struct {
 	Name   ContainerName
 	State  ContainerState
 	Image  string
-	Labels map[string]string
+	Labels Labels
 }
 
 // psEntry maps the docker ps --format json output.
@@ -200,11 +200,11 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 }
 
 // parseLabels parses the comma-separated key=value label string from docker ps JSON output.
-func parseLabels(s string) map[string]string {
+func parseLabels(s string) Labels {
 	if s == "" {
 		return nil
 	}
-	labels := make(map[string]string)
+	labels := make(Labels)
 	for _, pair := range strings.Split(s, ",") {
 		k, v, _ := strings.Cut(pair, "=")
 		labels[k] = v

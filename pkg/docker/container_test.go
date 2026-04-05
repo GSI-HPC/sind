@@ -414,7 +414,7 @@ func TestInspectContainer(t *testing.T) {
 	assert.Equal(t, ContainerID("94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca"), info.ID)
 	assert.Equal(t, testContainerName, info.Name)
 	assert.Equal(t, StateRunning, info.Status)
-	assert.Equal(t, map[string]string{
+	assert.Equal(t, Labels{
 		"sind.cluster": "dev",
 		"sind.role":    "controller",
 	}, info.Labels)
@@ -474,10 +474,10 @@ func TestListContainers(t *testing.T) {
 	assert.Equal(t, ContainerName("sind-dev-controller"), entries[0].Name)
 	assert.Equal(t, StateRunning, entries[0].State)
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", entries[0].Image)
-	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "controller"}, entries[0].Labels)
+	assert.Equal(t, Labels{"sind.cluster": "dev", "sind.role": "controller"}, entries[0].Labels)
 
 	assert.Equal(t, ContainerName("sind-dev-worker-0"), entries[1].Name)
-	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "worker"}, entries[1].Labels)
+	assert.Equal(t, Labels{"sind.cluster": "dev", "sind.role": "worker"}, entries[1].Labels)
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.cluster=dev"}, m.Calls[0].Args)

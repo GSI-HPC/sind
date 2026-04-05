@@ -16,7 +16,7 @@ func (c *Client) NetworkExists(ctx context.Context, name NetworkName) (bool, err
 
 // CreateNetwork creates a Docker network and returns its ID.
 // Labels are applied as --label flags when non-nil.
-func (c *Client) CreateNetwork(ctx context.Context, name NetworkName, labels map[string]string) (NetworkID, error) {
+func (c *Client) CreateNetwork(ctx context.Context, name NetworkName, labels Labels) (NetworkID, error) {
 	args := []string{"network", "create"}
 	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))

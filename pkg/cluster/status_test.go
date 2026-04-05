@@ -385,7 +385,7 @@ func TestGetMountPoints_AllVolumes(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
-		{Name: "sind-dev-controller", Labels: map[string]string{"sind.role": "controller"}},
+		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller"}},
 	}
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
 
@@ -417,7 +417,7 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
-		{Name: "sind-dev-controller", Labels: map[string]string{
+		{Name: "sind-dev-controller", Labels: docker.Labels{
 			"sind.role":          "controller",
 			"sind.data.hostpath": "/home/user/project",
 		}},

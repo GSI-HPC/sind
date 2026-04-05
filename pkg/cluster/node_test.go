@@ -18,7 +18,7 @@ import (
 func TestNodeLabels(t *testing.T) {
 	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, "25.11.0", "", 1)
 
-	assert.Equal(t, map[string]string{
+	assert.Equal(t, docker.Labels{
 		"sind.realm":                              mesh.DefaultRealm,
 		"sind.cluster":                            "dev",
 		"sind.role":                               "controller",
@@ -35,7 +35,7 @@ func TestNodeLabels(t *testing.T) {
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleWorker, "", "", 3)
 
-	assert.Equal(t, map[string]string{
+	assert.Equal(t, docker.Labels{
 		"sind.realm":                              mesh.DefaultRealm,
 		"sind.cluster":                            "dev",
 		"sind.role":                               "worker",

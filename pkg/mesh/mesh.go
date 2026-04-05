@@ -203,7 +203,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 		return nil
 	}
 	m.created = true
-	networkLabels := map[string]string{
+	networkLabels := docker.Labels{
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeNetworkLabel: "mesh",
 	}
