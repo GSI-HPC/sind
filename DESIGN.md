@@ -93,6 +93,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
+| `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
 
 **Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
 
@@ -536,6 +537,12 @@ storage:
     hostPath: ./data                     # only if type=hostPath
     mountPath: /data                     # default: /data
 
+slurm:
+  extra:
+    scheduling: |                        # becomes /etc/slurm/scheduling.conf
+      SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
+
 nodes:
   - role: controller
     tmpSize: 512m                        # override default
@@ -553,6 +560,38 @@ nodes:
     count: 2
     managed: false                       # slurmd not started, not in slurm.conf
 ```
+
+### Slurm Configuration Extension
+
+The `slurm.extra` map allows extending the generated `slurm.conf` with additional configuration files. Each entry in the map creates a file in `/etc/slurm/` and an `include` directive in `slurm.conf`:
+
+```yaml
+slurm:
+  extra:
+    scheduling: |
+      SchedulerType=sched/backfill
+    resources: |
+      SelectType=select/cons_tres
+      SelectTypeParameters=CR_Core_Memory
+```
+
+This produces:
+
+```
+/etc/slurm/
+├── slurm.conf           # includes sind-nodes.conf, resources.conf, scheduling.conf
+├── sind-nodes.conf
+├── cgroup.conf
+├── resources.conf       # from slurm.extra
+└── scheduling.conf      # from slurm.extra
+```
+
+Include directives are added in alphabetical order by key name. The `.conf` extension is appended automatically.
+
+Validation rules:
+- Keys must be plain filenames (no path separators)
+- Keys must not be empty
+- Values must not be empty
 
 ### Node Roles
 
@@ -998,6 +1037,34 @@ Examples (custom realm `ci-42`):
 - `worker-0.dev.ci-42.sind`
 
 Within a cluster, short names resolve via the search domain: a node in the `dev` cluster of realm `sind` can reach `controller` without the full `controller.dev.sind.sind`.
+
+## Realm Advisory Locking
+
+Mutating operations acquire a per-realm advisory lock (flock) to prevent concurrent modifications to shared realm state. The lock file is stored at:
+
+```
+$XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
+```
+
+### Protected operations
+
+- `sind create cluster`
+- `sind delete cluster` (single and `--all`)
+- `sind create worker`
+- `sind delete worker`
+
+Read-only operations (`get`, `status`, `logs`, `ssh`, etc.) do not acquire the lock.
+
+### Behavior
+
+- Lock is attempted non-blocking first; if free, the operation proceeds immediately
+- If another operation holds the lock, sind logs `"waiting for another operation to complete"` (info level) and blocks until the lock is released
+- Lock is released when the operation completes (success or failure)
+- Context cancellation (e.g., Ctrl+C) unblocks a waiting operation
+
+### Realm independence
+
+Locks are per-realm. Operations in different realms run concurrently without contention. This makes realm-based CI isolation safe for parallel jobs.
 
 ## Future Features
 

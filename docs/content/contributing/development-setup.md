@@ -64,6 +64,7 @@ sind uses a minimal set of dependencies:
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
+| `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
 | `github.com/stretchr/testify` | Test assertions (test only) |
 
 ## Run tests

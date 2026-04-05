@@ -12,9 +12,10 @@ sind generates a multi-file Slurm configuration and writes it to the `sind-<clus
 
 ```
 /etc/slurm/
-├── slurm.conf           # main config, includes sind-nodes.conf
+├── slurm.conf           # main config, includes sind-nodes.conf (+ extra)
 ├── sind-nodes.conf      # sind-managed node definitions
-└── cgroup.conf          # cgroupv2 configuration
+├── cgroup.conf          # cgroupv2 configuration
+└── *.conf               # additional files from slurm.extra (if configured)
 ```
 
 ## slurm.conf
@@ -61,9 +62,28 @@ This happens once per unique image. The version is stored as a label on cluster 
 
 When different images report different Slurm versions, sind logs a warning but continues. The controller image's version is used for configuration generation.
 
-## User customization
+## Custom configuration via slurm.extra
 
-sind provides a working starter configuration. For additional customization, users can:
+The cluster config supports a `slurm.extra` map for extending `slurm.conf` declaratively at creation time. Each entry becomes a file in `/etc/slurm/` with an `include` directive added to `slurm.conf`:
+
+```yaml
+slurm:
+  extra:
+    scheduling: |
+      SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
+    resources: |
+      SelectType=select/cons_tres
+      SelectTypeParameters=CR_Core_Memory
+```
+
+This generates `/etc/slurm/resources.conf` and `/etc/slurm/scheduling.conf`, with include directives appended to `slurm.conf` in alphabetical order by key name.
+
+See [Cluster Configuration]({{< relref "/configuration/cluster-config" >}}) for the full schema.
+
+## Post-creation customization
+
+sind provides a working starter configuration. For additional customization after creation, users can:
 
 - Edit `slurm.conf` on the controller (the config volume is writable)
 - Add include files for custom configuration

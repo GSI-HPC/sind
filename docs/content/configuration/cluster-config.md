@@ -46,6 +46,12 @@ storage:
     type: volume
     mountPath: /data
 
+slurm:
+  extra:
+    scheduling: |
+      SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
+
 nodes:
   - role: controller
     cpus: 2
@@ -73,6 +79,7 @@ nodes:
 | `realm` | no | `"sind"` | Realm namespace for resource isolation |
 | `defaults` | no | — | Default settings applied to all nodes |
 | `storage` | no | — | Shared storage configuration |
+| `slurm` | no | — | Slurm configuration extension |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
 ## Defaults section
@@ -101,6 +108,35 @@ storage:
 | `type` | `"volume"` | `"volume"` for a Docker volume, `"hostPath"` for a bind mount |
 | `hostPath` | — | Path on the host (required when `type: hostPath`) |
 | `mountPath` | `"/data"` | Mount point inside containers |
+
+## Slurm section
+
+The `slurm` section allows extending the generated Slurm configuration with additional config files.
+
+```yaml
+slurm:
+  extra:
+    scheduling: |
+      SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
+    resources: |
+      SelectType=select/cons_tres
+      SelectTypeParameters=CR_Core_Memory
+```
+
+Each key in `extra` creates a file `/etc/slurm/<key>.conf` with the corresponding value as content. An `include` directive is automatically added to `slurm.conf` for each file, in alphabetical order by key name.
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `extra` | — | Map of config name to content; each entry becomes an include file |
+
+Key validation:
+
+- Must be a plain filename (no path separators)
+- Must not be empty
+- Content must not be empty
+
+See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
 
 ## Validation rules
 

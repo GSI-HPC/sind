@@ -31,18 +31,18 @@ mode_integration_test.go  // build tag: integration
 
 ## Mock executor
 
-The `cmdexec.MockExecutor` (from `pkg/cmdexec`) replaces real CLI calls in unit tests. It supports two dispatch modes:
+The `mock.Executor` (from `internal/mock`) replaces real CLI calls in unit tests. It supports two dispatch modes:
 
 ### FIFO mode
 
 Queue results in order with `AddResult()`:
 
 ```go
-mock := &cmdexec.MockExecutor{}
-mock.AddResult(`{"Id":"abc123"}`, "", nil)  // first call returns this
-mock.AddResult("", "", nil)                  // second call returns this
+m := &mock.Executor{}
+m.AddResult(`{"Id":"abc123"}`, "", nil)  // first call returns this
+m.AddResult("", "", nil)                  // second call returns this
 
-client := docker.NewClient(mock)
+client := docker.NewClient(m)
 ```
 
 ### Dispatcher mode
@@ -50,12 +50,12 @@ client := docker.NewClient(mock)
 Use `OnCall` for concurrent tests or when result dispatch depends on the command:
 
 ```go
-mock := &cmdexec.MockExecutor{
-    OnCall: func(args []string, stdin string) cmdexec.MockResult {
+m := &mock.Executor{
+    OnCall: func(args []string, stdin string) mock.Result {
         if args[0] == "inspect" {
-            return cmdexec.MockResult{Stdout: `[{"Id":"abc"}]`}
+            return mock.Result{Stdout: `[{"Id":"abc"}]`}
         }
-        return cmdexec.MockResult{}
+        return mock.Result{}
     },
 }
 ```
@@ -65,8 +65,8 @@ mock := &cmdexec.MockExecutor{
 All calls are recorded and can be inspected:
 
 ```go
-assert.Equal(t, "create", mock.Calls[0].Args[0])
-assert.Contains(t, mock.Calls[0].Args, "--name")
+assert.Equal(t, "create", m.Calls[0].Args[0])
+assert.Contains(t, m.Calls[0].Args, "--name")
 ```
 
 ## Simulating missing resources
@@ -74,17 +74,17 @@ assert.Contains(t, mock.Calls[0].Args, "--name")
 For methods like `ContainerExists()` that check exit codes, a plain `fmt.Errorf` won't work. You need a real `*exec.ExitError` with exit code 1:
 
 ```go
-mock.AddResult("", "", &exec.ExitError{ProcessState: exitCode1(t)})
+m.AddResult("", "", &exec.ExitError{ProcessState: testutil.ExitCode1(t)})
 ```
 
-The `exitCode1(t)` helper runs `sh -c "exit 1"` to obtain a real `*os.ProcessState`. This helper is defined per test package (not shared).
+The `testutil.ExitCode1(t)` helper (from `internal/testutil`) runs `sh -c "exit 1"` to obtain a real `*os.ProcessState`.
 
 ## Recording executor
 
-The `cmdexec.RecordingExecutor` wraps a real executor and records all calls with their results. Useful for observing actual CLI I/O during integration tests:
+The `mock.RecordingExecutor` (from `internal/mock`) wraps a real executor and records all calls with their results. Useful for observing actual CLI I/O during integration tests:
 
 ```go
-rec := &cmdexec.RecordingExecutor{Inner: &cmdexec.OSExecutor{}}
+rec := &mock.RecordingExecutor{Inner: &cmdexec.OSExecutor{}}
 client := docker.NewClient(rec)
 
 // ... run operations ...
