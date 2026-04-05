@@ -54,9 +54,9 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		bg := context.Background()
-		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "config"))
-		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "munge"))
-		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "data"))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, VolumeConfig))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, VolumeMunge))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, VolumeData))
 		_ = c.RemoveNetwork(bg, NetworkName(mesh.DefaultRealm, clusterName))
 	})
 
@@ -92,7 +92,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists, "cluster network")
 
-	for _, vtype := range []string{"config", "munge", "data"} {
+	for _, vtype := range AllVolumeTypes {
 		exists, err = c.VolumeExists(ctx, VolumeName(mesh.DefaultRealm, clusterName, vtype))
 		require.NoError(t, err)
 		assert.True(t, exists, vtype+" volume")

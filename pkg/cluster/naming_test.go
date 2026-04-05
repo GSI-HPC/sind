@@ -31,7 +31,7 @@ func TestCustomRealm_NamingFunctions(t *testing.T) {
 	assert.Equal(t, docker.NetworkName("myrealm-dev-net"), NetworkName(realm, "dev"))
 	assert.Equal(t, docker.ContainerName("myrealm-dev-controller"), ContainerName(realm, "dev", "controller"))
 	assert.Equal(t, docker.ContainerName("myrealm-dev-worker-0"), ContainerName(realm, "dev", "worker-0"))
-	assert.Equal(t, docker.VolumeName("myrealm-dev-config"), VolumeName(realm, "dev", "config"))
+	assert.Equal(t, docker.VolumeName("myrealm-dev-config"), VolumeName(realm, "dev", VolumeConfig))
 	assert.Equal(t, "myrealm-dev-", ContainerPrefix(realm, "dev"))
 	assert.Equal(t, "myrealm-dev", ComposeProject(realm, "dev"))
 }
@@ -60,13 +60,13 @@ func TestVolumeName(t *testing.T) {
 	tests := []struct {
 		name       string
 		cluster    string
-		volumeType string
+		volumeType VolumeType
 		want       docker.VolumeName
 	}{
-		{"config", "dev", "config", "sind-dev-config"},
-		{"munge", "dev", "munge", "sind-dev-munge"},
-		{"data", "dev", "data", "sind-dev-data"},
-		{"default cluster", "default", "config", "sind-default-config"},
+		{"config", "dev", VolumeConfig, "sind-dev-config"},
+		{"munge", "dev", VolumeMunge, "sind-dev-munge"},
+		{"data", "dev", VolumeData, "sind-dev-data"},
+		{"default cluster", "default", VolumeConfig, "sind-default-config"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

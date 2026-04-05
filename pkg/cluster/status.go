@@ -154,14 +154,14 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	// Config and munge are always Docker volumes.
 	mounts := []MountPoint{
-		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, "config")), Type: "volume"},
-		{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, "munge")), Type: "volume"},
+		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: "volume"},
+		{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: "volume"},
 	}
 
 	if dataHostPath != "" {
 		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: dataHostPath, Type: "hostPath", OK: true})
 	} else {
-		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, "data")), Type: "volume"})
+		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: "volume"})
 	}
 
 	// Check existence of Docker volumes.

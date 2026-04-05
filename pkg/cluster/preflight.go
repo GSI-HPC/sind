@@ -52,7 +52,7 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 	}
 
 	// Check cluster volumes.
-	for _, vtype := range []string{"config", "munge", "data"} {
+	for _, vtype := range AllVolumeTypes {
 		volName := VolumeName(realm, cfg.Name, vtype)
 		exists, err := client.VolumeExists(ctx, volName)
 		if err != nil {

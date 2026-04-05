@@ -17,9 +17,8 @@ func ContainerName(realm, cluster, shortName string) docker.ContainerName {
 }
 
 // VolumeName returns the Docker volume name for a cluster resource.
-// volumeType is one of: "config", "munge", "data".
-func VolumeName(realm, cluster, volumeType string) docker.VolumeName {
-	return docker.VolumeName(realm + "-" + cluster + "-" + volumeType)
+func VolumeName(realm, cluster string, volumeType VolumeType) docker.VolumeName {
+	return docker.VolumeName(realm + "-" + cluster + "-" + string(volumeType))
 }
 
 // ContainerPrefix returns the container name prefix for a cluster,

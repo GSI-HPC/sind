@@ -28,14 +28,14 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 // When useDataVolume is true, a data volume is also created; otherwise the
 // caller is expected to use a host-path bind mount for /data.
 func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clusterName string, useDataVolume bool) error {
-	types := []string{"config", "munge"}
+	types := []VolumeType{VolumeConfig, VolumeMunge}
 	if useDataVolume {
-		types = append(types, "data")
+		types = append(types, VolumeData)
 	}
 	for _, vtype := range types {
 		labels := map[string]string{
 			docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
-			docker.ComposeVolumeLabel:  vtype,
+			docker.ComposeVolumeLabel:  string(vtype),
 		}
 		if err := client.CreateVolume(ctx, VolumeName(realm, clusterName, vtype), labels); err != nil {
 			return fmt.Errorf("creating %s volume: %w", vtype, err)
@@ -49,7 +49,7 @@ func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clu
 // volume.
 func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string, pull bool) error {
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
-	volName := VolumeName(realm, cfg.Name, "config")
+	volName := VolumeName(realm, cfg.Name, VolumeConfig)
 
 	args := []string{
 		"--name", string(helperName),
@@ -85,7 +85,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 // Uses a temporary container to access the volume.
 func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string, pull bool) error {
 	helperName := ContainerName(realm, clusterName, "munge-helper")
-	volName := VolumeName(realm, clusterName, "munge")
+	volName := VolumeName(realm, clusterName, VolumeMunge)
 
 	args := []string{
 		"--name", string(helperName),

@@ -11,8 +11,18 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
-// volumeTypes lists the cluster volume suffixes in creation order.
-var volumeTypes = []string{"config", "munge", "data"}
+// VolumeType identifies a cluster volume kind.
+type VolumeType string
+
+// Cluster volume types.
+const (
+	VolumeConfig VolumeType = "config"
+	VolumeMunge  VolumeType = "munge"
+	VolumeData   VolumeType = "data"
+)
+
+// AllVolumeTypes lists the cluster volume types in creation order.
+var AllVolumeTypes = []VolumeType{VolumeConfig, VolumeMunge, VolumeData}
 
 // Resources holds the Docker resources belonging to a cluster.
 type Resources struct {
@@ -45,7 +55,7 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 	res.NetworkExists = exists
 
 	// Check cluster volumes.
-	for _, vtype := range volumeTypes {
+	for _, vtype := range AllVolumeTypes {
 		volName := VolumeName(realm, clusterName, vtype)
 		exists, err := client.VolumeExists(ctx, volName)
 		if err != nil {
@@ -90,8 +100,8 @@ func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm stri
 		if name == meshVolSuffix {
 			continue
 		}
-		for _, suffix := range volumeTypes {
-			if cluster, ok := strings.CutSuffix(name, "-"+suffix); ok {
+		for _, suffix := range AllVolumeTypes {
+			if cluster, ok := strings.CutSuffix(name, "-"+string(suffix)); ok {
 				seen[cluster] = struct{}{}
 				break
 			}
