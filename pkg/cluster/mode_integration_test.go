@@ -55,7 +55,7 @@ defaults:
 	require.NoError(t, cfg.Validate())
 
 	// Create.
-	result, err := Create(ctx, c, meshMgr, cfg, 500*time.Millisecond)
+	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 	assert.Equal(t, clusterName, result.Name)
 	assert.Equal(t, StateRunning, result.State)
@@ -88,6 +88,67 @@ defaults:
 	for _, cl := range clusters {
 		assert.NotEqual(t, clusterName, cl.Name)
 	}
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+const probeInterval = 500 * time.Millisecond
+
+func TestSlurmSectionApplied(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+
+	skipIfNoNsdelegate(t)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-slurm-sect")
+	clusterName := "it-slurm-sect"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	err := meshMgr.EnsureMesh(ctx)
+	require.NoError(t, err)
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+slurm:
+  main: |
+    MaxNodeCount=10
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |
+    ConstrainCores=yes
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+	assert.Equal(t, StateRunning, result.State)
+
+	// Verify settings via scontrol show config on the controller.
+	controller := ContainerName(realm, clusterName, "controller")
+	out, err := c.Exec(ctx, controller, "scontrol", "show", "config")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "MaxNodeCount            = 10")
+	assert.Contains(t, out, "SelectType              = select/cons_tres")
+	assert.Contains(t, out, "SelectTypeParameters    = CR_CORE_MEMORY")
+	assert.Contains(t, out, "ConstrainCores          = yes")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

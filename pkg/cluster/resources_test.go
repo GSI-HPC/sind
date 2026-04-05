@@ -227,7 +227,7 @@ func TestWriteClusterConfig(t *testing.T) {
 	assert.Equal(t, []string{"rm", "-f", "sind-dev-config-helper"}, m.Calls[2].Args)
 }
 
-func TestWriteClusterConfig_SlurmExtra(t *testing.T) {
+func TestWriteClusterConfig_MainStringAppend(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
@@ -237,10 +237,7 @@ func TestWriteClusterConfig_SlurmExtra(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Slurm: config.Slurm{
-			Extra: map[string]string{
-				"scheduling": "SchedulerType=sched/backfill\n",
-				"resources":  "SelectType=select/cons_tres\n",
-			},
+			Main: config.Section{Content: "SchedulerType=sched/backfill\n"},
 		},
 		Nodes: []config.Node{
 			{Role: "controller"},
@@ -250,14 +247,80 @@ func TestWriteClusterConfig_SlurmExtra(t *testing.T) {
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 3)
-
-	// CopyToContainer stdin (tar) should contain the extra conf files
 	cpStdin := m.Calls[1].Stdin
-	assert.Contains(t, cpStdin, "scheduling.conf")
-	assert.Contains(t, cpStdin, "resources.conf")
+	assert.Contains(t, cpStdin, "SchedulerType=sched/backfill")
+}
+
+func TestWriteClusterConfig_MainMapFragments(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
+	m.AddResult("", "", nil)         // CopyToContainer
+	m.AddResult("", "", nil)         // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{
+		Name: "dev",
+		Slurm: config.Slurm{
+			Main: config.Section{Fragments: map[string]string{
+				"scheduling": "SchedulerType=sched/backfill\n",
+				"resources":  "SelectType=select/cons_tres\n",
+			}},
+		},
+		Nodes: []config.Node{
+			{Role: "controller"},
+			{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
+		},
+	}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.NoError(t, err)
+	cpStdin := m.Calls[1].Stdin
+	assert.Contains(t, cpStdin, "slurm.conf.d/")
+	assert.Contains(t, cpStdin, "slurm.conf.d/scheduling.conf")
+	assert.Contains(t, cpStdin, "slurm.conf.d/resources.conf")
 	assert.Contains(t, cpStdin, "SchedulerType=sched/backfill")
 	assert.Contains(t, cpStdin, "SelectType=select/cons_tres")
+}
+
+func TestWriteClusterConfig_PlugstackAlwaysScaffolded(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
+	m.AddResult("", "", nil)         // CopyToContainer
+	m.AddResult("", "", nil)         // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{
+		Name:  "dev",
+		Nodes: []config.Node{{Role: "controller"}, {Role: "worker"}},
+	}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.NoError(t, err)
+	cpStdin := m.Calls[1].Stdin
+	assert.Contains(t, cpStdin, "plugstack.conf")
+	assert.Contains(t, cpStdin, "plugstack.conf.d/")
+}
+
+func TestWriteClusterConfig_GresSection(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("abc123\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{
+		Name: "dev",
+		Slurm: config.Slurm{
+			Gres: config.Section{Content: "Name=gpu Type=tesla\n"},
+		},
+		Nodes: []config.Node{{Role: "controller"}, {Role: "worker"}},
+	}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.NoError(t, err)
+	cpStdin := m.Calls[1].Stdin
+	assert.Contains(t, cpStdin, "gres.conf")
+	assert.Contains(t, cpStdin, "Name=gpu Type=tesla")
 }
 
 func TestWriteClusterConfig_Pull(t *testing.T) {

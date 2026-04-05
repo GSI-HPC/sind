@@ -14,15 +14,26 @@ cmd/sind/          CLI commands (cobra)
   ├── root.go      Root command, --realm and -v flags (root-local, TraverseChildren)
   ├── context.go   Dependency injection via context
   ├── logging.go   Logger construction from -v verbosity
+  ├── lock.go      Per-realm advisory locking (flock)
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing
+  ├── sshexport.go SSH config export to ~/.local/state/sind/
+  ├── worker.go    Worker create/delete commands
   └── *.go         One file per command group
 
-pkg/cmdexec/       Command executor abstraction
-  ├── exec.go      Executor interface, OSExecutor, MockExecutor
-  ├── logging.go   LoggingExecutor (TRACE-level command logging)
-  ├── recorder.go  RecordingExecutor for integration tests
+internal/mock/     Test doubles for cmdexec.Executor
+  ├── mock.go      mock.Executor (FIFO + OnCall dispatch)
+  ├── recorder.go  mock.RecordingExecutor for integration tests
   └── recording.go Recorded call types
+
+internal/testutil/ Shared test helpers
+  ├── testutil.go  ExitCode1, Ptr[T], realm helpers
+  ├── client.go    NewClient (unit test client factory)
+  └── client_integration.go NewClient (integration test variant)
+
+pkg/cmdexec/       Command executor abstraction
+  ├── exec.go      Executor interface, OSExecutor
+  └── logging.go   LoggingExecutor (TRACE-level command logging)
 
 pkg/docker/        Docker CLI wrapper
   ├── client.go    Client type, run/exists helpers
@@ -36,9 +47,13 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── delete.go    Cluster deletion
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
-  ├── worker.go    Worker add/remove
+  ├── worker.go    Worker add
+  ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
   ├── node.go      Node initialization and setup
+  ├── discovery.go Cluster/node discovery queries
+  ├── resources.go Resource creation helpers
+  ├── types.go     Shared types (SlurmService, VolumeType, etc.)
   ├── ssh.go       SSH arg building, host key collection
   ├── logs.go      Log command arg building
   ├── dns.go       DNS record management
@@ -68,7 +83,7 @@ cmd/sind → pkg/cluster → pkg/docker  → pkg/cmdexec
                        → pkg/nodeset
 ```
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph.
 
 ## Adding a new CLI command
 
@@ -93,7 +108,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 1. **Add the method** to `pkg/docker/client.go` (or the appropriate resource file)
 2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output
 3. **Use strong types**: `ContainerName`, `NetworkName`, `VolumeName`, etc.
-4. **Write unit tests** using `MockExecutor`
+4. **Write unit tests** using `mock.Executor`
 
 ## Key patterns
 

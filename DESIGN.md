@@ -93,6 +93,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
+| `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
 
 **Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
 
@@ -536,6 +537,13 @@ storage:
     hostPath: ./data                     # only if type=hostPath
     mountPath: /data                     # default: /data
 
+slurm:
+  main: |                                # appended to slurm.conf
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |                              # appended to cgroup.conf
+    ConstrainCores=yes
+
 nodes:
   - role: controller
     tmpSize: 512m                        # override default
@@ -553,6 +561,66 @@ nodes:
     count: 2
     managed: false                       # slurmd not started, not in slurm.conf
 ```
+
+### Slurm Configuration Sections
+
+The `slurm` key contains named sections that map to Slurm config files. Each section supports two forms:
+
+- **String**: content appended directly to the config file
+- **Map**: each key creates a fragment in a `.conf.d/` directory, included via `include <name>.conf.d/*`
+
+| Section | Config file | sind generates defaults |
+|---------|-------------|:----------------------:|
+| `main` | `slurm.conf` | yes |
+| `cgroup` | `cgroup.conf` | yes |
+| `gres` | `gres.conf` | no |
+| `topology` | `topology.conf` | no |
+| `plugstack` | `plugstack.conf` | yes (always scaffolded) |
+
+**String form** — content appended to the config file:
+
+```yaml
+slurm:
+  main: |
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |
+    ConstrainCores=yes
+```
+
+**Map form** — named fragments in a `.conf.d/` directory:
+
+```yaml
+slurm:
+  main:
+    scheduling: |
+      SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
+    resources: |
+      SelectType=select/cons_tres
+```
+
+This produces:
+
+```
+/etc/slurm/
+├── slurm.conf              # sind defaults + include slurm.conf.d/*
+├── slurm.conf.d/
+│   ├── resources.conf
+│   └── scheduling.conf
+├── sind-nodes.conf
+├── cgroup.conf
+├── plugstack.conf          # always: include plugstack.conf.d/*
+└── plugstack.conf.d/
+```
+
+`plugstack.conf` is always created with an `include plugstack.conf.d/*` directive, and `PlugStackConfig` is always set in `slurm.conf`. This allows SPANK plugins to be dropped in without additional configuration.
+
+Standalone sections (`gres`, `topology`) are only created when configured. They require enabling in `slurm.conf` (e.g., `GresTypes=gpu`, `TopologyPlugin=topology/tree`) via the `main` section.
+
+Validation rules:
+- Fragment names must be plain filenames (no path separators)
+- Fragment names and content must not be empty
 
 ### Node Roles
 
@@ -904,15 +972,22 @@ sind generates a multi-file configuration structure:
 
 ```
 /etc/slurm/
-├── slurm.conf           # main config, includes sind-nodes.conf
-├── sind-nodes.conf      # sind-managed node definitions
-└── cgroup.conf          # cgroupv2 configuration
+├── slurm.conf              # main config
+├── sind-nodes.conf         # sind-managed node definitions
+├── cgroup.conf             # cgroupv2 configuration
+├── plugstack.conf          # SPANK plugin config (always created)
+├── plugstack.conf.d/       # SPANK plugin fragments (always created)
+├── slurm.conf.d/           # main config fragments (if slurm.main is a map)
+├── cgroup.conf.d/          # cgroup fragments (if slurm.cgroup is a map)
+├── gres.conf               # generic resources (if slurm.gres is set)
+└── topology.conf           # network topology (if slurm.topology is set)
 ```
 
-The main `slurm.conf` contains an include directive:
+The main `slurm.conf` always contains:
 
 ```
 include /etc/slurm/sind-nodes.conf
+PlugStackConfig=/etc/slurm/plugstack.conf
 ```
 
 #### sind-nodes.conf
@@ -933,10 +1008,11 @@ sind generates a `cgroup.conf` for cgroupv2 support on worker nodes. This enable
 
 #### User Customization
 
-sind avoids providing fully flexible customization of the initial configuration due to the complexity of Slurm configuration. The intent is to deliver a working starter configuration; users are expected to manage additional Slurm configuration with their own tooling after cluster creation. The `/etc/slurm` volume is writable on the controller node for this purpose.
+sind delivers a working starter configuration. The `slurm` config key allows extending it declaratively at creation time (see Slurm Configuration Sections above). For post-creation changes, the `/etc/slurm` volume is writable on the controller node.
 
 Users may:
-- Edit `slurm.conf` directly (sind does not modify it after creation)
+- Use `slurm.main`, `slurm.cgroup`, etc. to extend config at creation time
+- Edit config files directly after creation (sind does not modify them after creation)
 - Add additional include files for custom configuration
 - Replace the entire configuration (but `sind create worker` will then fail for managed nodes)
 
@@ -998,6 +1074,34 @@ Examples (custom realm `ci-42`):
 - `worker-0.dev.ci-42.sind`
 
 Within a cluster, short names resolve via the search domain: a node in the `dev` cluster of realm `sind` can reach `controller` without the full `controller.dev.sind.sind`.
+
+## Realm Advisory Locking
+
+Mutating operations acquire a per-realm advisory lock (flock) to prevent concurrent modifications to shared realm state. The lock file is stored at:
+
+```
+$XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
+```
+
+### Protected operations
+
+- `sind create cluster`
+- `sind delete cluster` (single and `--all`)
+- `sind create worker`
+- `sind delete worker`
+
+Read-only operations (`get`, `status`, `logs`, `ssh`, etc.) do not acquire the lock.
+
+### Behavior
+
+- Lock is attempted non-blocking first; if free, the operation proceeds immediately
+- If another operation holds the lock, sind logs `"waiting for another operation to complete"` (info level) and blocks until the lock is released
+- Lock is released when the operation completes (success or failure)
+- Context cancellation (e.g., Ctrl+C) unblocks a waiting operation
+
+### Realm independence
+
+Locks are per-realm. Operations in different realms run concurrently without contention. This makes realm-based CI isolation safe for parallel jobs.
 
 ## Future Features
 

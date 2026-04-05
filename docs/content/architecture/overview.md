@@ -30,6 +30,10 @@ Containers require specific security options for systemd:
 - `--tmpfs /run:exec,mode=755` — systemd runtime directory
 - `--tmpfs /run/lock` — systemd lock files
 
+## Concurrency
+
+Mutating operations acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations are unaffected. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}).
+
 ## Creation flow
 
 ```

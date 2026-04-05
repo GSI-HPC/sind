@@ -782,6 +782,17 @@ func TestCopyFilesToContainer(t *testing.T) {
 	assert.Equal(t, int64(0600), hdr.Mode)
 }
 
+func TestBuildFilesTar_DirHeaderError(t *testing.T) {
+	// Fail immediately — directory header write fails.
+	w := &failWriter{failAfter: 0}
+	files := map[string]File{
+		"sub/test": {Content: []byte("data"), Mode: 0644},
+	}
+	err := buildFilesTar(w, files)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "writing tar header for sub/")
+}
+
 func TestBuildFilesTar_HeaderError(t *testing.T) {
 	// Fail immediately — tar header write fails.
 	w := &failWriter{failAfter: 0}
@@ -827,6 +838,36 @@ func (w *failWriter) Write(p []byte) (int, error) {
 	}
 	w.written += len(p)
 	return len(p), nil
+}
+
+func TestBuildFilesTar_NestedPaths(t *testing.T) {
+	var buf bytes.Buffer
+	files := map[string]File{
+		"slurm.conf.d/scheduling.conf": {Content: []byte("SchedulerType=sched/backfill\n"), Mode: 0644},
+		"slurm.conf.d/resources.conf":  {Content: []byte("SelectType=select/cons_tres\n"), Mode: 0644},
+		"slurm.conf":                   {Content: []byte("include slurm.conf.d/*\n"), Mode: 0644},
+	}
+	err := buildFilesTar(&buf, files)
+	require.NoError(t, err)
+
+	tr := tar.NewReader(&buf)
+	var names []string
+	for {
+		hdr, err := tr.Next()
+		if err != nil {
+			break
+		}
+		names = append(names, hdr.Name)
+		if hdr.Typeflag == tar.TypeDir {
+			assert.Equal(t, int64(0755), hdr.Mode, "directory %s should be 0755", hdr.Name)
+		}
+	}
+
+	// Directory entry must precede its files
+	assert.Contains(t, names, "slurm.conf.d/")
+	assert.Contains(t, names, "slurm.conf.d/resources.conf")
+	assert.Contains(t, names, "slurm.conf.d/scheduling.conf")
+	assert.Contains(t, names, "slurm.conf")
 }
 
 func TestCopyToContainer_Error(t *testing.T) {

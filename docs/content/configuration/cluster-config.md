@@ -46,6 +46,13 @@ storage:
     type: volume
     mountPath: /data
 
+slurm:
+  main: |
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |
+    ConstrainCores=yes
+
 nodes:
   - role: controller
     cpus: 2
@@ -73,6 +80,7 @@ nodes:
 | `realm` | no | `"sind"` | Realm namespace for resource isolation |
 | `defaults` | no | — | Default settings applied to all nodes |
 | `storage` | no | — | Shared storage configuration |
+| `slurm` | no | — | Slurm configuration extension |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
 ## Defaults section
@@ -101,6 +109,50 @@ storage:
 | `type` | `"volume"` | `"volume"` for a Docker volume, `"hostPath"` for a bind mount |
 | `hostPath` | — | Path on the host (required when `type: hostPath`) |
 | `mountPath` | `"/data"` | Mount point inside containers |
+
+## Slurm section
+
+The `slurm` section extends the generated Slurm configuration. Each key maps to a config file:
+
+| Key | Config file | sind generates defaults |
+|-----|-------------|:----------------------:|
+| `main` | `slurm.conf` | yes |
+| `cgroup` | `cgroup.conf` | yes |
+| `gres` | `gres.conf` | no |
+| `topology` | `topology.conf` | no |
+| `plugstack` | `plugstack.conf` | yes (always scaffolded) |
+
+Each key supports two forms:
+
+**String form** — content appended to the config file:
+
+```yaml
+slurm:
+  main: |
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |
+    ConstrainCores=yes
+```
+
+**Map form** — named fragments placed in a `.conf.d/` directory:
+
+```yaml
+slurm:
+  main:
+    scheduling: |
+      SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
+    resources: |
+      SelectType=select/cons_tres
+```
+
+Fragment validation:
+
+- Names must be plain filenames (no path separators)
+- Names and content must not be empty
+
+See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
 
 ## Validation rules
 

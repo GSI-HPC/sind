@@ -41,6 +41,18 @@ With realm `ci-42`, resources are prefixed accordingly:
 | Cluster network | `sind-default-net` | `ci-42-default-net` |
 | Container | `sind-default-controller` | `ci-42-default-controller` |
 
+## Advisory locking
+
+Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:
+
+```
+~/.local/state/sind/<realm>/lock
+```
+
+If another operation already holds the lock, sind waits until it completes. Read-only operations (`get`, `status`, `logs`, etc.) are not affected.
+
+Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs.
+
 ## Example
 
 ```bash

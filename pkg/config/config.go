@@ -110,21 +110,67 @@ type Storage struct {
 	DataStorage DataStorage `json:"dataStorage,omitempty"`
 }
 
-// Slurm configures custom Slurm configuration.
-// Each key in Extra becomes a file /etc/slurm/<key>.conf with the value as
-// content, and an include directive is appended to slurm.conf.
-type Slurm struct {
-	Extra map[string]string `json:"extra,omitempty"`
+// Section represents a Slurm config file section that can be either:
+//   - a string (content appended directly to the config file)
+//   - a map of fragment name → content (creates a .conf.d/ directory)
+type Section struct {
+	Content   string            // string form
+	Fragments map[string]string // map form
 }
 
-// ExtraNames returns the sorted keys from Extra.
-func (s *Slurm) ExtraNames() []string {
-	names := make([]string, 0, len(s.Extra))
-	for k := range s.Extra {
+// IsEmpty returns true if the section has no content and no fragments.
+func (s Section) IsEmpty() bool {
+	return s.Content == "" && len(s.Fragments) == 0
+}
+
+// IsMap returns true if the section uses the map/fragments form.
+func (s Section) IsMap() bool {
+	return len(s.Fragments) > 0
+}
+
+// FragmentNames returns the sorted keys from Fragments.
+func (s Section) FragmentNames() []string {
+	if len(s.Fragments) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(s.Fragments))
+	for k := range s.Fragments {
 		names = append(names, k)
 	}
 	sort.Strings(names)
 	return names
+}
+
+// UnmarshalJSON supports two YAML/JSON forms:
+//   - string: "content" → Section{Content: "content"}
+//   - map: {"key": "content"} → Section{Fragments: {"key": "content"}}
+func (s *Section) UnmarshalJSON(data []byte) error {
+	// Try string form (also handles null → empty string)
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		s.Content = str
+		return nil
+	}
+
+	// Try map form
+	var m map[string]string
+	if err := json.Unmarshal(data, &m); err == nil {
+		s.Fragments = m
+		return nil
+	}
+
+	return fmt.Errorf("section must be a string or map of fragments")
+}
+
+// Slurm configures custom Slurm configuration files.
+// Each field maps to a Slurm config file: main → slurm.conf,
+// cgroup → cgroup.conf, gres → gres.conf, etc.
+type Slurm struct {
+	Main      Section `json:"main,omitempty"`
+	Cgroup    Section `json:"cgroup,omitempty"`
+	Gres      Section `json:"gres,omitempty"`
+	Topology  Section `json:"topology,omitempty"`
+	Plugstack Section `json:"plugstack,omitempty"`
 }
 
 // Cluster represents a sind cluster configuration.
@@ -235,18 +281,38 @@ func (c *Cluster) Validate() error {
 		return fmt.Errorf("at least one worker node required, got %d", workers)
 	}
 
-	for name, content := range c.Slurm.Extra {
-		if name == "" {
-			return fmt.Errorf("slurm extra config name must not be empty")
-		}
-		if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
-			return fmt.Errorf("slurm extra config name %q must be a plain filename without path separators", name)
-		}
-		if content == "" {
-			return fmt.Errorf("slurm extra config %q must not be empty", name)
+	sections := []struct {
+		name    string
+		section Section
+	}{
+		{"main", c.Slurm.Main},
+		{"cgroup", c.Slurm.Cgroup},
+		{"gres", c.Slurm.Gres},
+		{"topology", c.Slurm.Topology},
+		{"plugstack", c.Slurm.Plugstack},
+	}
+	for _, s := range sections {
+		if err := validateSection(s.name, s.section); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// validateSection checks that a Slurm config section is valid.
+func validateSection(sectionName string, s Section) error {
+	for name, content := range s.Fragments {
+		if name == "" {
+			return fmt.Errorf("slurm %s fragment name must not be empty", sectionName)
+		}
+		if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
+			return fmt.Errorf("slurm %s fragment name %q must be a plain filename without path separators", sectionName, name)
+		}
+		if content == "" {
+			return fmt.Errorf("slurm %s fragment %q must not be empty", sectionName, name)
+		}
+	}
 	return nil
 }
 

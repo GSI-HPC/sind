@@ -67,15 +67,33 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	}
 	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
-	extraNames := cfg.Slurm.ExtraNames()
-
 	files := docker.FileContents{
-		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, extraNames)),
+		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main)),
 		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
-		"cgroup.conf":       []byte(slurm.GenerateCgroupConf()),
+		"cgroup.conf":       []byte(slurm.GenerateCgroupConf(cfg.Slurm.Cgroup)),
+		"plugstack.conf":    []byte(slurm.GeneratePlugstackConf(cfg.Slurm.Plugstack)),
 	}
-	for _, name := range extraNames {
-		files[name+".conf"] = []byte(cfg.Slurm.Extra[name])
+	addSectionFragments(files, "slurm", cfg.Slurm.Main)
+	addSectionFragments(files, "cgroup", cfg.Slurm.Cgroup)
+	addSectionFragments(files, "plugstack", cfg.Slurm.Plugstack)
+
+	// Standalone sections: only created when configured
+	for _, s := range []struct {
+		name    string
+		section config.Section
+	}{
+		{"gres", cfg.Slurm.Gres},
+		{"topology", cfg.Slurm.Topology},
+	} {
+		if !s.section.IsEmpty() {
+			files[s.name+".conf"] = []byte(slurm.GenerateSectionConf(s.name, s.section))
+			addSectionFragments(files, s.name, s.section)
+		}
+	}
+
+	// Always create plugstack.conf.d/ directory (even if empty)
+	if !cfg.Slurm.Plugstack.IsMap() {
+		files["plugstack.conf.d/.keep"] = nil
 	}
 
 	err = client.CopyToContainer(ctx, helperName, slurm.ConfDir, files)
@@ -129,4 +147,12 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 	}
 
 	return nil
+}
+
+// addSectionFragments adds fragment files from a map-form section to the
+// FileContents map. Each fragment becomes <name>.conf.d/<key>.conf.
+func addSectionFragments(files docker.FileContents, name string, s config.Section) {
+	for _, key := range s.FragmentNames() {
+		files[name+".conf.d/"+key+".conf"] = []byte(s.Fragments[key])
+	}
 }
