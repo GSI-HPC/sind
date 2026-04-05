@@ -6,7 +6,6 @@ package mesh
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -26,31 +25,9 @@ const (
 	SSHVolumeName    docker.VolumeName    = "sind-ssh-config"
 )
 
-// composeLabels returns compose compatibility labels for a mesh container.
-func composeLabels(project, service string, containerNumber int) map[string]string {
-	return map[string]string{
-		docker.ComposeProjectLabel:         project,
-		docker.ComposeServiceLabel:         service,
-		docker.ComposeContainerNumberLabel: fmt.Sprintf("%d", containerNumber),
-		docker.ComposeOneoffLabel:          "False",
-		docker.ComposeConfigHashLabel:      "",
-		docker.ComposeConfigFilesLabel:     "",
-	}
-}
-
-// composeLabelFlags returns --label flags for a mesh container.
+// composeLabelFlags returns sorted --label flags for a mesh container.
 func composeLabelFlags(project, service string) []string {
-	labels := composeLabels(project, service, 1)
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	flags := make([]string, 0, len(labels)*2)
-	for _, k := range keys {
-		flags = append(flags, "--label", k+"="+labels[k])
-	}
-	return flags
+	return docker.SortedLabelFlags(docker.ComposeLabels(project, service, 1))
 }
 
 // DNSImage is the container image used for the mesh DNS server.

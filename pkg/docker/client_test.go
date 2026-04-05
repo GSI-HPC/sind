@@ -9,11 +9,11 @@ import (
 )
 
 func TestSortedLabelFlags_Nil(t *testing.T) {
-	assert.Nil(t, sortedLabelFlags(nil))
+	assert.Nil(t, SortedLabelFlags(nil))
 }
 
 func TestSortedLabelFlags_Empty(t *testing.T) {
-	assert.Nil(t, sortedLabelFlags(map[string]string{}))
+	assert.Nil(t, SortedLabelFlags(map[string]string{}))
 }
 
 func TestSortedLabelFlags_Sorted(t *testing.T) {
@@ -21,7 +21,7 @@ func TestSortedLabelFlags_Sorted(t *testing.T) {
 		"z.label": "last",
 		"a.label": "first",
 	}
-	result := sortedLabelFlags(labels)
+	result := SortedLabelFlags(labels)
 	assert.Equal(t, []string{
 		"--label", "a.label=first",
 		"--label", "z.label=last",

@@ -50,9 +50,9 @@ func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...stri
 	return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
 }
 
-// sortedLabelFlags returns --label k=v flag pairs in sorted key order.
+// SortedLabelFlags returns --label k=v flag pairs in sorted key order.
 // Returns nil when labels is nil or empty.
-func sortedLabelFlags(labels map[string]string) []string {
+func SortedLabelFlags(labels map[string]string) []string {
 	if len(labels) == 0 {
 		return nil
 	}

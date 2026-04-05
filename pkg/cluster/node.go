@@ -36,17 +36,10 @@ func ComposeProject(realm, clusterName string) string {
 // The slurm version label is omitted when slurmVersion is empty.
 // The data host path label is omitted when dataHostPath is empty (Docker volume mode).
 func NodeLabels(realm, clusterName string, role config.Role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
-	labels := map[string]string{
-		LabelRealm:                         realm,
-		LabelCluster:                       clusterName,
-		LabelRole:                          string(role),
-		docker.ComposeProjectLabel:         ComposeProject(realm, clusterName),
-		docker.ComposeServiceLabel:         string(role),
-		docker.ComposeContainerNumberLabel: strconv.Itoa(containerNumber),
-		docker.ComposeOneoffLabel:          "False",
-		docker.ComposeConfigHashLabel:      "",
-		docker.ComposeConfigFilesLabel:     "",
-	}
+	labels := docker.ComposeLabels(ComposeProject(realm, clusterName), string(role), containerNumber)
+	labels[LabelRealm] = realm
+	labels[LabelCluster] = clusterName
+	labels[LabelRole] = string(role)
 	if slurmVersion != "" {
 		labels[LabelSlurmVersion] = slurmVersion
 	}

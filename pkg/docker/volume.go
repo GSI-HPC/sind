@@ -18,7 +18,7 @@ func (c *Client) VolumeExists(ctx context.Context, name VolumeName) (bool, error
 // Labels are applied as --label flags when non-nil.
 func (c *Client) CreateVolume(ctx context.Context, name VolumeName, labels map[string]string) error {
 	args := []string{"volume", "create"}
-	args = append(args, sortedLabelFlags(labels)...)
+	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))
 	_, _, err := c.run(ctx, args...)
 	return err
