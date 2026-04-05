@@ -8,6 +8,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestComposeLabels(t *testing.T) {
+	labels := ComposeLabels("myproject", "web", 2)
+
+	assert.Equal(t, "myproject", labels[ComposeProjectLabel])
+	assert.Equal(t, "web", labels[ComposeServiceLabel])
+	assert.Equal(t, "2", labels[ComposeContainerNumberLabel])
+	assert.Equal(t, "False", labels[ComposeOneoffLabel])
+	assert.Equal(t, "", labels[ComposeConfigHashLabel])
+	assert.Equal(t, "", labels[ComposeConfigFilesLabel])
+	assert.Len(t, labels, 6)
+}
+
 func TestSortedLabelFlags_Nil(t *testing.T) {
 	assert.Nil(t, SortedLabelFlags(nil))
 }
