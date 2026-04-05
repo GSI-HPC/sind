@@ -144,30 +144,30 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 // TestClusterLifecycle exercises the full user workflow via CLI commands:
 // create cluster → get/status → power ops → add worker → delete worker → delete cluster.
 func TestClusterLifecycle(t *testing.T) {
-	t.Chdir(t.TempDir())
+	t.Parallel()
 	c := realClient(t)
 	skipIfNoNsdelegate(t)
 	image := testImage(t)
+	dataDir := t.TempDir()
 
-	t.Setenv("SIND_REALM", testRealm)
-
+	realm := "it-e2e-" + testID
 	cluster := "e2e-" + testID
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, testRealm)
+	meshMgr := mesh.NewManager(c, realm)
 	t.Cleanup(func() {
 		bg := context.Background()
 		// Best-effort cleanup in case test fails partway.
 		for _, name := range []string{"controller", "worker-0", "worker-1"} {
-			cn := docker.ContainerName(testRealm + "-" + cluster + "-" + name)
+			cn := docker.ContainerName(realm + "-" + cluster + "-" + name)
 			_ = c.KillContainer(bg, cn)
 			_ = c.RemoveContainer(bg, cn)
 		}
 		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName(testRealm+"-"+cluster+"-"+vt))
+			_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-"+cluster+"-"+vt))
 		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName(testRealm+"-"+cluster+"-net"))
+		_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-"+cluster+"-net"))
 		_ = meshMgr.CleanupMesh(bg)
 	})
 
@@ -177,43 +177,43 @@ func TestClusterLifecycle(t *testing.T) {
 	require.NoError(t, os.WriteFile(cfgPath, []byte("kind: Cluster\ndefaults:\n  image: "+image+"\n"), 0o644))
 
 	// --- create cluster ---
-	_, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", cluster, "--config", cfgPath)
+	_, stderr, err := executeWithRealmCtx(ctx, realm, "create", "cluster", cluster, "--config", cfgPath, "--data", dataDir)
 	require.NoError(t, err, "create cluster failed: stderr=%q", stderr)
 
 	// --- get clusters ---
 	var stdout string
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "clusters")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "clusters")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, cluster)
 	assert.Contains(t, stdout, "running")
 
 	// --- get nodes ---
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "nodes", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "controller."+cluster)
 	assert.Contains(t, stdout, "worker-0."+cluster)
 
 	// --- get networks ---
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "networks")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "networks")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, testRealm+"-"+cluster+"-net")
-	assert.Contains(t, stdout, testRealm+"-mesh")
+	assert.Contains(t, stdout, realm+"-"+cluster+"-net")
+	assert.Contains(t, stdout, realm+"-mesh")
 
 	// --- get volumes ---
 	// Data volume is not created when using host-path bind mount (default).
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "volumes")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "volumes")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, testRealm+"-"+cluster+"-config")
-	assert.Contains(t, stdout, testRealm+"-"+cluster+"-munge")
+	assert.Contains(t, stdout, realm+"-"+cluster+"-config")
+	assert.Contains(t, stdout, realm+"-"+cluster+"-munge")
 
 	// --- get munge-key ---
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "munge-key", cluster)
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "munge-key", cluster)
 	require.NoError(t, err)
 	assert.NotEmpty(t, stdout)
 	assert.NotContains(t, stdout, "Error")
 
 	// --- status ---
-	stdout, _, err = executeWithDockerCtx(ctx, "status", cluster)
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "status", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "CLUSTER")
 	assert.Contains(t, stdout, cluster)
@@ -225,83 +225,83 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "MOUNTS")
 
 	// --- exec ---
-	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", cluster, "--", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", cluster, "--", "hostname")
 	require.NoError(t, err, "exec failed: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "controller")
 
 	// exec with default cluster
-	_, _, err = executeWithDockerCtx(ctx, "exec", "--", "echo", "hello")
+	_, _, err = executeWithRealmCtx(ctx, realm, "exec", "--", "echo", "hello")
 	if err != nil {
 		// Only fails if no "default" cluster exists — expected in isolation.
 		assert.Contains(t, err.Error(), "default")
 	}
 
 	// exec missing separator
-	_, _, err = executeWithDockerCtx(ctx, "exec", "hostname")
+	_, _, err = executeWithRealmCtx(ctx, realm, "exec", "hostname")
 	assert.Error(t, err)
 
 	// exec missing command
-	_, _, err = executeWithDockerCtx(ctx, "exec", "--")
+	_, _, err = executeWithRealmCtx(ctx, realm, "exec", "--")
 	assert.Error(t, err)
 
 	// --- power shutdown ---
 	node := "worker-0." + cluster
-	_, _, err = executeWithDockerCtx(ctx, "power", "shutdown", node)
+	_, _, err = executeWithRealmCtx(ctx, realm, "power", "shutdown", node)
 	require.NoError(t, err)
-	info, err := c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
+	info, err := c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "exited", info.Status)
 
 	// --- power on ---
-	_, _, err = executeWithDockerCtx(ctx, "power", "on", node)
+	_, _, err = executeWithRealmCtx(ctx, realm, "power", "on", node)
 	require.NoError(t, err)
-	info, err = c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
+	info, err = c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
 	require.NoError(t, err)
 	assert.Equal(t, "running", info.Status)
 
 	// --- power freeze / unfreeze ---
-	_, _, err = executeWithDockerCtx(ctx, "power", "freeze", node)
+	_, _, err = executeWithRealmCtx(ctx, realm, "power", "freeze", node)
 	require.NoError(t, err)
-	info, _ = c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
+	info, _ = c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
 	assert.Equal(t, "paused", info.Status)
 
-	_, _, err = executeWithDockerCtx(ctx, "power", "unfreeze", node)
+	_, _, err = executeWithRealmCtx(ctx, realm, "power", "unfreeze", node)
 	require.NoError(t, err)
-	info, _ = c.InspectContainer(ctx, docker.ContainerName(testRealm+"-"+cluster+"-worker-0"))
+	info, _ = c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
 	assert.Equal(t, "running", info.Status)
 
 	// --- create worker ---
-	_, stderr, err = executeWithDockerCtx(ctx, "create", "worker", cluster, "--count", "1")
+	_, stderr, err = executeWithRealmCtx(ctx, realm, "create", "worker", cluster, "--count", "1")
 	require.NoError(t, err, "create worker failed: stderr=%q", stderr)
 
 	// Verify new node appears.
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "nodes", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "worker-1."+cluster)
 
 	// --- delete worker ---
-	_, _, err = executeWithDockerCtx(ctx, "delete", "worker", "worker-1."+cluster)
+	_, _, err = executeWithRealmCtx(ctx, realm, "delete", "worker", "worker-1."+cluster)
 	require.NoError(t, err)
 
 	// Verify node is gone.
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes", cluster)
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "nodes", cluster)
 	require.NoError(t, err)
 	assert.NotContains(t, stdout, "worker-1")
 
 	// --- delete cluster ---
-	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)
+	_, _, err = executeWithRealmCtx(ctx, realm, "delete", "cluster", cluster)
 	require.NoError(t, err)
 
 	// Verify everything is gone.
-	exists, err := c.ContainerExists(ctx, docker.ContainerName(testRealm+"-"+cluster+"-controller"))
+	exists, err := c.ContainerExists(ctx, docker.ContainerName(realm+"-"+cluster+"-controller"))
 	require.NoError(t, err)
 	assert.False(t, exists)
 
-	exists, err = c.NetworkExists(ctx, docker.NetworkName(testRealm+"-"+cluster+"-net"))
+	exists, err = c.NetworkExists(ctx, docker.NetworkName(realm+"-"+cluster+"-net"))
 	require.NoError(t, err)
 	assert.False(t, exists)
 
 	// --- delete nonexistent cluster (idempotent) ---
-	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "nonexistent-"+testID)
+	_, _, err = executeWithRealmCtx(ctx, realm, "delete", "cluster", "nonexistent-"+testID)
 	require.NoError(t, err, "deleting nonexistent cluster should not error")
 }

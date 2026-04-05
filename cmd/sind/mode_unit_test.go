@@ -12,15 +12,6 @@ import (
 )
 
 var testID = "unit"
-var testRealm = "sind"
-
-func executeWithDocker(_ ...string) (string, string, error) {
-	panic("executeWithDocker called in unit mode")
-}
-
-func executeWithDockerCtx(_ context.Context, _ ...string) (string, string, error) {
-	panic("executeWithDockerCtx called in unit mode")
-}
 
 func realClient(t *testing.T) *docker.Client {
 	t.Helper()
@@ -37,4 +28,12 @@ func testImage(t *testing.T) string {
 	t.Helper()
 	t.Skip("integration test")
 	return ""
+}
+
+func executeWithRealm(_ string, _ ...string) (string, string, error) {
+	panic("executeWithRealm called in unit mode")
+}
+
+func executeWithRealmCtx(_ context.Context, _ string, _ ...string) (string, string, error) {
+	panic("executeWithRealmCtx called in unit mode")
 }

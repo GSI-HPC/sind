@@ -38,12 +38,13 @@ func TestPower_RequiresArgs(t *testing.T) {
 // --- Integration ---
 
 func TestPowerLifecycle(t *testing.T) {
+	t.Parallel()
 	c := realClient(t)
 	ctx := t.Context()
-	t.Setenv("SIND_REALM", testRealm)
+	realm := "it-pwr-" + testID
 	cluster := "cli-pwr-" + testID
 
-	ctrName := docker.ContainerName(testRealm + "-" + cluster + "-worker-0")
+	ctrName := docker.ContainerName(realm + "-" + cluster + "-worker-0")
 
 	t.Cleanup(func() {
 		bg := context.Background()
@@ -53,7 +54,7 @@ func TestPowerLifecycle(t *testing.T) {
 
 	_, err := c.RunContainer(ctx,
 		"--name", string(ctrName),
-		"--label", "sind.realm="+testRealm,
+		"--label", "sind.realm="+realm,
 		"--label", "sind.cluster="+cluster,
 		"--label", "sind.role=worker",
 		"busybox:latest", "sleep", "120",
@@ -63,49 +64,49 @@ func TestPowerLifecycle(t *testing.T) {
 	node := "worker-0." + cluster
 
 	// shutdown (stop)
-	_, _, err = executeWithDocker("power", "shutdown", node)
+	_, _, err = executeWithRealm(realm, "power", "shutdown", node)
 	require.NoError(t, err)
 	info, err := c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, "exited", info.Status)
 
 	// on (start)
-	_, _, err = executeWithDocker("power", "on", node)
+	_, _, err = executeWithRealm(realm, "power", "on", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, "running", info.Status)
 
 	// freeze (pause)
-	_, _, err = executeWithDocker("power", "freeze", node)
+	_, _, err = executeWithRealm(realm, "power", "freeze", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, "paused", info.Status)
 
 	// unfreeze (unpause)
-	_, _, err = executeWithDocker("power", "unfreeze", node)
+	_, _, err = executeWithRealm(realm, "power", "unfreeze", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, "running", info.Status)
 
 	// reboot (stop + start)
-	_, _, err = executeWithDocker("power", "reboot", node)
+	_, _, err = executeWithRealm(realm, "power", "reboot", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, "running", info.Status)
 
 	// cycle (kill + start)
-	_, _, err = executeWithDocker("power", "cycle", node)
+	_, _, err = executeWithRealm(realm, "power", "cycle", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)
 	assert.Equal(t, "running", info.Status)
 
 	// cut (kill)
-	_, _, err = executeWithDocker("power", "cut", node)
+	_, _, err = executeWithRealm(realm, "power", "cut", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, ctrName)
 	require.NoError(t, err)

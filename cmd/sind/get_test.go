@@ -209,23 +209,26 @@ func TestGetDNS_Error(t *testing.T) {
 // --- Integration ---
 
 func TestGetClustersEmpty(t *testing.T) {
+	t.Parallel()
 	realClient(t)
-	stdout, _, err := executeWithDocker("get", "clusters")
+	realm := "it-empty-" + testID
+	stdout, _, err := executeWithRealm(realm, "get", "clusters")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "NAME")
 }
 
 func TestGetLifecycle(t *testing.T) {
+	t.Parallel()
 	c := realClient(t)
 	ctx := t.Context()
-	t.Setenv("SIND_REALM", testRealm)
+	realm := "it-get-" + testID
 	cluster := "cli-get-" + testID
 
-	netName := docker.NetworkName(testRealm + "-" + cluster + "-net")
-	ctrName := docker.ContainerName(testRealm + "-" + cluster + "-controller")
-	volConfig := docker.VolumeName(testRealm + "-" + cluster + "-config")
-	volMunge := docker.VolumeName(testRealm + "-" + cluster + "-munge")
-	volData := docker.VolumeName(testRealm + "-" + cluster + "-data")
+	netName := docker.NetworkName(realm + "-" + cluster + "-net")
+	ctrName := docker.ContainerName(realm + "-" + cluster + "-controller")
+	volConfig := docker.VolumeName(realm + "-" + cluster + "-config")
+	volMunge := docker.VolumeName(realm + "-" + cluster + "-munge")
+	volData := docker.VolumeName(realm + "-" + cluster + "-data")
 
 	t.Cleanup(func() {
 		bg := context.Background()
@@ -246,7 +249,7 @@ func TestGetLifecycle(t *testing.T) {
 	_, err = c.RunContainer(ctx,
 		"--name", string(ctrName),
 		"--network", string(netName),
-		"--label", "sind.realm="+testRealm,
+		"--label", "sind.realm="+realm,
 		"--label", "sind.cluster="+cluster,
 		"--label", "sind.role=controller",
 		"--label", "sind.slurm.version=25.11.0",
@@ -257,31 +260,31 @@ func TestGetLifecycle(t *testing.T) {
 	require.NoError(t, c.WriteFile(ctx, ctrName, "/etc/munge/munge.key", "test-munge-key"))
 
 	// get clusters
-	stdout, _, err := executeWithDocker("get", "clusters")
+	stdout, _, err := executeWithRealm(realm, "get", "clusters")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, cluster)
 	assert.Contains(t, stdout, "25.11.0")
 	assert.Contains(t, stdout, "running")
 
 	// get nodes
-	stdout, _, err = executeWithDocker("get", "nodes", cluster)
+	stdout, _, err = executeWithRealm(realm, "get", "nodes", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "controller."+cluster)
 
 	// get networks
-	stdout, _, err = executeWithDocker("get", "networks")
+	stdout, _, err = executeWithRealm(realm, "get", "networks")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, string(netName))
 
 	// get volumes
-	stdout, _, err = executeWithDocker("get", "volumes")
+	stdout, _, err = executeWithRealm(realm, "get", "volumes")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, string(volConfig))
 	assert.Contains(t, stdout, string(volMunge))
 	assert.Contains(t, stdout, string(volData))
 
 	// get munge-key
-	stdout, _, err = executeWithDocker("get", "munge-key", cluster)
+	stdout, _, err = executeWithRealm(realm, "get", "munge-key", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "dGVzdC1tdW5nZS1rZXk=") // base64("test-munge-key")
 }

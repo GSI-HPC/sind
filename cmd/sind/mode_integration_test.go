@@ -36,6 +36,21 @@ func executeWithDocker(args ...string) (string, string, error) {
 	return executeWithDockerCtx(context.Background(), args...)
 }
 
+// executeWithRealm runs a CLI command with --realm prepended.
+func executeWithRealm(realm string, args ...string) (string, string, error) {
+	return executeWithDocker(append([]string{"--realm", realm}, args...)...)
+}
+
+// executeWithRealmCtx runs a CLI command with --realm prepended and a context.
+func executeWithRealmCtx(ctx context.Context, realm string, args ...string) (string, string, error) {
+	return executeWithDockerCtx(ctx, append([]string{"--realm", realm}, args...)...)
+}
+
+// executeWithRealmStdin runs a CLI command with --realm prepended and piped stdin.
+func executeWithRealmStdin(ctx context.Context, realm string, stdin string, args ...string) (string, string, error) {
+	return executeWithStdin(ctx, stdin, append([]string{"--realm", realm}, args...)...)
+}
+
 // executeWithDockerCtx runs a CLI command backed by a real Docker client
 // with the given context (e.g. for deadline control on long-running commands).
 func executeWithDockerCtx(ctx context.Context, args ...string) (string, string, error) {

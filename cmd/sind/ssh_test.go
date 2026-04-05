@@ -122,29 +122,29 @@ func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 // TestSSHAccess exercises all SSH access methods against a real cluster:
 // sind ssh, sind enter, sind exec, and user SSH client via exported ssh_config.
 func TestSSHAccess(t *testing.T) {
-	t.Chdir(t.TempDir())
+	t.Parallel()
 	c := realClient(t)
 	skipIfNoNsdelegate(t)
 	image := testImage(t)
+	dataDir := t.TempDir()
 
-	t.Setenv("SIND_REALM", testRealm)
-
+	realm := "it-ssh-" + testID
 	cluster := "e2e-ssh-" + testID
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, testRealm)
+	meshMgr := mesh.NewManager(c, realm)
 	t.Cleanup(func() {
 		bg := context.Background()
 		for _, name := range []string{"controller", "submitter", "worker-0"} {
-			cn := docker.ContainerName(testRealm + "-" + cluster + "-" + name)
+			cn := docker.ContainerName(realm + "-" + cluster + "-" + name)
 			_ = c.KillContainer(bg, cn)
 			_ = c.RemoveContainer(bg, cn)
 		}
 		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName(testRealm+"-"+cluster+"-"+vt))
+			_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-"+cluster+"-"+vt))
 		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName(testRealm+"-"+cluster+"-net"))
+		_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-"+cluster+"-net"))
 		_ = meshMgr.CleanupMesh(bg)
 	})
 
@@ -154,20 +154,20 @@ func TestSSHAccess(t *testing.T) {
 	cfg := "kind: Cluster\nname: " + cluster + "\ndefaults:\n  image: " + image + "\nnodes:\n  - controller\n  - submitter\n  - worker: 1\n"
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o644))
 
-	stdout, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", "--config", cfgPath)
+	stdout, stderr, err := executeWithRealmCtx(ctx, realm, "create", "cluster", "--config", cfgPath, "--data", dataDir)
 	require.NoError(t, err, "create cluster: stdout=%q stderr=%q", stdout, stderr)
 
 	// --- sind ssh: run command on specific node ---
-	stdout, stderr, err = executeWithDockerCtx(ctx, "ssh", "controller."+cluster, "--", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "controller."+cluster, "--", "hostname")
 	require.NoError(t, err, "ssh controller: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "controller")
 
-	stdout, stderr, err = executeWithDockerCtx(ctx, "ssh", "worker-0."+cluster, "--", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "worker-0."+cluster, "--", "hostname")
 	require.NoError(t, err, "ssh worker-0: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "worker-0")
 
 	// --- sind enter: routes to submitter when present ---
-	stdout, stderr, err = executeWithDockerCtx(ctx, "enter", cluster)
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "enter", cluster)
 	// enter opens an interactive shell — will exit immediately since stdin is not a TTY.
 	// But the connection itself should succeed (exit code 0 or similar).
 	// We can't assert much about stdout here since it's an interactive session.
@@ -176,12 +176,12 @@ func TestSSHAccess(t *testing.T) {
 	_ = err
 
 	// --- sind exec: routes to submitter when present ---
-	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", cluster, "--", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", cluster, "--", "hostname")
 	require.NoError(t, err, "exec: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "submitter", "exec should route to submitter when present")
 
 	// --- user SSH client via exported ssh_config ---
-	sshConfigDir, err := sindStateDir(testRealm)
+	sshConfigDir, err := sindStateDir(realm)
 	require.NoError(t, err)
 	sshConfigPath := filepath.Join(sshConfigDir, "ssh_config")
 
@@ -190,7 +190,7 @@ func TestSSHAccess(t *testing.T) {
 		sshCmd := exec.CommandContext(ctx, "ssh",
 			"-F", sshConfigPath,
 			"-o", "BatchMode=yes",
-			"controller."+cluster+"."+testRealm+".sind",
+			"controller."+cluster+"."+realm+".sind",
 			"hostname",
 		)
 		out, sshErr := sshCmd.CombinedOutput()
@@ -201,7 +201,7 @@ func TestSSHAccess(t *testing.T) {
 		sshCmd = exec.CommandContext(ctx, "ssh",
 			"-F", sshConfigPath,
 			"-o", "BatchMode=yes",
-			"worker-0."+cluster+"."+testRealm+".sind",
+			"worker-0."+cluster+"."+realm+".sind",
 			"hostname",
 		)
 		out, sshErr = sshCmd.CombinedOutput()
@@ -210,6 +210,6 @@ func TestSSHAccess(t *testing.T) {
 	}
 
 	// --- delete cluster ---
-	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", cluster)
+	_, _, err = executeWithRealmCtx(ctx, realm, "delete", "cluster", cluster)
 	require.NoError(t, err)
 }
