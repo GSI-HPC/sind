@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Func is a probe function that checks a single readiness condition.
@@ -22,17 +24,29 @@ type Probe struct {
 	Check Func
 }
 
+// ForService returns the readiness probe for a Slurm service.
+func ForService(svc slurm.Service) Probe {
+	switch svc {
+	case slurm.Slurmctld:
+		return Probe{Name: string(svc), Check: SlurmctldReady}
+	case slurm.Slurmd:
+		return Probe{Name: string(svc), Check: SlurmdReady}
+	default:
+		return Probe{Name: string(svc)}
+	}
+}
+
 // NodeProbes returns the probes applicable to a node with the given role.
-func NodeProbes(role string) []Probe {
+func NodeProbes(role config.Role) []Probe {
 	probes := []Probe{
 		{"container", ContainerRunning},
 		{"systemd", SystemdReady},
 		{"sshd", SSHDReady},
 	}
 	switch role {
-	case "controller":
+	case config.RoleController:
 		probes = append(probes, Probe{"slurmctld", SlurmctldReady})
-	case "worker":
+	case config.RoleWorker:
 		probes = append(probes, Probe{"slurmd", SlurmdReady})
 	}
 	return probes
@@ -82,7 +96,7 @@ func ContainerRunning(ctx context.Context, client *docker.Client, name docker.Co
 	if err != nil {
 		return fmt.Errorf("inspecting container: %w", err)
 	}
-	if info.Status != "running" {
+	if info.Status != docker.StateRunning {
 		return fmt.Errorf("container %s is %s, expected running", name, info.Status)
 	}
 	return nil
@@ -106,11 +120,14 @@ func SystemdReady(ctx context.Context, client *docker.Client, name docker.Contai
 	return nil
 }
 
+// sshPort is the TCP port used by the SSH daemon.
+const sshPort = "22"
+
 // SSHDReady verifies that sshd is accepting connections and responding with
 // the SSH protocol banner on port 22.
 func SSHDReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	stdout, err := client.Exec(ctx, name,
-		"bash", "-c", "read -t1 line < /dev/tcp/localhost/22 && echo \"$line\"")
+		"bash", "-c", "read -t1 line < /dev/tcp/localhost/"+sshPort+" && echo \"$line\"")
 	if err != nil {
 		return fmt.Errorf("sshd not ready: %w", err)
 	}

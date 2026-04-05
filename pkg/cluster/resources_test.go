@@ -54,9 +54,9 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		bg := context.Background()
-		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "config"))
-		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "munge"))
-		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, "data"))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, VolumeConfig))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, VolumeMunge))
+		_ = c.RemoveVolume(bg, VolumeName(mesh.DefaultRealm, clusterName, VolumeData))
 		_ = c.RemoveNetwork(bg, NetworkName(mesh.DefaultRealm, clusterName))
 	})
 
@@ -76,8 +76,8 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: clusterName,
 		Nodes: []config.Node{
-			{Role: "controller", CPUs: 2, Memory: "2g", Image: helperImage},
-			{Role: "worker", Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
+			{Role: config.RoleController, CPUs: 2, Memory: "2g", Image: helperImage},
+			{Role: config.RoleWorker, Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
 		},
 	}
 	err = WriteClusterConfig(ctx, c, mesh.DefaultRealm, cfg, helperImage, false)
@@ -92,7 +92,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists, "cluster network")
 
-	for _, vtype := range []string{"config", "munge", "data"} {
+	for _, vtype := range AllVolumeTypes {
 		exists, err = c.VolumeExists(ctx, VolumeName(mesh.DefaultRealm, clusterName, vtype))
 		require.NoError(t, err)
 		assert.True(t, exists, vtype+" volume")
@@ -203,8 +203,8 @@ func TestWriteClusterConfig(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller"},
-			{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
+			{Role: config.RoleController},
+			{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)

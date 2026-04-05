@@ -16,7 +16,7 @@ import (
 )
 
 func TestNodeLabels(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", "", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, "25.11.0", "", 1)
 
 	assert.Equal(t, map[string]string{
 		"sind.realm":                              mesh.DefaultRealm,
@@ -33,7 +33,7 @@ func TestNodeLabels(t *testing.T) {
 }
 
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", "worker", "", "", 3)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleWorker, "", "", 3)
 
 	assert.Equal(t, map[string]string{
 		"sind.realm":                              mesh.DefaultRealm,
@@ -51,13 +51,13 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 }
 
 func TestNodeLabels_WithDataHostPath(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", "/home/user/project", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, "25.11.0", "/home/user/project", 1)
 
 	assert.Equal(t, "/home/user/project", labels[LabelDataHostPath])
 }
 
 func TestNodeLabels_NoDataHostPath(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", "controller", "25.11.0", "", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, "25.11.0", "", 1)
 
 	_, ok := labels[LabelDataHostPath]
 	assert.False(t, ok, "data host path label absent when empty")
@@ -171,22 +171,22 @@ func TestBuildRunArgs_Network_NoDNSIP(t *testing.T) {
 func TestBuildRunArgs_Mounts(t *testing.T) {
 	tests := []struct {
 		name     string
-		role     string
+		role     config.Role
 		wantConf string
 	}{
 		{
 			name:     "controller gets rw config",
-			role:     "controller",
+			role:     config.RoleController,
 			wantConf: "sind-dev-config:/etc/slurm:rw",
 		},
 		{
 			name:     "worker gets ro config",
-			role:     "worker",
+			role:     config.RoleWorker,
 			wantConf: "sind-dev-config:/etc/slurm:ro",
 		},
 		{
 			name:     "submitter gets ro config",
-			role:     "submitter",
+			role:     config.RoleSubmitter,
 			wantConf: "sind-dev-config:/etc/slurm:ro",
 		},
 	}
@@ -195,7 +195,7 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := defaultRunConfig()
 			cfg.Role = tt.role
-			cfg.ShortName = tt.role
+			cfg.ShortName = string(tt.role)
 			args := BuildRunArgs(cfg)
 
 			volumes := testutil.ArgValues(args, "-v")
@@ -399,8 +399,8 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -408,9 +408,9 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
-	assert.Equal(t, "controller", configs[0].Role)
+	assert.Equal(t, config.RoleController, configs[0].Role)
 	assert.Equal(t, "worker-0", configs[1].ShortName)
-	assert.Equal(t, "worker", configs[1].Role)
+	assert.Equal(t, config.RoleWorker, configs[1].Role)
 	assert.True(t, configs[1].Managed, "worker defaults to managed")
 	// Shared fields
 	for _, c := range configs {
@@ -425,9 +425,9 @@ func TestNodeRunConfigs_MultiComputeGroups(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "worker", Count: 2, Image: "img:1", CPUs: 4, Memory: "8g", TmpSize: "1g"},
-			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 2, Image: "img:1", CPUs: 4, Memory: "8g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -446,9 +446,9 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "submitter", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -464,8 +464,8 @@ func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "worker", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -479,10 +479,10 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-			{Role: "worker", Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
 				Managed: testutil.Ptr(false)},
-			{Role: "worker", Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -499,13 +499,13 @@ func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 		Name: "dev",
 		Storage: config.Storage{
 			DataStorage: config.DataStorage{
-				Type:      "hostPath",
+				Type:      config.StorageHostPath,
 				HostPath:  "/data/shared",
 				MountPath: "/shared",
 			},
 		},
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -520,7 +520,7 @@ func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -540,7 +540,7 @@ func TestNodeRunConfigs_VolumeStorageCustomMount(t *testing.T) {
 			},
 		},
 		Nodes: []config.Node{
-			{Role: "controller", Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -575,9 +575,9 @@ func TestCreateClusterNodes(t *testing.T) {
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController,
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker,
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
@@ -599,9 +599,9 @@ func TestCreateClusterNodes_Error(t *testing.T) {
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
 	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController,
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker",
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker,
 			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 	}
 
@@ -632,8 +632,8 @@ func TestEnableSlurmServices(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},
 	}
 
 	err := EnableSlurmServices(t.Context(), c, configs)
@@ -652,8 +652,8 @@ func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "submitter", Role: "submitter"},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "submitter", Role: config.RoleSubmitter},
 	}
 
 	err := EnableSlurmServices(t.Context(), c, configs)
@@ -668,9 +668,9 @@ func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: "worker", Managed: false},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-1", Role: "worker", Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: false},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-1", Role: config.RoleWorker, Managed: true},
 	}
 
 	// Need result for worker-1 slurmd
@@ -690,7 +690,7 @@ func TestEnableSlurmServices_Error(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: "controller"},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
 	}
 
 	err := EnableSlurmServices(t.Context(), c, configs)

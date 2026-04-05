@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,6 +34,22 @@ func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
 		assert.Equal(t, strings.TrimRight(line, " \t"), line,
 			"line has trailing whitespace: %q", line)
 	}
+}
+
+func TestServiceForRole(t *testing.T) {
+	svc, ok := ServiceForRole(config.RoleController)
+	assert.True(t, ok)
+	assert.Equal(t, Slurmctld, svc)
+
+	svc, ok = ServiceForRole(config.RoleWorker)
+	assert.True(t, ok)
+	assert.Equal(t, Slurmd, svc)
+
+	_, ok = ServiceForRole(config.RoleSubmitter)
+	assert.False(t, ok)
+
+	_, ok = ServiceForRole("unknown")
+	assert.False(t, ok)
 }
 
 func TestGenerateCgroupConf(t *testing.T) {

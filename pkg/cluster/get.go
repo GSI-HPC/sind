@@ -8,7 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Summary holds summary information about a sind cluster.
@@ -36,7 +38,7 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 	// Group containers by cluster name.
 	type clusterData struct {
 		summary *Summary
-		states  []string
+		states  []docker.ContainerState
 	}
 	byCluster := make(map[string]*clusterData)
 	for _, c := range containers {
@@ -56,12 +58,12 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 		}
 		cd.summary.NodeCount++
 		cd.states = append(cd.states, c.State)
-		switch c.Labels[LabelRole] {
-		case "controller":
+		switch config.Role(c.Labels[LabelRole]) {
+		case config.RoleController:
 			cd.summary.Controllers++
-		case "submitter":
+		case config.RoleSubmitter:
 			cd.summary.Submitters++
-		case "worker":
+		case config.RoleWorker:
 			cd.summary.Workers++
 		}
 	}
@@ -80,8 +82,8 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 
 // NodeSummary holds summary information about a node in a sind cluster.
 type NodeSummary struct {
-	Name  string // short name: "controller", "worker-0"
-	Role  string // "controller", "submitter", "worker"
+	Name  string      // short name: "controller", "worker-0"
+	Role  config.Role // "controller", "submitter", "worker"
 	State State
 }
 
@@ -102,7 +104,7 @@ func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName str
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		result = append(result, &NodeSummary{
 			Name:  shortName,
-			Role:  c.Labels[LabelRole],
+			Role:  config.Role(c.Labels[LabelRole]),
 			State: containerStateToState(c.State),
 		})
 	}
@@ -120,14 +122,14 @@ func nodeOrder(n *NodeSummary) string {
 
 // roleSortKey returns a sort key that orders by role (controller, submitter, worker)
 // then by name within each role.
-func roleSortKey(role, name string) string {
+func roleSortKey(role config.Role, name string) string {
 	var prefix string
 	switch role {
-	case "controller":
+	case config.RoleController:
 		prefix = "0"
-	case "submitter":
+	case config.RoleSubmitter:
 		prefix = "1"
-	case "worker":
+	case config.RoleWorker:
 		prefix = "2"
 	default:
 		prefix = "9"
@@ -212,7 +214,7 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 	if len(containers) == 0 {
 		return nil, fmt.Errorf("no containers found in cluster %q", clusterName)
 	}
-	key, err := client.CopyFromContainer(ctx, containers[0].Name, "/etc/munge/munge.key")
+	key, err := client.CopyFromContainer(ctx, containers[0].Name, slurm.MungeKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading munge key: %w", err)
 	}
@@ -222,7 +224,7 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 // aggregateState determines the overall cluster status from node states.
 // If all nodes share the same status, that status is returned.
 // Mixed states return StateMixed; no nodes returns StateEmpty.
-func aggregateState(states []string) State {
+func aggregateState(states []docker.ContainerState) State {
 	if len(states) == 0 {
 		return StateEmpty
 	}
@@ -235,14 +237,14 @@ func aggregateState(states []string) State {
 	return first
 }
 
-// containerStateToState maps a docker container state string to a Status.
-func containerStateToState(state string) State {
+// containerStateToState maps a docker container state to a cluster State.
+func containerStateToState(state docker.ContainerState) State {
 	switch state {
-	case "running":
+	case docker.StateRunning:
 		return StateRunning
-	case "paused":
+	case docker.StatePaused:
 		return StatePaused
-	case "exited", "dead", "created":
+	case docker.StateExited, docker.StateDead, docker.StateCreated:
 		return StateStopped
 	default:
 		return StateUnknown

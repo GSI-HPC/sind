@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -99,7 +100,7 @@ func TestApplyDataFlag_HostPath(t *testing.T) {
 
 	require.NoError(t, applyDataFlag(cfg, "/tmp/my-project"))
 
-	assert.Equal(t, "hostPath", cfg.Storage.DataStorage.Type)
+	assert.Equal(t, config.StorageHostPath, cfg.Storage.DataStorage.Type)
 	assert.Equal(t, "/tmp/my-project", cfg.Storage.DataStorage.HostPath)
 }
 
@@ -109,7 +110,7 @@ func TestApplyDataFlag_RelativePath(t *testing.T) {
 
 	require.NoError(t, applyDataFlag(cfg, "."))
 
-	assert.Equal(t, "hostPath", cfg.Storage.DataStorage.Type)
+	assert.Equal(t, config.StorageHostPath, cfg.Storage.DataStorage.Type)
 	assert.True(t, filepath.IsAbs(cfg.Storage.DataStorage.HostPath), "path should be absolute")
 }
 
@@ -250,25 +251,25 @@ func TestClusterLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	info, err := c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
 	require.NoError(t, err)
-	assert.Equal(t, "exited", info.Status)
+	assert.Equal(t, docker.StateExited, info.Status)
 
 	// --- power on ---
 	_, _, err = executeWithRealmCtx(ctx, realm, "power", "on", node)
 	require.NoError(t, err)
 	info, err = c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
 	require.NoError(t, err)
-	assert.Equal(t, "running", info.Status)
+	assert.Equal(t, docker.StateRunning, info.Status)
 
 	// --- power freeze / unfreeze ---
 	_, _, err = executeWithRealmCtx(ctx, realm, "power", "freeze", node)
 	require.NoError(t, err)
 	info, _ = c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
-	assert.Equal(t, "paused", info.Status)
+	assert.Equal(t, docker.StatePaused, info.Status)
 
 	_, _, err = executeWithRealmCtx(ctx, realm, "power", "unfreeze", node)
 	require.NoError(t, err)
 	info, _ = c.InspectContainer(ctx, docker.ContainerName(realm+"-"+cluster+"-worker-0"))
-	assert.Equal(t, "running", info.Status)
+	assert.Equal(t, docker.StateRunning, info.Status)
 
 	// --- create worker ---
 	_, stderr, err = executeWithRealmCtx(ctx, realm, "create", "worker", cluster, "--count", "1")

@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -222,18 +224,32 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmd not ready")
 }
 
+func TestForService(t *testing.T) {
+	p := ForService(slurm.Slurmctld)
+	assert.Equal(t, "slurmctld", p.Name)
+	assert.NotNil(t, p.Check)
+
+	p = ForService(slurm.Slurmd)
+	assert.Equal(t, "slurmd", p.Name)
+	assert.NotNil(t, p.Check)
+
+	p = ForService("unknown")
+	assert.Equal(t, "unknown", p.Name)
+	assert.Nil(t, p.Check)
+}
+
 func TestNodeProbes(t *testing.T) {
 	tests := []struct {
-		role  string
+		role  config.Role
 		names []string
 	}{
-		{"controller", []string{"container", "systemd", "sshd", "slurmctld"}},
-		{"worker", []string{"container", "systemd", "sshd", "slurmd"}},
-		{"submitter", []string{"container", "systemd", "sshd"}},
+		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}},
+		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}},
+		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}},
 		{"unknown", []string{"container", "systemd", "sshd"}},
 	}
 	for _, tt := range tests {
-		t.Run(tt.role, func(t *testing.T) {
+		t.Run(string(tt.role), func(t *testing.T) {
 			probes := NodeProbes(tt.role)
 			var names []string
 			for _, p := range probes {

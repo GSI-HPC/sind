@@ -8,25 +8,27 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	Container string          // container state: "running", "exited", etc.
-	IP        string          // container IP address
-	Munge     bool            // munge service healthy
-	SSHD      bool            // sshd accepting connections
-	Services  map[string]bool // role-specific services (e.g., "slurmctld", "slurmd")
+	Container docker.ContainerState // container state from Docker (e.g. "running", "exited")
+	IP        string                // container IP address
+	Munge     bool                  // munge service healthy
+	SSHD      bool                  // sshd accepting connections
+	Services  map[string]bool       // role-specific services (e.g., "slurmctld", "slurmd")
 }
 
 // GetNodeHealth checks the health of a single node container.
 // If the container is not running, remaining checks are skipped and
 // default to false. The role determines which Slurm services are checked.
 // clusterName is used to select the cluster network IP.
-func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, role, realm, clusterName string) (*NodeHealth, error) {
+func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
 	name := docker.ContainerName(containerName)
 
 	info, err := client.InspectContainer(ctx, name)
@@ -41,7 +43,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName, ro
 	}
 
 	// If container is not running, skip all service checks.
-	if info.Status != "running" {
+	if info.Status != docker.StateRunning {
 		for _, svc := range roleServices(role) {
 			health.Services[svc] = false
 		}
@@ -130,10 +132,10 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 
 // MountPoint describes a volume or bind mount on cluster containers.
 type MountPoint struct {
-	Path   string // mount path inside the container (e.g. "/etc/slurm")
-	Source string // volume name or host path
-	Type   string // "volume" or "hostPath"
-	OK     bool   // true if the Docker volume exists (always true for hostPath)
+	Path   string             // mount path inside the container (e.g. "/etc/slurm")
+	Source string             // volume name or host path
+	Type   config.StorageType // "volume" or "hostPath"
+	OK     bool               // true if the Docker volume exists (always true for hostPath)
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
@@ -152,19 +154,19 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	// Config and munge are always Docker volumes.
 	mounts := []MountPoint{
-		{Path: "/etc/slurm", Source: string(VolumeName(realm, clusterName, "config")), Type: "volume"},
-		{Path: "/etc/munge", Source: string(VolumeName(realm, clusterName, "munge")), Type: "volume"},
+		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: config.StorageVolume},
+		{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: config.StorageVolume},
 	}
 
 	if dataHostPath != "" {
-		mounts = append(mounts, MountPoint{Path: "/data", Source: dataHostPath, Type: "hostPath", OK: true})
+		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: dataHostPath, Type: config.StorageHostPath, OK: true})
 	} else {
-		mounts = append(mounts, MountPoint{Path: "/data", Source: string(VolumeName(realm, clusterName, "data")), Type: "volume"})
+		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume})
 	}
 
 	// Check existence of Docker volumes.
 	for i := range mounts {
-		if mounts[i].Type != "volume" {
+		if mounts[i].Type != config.StorageVolume {
 			continue
 		}
 		exists, err := client.VolumeExists(ctx, docker.VolumeName(mounts[i].Source))
@@ -179,8 +181,8 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
-	Name   string // DNS-style name: "controller.dev"
-	Role   string // "controller", "submitter", "worker"
+	Name   string      // DNS-style name: "controller.dev"
+	Role   config.Role // "controller", "submitter", "worker"
 	Health *NodeHealth
 }
 
@@ -206,10 +208,10 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 
 	prefix := ContainerPrefix(realm, clusterName)
 	var nodes []*NodeStatus
-	var states []string
+	var states []docker.ContainerState
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
-		role := c.Labels[LabelRole]
+		role := config.Role(c.Labels[LabelRole])
 
 		health, err := GetNodeHealth(ctx, client, string(c.Name), role, realm, clusterName)
 		if err != nil {
@@ -253,13 +255,9 @@ func nodeStatusOrder(n *NodeStatus) string {
 }
 
 // roleServices returns the Slurm service names for the given role.
-func roleServices(role string) []string {
-	switch role {
-	case "controller":
-		return []string{"slurmctld"}
-	case "worker":
-		return []string{"slurmd"}
-	default:
-		return nil
+func roleServices(role config.Role) []string {
+	if svc, ok := slurm.ServiceForRole(role); ok {
+		return []string{string(svc)}
 	}
+	return nil
 }

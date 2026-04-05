@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -57,15 +58,15 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		if !ok {
 			return fmt.Errorf("node %q not found in cluster %q", name, clusterName)
 		}
-		if role := c.Labels[LabelRole]; role != "worker" {
-			return fmt.Errorf("node %q has role %q: only worker nodes can be removed with worker remove", name, role)
+		if config.Role(c.Labels[LabelRole]) != config.RoleWorker {
+			return fmt.Errorf("node %q has role %q: only worker nodes can be removed with worker remove", name, c.Labels[LabelRole])
 		}
 		targets = append(targets, c)
 	}
 
 	// For managed nodes: check if sind-nodes.conf exists and update it.
 	if hasController {
-		nodesConf, err := client.ReadFile(ctx, controller.Name, "/etc/slurm/sind-nodes.conf")
+		nodesConf, err := client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
 		if err == nil {
 			// sind-nodes.conf exists → remove managed nodes from it.
 			if err := removeNodesConf(ctx, client, controller.Name, nodesConf, shortNames); err != nil {

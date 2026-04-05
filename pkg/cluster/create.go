@@ -20,7 +20,7 @@ import (
 // controllerImage returns the image configured for the controller node.
 func controllerImage(cfg *config.Cluster) string {
 	for _, n := range cfg.Nodes {
-		if n.Role == "controller" {
+		if n.Role == config.RoleController {
 			return n.Image
 		}
 	}
@@ -337,25 +337,18 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 	log := sindlog.From(ctx)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
-		var service string
-		var slurmProbe probe.Probe
-		switch nc.Role {
-		case "controller":
-			service = "slurmctld"
-			slurmProbe = probe.Probe{Name: "slurmctld", Check: probe.SlurmctldReady}
-		case "worker":
-			if !nc.Managed {
-				continue
-			}
-			service = "slurmd"
-			slurmProbe = probe.Probe{Name: "slurmd", Check: probe.SlurmdReady}
-		default:
+		if nc.Role == config.RoleWorker && !nc.Managed {
 			continue
 		}
+		service, ok := slurm.ServiceForRole(nc.Role)
+		if !ok {
+			continue
+		}
+		slurmProbe := probe.ForService(service)
 		g.Go(func() error {
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 			log.DebugContext(gctx, "enabling slurm service", "node", nc.ShortName, "service", service)
-			_, err := client.Exec(gctx, containerName, "systemctl", "enable", "--now", service)
+			_, err := client.Exec(gctx, containerName, "systemctl", "enable", "--now", string(service))
 			if err != nil {
 				return fmt.Errorf("enabling %s on %s: %w", service, nc.ShortName, err)
 			}

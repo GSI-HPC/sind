@@ -28,14 +28,14 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 // When useDataVolume is true, a data volume is also created; otherwise the
 // caller is expected to use a host-path bind mount for /data.
 func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clusterName string, useDataVolume bool) error {
-	types := []string{"config", "munge"}
+	types := []VolumeType{VolumeConfig, VolumeMunge}
 	if useDataVolume {
-		types = append(types, "data")
+		types = append(types, VolumeData)
 	}
 	for _, vtype := range types {
 		labels := map[string]string{
 			docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
-			docker.ComposeVolumeLabel:  vtype,
+			docker.ComposeVolumeLabel:  string(vtype),
 		}
 		if err := client.CreateVolume(ctx, VolumeName(realm, clusterName, vtype), labels); err != nil {
 			return fmt.Errorf("creating %s volume: %w", vtype, err)
@@ -49,13 +49,13 @@ func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clu
 // volume.
 func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string, pull bool) error {
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
-	volName := VolumeName(realm, cfg.Name, "config")
+	volName := VolumeName(realm, cfg.Name, VolumeConfig)
 
 	args := []string{
 		"--name", string(helperName),
 		"--label", LabelRealm + "=" + realm,
 		"--label", LabelCluster + "=" + cfg.Name,
-		"-v", string(volName) + ":/etc/slurm",
+		"-v", string(volName) + ":" + slurm.ConfDir,
 	}
 	if pull {
 		args = append(args, "--pull", "always")
@@ -68,12 +68,12 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
 	files := map[string][]byte{
-		"slurm.conf":      []byte(slurm.GenerateSlurmConf(cfg.Name)),
-		"sind-nodes.conf": []byte(slurm.GenerateNodesConf(cfg.Nodes)),
-		"cgroup.conf":     []byte(slurm.GenerateCgroupConf()),
+		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name)),
+		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
+		"cgroup.conf":       []byte(slurm.GenerateCgroupConf()),
 	}
 
-	err = client.CopyToContainer(ctx, helperName, "/etc/slurm", files)
+	err = client.CopyToContainer(ctx, helperName, slurm.ConfDir, files)
 	if err != nil {
 		return fmt.Errorf("writing slurm config: %w", err)
 	}
@@ -85,13 +85,13 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 // Uses a temporary container to access the volume.
 func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string, pull bool) error {
 	helperName := ContainerName(realm, clusterName, "munge-helper")
-	volName := VolumeName(realm, clusterName, "munge")
+	volName := VolumeName(realm, clusterName, VolumeMunge)
 
 	args := []string{
 		"--name", string(helperName),
 		"--label", LabelRealm + "=" + realm,
 		"--label", LabelCluster + "=" + clusterName,
-		"-v", string(volName) + ":/etc/munge",
+		"-v", string(volName) + ":" + slurm.MungeDir,
 	}
 	if pull {
 		args = append(args, "--pull", "always")
@@ -106,19 +106,19 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 		_ = client.RemoveContainer(ctx, helperName)
 	}()
 
-	err = client.CopyToContainer(ctx, helperName, "/etc/munge", map[string][]byte{
-		"munge.key": key,
+	err = client.CopyToContainer(ctx, helperName, slurm.MungeDir, map[string][]byte{
+		slurm.MungeKeyFile: key,
 	})
 	if err != nil {
 		return fmt.Errorf("writing munge key: %w", err)
 	}
 
 	// docker cp creates files as root; munge requires ownership by the munge user.
-	_, err = client.Exec(ctx, helperName, "chown", "munge:munge", "/etc/munge/munge.key")
+	_, err = client.Exec(ctx, helperName, "chown", "munge:munge", slurm.MungeKeyPath)
 	if err != nil {
 		return fmt.Errorf("fixing munge key ownership: %w", err)
 	}
-	_, err = client.Exec(ctx, helperName, "chmod", "0400", "/etc/munge/munge.key")
+	_, err = client.Exec(ctx, helperName, "chmod", "0400", slurm.MungeKeyPath)
 	if err != nil {
 		return fmt.Errorf("fixing munge key permissions: %w", err)
 	}

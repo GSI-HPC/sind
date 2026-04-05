@@ -18,7 +18,7 @@ func (c *Client) NetworkExists(ctx context.Context, name NetworkName) (bool, err
 // Labels are applied as --label flags when non-nil.
 func (c *Client) CreateNetwork(ctx context.Context, name NetworkName, labels map[string]string) (NetworkID, error) {
 	args := []string{"network", "create"}
-	args = append(args, sortedLabelFlags(labels)...)
+	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))
 	stdout, _, err := c.run(ctx, args...)
 	if err != nil {

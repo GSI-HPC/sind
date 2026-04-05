@@ -64,7 +64,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	// Validate sind-nodes.conf for managed workers.
 	if !opts.Unmanaged {
-		_, err := client.ReadFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf")
+		_, err := client.ReadFile(ctx, controllerName, slurm.NodesConfPath)
 		if err != nil {
 			return nil, errSindNodesConfMissing
 		}
@@ -113,7 +113,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			Realm:           realm,
 			ClusterName:     opts.ClusterName,
 			ShortName:       fmt.Sprintf("worker-%d", startIdx+i),
-			Role:            "worker",
+			Role:            config.RoleWorker,
 			Image:           image,
 			CPUs:            cpus,
 			Memory:          memory,
@@ -188,7 +188,7 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string,
 		return nil
 	}
 
-	_, err = client.ReadFile(ctx, controller.Name, "/etc/slurm/sind-nodes.conf")
+	_, err = client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
 	if err != nil {
 		return errSindNodesConfMissing
 	}
@@ -212,7 +212,7 @@ func NextComputeIndex(ctx context.Context, client *docker.Client, realm, cluster
 // findController returns the controller's container entry from the list.
 // Returns false if no controller exists for the given cluster.
 func findController(containers []docker.ContainerListEntry, realm, clusterName string) (docker.ContainerListEntry, bool) {
-	controllerName := ContainerName(realm, clusterName, "controller")
+	controllerName := ContainerName(realm, clusterName, string(config.RoleController))
 	for _, c := range containers {
 		if c.Name == controllerName {
 			return c, true
@@ -253,7 +253,7 @@ func resolveWorkerInfra(ctx context.Context, client *docker.Client, meshMgr *mes
 // updateNodesConf reads the current sind-nodes.conf from the controller,
 // appends the new node definitions, writes it back, and reconfigures slurmctld.
 func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, nodeConfigs []RunConfig) error {
-	current, err := client.ReadFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf")
+	current, err := client.ReadFile(ctx, controllerName, slurm.NodesConfPath)
 	if err != nil {
 		return fmt.Errorf("reading sind-nodes.conf: %w", err)
 	}
@@ -278,7 +278,7 @@ func updateNodesConf(ctx context.Context, client *docker.Client, controllerName 
 // writeNodesConfAndReconfigure writes sind-nodes.conf to the controller
 // and triggers slurmctld to reload.
 func writeNodesConfAndReconfigure(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, content string) error {
-	if err := client.WriteFile(ctx, controllerName, "/etc/slurm/sind-nodes.conf", content); err != nil {
+	if err := client.WriteFile(ctx, controllerName, slurm.NodesConfPath, content); err != nil {
 		return fmt.Errorf("updating sind-nodes.conf: %w", err)
 	}
 	if _, err := client.Exec(ctx, controllerName, "scontrol", "reconfigure"); err != nil {

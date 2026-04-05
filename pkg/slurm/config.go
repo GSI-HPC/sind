@@ -2,7 +2,40 @@
 
 package slurm
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/GSI-HPC/sind/pkg/config"
+)
+
+// Service identifies a Slurm daemon managed by sind.
+type Service string
+
+// Slurm daemon services.
+const (
+	Slurmctld Service = "slurmctld"
+	Slurmd    Service = "slurmd"
+)
+
+// ServiceForRole returns the Slurm service for the given node role.
+// Returns empty string and false for roles that have no Slurm service.
+func ServiceForRole(role config.Role) (Service, bool) {
+	switch role {
+	case config.RoleController:
+		return Slurmctld, true
+	case config.RoleWorker:
+		return Slurmd, true
+	default:
+		return "", false
+	}
+}
+
+// Container paths for Slurm configuration files.
+const (
+	ConfDir       = "/etc/slurm"
+	NodesConfFile = "sind-nodes.conf"
+	NodesConfPath = ConfDir + "/" + NodesConfFile
+)
 
 // GenerateSlurmConf generates the main slurm.conf content for a cluster.
 // Node definitions are not included here; they go in sind-nodes.conf.
@@ -19,7 +52,7 @@ func GenerateSlurmConf(clusterName string) string {
 	b.WriteString("TaskPlugin=task/cgroup,task/affinity\n")
 	b.WriteString("ReturnToService=2\n")
 	b.WriteString("\n")
-	b.WriteString("include /etc/slurm/sind-nodes.conf\n")
+	b.WriteString("include " + NodesConfPath + "\n")
 	return b.String()
 }
 

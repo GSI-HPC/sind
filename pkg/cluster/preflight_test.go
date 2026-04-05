@@ -26,43 +26,43 @@ func TestNodeShortNames(t *testing.T) {
 		{
 			name: "minimal: controller + 1 worker",
 			nodes: []config.Node{
-				{Role: "controller"},
-				{Role: "worker", Count: 1},
+				{Role: config.RoleController},
+				{Role: config.RoleWorker, Count: 1},
 			},
 			want: []string{"controller", "worker-0"},
 		},
 		{
 			name: "with submitter",
 			nodes: []config.Node{
-				{Role: "controller"},
-				{Role: "submitter"},
-				{Role: "worker", Count: 2},
+				{Role: config.RoleController},
+				{Role: config.RoleSubmitter},
+				{Role: config.RoleWorker, Count: 2},
 			},
 			want: []string{"controller", "submitter", "worker-0", "worker-1"},
 		},
 		{
 			name: "multiple worker groups with sequential indexing",
 			nodes: []config.Node{
-				{Role: "controller"},
-				{Role: "worker", Count: 2},
-				{Role: "worker", Count: 3},
+				{Role: config.RoleController},
+				{Role: config.RoleWorker, Count: 2},
+				{Role: config.RoleWorker, Count: 3},
 			},
 			want: []string{"controller", "worker-0", "worker-1", "worker-2", "worker-3", "worker-4"},
 		},
 		{
 			name: "unmanaged nodes still get indexed",
 			nodes: []config.Node{
-				{Role: "controller"},
-				{Role: "worker", Count: 2, Managed: testutil.Ptr(false)},
-				{Role: "worker", Count: 1},
+				{Role: config.RoleController},
+				{Role: config.RoleWorker, Count: 2, Managed: testutil.Ptr(false)},
+				{Role: config.RoleWorker, Count: 1},
 			},
 			want: []string{"controller", "worker-0", "worker-1", "worker-2"},
 		},
 		{
 			name: "worker with default count",
 			nodes: []config.Node{
-				{Role: "controller"},
-				{Role: "worker"},
+				{Role: config.RoleController},
+				{Role: config.RoleWorker},
 			},
 			want: []string{"controller", "worker-0"},
 		},
@@ -208,8 +208,8 @@ func TestPreflightCheck_MultiCompute(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller"},
-			{Role: "worker", Count: 3},
+			{Role: config.RoleController},
+			{Role: config.RoleWorker, Count: 3},
 		},
 	}
 	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
@@ -226,8 +226,8 @@ func minimalConfig() *config.Cluster {
 	return &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller"},
-			{Role: "worker", Count: 1},
+			{Role: config.RoleController},
+			{Role: config.RoleWorker, Count: 1},
 		},
 	}
 }

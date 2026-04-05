@@ -84,11 +84,23 @@ func (c *Client) UnpauseContainer(ctx context.Context, name ContainerName) error
 	return err
 }
 
+// ContainerState represents the state of a Docker container.
+type ContainerState string
+
+// Known container states returned by Docker.
+const (
+	StateRunning ContainerState = "running"
+	StatePaused  ContainerState = "paused"
+	StateExited  ContainerState = "exited"
+	StateDead    ContainerState = "dead"
+	StateCreated ContainerState = "created"
+)
+
 // ContainerInfo holds inspected container details.
 type ContainerInfo struct {
 	ID     ContainerID
 	Name   ContainerName
-	Status string
+	Status ContainerState
 	Labels map[string]string
 	IPs    map[NetworkName]string
 }
@@ -131,7 +143,7 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 	return &ContainerInfo{
 		ID:     ContainerID(r.ID),
 		Name:   ContainerName(strings.TrimPrefix(r.Name, "/")),
-		Status: r.State.Status,
+		Status: ContainerState(r.State.Status),
 		Labels: r.Config.Labels,
 		IPs:    ips,
 	}, nil
@@ -141,7 +153,7 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 type ContainerListEntry struct {
 	ID     ContainerID
 	Name   ContainerName
-	State  string
+	State  ContainerState
 	Image  string
 	Labels map[string]string
 }
@@ -179,7 +191,7 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 		entries = append(entries, ContainerListEntry{
 			ID:     ContainerID(p.ID),
 			Name:   ContainerName(p.Names),
-			State:  p.State,
+			State:  ContainerState(p.State),
 			Image:  p.Image,
 			Labels: parseLabels(p.Labels),
 		})

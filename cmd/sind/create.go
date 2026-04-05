@@ -123,7 +123,7 @@ func applyDataFlag(cfg *config.Cluster, value string) error {
 	if err != nil {
 		return fmt.Errorf("resolving data path %q: %w", value, err)
 	}
-	cfg.Storage.DataStorage.Type = "hostPath"
+	cfg.Storage.DataStorage.Type = config.StorageHostPath
 	cfg.Storage.DataStorage.HostPath = abs
 	return nil
 }

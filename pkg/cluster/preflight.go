@@ -19,9 +19,9 @@ func NodeShortNames(nodes []config.Node) []string {
 	workerIdx := 0
 	for _, n := range nodes {
 		switch n.Role {
-		case "controller", "submitter":
-			names = append(names, n.Role)
-		case "worker":
+		case config.RoleController, config.RoleSubmitter:
+			names = append(names, string(n.Role))
+		case config.RoleWorker:
 			count := n.Count
 			if count <= 0 {
 				count = 1
@@ -52,7 +52,7 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 	}
 
 	// Check cluster volumes.
-	for _, vtype := range []string{"config", "munge", "data"} {
+	for _, vtype := range AllVolumeTypes {
 		volName := VolumeName(realm, cfg.Name, vtype)
 		exists, err := client.VolumeExists(ctx, volName)
 		if err != nil {

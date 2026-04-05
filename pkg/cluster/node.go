@@ -11,7 +11,11 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
+
+// DefaultDataMountPath is the default mount path for the shared data volume.
+const DefaultDataMountPath = "/data"
 
 // Label keys used on sind containers.
 const (
@@ -31,18 +35,11 @@ func ComposeProject(realm, clusterName string) string {
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is omitted when slurmVersion is empty.
 // The data host path label is omitted when dataHostPath is empty (Docker volume mode).
-func NodeLabels(realm, clusterName, role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
-	labels := map[string]string{
-		LabelRealm:                         realm,
-		LabelCluster:                       clusterName,
-		LabelRole:                          role,
-		docker.ComposeProjectLabel:         ComposeProject(realm, clusterName),
-		docker.ComposeServiceLabel:         role,
-		docker.ComposeContainerNumberLabel: strconv.Itoa(containerNumber),
-		docker.ComposeOneoffLabel:          "False",
-		docker.ComposeConfigHashLabel:      "",
-		docker.ComposeConfigFilesLabel:     "",
-	}
+func NodeLabels(realm, clusterName string, role config.Role, slurmVersion, dataHostPath string, containerNumber int) map[string]string {
+	labels := docker.ComposeLabels(ComposeProject(realm, clusterName), string(role), containerNumber)
+	labels[LabelRealm] = realm
+	labels[LabelCluster] = clusterName
+	labels[LabelRole] = string(role)
 	if slurmVersion != "" {
 		labels[LabelSlurmVersion] = slurmVersion
 	}
@@ -55,21 +52,21 @@ func NodeLabels(realm, clusterName, role, slurmVersion, dataHostPath string, con
 // RunConfig holds the parameters needed to build docker run arguments
 // for creating a node container.
 type RunConfig struct {
-	Realm           string // realm name (e.g. "sind")
-	ClusterName     string // cluster name
-	ShortName       string // node hostname: "controller", "worker-0"
-	Role            string // "controller", "submitter", "worker"
-	Image           string // container image
-	CPUs            int    // CPU limit
-	Memory          string // memory limit (e.g. "2g")
-	TmpSize         string // /tmp tmpfs size (e.g. "1g")
-	SlurmVersion    string // slurm version for labels (optional)
-	DNSIP           string // mesh DNS container IP (optional)
-	DataHostPath    string // host path for data volume (empty = use docker volume)
-	DataMountPath   string // mount point for data (default: /data)
-	Managed         bool   // start slurmd and add to slurm.conf (worker only)
-	ContainerNumber int    // 1-based compose container instance number
-	Pull            bool   // force fresh image pull (--pull always)
+	Realm           string      // realm name (e.g. "sind")
+	ClusterName     string      // cluster name
+	ShortName       string      // node hostname: "controller", "worker-0"
+	Role            config.Role // "controller", "submitter", "worker"
+	Image           string      // container image
+	CPUs            int         // CPU limit
+	Memory          string      // memory limit (e.g. "2g")
+	TmpSize         string      // /tmp tmpfs size (e.g. "1g")
+	SlurmVersion    string      // slurm version for labels (optional)
+	DNSIP           string      // mesh DNS container IP (optional)
+	DataHostPath    string      // host path for data volume (empty = use docker volume)
+	DataMountPath   string      // mount point for data (default: /data)
+	Managed         bool        // start slurmd and add to slurm.conf (worker only)
+	ContainerNumber int         // 1-based compose container instance number
+	Pull            bool        // force fresh image pull (--pull always)
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.
@@ -93,23 +90,23 @@ func BuildRunArgs(cfg RunConfig) []string {
 
 	// Volume mounts
 	configMode := "ro"
-	if cfg.Role == "controller" {
+	if cfg.Role == config.RoleController {
 		configMode = "rw"
 	}
 	args = append(args,
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "config"))+":/etc/slurm:"+configMode,
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "munge"))+":/etc/munge:ro",
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeConfig))+":"+slurm.ConfDir+":"+configMode,
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeMunge))+":"+slurm.MungeDir+":ro",
 	)
 
 	// Data volume
 	dataMountPath := cfg.DataMountPath
 	if dataMountPath == "" {
-		dataMountPath = "/data"
+		dataMountPath = DefaultDataMountPath
 	}
 	if cfg.DataHostPath != "" {
 		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw")
 	} else {
-		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "data"))+":"+dataMountPath+":rw")
+		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeData))+":"+dataMountPath+":rw")
 	}
 
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
@@ -184,7 +181,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 
 	dataHostPath := ""
 	dataMountPath := ""
-	if cfg.Storage.DataStorage.Type == "hostPath" {
+	if cfg.Storage.DataStorage.Type == config.StorageHostPath {
 		dataHostPath = cfg.Storage.DataStorage.HostPath
 	}
 	if cfg.Storage.DataStorage.MountPath != "" {
@@ -193,11 +190,11 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
-		case "controller", "submitter":
+		case config.RoleController, config.RoleSubmitter:
 			configs = append(configs, RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
-				ShortName:       n.Role,
+				ShortName:       string(n.Role),
 				Role:            n.Role,
 				Image:           n.Image,
 				CPUs:            n.CPUs,
@@ -210,7 +207,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				ContainerNumber: 1,
 				Pull:            cfg.Pull,
 			})
-		case "worker":
+		case config.RoleWorker:
 			count := n.Count
 			if count <= 0 {
 				count = 1
@@ -221,7 +218,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 					Realm:           realm,
 					ClusterName:     cfg.Name,
 					ShortName:       fmt.Sprintf("worker-%d", workerIdx),
-					Role:            "worker",
+					Role:            config.RoleWorker,
 					Image:           n.Image,
 					CPUs:            n.CPUs,
 					Memory:          n.Memory,
@@ -258,21 +255,16 @@ func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mes
 // Submitter and unmanaged worker nodes are skipped.
 func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []RunConfig) error {
 	for _, cfg := range configs {
-		var service string
-		switch cfg.Role {
-		case "controller":
-			service = "slurmctld"
-		case "worker":
-			if !cfg.Managed {
-				continue
-			}
-			service = "slurmd"
-		default:
+		if cfg.Role == config.RoleWorker && !cfg.Managed {
+			continue
+		}
+		service, ok := slurm.ServiceForRole(cfg.Role)
+		if !ok {
 			continue
 		}
 
 		containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
-		_, err := client.Exec(ctx, containerName, "systemctl", "enable", "--now", service)
+		_, err := client.Exec(ctx, containerName, "systemctl", "enable", "--now", string(service))
 		if err != nil {
 			return fmt.Errorf("enabling %s on %s: %w", service, cfg.ShortName, err)
 		}

@@ -2,6 +2,8 @@
 
 package docker
 
+import "strconv"
+
 // Docker Compose compatibility labels.
 // See https://github.com/docker/compose/blob/main/pkg/api/labels.go
 const (
@@ -14,3 +16,17 @@ const (
 	ComposeNetworkLabel         = "com.docker.compose.network"
 	ComposeVolumeLabel          = "com.docker.compose.volume"
 )
+
+// ComposeLabels returns the standard Docker Compose compatibility labels
+// for a container. These labels make sind containers appear as part of a
+// compose project.
+func ComposeLabels(project, service string, containerNumber int) map[string]string {
+	return map[string]string{
+		ComposeProjectLabel:         project,
+		ComposeServiceLabel:         service,
+		ComposeContainerNumberLabel: strconv.Itoa(containerNumber),
+		ComposeOneoffLabel:          "False",
+		ComposeConfigHashLabel:      "",
+		ComposeConfigFilesLabel:     "",
+	}
+}

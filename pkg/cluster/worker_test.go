@@ -11,6 +11,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -403,7 +404,7 @@ func TestWorkerAdd_Managed(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "worker-1", nodes[0].Name)
-	assert.Equal(t, "worker", nodes[0].Role)
+	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
 	// Verify key docker calls were made.
@@ -513,7 +514,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "worker-1", nodes[0].Name)
-	assert.Equal(t, "worker", nodes[0].Role)
+	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
 	// Verify slurm config was NOT updated and slurmd was NOT enabled.
@@ -1599,7 +1600,7 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "worker-1", nodes[0].Name)
-	assert.Equal(t, "worker", nodes[0].Role)
+	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
 	// Remove the worker.
