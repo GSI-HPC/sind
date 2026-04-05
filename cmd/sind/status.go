@@ -127,7 +127,7 @@ func checkmark(ok bool) string {
 	return "\u2717"
 }
 
-func formatServices(services map[string]bool) string {
+func formatServices(services cluster.ServiceHealth) string {
 	if len(services) == 0 {
 		return ""
 	}

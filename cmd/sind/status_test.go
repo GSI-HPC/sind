@@ -77,12 +77,12 @@ func TestFormatState(t *testing.T) {
 
 func TestFormatServices(t *testing.T) {
 	assert.Equal(t, "", formatServices(nil))
-	assert.Equal(t, "slurmctld \u2713", formatServices(map[string]bool{"slurmctld": true}))
-	assert.Equal(t, "slurmd \u2717", formatServices(map[string]bool{"slurmd": false}))
+	assert.Equal(t, "slurmctld \u2713", formatServices(cluster.ServiceHealth{"slurmctld": true}))
+	assert.Equal(t, "slurmd \u2717", formatServices(cluster.ServiceHealth{"slurmd": false}))
 }
 
 func TestFormatServices_Multiple(t *testing.T) {
-	services := map[string]bool{"slurmctld": true, "slurmd": false}
+	services := cluster.ServiceHealth{"slurmctld": true, "slurmd": false}
 	got := formatServices(services)
 	assert.Equal(t, "slurmctld \u2713 slurmd \u2717", got)
 }

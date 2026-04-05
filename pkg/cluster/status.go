@@ -15,13 +15,16 @@ import (
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
+// ServiceHealth maps service names to their health status (true = healthy).
+type ServiceHealth map[string]bool
+
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
 	Container docker.ContainerState // container state from Docker (e.g. "running", "exited")
 	IP        string                // container IP address
 	Munge     bool                  // munge service healthy
 	SSHD      bool                  // sshd accepting connections
-	Services  map[string]bool       // role-specific services (e.g., "slurmctld", "slurmd")
+	Services  ServiceHealth         // role-specific services (e.g., "slurmctld", "slurmd")
 }
 
 // GetNodeHealth checks the health of a single node container.
@@ -39,7 +42,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 	health := &NodeHealth{
 		Container: info.Status,
 		IP:        info.IPs[NetworkName(realm, clusterName)],
-		Services:  make(map[string]bool),
+		Services:  make(ServiceHealth),
 	}
 
 	// If container is not running, skip all service checks.
