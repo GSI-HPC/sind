@@ -66,7 +66,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 
 	// For managed nodes: check if sind-nodes.conf exists and update it.
 	if hasController {
-		nodesConf, err := client.ReadFile(ctx, controller.Name, "/etc/slurm/sind-nodes.conf")
+		nodesConf, err := client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
 		if err == nil {
 			// sind-nodes.conf exists → remove managed nodes from it.
 			if err := removeNodesConf(ctx, client, controller.Name, nodesConf, shortNames); err != nil {

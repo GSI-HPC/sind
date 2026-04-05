@@ -10,6 +10,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // Summary holds summary information about a sind cluster.
@@ -213,7 +214,7 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 	if len(containers) == 0 {
 		return nil, fmt.Errorf("no containers found in cluster %q", clusterName)
 	}
-	key, err := client.CopyFromContainer(ctx, containers[0].Name, "/etc/munge/munge.key")
+	key, err := client.CopyFromContainer(ctx, containers[0].Name, slurm.MungeKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading munge key: %w", err)
 	}

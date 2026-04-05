@@ -4,6 +4,13 @@ package slurm
 
 import "strings"
 
+// Container paths for Slurm configuration files.
+const (
+	ConfDir       = "/etc/slurm"
+	NodesConfFile = "sind-nodes.conf"
+	NodesConfPath = ConfDir + "/" + NodesConfFile
+)
+
 // GenerateSlurmConf generates the main slurm.conf content for a cluster.
 // Node definitions are not included here; they go in sind-nodes.conf.
 func GenerateSlurmConf(clusterName string) string {
@@ -19,7 +26,7 @@ func GenerateSlurmConf(clusterName string) string {
 	b.WriteString("TaskPlugin=task/cgroup,task/affinity\n")
 	b.WriteString("ReturnToService=2\n")
 	b.WriteString("\n")
-	b.WriteString("include /etc/slurm/sind-nodes.conf\n")
+	b.WriteString("include " + NodesConfPath + "\n")
 	return b.String()
 }
 

@@ -11,7 +11,11 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
+
+// DefaultDataMountPath is the default mount path for the shared data volume.
+const DefaultDataMountPath = "/data"
 
 // Label keys used on sind containers.
 const (
@@ -97,14 +101,14 @@ func BuildRunArgs(cfg RunConfig) []string {
 		configMode = "rw"
 	}
 	args = append(args,
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "config"))+":/etc/slurm:"+configMode,
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "munge"))+":/etc/munge:ro",
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "config"))+":"+slurm.ConfDir+":"+configMode,
+		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, "munge"))+":"+slurm.MungeDir+":ro",
 	)
 
 	// Data volume
 	dataMountPath := cfg.DataMountPath
 	if dataMountPath == "" {
-		dataMountPath = "/data"
+		dataMountPath = DefaultDataMountPath
 	}
 	if cfg.DataHostPath != "" {
 		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw")

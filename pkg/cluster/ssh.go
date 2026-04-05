@@ -61,7 +61,7 @@ func BuildContainerExecArgs(container docker.ContainerName, isTTY bool, command 
 	if isTTY {
 		args = append(args, "-t")
 	}
-	args = append(args, "-w", "/data", string(container))
+	args = append(args, "-w", DefaultDataMountPath, string(container))
 	if len(command) == 0 {
 		args = append(args, "bash", "-l")
 	} else {

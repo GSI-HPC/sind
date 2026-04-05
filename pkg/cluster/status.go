@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
 // NodeHealth holds the health status of a single node.
@@ -153,14 +154,14 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	// Config and munge are always Docker volumes.
 	mounts := []MountPoint{
-		{Path: "/etc/slurm", Source: string(VolumeName(realm, clusterName, "config")), Type: "volume"},
-		{Path: "/etc/munge", Source: string(VolumeName(realm, clusterName, "munge")), Type: "volume"},
+		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, "config")), Type: "volume"},
+		{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, "munge")), Type: "volume"},
 	}
 
 	if dataHostPath != "" {
-		mounts = append(mounts, MountPoint{Path: "/data", Source: dataHostPath, Type: "hostPath", OK: true})
+		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: dataHostPath, Type: "hostPath", OK: true})
 	} else {
-		mounts = append(mounts, MountPoint{Path: "/data", Source: string(VolumeName(realm, clusterName, "data")), Type: "volume"})
+		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, "data")), Type: "volume"})
 	}
 
 	// Check existence of Docker volumes.

@@ -55,7 +55,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		"--name", string(helperName),
 		"--label", LabelRealm + "=" + realm,
 		"--label", LabelCluster + "=" + cfg.Name,
-		"-v", string(volName) + ":/etc/slurm",
+		"-v", string(volName) + ":" + slurm.ConfDir,
 	}
 	if pull {
 		args = append(args, "--pull", "always")
@@ -68,12 +68,12 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
 	files := map[string][]byte{
-		"slurm.conf":      []byte(slurm.GenerateSlurmConf(cfg.Name)),
-		"sind-nodes.conf": []byte(slurm.GenerateNodesConf(cfg.Nodes)),
-		"cgroup.conf":     []byte(slurm.GenerateCgroupConf()),
+		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name)),
+		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
+		"cgroup.conf":       []byte(slurm.GenerateCgroupConf()),
 	}
 
-	err = client.CopyToContainer(ctx, helperName, "/etc/slurm", files)
+	err = client.CopyToContainer(ctx, helperName, slurm.ConfDir, files)
 	if err != nil {
 		return fmt.Errorf("writing slurm config: %w", err)
 	}
@@ -91,7 +91,7 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 		"--name", string(helperName),
 		"--label", LabelRealm + "=" + realm,
 		"--label", LabelCluster + "=" + clusterName,
-		"-v", string(volName) + ":/etc/munge",
+		"-v", string(volName) + ":" + slurm.MungeDir,
 	}
 	if pull {
 		args = append(args, "--pull", "always")
@@ -106,19 +106,19 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 		_ = client.RemoveContainer(ctx, helperName)
 	}()
 
-	err = client.CopyToContainer(ctx, helperName, "/etc/munge", map[string][]byte{
-		"munge.key": key,
+	err = client.CopyToContainer(ctx, helperName, slurm.MungeDir, map[string][]byte{
+		slurm.MungeKeyFile: key,
 	})
 	if err != nil {
 		return fmt.Errorf("writing munge key: %w", err)
 	}
 
 	// docker cp creates files as root; munge requires ownership by the munge user.
-	_, err = client.Exec(ctx, helperName, "chown", "munge:munge", "/etc/munge/munge.key")
+	_, err = client.Exec(ctx, helperName, "chown", "munge:munge", slurm.MungeKeyPath)
 	if err != nil {
 		return fmt.Errorf("fixing munge key ownership: %w", err)
 	}
-	_, err = client.Exec(ctx, helperName, "chmod", "0400", "/etc/munge/munge.key")
+	_, err = client.Exec(ctx, helperName, "chmod", "0400", slurm.MungeKeyPath)
 	if err != nil {
 		return fmt.Errorf("fixing munge key permissions: %w", err)
 	}
