@@ -12,6 +12,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// minDockerMajor is the minimum required Docker Engine major version.
+const minDockerMajor = 28
+
 func newDoctorCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
@@ -40,11 +43,11 @@ func runDoctor(cmd *cobra.Command) error {
 		if parseErr != nil {
 			printResult(cmd, false, "Docker Engine: %s (unable to parse version)", version)
 			failed = true
-		} else if major < 28 {
-			printResult(cmd, false, "Docker Engine: %s (requires >= 28.0)", version)
+		} else if major < minDockerMajor {
+			printResult(cmd, false, "Docker Engine: %s (requires >= %d.0)", version, minDockerMajor)
 			failed = true
 		} else {
-			printResult(cmd, true, "Docker Engine: %s (>= 28.0)", version)
+			printResult(cmd, true, "Docker Engine: %s (>= %d.0)", version, minDockerMajor)
 		}
 	}
 

@@ -47,13 +47,17 @@ func (m *Manager) DNSPolkitAuthorized(ctx context.Context) bool {
 	return true
 }
 
+// bridgeIDPrefixLen is the number of hex characters Docker uses from the
+// network ID to form the bridge interface name (br-<prefix>).
+const bridgeIDPrefixLen = 12
+
 // findBridgeInterface returns the Linux bridge interface name for a Docker
 // network ID. Docker names bridges "br-" + first 12 chars of the network ID.
 func findBridgeInterface(networkID string) (string, error) {
-	if len(networkID) < 12 {
+	if len(networkID) < bridgeIDPrefixLen {
 		return "", fmt.Errorf("network ID too short: %q", networkID)
 	}
-	name := "br-" + networkID[:12]
+	name := "br-" + networkID[:bridgeIDPrefixLen]
 	if _, err := os.Stat(filepath.Join(sysClassNet, name)); err != nil {
 		return "", fmt.Errorf("bridge interface %s not found: %w", name, err)
 	}

@@ -107,11 +107,14 @@ func SystemdReady(ctx context.Context, client *docker.Client, name docker.Contai
 	return nil
 }
 
+// sshPort is the TCP port used by the SSH daemon.
+const sshPort = "22"
+
 // SSHDReady verifies that sshd is accepting connections and responding with
 // the SSH protocol banner on port 22.
 func SSHDReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	stdout, err := client.Exec(ctx, name,
-		"bash", "-c", "read -t1 line < /dev/tcp/localhost/22 && echo \"$line\"")
+		"bash", "-c", "read -t1 line < /dev/tcp/localhost/"+sshPort+" && echo \"$line\"")
 	if err != nil {
 		return fmt.Errorf("sshd not ready: %w", err)
 	}
