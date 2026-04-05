@@ -69,7 +69,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 
 	extraNames := cfg.Slurm.ExtraNames()
 
-	files := map[string][]byte{
+	files := docker.FileContents{
 		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, extraNames)),
 		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
 		"cgroup.conf":       []byte(slurm.GenerateCgroupConf()),
@@ -111,7 +111,7 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 		_ = client.RemoveContainer(ctx, helperName)
 	}()
 
-	err = client.CopyToContainer(ctx, helperName, slurm.MungeDir, map[string][]byte{
+	err = client.CopyToContainer(ctx, helperName, slurm.MungeDir, docker.FileContents{
 		slurm.MungeKeyFile: key,
 	})
 	if err != nil {

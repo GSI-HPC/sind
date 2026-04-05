@@ -246,6 +246,9 @@ func (c *Client) AppendFile(ctx context.Context, container ContainerName, path, 
 		"sh", "-c", "cat >> "+path)
 }
 
+// FileContents maps file paths to their raw content for copying into containers.
+type FileContents map[string][]byte
+
 // File represents a file to copy into a container with explicit permissions.
 type File struct {
 	Content []byte
@@ -292,7 +295,7 @@ func buildFilesTar(w io.Writer, files map[string]File) error {
 // CopyToContainer writes files into a container directory via docker cp.
 // All files are written with mode 0644. Use CopyFilesToContainer for
 // explicit per-file permissions.
-func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, destDir string, files map[string][]byte) error {
+func (c *Client) CopyToContainer(ctx context.Context, container ContainerName, destDir string, files FileContents) error {
 	typed := make(map[string]File, len(files))
 	for name, content := range files {
 		typed[name] = File{Content: content, Mode: 0644}

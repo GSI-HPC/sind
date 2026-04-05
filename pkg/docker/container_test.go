@@ -147,7 +147,7 @@ func TestContainerExecAndFiles(t *testing.T) {
 	assert.Equal(t, "line1\nline2\n", content)
 
 	// CopyTo + CopyFrom.
-	err = c.CopyToContainer(ctx, name, "/tmp", map[string][]byte{
+	err = c.CopyToContainer(ctx, name, "/tmp", FileContents{
 		"a.txt": []byte("content-a"),
 	})
 	require.NoError(t, err)
@@ -727,7 +727,7 @@ func TestCopyToContainer(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	files := map[string][]byte{
+	files := FileContents{
 		"Corefile": []byte(".:53 { whoami }\n"),
 		"hosts":    []byte(""),
 	}
@@ -834,7 +834,7 @@ func TestCopyToContainer_Error(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
 	c := NewClient(&m)
 
-	err := c.CopyToContainer(t.Context(), testContainerName, "/", map[string][]byte{"f": []byte("x")})
+	err := c.CopyToContainer(t.Context(), testContainerName, "/", FileContents{"f": []byte("x")})
 	assert.Error(t, err)
 }
 
