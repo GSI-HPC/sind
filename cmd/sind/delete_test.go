@@ -41,18 +41,19 @@ func TestDeleteCluster_AllRejectsArgs(t *testing.T) {
 // --- Integration ---
 
 func TestDeleteClusterLifecycle(t *testing.T) {
+	t.Parallel()
 	c := realClient(t)
 	ctx := t.Context()
-	t.Setenv("SIND_REALM", testRealm)
+	realm := "it-del-" + testID
 	cluster := "cli-del-" + testID
 
-	meshMgr := mesh.NewManager(c, testRealm)
+	meshMgr := mesh.NewManager(c, realm)
 
-	netName := docker.NetworkName(testRealm + "-" + cluster + "-net")
-	ctrName := docker.ContainerName(testRealm + "-" + cluster + "-controller")
-	volConfig := docker.VolumeName(testRealm + "-" + cluster + "-config")
-	volMunge := docker.VolumeName(testRealm + "-" + cluster + "-munge")
-	volData := docker.VolumeName(testRealm + "-" + cluster + "-data")
+	netName := docker.NetworkName(realm + "-" + cluster + "-net")
+	ctrName := docker.ContainerName(realm + "-" + cluster + "-controller")
+	volConfig := docker.VolumeName(realm + "-" + cluster + "-config")
+	volMunge := docker.VolumeName(realm + "-" + cluster + "-munge")
+	volData := docker.VolumeName(realm + "-" + cluster + "-data")
 
 	t.Cleanup(func() {
 		bg := context.Background()
@@ -77,7 +78,7 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	_, err = c.RunContainer(ctx,
 		"--name", string(ctrName),
 		"--network", string(netName),
-		"--label", "sind.realm="+testRealm,
+		"--label", "sind.realm="+realm,
 		"--label", "sind.cluster="+cluster,
 		"--label", "sind.role=controller",
 		"busybox:latest", "sleep", "120",
@@ -85,7 +86,7 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete via CLI.
-	_, _, err = executeWithDocker("delete", "cluster", cluster)
+	_, _, err = executeWithRealm(realm, "delete", "cluster", cluster)
 	require.NoError(t, err)
 
 	// Verify cluster resources are gone.

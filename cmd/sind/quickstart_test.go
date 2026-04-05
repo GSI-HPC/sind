@@ -21,13 +21,13 @@ import (
 // Each section comment references the corresponding guide heading.
 // Keep in sync with docs/content/getting-started/quickstart.md.
 func TestQuickstart(t *testing.T) {
-	t.Chdir(t.TempDir())
+	t.Parallel()
+	dataDir := t.TempDir()
 	c := realClient(t)
 	skipIfNoNsdelegate(t)
 	image := testImage(t)
 
 	realm := "it-qs-" + testID
-	t.Setenv("SIND_REALM", realm)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
@@ -56,25 +56,25 @@ func TestQuickstart(t *testing.T) {
 	minimalCfg := filepath.Join(cfgDir, "minimal.yaml")
 	require.NoError(t, os.WriteFile(minimalCfg, []byte("kind: Cluster\ndefaults:\n  image: "+image+"\n"), 0o644))
 
-	_, stderr, err := executeWithDockerCtx(ctx, "create", "cluster", "--config", minimalCfg)
+	_, stderr, err := executeWithRealmCtx(ctx, realm, "create", "cluster", "--config", minimalCfg, "--data", dataDir)
 	require.NoError(t, err, "create cluster: stderr=%q", stderr)
 
 	// ## Check cluster status
 	// sind get clusters
 	var stdout string
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "clusters")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "clusters")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "default")
 	assert.Contains(t, stdout, "running")
 
 	// sind get nodes
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "nodes")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "controller.default")
 	assert.Contains(t, stdout, "worker-0.default")
 
 	// sind status
-	stdout, _, err = executeWithDockerCtx(ctx, "status")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "status")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "CLUSTER")
 	assert.Contains(t, stdout, "default")
@@ -85,55 +85,55 @@ func TestQuickstart(t *testing.T) {
 
 	// ## Run Slurm commands
 	// sind exec -- sinfo
-	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sinfo")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "--", "sinfo")
 	require.NoError(t, err, "exec sinfo: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "PARTITION")
 
 	// sind exec -- srun hostname
-	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "srun", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "--", "srun", "hostname")
 	require.NoError(t, err, "exec srun hostname: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "worker-0")
 
 	// ### Submit a batch job
 	// Create batch script via exec (lands in /data = test temp dir)
-	_, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", `printf '#!/bin/sh\n#SBATCH --job-name=hello\nhostname\nsleep 30\n' > job.sh`)
+	_, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "--", "sh", "-c", `printf '#!/bin/sh\n#SBATCH --job-name=hello\nhostname\nsleep 2\n' > job.sh`)
 	require.NoError(t, err, "create job script: stderr=%q", stderr)
 
 	// sind exec -- sbatch job.sh
-	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sbatch", "job.sh")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "--", "sbatch", "job.sh")
 	require.NoError(t, err, "sbatch: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "Submitted batch job")
 
 	// sind exec -- squeue (job should still be running thanks to sleep)
-	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "squeue")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "exec", "--", "squeue")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "hello")
 
 	// Wait for job to finish, then verify output file
-	_, stderr, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", "while squeue -h -n hello | grep -q hello; do sleep 2; done")
+	_, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "--", "sh", "-c", "while squeue -h -n hello | grep -q hello; do sleep 1; done")
 	require.NoError(t, err, "wait for job: stderr=%q", stderr)
 
-	stdout, _, err = executeWithDockerCtx(ctx, "exec", "--", "sh", "-c", "cat slurm-*.out")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "exec", "--", "sh", "-c", "cat slurm-*.out")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "worker-0")
 
 	// ## SSH into a node
 	// sind ssh controller
-	stdout, stderr, err = executeWithDockerCtx(ctx, "ssh", "controller", "--", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "controller", "--", "hostname")
 	require.NoError(t, err, "ssh controller: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "controller")
 
 	// sind ssh worker-0
-	stdout, stderr, err = executeWithDockerCtx(ctx, "ssh", "worker-0", "--", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "worker-0", "--", "hostname")
 	require.NoError(t, err, "ssh worker-0: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "worker-0")
 
 	// ## Scale up
 	// sind create worker --count 3
-	_, stderr, err = executeWithDockerCtx(ctx, "create", "worker", "--count", "3")
+	_, stderr, err = executeWithRealmCtx(ctx, realm, "create", "worker", "--count", "3")
 	require.NoError(t, err, "create worker: stderr=%q", stderr)
 
-	stdout, _, err = executeWithDockerCtx(ctx, "get", "nodes")
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "nodes")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "worker-1.default")
 	assert.Contains(t, stdout, "worker-2.default")
@@ -141,23 +141,23 @@ func TestQuickstart(t *testing.T) {
 
 	// ## Tear down
 	// sind delete cluster default
-	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "default")
+	_, _, err = executeWithRealmCtx(ctx, realm, "delete", "cluster", "default")
 	require.NoError(t, err)
 
 	// ## Going further — named clusters with custom configuration
 	devYAML := "kind: Cluster\nname: dev\ndefaults:\n  image: " + image + "\n  cpus: 2\n  memory: 1g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n"
 
-	_, stderr, err = executeWithStdin(ctx, devYAML, "create", "cluster")
+	_, stderr, err = executeWithRealmStdin(ctx, realm, devYAML, "create", "cluster", "--data", dataDir)
 	require.NoError(t, err, "create dev cluster: stderr=%q", stderr)
 
 	// Verify submitter is present and exec routes to it.
-	stdout, stderr, err = executeWithDockerCtx(ctx, "exec", "dev", "--", "hostname")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "dev", "--", "hostname")
 	require.NoError(t, err, "exec dev hostname: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "submitter")
 
 	// Cleanup: delete remaining cluster
 	// sind delete cluster --all
-	_, _, err = executeWithDockerCtx(ctx, "delete", "cluster", "--all")
+	_, _, err = executeWithRealmCtx(ctx, realm, "delete", "cluster", "--all")
 	require.NoError(t, err)
 
 	// Verify everything is gone.
