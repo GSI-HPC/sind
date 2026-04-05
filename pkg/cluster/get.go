@@ -37,7 +37,7 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 	// Group containers by cluster name.
 	type clusterData struct {
 		summary *Summary
-		states  []string
+		states  []docker.ContainerState
 	}
 	byCluster := make(map[string]*clusterData)
 	for _, c := range containers {
@@ -223,7 +223,7 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 // aggregateState determines the overall cluster status from node states.
 // If all nodes share the same status, that status is returned.
 // Mixed states return StateMixed; no nodes returns StateEmpty.
-func aggregateState(states []string) State {
+func aggregateState(states []docker.ContainerState) State {
 	if len(states) == 0 {
 		return StateEmpty
 	}
@@ -236,14 +236,14 @@ func aggregateState(states []string) State {
 	return first
 }
 
-// containerStateToState maps a docker container state string to a Status.
-func containerStateToState(state string) State {
+// containerStateToState maps a docker container state to a cluster State.
+func containerStateToState(state docker.ContainerState) State {
 	switch state {
-	case "running":
+	case docker.StateRunning:
 		return StateRunning
-	case "paused":
+	case docker.StatePaused:
 		return StatePaused
-	case "exited", "dead", "created":
+	case docker.StateExited, docker.StateDead, docker.StateCreated:
 		return StateStopped
 	default:
 		return StateUnknown

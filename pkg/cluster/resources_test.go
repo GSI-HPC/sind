@@ -76,8 +76,8 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: clusterName,
 		Nodes: []config.Node{
-			{Role: "controller", CPUs: 2, Memory: "2g", Image: helperImage},
-			{Role: "worker", Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
+			{Role: config.RoleController, CPUs: 2, Memory: "2g", Image: helperImage},
+			{Role: config.RoleWorker, Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
 		},
 	}
 	err = WriteClusterConfig(ctx, c, mesh.DefaultRealm, cfg, helperImage, false)
@@ -203,8 +203,8 @@ func TestWriteClusterConfig(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: "controller"},
-			{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
+			{Role: config.RoleController},
+			{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)

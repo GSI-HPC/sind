@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/cobra"
 )
 
@@ -106,9 +107,9 @@ func formatState(status *cluster.Status) string {
 	var running, stopped, paused int
 	for _, n := range status.Nodes {
 		switch n.Health.Container {
-		case "running":
+		case docker.StateRunning:
 			running++
-		case "paused":
+		case docker.StatePaused:
 			paused++
 		default: // exited, dead, created, etc.
 			stopped++

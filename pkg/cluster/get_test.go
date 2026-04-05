@@ -343,18 +343,18 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 
 func TestContainerStateToState(t *testing.T) {
 	tests := []struct {
-		state  string
+		state  docker.ContainerState
 		status State
 	}{
-		{"running", StateRunning},
-		{"paused", StatePaused},
-		{"exited", StateStopped},
-		{"dead", StateStopped},
-		{"created", StateStopped},
+		{docker.StateRunning, StateRunning},
+		{docker.StatePaused, StatePaused},
+		{docker.StateExited, StateStopped},
+		{docker.StateDead, StateStopped},
+		{docker.StateCreated, StateStopped},
 		{"restarting", StateUnknown},
 	}
 	for _, tt := range tests {
-		t.Run(tt.state, func(t *testing.T) {
+		t.Run(string(tt.state), func(t *testing.T) {
 			assert.Equal(t, tt.status, containerStateToState(tt.state))
 		})
 	}
@@ -365,7 +365,7 @@ func TestAggregateState_Empty(t *testing.T) {
 }
 
 func TestAggregateState_Single(t *testing.T) {
-	assert.Equal(t, StateRunning, aggregateState([]string{"running"}))
+	assert.Equal(t, StateRunning, aggregateState([]docker.ContainerState{docker.StateRunning}))
 }
 
 // --- GetNetworks ---

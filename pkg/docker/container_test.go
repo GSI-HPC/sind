@@ -60,7 +60,7 @@ func TestContainerStateLifecycle(t *testing.T) {
 
 	info, err := c.InspectContainer(ctx, name)
 	require.NoError(t, err)
-	assert.Equal(t, "running", info.Status)
+	assert.Equal(t, StateRunning, info.Status)
 
 	// Stop → exited.
 	err = c.StopContainer(ctx, name)
@@ -68,7 +68,7 @@ func TestContainerStateLifecycle(t *testing.T) {
 
 	info, err = c.InspectContainer(ctx, name)
 	require.NoError(t, err)
-	assert.Equal(t, "exited", info.Status)
+	assert.Equal(t, StateExited, info.Status)
 
 	// Start → Pause → paused.
 	err = c.StartContainer(ctx, name)
@@ -79,7 +79,7 @@ func TestContainerStateLifecycle(t *testing.T) {
 
 	info, err = c.InspectContainer(ctx, name)
 	require.NoError(t, err)
-	assert.Equal(t, "paused", info.Status)
+	assert.Equal(t, StatePaused, info.Status)
 
 	// Unpause → running.
 	err = c.UnpauseContainer(ctx, name)
@@ -87,7 +87,7 @@ func TestContainerStateLifecycle(t *testing.T) {
 
 	info, err = c.InspectContainer(ctx, name)
 	require.NoError(t, err)
-	assert.Equal(t, "running", info.Status)
+	assert.Equal(t, StateRunning, info.Status)
 
 	// Kill + Remove → gone.
 	err = c.KillContainer(ctx, name)
@@ -413,7 +413,7 @@ func TestInspectContainer(t *testing.T) {
 
 	assert.Equal(t, ContainerID("94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca"), info.ID)
 	assert.Equal(t, testContainerName, info.Name)
-	assert.Equal(t, "running", info.Status)
+	assert.Equal(t, StateRunning, info.Status)
 	assert.Equal(t, map[string]string{
 		"sind.cluster": "dev",
 		"sind.role":    "controller",
@@ -472,7 +472,7 @@ func TestListContainers(t *testing.T) {
 	require.Len(t, entries, 2)
 
 	assert.Equal(t, ContainerName("sind-dev-controller"), entries[0].Name)
-	assert.Equal(t, "running", entries[0].State)
+	assert.Equal(t, StateRunning, entries[0].State)
 	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", entries[0].Image)
 	assert.Equal(t, map[string]string{"sind.cluster": "dev", "sind.role": "controller"}, entries[0].Labels)
 

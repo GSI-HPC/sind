@@ -83,7 +83,7 @@ func ContainerRunning(ctx context.Context, client *docker.Client, name docker.Co
 	if err != nil {
 		return fmt.Errorf("inspecting container: %w", err)
 	}
-	if info.Status != "running" {
+	if info.Status != docker.StateRunning {
 		return fmt.Errorf("container %s is %s, expected running", name, info.Status)
 	}
 	return nil

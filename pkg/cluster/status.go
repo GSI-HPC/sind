@@ -16,11 +16,11 @@ import (
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	Container string          // container state from Docker (e.g. "running", "exited")
-	IP        string          // container IP address
-	Munge     bool            // munge service healthy
-	SSHD      bool            // sshd accepting connections
-	Services  map[string]bool // role-specific services (e.g., "slurmctld", "slurmd")
+	Container docker.ContainerState // container state from Docker (e.g. "running", "exited")
+	IP        string                // container IP address
+	Munge     bool                  // munge service healthy
+	SSHD      bool                  // sshd accepting connections
+	Services  map[string]bool       // role-specific services (e.g., "slurmctld", "slurmd")
 }
 
 // GetNodeHealth checks the health of a single node container.
@@ -42,7 +42,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 	}
 
 	// If container is not running, skip all service checks.
-	if info.Status != "running" {
+	if info.Status != docker.StateRunning {
 		for _, svc := range roleServices(role) {
 			health.Services[svc] = false
 		}
@@ -207,7 +207,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 
 	prefix := ContainerPrefix(realm, clusterName)
 	var nodes []*NodeStatus
-	var states []string
+	var states []docker.ContainerState
 	for _, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := config.Role(c.Labels[LabelRole])
