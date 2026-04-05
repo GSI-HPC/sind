@@ -11,7 +11,7 @@ import (
 )
 
 func TestGenerateSlurmConf(t *testing.T) {
-	conf := GenerateSlurmConf("dev")
+	conf := GenerateSlurmConf("dev", nil)
 
 	assert.Contains(t, conf, "ClusterName=dev")
 	assert.Contains(t, conf, "SlurmctldHost=controller")
@@ -22,18 +22,26 @@ func TestGenerateSlurmConf(t *testing.T) {
 }
 
 func TestGenerateSlurmConf_DefaultCluster(t *testing.T) {
-	conf := GenerateSlurmConf("default")
+	conf := GenerateSlurmConf("default", nil)
 
 	assert.Contains(t, conf, "ClusterName=default")
 	assert.Contains(t, conf, "SlurmctldHost=controller")
 }
 
 func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
-	conf := GenerateSlurmConf("test")
+	conf := GenerateSlurmConf("test", nil)
 	for _, line := range strings.Split(conf, "\n") {
 		assert.Equal(t, strings.TrimRight(line, " \t"), line,
 			"line has trailing whitespace: %q", line)
 	}
+}
+
+func TestGenerateSlurmConf_ExtraIncludes(t *testing.T) {
+	conf := GenerateSlurmConf("dev", []string{"resources", "scheduling"})
+
+	assert.Contains(t, conf, "include /etc/slurm/sind-nodes.conf\n")
+	assert.Contains(t, conf, "include /etc/slurm/resources.conf\n")
+	assert.Contains(t, conf, "include /etc/slurm/scheduling.conf\n")
 }
 
 func TestServiceForRole(t *testing.T) {

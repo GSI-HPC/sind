@@ -7,6 +7,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"sigs.k8s.io/yaml"
 )
@@ -107,6 +110,23 @@ type Storage struct {
 	DataStorage DataStorage `json:"dataStorage,omitempty"`
 }
 
+// Slurm configures custom Slurm configuration.
+// Each key in Extra becomes a file /etc/slurm/<key>.conf with the value as
+// content, and an include directive is appended to slurm.conf.
+type Slurm struct {
+	Extra map[string]string `json:"extra,omitempty"`
+}
+
+// ExtraNames returns the sorted keys from Extra.
+func (s *Slurm) ExtraNames() []string {
+	names := make([]string, 0, len(s.Extra))
+	for k := range s.Extra {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Cluster represents a sind cluster configuration.
 type Cluster struct {
 	Kind     string   `json:"kind"`
@@ -114,6 +134,7 @@ type Cluster struct {
 	Realm    string   `json:"realm,omitempty"`
 	Defaults Defaults `json:"defaults,omitempty"`
 	Storage  Storage  `json:"storage,omitempty"`
+	Slurm    Slurm    `json:"slurm,omitempty"`
 	Nodes    []Node   `json:"nodes,omitempty"`
 
 	// Pull is a runtime flag (not part of the config file) that forces
@@ -212,6 +233,18 @@ func (c *Cluster) Validate() error {
 	}
 	if workers < 1 {
 		return fmt.Errorf("at least one worker node required, got %d", workers)
+	}
+
+	for name, content := range c.Slurm.Extra {
+		if name == "" {
+			return fmt.Errorf("slurm extra config name must not be empty")
+		}
+		if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
+			return fmt.Errorf("slurm extra config name %q must be a plain filename without path separators", name)
+		}
+		if content == "" {
+			return fmt.Errorf("slurm extra config %q must not be empty", name)
+		}
 	}
 
 	return nil

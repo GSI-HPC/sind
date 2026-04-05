@@ -67,10 +67,15 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	}
 	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
+	extraNames := cfg.Slurm.ExtraNames()
+
 	files := map[string][]byte{
-		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name)),
+		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, extraNames)),
 		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
 		"cgroup.conf":       []byte(slurm.GenerateCgroupConf()),
+	}
+	for _, name := range extraNames {
+		files[name+".conf"] = []byte(cfg.Slurm.Extra[name])
 	}
 
 	err = client.CopyToContainer(ctx, helperName, slurm.ConfDir, files)
