@@ -623,59 +623,153 @@ func TestParse_Realm(t *testing.T) {
 	})
 }
 
+// --- Section type ---
+
+func TestSection_UnmarshalJSON(t *testing.T) {
+	t.Run("string form", func(t *testing.T) {
+		var s Section
+		err := s.UnmarshalJSON([]byte(`"SchedulerType=sched/backfill\n"`))
+		require.NoError(t, err)
+		assert.Equal(t, "SchedulerType=sched/backfill\n", s.Content)
+		assert.Nil(t, s.Fragments)
+	})
+
+	t.Run("map form", func(t *testing.T) {
+		var s Section
+		err := s.UnmarshalJSON([]byte(`{"scheduling":"SchedulerType=sched/backfill\n","resources":"SelectType=select/cons_tres\n"}`))
+		require.NoError(t, err)
+		assert.Empty(t, s.Content)
+		require.Len(t, s.Fragments, 2)
+		assert.Equal(t, "SchedulerType=sched/backfill\n", s.Fragments["scheduling"])
+		assert.Equal(t, "SelectType=select/cons_tres\n", s.Fragments["resources"])
+	})
+
+	t.Run("null", func(t *testing.T) {
+		var s Section
+		err := s.UnmarshalJSON([]byte(`null`))
+		require.NoError(t, err)
+		assert.True(t, s.IsEmpty())
+	})
+
+	t.Run("invalid type", func(t *testing.T) {
+		var s Section
+		err := s.UnmarshalJSON([]byte(`42`))
+		require.Error(t, err)
+	})
+}
+
+func TestSection_IsEmpty(t *testing.T) {
+	assert.True(t, Section{}.IsEmpty())
+	assert.False(t, Section{Content: "x"}.IsEmpty())
+	assert.False(t, Section{Fragments: map[string]string{"a": "b"}}.IsEmpty())
+}
+
+func TestSection_IsMap(t *testing.T) {
+	assert.False(t, Section{}.IsMap())
+	assert.False(t, Section{Content: "x"}.IsMap())
+	assert.True(t, Section{Fragments: map[string]string{"a": "b"}}.IsMap())
+}
+
+func TestSection_FragmentNames(t *testing.T) {
+	s := Section{Fragments: map[string]string{
+		"zebra":  "z",
+		"alpha":  "a",
+		"middle": "m",
+	}}
+	assert.Equal(t, []string{"alpha", "middle", "zebra"}, s.FragmentNames())
+}
+
+func TestSection_FragmentNamesEmpty(t *testing.T) {
+	assert.Empty(t, Section{}.FragmentNames())
+	assert.Empty(t, Section{Content: "x"}.FragmentNames())
+}
+
+// --- Parse Slurm sections ---
+
 func TestParse_Slurm(t *testing.T) {
-	t.Run("single extra entry", func(t *testing.T) {
+	t.Run("main string form", func(t *testing.T) {
 		input := `kind: Cluster
 slurm:
-  extra:
-    scheduling: |
-      SchedulerType=sched/backfill`
+  main: |
+    SchedulerType=sched/backfill`
 
 		cfg, err := Parse([]byte(input))
 		require.NoError(t, err)
-		require.Len(t, cfg.Slurm.Extra, 1)
-		assert.Contains(t, cfg.Slurm.Extra["scheduling"], "SchedulerType=sched/backfill")
+		assert.Contains(t, cfg.Slurm.Main.Content, "SchedulerType=sched/backfill")
 	})
 
-	t.Run("multiple extra entries", func(t *testing.T) {
+	t.Run("main map form", func(t *testing.T) {
 		input := `kind: Cluster
 slurm:
-  extra:
+  main:
     scheduling: |
       SchedulerType=sched/backfill
     resources: |
-      SelectType=select/cons_tres
-      SelectTypeParameters=CR_Core_Memory`
+      SelectType=select/cons_tres`
 
 		cfg, err := Parse([]byte(input))
 		require.NoError(t, err)
-		require.Len(t, cfg.Slurm.Extra, 2)
-		assert.Contains(t, cfg.Slurm.Extra["scheduling"], "SchedulerType=sched/backfill")
-		assert.Contains(t, cfg.Slurm.Extra["resources"], "SelectType=select/cons_tres")
+		require.Len(t, cfg.Slurm.Main.Fragments, 2)
+		assert.Contains(t, cfg.Slurm.Main.Fragments["scheduling"], "SchedulerType=sched/backfill")
+		assert.Contains(t, cfg.Slurm.Main.Fragments["resources"], "SelectType=select/cons_tres")
+	})
+
+	t.Run("cgroup string form", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  cgroup: |
+    ConstrainCores=yes`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		assert.Contains(t, cfg.Slurm.Cgroup.Content, "ConstrainCores=yes")
+	})
+
+	t.Run("gres map form", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  gres:
+    gpu: |
+      Name=gpu Type=tesla File=/dev/nvidia0`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		require.Len(t, cfg.Slurm.Gres.Fragments, 1)
+		assert.Contains(t, cfg.Slurm.Gres.Fragments["gpu"], "Name=gpu")
+	})
+
+	t.Run("multiple sections", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  main: |
+    SchedulerType=sched/backfill
+  cgroup: |
+    ConstrainCores=yes
+  plugstack:
+    pbs: |
+      optional /usr/lib/slurm/spank_pbs.so`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		assert.NotEmpty(t, cfg.Slurm.Main.Content)
+		assert.NotEmpty(t, cfg.Slurm.Cgroup.Content)
+		require.Len(t, cfg.Slurm.Plugstack.Fragments, 1)
 	})
 
 	t.Run("no slurm section", func(t *testing.T) {
 		cfg, err := Parse([]byte("kind: Cluster"))
 		require.NoError(t, err)
-		assert.Empty(t, cfg.Slurm.Extra)
+		assert.True(t, cfg.Slurm.Main.IsEmpty())
+		assert.True(t, cfg.Slurm.Cgroup.IsEmpty())
+		assert.True(t, cfg.Slurm.Gres.IsEmpty())
+		assert.True(t, cfg.Slurm.Topology.IsEmpty())
+		assert.True(t, cfg.Slurm.Plugstack.IsEmpty())
 	})
 }
 
-func TestSlurm_ExtraNames(t *testing.T) {
-	s := &Slurm{Extra: map[string]string{
-		"zebra":  "z",
-		"alpha":  "a",
-		"middle": "m",
-	}}
-	assert.Equal(t, []string{"alpha", "middle", "zebra"}, s.ExtraNames())
-}
+// --- Validate Slurm sections ---
 
-func TestSlurm_ExtraNamesEmpty(t *testing.T) {
-	s := &Slurm{}
-	assert.Empty(t, s.ExtraNames())
-}
-
-func TestValidate_SlurmExtra(t *testing.T) {
+func TestValidate_SlurmSections(t *testing.T) {
 	base := func() *Cluster {
 		return &Cluster{
 			Kind: "Cluster",
@@ -687,41 +781,61 @@ func TestValidate_SlurmExtra(t *testing.T) {
 		}
 	}
 
-	t.Run("valid extra", func(t *testing.T) {
+	t.Run("valid string form", func(t *testing.T) {
 		cfg := base()
-		cfg.Slurm.Extra = map[string]string{
-			"scheduling": "SchedulerType=sched/backfill\n",
-		}
+		cfg.Slurm.Main = Section{Content: "SchedulerType=sched/backfill\n"}
 		require.NoError(t, cfg.Validate())
 	})
 
-	t.Run("empty name", func(t *testing.T) {
+	t.Run("valid map form", func(t *testing.T) {
 		cfg := base()
-		cfg.Slurm.Extra = map[string]string{
+		cfg.Slurm.Main = Section{Fragments: map[string]string{
+			"scheduling": "SchedulerType=sched/backfill\n",
+		}}
+		require.NoError(t, cfg.Validate())
+	})
+
+	t.Run("empty fragment name", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Main = Section{Fragments: map[string]string{
 			"": "content",
-		}
+		}}
 		err := cfg.Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must not be empty")
 	})
 
-	t.Run("name with path separator", func(t *testing.T) {
+	t.Run("fragment name with path separator", func(t *testing.T) {
 		cfg := base()
-		cfg.Slurm.Extra = map[string]string{
+		cfg.Slurm.Cgroup = Section{Fragments: map[string]string{
 			"../escape": "content",
-		}
+		}}
 		err := cfg.Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "plain filename")
 	})
 
-	t.Run("empty content", func(t *testing.T) {
+	t.Run("empty fragment content", func(t *testing.T) {
 		cfg := base()
-		cfg.Slurm.Extra = map[string]string{
-			"scheduling": "",
-		}
+		cfg.Slurm.Gres = Section{Fragments: map[string]string{
+			"gpu": "",
+		}}
 		err := cfg.Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must not be empty")
+	})
+
+	t.Run("all sections valid", func(t *testing.T) {
+		cfg := base()
+		cfg.Slurm.Main = Section{Content: "SchedulerType=sched/backfill\n"}
+		cfg.Slurm.Cgroup = Section{Content: "ConstrainCores=yes\n"}
+		cfg.Slurm.Gres = Section{Content: "Name=gpu Type=tesla\n"}
+		cfg.Slurm.Topology = Section{Fragments: map[string]string{
+			"switches": "SwitchName=s0 Nodes=worker-[0-3]\n",
+		}}
+		cfg.Slurm.Plugstack = Section{Fragments: map[string]string{
+			"pbs": "optional /usr/lib/slurm/spank_pbs.so\n",
+		}}
+		require.NoError(t, cfg.Validate())
 	})
 }

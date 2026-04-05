@@ -12,18 +12,24 @@ sind generates a multi-file Slurm configuration and writes it to the `sind-<clus
 
 ```
 /etc/slurm/
-├── slurm.conf           # main config, includes sind-nodes.conf (+ extra)
-├── sind-nodes.conf      # sind-managed node definitions
-├── cgroup.conf          # cgroupv2 configuration
-└── *.conf               # additional files from slurm.extra (if configured)
+├── slurm.conf              # main config
+├── sind-nodes.conf         # sind-managed node definitions
+├── cgroup.conf             # cgroupv2 configuration
+├── plugstack.conf          # SPANK plugin config (always created)
+├── plugstack.conf.d/       # SPANK plugin fragments (always created)
+├── slurm.conf.d/           # main config fragments (if slurm.main is a map)
+├── cgroup.conf.d/          # cgroup fragments (if slurm.cgroup is a map)
+├── gres.conf               # generic resources (if slurm.gres is set)
+└── topology.conf           # network topology (if slurm.topology is set)
 ```
 
 ## slurm.conf
 
-The main configuration file includes cluster name, controller host, and process tracking settings. It contains an include directive:
+The main configuration file includes cluster name, controller host, process tracking settings, and always contains:
 
 ```
 include /etc/slurm/sind-nodes.conf
+PlugStackConfig=/etc/slurm/plugstack.conf
 ```
 
 sind does not modify `slurm.conf` after initial creation.
@@ -44,6 +50,41 @@ Do not edit `sind-nodes.conf` directly. To add custom node definitions, create a
 
 sind generates a `cgroup.conf` for cgroupv2 support, enabling resource isolation and accounting for Slurm jobs.
 
+## plugstack.conf
+
+Always created with an `include plugstack.conf.d/*` directive and an empty `.conf.d/` directory. This allows SPANK plugins to be dropped in as fragment files without additional configuration.
+
+## Extending configuration via slurm sections
+
+The `slurm` key in the cluster config allows extending any Slurm config file declaratively at creation time. Each section supports two forms:
+
+**String form** — content appended directly to the config file:
+
+```yaml
+slurm:
+  main: |
+    SelectType=select/cons_tres
+  cgroup: |
+    ConstrainCores=yes
+```
+
+**Map form** — named fragments in a `.conf.d/` directory, included via glob:
+
+```yaml
+slurm:
+  main:
+    scheduling: |
+      SchedulerType=sched/backfill
+    resources: |
+      SelectType=select/cons_tres
+```
+
+This creates `slurm.conf.d/scheduling.conf` and `slurm.conf.d/resources.conf`, with `include /etc/slurm/slurm.conf.d/*` appended to `slurm.conf`.
+
+Standalone sections (`gres`, `topology`) are only created when configured and require enabling in `slurm.conf` via the `main` section (e.g., `GresTypes=gpu`).
+
+See [Cluster Configuration]({{< relref "/configuration/cluster-config" >}}) for the full schema.
+
 ## Version discovery
 
 sind discovers the Slurm version before creating any cluster resources by running an ephemeral container:
@@ -62,29 +103,10 @@ This happens once per unique image. The version is stored as a label on cluster 
 
 When different images report different Slurm versions, sind logs a warning but continues. The controller image's version is used for configuration generation.
 
-## Custom configuration via slurm.extra
-
-The cluster config supports a `slurm.extra` map for extending `slurm.conf` declaratively at creation time. Each entry becomes a file in `/etc/slurm/` with an `include` directive added to `slurm.conf`:
-
-```yaml
-slurm:
-  extra:
-    scheduling: |
-      SchedulerType=sched/backfill
-      SchedulerParameters=bf_continue
-    resources: |
-      SelectType=select/cons_tres
-      SelectTypeParameters=CR_Core_Memory
-```
-
-This generates `/etc/slurm/resources.conf` and `/etc/slurm/scheduling.conf`, with include directives appended to `slurm.conf` in alphabetical order by key name.
-
-See [Cluster Configuration]({{< relref "/configuration/cluster-config" >}}) for the full schema.
-
 ## Post-creation customization
 
 sind provides a working starter configuration. For additional customization after creation, users can:
 
-- Edit `slurm.conf` on the controller (the config volume is writable)
+- Edit config files on the controller (the config volume is writable)
 - Add include files for custom configuration
 - Replace the entire configuration (but `sind create worker` will fail for managed nodes without `sind-nodes.conf`)

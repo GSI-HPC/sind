@@ -47,10 +47,11 @@ storage:
     mountPath: /data
 
 slurm:
-  extra:
-    scheduling: |
-      SchedulerType=sched/backfill
-      SchedulerParameters=bf_continue
+  main: |
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |
+    ConstrainCores=yes
 
 nodes:
   - role: controller
@@ -111,30 +112,45 @@ storage:
 
 ## Slurm section
 
-The `slurm` section allows extending the generated Slurm configuration with additional config files.
+The `slurm` section extends the generated Slurm configuration. Each key maps to a config file:
+
+| Key | Config file | sind generates defaults |
+|-----|-------------|:----------------------:|
+| `main` | `slurm.conf` | yes |
+| `cgroup` | `cgroup.conf` | yes |
+| `gres` | `gres.conf` | no |
+| `topology` | `topology.conf` | no |
+| `plugstack` | `plugstack.conf` | yes (always scaffolded) |
+
+Each key supports two forms:
+
+**String form** — content appended to the config file:
 
 ```yaml
 slurm:
-  extra:
+  main: |
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |
+    ConstrainCores=yes
+```
+
+**Map form** — named fragments placed in a `.conf.d/` directory:
+
+```yaml
+slurm:
+  main:
     scheduling: |
       SchedulerType=sched/backfill
       SchedulerParameters=bf_continue
     resources: |
       SelectType=select/cons_tres
-      SelectTypeParameters=CR_Core_Memory
 ```
 
-Each key in `extra` creates a file `/etc/slurm/<key>.conf` with the corresponding value as content. An `include` directive is automatically added to `slurm.conf` for each file, in alphabetical order by key name.
+Fragment validation:
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `extra` | — | Map of config name to content; each entry becomes an include file |
-
-Key validation:
-
-- Must be a plain filename (no path separators)
-- Must not be empty
-- Content must not be empty
+- Names must be plain filenames (no path separators)
+- Names and content must not be empty
 
 See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
 

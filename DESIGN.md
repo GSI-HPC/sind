@@ -538,10 +538,11 @@ storage:
     mountPath: /data                     # default: /data
 
 slurm:
-  extra:
-    scheduling: |                        # becomes /etc/slurm/scheduling.conf
-      SchedulerType=sched/backfill
-      SchedulerParameters=bf_continue
+  main: |                                # appended to slurm.conf
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |                              # appended to cgroup.conf
+    ConstrainCores=yes
 
 nodes:
   - role: controller
@@ -561,37 +562,65 @@ nodes:
     managed: false                       # slurmd not started, not in slurm.conf
 ```
 
-### Slurm Configuration Extension
+### Slurm Configuration Sections
 
-The `slurm.extra` map allows extending the generated `slurm.conf` with additional configuration files. Each entry in the map creates a file in `/etc/slurm/` and an `include` directive in `slurm.conf`:
+The `slurm` key contains named sections that map to Slurm config files. Each section supports two forms:
+
+- **String**: content appended directly to the config file
+- **Map**: each key creates a fragment in a `.conf.d/` directory, included via `include <name>.conf.d/*`
+
+| Section | Config file | sind generates defaults |
+|---------|-------------|:----------------------:|
+| `main` | `slurm.conf` | yes |
+| `cgroup` | `cgroup.conf` | yes |
+| `gres` | `gres.conf` | no |
+| `topology` | `topology.conf` | no |
+| `plugstack` | `plugstack.conf` | yes (always scaffolded) |
+
+**String form** — content appended to the config file:
 
 ```yaml
 slurm:
-  extra:
+  main: |
+    SelectType=select/cons_tres
+    SelectTypeParameters=CR_Core_Memory
+  cgroup: |
+    ConstrainCores=yes
+```
+
+**Map form** — named fragments in a `.conf.d/` directory:
+
+```yaml
+slurm:
+  main:
     scheduling: |
       SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
     resources: |
       SelectType=select/cons_tres
-      SelectTypeParameters=CR_Core_Memory
 ```
 
 This produces:
 
 ```
 /etc/slurm/
-├── slurm.conf           # includes sind-nodes.conf, resources.conf, scheduling.conf
+├── slurm.conf              # sind defaults + include slurm.conf.d/*
+├── slurm.conf.d/
+│   ├── resources.conf
+│   └── scheduling.conf
 ├── sind-nodes.conf
 ├── cgroup.conf
-├── resources.conf       # from slurm.extra
-└── scheduling.conf      # from slurm.extra
+├── plugstack.conf          # always: include plugstack.conf.d/*
+└── plugstack.conf.d/
 ```
 
-Include directives are added in alphabetical order by key name. The `.conf` extension is appended automatically.
+`plugstack.conf` is always created with an `include plugstack.conf.d/*` directive, and `PlugStackConfig` is always set in `slurm.conf`. This allows SPANK plugins to be dropped in without additional configuration.
+
+Standalone sections (`gres`, `topology`) are only created when configured. They require enabling in `slurm.conf` (e.g., `GresTypes=gpu`, `TopologyPlugin=topology/tree`) via the `main` section.
 
 Validation rules:
-- Keys must be plain filenames (no path separators)
-- Keys must not be empty
-- Values must not be empty
+- Fragment names must be plain filenames (no path separators)
+- Fragment names and content must not be empty
 
 ### Node Roles
 
@@ -943,15 +972,22 @@ sind generates a multi-file configuration structure:
 
 ```
 /etc/slurm/
-├── slurm.conf           # main config, includes sind-nodes.conf
-├── sind-nodes.conf      # sind-managed node definitions
-└── cgroup.conf          # cgroupv2 configuration
+├── slurm.conf              # main config
+├── sind-nodes.conf         # sind-managed node definitions
+├── cgroup.conf             # cgroupv2 configuration
+├── plugstack.conf          # SPANK plugin config (always created)
+├── plugstack.conf.d/       # SPANK plugin fragments (always created)
+├── slurm.conf.d/           # main config fragments (if slurm.main is a map)
+├── cgroup.conf.d/          # cgroup fragments (if slurm.cgroup is a map)
+├── gres.conf               # generic resources (if slurm.gres is set)
+└── topology.conf           # network topology (if slurm.topology is set)
 ```
 
-The main `slurm.conf` contains an include directive:
+The main `slurm.conf` always contains:
 
 ```
 include /etc/slurm/sind-nodes.conf
+PlugStackConfig=/etc/slurm/plugstack.conf
 ```
 
 #### sind-nodes.conf
@@ -972,10 +1008,11 @@ sind generates a `cgroup.conf` for cgroupv2 support on worker nodes. This enable
 
 #### User Customization
 
-sind avoids providing fully flexible customization of the initial configuration due to the complexity of Slurm configuration. The intent is to deliver a working starter configuration; users are expected to manage additional Slurm configuration with their own tooling after cluster creation. The `/etc/slurm` volume is writable on the controller node for this purpose.
+sind delivers a working starter configuration. The `slurm` config key allows extending it declaratively at creation time (see Slurm Configuration Sections above). For post-creation changes, the `/etc/slurm` volume is writable on the controller node.
 
 Users may:
-- Edit `slurm.conf` directly (sind does not modify it after creation)
+- Use `slurm.main`, `slurm.cgroup`, etc. to extend config at creation time
+- Edit config files directly after creation (sind does not modify them after creation)
 - Add additional include files for custom configuration
 - Replace the entire configuration (but `sind create worker` will then fail for managed nodes)
 

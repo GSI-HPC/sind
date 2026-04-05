@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path"
 	"sort"
 	"strings"
 )
@@ -267,7 +268,8 @@ func (c *Client) CopyFilesToContainer(ctx context.Context, container ContainerNa
 }
 
 // buildFilesTar writes files into a tar archive on the given writer.
-// Keys are sorted for deterministic output.
+// Keys are sorted for deterministic output. Directory entries are
+// automatically created for files in subdirectories.
 func buildFilesTar(w io.Writer, files map[string]File) error {
 	tw := tar.NewWriter(w)
 
@@ -277,7 +279,14 @@ func buildFilesTar(w io.Writer, files map[string]File) error {
 	}
 	sort.Strings(names)
 
+	dirs := make(map[string]bool)
 	for _, name := range names {
+		if dir := path.Dir(name); dir != "." && !dirs[dir] {
+			dirs[dir] = true
+			if err := tw.WriteHeader(&tar.Header{Name: dir + "/", Typeflag: tar.TypeDir, Mode: 0755}); err != nil {
+				return fmt.Errorf("writing tar header for %s/: %w", dir, err)
+			}
+		}
 		f := files[name]
 		if err := tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(f.Content)), Mode: f.Mode}); err != nil {
 			return fmt.Errorf("writing tar header for %s: %w", name, err)
