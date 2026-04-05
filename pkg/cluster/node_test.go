@@ -499,7 +499,7 @@ func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 		Name: "dev",
 		Storage: config.Storage{
 			DataStorage: config.DataStorage{
-				Type:      "hostPath",
+				Type:      config.StorageHostPath,
 				HostPath:  "/data/shared",
 				MountPath: "/shared",
 			},

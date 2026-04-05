@@ -188,7 +188,7 @@ func TestParse_Storage(t *testing.T) {
 	tests := []struct {
 		name          string
 		input         string
-		wantType      string
+		wantType      StorageType
 		wantHostPath  string
 		wantMountPath string
 	}{
@@ -198,7 +198,7 @@ func TestParse_Storage(t *testing.T) {
 storage:
   dataStorage:
     type: volume`,
-			wantType: "volume",
+			wantType: StorageVolume,
 		},
 		{
 			name: "hostPath type",
@@ -208,7 +208,7 @@ storage:
     type: hostPath
     hostPath: ./data
     mountPath: /data`,
-			wantType:      "hostPath",
+			wantType:      StorageHostPath,
 			wantHostPath:  "./data",
 			wantMountPath: "/data",
 		},
@@ -222,7 +222,7 @@ storage:
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := Parse([]byte(tt.input))
 			require.NoError(t, err)
-			if tt.wantType != "" {
+			if tt.wantType != StorageType("") {
 				assert.Equal(t, tt.wantType, cfg.Storage.DataStorage.Type)
 			}
 			if tt.wantHostPath != "" {

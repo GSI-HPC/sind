@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -221,6 +222,20 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	err := SlurmdReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "slurmd not ready")
+}
+
+func TestForService(t *testing.T) {
+	p := ForService(slurm.Slurmctld)
+	assert.Equal(t, "slurmctld", p.Name)
+	assert.NotNil(t, p.Check)
+
+	p = ForService(slurm.Slurmd)
+	assert.Equal(t, "slurmd", p.Name)
+	assert.NotNil(t, p.Check)
+
+	p = ForService("unknown")
+	assert.Equal(t, "unknown", p.Name)
+	assert.Nil(t, p.Check)
 }
 
 func TestNodeProbes(t *testing.T) {

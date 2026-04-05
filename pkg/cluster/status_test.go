@@ -393,13 +393,13 @@ func TestGetMountPoints_AllVolumes(t *testing.T) {
 	require.Len(t, mounts, 3)
 	assert.Equal(t, "/etc/slurm", mounts[0].Path)
 	assert.Equal(t, "sind-dev-config", mounts[0].Source)
-	assert.Equal(t, "volume", mounts[0].Type)
+	assert.Equal(t, config.StorageVolume, mounts[0].Type)
 	assert.True(t, mounts[0].OK)
 	assert.Equal(t, "/etc/munge", mounts[1].Path)
 	assert.True(t, mounts[1].OK)
 	assert.Equal(t, "/data", mounts[2].Path)
 	assert.Equal(t, "sind-dev-data", mounts[2].Source)
-	assert.Equal(t, "volume", mounts[2].Type)
+	assert.Equal(t, config.StorageVolume, mounts[2].Type)
 	assert.True(t, mounts[2].OK)
 
 	// Verify correct volume names were checked.
@@ -428,7 +428,7 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 	require.Len(t, mounts, 3)
 	assert.Equal(t, "/data", mounts[2].Path)
 	assert.Equal(t, "/home/user/project", mounts[2].Source)
-	assert.Equal(t, "hostPath", mounts[2].Type)
+	assert.Equal(t, config.StorageHostPath, mounts[2].Type)
 	assert.True(t, mounts[2].OK)
 
 	// Only config and munge volumes checked.

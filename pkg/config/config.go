@@ -86,11 +86,20 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// StorageType identifies the backing mechanism for data storage.
+type StorageType string
+
+// Storage type values.
+const (
+	StorageVolume   StorageType = "volume"
+	StorageHostPath StorageType = "hostPath"
+)
+
 // DataStorage configures the shared data volume.
 type DataStorage struct {
-	Type      string `json:"type,omitempty"`
-	HostPath  string `json:"hostPath,omitempty"`
-	MountPath string `json:"mountPath,omitempty"`
+	Type      StorageType `json:"type,omitempty"`
+	HostPath  string      `json:"hostPath,omitempty"`
+	MountPath string      `json:"mountPath,omitempty"`
 }
 
 // Storage configures cluster storage options.

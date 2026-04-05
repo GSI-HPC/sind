@@ -132,10 +132,10 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 
 // MountPoint describes a volume or bind mount on cluster containers.
 type MountPoint struct {
-	Path   string // mount path inside the container (e.g. "/etc/slurm")
-	Source string // volume name or host path
-	Type   string // "volume" or "hostPath"
-	OK     bool   // true if the Docker volume exists (always true for hostPath)
+	Path   string             // mount path inside the container (e.g. "/etc/slurm")
+	Source string             // volume name or host path
+	Type   config.StorageType // "volume" or "hostPath"
+	OK     bool               // true if the Docker volume exists (always true for hostPath)
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
@@ -154,19 +154,19 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	// Config and munge are always Docker volumes.
 	mounts := []MountPoint{
-		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: "volume"},
-		{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: "volume"},
+		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: config.StorageVolume},
+		{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: config.StorageVolume},
 	}
 
 	if dataHostPath != "" {
-		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: dataHostPath, Type: "hostPath", OK: true})
+		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: dataHostPath, Type: config.StorageHostPath, OK: true})
 	} else {
-		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: "volume"})
+		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume})
 	}
 
 	// Check existence of Docker volumes.
 	for i := range mounts {
-		if mounts[i].Type != "volume" {
+		if mounts[i].Type != config.StorageVolume {
 			continue
 		}
 		exists, err := client.VolumeExists(ctx, docker.VolumeName(mounts[i].Source))
