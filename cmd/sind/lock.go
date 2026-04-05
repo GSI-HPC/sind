@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -33,6 +34,7 @@ func acquireRealmLock(ctx context.Context, realm, stateHome string) (func(), err
 		return nil, fmt.Errorf("creating state directory: %w", err)
 	}
 
+	log := sindlog.From(ctx)
 	lockPath := filepath.Join(dir, "lock")
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
@@ -49,7 +51,7 @@ func acquireRealmLock(ctx context.Context, realm, stateHome string) (func(), err
 			return nil, fmt.Errorf("acquiring lock: %w", err)
 		}
 
-		fmt.Fprintln(os.Stderr, "sind: waiting for another operation to complete...")
+		log.InfoContext(ctx, "waiting for another operation to complete", "realm", realm)
 
 		// Block in a goroutine so we can respect context cancellation.
 		done := make(chan error, 1)
@@ -67,8 +69,11 @@ func acquireRealmLock(ctx context.Context, realm, stateHome string) (func(), err
 		}
 	}
 
+	log.DebugContext(ctx, "realm lock acquired", "realm", realm)
+
 	return func() {
 		_ = unix.Flock(fd, unix.LOCK_UN)
 		_ = f.Close()
+		log.DebugContext(ctx, "realm lock released", "realm", realm)
 	}, nil
 }
