@@ -8,12 +8,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	skipIfNoNsdelegate(t)
+	checkPrerequisites(t, c)
 
 	img := os.Getenv("SIND_TEST_IMAGE")
 	if img == "" {
@@ -99,7 +100,7 @@ func TestSlurmSectionApplied(t *testing.T) {
 	c, rec := testutil.NewClient(t)
 	ctx := t.Context()
 
-	skipIfNoNsdelegate(t)
+	checkPrerequisites(t, c)
 
 	img := os.Getenv("SIND_TEST_IMAGE")
 	if img == "" {
@@ -153,16 +154,19 @@ slurm:
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
-func skipIfNoNsdelegate(t *testing.T) {
+func checkPrerequisites(t *testing.T, c *docker.Client) {
 	t.Helper()
-	data, err := os.ReadFile("/proc/mounts")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	version, err := c.ServerVersion(ctx)
 	if err != nil {
-		t.Skip("cannot read /proc/mounts")
+		t.Skipf("cannot query Docker version: %v", err)
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.Contains(line, "cgroup2") && strings.Contains(line, "nsdelegate") {
-			return
-		}
+	if vErr := doctor.CheckDockerVersion(version); vErr != nil {
+		t.Skipf("%v", vErr)
 	}
-	t.Skip("host cgroup mount lacks nsdelegate (mount -o remount,nsdelegate /sys/fs/cgroup)")
+	_, _, hasNsd := doctor.CgroupInfo()
+	if !hasNsd {
+		t.Skip("host cgroup mount lacks nsdelegate")
+	}
 }

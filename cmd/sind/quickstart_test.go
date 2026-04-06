@@ -24,7 +24,7 @@ func TestQuickstart(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	c := realClient(t)
-	skipIfNoNsdelegate(t)
+	checkPrerequisites(t, c)
 	image := testImage(t)
 
 	realm := "it-qs-" + testID

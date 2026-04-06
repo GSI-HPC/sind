@@ -124,7 +124,7 @@ func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 func TestSSHAccess(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
-	skipIfNoNsdelegate(t)
+	checkPrerequisites(t, c)
 	image := testImage(t)
 	dataDir := t.TempDir()
 
