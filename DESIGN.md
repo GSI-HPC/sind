@@ -524,6 +524,7 @@ The shorthand and full forms can be mixed in the same configuration.
 ```yaml
 kind: Cluster
 name: test-cluster                       # default: "default"
+realm: sind                              # default: "sind"
 
 defaults:
   image: ghcr.io/gsi-hpc/sind-node:25.11.2  # default: sind-node:latest
@@ -655,26 +656,26 @@ Validation rules:
 
 | Type | Name Pattern | Example (`sind create cluster dev`) |
 |------|--------------|------------------------|
-| Network | `sind-<cluster>-net` | `sind-dev-net` |
-| Controller | `sind-<cluster>-controller` | `sind-dev-controller` |
-| Submitter | `sind-<cluster>-submitter` | `sind-dev-submitter` |
-| Worker | `sind-<cluster>-worker-<N>` | `sind-dev-worker-0` |
-| Config volume | `sind-<cluster>-config` | `sind-dev-config` |
-| Munge volume | `sind-<cluster>-munge` | `sind-dev-munge` |
-| Data volume | `sind-<cluster>-data` | `sind-dev-data` |
+| Network | `<realm>-<cluster>-net` | `sind-dev-net` |
+| Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
+| Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
+| Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
+| Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
+| Munge volume | `<realm>-<cluster>-munge` | `sind-dev-munge` |
+| Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
 
 ### Global Resources (Mesh)
 
-| Type | Name |
-|------|------|
-| Mesh network | `sind-mesh` |
-| DNS container | `sind-dns` |
-| SSH container | `sind-ssh` |
-| SSH volume | `sind-ssh-config` |
+| Type | Name Pattern | Example |
+|------|-------------|---------|
+| Mesh network | `<realm>-mesh` | `sind-mesh` |
+| DNS container | `<realm>-dns` | `sind-dns` |
+| SSH container | `<realm>-ssh` | `sind-ssh` |
+| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` |
 
-### Default Cluster Name
+### Defaults
 
-When `NAME` is omitted, the default cluster name is `default`, resulting in prefixes like `sind-default-*`.
+The default realm is `sind` and the default cluster name is `default`, resulting in prefixes like `sind-default-*`.
 
 ## Volume Mounts
 
@@ -716,6 +717,18 @@ When a YAML config specifies `storage.dataStorage`, the config takes precedence 
 
 The resolved host path is stored on each container as the `sind.data.hostpath` label so that
 dynamically added workers (`sind create worker`) inherit the same mount.
+
+### Container Labels
+
+sind applies labels to containers for filtering and metadata:
+
+| Label | Example | Description |
+|-------|---------|-------------|
+| `sind.realm` | `sind` | Realm namespace |
+| `sind.cluster` | `dev` | Cluster name |
+| `sind.role` | `worker` | Node role |
+| `sind.slurm.version` | `25.11.4` | Slurm version |
+| `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
 
 ### Enter and Exec
 
