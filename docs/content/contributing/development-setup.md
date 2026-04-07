@@ -25,7 +25,7 @@ The binary is built at `./sind`.
 ## Run
 
 ```bash
-./sind --version
+./sind version
 ./sind create cluster
 ```
 
@@ -45,7 +45,7 @@ All common tasks are available via `make`:
 | `make clean` | Remove build artifacts and coverage files |
 | `make help` | Show all available targets |
 
-The build version defaults to `dev` and can be overridden:
+The build version defaults to `git describe --tags --always --dirty` and can be overridden:
 
 ```bash
 make build VERSION=v1.0.0
