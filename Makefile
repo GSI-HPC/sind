@@ -31,6 +31,10 @@ coverage: ## Generate HTML coverage report
 	go test -race -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
+check-coverage: ## Check coverage thresholds (requires go-test-coverage)
+	go test -race -coverprofile=coverage.out ./...
+	go-test-coverage --config .testcoverage.yml
+
 image: ## Build the container image via docker buildx bake
 	docker buildx bake
 
