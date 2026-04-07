@@ -19,13 +19,17 @@ import (
 const testContainer docker.ContainerName = "sind-dev-controller"
 
 func inspectJSON(status string) string {
+	return inspectJSONFull(status, 0, false)
+}
+
+func inspectJSONFull(status string, exitCode int, oomKilled bool) string {
 	return fmt.Sprintf(`[{
   "Id": "abc123",
   "Name": "/%s",
-  "State": {"Status": %q},
+  "State": {"Status": %q, "ExitCode": %d, "OOMKilled": %v},
   "Config": {"Labels": {}},
   "NetworkSettings": {"Networks": {}}
-}]`, testContainer, status)
+}]`, testContainer, status, exitCode, oomKilled)
 }
 
 func TestContainerRunning(t *testing.T) {
@@ -41,7 +45,7 @@ func TestContainerRunning(t *testing.T) {
 }
 
 func TestContainerRunning_NotRunning(t *testing.T) {
-	for _, status := range []string{"exited", "created", "paused", "dead"} {
+	for _, status := range []string{"created", "paused"} {
 		t.Run(status, func(t *testing.T) {
 			var m mock.Executor
 			m.AddResult(inspectJSON(status), "", nil)
@@ -51,6 +55,23 @@ func TestContainerRunning_NotRunning(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), status)
 			assert.Contains(t, err.Error(), "expected running")
+		})
+	}
+}
+
+func TestContainerRunning_Terminal(t *testing.T) {
+	for _, status := range []string{"exited", "dead"} {
+		t.Run(status, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(inspectJSON(status), "", nil)
+			c := docker.NewClient(&m)
+
+			err := ContainerRunning(t.Context(), c, testContainer)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), status)
+
+			var te *TerminalError
+			assert.ErrorAs(t, err, &te)
 		})
 	}
 }
@@ -395,4 +416,36 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
+}
+
+func TestUntilReady_TerminalError(t *testing.T) {
+	var m mock.Executor
+	// Container exited — should fail immediately without retrying.
+	m.AddResult(inspectJSON("exited"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not ready")
+	assert.Contains(t, err.Error(), "exited")
+	// Only one call — no retries for terminal state.
+	assert.Len(t, m.Calls, 1)
+}
+
+func TestContainerRunning_OOMKilled(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSONFull("exited", 137, true), "", nil)
+	c := docker.NewClient(&m)
+
+	err := ContainerRunning(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OOM killed")
+	assert.Contains(t, err.Error(), "137")
+
+	var te *TerminalError
+	assert.ErrorAs(t, err, &te)
 }
