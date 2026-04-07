@@ -459,6 +459,47 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	assert.Contains(t, err.Error(), "no results")
 }
 
+func TestInspectContainer_ExitCodeAndOOM(t *testing.T) {
+	json := `[{
+  "Id": "abc123",
+  "Name": "/sind-dev-worker-0",
+  "State": {"Status": "exited", "ExitCode": 137, "OOMKilled": true},
+  "Config": {"Labels": {}},
+  "NetworkSettings": {"Networks": {}}
+}]`
+	var m mock.Executor
+	m.AddResult(json, "", nil)
+	c := NewClient(&m)
+
+	info, err := c.InspectContainer(t.Context(), "sind-dev-worker-0")
+	require.NoError(t, err)
+	assert.Equal(t, StateExited, info.Status)
+	assert.Equal(t, 137, info.ExitCode)
+	assert.True(t, info.OOMKilled)
+}
+
+func TestLogs(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("line1\nline2\nline3\n", "", nil)
+	c := NewClient(&m)
+
+	logs, err := c.Logs(t.Context(), testContainerName, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "line1\nline2\nline3\n", logs)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"logs", "--tail", "3", string(testContainerName)}, m.Calls[0].Args)
+}
+
+func TestLogs_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	_, err := c.Logs(t.Context(), testContainerName, 10)
+	assert.Error(t, err)
+}
+
 const psJSON = `{"ID":"94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca","Names":"sind-dev-controller","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=controller"}
 {"ID":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2","Names":"sind-dev-worker-0","State":"running","Image":"ghcr.io/gsi-hpc/sind-node:25.11","Labels":"sind.cluster=dev,sind.role=worker"}`
 

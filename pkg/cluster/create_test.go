@@ -456,7 +456,7 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 			psCalls++
 		}
 	}
-	assert.Equal(t, 1, psCalls, "cleanup should call ListContainers once")
+	assert.Equal(t, 2, psCalls, "cleanup should call ListContainers for diagnostics and deletion")
 }
 
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {

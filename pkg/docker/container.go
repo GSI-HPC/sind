@@ -85,6 +85,15 @@ func (c *Client) UnpauseContainer(ctx context.Context, name ContainerName) error
 	return err
 }
 
+// Logs returns the last n lines of a container's log output.
+func (c *Client) Logs(ctx context.Context, name ContainerName, n int) (string, error) {
+	stdout, _, err := c.run(ctx, "logs", "--tail", fmt.Sprintf("%d", n), string(name))
+	if err != nil {
+		return "", err
+	}
+	return stdout, nil
+}
+
 // ContainerState represents the state of a Docker container.
 type ContainerState string
 
@@ -99,11 +108,13 @@ const (
 
 // ContainerInfo holds inspected container details.
 type ContainerInfo struct {
-	ID     ContainerID
-	Name   ContainerName
-	Status ContainerState
-	Labels Labels
-	IPs    map[NetworkName]string
+	ID        ContainerID
+	Name      ContainerName
+	Status    ContainerState
+	ExitCode  int
+	OOMKilled bool
+	Labels    Labels
+	IPs       map[NetworkName]string
 }
 
 // inspectResult maps the subset of docker inspect JSON we care about.
@@ -111,7 +122,9 @@ type inspectResult struct {
 	ID    string `json:"Id"`
 	Name  string `json:"Name"`
 	State struct {
-		Status string `json:"Status"`
+		Status    string `json:"Status"`
+		ExitCode  int    `json:"ExitCode"`
+		OOMKilled bool   `json:"OOMKilled"`
 	} `json:"State"`
 	Config struct {
 		Labels map[string]string `json:"Labels"`
@@ -142,11 +155,13 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 		ips[NetworkName(net)] = info.IPAddress
 	}
 	return &ContainerInfo{
-		ID:     ContainerID(r.ID),
-		Name:   ContainerName(strings.TrimPrefix(r.Name, "/")),
-		Status: ContainerState(r.State.Status),
-		Labels: r.Config.Labels,
-		IPs:    ips,
+		ID:        ContainerID(r.ID),
+		Name:      ContainerName(strings.TrimPrefix(r.Name, "/")),
+		Status:    ContainerState(r.State.Status),
+		ExitCode:  r.State.ExitCode,
+		OOMKilled: r.State.OOMKilled,
+		Labels:    r.Config.Labels,
+		IPs:       ips,
 	}, nil
 }
 

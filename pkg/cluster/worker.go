@@ -324,6 +324,7 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 		if err := meshMgr.RemoveKnownHost(ctx, dnsName); err != nil {
 			log.DebugContext(ctx, "cleanup: removing known host", "node", nc.ShortName, "error", err)
 		}
+		logContainerDiagnostics(ctx, client, containerName)
 		if err := client.RemoveContainer(ctx, containerName); err != nil {
 			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
 		}

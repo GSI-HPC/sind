@@ -5,6 +5,7 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,6 +15,15 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
+
+// TerminalError indicates a probe failure that cannot be recovered by
+// retrying. For example, a container in "exited" or "dead" state will
+// never become "running" on its own.
+type TerminalError struct {
+	Msg string
+}
+
+func (e *TerminalError) Error() string { return e.Msg }
 
 // Func is a probe function that checks a single readiness condition.
 type Func func(ctx context.Context, client *docker.Client, name docker.ContainerName) error
@@ -75,6 +85,10 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
 				log.Log(ctx, sindlog.LevelTrace, "probe failed", "node", string(name), "probe", p.Name, "err", err)
 				failed = true
+				var te *TerminalError
+				if errors.As(err, &te) {
+					return fmt.Errorf("node %s not ready: %w", name, lastErr)
+				}
 				break
 			}
 		}
@@ -91,10 +105,18 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 }
 
 // ContainerRunning verifies that the container is in the "running" state.
+// Returns a TerminalError for states that cannot recover (exited, dead).
 func ContainerRunning(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	info, err := client.InspectContainer(ctx, name)
 	if err != nil {
 		return fmt.Errorf("inspecting container: %w", err)
+	}
+	if info.Status == docker.StateExited || info.Status == docker.StateDead {
+		msg := fmt.Sprintf("container %s is %s (exit code %d)", name, info.Status, info.ExitCode)
+		if info.OOMKilled {
+			msg += " (OOM killed)"
+		}
+		return &TerminalError{Msg: msg}
 	}
 	if info.Status != docker.StateRunning {
 		return fmt.Errorf("container %s is %s, expected running", name, info.Status)

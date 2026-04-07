@@ -4,16 +4,11 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/doctor"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/cobra"
 )
-
-// minDockerMajor is the minimum required Docker Engine major version.
-const minDockerMajor = 28
 
 func newDoctorCommand() *cobra.Command {
 	return &cobra.Command{
@@ -38,23 +33,17 @@ func runDoctor(cmd *cobra.Command) error {
 	if err != nil {
 		printResult(cmd, false, "Docker Engine: not reachable")
 		failed = true
+	} else if vErr := doctor.CheckDockerVersion(version); vErr != nil {
+		printResult(cmd, false, "Docker Engine: %s", vErr)
+		failed = true
 	} else {
-		major, _, parseErr := parseVersion(version)
-		if parseErr != nil {
-			printResult(cmd, false, "Docker Engine: %s (unable to parse version)", version)
-			failed = true
-		} else if major < minDockerMajor {
-			printResult(cmd, false, "Docker Engine: %s (requires >= %d.0)", version, minDockerMajor)
-			failed = true
-		} else {
-			printResult(cmd, true, "Docker Engine: %s (>= %d.0)", version, minDockerMajor)
-		}
+		printResult(cmd, true, "Docker Engine: %s (>= %d.0)", version, doctor.MinDockerMajor)
 	}
 
 	// Check cgroup2 with nsdelegate.
 	log := sindlog.From(ctx)
 	log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
-	mountPath, hasV2, hasNsd := cgroupInfo()
+	mountPath, hasV2, hasNsd := doctor.CgroupInfo()
 	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd)
 	if !hasV2 {
 		printResult(cmd, false, "cgroup: v2 not mounted (sind requires cgroupv2)")
@@ -128,39 +117,4 @@ func runDoctor(cmd *cobra.Command) error {
 
 func printResult(cmd *cobra.Command, ok bool, format string, args ...any) {
 	cmd.Printf("%s %s\n", checkmark(ok), fmt.Sprintf(format, args...))
-}
-
-func parseVersion(s string) (major, minor int, err error) {
-	if idx := strings.IndexByte(s, '-'); idx >= 0 {
-		s = s[:idx]
-	}
-	parts := strings.SplitN(s, ".", 3)
-	if len(parts) < 2 {
-		return 0, 0, fmt.Errorf("invalid version: %s", s)
-	}
-	major, err = strconv.Atoi(parts[0])
-	if err != nil {
-		return 0, 0, err
-	}
-	minor, err = strconv.Atoi(parts[1])
-	if err != nil {
-		return 0, 0, err
-	}
-	return major, minor, nil
-}
-
-// cgroupInfo reads /proc/mounts and returns the cgroup2 mount path,
-// whether cgroup2 is mounted at all, and whether nsdelegate is enabled.
-func cgroupInfo() (mountPath string, hasV2, hasNsdelegate bool) {
-	data, err := os.ReadFile("/proc/mounts")
-	if err != nil {
-		return "", false, false
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 4 && fields[2] == "cgroup2" {
-			return fields[1], true, strings.Contains(fields[3], "nsdelegate")
-		}
-	}
-	return "", false, false
 }

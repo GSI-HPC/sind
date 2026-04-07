@@ -147,7 +147,7 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 func TestClusterLifecycle(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
-	skipIfNoNsdelegate(t)
+	checkPrerequisites(t, c)
 	image := testImage(t)
 	dataDir := t.TempDir()
 

@@ -11,12 +11,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/doctor"
 )
 
 // testID is a per-process random suffix for unique resource names.
@@ -100,19 +100,23 @@ func realClient(t *testing.T) *docker.Client {
 	return docker.NewClient(&cmdexec.OSExecutor{})
 }
 
-// skipIfNoNsdelegate skips the test if the host cgroup mount lacks nsdelegate.
-func skipIfNoNsdelegate(t *testing.T) {
+// checkPrerequisites skips the test if the host does not meet sind
+// prerequisites (Docker version, cgroupv2 with nsdelegate).
+func checkPrerequisites(t *testing.T, c *docker.Client) {
 	t.Helper()
-	data, err := os.ReadFile("/proc/mounts")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	version, err := c.ServerVersion(ctx)
 	if err != nil {
-		t.Skip("cannot read /proc/mounts")
+		t.Skipf("cannot query Docker version: %v", err)
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.Contains(line, "cgroup2") && strings.Contains(line, "nsdelegate") {
-			return
-		}
+	if vErr := doctor.CheckDockerVersion(version); vErr != nil {
+		t.Skipf("%v", vErr)
 	}
-	t.Skip("host cgroup mount lacks nsdelegate")
+	_, _, hasNsd := doctor.CgroupInfo()
+	if !hasNsd {
+		t.Skip("host cgroup mount lacks nsdelegate")
+	}
 }
 
 // testImage returns the sind-node image to use for integration tests.

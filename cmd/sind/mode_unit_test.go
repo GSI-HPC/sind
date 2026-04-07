@@ -19,7 +19,7 @@ func realClient(t *testing.T) *docker.Client {
 	return nil
 }
 
-func skipIfNoNsdelegate(t *testing.T) {
+func checkPrerequisites(t *testing.T, _ *docker.Client) {
 	t.Helper()
 	t.Skip("integration test")
 }

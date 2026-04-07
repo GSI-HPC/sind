@@ -72,6 +72,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		log.ErrorContext(ctx, "cleaning up partial resources, please wait")
 		cleanupCtx := context.WithoutCancel(ctx)
 		if resourcesCreated {
+			logClusterDiagnostics(cleanupCtx, client, realm, cfg.Name)
 			log.DebugContext(ctx, "removing cluster resources", "name", cfg.Name)
 			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name); err != nil {
 				log.ErrorContext(ctx, "cleanup failed", "error", err)
