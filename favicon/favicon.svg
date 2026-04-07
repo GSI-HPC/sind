@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 208" style="background:transparent">
+  <g transform="translate(16, 16)">
+    <!-- Row 1 -->
+    <rect x="0"   y="0" width="52" height="52" rx="9" fill="#0EA5E9" opacity=".92"/>
+    <rect x="62"  y="0" width="52" height="52" rx="9" fill="#0EA5E9" opacity=".70"/>
+    <rect x="124" y="0" width="52" height="52" rx="9" fill="#0EA5E9" opacity=".48"/>
+
+    <!-- Row 2 -->
+    <rect x="0"   y="62" width="52" height="52" rx="9" fill="#14B8A6" opacity=".82"/>
+    <rect x="62"  y="62" width="52" height="52" rx="9" fill="#0D9488"/>
+    <line x1="78" y1="82" x2="98" y2="82" stroke="#fff" stroke-width="2.5" opacity=".90" stroke-linecap="round"/>
+    <line x1="78" y1="89" x2="98" y2="89" stroke="#fff" stroke-width="2.5" opacity=".90" stroke-linecap="round"/>
+    <line x1="78" y1="96" x2="98" y2="96" stroke="#fff" stroke-width="2.5" opacity=".90" stroke-linecap="round"/>
+    <rect x="124" y="62" width="52" height="52" rx="9" fill="#14B8A6" opacity=".58"/>
+
+    <!-- Row 3 -->
+    <rect x="0"   y="124" width="52" height="52" rx="9" fill="#0EA5E9" opacity=".48"/>
+    <rect x="62"  y="124" width="52" height="52" rx="9" fill="#0EA5E9" opacity=".34"/>
+    <rect x="124" y="124" width="52" height="52" rx="9" fill="#14B8A6" opacity=".40"/>
+
+    <!-- Flow connectors -->
+    <line x1="26"  y1="54" x2="26"  y2="60" stroke="#0EA5E9" stroke-width="2" opacity=".38" stroke-linecap="round"/>
+    <line x1="88"  y1="54" x2="88"  y2="60" stroke="#0D9488" stroke-width="2" opacity=".52" stroke-linecap="round"/>
+    <line x1="150" y1="54" x2="150" y2="60" stroke="#14B8A6" stroke-width="2" opacity=".38" stroke-linecap="round"/>
+    <line x1="26"  y1="116" x2="26"  y2="122" stroke="#14B8A6" stroke-width="2" opacity=".38" stroke-linecap="round"/>
+    <line x1="88"  y1="116" x2="88"  y2="122" stroke="#0D9488" stroke-width="2" opacity=".52" stroke-linecap="round"/>
+    <line x1="150" y1="116" x2="150" y2="122" stroke="#14B8A6" stroke-width="2" opacity=".30" stroke-linecap="round"/>
+  </g>
+</svg>
