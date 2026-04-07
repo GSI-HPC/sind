@@ -68,7 +68,7 @@ slurm:
     ConstrainCores=yes
 ```
 
-**Map form** — named fragments in a `.conf.d/` directory, included via glob:
+**Map form** — named fragments in a `.conf.d/` directory, included explicitly:
 
 ```yaml
 slurm:
@@ -79,7 +79,7 @@ slurm:
       SelectType=select/cons_tres
 ```
 
-This creates `slurm.conf.d/scheduling.conf` and `slurm.conf.d/resources.conf`, with `include /etc/slurm/slurm.conf.d/*` appended to `slurm.conf`.
+This creates `slurm.conf.d/scheduling.conf` and `slurm.conf.d/resources.conf`, with explicit include directives appended to `slurm.conf` for each fragment file. Glob includes are not used because Slurm's main config parser does not support them (the SPANK `plugstack.conf` parser does).
 
 Standalone sections (`gres`, `topology`) are only created when configured and require enabling in `slurm.conf` via the `main` section (e.g., `GresTypes=gpu`).
 

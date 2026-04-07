@@ -568,7 +568,7 @@ nodes:
 The `slurm` key contains named sections that map to Slurm config files. Each section supports two forms:
 
 - **String**: content appended directly to the config file
-- **Map**: each key creates a fragment in a `.conf.d/` directory, included via `include <name>.conf.d/*`
+- **Map**: each key creates a fragment in a `.conf.d/` directory, included via explicit `include` directives per fragment file
 
 | Section | Config file | sind generates defaults |
 |---------|-------------|:----------------------:|
@@ -605,7 +605,7 @@ This produces:
 
 ```
 /etc/slurm/
-├── slurm.conf              # sind defaults + include slurm.conf.d/*
+├── slurm.conf              # sind defaults + explicit includes per fragment
 ├── slurm.conf.d/
 │   ├── resources.conf
 │   └── scheduling.conf
