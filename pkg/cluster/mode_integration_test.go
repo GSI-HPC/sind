@@ -154,6 +154,64 @@ slurm:
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestSlurmSectionMapFormApplied(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-slurm-map")
+	clusterName := "it-slurm-map"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	err := meshMgr.EnsureMesh(ctx)
+	require.NoError(t, err)
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+slurm:
+  main:
+    scheduling: |
+      SchedulerType=sched/backfill
+      SchedulerParameters=bf_continue
+    resources: |
+      SelectType=select/cons_tres
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+	assert.Equal(t, StateRunning, result.State)
+
+	// Verify settings via scontrol show config on the controller.
+	controller := ContainerName(realm, clusterName, "controller")
+	out, err := c.Exec(ctx, controller, "scontrol", "show", "config")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "SchedulerType           = sched/backfill")
+	assert.Contains(t, out, "SchedulerParameters     = bf_continue")
+	assert.Contains(t, out, "SelectType              = select/cons_tres")
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func checkPrerequisites(t *testing.T, c *docker.Client) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

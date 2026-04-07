@@ -47,14 +47,22 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
+// procMountsPath is the path to the mount table file. Tests may override it.
+var procMountsPath = "/proc/mounts"
+
 // CgroupInfo reads /proc/mounts and returns the cgroup2 mount path,
 // whether cgroup2 is mounted at all, and whether nsdelegate is enabled.
 func CgroupInfo() (mountPath string, hasV2, hasNsdelegate bool) {
-	data, err := os.ReadFile("/proc/mounts")
+	data, err := os.ReadFile(procMountsPath)
 	if err != nil {
 		return "", false, false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	return parseCgroupInfo(string(data))
+}
+
+// parseCgroupInfo extracts cgroup2 info from mount table content.
+func parseCgroupInfo(mounts string) (mountPath string, hasV2, hasNsdelegate bool) {
+	for _, line := range strings.Split(mounts, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) >= 4 && fields[2] == "cgroup2" {
 			return fields[1], true, strings.Contains(fields[3], "nsdelegate")

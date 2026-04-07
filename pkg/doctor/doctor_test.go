@@ -33,6 +33,12 @@ func TestParseVersion_Invalid(t *testing.T) {
 
 	_, _, err = ParseVersion("28")
 	assert.Error(t, err)
+
+	_, _, err = ParseVersion("x.0.0")
+	assert.Error(t, err)
+
+	_, _, err = ParseVersion("28.y.0")
+	assert.Error(t, err)
 }
 
 func TestCheckDockerVersion(t *testing.T) {
@@ -51,4 +57,56 @@ func TestCheckDockerVersion_Invalid(t *testing.T) {
 	err := CheckDockerVersion("bogus")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unable to parse version")
+}
+
+func TestCgroupInfo(t *testing.T) {
+	mountPath, hasV2, hasNsd := CgroupInfo()
+	if !hasV2 {
+		t.Skip("no cgroup2 mount on this host")
+	}
+	assert.NotEmpty(t, mountPath)
+	// nsdelegate may or may not be set, just verify the function ran
+	_ = hasNsd
+}
+
+func TestCgroupInfo_ReadError(t *testing.T) {
+	old := procMountsPath
+	procMountsPath = "/nonexistent/mounts"
+	t.Cleanup(func() { procMountsPath = old })
+
+	path, hasV2, hasNsd := CgroupInfo()
+	assert.Empty(t, path)
+	assert.False(t, hasV2)
+	assert.False(t, hasNsd)
+}
+
+func TestParseCgroupInfo_WithNsdelegate(t *testing.T) {
+	mounts := "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n"
+	path, hasV2, hasNsd := parseCgroupInfo(mounts)
+	assert.Equal(t, "/sys/fs/cgroup", path)
+	assert.True(t, hasV2)
+	assert.True(t, hasNsd)
+}
+
+func TestParseCgroupInfo_WithoutNsdelegate(t *testing.T) {
+	mounts := "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime 0 0\n"
+	path, hasV2, hasNsd := parseCgroupInfo(mounts)
+	assert.Equal(t, "/sys/fs/cgroup", path)
+	assert.True(t, hasV2)
+	assert.False(t, hasNsd)
+}
+
+func TestParseCgroupInfo_NoCgroup2(t *testing.T) {
+	mounts := "tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n"
+	path, hasV2, hasNsd := parseCgroupInfo(mounts)
+	assert.Empty(t, path)
+	assert.False(t, hasV2)
+	assert.False(t, hasNsd)
+}
+
+func TestParseCgroupInfo_Empty(t *testing.T) {
+	path, hasV2, hasNsd := parseCgroupInfo("")
+	assert.Empty(t, path)
+	assert.False(t, hasV2)
+	assert.False(t, hasNsd)
 }

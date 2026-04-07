@@ -48,6 +48,24 @@ jobs:
           path: unit-tests.xml
           reporter: java-junit
 
+  unit-test-coverage:
+    name: Unit Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Generate coverage profile
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Check coverage thresholds
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: .testcoverage.yml
+
   integration-test:
     name: Integration Test
     runs-on: ubuntu-latest

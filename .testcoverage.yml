@@ -1,0 +1,14 @@
+# go-test-coverage configuration
+# https://github.com/vladopajic/go-test-coverage
+profile: coverage.out
+
+threshold:
+  file: 0
+  package: 50
+  total: 80
+
+override:
+  - path: ^pkg/
+    threshold: 100
+  - path: ^internal/
+    threshold: 100
