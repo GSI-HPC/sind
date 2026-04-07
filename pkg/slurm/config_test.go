@@ -53,10 +53,9 @@ func TestGenerateSlurmConf_MainMapIncludes(t *testing.T) {
 	}}
 	conf := GenerateSlurmConf("dev", main)
 
-	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/*\n")
-	// Individual fragment files are not included directly — the .d glob handles it
-	assert.NotContains(t, conf, "include /etc/slurm/resources.conf")
-	assert.NotContains(t, conf, "include /etc/slurm/scheduling.conf")
+	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/resources.conf\n")
+	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/scheduling.conf\n")
+	assert.NotContains(t, conf, "*")
 }
 
 func TestServiceForRole(t *testing.T) {
@@ -96,7 +95,8 @@ func TestGenerateCgroupConf_MapIncludes(t *testing.T) {
 	conf := GenerateCgroupConf(cgroup)
 
 	assert.Contains(t, conf, "CgroupPlugin=autodetect")
-	assert.Contains(t, conf, "include /etc/slurm/cgroup.conf.d/*\n")
+	assert.Contains(t, conf, "include /etc/slurm/cgroup.conf.d/cores.conf\n")
+	assert.NotContains(t, conf, "*")
 }
 
 func TestGeneratePlugstackConf(t *testing.T) {
@@ -127,6 +127,6 @@ func TestGenerateSectionConf(t *testing.T) {
 		}}
 		conf := GenerateSectionConf("gres", s)
 
-		assert.Equal(t, "include /etc/slurm/gres.conf.d/*\n", conf)
+		assert.Equal(t, "include /etc/slurm/gres.conf.d/gpu.conf\n", conf)
 	})
 }

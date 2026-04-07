@@ -85,24 +85,34 @@ func GeneratePlugstackConf(plugstack config.Section) string {
 
 // GenerateSectionConf generates the content for a standalone config file
 // (gres.conf, topology.conf). String form returns content directly;
-// map form returns an include directive for the .conf.d directory.
+// map form returns include lines for each fragment file.
 func GenerateSectionConf(name string, section config.Section) string {
 	if section.IsMap() {
-		return "include " + ConfDir + "/" + name + ".conf.d/*\n"
+		var b strings.Builder
+		appendFragmentIncludes(&b, name, section)
+		return b.String()
 	}
 	return section.Content
 }
 
 // appendSection appends section content to a config file builder.
 // String form appends content directly; map form appends an include
-// directive for the .conf.d directory.
+// line for each fragment file (Slurm does not support glob includes).
 func appendSection(b *strings.Builder, name string, s config.Section) {
 	if s.IsEmpty() {
 		return
 	}
 	if s.IsMap() {
-		b.WriteString("include " + ConfDir + "/" + name + ".conf.d/*\n")
+		appendFragmentIncludes(b, name, s)
 	} else {
 		b.WriteString(s.Content)
+	}
+}
+
+// appendFragmentIncludes writes an include line for each fragment file
+// in sorted order.
+func appendFragmentIncludes(b *strings.Builder, name string, s config.Section) {
+	for _, key := range s.FragmentNames() {
+		b.WriteString("include " + ConfDir + "/" + name + ".conf.d/" + key + ".conf\n")
 	}
 }
