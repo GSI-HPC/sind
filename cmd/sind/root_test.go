@@ -40,12 +40,6 @@ func executeWithMock(mock *mock.Executor, args ...string) (string, string, error
 	return stdout.String(), stderr.String(), err
 }
 
-func TestRootCommand_Version(t *testing.T) {
-	stdout, _, err := executeCommand("--version")
-	require.NoError(t, err)
-	assert.Contains(t, stdout, "sind version dev")
-}
-
 func TestRootCommand_Help(t *testing.T) {
 	stdout, _, err := executeCommand("--help")
 	require.NoError(t, err)

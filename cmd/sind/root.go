@@ -8,8 +8,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is set at build time via -ldflags.
-var version = "dev"
+// version and commit are set at build time via -ldflags.
+var (
+	version = "dev"
+	commit  string
+)
 
 // NewRootCommand creates the root sind command.
 func NewRootCommand() *cobra.Command {
@@ -18,7 +21,6 @@ func NewRootCommand() *cobra.Command {
 		Short: "Slurm in Docker",
 		Long:  "sind creates and manages containerized Slurm clusters for development, testing, and CI/CD workflows.",
 
-		Version:          version,
 		SilenceUsage:     true,
 		SilenceErrors:    true,
 		TraverseChildren: true,
@@ -43,6 +45,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newExecCommand())
 	cmd.AddCommand(newLogsCommand())
 	cmd.AddCommand(newDoctorCommand())
+	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(ophis.Command(nil))
 
 	return cmd

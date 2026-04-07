@@ -424,9 +424,12 @@ sind logs worker-0 slurmd --follow    # follow slurmd logs
 ### Utilities
 
 ```bash
+sind version [--json]                  # print version information
 sind get munge-key [CLUSTER]           # output munge key (base64)
 sind get ssh-config                    # show SSH config path for Include
 ```
+
+`sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. The `--json` flag outputs all fields as JSON.
 
 `sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
 

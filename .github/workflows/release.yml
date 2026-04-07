@@ -18,7 +18,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Build binary
-        run: make LDFLAGS="-s -w -X main.version=${{ github.event.release.tag_name }}" build
+        run: make LDFLAGS="-s -w -X main.version=${{ github.event.release.tag_name }} -X main.commit=$(git rev-parse --short HEAD)" build
 
       - name: Upload release asset
         env:

@@ -1,19 +1,23 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 CMD           := ./cmd/sind
-VERSION       ?= dev
+VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT        ?= $(shell git rev-parse --short HEAD 2>/dev/null)
 GOOS          ?= $(shell go env GOOS)
 GOARCH        ?= $(shell go env GOARCH)
 BINARY        := sind-$(GOOS)-$(GOARCH)
-LDFLAGS       := -X main.version=$(VERSION)
+LDFLAGS       := -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 CGO_ENABLED   ?= 0
 GOBUILD       ?= go build
 GOTEST        ?= go test
 
-.PHONY: build lint lint-docs test test-integration coverage image clean help
+.PHONY: build install lint lint-docs test test-integration coverage image clean help
 
 build: ## Build the sind binary
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -trimpath -ldflags='$(LDFLAGS)' -o $(BINARY) $(CMD)
+
+install: ## Install sind to GOPATH/bin
+	CGO_ENABLED=$(CGO_ENABLED) go install -trimpath -ldflags='$(LDFLAGS)' $(CMD)
 
 lint: ## Run golangci-lint
 	golangci-lint run
