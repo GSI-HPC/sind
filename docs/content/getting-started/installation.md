@@ -11,11 +11,24 @@ toc: true
 {{< tabs "install" >}}
 {{< tab "Pre-built binary (linux/amd64)" >}}
 
+System-wide installation into `/usr/local/bin`:
+
 ```bash
 curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
-chmod +x ./sind
-sudo mv ./sind /usr/local/bin/sind
+# install sets mode 755 and copies to the target directory
+sudo install ./sind /usr/local/bin/sind
 ```
+
+Per-user installation into `~/.local/bin`:
+
+```bash
+curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
+install -D ./sind ~/.local/bin/sind
+```
+
+> Most distributions include `~/.local/bin` in `$PATH` by default, but only
+> if the directory exists at login time. You may need to log out and back in
+> after creating it.
 
 {{< /tab >}}
 {{< tab "From source" >}}
