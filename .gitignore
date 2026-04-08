@@ -18,6 +18,7 @@ Thumbs.db
 
 # Build
 dist/
+.hugo_build.lock
 
 # Agents
 .serena/
