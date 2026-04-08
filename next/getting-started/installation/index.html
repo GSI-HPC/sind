@@ -45,7 +45,7 @@
 <meta property="article:section" content="Getting Started" />
     <meta
       property="article:modified_time"
-      content="2026-03-30T03:58:44+02:00"
+      content="2026-04-08T15:30:21+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/getting-started/installation/",
       "headline": "Installation",
       "description": "Prerequisites and installation instructions",
-      "wordCount": "111",
+      "wordCount": "164",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-30T03:58:44.00Z",
+      "dateModified": "2026-04-08T15:30:21.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1906,10 +1906,19 @@
       Pre-built binary (linux/amd64)
     </label>
     <div class="gdoc-markdown--nested gdoc-tabs__content">
-      <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
-</span></span><span class="line"><span class="cl">chmod +x ./sind
-</span></span><span class="line"><span class="cl">sudo mv ./sind /usr/local/bin/sind
-</span></span></code></pre></div></div>
+      <p>System-wide installation into <code>/usr/local/bin</code>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
+</span></span><span class="line"><span class="cl"><span class="c1"># install sets mode 755 and copies to the target directory</span>
+</span></span><span class="line"><span class="cl">sudo install ./sind /usr/local/bin/sind
+</span></span></code></pre></div><p>Per-user installation into <code>~/.local/bin</code>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
+</span></span><span class="line"><span class="cl">install -D ./sind ~/.local/bin/sind
+</span></span></code></pre></div><blockquote>
+<p>Most distributions include <code>~/.local/bin</code> in <code>$PATH</code> by default, but only
+if the directory exists at login time. You may need to log out and back in
+after creating it.</p>
+</blockquote>
+</div>
     <input
       type="radio"
       class="gdoc-tabs__control hidden"
