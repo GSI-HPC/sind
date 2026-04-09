@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 	require.NoError(t, err, "mpicc: stderr=%q", stderr)
 
 	// Run across all 3 workers with one task per node.
-	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "--", "srun", "-N3", "--ntasks-per-node=1", "--mpi=pmix", "./hello_mpi")
+	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", "--", "srun", "-N3", "--ntasks-per-node=1", "./hello_mpi")
 	require.NoError(t, err, "srun mpi: stdout=%q stderr=%q", stdout, stderr)
 	t.Logf("srun output:\n%s", stdout)
 
