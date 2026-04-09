@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -204,6 +206,130 @@ func TestGetDNS_Error(t *testing.T) {
 
 	_, _, err := executeWithMock(&m, "get", "dns")
 	assert.Error(t, err)
+}
+
+// --- JSON output ---
+
+func TestGetClusters_JSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "clusters", "--output", "json")
+	require.NoError(t, err)
+
+	var got []struct {
+		Name         string `json:"name"`
+		SlurmVersion string `json:"slurm_version"`
+		Status       string `json:"status"`
+		Nodes        int    `json:"nodes"`
+		Controllers  int    `json:"controllers"`
+		Workers      int    `json:"workers"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.Len(t, got, 1)
+	assert.Equal(t, "dev", got[0].Name)
+	assert.Equal(t, "25.11.0", got[0].SlurmVersion)
+	assert.Equal(t, "running", got[0].Status)
+	assert.Equal(t, 2, got[0].Nodes)
+	assert.Equal(t, 1, got[0].Controllers)
+	assert.Equal(t, 1, got[0].Workers)
+}
+
+func TestGetClusters_JSONEmpty(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "clusters", "--output", "json")
+	require.NoError(t, err)
+	assert.Equal(t, "null\n", stdout)
+}
+
+func TestGetNodes_JSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=worker",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "nodes", "dev", "--output", "json")
+	require.NoError(t, err)
+
+	var got []struct {
+		Name   string `json:"name"`
+		Role   string `json:"role"`
+		Status string `json:"status"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.Len(t, got, 2)
+	assert.Equal(t, "controller.dev", got[0].Name)
+	assert.Equal(t, "controller", got[0].Role)
+	assert.Equal(t, "running", got[0].Status)
+	assert.Equal(t, "worker-0.dev", got[1].Name)
+}
+
+func TestGetDNS_JSON(t *testing.T) {
+	corefile := "sind.sind:53 {\n    hosts {\n" +
+		"        172.18.0.2 controller.dev.sind.sind\n" +
+		"        172.18.0.3 worker-0.dev.sind.sind\n" +
+		"        fallthrough\n    }\n    reload\n    log\n    errors\n}\n\n" +
+		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
+
+	var m mock.Executor
+	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "dns", "--output", "json")
+	require.NoError(t, err)
+
+	var got []mesh.DNSRecord
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.Len(t, got, 2)
+	assert.Equal(t, "controller.dev.sind.sind", got[0].Hostname)
+	assert.Equal(t, "172.18.0.2", got[0].IP)
+}
+
+func TestGetMungeKey_JSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(testutil.PsEntry{
+		ID: "a", Names: "sind-dev-controller", State: "running",
+		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+	}), "", nil)
+	m.AddResult(testutil.TarArchive("munge.key", "secret-key"), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "munge-key", "dev", "--output", "json")
+	require.NoError(t, err)
+
+	var got struct {
+		Key string `json:"key"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, "c2VjcmV0LWtleQ==", got.Key)
+}
+
+func TestGetSSHConfig_JSON(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/xdg/state")
+	stdout, _, err := executeCommand("get", "ssh-config", "--output", "json")
+	require.NoError(t, err)
+
+	var got struct {
+		Path string `json:"path"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, "/xdg/state/sind/sind/ssh_config", got.Path)
 }
 
 // --- Integration ---

@@ -20,6 +20,11 @@ func newGetCommand() *cobra.Command {
 		Short: "Display resources",
 	}
 
+	cmd.PersistentFlags().StringP("output", "o", "human", "output format (human|json)")
+	cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		return validateOutputFlag(cmd)
+	}
+
 	cmd.AddCommand(newGetClustersCommand())
 	cmd.AddCommand(newGetNodesCommand())
 	cmd.AddCommand(newGetNetworksCommand())
@@ -87,6 +92,10 @@ func runGetClusters(cmd *cobra.Command) error {
 		return err
 	}
 
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), clusters)
+	}
+
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/W)\tSLURM\tSTATUS")
 	for _, c := range clusters {
@@ -107,6 +116,24 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 		return err
 	}
 
+	if isJSONOutput(cmd) {
+		// Qualify node names with cluster for JSON output.
+		type jsonNode struct {
+			Name   string      `json:"name"`
+			Role   config.Role `json:"role"`
+			Status string      `json:"status"`
+		}
+		out := make([]jsonNode, len(nodes))
+		for i, n := range nodes {
+			out[i] = jsonNode{
+				Name:   n.Name + "." + name,
+				Role:   n.Role,
+				Status: string(n.State),
+			}
+		}
+		return writeJSON(cmd.OutOrStdout(), out)
+	}
+
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tROLE\tSTATUS")
 	for _, n := range nodes {
@@ -122,6 +149,10 @@ func runGetNetworks(cmd *cobra.Command) error {
 		return err
 	}
 
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), networks)
+	}
+
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
 	for _, n := range networks {
@@ -135,6 +166,10 @@ func runGetVolumes(cmd *cobra.Command) error {
 	volumes, err := cluster.GetVolumes(cmd.Context(), client, realmFromFlag(cmd))
 	if err != nil {
 		return err
+	}
+
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), volumes)
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
@@ -164,6 +199,10 @@ func runGetDNS(cmd *cobra.Command) error {
 	records, err := mgr.GetDNSRecords(cmd.Context())
 	if err != nil {
 		return err
+	}
+
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), records)
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
@@ -196,7 +235,13 @@ func runGetMungeKey(cmd *cobra.Command, name string) error {
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), base64.StdEncoding.EncodeToString(key))
+	encoded := base64.StdEncoding.EncodeToString(key)
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), struct {
+			Key string `json:"key"`
+		}{Key: encoded})
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), encoded)
 	return nil
 }
 
@@ -211,7 +256,13 @@ func newGetSSHConfigCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), filepath.Join(dir, "ssh_config"))
+			p := filepath.Join(dir, "ssh_config")
+			if isJSONOutput(cmd) {
+				return writeJSON(cmd.OutOrStdout(), struct {
+					Path string `json:"path"`
+				}{Path: p})
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
 			return nil
 		},
 	}
