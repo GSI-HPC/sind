@@ -52,7 +52,7 @@ func TestMPI(t *testing.T) {
 	stdout, stderr, err := executeWithRealmCtx(ctx, realm, "exec", "--", "ompi_info", "--all")
 	require.NoError(t, err, "ompi_info: stderr=%q", stderr)
 	assert.Contains(t, stdout, "Open MPI")
-	assert.Contains(t, stdout, "MCA pmix")
+	assert.Contains(t, stdout, "--with-pmix")
 	assert.Contains(t, stdout, "MCA pml: ucx")
 	t.Logf("ompi_info output:\n%s", stdout)
 

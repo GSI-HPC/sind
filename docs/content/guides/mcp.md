@@ -1,5 +1,5 @@
 ---
-weight: 370
+weight: 352
 title: "MCP Integration"
 description: "Using sind with AI assistants via the Model Context Protocol"
 ---
