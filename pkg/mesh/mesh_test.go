@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +20,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// exitCode1 runs a trivial shell command that exits with code 1 so tests can
+// synthesise a real *os.ProcessState for use with *exec.ExitError.
+func exitCode1(t *testing.T) *os.ProcessState {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "exit 1")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	return exitErr.ProcessState
+}
 
 // --- Lifecycle ---
 
@@ -1173,6 +1185,86 @@ func TestCustomRealm_CleanupMesh(t *testing.T) {
 // dnsInspectJSON returns a mock docker inspect result for the DNS container on the mesh network.
 func dnsInspectJSON() string {
 	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
+}
+
+// --- GetInfo ---
+
+func TestGetInfo(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil)         // ContainerExists(DNS) → true
+	m.AddResult(dnsInspectJSON(), "", nil) // InspectContainer(DNS)
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	info, err := mgr.GetInfo(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "sind-mesh", info.Network)
+	assert.Equal(t, "sind-dns", info.DNSContainer)
+	assert.Equal(t, "10.0.0.2", info.DNSIP)
+	assert.Equal(t, "sind.sind", info.DNSZone)
+	assert.Equal(t, string(DNSImage), info.DNSImage)
+	assert.Equal(t, "sind-ssh", info.SSHContainer)
+	assert.Equal(t, "sind-ssh-config", info.SSHVolume)
+	assert.Equal(t, SSHImage, info.SSHImage)
+}
+
+func TestGetInfo_CustomRealm(t *testing.T) {
+	inspectJSON := `[{"Id":"dns1","Name":"/ci-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"ci-mesh":{"IPAddress":"10.1.0.5"}}}}]`
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
+	m.AddResult(inspectJSON, "", nil)
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, "ci")
+
+	info, err := mgr.GetInfo(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "ci-mesh", info.Network)
+	assert.Equal(t, "ci-dns", info.DNSContainer)
+	assert.Equal(t, "10.1.0.5", info.DNSIP)
+	assert.Equal(t, "ci.sind", info.DNSZone)
+}
+
+func TestGetInfo_NoMesh(t *testing.T) {
+	var m mock.Executor
+	// ContainerExists uses exit code 1 to signal "not found".
+	m.AddResult("", "Error: No such object\n", &exec.ExitError{ProcessState: exitCode1(t)})
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetInfo(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no mesh found for realm")
+	assert.Contains(t, err.Error(), DefaultRealm)
+}
+
+func TestGetInfo_InspectError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetInfo(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "inspecting DNS container")
+}
+
+func TestGetInfo_ContainerExistsError(t *testing.T) {
+	// ContainerExists failing with a non-exit-code-1 error (e.g. daemon
+	// unreachable) should surface as a "checking DNS container" wrap.
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetInfo(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking DNS container")
 }
 
 // --- GetDNSRecords ---

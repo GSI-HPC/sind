@@ -351,6 +351,51 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 	return m.writeDNSEntries(ctx, kept)
 }
 
+// Info holds information about the mesh infrastructure for a realm.
+type Info struct {
+	Network      string `json:"network"`
+	DNSContainer string `json:"dns_container"`
+	DNSIP        string `json:"dns_ip"`
+	DNSZone      string `json:"dns_zone"`
+	DNSImage     string `json:"dns_image"`
+	SSHContainer string `json:"ssh_container"`
+	SSHVolume    string `json:"ssh_volume"`
+	SSHImage     string `json:"ssh_image"`
+}
+
+// GetInfo returns information about the mesh infrastructure for this realm.
+// The mesh must exist (DNS container must be running to resolve the DNS IP).
+// Returns an error containing "no mesh found for realm" if the DNS container
+// does not exist yet.
+func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
+	dnsName := m.DNSContainerName()
+	netName := m.NetworkName()
+
+	exists, err := m.Docker.ContainerExists(ctx, dnsName)
+	if err != nil {
+		return nil, fmt.Errorf("checking DNS container: %w", err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("no mesh found for realm %q", m.Realm)
+	}
+
+	dnsInfo, err := m.Docker.InspectContainer(ctx, dnsName)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting DNS container: %w", err)
+	}
+
+	return &Info{
+		Network:      string(netName),
+		DNSContainer: string(dnsName),
+		DNSIP:        dnsInfo.IPs[netName],
+		DNSZone:      m.Realm + ".sind",
+		DNSImage:     DNSImage,
+		SSHContainer: string(m.SSHContainerName()),
+		SSHVolume:    string(m.SSHVolumeName()),
+		SSHImage:     SSHImage,
+	}, nil
+}
+
 // DNSRecord represents a single A record in the mesh DNS.
 type DNSRecord struct {
 	Hostname string `json:"hostname"`

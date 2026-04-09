@@ -332,6 +332,63 @@ func TestGetSSHConfig_JSON(t *testing.T) {
 	assert.Equal(t, "/xdg/state/sind/sind/ssh_config", got.Path)
 }
 
+// --- Mesh ---
+
+func TestGetMesh_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"get", "mesh"})
+	require.NoError(t, err)
+	assert.Equal(t, "mesh", c.Use)
+}
+
+func TestGetMesh_RejectsArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "mesh", "extra")
+	assert.Error(t, err)
+}
+
+func TestGetMesh_Output(t *testing.T) {
+	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
+	m.AddResult(inspectJSON, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "mesh")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "PROPERTY")
+	assert.Contains(t, stdout, "sind-mesh")
+	assert.Contains(t, stdout, "sind-dns")
+	assert.Contains(t, stdout, "10.0.0.2")
+	assert.Contains(t, stdout, "sind.sind")
+	assert.Contains(t, stdout, "sind-ssh")
+	assert.Contains(t, stdout, "sind-ssh-config")
+}
+
+func TestGetMesh_JSON(t *testing.T) {
+	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
+	m.AddResult(inspectJSON, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "mesh", "--output", "json")
+	require.NoError(t, err)
+
+	var got mesh.Info
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, "sind-mesh", got.Network)
+	assert.Equal(t, "sind-dns", got.DNSContainer)
+	assert.Equal(t, "10.0.0.2", got.DNSIP)
+	assert.Equal(t, "sind.sind", got.DNSZone)
+}
+
+func TestGetMesh_Error(t *testing.T) {
+	var m mock.Executor
+	// ContainerExists returns a non-exit-code-1 error (daemon unreachable).
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+
+	_, _, err := executeWithMock(&m, "get", "mesh")
+	assert.Error(t, err)
+}
+
 // --- Integration ---
 
 func TestGetClustersEmpty(t *testing.T) {

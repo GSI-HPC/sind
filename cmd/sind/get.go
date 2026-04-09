@@ -32,6 +32,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetMungeKeyCommand())
 	cmd.AddCommand(newGetDNSCommand())
 	cmd.AddCommand(newGetSSHConfigCommand())
+	cmd.AddCommand(newGetMeshCommand())
 
 	return cmd
 }
@@ -266,6 +267,44 @@ func newGetSSHConfigCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newGetMeshCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "mesh",
+		Short: "Show mesh infrastructure info",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetMesh(cmd)
+		},
+	}
+}
+
+func runGetMesh(cmd *cobra.Command) error {
+	client := clientFrom(cmd.Context())
+	realm := realmFromFlag(cmd)
+	mgr := meshMgrFrom(cmd.Context(), client, realm)
+
+	info, err := mgr.GetInfo(cmd.Context())
+	if err != nil {
+		return err
+	}
+
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), info)
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(w, "PROPERTY\tVALUE")
+	_, _ = fmt.Fprintf(w, "network\t%s\n", info.Network)
+	_, _ = fmt.Fprintf(w, "dns-container\t%s\n", info.DNSContainer)
+	_, _ = fmt.Fprintf(w, "dns-ip\t%s\n", info.DNSIP)
+	_, _ = fmt.Fprintf(w, "dns-zone\t%s\n", info.DNSZone)
+	_, _ = fmt.Fprintf(w, "dns-image\t%s\n", info.DNSImage)
+	_, _ = fmt.Fprintf(w, "ssh-container\t%s\n", info.SSHContainer)
+	_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", info.SSHVolume)
+	_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", info.SSHImage)
+	return w.Flush()
 }
 
 func newTabWriter(out io.Writer) *tabwriter.Writer {
