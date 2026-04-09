@@ -11,9 +11,10 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 - Linux host with cgroupv2 and `nsdelegate` mount option (`mount -o remount,nsdelegate /sys/fs/cgroup`)
 - Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true`)
 
-## Supported Slurm Versions
+## Supported Versions
 
 - Slurm 25.11
+- OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.20)
 
 ## Overview
 
@@ -944,11 +945,12 @@ This is the default image when `defaults.image` is not specified in the cluster 
 
 The generic image:
 - Based on Rocky Linux 10
-- Builds Slurm from source for each release
-- Contains all daemons (slurmctld, slurmd)
+- Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
+- Contains all Slurm daemons (slurmctld, slurmd) and a full MPI stack
+- Slurm is built with `--with-pmix` for native PMIx job launch support
 - sind enables the appropriate services based on node role
 
-The `Dockerfile` and `docker-bake.hcl` are in the repository root.
+The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. Component versions are pinned as `ARG` defaults in the Dockerfile and mirrored in `docker-bake.hcl`.
 
 ### Custom Images
 
