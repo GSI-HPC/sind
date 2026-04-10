@@ -6,10 +6,6 @@ on:
     paths:
       - "Dockerfile"
       - "docker-bake.hcl"
-  pull_request:
-    paths:
-      - "Dockerfile"
-      - "docker-bake.hcl"
   workflow_dispatch:
 
 permissions:
@@ -36,6 +32,10 @@ jobs:
         uses: docker/bake-action@v7
         with:
           push: ${{ github.event_name != 'pull_request' }}
+          allow: network.host
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
 
       - name: Tag latest if this is the highest version
         if: github.event_name != 'pull_request'
