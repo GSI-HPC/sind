@@ -14,7 +14,7 @@ While the cluster configuration resembles a Kubernetes manifest, sind is **not**
 - sind does not watch or reconcile cluster state
 - sind does not automatically repair drift or failures
 
-sind provides commands for inspection (`get`, `status`), modification (`create/delete worker`), and simulation (`power`), but these are imperative operations, not declarative state management.
+sind provides commands for inspection (`get`), modification (`create/delete worker`), and simulation (`power`), but these are imperative operations, not declarative state management.
 
 This is intentional: sind is a development and testing tool, not a production cluster controller.
 
