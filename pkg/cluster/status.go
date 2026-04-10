@@ -61,8 +61,12 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 		switch svc {
 		case "slurmctld":
 			check = probe.SlurmctldReady
+		case "slurmdbd":
+			check = probe.SlurmdbdReady
 		case "slurmd":
 			check = probe.SlurmdReady
+		case "mariadb":
+			check = probe.MariadbReady
 		}
 		health.Services[svc] = check(ctx, client, name) == nil
 	}
@@ -257,8 +261,11 @@ func nodeStatusOrder(n *NodeStatus) string {
 	return roleSortKey(n.Role, n.Name)
 }
 
-// roleServices returns the Slurm service names for the given role.
+// roleServices returns the service names checked for the given role.
 func roleServices(role config.Role) []string {
+	if role == config.RoleDb {
+		return []string{string(slurm.Mariadb), string(slurm.Slurmdbd)}
+	}
 	if svc, ok := slurm.ServiceForRole(role); ok {
 		return []string{string(svc)}
 	}
