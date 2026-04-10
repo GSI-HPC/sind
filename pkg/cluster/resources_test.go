@@ -392,11 +392,11 @@ func TestWriteClusterConfig_DbCreateError(t *testing.T) {
 
 func TestWriteClusterConfig_DbChownError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("abc123\n", "", nil)                  // RunContainer
-	m.AddResult("", "", nil)                          // CopyToContainer
-	m.AddResult("", "", fmt.Errorf("chown failed"))   // chown
-	m.AddResult("", "", nil)                          // KillContainer (defer)
-	m.AddResult("", "", nil)                          // RemoveContainer (defer)
+	m.AddResult("abc123\n", "", nil)                // RunContainer
+	m.AddResult("", "", nil)                        // CopyToContainer
+	m.AddResult("", "", fmt.Errorf("chown failed")) // chown
+	m.AddResult("", "", nil)                        // KillContainer (defer)
+	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{
@@ -411,12 +411,12 @@ func TestWriteClusterConfig_DbChownError(t *testing.T) {
 
 func TestWriteClusterConfig_DbChmodError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("abc123\n", "", nil)                  // RunContainer
-	m.AddResult("", "", nil)                          // CopyToContainer
-	m.AddResult("", "", nil)                          // chown
-	m.AddResult("", "", fmt.Errorf("chmod failed"))   // chmod
-	m.AddResult("", "", nil)                          // KillContainer (defer)
-	m.AddResult("", "", nil)                          // RemoveContainer (defer)
+	m.AddResult("abc123\n", "", nil)                // RunContainer
+	m.AddResult("", "", nil)                        // CopyToContainer
+	m.AddResult("", "", nil)                        // chown
+	m.AddResult("", "", fmt.Errorf("chmod failed")) // chmod
+	m.AddResult("", "", nil)                        // KillContainer (defer)
+	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{
