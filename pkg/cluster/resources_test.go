@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -314,8 +315,11 @@ func TestWriteClusterConfig_Pull(t *testing.T) {
 
 func TestWriteClusterConfig_WithDb(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
+	m.AddResult("abc123\n", "", nil) // RunContainer (helper with sleep)
 	m.AddResult("", "", nil)         // CopyToContainer
+	m.AddResult("", "", nil)         // chown slurmdbd.conf
+	m.AddResult("", "", nil)         // chmod slurmdbd.conf
+	m.AddResult("", "", nil)         // KillContainer (defer)
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
@@ -330,10 +334,18 @@ func TestWriteClusterConfig_WithDb(t *testing.T) {
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
 
 	require.NoError(t, err)
+	require.Len(t, m.Calls, 6)
 
-	// Verify the CopyToContainer call includes slurm.conf with accounting directives
-	cpCall := m.Calls[1]
-	assert.Equal(t, "cp", cpCall.Args[0])
+	// RunContainer starts helper with sleep
+	assert.Equal(t, "run", m.Calls[0].Args[0])
+	assert.Contains(t, m.Calls[0].Args, "sleep")
+
+	// CopyToContainer
+	assert.Equal(t, "cp", m.Calls[1].Args[0])
+
+	// chown + chmod slurmdbd.conf
+	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chown", "slurm:slurm", slurm.SlurmdbdConfPath}, m.Calls[2].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chmod", "0600", slurm.SlurmdbdConfPath}, m.Calls[3].Args)
 }
 
 func TestWriteClusterConfig_CreateError(t *testing.T) {
@@ -361,6 +373,60 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing slurm config")
 	assert.Len(t, m.Calls, 3) // defer still runs
+}
+
+func TestWriteClusterConfig_DbCreateError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("run failed"))
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{
+		Name:  "dev",
+		Nodes: []config.Node{{Role: config.RoleDb}},
+	}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "creating config helper")
+}
+
+func TestWriteClusterConfig_DbChownError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("abc123\n", "", nil)                  // RunContainer
+	m.AddResult("", "", nil)                          // CopyToContainer
+	m.AddResult("", "", fmt.Errorf("chown failed"))   // chown
+	m.AddResult("", "", nil)                          // KillContainer (defer)
+	m.AddResult("", "", nil)                          // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{
+		Name:  "dev",
+		Nodes: []config.Node{{Role: config.RoleDb}},
+	}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fixing slurmdbd.conf ownership")
+}
+
+func TestWriteClusterConfig_DbChmodError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("abc123\n", "", nil)                  // RunContainer
+	m.AddResult("", "", nil)                          // CopyToContainer
+	m.AddResult("", "", nil)                          // chown
+	m.AddResult("", "", fmt.Errorf("chmod failed"))   // chmod
+	m.AddResult("", "", nil)                          // KillContainer (defer)
+	m.AddResult("", "", nil)                          // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{
+		Name:  "dev",
+		Nodes: []config.Node{{Role: config.RoleDb}},
+	}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fixing slurmdbd.conf permissions")
 }
 
 // --- WriteMungeKey ---
