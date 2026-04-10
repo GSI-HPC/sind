@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-04-06T01:09:27+02:00"
+      content="2026-04-10T20:02:56+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
       "headline": "Cluster Configuration",
       "description": "YAML configuration schema reference",
-      "wordCount": "414",
+      "wordCount": "477",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-06T01:09:27.00Z",
+      "dateModified": "2026-04-10T20:02:56.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2151,8 +2151,29 @@
           <td><code>&quot;256m&quot;</code></td>
           <td>tmpfs size for <code>/tmp</code></td>
       </tr>
+      <tr>
+          <td><code>capAdd</code></td>
+          <td>none</td>
+          <td>Extra Linux capabilities</td>
+      </tr>
+      <tr>
+          <td><code>capDrop</code></td>
+          <td>none</td>
+          <td>Dropped Linux capabilities</td>
+      </tr>
+      <tr>
+          <td><code>devices</code></td>
+          <td>none</td>
+          <td>Host devices to expose</td>
+      </tr>
+      <tr>
+          <td><code>securityOpt</code></td>
+          <td>none</td>
+          <td>Extra security options</td>
+      </tr>
   </tbody>
 </table> </div>
+<p>Scalar fields (<code>image</code>, <code>cpus</code>, <code>memory</code>, <code>tmpSize</code>) are overridden by per-node values. List fields (<code>capAdd</code>, <code>capDrop</code>, <code>devices</code>, <code>securityOpt</code>) are merged with per-node values.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="storage-section"
     >
@@ -2281,6 +2302,8 @@
 <li><code>count</code> is only valid for worker nodes</li>
 <li><code>managed</code> is only valid for worker nodes</li>
 <li><code>count</code> must not be negative</li>
+<li><code>capAdd</code>/<code>capDrop</code> values must be recognized Linux capability names (e.g. <code>SYS_ADMIN</code>, <code>NET_ADMIN</code>, <code>ALL</code>)</li>
+<li><code>devices</code> paths must be absolute (start with <code>/</code>)</li>
 </ul>
 
   </article>
