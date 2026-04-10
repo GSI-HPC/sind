@@ -12,9 +12,9 @@
 <meta name="generator" content="Hugo 0.160.1">
 
 
-  <meta name="description" content="DNS-style node naming and nodeset expansion" />
+  <meta name="description" content="Task-oriented walkthroughs for common workflows" />
 
-    <title>Node Arguments | sind</title>
+    <title>Guides | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -35,46 +35,46 @@
     
   <meta
     property="og:title"
-    content="Node Arguments"
+    content="Guides"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="DNS-style node naming and nodeset expansion" />
+  <meta property="og:description" content="Task-oriented walkthroughs for common workflows" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/usage/node-arguments/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/" />
 
-<meta property="article:section" content="Usage" />
+<meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-03-27T11:26:56+01:00"
+      content="2026-04-09T16:23:27+02:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Node Arguments" />
-  <meta name="twitter:description" content="DNS-style node naming and nodeset expansion" />
+<meta name="twitter:title" content="Guides" />
+  <meta name="twitter:description" content="Task-oriented walkthroughs for common workflows" />
 
 
   <script type="application/ld+json">
   {
       "@context": "http://schema.org",
       "@type": "TechArticle",
-      "articleSection": "Usage",
-      "name": "Node Arguments",
-      "url": "https://gsi-hpc.github.io/sind/next/usage/node-arguments/",
-      "headline": "Node Arguments",
-      "description": "DNS-style node naming and nodeset expansion",
-      "wordCount": "133",
+      "articleSection": "Guides",
+      "name": "Guides",
+      "url": "https://gsi-hpc.github.io/sind/next/guides/",
+      "headline": "Guides",
+      "description": "Task-oriented walkthroughs for common workflows",
+      "wordCount": "13",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/usage/node-arguments/"
+          "@id": "https://gsi-hpc.github.io/sind/next/guides/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-27T11:26:56.00Z",
+      "dateModified": "2026-04-09T16:23:27.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -152,7 +152,7 @@
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/usage/node-arguments/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/guides/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -969,7 +969,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/usage/node-arguments/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     Node Arguments
                   </a>
@@ -1020,7 +1020,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/guides/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     Guides
                   </a>
@@ -1954,15 +1954,7 @@
     
   
   
-    
-    
-    
-    
-  
-  
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/usage/' href='/sind/next/usage/'><span itemprop='name'>Usage</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Node Arguments</span><meta itemprop='position' content='5' /></li>
-  
-
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Guides</span><meta itemprop='position' content='4' /></li>
   
 
   
@@ -1979,112 +1971,8 @@
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>Node Arguments</h1>
-    
-    <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="format"
-    >
-        Format
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#format" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Format" aria-label="Anchor to: Format" href="#format">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>Commands that accept node arguments use DNS-style names:</p>
-<pre tabindex="0"><code>&lt;role&gt;.&lt;cluster&gt;
-&lt;role&gt;-&lt;N&gt;.&lt;cluster&gt;
-</code></pre><p>The cluster suffix defaults to <code>default</code> if omitted:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh controller          <span class="c1"># → controller.default</span>
-</span></span><span class="line"><span class="cl">sind ssh worker-0            <span class="c1"># → worker-0.default</span>
-</span></span><span class="line"><span class="cl">sind ssh worker-0.dev        <span class="c1"># → worker-0.dev</span>
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="nodeset-expansion"
-    >
-        Nodeset expansion
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#nodeset-expansion" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Nodeset expansion" aria-label="Anchor to: Nodeset expansion" href="#nodeset-expansion">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>sind supports Slurm-style nodeset notation for specifying multiple nodes:</p>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Pattern</th>
-          <th>Expansion</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>worker-[0-3]</code></td>
-          <td>worker-0, worker-1, worker-2, worker-3</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0,2,4]</code></td>
-          <td>worker-0, worker-2, worker-4</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0-2,5]</code></td>
-          <td>worker-0, worker-1, worker-2, worker-5</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0-1].dev</code></td>
-          <td>worker-0.dev, worker-1.dev</td>
-      </tr>
-      <tr>
-          <td><code>worker-[00-03]</code></td>
-          <td>worker-00, worker-01, worker-02, worker-03</td>
-      </tr>
-  </tbody>
-</table> </div>
-<p>Zero-padding is preserved: <code>worker-[00-03]</code> produces <code>worker-00</code> through <code>worker-03</code>.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="multiple-nodes"
-    >
-        Multiple nodes
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#multiple-nodes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Multiple nodes" aria-label="Anchor to: Multiple nodes" href="#multiple-nodes">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>Comma-separate multiple nodesets:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind power shutdown controller,worker-<span class="o">[</span>0-3<span class="o">]</span>
-</span></span><span class="line"><span class="cl">sind power cycle worker-<span class="o">[</span>0-1<span class="o">]</span>.dev,worker-<span class="o">[</span>0-3<span class="o">]</span>.default
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="commands-that-accept-nodeset-arguments"
-    >
-        Commands that accept nodeset arguments
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#commands-that-accept-nodeset-arguments" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Commands that accept nodeset arguments" aria-label="Anchor to: Commands that accept nodeset arguments" href="#commands-that-accept-nodeset-arguments">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Command</th>
-          <th>Accepts nodesets</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind power &lt;action&gt;</code></td>
-          <td>Yes — one or more nodes</td>
-      </tr>
-      <tr>
-          <td><code>sind delete worker</code></td>
-          <td>Yes — one or more nodes</td>
-      </tr>
-      <tr>
-          <td><code>sind ssh</code></td>
-          <td>No — exactly one node</td>
-      </tr>
-      <tr>
-          <td><code>sind logs</code></td>
-          <td>No — exactly one node</td>
-      </tr>
-  </tbody>
-</table> </div>
+    <h1>Guides</h1>
+    <p>Applied guides that show how to use sind for specific tasks and integrations.</p>
 
   </article>
 
@@ -2610,9 +2498,6 @@
         
 
         
-          
-          
-        
 
         
           
@@ -2629,6 +2514,44 @@
       
     
 
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+          
+          
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
   
     
 
@@ -2654,41 +2577,6 @@
             
             
           
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
         
 
         
@@ -3203,11 +3091,11 @@
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/usage/diagnostics/"
-      title="Diagnostics"
+      href="/sind/next/usage/node-arguments/"
+      title="Node Arguments"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Diagnostics
+      Node Arguments
     </a>
   
 </span>
@@ -3215,10 +3103,10 @@
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/guides/"
-      title="Guides"
+      href="/sind/next/guides/mpi-jobs/"
+      title="Running MPI Jobs"
     >
-      Guides
+      Running MPI Jobs
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

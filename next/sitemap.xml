@@ -44,14 +44,20 @@
     <loc>https://gsi-hpc.github.io/sind/next/usage/diagnostics/</loc>
     <lastmod>2026-04-02T15:14:37+02:00</lastmod>
   </url><url>
+    <loc>https://gsi-hpc.github.io/sind/next/guides/</loc>
+    <lastmod>2026-04-09T16:23:27+02:00</lastmod>
+  </url><url>
+    <loc>https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/</loc>
+    <lastmod>2026-04-09T16:23:27+02:00</lastmod>
+  </url><url>
+    <loc>https://gsi-hpc.github.io/sind/next/guides/mcp/</loc>
+    <lastmod>2026-04-09T16:23:27+02:00</lastmod>
+  </url><url>
+    <loc>https://gsi-hpc.github.io/sind/next/guides/ci-cd/</loc>
+    <lastmod>2026-04-09T16:23:27+02:00</lastmod>
+  </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-arguments/</loc>
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
-  </url><url>
-    <loc>https://gsi-hpc.github.io/sind/next/usage/mcp/</loc>
-    <lastmod>2026-03-29T23:27:31+02:00</lastmod>
-  </url><url>
-    <loc>https://gsi-hpc.github.io/sind/next/usage/ci-cd/</loc>
-    <lastmod>2026-04-01T21:58:52+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/</loc>
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
@@ -69,10 +75,10 @@
     <lastmod>2026-04-07T15:04:50+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/container-images/</loc>
-    <lastmod>2026-03-29T22:02:11+02:00</lastmod>
+    <lastmod>2026-04-09T14:59:43+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/container-images/building-images/</loc>
-    <lastmod>2026-03-30T02:03:09+02:00</lastmod>
+    <lastmod>2026-04-09T14:59:43+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/contributing/</loc>
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>

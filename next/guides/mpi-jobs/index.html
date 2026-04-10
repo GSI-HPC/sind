@@ -12,9 +12,9 @@
 <meta name="generator" content="Hugo 0.160.1">
 
 
-  <meta name="description" content="DNS-style node naming and nodeset expansion" />
+  <meta name="description" content="Compile and run multi-node MPI programs with OpenMPI and PMIx" />
 
-    <title>Node Arguments | sind</title>
+    <title>Running MPI Jobs | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -35,46 +35,46 @@
     
   <meta
     property="og:title"
-    content="Node Arguments"
+    content="Running MPI Jobs"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="DNS-style node naming and nodeset expansion" />
+  <meta property="og:description" content="Compile and run multi-node MPI programs with OpenMPI and PMIx" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/usage/node-arguments/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/" />
 
-<meta property="article:section" content="Usage" />
+<meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-03-27T11:26:56+01:00"
+      content="2026-04-09T16:23:27+02:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Node Arguments" />
-  <meta name="twitter:description" content="DNS-style node naming and nodeset expansion" />
+<meta name="twitter:title" content="Running MPI Jobs" />
+  <meta name="twitter:description" content="Compile and run multi-node MPI programs with OpenMPI and PMIx" />
 
 
   <script type="application/ld+json">
   {
       "@context": "http://schema.org",
       "@type": "TechArticle",
-      "articleSection": "Usage",
-      "name": "Node Arguments",
-      "url": "https://gsi-hpc.github.io/sind/next/usage/node-arguments/",
-      "headline": "Node Arguments",
-      "description": "DNS-style node naming and nodeset expansion",
-      "wordCount": "133",
+      "articleSection": "Guides",
+      "name": "Running MPI Jobs",
+      "url": "https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/",
+      "headline": "Running MPI Jobs",
+      "description": "Compile and run multi-node MPI programs with OpenMPI and PMIx",
+      "wordCount": "284",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/usage/node-arguments/"
+          "@id": "https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-27T11:26:56.00Z",
+      "dateModified": "2026-04-09T16:23:27.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -152,7 +152,7 @@
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/usage/node-arguments/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -969,7 +969,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/usage/node-arguments/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     Node Arguments
                   </a>
@@ -1067,7 +1067,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/guides/mpi-jobs/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     Running MPI Jobs
                   </a>
@@ -1960,7 +1960,7 @@
     
   
   
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/usage/' href='/sind/next/usage/'><span itemprop='name'>Usage</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Node Arguments</span><meta itemprop='position' content='5' /></li>
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/guides/' href='/sind/next/guides/'><span itemprop='name'>Guides</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Running MPI Jobs</span><meta itemprop='position' content='5' /></li>
   
 
   
@@ -1979,113 +1979,116 @@
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>Node Arguments</h1>
+    <h1>Running MPI Jobs</h1>
     
-    <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="format"
-    >
-        Format
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#format" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Format" aria-label="Anchor to: Format" href="#format">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>Commands that accept node arguments use DNS-style names:</p>
-<pre tabindex="0"><code>&lt;role&gt;.&lt;cluster&gt;
-&lt;role&gt;-&lt;N&gt;.&lt;cluster&gt;
-</code></pre><p>The cluster suffix defaults to <code>default</code> if omitted:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh controller          <span class="c1"># → controller.default</span>
-</span></span><span class="line"><span class="cl">sind ssh worker-0            <span class="c1"># → worker-0.default</span>
-</span></span><span class="line"><span class="cl">sind ssh worker-0.dev        <span class="c1"># → worker-0.dev</span>
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="nodeset-expansion"
-    >
-        Nodeset expansion
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#nodeset-expansion" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Nodeset expansion" aria-label="Anchor to: Nodeset expansion" href="#nodeset-expansion">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>sind supports Slurm-style nodeset notation for specifying multiple nodes:</p>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Pattern</th>
-          <th>Expansion</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>worker-[0-3]</code></td>
-          <td>worker-0, worker-1, worker-2, worker-3</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0,2,4]</code></td>
-          <td>worker-0, worker-2, worker-4</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0-2,5]</code></td>
-          <td>worker-0, worker-1, worker-2, worker-5</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0-1].dev</code></td>
-          <td>worker-0.dev, worker-1.dev</td>
-      </tr>
-      <tr>
-          <td><code>worker-[00-03]</code></td>
-          <td>worker-00, worker-01, worker-02, worker-03</td>
-      </tr>
-  </tbody>
-</table> </div>
-<p>Zero-padding is preserved: <code>worker-[00-03]</code> produces <code>worker-00</code> through <code>worker-03</code>.</p>
+    <p>The default sind-node image ships with a full MPI stack (OpenMPI, PMIx, PRRTE, UCX) and Slurm configured with <code>MpiDefault=pmix</code>. This guide walks through compiling and running a simple MPI program across multiple nodes.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="multiple-nodes"
+    <h2 id="create-a-multi-node-cluster"
     >
-        Multiple nodes
+        Create a multi-node cluster
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#multiple-nodes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Multiple nodes" aria-label="Anchor to: Multiple nodes" href="#multiple-nodes">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/#create-a-multi-node-cluster" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Create a multi-node cluster" aria-label="Anchor to: Create a multi-node cluster" href="#create-a-multi-node-cluster">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Comma-separate multiple nodesets:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind power shutdown controller,worker-<span class="o">[</span>0-3<span class="o">]</span>
-</span></span><span class="line"><span class="cl">sind power cycle worker-<span class="o">[</span>0-1<span class="o">]</span>.dev,worker-<span class="o">[</span>0-3<span class="o">]</span>.default
+<p>Create a cluster with 3 workers:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster <span class="s">&lt;&lt;&#39;EOF&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s">kind: Cluster
+</span></span></span><span class="line"><span class="cl"><span class="s">nodes:
+</span></span></span><span class="line"><span class="cl"><span class="s">  - controller
+</span></span></span><span class="line"><span class="cl"><span class="s">  - worker: 3
+</span></span></span><span class="line"><span class="cl"><span class="s">EOF</span>
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="commands-that-accept-nodeset-arguments"
+    <h2 id="verify-the-mpi-stack"
     >
-        Commands that accept nodeset arguments
+        Verify the MPI stack
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#commands-that-accept-nodeset-arguments" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Commands that accept nodeset arguments" aria-label="Anchor to: Commands that accept nodeset arguments" href="#commands-that-accept-nodeset-arguments">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/#verify-the-mpi-stack" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Verify the MPI stack" aria-label="Anchor to: Verify the MPI stack" href="#verify-the-mpi-stack">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Command</th>
-          <th>Accepts nodesets</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind power &lt;action&gt;</code></td>
-          <td>Yes — one or more nodes</td>
-      </tr>
-      <tr>
-          <td><code>sind delete worker</code></td>
-          <td>Yes — one or more nodes</td>
-      </tr>
-      <tr>
-          <td><code>sind ssh</code></td>
-          <td>No — exactly one node</td>
-      </tr>
-      <tr>
-          <td><code>sind logs</code></td>
-          <td>No — exactly one node</td>
-      </tr>
-  </tbody>
-</table> </div>
-
+<p>Check that OpenMPI is installed and configured with PMIx and UCX:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- ompi_info <span class="p">|</span> grep -E <span class="s2">&#34;Open MPI:|MCA pml|with-pmix&#34;</span>
+</span></span></code></pre></div><p>You should see OpenMPI&rsquo;s version, the UCX point-to-point layer, and <code>--with-pmix</code> in the configure line.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="write-an-mpi-program"
+    >
+        Write an MPI program
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/#write-an-mpi-program" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Write an MPI program" aria-label="Anchor to: Write an MPI program" href="#write-an-mpi-program">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Create a hello-world program that synchronizes all ranks with a barrier:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sh -c <span class="s1">&#39;cat &gt; hello_mpi.c &lt;&lt; &#34;CSRC&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s1">#include &lt;mpi.h&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">#include &lt;stdio.h&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">#include &lt;unistd.h&gt;
+</span></span></span><span class="line"><span class="cl"><span class="s1">
+</span></span></span><span class="line"><span class="cl"><span class="s1">int main(int argc, char **argv) {
+</span></span></span><span class="line"><span class="cl"><span class="s1">    MPI_Init(&amp;argc, &amp;argv);
+</span></span></span><span class="line"><span class="cl"><span class="s1">
+</span></span></span><span class="line"><span class="cl"><span class="s1">    int rank, size;
+</span></span></span><span class="line"><span class="cl"><span class="s1">    char hostname[256];
+</span></span></span><span class="line"><span class="cl"><span class="s1">    MPI_Comm_rank(MPI_COMM_WORLD, &amp;rank);
+</span></span></span><span class="line"><span class="cl"><span class="s1">    MPI_Comm_size(MPI_COMM_WORLD, &amp;size);
+</span></span></span><span class="line"><span class="cl"><span class="s1">    gethostname(hostname, sizeof(hostname));
+</span></span></span><span class="line"><span class="cl"><span class="s1">
+</span></span></span><span class="line"><span class="cl"><span class="s1">    MPI_Barrier(MPI_COMM_WORLD);
+</span></span></span><span class="line"><span class="cl"><span class="s1">    printf(&#34;rank %d of %d on %s\n&#34;, rank, size, hostname);
+</span></span></span><span class="line"><span class="cl"><span class="s1">
+</span></span></span><span class="line"><span class="cl"><span class="s1">    MPI_Finalize();
+</span></span></span><span class="line"><span class="cl"><span class="s1">    return 0;
+</span></span></span><span class="line"><span class="cl"><span class="s1">}
+</span></span></span><span class="line"><span class="cl"><span class="s1">CSRC&#39;</span>
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="compile"
+    >
+        Compile
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/#compile" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Compile" aria-label="Anchor to: Compile" href="#compile">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>The image includes <code>mpicc</code>, which wraps gcc with the correct MPI flags:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- mpicc -o hello_mpi hello_mpi.c
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="run-across-all-nodes"
+    >
+        Run across all nodes
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/#run-across-all-nodes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Run across all nodes" aria-label="Anchor to: Run across all nodes" href="#run-across-all-nodes">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Launch one task per worker node via <code>srun</code>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- srun -N3 --ntasks-per-node<span class="o">=</span><span class="m">1</span> ./hello_mpi
+</span></span></code></pre></div><p>Expected output (order may vary):</p>
+<pre tabindex="0"><code>rank 0 of 3 on worker-0
+rank 1 of 3 on worker-1
+rank 2 of 3 on worker-2
+</code></pre><p>Since <code>MpiDefault=pmix</code> is set in the generated <code>slurm.conf</code>, <code>srun</code> uses PMIx for process launch automatically — no <code>--mpi=pmix</code> flag needed.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="batch-submission"
+    >
+        Batch submission
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mpi-jobs/#batch-submission" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Batch submission" aria-label="Anchor to: Batch submission" href="#batch-submission">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>The same program works with <code>sbatch</code>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sh -c <span class="s1">&#39;cat &gt; mpi_job.sh &lt;&lt; &#34;SCRIPT&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s1">#!/bin/sh
+</span></span></span><span class="line"><span class="cl"><span class="s1">#SBATCH --job-name=mpi-hello
+</span></span></span><span class="line"><span class="cl"><span class="s1">#SBATCH --nodes=3
+</span></span></span><span class="line"><span class="cl"><span class="s1">#SBATCH --ntasks-per-node=1
+</span></span></span><span class="line"><span class="cl"><span class="s1">srun hello_mpi
+</span></span></span><span class="line"><span class="cl"><span class="s1">SCRIPT&#39;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sbatch --wait mpi_job.sh
+</span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sh -c <span class="s1">&#39;cat slurm-*.out&#39;</span>
+</span></span></code></pre></div>
   </article>
 
 
@@ -2610,9 +2613,6 @@
         
 
         
-          
-          
-        
 
         
           
@@ -2625,6 +2625,77 @@
 
   
 
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+          
+          
+        
+
+        
+          
+        
+
+        
         
       
     
@@ -2654,74 +2725,6 @@
             
             
           
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
         
 
         
@@ -3203,11 +3206,11 @@
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/usage/diagnostics/"
-      title="Diagnostics"
+      href="/sind/next/guides/"
+      title="Guides"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Diagnostics
+      Guides
     </a>
   
 </span>
@@ -3215,10 +3218,10 @@
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/guides/"
-      title="Guides"
+      href="/sind/next/guides/mcp/"
+      title="MCP Integration"
     >
-      Guides
+      MCP Integration
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

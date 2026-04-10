@@ -12,9 +12,9 @@
 <meta name="generator" content="Hugo 0.160.1">
 
 
-  <meta name="description" content="DNS-style node naming and nodeset expansion" />
+  <meta name="description" content="Using sind with AI assistants via the Model Context Protocol" />
 
-    <title>Node Arguments | sind</title>
+    <title>MCP Integration | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -35,46 +35,46 @@
     
   <meta
     property="og:title"
-    content="Node Arguments"
+    content="MCP Integration"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="DNS-style node naming and nodeset expansion" />
+  <meta property="og:description" content="Using sind with AI assistants via the Model Context Protocol" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/usage/node-arguments/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/mcp/" />
 
-<meta property="article:section" content="Usage" />
+<meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-03-27T11:26:56+01:00"
+      content="2026-04-09T16:23:27+02:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Node Arguments" />
-  <meta name="twitter:description" content="DNS-style node naming and nodeset expansion" />
+<meta name="twitter:title" content="MCP Integration" />
+  <meta name="twitter:description" content="Using sind with AI assistants via the Model Context Protocol" />
 
 
   <script type="application/ld+json">
   {
       "@context": "http://schema.org",
       "@type": "TechArticle",
-      "articleSection": "Usage",
-      "name": "Node Arguments",
-      "url": "https://gsi-hpc.github.io/sind/next/usage/node-arguments/",
-      "headline": "Node Arguments",
-      "description": "DNS-style node naming and nodeset expansion",
-      "wordCount": "133",
+      "articleSection": "Guides",
+      "name": "MCP Integration",
+      "url": "https://gsi-hpc.github.io/sind/next/guides/mcp/",
+      "headline": "MCP Integration",
+      "description": "Using sind with AI assistants via the Model Context Protocol",
+      "wordCount": "211",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/usage/node-arguments/"
+          "@id": "https://gsi-hpc.github.io/sind/next/guides/mcp/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-27T11:26:56.00Z",
+      "dateModified": "2026-04-09T16:23:27.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -152,7 +152,7 @@
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/usage/node-arguments/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/guides/mcp/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -969,7 +969,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/usage/node-arguments/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     Node Arguments
                   </a>
@@ -1111,7 +1111,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/guides/mcp/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     MCP Integration
                   </a>
@@ -1960,7 +1960,7 @@
     
   
   
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/usage/' href='/sind/next/usage/'><span itemprop='name'>Usage</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Node Arguments</span><meta itemprop='position' content='5' /></li>
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/guides/' href='/sind/next/guides/'><span itemprop='name'>Guides</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>MCP Integration</span><meta itemprop='position' content='5' /></li>
   
 
   
@@ -1979,113 +1979,118 @@
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>Node Arguments</h1>
+    <h1>MCP Integration</h1>
     
-    <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="format"
-    >
-        Format
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#format" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Format" aria-label="Anchor to: Format" href="#format">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>Commands that accept node arguments use DNS-style names:</p>
-<pre tabindex="0"><code>&lt;role&gt;.&lt;cluster&gt;
-&lt;role&gt;-&lt;N&gt;.&lt;cluster&gt;
-</code></pre><p>The cluster suffix defaults to <code>default</code> if omitted:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh controller          <span class="c1"># → controller.default</span>
-</span></span><span class="line"><span class="cl">sind ssh worker-0            <span class="c1"># → worker-0.default</span>
-</span></span><span class="line"><span class="cl">sind ssh worker-0.dev        <span class="c1"># → worker-0.dev</span>
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="nodeset-expansion"
-    >
-        Nodeset expansion
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#nodeset-expansion" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Nodeset expansion" aria-label="Anchor to: Nodeset expansion" href="#nodeset-expansion">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>sind supports Slurm-style nodeset notation for specifying multiple nodes:</p>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Pattern</th>
-          <th>Expansion</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>worker-[0-3]</code></td>
-          <td>worker-0, worker-1, worker-2, worker-3</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0,2,4]</code></td>
-          <td>worker-0, worker-2, worker-4</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0-2,5]</code></td>
-          <td>worker-0, worker-1, worker-2, worker-5</td>
-      </tr>
-      <tr>
-          <td><code>worker-[0-1].dev</code></td>
-          <td>worker-0.dev, worker-1.dev</td>
-      </tr>
-      <tr>
-          <td><code>worker-[00-03]</code></td>
-          <td>worker-00, worker-01, worker-02, worker-03</td>
-      </tr>
-  </tbody>
-</table> </div>
-<p>Zero-padding is preserved: <code>worker-[00-03]</code> produces <code>worker-00</code> through <code>worker-03</code>.</p>
+    <p>sind includes a built-in <a
+  class="gdoc-markdown__link"
+  href="https://modelcontextprotocol.io/"
+>Model Context Protocol</a> (MCP) server that exposes all CLI commands as tools for AI assistants. This lets tools like Claude, VS Code Copilot, or Cursor create clusters, check status, manage workers, and control node power states through natural language.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="multiple-nodes"
+    <h2 id="quick-setup"
     >
-        Multiple nodes
+        Quick setup
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#multiple-nodes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Multiple nodes" aria-label="Anchor to: Multiple nodes" href="#multiple-nodes">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#quick-setup" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Quick setup" aria-label="Anchor to: Quick setup" href="#quick-setup">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Comma-separate multiple nodesets:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind power shutdown controller,worker-<span class="o">[</span>0-3<span class="o">]</span>
-</span></span><span class="line"><span class="cl">sind power cycle worker-<span class="o">[</span>0-1<span class="o">]</span>.dev,worker-<span class="o">[</span>0-3<span class="o">]</span>.default
+<p>Register sind with your editor:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Claude Desktop</span>
+</span></span><span class="line"><span class="cl">sind mcp claude <span class="nb">enable</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># VS Code</span>
+</span></span><span class="line"><span class="cl">sind mcp vscode <span class="nb">enable</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># Cursor</span>
+</span></span><span class="line"><span class="cl">sind mcp cursor <span class="nb">enable</span>
+</span></span></code></pre></div><p>To unregister:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp claude disable
+</span></span><span class="line"><span class="cl">sind mcp vscode disable
+</span></span><span class="line"><span class="cl">sind mcp cursor disable
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="commands-that-accept-nodeset-arguments"
+    <h2 id="manual-configuration"
     >
-        Commands that accept nodeset arguments
+        Manual configuration
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-arguments/#commands-that-accept-nodeset-arguments" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Commands that accept nodeset arguments" aria-label="Anchor to: Commands that accept nodeset arguments" href="#commands-that-accept-nodeset-arguments">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#manual-configuration" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Manual configuration" aria-label="Anchor to: Manual configuration" href="#manual-configuration">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
+<p>If you prefer to configure the MCP server manually, add the following to your editor&rsquo;s MCP config:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-json" data-lang="json"><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="nt">&#34;mcpServers&#34;</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;sind&#34;</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&#34;command&#34;</span><span class="p">:</span> <span class="s2">&#34;sind&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">      <span class="nt">&#34;args&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;mcp&#34;</span><span class="p">,</span> <span class="s2">&#34;start&#34;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="available-tools"
+    >
+        Available tools
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#available-tools" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Available tools" aria-label="Anchor to: Available tools" href="#available-tools">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>All sind commands are automatically exposed as MCP tools. To see the full list:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp tools
+</span></span></code></pre></div><p>This exports the tool definitions to <code>mcp-tools.json</code>. The tools follow the naming convention <code>sind_&lt;command&gt;_&lt;subcommand&gt;</code>, for example:</p>
 <div class="table-wrap"> <table>
   <thead>
       <tr>
-          <th>Command</th>
-          <th>Accepts nodesets</th>
+          <th>Tool</th>
+          <th>Description</th>
       </tr>
   </thead>
   <tbody>
       <tr>
-          <td><code>sind power &lt;action&gt;</code></td>
-          <td>Yes — one or more nodes</td>
+          <td><code>sind_create_cluster</code></td>
+          <td>Create a new cluster</td>
       </tr>
       <tr>
-          <td><code>sind delete worker</code></td>
-          <td>Yes — one or more nodes</td>
+          <td><code>sind_create_worker</code></td>
+          <td>Add workers to a running cluster</td>
       </tr>
       <tr>
-          <td><code>sind ssh</code></td>
-          <td>No — exactly one node</td>
+          <td><code>sind_delete_cluster</code></td>
+          <td>Delete a cluster</td>
       </tr>
       <tr>
-          <td><code>sind logs</code></td>
-          <td>No — exactly one node</td>
+          <td><code>sind_status</code></td>
+          <td>Show cluster status</td>
+      </tr>
+      <tr>
+          <td><code>sind_get_nodes</code></td>
+          <td>List cluster nodes</td>
+      </tr>
+      <tr>
+          <td><code>sind_power_shutdown</code></td>
+          <td>Shut down a node</td>
+      </tr>
+      <tr>
+          <td><code>sind_power_reboot</code></td>
+          <td>Reboot a node</td>
+      </tr>
+      <tr>
+          <td><code>sind_ssh</code></td>
+          <td>SSH into a node</td>
       </tr>
   </tbody>
 </table> </div>
-
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="http-mode"
+    >
+        HTTP mode
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#http-mode" class="gdoc-page__anchor clip flex align-center" title="Anchor to: HTTP mode" aria-label="Anchor to: HTTP mode" href="#http-mode">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>For remote or multi-client setups, sind can serve MCP over HTTP:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp stream --host localhost --port <span class="m">8080</span>
+</span></span></code></pre></div>
   </article>
 
 
@@ -2610,9 +2615,6 @@
         
 
         
-          
-          
-        
 
         
           
@@ -2625,6 +2627,110 @@
 
   
 
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+          
+          
+        
+
+        
+          
+        
+
+        
         
       
     
@@ -2654,107 +2760,6 @@
             
             
           
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
         
 
         
@@ -3203,11 +3208,11 @@
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/usage/diagnostics/"
-      title="Diagnostics"
+      href="/sind/next/guides/mpi-jobs/"
+      title="Running MPI Jobs"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Diagnostics
+      Running MPI Jobs
     </a>
   
 </span>
@@ -3215,10 +3220,10 @@
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/guides/"
-      title="Guides"
+      href="/sind/next/guides/ci-cd/"
+      title="CI/CD"
     >
-      Guides
+      CI/CD
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   
