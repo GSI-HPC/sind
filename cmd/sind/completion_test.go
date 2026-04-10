@@ -34,7 +34,7 @@ func TestCompleteClusterNames(t *testing.T) {
 		"{\"Name\":\"sind-dev-net\"}\n{\"Name\":\"sind-prod-net\"}", "", nil)
 	mock.AddResult("", "", nil) // no volumes
 
-	sub := findCmd(completionCtx(mock), t, "status")
+	sub := findCmd(completionCtx(mock), t, "get", "cluster")
 
 	names, directive := sub.ValidArgsFunction(sub, nil, "")
 	assert.ElementsMatch(t, []string{"dev", "prod"}, names)
@@ -42,7 +42,7 @@ func TestCompleteClusterNames(t *testing.T) {
 }
 
 func TestCompleteClusterNames_AlreadyHasArg(t *testing.T) {
-	sub := findCmd(completionCtx(&mock.Executor{}), t, "status")
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "get", "cluster")
 
 	names, directive := sub.ValidArgsFunction(sub, []string{"existing"}, "")
 	assert.Nil(t, names)
@@ -185,7 +185,7 @@ func TestCompleteClusterNames_DockerError(t *testing.T) {
 	mock := &mock.Executor{}
 	mock.AddResult("", "Error", assert.AnError)
 
-	sub := findCmd(completionCtx(mock), t, "status")
+	sub := findCmd(completionCtx(mock), t, "get", "cluster")
 
 	names, directive := sub.ValidArgsFunction(sub, nil, "")
 	assert.Nil(t, names)

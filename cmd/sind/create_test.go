@@ -213,8 +213,8 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.NotEmpty(t, stdout)
 	assert.NotContains(t, stdout, "Error")
 
-	// --- status ---
-	stdout, _, err = executeWithRealmCtx(ctx, realm, "status", cluster)
+	// --- get cluster ---
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "cluster", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "CLUSTER")
 	assert.Contains(t, stdout, cluster)

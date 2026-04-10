@@ -73,8 +73,8 @@ func TestQuickstart(t *testing.T) {
 	assert.Contains(t, stdout, "controller.default")
 	assert.Contains(t, stdout, "worker-0.default")
 
-	// sind status
-	stdout, _, err = executeWithRealmCtx(ctx, realm, "status")
+	// sind get cluster
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "cluster")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "CLUSTER")
 	assert.Contains(t, stdout, "default")
