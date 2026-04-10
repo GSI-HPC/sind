@@ -689,6 +689,78 @@ func TestGenerateKeypair_KeysMatch(t *testing.T) {
 	assert.Equal(t, pubFromLine, pubFromPriv, "public keys from private and public files should match")
 }
 
+// --- GetSSH* ---
+
+func TestGetSSHPrivateKey(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	key, err := mgr.GetSSHPrivateKey(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, key, "BEGIN OPENSSH PRIVATE KEY")
+	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/id_ed25519"}, m.Calls[0].Args)
+}
+
+func TestGetSSHPrivateKey_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHPrivateKey(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading SSH private key")
+}
+
+func TestGetSSHPublicKey(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("ssh-ed25519 AAAA... comment\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	key, err := mgr.GetSSHPublicKey(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, key, "ssh-ed25519")
+	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/id_ed25519.pub"}, m.Calls[0].Args)
+}
+
+func TestGetSSHKnownHosts(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("host1 ssh-ed25519 AAAA...\nhost2 ssh-ed25519 BBBB...\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	hosts, err := mgr.GetSSHKnownHosts(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, hosts, "host1")
+	assert.Contains(t, hosts, "host2")
+	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/known_hosts"}, m.Calls[0].Args)
+}
+
+func TestGetSSHPublicKey_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHPublicKey(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading SSH public key")
+}
+
+func TestGetSSHKnownHosts_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHKnownHosts(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading SSH known_hosts")
+}
+
 // --- test helpers ---
 
 // parseSSHString reads an SSH wire string (uint32 length + data) from buf.

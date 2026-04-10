@@ -33,6 +33,9 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetDNSCommand())
 	cmd.AddCommand(newGetSSHConfigCommand())
 	cmd.AddCommand(newGetMeshCommand())
+	cmd.AddCommand(newGetSSHPrivateKeyCommand())
+	cmd.AddCommand(newGetSSHPublicKeyCommand())
+	cmd.AddCommand(newGetSSHKnownHostsCommand())
 
 	return cmd
 }
@@ -305,6 +308,78 @@ func runGetMesh(cmd *cobra.Command) error {
 	_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", info.SSHVolume)
 	_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", info.SSHImage)
 	return w.Flush()
+}
+
+func newGetSSHPrivateKeyCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ssh-private-key",
+		Short: "Output SSH private key",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetSSHKey(cmd, "private")
+		},
+	}
+}
+
+func newGetSSHPublicKeyCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ssh-public-key",
+		Short: "Output SSH public key",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetSSHKey(cmd, "public")
+		},
+	}
+}
+
+func newGetSSHKnownHostsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ssh-known-hosts",
+		Short: "Output SSH known_hosts",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetSSHKey(cmd, "known-hosts")
+		},
+	}
+}
+
+func runGetSSHKey(cmd *cobra.Command, kind string) error {
+	client := clientFrom(cmd.Context())
+	realm := realmFromFlag(cmd)
+	mgr := meshMgrFrom(cmd.Context(), client, realm)
+
+	var content string
+	var err error
+	switch kind {
+	case "private":
+		content, err = mgr.GetSSHPrivateKey(cmd.Context())
+	case "public":
+		content, err = mgr.GetSSHPublicKey(cmd.Context())
+	case "known-hosts":
+		content, err = mgr.GetSSHKnownHosts(cmd.Context())
+	}
+	if err != nil {
+		return err
+	}
+
+	if isJSONOutput(cmd) {
+		switch kind {
+		case "private":
+			return writeJSON(cmd.OutOrStdout(), struct {
+				PrivateKey string `json:"private_key"`
+			}{PrivateKey: content})
+		case "public":
+			return writeJSON(cmd.OutOrStdout(), struct {
+				PublicKey string `json:"public_key"`
+			}{PublicKey: content})
+		case "known-hosts":
+			return writeJSON(cmd.OutOrStdout(), struct {
+				KnownHosts string `json:"known_hosts"`
+			}{KnownHosts: content})
+		}
+	}
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), content)
+	return nil
 }
 
 func newTabWriter(out io.Writer) *tabwriter.Writer {

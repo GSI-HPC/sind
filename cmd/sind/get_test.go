@@ -389,6 +389,103 @@ func TestGetMesh_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// --- SSH keys ---
+
+func TestGetSSHPrivateKey_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"get", "ssh-private-key"})
+	require.NoError(t, err)
+	assert.Equal(t, "ssh-private-key", c.Use)
+}
+
+func TestGetSSHPrivateKey_RejectsArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "ssh-private-key", "extra")
+	assert.Error(t, err)
+}
+
+func TestGetSSHPrivateKey_Output(t *testing.T) {
+	pemData := "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"
+	var m mock.Executor
+	m.AddResult(pemData, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "ssh-private-key")
+	require.NoError(t, err)
+	assert.Equal(t, pemData, stdout)
+}
+
+func TestGetSSHPrivateKey_JSON(t *testing.T) {
+	pemData := "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"
+	var m mock.Executor
+	m.AddResult(pemData, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "ssh-private-key", "--output", "json")
+	require.NoError(t, err)
+
+	var got struct {
+		PrivateKey string `json:"private_key"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, pemData, got.PrivateKey)
+}
+
+func TestGetSSHPublicKey_Output(t *testing.T) {
+	pubKey := "ssh-ed25519 AAAA... comment\n"
+	var m mock.Executor
+	m.AddResult(pubKey, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "ssh-public-key")
+	require.NoError(t, err)
+	assert.Equal(t, pubKey, stdout)
+}
+
+func TestGetSSHPublicKey_JSON(t *testing.T) {
+	pubKey := "ssh-ed25519 AAAA... comment\n"
+	var m mock.Executor
+	m.AddResult(pubKey, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "ssh-public-key", "--output", "json")
+	require.NoError(t, err)
+
+	var got struct {
+		PublicKey string `json:"public_key"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, pubKey, got.PublicKey)
+}
+
+func TestGetSSHKnownHosts_Output(t *testing.T) {
+	hosts := "host1 ssh-ed25519 AAAA...\nhost2 ssh-ed25519 BBBB...\n"
+	var m mock.Executor
+	m.AddResult(hosts, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "ssh-known-hosts")
+	require.NoError(t, err)
+	assert.Equal(t, hosts, stdout)
+}
+
+func TestGetSSHKnownHosts_JSON(t *testing.T) {
+	hosts := "host1 ssh-ed25519 AAAA...\nhost2 ssh-ed25519 BBBB...\n"
+	var m mock.Executor
+	m.AddResult(hosts, "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "ssh-known-hosts", "--output", "json")
+	require.NoError(t, err)
+
+	var got struct {
+		KnownHosts string `json:"known_hosts"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, hosts, got.KnownHosts)
+}
+
+func TestGetSSHPrivateKey_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+
+	_, _, err := executeWithMock(&m, "get", "ssh-private-key")
+	assert.Error(t, err)
+}
+
 // --- Integration ---
 
 func TestGetClustersEmpty(t *testing.T) {

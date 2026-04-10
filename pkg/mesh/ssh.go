@@ -126,6 +126,39 @@ func (m *Manager) EnsureSSH(ctx context.Context) error {
 	return nil
 }
 
+// privateKeyPath is the path to the private key inside the SSH container.
+const privateKeyPath = "/root/.ssh/id_ed25519"
+
+// publicKeyPath is the path to the public key inside the SSH container.
+const publicKeyPath = "/root/.ssh/id_ed25519.pub"
+
+// GetSSHPrivateKey reads the SSH private key from the SSH container.
+func (m *Manager) GetSSHPrivateKey(ctx context.Context) (string, error) {
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), privateKeyPath)
+	if err != nil {
+		return "", fmt.Errorf("reading SSH private key: %w", err)
+	}
+	return content, nil
+}
+
+// GetSSHPublicKey reads the SSH public key from the SSH container.
+func (m *Manager) GetSSHPublicKey(ctx context.Context) (string, error) {
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), publicKeyPath)
+	if err != nil {
+		return "", fmt.Errorf("reading SSH public key: %w", err)
+	}
+	return content, nil
+}
+
+// GetSSHKnownHosts reads the known_hosts file from the SSH container.
+func (m *Manager) GetSSHKnownHosts(ctx context.Context) (string, error) {
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), knownHostsPath)
+	if err != nil {
+		return "", fmt.Errorf("reading SSH known_hosts: %w", err)
+	}
+	return content, nil
+}
+
 // AddKnownHost appends a host key entry to the known_hosts file in the SSH
 // container. The hostKey should be the full key type and data (e.g.
 // "ssh-ed25519 AAAA...").
