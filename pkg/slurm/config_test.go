@@ -11,7 +11,7 @@ import (
 )
 
 func TestGenerateSlurmConf(t *testing.T) {
-	conf := GenerateSlurmConf("dev", config.Section{})
+	conf := GenerateSlurmConf("dev", config.Section{}, false)
 
 	assert.Contains(t, conf, "ClusterName=dev")
 	assert.Contains(t, conf, "SlurmctldHost=controller")
@@ -24,14 +24,14 @@ func TestGenerateSlurmConf(t *testing.T) {
 }
 
 func TestGenerateSlurmConf_DefaultCluster(t *testing.T) {
-	conf := GenerateSlurmConf("default", config.Section{})
+	conf := GenerateSlurmConf("default", config.Section{}, false)
 
 	assert.Contains(t, conf, "ClusterName=default")
 	assert.Contains(t, conf, "SlurmctldHost=controller")
 }
 
 func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
-	conf := GenerateSlurmConf("test", config.Section{})
+	conf := GenerateSlurmConf("test", config.Section{}, false)
 	for _, line := range strings.Split(conf, "\n") {
 		assert.Equal(t, strings.TrimRight(line, " \t"), line,
 			"line has trailing whitespace: %q", line)
@@ -40,7 +40,7 @@ func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
 
 func TestGenerateSlurmConf_MainStringAppend(t *testing.T) {
 	main := config.Section{Content: "SchedulerType=sched/backfill\n"}
-	conf := GenerateSlurmConf("dev", main)
+	conf := GenerateSlurmConf("dev", main, false)
 
 	assert.Contains(t, conf, "SchedulerType=sched/backfill\n")
 	// Appended after the base config
@@ -52,17 +52,67 @@ func TestGenerateSlurmConf_MainMapIncludes(t *testing.T) {
 		"resources":  "SelectType=select/cons_tres\n",
 		"scheduling": "SchedulerType=sched/backfill\n",
 	}}
-	conf := GenerateSlurmConf("dev", main)
+	conf := GenerateSlurmConf("dev", main, false)
 
 	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/resources.conf\n")
 	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/scheduling.conf\n")
 	assert.NotContains(t, conf, "*")
 }
 
+func TestGenerateSlurmConf_WithDb(t *testing.T) {
+	conf := GenerateSlurmConf("dev", config.Section{}, true)
+
+	assert.Contains(t, conf, "AccountingStorageType=accounting_storage/slurmdbd")
+	assert.Contains(t, conf, "AccountingStorageHost=db")
+}
+
+func TestGenerateSlurmConf_WithoutDb(t *testing.T) {
+	conf := GenerateSlurmConf("dev", config.Section{}, false)
+
+	assert.NotContains(t, conf, "AccountingStorage")
+}
+
+func TestGenerateSlurmdbdConf(t *testing.T) {
+	conf := GenerateSlurmdbdConf("dev", config.Section{})
+
+	assert.Contains(t, conf, "AuthType=auth/munge")
+	assert.Contains(t, conf, "DbdHost=db")
+	assert.Contains(t, conf, "SlurmUser=slurm")
+	assert.Contains(t, conf, "LogFile=/var/log/slurm/slurmdbd.log")
+	assert.Contains(t, conf, "PidFile=/run/slurmdbd.pid")
+	assert.Contains(t, conf, "StorageType=accounting_storage/mysql")
+	assert.Contains(t, conf, "StorageLoc=slurm_acct_db")
+	assert.Contains(t, conf, "StorageHost=localhost")
+	assert.Contains(t, conf, "StorageUser=slurm")
+	assert.Contains(t, conf, "StoragePass=")
+}
+
+func TestGenerateSlurmdbdConf_StringAppend(t *testing.T) {
+	slurmdbd := config.Section{Content: "ArchiveEvents=yes\n"}
+	conf := GenerateSlurmdbdConf("dev", slurmdbd)
+
+	assert.Contains(t, conf, "AuthType=auth/munge")
+	assert.Contains(t, conf, "ArchiveEvents=yes\n")
+}
+
+func TestGenerateSlurmdbdConf_MapIncludes(t *testing.T) {
+	slurmdbd := config.Section{Fragments: map[string]string{
+		"archive": "ArchiveEvents=yes\n",
+	}}
+	conf := GenerateSlurmdbdConf("dev", slurmdbd)
+
+	assert.Contains(t, conf, "AuthType=auth/munge")
+	assert.Contains(t, conf, "include /etc/slurm/slurmdbd.conf.d/archive.conf\n")
+}
+
 func TestServiceForRole(t *testing.T) {
 	svc, ok := ServiceForRole(config.RoleController)
 	assert.True(t, ok)
 	assert.Equal(t, Slurmctld, svc)
+
+	svc, ok = ServiceForRole(config.RoleDb)
+	assert.True(t, ok)
+	assert.Equal(t, Slurmdbd, svc)
 
 	svc, ok = ServiceForRole(config.RoleWorker)
 	assert.True(t, ok)

@@ -60,7 +60,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
 	files := docker.FileContents{
-		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main)),
+		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, hasDbNode(cfg.Nodes))),
 		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
 		"cgroup.conf":       []byte(slurm.GenerateCgroupConf(cfg.Slurm.Cgroup)),
 		"plugstack.conf":    []byte(slurm.GeneratePlugstackConf(cfg.Slurm.Plugstack)),
@@ -139,6 +139,16 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 	}
 
 	return nil
+}
+
+// hasDbNode returns true if any node in the list has the db role.
+func hasDbNode(nodes []config.Node) bool {
+	for _, n := range nodes {
+		if n.Role == config.RoleDb {
+			return true
+		}
+	}
+	return false
 }
 
 // addSectionFragments adds fragment files from a map-form section to the

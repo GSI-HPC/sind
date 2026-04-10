@@ -312,6 +312,30 @@ func TestWriteClusterConfig_Pull(t *testing.T) {
 	assert.Equal(t, "always", pull)
 }
 
+func TestWriteClusterConfig_WithDb(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
+	m.AddResult("", "", nil)         // CopyToContainer
+	m.AddResult("", "", nil)         // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleDb},
+			{Role: config.RoleWorker},
+		},
+	}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.NoError(t, err)
+
+	// Verify the CopyToContainer call includes slurm.conf with accounting directives
+	cpCall := m.Calls[1]
+	assert.Equal(t, "cp", cpCall.Args[0])
+}
+
 func TestWriteClusterConfig_CreateError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("create failed"))
