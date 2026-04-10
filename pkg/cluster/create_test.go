@@ -974,6 +974,49 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 	assert.Contains(t, err.Error(), "registering host key")
 }
 
+func TestLogExtraPrivileges(t *testing.T) {
+	t.Run("no privileges", func(t *testing.T) {
+		configs := []RunConfig{
+			{ShortName: "controller"},
+			{ShortName: "worker-0"},
+		}
+		// Should not panic or log anything.
+		logExtraPrivileges(t.Context(), configs)
+	})
+
+	t.Run("capAdd only", func(t *testing.T) {
+		configs := []RunConfig{
+			{ShortName: "worker-0", CapAdd: []string{"SYS_ADMIN"}},
+		}
+		logExtraPrivileges(t.Context(), configs)
+	})
+
+	t.Run("devices only", func(t *testing.T) {
+		configs := []RunConfig{
+			{ShortName: "worker-0", Devices: []string{"/dev/fuse"}},
+		}
+		logExtraPrivileges(t.Context(), configs)
+	})
+
+	t.Run("securityOpt only", func(t *testing.T) {
+		configs := []RunConfig{
+			{ShortName: "worker-0", SecurityOpt: []string{"apparmor=unconfined"}},
+		}
+		logExtraPrivileges(t.Context(), configs)
+	})
+
+	t.Run("all fields", func(t *testing.T) {
+		configs := []RunConfig{
+			{ShortName: "worker-0",
+				CapAdd:      []string{"SYS_ADMIN", "NET_ADMIN"},
+				Devices:     []string{"/dev/fuse"},
+				SecurityOpt: []string{"apparmor=unconfined"},
+			},
+		}
+		logExtraPrivileges(t.Context(), configs)
+	})
+}
+
 func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

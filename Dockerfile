@@ -263,10 +263,12 @@ RUN ssh-keygen -A && \
 # depending on the node's role.
 RUN systemctl enable munge sshd
 
-# Mask units that are unnecessary or problematic inside a container
+# Mask units that are unnecessary or problematic inside a container.
+# Note: sys-fs-fuse-connections.mount is NOT masked — it is a no-op without
+# /dev/fuse and must remain unmasked for FUSE to work when containers are
+# granted SYS_ADMIN + /dev/fuse via capAdd/devices.
 RUN systemctl mask \
     dev-hugepages.mount \
-    sys-fs-fuse-connections.mount \
     getty.target \
     console-getty.service
 

@@ -839,3 +839,191 @@ func TestValidate_SlurmSections(t *testing.T) {
 		require.NoError(t, cfg.Validate())
 	})
 }
+
+// --- Security fields: capAdd, capDrop, devices, securityOpt ---
+
+func TestParse_SecurityFields(t *testing.T) {
+	input := `kind: Cluster
+nodes:
+  - role: controller
+  - role: worker
+    count: 3
+    capAdd:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, cfg.Nodes, 2)
+
+	assert.Empty(t, cfg.Nodes[0].CapAdd)
+	assert.Equal(t, []string{"SYS_ADMIN"}, cfg.Nodes[1].CapAdd)
+	assert.Equal(t, []string{"/dev/fuse"}, cfg.Nodes[1].Devices)
+}
+
+func TestParse_SecurityFieldsAllFields(t *testing.T) {
+	input := `kind: Cluster
+nodes:
+  - role: controller
+  - role: worker
+    capAdd:
+      - SYS_ADMIN
+      - NET_ADMIN
+    capDrop:
+      - MKNOD
+    devices:
+      - /dev/fuse
+      - /dev/sda:/dev/xvda:rwm
+    securityOpt:
+      - apparmor=unconfined`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, cfg.Nodes, 2)
+
+	w := cfg.Nodes[1]
+	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN"}, w.CapAdd)
+	assert.Equal(t, []string{"MKNOD"}, w.CapDrop)
+	assert.Equal(t, []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}, w.Devices)
+	assert.Equal(t, []string{"apparmor=unconfined"}, w.SecurityOpt)
+}
+
+func TestParse_SecurityFieldsInDefaults(t *testing.T) {
+	input := `kind: Cluster
+defaults:
+  capAdd:
+    - SYS_ADMIN
+  devices:
+    - /dev/fuse
+nodes:
+  - role: controller
+  - role: worker`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"SYS_ADMIN"}, cfg.Defaults.CapAdd)
+	assert.Equal(t, []string{"/dev/fuse"}, cfg.Defaults.Devices)
+}
+
+func TestApplyDefaults_SecurityFieldsMerge(t *testing.T) {
+	cfg := &Cluster{
+		Kind: "Cluster",
+		Name: "default",
+		Defaults: Defaults{
+			CapAdd:  []string{"SYS_ADMIN"},
+			Devices: []string{"/dev/fuse"},
+		},
+		Nodes: []Node{
+			{Role: RoleController},
+			{Role: RoleWorker, CapAdd: []string{"NET_ADMIN"}, Devices: []string{"/dev/sda"}},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	// Controller inherits defaults only
+	assert.Equal(t, []string{"SYS_ADMIN"}, cfg.Nodes[0].CapAdd)
+	assert.Equal(t, []string{"/dev/fuse"}, cfg.Nodes[0].Devices)
+
+	// Worker merges defaults + per-node
+	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN"}, cfg.Nodes[1].CapAdd)
+	assert.Equal(t, []string{"/dev/fuse", "/dev/sda"}, cfg.Nodes[1].Devices)
+}
+
+func TestApplyDefaults_SecurityFieldsMergeDeduplicate(t *testing.T) {
+	cfg := &Cluster{
+		Kind: "Cluster",
+		Name: "default",
+		Defaults: Defaults{
+			CapAdd: []string{"SYS_ADMIN"},
+		},
+		Nodes: []Node{
+			{Role: RoleController},
+			{Role: RoleWorker, CapAdd: []string{"SYS_ADMIN", "NET_ADMIN"}},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	// Duplicate SYS_ADMIN from defaults + node should be deduplicated
+	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN"}, cfg.Nodes[1].CapAdd)
+}
+
+func TestApplyDefaults_SecurityFieldsEmpty(t *testing.T) {
+	cfg := &Cluster{
+		Kind: "Cluster",
+		Name: "default",
+		Nodes: []Node{
+			{Role: RoleController},
+			{Role: RoleWorker},
+		},
+	}
+	cfg.ApplyDefaults()
+
+	// No security fields set — should remain nil
+	assert.Nil(t, cfg.Nodes[0].CapAdd)
+	assert.Nil(t, cfg.Nodes[0].CapDrop)
+	assert.Nil(t, cfg.Nodes[0].Devices)
+	assert.Nil(t, cfg.Nodes[0].SecurityOpt)
+}
+
+func TestValidate_SecurityFields(t *testing.T) {
+	base := func() *Cluster {
+		return &Cluster{
+			Kind: "Cluster",
+			Name: "default",
+			Nodes: []Node{
+				{Role: "controller"},
+				{Role: "worker"},
+			},
+		}
+	}
+
+	t.Run("valid capabilities", func(t *testing.T) {
+		cfg := base()
+		cfg.Nodes[1].CapAdd = []string{"SYS_ADMIN", "NET_ADMIN"}
+		cfg.Nodes[1].CapDrop = []string{"MKNOD"}
+		require.NoError(t, cfg.Validate())
+	})
+
+	t.Run("ALL capability", func(t *testing.T) {
+		cfg := base()
+		cfg.Nodes[1].CapAdd = []string{"ALL"}
+		require.NoError(t, cfg.Validate())
+	})
+
+	t.Run("invalid capAdd", func(t *testing.T) {
+		cfg := base()
+		cfg.Nodes[1].CapAdd = []string{"INVALID_CAP"}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown capability "INVALID_CAP" in capAdd`)
+	})
+
+	t.Run("invalid capDrop", func(t *testing.T) {
+		cfg := base()
+		cfg.Nodes[1].CapDrop = []string{"NOT_A_CAP"}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown capability "NOT_A_CAP" in capDrop`)
+	})
+
+	t.Run("valid devices", func(t *testing.T) {
+		cfg := base()
+		cfg.Nodes[1].Devices = []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}
+		require.NoError(t, cfg.Validate())
+	})
+
+	t.Run("device path not absolute", func(t *testing.T) {
+		cfg := base()
+		cfg.Nodes[1].Devices = []string{"dev/fuse"}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "device path must be absolute")
+	})
+
+	t.Run("valid security opts", func(t *testing.T) {
+		cfg := base()
+		cfg.Nodes[1].SecurityOpt = []string{"apparmor=unconfined"}
+		require.NoError(t, cfg.Validate())
+	})
+}

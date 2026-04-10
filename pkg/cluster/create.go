@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -25,6 +26,28 @@ func controllerImage(cfg *config.Cluster) string {
 		}
 	}
 	return config.DefaultImage
+}
+
+// logExtraPrivileges emits a notice for each node that has extra capabilities,
+// devices, or security options configured, making privilege escalation visible.
+func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
+	log := sindlog.From(ctx)
+	for _, cfg := range configs {
+		if len(cfg.CapAdd) == 0 && len(cfg.Devices) == 0 && len(cfg.SecurityOpt) == 0 {
+			continue
+		}
+		var parts []string
+		if len(cfg.CapAdd) > 0 {
+			parts = append(parts, "capAdd=["+strings.Join(cfg.CapAdd, ",")+"]")
+		}
+		if len(cfg.Devices) > 0 {
+			parts = append(parts, "devices=["+strings.Join(cfg.Devices, ",")+"]")
+		}
+		if len(cfg.SecurityOpt) > 0 {
+			parts = append(parts, "securityOpt=["+strings.Join(cfg.SecurityOpt, ",")+"]")
+		}
+		log.InfoContext(ctx, "extra privileges", "node", cfg.ShortName, "config", strings.Join(parts, " "))
+	}
 }
 
 // nodeResult holds per-node data collected during concurrent setup.
@@ -109,6 +132,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	log.DebugContext(ctx, "cluster resources created")
 
 	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion)
+	logExtraPrivileges(ctx, nodeConfigs)
 	if err := createAllNodes(ctx, client, meshMgr, nodeConfigs); err != nil {
 		return nil, err
 	}

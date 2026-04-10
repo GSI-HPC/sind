@@ -28,6 +28,10 @@ type WorkerAddOptions struct {
 	TmpSize     string
 	Unmanaged   bool
 	Pull        bool
+	CapAdd      []string
+	CapDrop     []string
+	Devices     []string
+	SecurityOpt []string
 }
 
 // --- Exported functions ---
@@ -124,6 +128,10 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			Managed:         !opts.Unmanaged,
 			ContainerNumber: startIdx + i + 1,
 			Pull:            opts.Pull,
+			CapAdd:          opts.CapAdd,
+			CapDrop:         opts.CapDrop,
+			Devices:         opts.Devices,
+			SecurityOpt:     opts.SecurityOpt,
 		}
 	}
 
