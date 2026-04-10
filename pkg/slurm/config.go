@@ -52,6 +52,7 @@ func GenerateSlurmConf(clusterName string, main config.Section) string {
 	b.WriteString("\n")
 	b.WriteString("ProctrackType=proctrack/cgroup\n")
 	b.WriteString("TaskPlugin=task/cgroup,task/affinity\n")
+	b.WriteString("MpiDefault=pmix\n")
 	b.WriteString("ReturnToService=2\n")
 	b.WriteString("PlugStackConfig=" + ConfDir + "/plugstack.conf\n")
 	b.WriteString("\n")

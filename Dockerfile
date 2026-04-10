@@ -30,28 +30,107 @@
 #   docker buildx bake
 
 # ==============================================================================
-# Stage 1: Builder — compile Slurm from source
+# Stage: builder-base — Rocky 10 with common build toolchain
 # ==============================================================================
-FROM quay.io/rockylinux/rockylinux:10 AS builder
+FROM quay.io/rockylinux/rockylinux:10 AS builder-base
 
-ARG SLURM_VERSION=25.11.4
-
-# EPEL + CRB are required for munge-devel and other build headers
 RUN dnf -y install epel-release dnf-plugins-core && \
     dnf config-manager --set-enabled crb
 
-# Build toolchain and Slurm's compile-time dependencies
 RUN dnf -y install \
         gcc gcc-c++ make \
+        libevent-devel \
+        hwloc-devel \
+        python3 perl flex pkgconf \
+        tar bzip2 diffutils \
+    && dnf clean all
+
+# ==============================================================================
+# Stage: ucx-builder — compile UCX from source
+# ==============================================================================
+FROM builder-base AS ucx-builder
+
+ARG UCX_VERSION=1.20.0
+
+ADD --checksum=sha256:7c8a6093cada179aa1d851b83625e3b25ed5658966e309de5118c27a038c7ef9 \
+    https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz \
+    /tmp/ucx.tar.gz
+
+WORKDIR /tmp
+RUN tar xf ucx.tar.gz && \
+    cd ucx-${UCX_VERSION} && \
+    ./configure \
+        --prefix=/usr \
+        --libdir=/usr/lib64 \
+        --disable-static \
+        --without-cuda \
+        --without-rocm \
+        --without-java && \
+    make -j$(nproc) && \
+    DESTDIR=/install make install
+
+# ==============================================================================
+# Stage: pmix-builder — compile PMIx from source
+# ==============================================================================
+FROM builder-base AS pmix-builder
+
+ARG PMIX_VERSION=6.1.0
+
+ADD --checksum=sha256:bb9021c8e100a376f5070ecca727f83a29b5f652dfe381793b88daa79a3b98a2 \
+    https://github.com/openpmix/openpmix/releases/download/v${PMIX_VERSION}/pmix-${PMIX_VERSION}.tar.bz2 \
+    /tmp/pmix.tar.bz2
+
+WORKDIR /tmp
+RUN tar xf pmix.tar.bz2 && \
+    cd pmix-${PMIX_VERSION} && \
+    ./configure \
+        --prefix=/usr \
+        --libdir=/usr/lib64 \
+        --disable-static && \
+    make -j$(nproc) && \
+    DESTDIR=/install make install
+
+# ==============================================================================
+# Stage: prrte-builder — compile PRRTE from source (with PMIx 6.x)
+# ==============================================================================
+FROM builder-base AS prrte-builder
+
+ARG PRRTE_VERSION=4.1.0
+
+COPY --from=pmix-builder /install/usr /usr
+
+ADD --checksum=sha256:285ad62b670075708b9fcfe14c54baa599733bc274d10502a82e8eebba0b7c70 \
+    https://github.com/openpmix/prrte/releases/download/v${PRRTE_VERSION}/prrte-${PRRTE_VERSION}.tar.bz2 \
+    /tmp/prrte.tar.bz2
+
+WORKDIR /tmp
+RUN tar xf prrte.tar.bz2 && \
+    cd prrte-${PRRTE_VERSION} && \
+    ./configure \
+        --prefix=/usr \
+        --libdir=/usr/lib64 \
+        --disable-static && \
+    make -j$(nproc) && \
+    DESTDIR=/install make install
+
+# ==============================================================================
+# Stage: slurm-builder — compile Slurm from source (with PMIx support)
+# ==============================================================================
+FROM builder-base AS slurm-builder
+
+ARG SLURM_VERSION=25.11.4
+
+# PMIx headers and libraries are needed for Slurm's PMIx launch plugin.
+COPY --from=pmix-builder /install/usr /usr
+
+RUN dnf -y install \
         munge-devel \
         pam-devel \
         readline-devel \
         perl-ExtUtils-MakeMaker \
-        python3 \
         mariadb-devel \
         dbus-devel \
         libbpf-devel \
-        tar bzip2 \
     && dnf clean all
 
 # Fetch the Slurm source tarball with integrity verification.
@@ -70,24 +149,63 @@ RUN tar xf slurm.tar.bz2 && \
         --localstatedir=/var \
         --runstatedir=/run \
         --with-munge \
+        --with-pmix \
         --with-pam_dir=/usr/lib64/security \
         --with-systemdsystemunitdir=/usr/lib/systemd/system && \
     make -j$(nproc) && \
-    DESTDIR=/slurm-install make install && \
-    mkdir -p /slurm-install/etc
+    DESTDIR=/install make install && \
+    mkdir -p /install/etc
 
 # ==============================================================================
-# Stage 2: Runtime — lean image with only the packages needed at run time
+# Stage: ompi-builder — compile OpenMPI from source (with PRRTE + PMIx + UCX)
+# ==============================================================================
+FROM builder-base AS ompi-builder
+
+ARG OMPI_VERSION=5.0.10
+
+COPY --from=ucx-builder /install/usr /usr
+COPY --from=pmix-builder /install/usr /usr
+COPY --from=prrte-builder /install/usr /usr
+
+ADD --checksum=sha256:0acecc4fc218e5debdbcb8a41d182c6b0f1d29393015ed763b2a91d5d7374cc6 \
+    https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-${OMPI_VERSION}.tar.bz2 \
+    /tmp/openmpi.tar.bz2
+
+WORKDIR /tmp
+RUN tar xf openmpi.tar.bz2 && \
+    cd openmpi-${OMPI_VERSION} && \
+    ./configure \
+        --prefix=/usr \
+        --libdir=/usr/lib64 \
+        --disable-static \
+        --with-pmix \
+        --with-prrte=external \
+        --with-ucx \
+        --with-hwloc=external \
+        --with-libevent=external \
+        --without-cuda \
+        --without-rocm && \
+    make -j$(nproc) && \
+    DESTDIR=/install make install
+
+# ==============================================================================
+# Stage: runtime — lean image with only the packages needed at run time
 # ==============================================================================
 FROM quay.io/rockylinux/rockylinux:10
 
 ARG SLURM_VERSION=25.11.4
+ARG UCX_VERSION=1.20.0
+ARG PMIX_VERSION=6.1.0
+ARG PRRTE_VERSION=4.1.0
+ARG OMPI_VERSION=5.0.10
 
 RUN dnf -y install epel-release dnf-plugins-core && \
     dnf config-manager --set-enabled crb
 
-# Runtime dependencies — no compilers or -devel packages.
+# Runtime dependencies.
+# gcc is needed by mpicc (OpenMPI's wrapper compiler).
 # mariadb-server is included for the db role (slurmdbd accounting storage).
+# libevent and hwloc-libs are required by PMIx, PRRTE, and OpenMPI at runtime.
 RUN dnf -y install \
         systemd \
         munge \
@@ -100,12 +218,18 @@ RUN dnf -y install \
         openssh-server \
         openssh-clients \
         dbus-libs \
+        libevent \
+        hwloc-libs \
+        gcc \
     && dnf clean all
 
-# Bring in only the compiled Slurm binaries, libraries, and config from the
-# builder stage — keeps the final image small.
-COPY --from=builder /slurm-install/usr /usr
-COPY --from=builder /slurm-install/etc /etc
+# Bring in compiled artifacts from each builder stage.
+COPY --from=slurm-builder /install/usr /usr
+COPY --from=slurm-builder /install/etc /etc
+COPY --from=ucx-builder /install/usr /usr
+COPY --from=pmix-builder /install/usr /usr
+COPY --from=prrte-builder /install/usr /usr
+COPY --from=ompi-builder /install/usr /usr
 
 # Slurm daemons run as the unprivileged slurm user
 RUN useradd -r -s /sbin/nologin slurm
@@ -149,7 +273,11 @@ RUN systemctl mask \
 LABEL org.opencontainers.image.title="sind-node" \
       org.opencontainers.image.description="Generic Slurm node for sind" \
       org.opencontainers.image.version="${SLURM_VERSION}" \
-      sind.slurm.version="${SLURM_VERSION}"
+      sind.slurm.version="${SLURM_VERSION}" \
+      sind.ucx.version="${UCX_VERSION}" \
+      sind.pmix.version="${PMIX_VERSION}" \
+      sind.prrte.version="${PRRTE_VERSION}" \
+      sind.ompi.version="${OMPI_VERSION}"
 
 VOLUME ["/etc/slurm", "/etc/munge", "/data"]
 WORKDIR /data

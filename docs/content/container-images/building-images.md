@@ -20,8 +20,10 @@ This is the default image when `defaults.image` is not specified.
 The default image:
 
 - Is based on Rocky Linux 10
-- Builds Slurm from source
-- Contains all daemons (slurmctld, slurmd, munge, sshd)
+- Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
+- Contains all Slurm daemons (slurmctld, slurmd, munge, sshd) and a full MPI stack
+- Slurm is built with PMIx support (`--with-pmix`) for native PMIx job launch
+- OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1)
 
 sind enables the appropriate Slurm services based on node role at container start.
