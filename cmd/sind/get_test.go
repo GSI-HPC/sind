@@ -11,11 +11,17 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// nodeInspectJSON returns mock docker inspect output for a container with the given IP on the given network.
+func nodeInspectJSON(name, ip, network string) string {
+	return fmt.Sprintf(`[{"Id":"id","Name":"/%s","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"%s":{"IPAddress":"%s"}}}}]`, name, network, ip)
+}
 
 func TestGetSSHConfig_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
@@ -108,12 +114,45 @@ func TestGetNodes_Output(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
+	m.AddResult(nodeInspectJSON("sind-dev-controller", "10.0.0.2", "sind-dev-net"), "", nil)
+	m.AddResult(nodeInspectJSON("sind-dev-worker-0", "10.0.0.3", "sind-dev-net"), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "nodes", "dev")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "NAME")
-	assert.Contains(t, stdout, "controller.dev")
-	assert.Contains(t, stdout, "worker-0.dev")
+	assert.Contains(t, stdout, "CONTAINER")
+	assert.Contains(t, stdout, "FQDN")
+	assert.Contains(t, stdout, "IP")
+	assert.Contains(t, stdout, "sind-dev-controller")
+	assert.Contains(t, stdout, "controller.dev.sind.sind")
+	assert.Contains(t, stdout, "10.0.0.2")
+	assert.Contains(t, stdout, "sind-dev-worker-0")
+	assert.NotContains(t, stdout, "CLUSTER")
+}
+
+func TestGetNodes_AllClusters(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-prod-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=prod,sind.role=controller",
+		},
+	), "", nil)
+	m.AddResult(nodeInspectJSON("sind-dev-controller", "10.0.0.2", "sind-dev-net"), "", nil)
+	m.AddResult(nodeInspectJSON("sind-prod-controller", "10.1.0.2", "sind-prod-net"), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "nodes")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "CONTAINER")
+	assert.Contains(t, stdout, "CLUSTER")
+	assert.Contains(t, stdout, "FQDN")
+	assert.Contains(t, stdout, "sind-dev-controller")
+	assert.Contains(t, stdout, "dev")
+	assert.Contains(t, stdout, "sind-prod-controller")
+	assert.Contains(t, stdout, "prod")
 }
 
 func TestGetNetworks_CommandExists(t *testing.T) {
@@ -266,21 +305,29 @@ func TestGetNodes_JSON(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
+	m.AddResult(nodeInspectJSON("sind-dev-controller", "10.0.0.2", "sind-dev-net"), "", nil)
+	m.AddResult(nodeInspectJSON("sind-dev-worker-0", "10.0.0.3", "sind-dev-net"), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "nodes", "dev", "--output", "json")
 	require.NoError(t, err)
 
 	var got []struct {
-		Name   string `json:"name"`
-		Role   string `json:"role"`
-		Status string `json:"status"`
+		Container string `json:"container"`
+		Cluster   string `json:"cluster"`
+		Role      string `json:"role"`
+		FQDN      string `json:"fqdn"`
+		IP        string `json:"ip"`
+		Status    string `json:"status"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.Len(t, got, 2)
-	assert.Equal(t, "controller.dev", got[0].Name)
+	assert.Equal(t, "sind-dev-controller", got[0].Container)
+	assert.Equal(t, "dev", got[0].Cluster)
 	assert.Equal(t, "controller", got[0].Role)
+	assert.Equal(t, "controller.dev.sind.sind", got[0].FQDN)
+	assert.Equal(t, "10.0.0.2", got[0].IP)
 	assert.Equal(t, "running", got[0].Status)
-	assert.Equal(t, "worker-0.dev", got[1].Name)
+	assert.Equal(t, "sind-dev-worker-0", got[1].Container)
 }
 
 func TestGetDNS_JSON(t *testing.T) {
@@ -566,6 +613,100 @@ func TestFormatServices_Multiple(t *testing.T) {
 	assert.Equal(t, "slurmctld \u2713 slurmd \u2717", got)
 }
 
+// --- Node (single) ---
+
+func TestGetNode_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"get", "node"})
+	require.NoError(t, err)
+	assert.Equal(t, "node NODE[.CLUSTER]", c.Use)
+}
+
+func TestGetNode_RequiresArg(t *testing.T) {
+	_, _, err := executeCommand("get", "node")
+	assert.Error(t, err)
+}
+
+func TestGetNode_RejectsFQDN(t *testing.T) {
+	_, _, err := executeCommand("get", "node", "worker-0.dev.sind.sind")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "NODE[.CLUSTER]")
+	assert.Contains(t, err.Error(), "worker-0.dev.sind.sind")
+}
+
+func TestGetNode_Output(t *testing.T) {
+	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"controller","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}]`
+
+	m := &mock.Executor{
+		OnCall: func(args []string, _ string) mock.Result {
+			if len(args) >= 2 && args[0] == "inspect" {
+				return mock.Result{Stdout: inspectWithLabels}
+			}
+			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
+				return mock.Result{Stdout: "active\n"}
+			}
+			if len(args) >= 3 && args[2] == "bash" {
+				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+			}
+			if len(args) >= 3 && args[2] == "scontrol" {
+				return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+			}
+			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+		},
+	}
+
+	stdout, _, err := executeWithMock(m, "get", "node", "controller.dev")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "CONTAINER")
+	assert.Contains(t, stdout, "FQDN")
+	assert.Contains(t, stdout, "IP")
+	assert.Contains(t, stdout, "sind-dev-controller")
+	assert.Contains(t, stdout, "controller.dev.sind.sind")
+	assert.Contains(t, stdout, "10.0.0.2")
+	assert.Contains(t, stdout, "SERVICES")
+	assert.Contains(t, stdout, "munge")
+	assert.Contains(t, stdout, "sshd")
+	assert.Contains(t, stdout, "slurmctld")
+	assert.Contains(t, stdout, "\u2713")
+}
+
+func TestGetNode_JSON(t *testing.T) {
+	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"controller","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}]`
+
+	m := &mock.Executor{
+		OnCall: func(args []string, _ string) mock.Result {
+			if len(args) >= 2 && args[0] == "inspect" {
+				return mock.Result{Stdout: inspectWithLabels}
+			}
+			if len(args) >= 4 && args[2] == "systemctl" {
+				return mock.Result{Stdout: "active\n"}
+			}
+			if len(args) >= 3 && args[2] == "bash" {
+				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+			}
+			if len(args) >= 3 && args[2] == "scontrol" {
+				return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+			}
+			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+		},
+	}
+
+	stdout, _, err := executeWithMock(m, "get", "node", "controller.dev", "--output", "json")
+	require.NoError(t, err)
+
+	var got cluster.NodeDetail
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, "sind-dev-controller", got.Container)
+	assert.Equal(t, "dev", got.Cluster)
+	assert.Equal(t, config.RoleController, got.Role)
+	assert.Equal(t, "controller.dev.sind.sind", got.FQDN)
+	assert.Equal(t, "10.0.0.2", got.IP)
+	assert.Equal(t, docker.StateRunning, got.Status)
+	assert.True(t, got.Munge)
+	assert.True(t, got.SSHD)
+	assert.True(t, got.Services["slurmctld"])
+}
+
 // --- Integration ---
 
 func TestGetClustersEmpty(t *testing.T) {
@@ -629,7 +770,7 @@ func TestGetLifecycle(t *testing.T) {
 	// get nodes
 	stdout, _, err = executeWithRealm(realm, "get", "nodes", cluster)
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "controller."+cluster)
+	assert.Contains(t, stdout, string(ctrName))
 
 	// get networks
 	stdout, _, err = executeWithRealm(realm, "get", "networks")

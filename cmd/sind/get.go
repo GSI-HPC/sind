@@ -30,6 +30,7 @@ func newGetCommand() *cobra.Command {
 
 	cmd.AddCommand(newGetClusterCommand())
 	cmd.AddCommand(newGetClustersCommand())
+	cmd.AddCommand(newGetNodeCommand())
 	cmd.AddCommand(newGetNodesCommand())
 	cmd.AddCommand(newGetNetworksCommand())
 	cmd.AddCommand(newGetVolumesCommand())
@@ -58,15 +59,14 @@ func newGetClustersCommand() *cobra.Command {
 func newGetNodesCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "nodes [CLUSTER]",
-		Short:             "List nodes in a cluster",
+		Short:             "List nodes",
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
 			if len(args) > 0 {
-				name = args[0]
+				return runGetNodes(cmd, args[0])
 			}
-			return runGetNodes(cmd, name)
+			return runGetAllNodes(cmd)
 		},
 	}
 }
@@ -117,6 +117,110 @@ func runGetClusters(cmd *cobra.Command) error {
 	return w.Flush()
 }
 
+func newGetNodeCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:               "node NODE[.CLUSTER]",
+		Short:             "Show node health status (accepts bare name or NODE.CLUSTER)",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeNodeNames,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGetNode(cmd, args[0])
+		},
+	}
+}
+
+func runGetNode(cmd *cobra.Command, arg string) error {
+	if strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
+		return fmt.Errorf("use NODE[.CLUSTER], not the FQDN %q", arg)
+	}
+	// Parse shortName.cluster on the first dot (node short names do not
+	// contain dots; cluster names may).
+	shortName, clusterName := arg, config.DefaultClusterName
+	if i := strings.Index(arg, "."); i >= 0 {
+		shortName = arg[:i]
+		clusterName = arg[i+1:]
+	}
+
+	client := clientFrom(cmd.Context())
+	realm := realmFromFlag(cmd)
+	containerName := string(cluster.ContainerName(realm, clusterName, shortName))
+
+	info, err := client.InspectContainer(cmd.Context(), docker.ContainerName(containerName))
+	if err != nil {
+		return fmt.Errorf("inspecting container: %w", err)
+	}
+
+	role := config.Role(info.Labels[cluster.LabelRole])
+	health, err := cluster.GetNodeHealth(cmd.Context(), client, containerName, role, realm, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), cluster.NodeDetail{
+			Container: containerName,
+			Cluster:   clusterName,
+			Role:      role,
+			FQDN:      cluster.DNSName(shortName, clusterName, realm),
+			IP:        health.IP,
+			Status:    health.Container,
+			Munge:     health.Munge,
+			SSHD:      health.SSHD,
+			Services:  health.Services,
+		})
+	}
+
+	out := cmd.OutOrStdout()
+	fqdn := cluster.DNSName(shortName, clusterName, realm)
+
+	w := newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, role, fqdn, health.IP, health.Container)
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "SERVICES")
+	w = newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "NAME\tSTATUS")
+	_, _ = fmt.Fprintf(w, "munge\t%s\n", checkmark(health.Munge))
+	_, _ = fmt.Fprintf(w, "sshd\t%s\n", checkmark(health.SSHD))
+	for _, name := range sortedServiceNames(health.Services) {
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", name, checkmark(health.Services[name]))
+	}
+	return w.Flush()
+}
+
+// sortedServiceNames returns service names sorted alphabetically.
+func sortedServiceNames(services cluster.ServiceHealth) []string {
+	names := make([]string, 0, len(services))
+	for name := range services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func runGetAllNodes(cmd *cobra.Command) error {
+	client := clientFrom(cmd.Context())
+	nodes, err := cluster.GetAllNodes(cmd.Context(), client, realmFromFlag(cmd))
+	if err != nil {
+		return err
+	}
+
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), nodes)
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(w, "CONTAINER\tCLUSTER\tROLE\tFQDN\tIP\tSTATUS")
+	for _, n := range nodes {
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", n.Container, n.Cluster, n.Role, n.FQDN, n.IP, n.State)
+	}
+	return w.Flush()
+}
+
 func runGetNodes(cmd *cobra.Command, name string) error {
 	client := clientFrom(cmd.Context())
 	nodes, err := cluster.GetNodes(cmd.Context(), client, realmFromFlag(cmd), name)
@@ -125,27 +229,13 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 	}
 
 	if isJSONOutput(cmd) {
-		// Qualify node names with cluster for JSON output.
-		type jsonNode struct {
-			Name   string      `json:"name"`
-			Role   config.Role `json:"role"`
-			Status string      `json:"status"`
-		}
-		out := make([]jsonNode, len(nodes))
-		for i, n := range nodes {
-			out[i] = jsonNode{
-				Name:   n.Name + "." + name,
-				Role:   n.Role,
-				Status: string(n.State),
-			}
-		}
-		return writeJSON(cmd.OutOrStdout(), out)
+		return writeJSON(cmd.OutOrStdout(), nodes)
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tROLE\tSTATUS")
+	_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
 	for _, n := range nodes {
-		_, _ = fmt.Fprintf(w, "%s.%s\t%s\t%s\n", n.Name, name, n.Role, n.State)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", n.Container, n.Role, n.FQDN, n.IP, n.State)
 	}
 	return w.Flush()
 }

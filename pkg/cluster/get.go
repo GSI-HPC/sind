@@ -82,30 +82,75 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 
 // NodeSummary holds summary information about a node in a sind cluster.
 type NodeSummary struct {
-	Name  string      `json:"name"` // short name: "controller", "worker-0"
-	Role  config.Role `json:"role"` // "controller", "submitter", "worker"
-	State State       `json:"status"`
+	Container string      `json:"container"` // Docker container name
+	Cluster   string      `json:"cluster"`   // cluster name
+	Role      config.Role `json:"role"`
+	FQDN      string      `json:"fqdn"` // DNS name
+	IP        string      `json:"ip"`   // container IP on cluster network
+	State     State       `json:"status"`
+}
+
+// NodeDetail holds the full identity and health information for a single node
+// as reported by 'sind get node'. It extends NodeSummary with per-service
+// health flags derived from NodeHealth.
+type NodeDetail struct {
+	Container string                `json:"container"`
+	Cluster   string                `json:"cluster"`
+	Role      config.Role           `json:"role"`
+	FQDN      string                `json:"fqdn"`
+	IP        string                `json:"ip"`
+	Status    docker.ContainerState `json:"status"`
+	Munge     bool                  `json:"munge"`
+	SSHD      bool                  `json:"sshd"`
+	Services  ServiceHealth         `json:"services"`
+}
+
+// GetAllNodes lists all nodes across all clusters in the realm.
+func GetAllNodes(ctx context.Context, client *docker.Client, realm string) ([]*NodeSummary, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	return buildNodeSummaries(ctx, client, realm, containers)
 }
 
 // GetNodes lists all nodes in the named cluster.
 func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName string) ([]*NodeSummary, error) {
 	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
+	return buildNodeSummaries(ctx, client, realm, containers)
+}
+
+// buildNodeSummaries converts container list entries into node summaries.
+func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string, containers []docker.ContainerListEntry) ([]*NodeSummary, error) {
 	if len(containers) == 0 {
 		return nil, nil
 	}
-
-	prefix := ContainerPrefix(realm, clusterName)
 	result := make([]*NodeSummary, 0, len(containers))
 	for _, c := range containers {
+		clusterName := c.Labels[LabelCluster]
+		if clusterName == "" {
+			continue
+		}
+		prefix := ContainerPrefix(realm, clusterName)
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
+
+		var ip string
+		if info, err := client.InspectContainer(ctx, c.Name); err == nil {
+			ip = info.IPs[NetworkName(realm, clusterName)]
+		}
+
 		result = append(result, &NodeSummary{
-			Name:  shortName,
-			Role:  config.Role(c.Labels[LabelRole]),
-			State: containerStateToState(c.State),
+			Container: string(c.Name),
+			Cluster:   clusterName,
+			Role:      config.Role(c.Labels[LabelRole]),
+			FQDN:      DNSName(shortName, clusterName, realm),
+			IP:        ip,
+			State:     containerStateToState(c.State),
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -114,10 +159,9 @@ func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName str
 	return result, nil
 }
 
-// nodeOrder returns a sort key that orders nodes by role (controller, submitter, worker)
-// then by name within each role.
+// nodeOrder returns a sort key that orders nodes by cluster, then role, then name.
 func nodeOrder(n *NodeSummary) string {
-	return roleSortKey(n.Role, n.Name)
+	return n.Cluster + roleSortKey(n.Role, n.Container)
 }
 
 // roleSortKey returns a sort key that orders by role (controller, submitter, worker)

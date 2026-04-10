@@ -208,6 +208,10 @@ func TestGetNodes(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
+	devNet := map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", devNet), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-worker-1", "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.0.4"}), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-worker-0", "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.0.3"}), "", nil)
 	c := docker.NewClient(&m)
 
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -216,18 +220,22 @@ func TestGetNodes(t *testing.T) {
 	require.Len(t, nodes, 3)
 
 	// Sorted: controller first, then worker by name.
-	assert.Equal(t, "controller", nodes[0].Name)
+	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
+	assert.Equal(t, "dev", nodes[0].Cluster)
 	assert.Equal(t, config.RoleController, nodes[0].Role)
+	assert.Equal(t, "controller.dev.sind.sind", nodes[0].FQDN)
+	assert.Equal(t, "10.0.0.2", nodes[0].IP)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
-	assert.Equal(t, "worker-0", nodes[1].Name)
+	assert.Equal(t, "sind-dev-worker-0", nodes[1].Container)
 	assert.Equal(t, config.RoleWorker, nodes[1].Role)
 
-	assert.Equal(t, "worker-1", nodes[2].Name)
+	assert.Equal(t, "sind-dev-worker-1", nodes[2].Container)
 	assert.Equal(t, config.RoleWorker, nodes[2].Role)
 }
 
 func TestGetNodes_WithStatus(t *testing.T) {
+	net := map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
@@ -243,6 +251,9 @@ func TestGetNodes_WithStatus(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", net), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-worker-0", "exited", net), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-worker-1", "paused", net), "", nil)
 	c := docker.NewClient(&m)
 
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -285,12 +296,12 @@ func TestGetNodes_LabelFilter(t *testing.T) {
 
 	require.Len(t, m.Calls, 1)
 	args := m.Calls[0].Args
-	filterIdx := indexOf(args, "--filter")
-	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label=sind.cluster=myCluster", args[filterIdx+1])
+	assert.Contains(t, args, "label=sind.realm=sind")
+	assert.Contains(t, args, "label=sind.cluster=myCluster")
 }
 
 func TestGetNodes_SortOrder(t *testing.T) {
+	net := map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
@@ -306,6 +317,9 @@ func TestGetNodes_SortOrder(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
 	), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-worker-0", "running", net), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-submitter", "running", net), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", net), "", nil)
 	c := docker.NewClient(&m)
 
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -319,6 +333,7 @@ func TestGetNodes_SortOrder(t *testing.T) {
 }
 
 func TestGetNodes_UnknownRole(t *testing.T) {
+	net := map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		testutil.PsEntry{
@@ -330,6 +345,8 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=mystery",
 		},
 	), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", net), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-mystery", "running", net), "", nil)
 	c := docker.NewClient(&m)
 
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -339,6 +356,79 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 	// controller (prefix "0") sorts before unknown role (prefix "9").
 	assert.Equal(t, config.RoleController, nodes[0].Role)
 	assert.Equal(t, config.Role("mystery"), nodes[1].Role)
+}
+
+// --- GetAllNodes ---
+
+func TestGetAllNodes(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-prod-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=prod,sind.role=controller",
+		},
+	), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}), "", nil)
+	m.AddResult(inspectJSON(t, "sind-prod-controller", "running", map[docker.NetworkName]string{"sind-prod-net": "10.1.0.2"}), "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetAllNodes(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	assert.Equal(t, "dev", nodes[0].Cluster)
+	assert.Equal(t, "prod", nodes[1].Cluster)
+}
+
+func TestGetAllNodes_OnlyOrphanContainers(t *testing.T) {
+	// Containers exist but none carry the sind.cluster label, so they should
+	// all be skipped and the result is an empty slice.
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "orphan-1", State: "running", Image: "img"},
+		testutil.PsEntry{ID: "b", Names: "orphan-2", State: "running", Image: "img"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetAllNodes(t.Context(), c, mesh.DefaultRealm)
+	require.NoError(t, err)
+	assert.Empty(t, nodes)
+}
+
+func TestGetAllNodes_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetAllNodes(t.Context(), c, mesh.DefaultRealm)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing containers")
+}
+
+func TestGetNodes_SkipsEmptyClusterLabel(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "orphan", State: "running", Image: "img",
+		},
+	), "", nil)
+	m.AddResult(inspectJSON(t, "sind-dev-controller", "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}), "", nil)
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
 }
 
 func TestContainerStateToState(t *testing.T) {
