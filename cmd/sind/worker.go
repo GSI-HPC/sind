@@ -33,6 +33,10 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd.Flags().String("tmp-size", "", "/tmp tmpfs size")
 	cmd.Flags().Bool("unmanaged", false, "don't start slurmd, don't add to slurm.conf")
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
+	cmd.Flags().StringSlice("cap-add", nil, "add Linux capabilities (e.g. SYS_ADMIN)")
+	cmd.Flags().StringSlice("cap-drop", nil, "drop Linux capabilities")
+	cmd.Flags().StringSlice("device", nil, "host devices to expose (e.g. /dev/fuse)")
+	cmd.Flags().StringSlice("security-opt", nil, "security options")
 
 	return cmd
 }
@@ -45,6 +49,10 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	tmpSize, _ := cmd.Flags().GetString("tmp-size")
 	unmanaged, _ := cmd.Flags().GetBool("unmanaged")
 	pull, _ := cmd.Flags().GetBool("pull")
+	capAdd, _ := cmd.Flags().GetStringSlice("cap-add")
+	capDrop, _ := cmd.Flags().GetStringSlice("cap-drop")
+	devices, _ := cmd.Flags().GetStringSlice("device")
+	securityOpt, _ := cmd.Flags().GetStringSlice("security-opt")
 
 	opts := cluster.WorkerAddOptions{
 		ClusterName: clusterName,
@@ -55,6 +63,10 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		TmpSize:     tmpSize,
 		Unmanaged:   unmanaged,
 		Pull:        pull,
+		CapAdd:      capAdd,
+		CapDrop:     capDrop,
+		Devices:     devices,
+		SecurityOpt: securityOpt,
 	}
 
 	ctx := cmd.Context()

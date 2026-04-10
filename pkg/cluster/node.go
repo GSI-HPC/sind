@@ -67,6 +67,10 @@ type RunConfig struct {
 	Managed         bool        // start slurmd and add to slurm.conf (worker only)
 	ContainerNumber int         // 1-based compose container instance number
 	Pull            bool        // force fresh image pull (--pull always)
+	CapAdd          []string    // extra Linux capabilities (e.g. "SYS_ADMIN")
+	CapDrop         []string    // dropped Linux capabilities
+	Devices         []string    // host devices to expose (e.g. "/dev/fuse")
+	SecurityOpt     []string    // extra security options
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.
@@ -128,6 +132,20 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--security-opt", "writable-cgroups=true",
 		"--security-opt", "label=disable",
 	)
+
+	// Extra capabilities and devices (opt-in)
+	for _, cap := range cfg.CapAdd {
+		args = append(args, "--cap-add", cap)
+	}
+	for _, cap := range cfg.CapDrop {
+		args = append(args, "--cap-drop", cap)
+	}
+	for _, dev := range cfg.Devices {
+		args = append(args, "--device", dev)
+	}
+	for _, opt := range cfg.SecurityOpt {
+		args = append(args, "--security-opt", opt)
+	}
 
 	// Labels
 	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
@@ -206,6 +224,10 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				DataMountPath:   dataMountPath,
 				ContainerNumber: 1,
 				Pull:            cfg.Pull,
+				CapAdd:          n.CapAdd,
+				CapDrop:         n.CapDrop,
+				Devices:         n.Devices,
+				SecurityOpt:     n.SecurityOpt,
 			})
 		case config.RoleWorker:
 			count := n.Count
@@ -230,6 +252,10 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 					Managed:         isManaged,
 					ContainerNumber: workerIdx + 1,
 					Pull:            cfg.Pull,
+					CapAdd:          n.CapAdd,
+					CapDrop:         n.CapDrop,
+					Devices:         n.Devices,
+					SecurityOpt:     n.SecurityOpt,
 				})
 				workerIdx++
 			}

@@ -16,10 +16,14 @@ import (
 
 // Defaults holds default settings applied to all nodes unless overridden.
 type Defaults struct {
-	Image   string `json:"image,omitempty"`
-	CPUs    int    `json:"cpus,omitempty"`
-	Memory  string `json:"memory,omitempty"`
-	TmpSize string `json:"tmpSize,omitempty"`
+	Image       string   `json:"image,omitempty"`
+	CPUs        int      `json:"cpus,omitempty"`
+	Memory      string   `json:"memory,omitempty"`
+	TmpSize     string   `json:"tmpSize,omitempty"`
+	CapAdd      []string `json:"capAdd,omitempty"`
+	CapDrop     []string `json:"capDrop,omitempty"`
+	Devices     []string `json:"devices,omitempty"`
+	SecurityOpt []string `json:"securityOpt,omitempty"`
 }
 
 // Role identifies the function of a node within a cluster.
@@ -34,13 +38,17 @@ const (
 
 // Node represents a single node or node group in the cluster configuration.
 type Node struct {
-	Role    Role   `json:"role"`
-	Count   int    `json:"count,omitempty"`
-	Image   string `json:"image,omitempty"`
-	CPUs    int    `json:"cpus,omitempty"`
-	Memory  string `json:"memory,omitempty"`
-	TmpSize string `json:"tmpSize,omitempty"`
-	Managed *bool  `json:"managed,omitempty"`
+	Role        Role     `json:"role"`
+	Count       int      `json:"count,omitempty"`
+	Image       string   `json:"image,omitempty"`
+	CPUs        int      `json:"cpus,omitempty"`
+	Memory      string   `json:"memory,omitempty"`
+	TmpSize     string   `json:"tmpSize,omitempty"`
+	Managed     *bool    `json:"managed,omitempty"`
+	CapAdd      []string `json:"capAdd,omitempty"`
+	CapDrop     []string `json:"capDrop,omitempty"`
+	Devices     []string `json:"devices,omitempty"`
+	SecurityOpt []string `json:"securityOpt,omitempty"`
 }
 
 // UnmarshalJSON supports three YAML forms:
@@ -241,7 +249,35 @@ func (c *Cluster) ApplyDefaults() {
 		if c.Nodes[i].TmpSize == "" {
 			c.Nodes[i].TmpSize = tmpSize
 		}
+		// Security fields: per-node values merge with (not replace) defaults
+		c.Nodes[i].CapAdd = mergeStringSlices(c.Defaults.CapAdd, c.Nodes[i].CapAdd)
+		c.Nodes[i].CapDrop = mergeStringSlices(c.Defaults.CapDrop, c.Nodes[i].CapDrop)
+		c.Nodes[i].Devices = mergeStringSlices(c.Defaults.Devices, c.Nodes[i].Devices)
+		c.Nodes[i].SecurityOpt = mergeStringSlices(c.Defaults.SecurityOpt, c.Nodes[i].SecurityOpt)
 	}
+}
+
+// mergeStringSlices merges two string slices, deduplicating entries.
+// Returns nil if both inputs are empty.
+func mergeStringSlices(base, overlay []string) []string {
+	if len(base) == 0 && len(overlay) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(base)+len(overlay))
+	var result []string
+	for _, s := range base {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			result = append(result, s)
+		}
+	}
+	for _, s := range overlay {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // Validate checks that the cluster configuration satisfies all constraints.
@@ -279,6 +315,25 @@ func (c *Cluster) Validate() error {
 	}
 	if workers < 1 {
 		return fmt.Errorf("at least one worker node required, got %d", workers)
+	}
+
+	for _, n := range c.Nodes {
+		for _, cap := range n.CapAdd {
+			if !isValidCapability(cap) {
+				return fmt.Errorf("unknown capability %q in capAdd", cap)
+			}
+		}
+		for _, cap := range n.CapDrop {
+			if !isValidCapability(cap) {
+				return fmt.Errorf("unknown capability %q in capDrop", cap)
+			}
+		}
+		for _, dev := range n.Devices {
+			hostDev := strings.SplitN(dev, ":", 2)[0]
+			if !strings.HasPrefix(hostDev, "/") {
+				return fmt.Errorf("device path must be absolute, got %q", dev)
+			}
+		}
 	}
 
 	sections := []struct {

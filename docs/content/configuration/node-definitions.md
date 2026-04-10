@@ -24,8 +24,12 @@ toc: true
 | `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp` |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+| `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
+| `capDrop` | global + per-node | none | Dropped Linux capabilities |
+| `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
+| `securityOpt` | global + per-node | none | Extra security options |
 
-Per-node values override the `defaults` section, which in turn overrides the built-in defaults.
+Per-node scalar values override the `defaults` section. Security list fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
 
 ## Shorthand syntax
 
@@ -74,6 +78,48 @@ Unmanaged workers can also be created dynamically:
 
 ```bash
 sind create worker --count 2 --unmanaged
+```
+
+## Capabilities and devices
+
+sind's default security posture avoids extra capabilities and device access. When specific use cases require them (e.g. testing CVMFS provisioning or FUSE-based filesystems), you can grant targeted privileges per node.
+
+```yaml
+nodes:
+  - role: controller
+  - role: worker
+    count: 3
+    capAdd:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse
+```
+
+Capability names follow Docker convention (without the `CAP_` prefix). Device strings use Docker's format: `/dev/fuse` or `/dev/sda:/dev/xvda:rwm`.
+
+When set in the `defaults` section, security fields apply to all nodes. Per-node values merge with (not replace) defaults:
+
+```yaml
+defaults:
+  capAdd:
+    - SYS_ADMIN
+  devices:
+    - /dev/fuse
+
+nodes:
+  - role: controller
+  - role: worker
+    count: 3
+    capAdd:
+      - NET_ADMIN    # workers get both SYS_ADMIN and NET_ADMIN
+```
+
+sind logs a notice at cluster creation when extra privileges are configured, making the escalation visible.
+
+Workers created via `sind create worker` also support these fields:
+
+```bash
+sind create worker --cap-add SYS_ADMIN --device /dev/fuse
 ```
 
 ## Default nodes

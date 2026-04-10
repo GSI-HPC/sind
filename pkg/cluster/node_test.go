@@ -698,3 +698,94 @@ func TestEnableSlurmServices_Error(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "enabling slurmctld on controller")
 }
+
+// --- Security fields in BuildRunArgs ---
+
+func TestBuildRunArgs_CapAdd(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.CapAdd = []string{"SYS_ADMIN", "NET_ADMIN"}
+	args := BuildRunArgs(cfg)
+
+	caps := testutil.ArgValues(args, "--cap-add")
+	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN"}, caps)
+}
+
+func TestBuildRunArgs_CapDrop(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.CapDrop = []string{"MKNOD"}
+	args := BuildRunArgs(cfg)
+
+	caps := testutil.ArgValues(args, "--cap-drop")
+	assert.Equal(t, []string{"MKNOD"}, caps)
+}
+
+func TestBuildRunArgs_Devices(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.Devices = []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}
+	args := BuildRunArgs(cfg)
+
+	devs := testutil.ArgValues(args, "--device")
+	assert.Equal(t, []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}, devs)
+}
+
+func TestBuildRunArgs_SecurityOptExtra(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.SecurityOpt = []string{"apparmor=unconfined"}
+	args := BuildRunArgs(cfg)
+
+	secOpts := testutil.ArgValues(args, "--security-opt")
+	// Should contain both the built-in opts and the extra one
+	assert.Contains(t, secOpts, "writable-cgroups=true")
+	assert.Contains(t, secOpts, "label=disable")
+	assert.Contains(t, secOpts, "apparmor=unconfined")
+}
+
+func TestBuildRunArgs_NoSecurityFieldsByDefault(t *testing.T) {
+	cfg := defaultRunConfig()
+	args := BuildRunArgs(cfg)
+
+	// No --cap-add, --cap-drop, or --device flags
+	caps := testutil.ArgValues(args, "--cap-add")
+	assert.Empty(t, caps)
+
+	drops := testutil.ArgValues(args, "--cap-drop")
+	assert.Empty(t, drops)
+
+	devs := testutil.ArgValues(args, "--device")
+	assert.Empty(t, devs)
+
+	// Only the built-in security opts
+	secOpts := testutil.ArgValues(args, "--security-opt")
+	assert.Equal(t, []string{"writable-cgroups=true", "label=disable"}, secOpts)
+}
+
+// --- Security fields in NodeRunConfigs ---
+
+func TestNodeRunConfigs_SecurityFields(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+				CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}},
+			{Role: config.RoleWorker, Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+				CapAdd: []string{"NET_ADMIN"}, CapDrop: []string{"MKNOD"},
+				Devices: []string{"/dev/sda"}, SecurityOpt: []string{"apparmor=unconfined"}},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+
+	require.Len(t, configs, 3)
+
+	// Controller
+	assert.Equal(t, []string{"SYS_ADMIN"}, configs[0].CapAdd)
+	assert.Equal(t, []string{"/dev/fuse"}, configs[0].Devices)
+
+	// Workers inherit from their node config
+	for _, wc := range configs[1:] {
+		assert.Equal(t, []string{"NET_ADMIN"}, wc.CapAdd)
+		assert.Equal(t, []string{"MKNOD"}, wc.CapDrop)
+		assert.Equal(t, []string{"/dev/sda"}, wc.Devices)
+		assert.Equal(t, []string{"apparmor=unconfined"}, wc.SecurityOpt)
+	}
+}

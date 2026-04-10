@@ -93,6 +93,12 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 | `cpus` | `1` | CPU limit per container |
 | `memory` | `"512m"` | Memory limit per container |
 | `tmpSize` | `"256m"` | tmpfs size for `/tmp` |
+| `capAdd` | none | Extra Linux capabilities |
+| `capDrop` | none | Dropped Linux capabilities |
+| `devices` | none | Host devices to expose |
+| `securityOpt` | none | Extra security options |
+
+Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node values. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are merged with per-node values.
 
 ## Storage section
 
@@ -163,3 +169,5 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - `count` is only valid for worker nodes
 - `managed` is only valid for worker nodes
 - `count` must not be negative
+- `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
+- `devices` paths must be absolute (start with `/`)
