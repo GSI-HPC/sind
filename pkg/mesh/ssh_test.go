@@ -398,6 +398,141 @@ func TestAddKnownHost_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "adding known host controller.dev.sind.sind")
 }
 
+// --- AddKnownHosts (batch) ---
+
+func TestAddKnownHosts(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil) // ReadFile (empty known_hosts)
+	m.AddResult("", "", nil) // WriteFile
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddKnownHosts(t.Context(), []KnownHostEntry{
+		{Hostname: "controller.dev.sind.sind", HostKey: "ssh-ed25519 AAAA..."},
+		{Hostname: "worker-0.dev.sind.sind", HostKey: "ssh-ed25519 BBBB..."},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t,
+		"controller.dev.sind.sind ssh-ed25519 AAAA...\nworker-0.dev.sind.sind ssh-ed25519 BBBB...\n",
+		m.Calls[1].Stdin)
+}
+
+func TestAddKnownHosts_Dedup(t *testing.T) {
+	existing := "controller.dev.sind.sind ssh-ed25519 OLD-KEY\n" +
+		"worker-0.dev.sind.sind ssh-ed25519 BBBB...\n"
+
+	var m mock.Executor
+	m.AddResult(existing, "", nil) // ReadFile
+	m.AddResult("", "", nil)       // WriteFile
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddKnownHosts(t.Context(), []KnownHostEntry{
+		{Hostname: "controller.dev.sind.sind", HostKey: "ssh-ed25519 NEW-KEY"},
+	})
+	require.NoError(t, err)
+
+	// worker-0 preserved, controller replaced with new key.
+	assert.Equal(t,
+		"worker-0.dev.sind.sind ssh-ed25519 BBBB...\ncontroller.dev.sind.sind ssh-ed25519 NEW-KEY\n",
+		m.Calls[1].Stdin)
+}
+
+func TestAddKnownHosts_ReadError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("container stopped"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddKnownHosts(t.Context(), []KnownHostEntry{
+		{Hostname: "controller.dev.sind.sind", HostKey: "ssh-ed25519 AAAA..."},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reading known_hosts")
+}
+
+func TestAddKnownHosts_WriteError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)                     // ReadFile
+	m.AddResult("", "", fmt.Errorf("disk full")) // WriteFile
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddKnownHosts(t.Context(), []KnownHostEntry{
+		{Hostname: "controller.dev.sind.sind", HostKey: "ssh-ed25519 AAAA..."},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "writing known_hosts")
+}
+
+func TestAddKnownHosts_Empty(t *testing.T) {
+	var m mock.Executor
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddKnownHosts(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls, "no docker calls for empty slice")
+}
+
+// --- RemoveKnownHosts (batch) ---
+
+func TestRemoveKnownHosts(t *testing.T) {
+	existing := "controller.dev.sind.sind ssh-ed25519 AAAA...\n" +
+		"worker-0.dev.sind.sind ssh-ed25519 BBBB...\n" +
+		"worker-1.dev.sind.sind ssh-ed25519 CCCC...\n"
+
+	var m mock.Executor
+	m.AddResult(existing, "", nil) // ReadFile
+	m.AddResult("", "", nil)       // WriteFile
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.RemoveKnownHosts(t.Context(), []string{
+		"controller.dev.sind.sind",
+		"worker-1.dev.sind.sind",
+	})
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, "worker-0.dev.sind.sind ssh-ed25519 BBBB...\n", m.Calls[1].Stdin)
+}
+
+func TestRemoveKnownHosts_Empty(t *testing.T) {
+	var m mock.Executor
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.RemoveKnownHosts(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Empty(t, m.Calls, "no docker calls for empty slice")
+}
+
+func TestRemoveKnownHosts_ReadError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("container stopped"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.RemoveKnownHosts(t.Context(), []string{"controller.dev.sind.sind"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reading known_hosts")
+}
+
+func TestRemoveKnownHosts_WriteError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("controller.dev.sind.sind ssh-ed25519 AAAA...\n", "", nil) // ReadFile
+	m.AddResult("", "", fmt.Errorf("disk full"))                           // WriteFile
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.RemoveKnownHosts(t.Context(), []string{"controller.dev.sind.sind"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "writing known_hosts")
+}
+
 // --- RemoveKnownHost ---
 
 func TestRemoveKnownHost(t *testing.T) {

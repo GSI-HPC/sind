@@ -269,6 +269,40 @@ func (m *Manager) AddDNSRecord(ctx context.Context, hostname, ip string) error {
 	return m.writeDNSEntries(ctx, entries)
 }
 
+// AddDNSRecords adds multiple A records to the mesh DNS Corefile and reloads
+// CoreDNS once. Existing entries for the same hostnames are replaced,
+// making the operation idempotent on retry.
+func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	entries, err := m.readDNSEntries(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Build set of hostnames being added for dedup.
+	newHostnames := make(map[string]bool, len(records))
+	for _, r := range records {
+		newHostnames[r.Hostname] = true
+	}
+
+	// Keep existing entries that don't conflict with new ones.
+	kept := make([]string, 0, len(entries)+len(records))
+	for _, entry := range entries {
+		fields := strings.Fields(entry)
+		if len(fields) >= 2 && newHostnames[fields[1]] {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	for _, r := range records {
+		kept = append(kept, r.IP+" "+r.Hostname)
+	}
+
+	return m.writeDNSEntries(ctx, kept)
+}
+
 // RemoveDNSRecord removes all A records for the given hostname from the mesh DNS
 // Corefile and reloads CoreDNS.
 func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
@@ -281,6 +315,34 @@ func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
 	for _, entry := range entries {
 		fields := strings.Fields(entry)
 		if len(fields) >= 2 && fields[1] == hostname {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+
+	return m.writeDNSEntries(ctx, kept)
+}
+
+// RemoveDNSRecords removes all A records for the given hostnames from the
+// mesh DNS Corefile and reloads CoreDNS once.
+func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) error {
+	if len(hostnames) == 0 {
+		return nil
+	}
+	entries, err := m.readDNSEntries(ctx)
+	if err != nil {
+		return err
+	}
+
+	remove := make(map[string]bool, len(hostnames))
+	for _, h := range hostnames {
+		remove[h] = true
+	}
+
+	kept := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		fields := strings.Fields(entry)
+		if len(fields) >= 2 && remove[fields[1]] {
 			continue
 		}
 		kept = append(kept, entry)
