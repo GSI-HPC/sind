@@ -5,10 +5,13 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"golang.org/x/sync/errgroup"
 )
 
 // NodeShortNames returns the short hostname for each node defined in the config.
@@ -39,43 +42,60 @@ func NodeShortNames(nodes []config.Node) []string {
 // that would be created from the given configuration. It checks for existing
 // networks, volumes, and containers with matching names.
 func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
-	var conflicts []string
+	var (
+		mu        sync.Mutex
+		conflicts []string
+	)
+
+	check := func(ctx context.Context, kind, name string, existsFn func(context.Context) (bool, error)) error {
+		exists, err := existsFn(ctx)
+		if err != nil {
+			return fmt.Errorf("checking %s %s: %w", kind, name, err)
+		}
+		if exists {
+			mu.Lock()
+			conflicts = append(conflicts, kind+" "+name)
+			mu.Unlock()
+		}
+		return nil
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
 
 	// Check cluster network.
 	netName := NetworkName(realm, cfg.Name)
-	exists, err := client.NetworkExists(ctx, netName)
-	if err != nil {
-		return fmt.Errorf("checking network %s: %w", netName, err)
-	}
-	if exists {
-		conflicts = append(conflicts, "network "+string(netName))
-	}
+	g.Go(func() error {
+		return check(gctx, "network", string(netName), func(ctx context.Context) (bool, error) {
+			return client.NetworkExists(ctx, netName)
+		})
+	})
 
 	// Check cluster volumes.
 	for _, vtype := range AllVolumeTypes {
 		volName := VolumeName(realm, cfg.Name, vtype)
-		exists, err := client.VolumeExists(ctx, volName)
-		if err != nil {
-			return fmt.Errorf("checking volume %s: %w", volName, err)
-		}
-		if exists {
-			conflicts = append(conflicts, "volume "+string(volName))
-		}
+		g.Go(func() error {
+			return check(gctx, "volume", string(volName), func(ctx context.Context) (bool, error) {
+				return client.VolumeExists(ctx, volName)
+			})
+		})
 	}
 
 	// Check node containers.
 	for _, shortName := range NodeShortNames(cfg.Nodes) {
 		containerName := ContainerName(realm, cfg.Name, shortName)
-		exists, err := client.ContainerExists(ctx, containerName)
-		if err != nil {
-			return fmt.Errorf("checking container %s: %w", containerName, err)
-		}
-		if exists {
-			conflicts = append(conflicts, "container "+string(containerName))
-		}
+		g.Go(func() error {
+			return check(gctx, "container", string(containerName), func(ctx context.Context) (bool, error) {
+				return client.ContainerExists(ctx, containerName)
+			})
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	if len(conflicts) > 0 {
+		sort.Strings(conflicts)
 		return fmt.Errorf("conflicting resources already exist: %s", strings.Join(conflicts, ", "))
 	}
 

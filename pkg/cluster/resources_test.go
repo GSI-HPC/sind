@@ -26,7 +26,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	if !rec.IsIntegration() {
 		// CreateClusterNetwork
 		rec.AddResult("net-id\n", "", nil)
-		// CreateClusterVolumes (config, munge, data)
+		// CreateClusterVolume × 3 (config, munge, data)
 		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
 		rec.AddResult("", "", nil)
@@ -65,8 +65,10 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create volumes.
-	err = CreateClusterVolumes(ctx, c, mesh.DefaultRealm, clusterName, true)
-	require.NoError(t, err)
+	for _, vtype := range []VolumeType{VolumeConfig, VolumeMunge, VolumeData} {
+		err = CreateClusterVolume(ctx, c, mesh.DefaultRealm, clusterName, vtype)
+		require.NoError(t, err)
+	}
 
 	// Write config.
 	helperImage := "busybox:latest"
@@ -131,64 +133,34 @@ func TestCreateClusterNetwork_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating cluster network")
 }
 
-// --- CreateClusterVolumes ---
+// --- CreateClusterVolume ---
 
-func TestCreateClusterVolumes(t *testing.T) {
+func TestCreateClusterVolume(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil) // config
-	m.AddResult("", "", nil) // munge
-	m.AddResult("", "", nil) // data
+	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev", true)
+	err := CreateClusterVolume(t.Context(), c, mesh.DefaultRealm, "dev", VolumeConfig)
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 3)
+	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{
 		"volume", "create",
 		"--label", "com.docker.compose.project=sind-dev",
 		"--label", "com.docker.compose.volume=config",
 		"sind-dev-config",
 	}, m.Calls[0].Args)
-	assert.Equal(t, []string{
-		"volume", "create",
-		"--label", "com.docker.compose.project=sind-dev",
-		"--label", "com.docker.compose.volume=munge",
-		"sind-dev-munge",
-	}, m.Calls[1].Args)
-	assert.Equal(t, []string{
-		"volume", "create",
-		"--label", "com.docker.compose.project=sind-dev",
-		"--label", "com.docker.compose.volume=data",
-		"sind-dev-data",
-	}, m.Calls[2].Args)
 }
 
-func TestCreateClusterVolumes_SkipData(t *testing.T) {
+func TestCreateClusterVolume_Error(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil) // config
-	m.AddResult("", "", nil) // munge
+	m.AddResult("", "", fmt.Errorf("volume create failed"))
 	c := docker.NewClient(&m)
 
-	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev", false)
-
-	require.NoError(t, err)
-	require.Len(t, m.Calls, 2)
-	assert.Contains(t, m.Calls[0].Args[len(m.Calls[0].Args)-1], "config")
-	assert.Contains(t, m.Calls[1].Args[len(m.Calls[1].Args)-1], "munge")
-}
-
-func TestCreateClusterVolumes_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)                                // config OK
-	m.AddResult("", "", fmt.Errorf("volume create failed")) // munge fails
-	c := docker.NewClient(&m)
-
-	err := CreateClusterVolumes(t.Context(), c, mesh.DefaultRealm, "dev", true)
+	err := CreateClusterVolume(t.Context(), c, mesh.DefaultRealm, "dev", VolumeMunge)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "munge")
-	assert.Len(t, m.Calls, 2)
 }
 
 // --- WriteClusterConfig ---

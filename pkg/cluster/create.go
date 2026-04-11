@@ -212,27 +212,28 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // createResources creates cluster network, volumes, config, and munge key.
 //
 //	┌─────────┐  ┌─────────┐
-//	│ network │  │ volumes │
-//	└────┬────┘  └────┬────┘
-//	     │       ┌────┴────┐
-//	     │  ┌────┴───┐ ┌───┴────┐
-//	     │  │ config │ │  munge │
-//	     │  └────┬───┘ └───┬────┘
-//	     └───────┼─────────┘
+//	network ║ (config vol → write config) ║ (munge vol → write munge key) ║ data vol
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
-	useDataVolume := cfg.Storage.DataStorage.HostPath == ""
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return CreateClusterNetwork(gctx, client, realm, cfg.Name) })
-	g.Go(func() error { return CreateClusterVolumes(gctx, client, realm, cfg.Name, useDataVolume) })
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
-	g, gctx = errgroup.WithContext(ctx)
-	g.Go(func() error { return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull) })
-	g.Go(func() error { return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull) })
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return CreateClusterNetwork(gctx, client, realm, cfg.Name) })
+	g.Go(func() error {
+		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeConfig); err != nil {
+			return err
+		}
+		return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull)
+	})
+	g.Go(func() error {
+		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
+			return err
+		}
+		return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull)
+	})
+	if cfg.Storage.DataStorage.HostPath == "" {
+		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeData) })
+	}
 	return g.Wait()
 }
 

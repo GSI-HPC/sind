@@ -20,8 +20,7 @@ import (
 
 func TestDeleteContainers(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil) // rm -f container 1
-	m.AddResult("", "", nil) // rm -f container 2
+	m.OnCall = func(_ []string, _ string) mock.Result { return mock.Result{} }
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -32,8 +31,9 @@ func TestDeleteContainers(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"rm", "-f", "sind-dev-controller"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"rm", "-f", "sind-dev-worker-0"}, m.Calls[1].Args)
+	// Order is nondeterministic (parallel removal).
+	names := []string{m.Calls[0].Args[2], m.Calls[1].Args[2]}
+	assert.ElementsMatch(t, []string{"sind-dev-controller", "sind-dev-worker-0"}, names)
 }
 
 func TestDeleteContainers_RemoveError(t *testing.T) {
@@ -175,7 +175,7 @@ func TestDeregisterMesh_DNSError(t *testing.T) {
 	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing DNS record for controller")
+	assert.Contains(t, err.Error(), "removing DNS records")
 }
 
 func TestDeregisterMesh_KnownHostError(t *testing.T) {
@@ -208,7 +208,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing known host for controller")
+	assert.Contains(t, err.Error(), "removing known hosts")
 }
 
 // --- Delete Orchestrator ---

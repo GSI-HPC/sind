@@ -24,22 +24,14 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 	return nil
 }
 
-// CreateClusterVolumes creates the config and munge volumes for a cluster.
-// When useDataVolume is true, a data volume is also created; otherwise the
-// caller is expected to use a host-path bind mount for /data.
-func CreateClusterVolumes(ctx context.Context, client *docker.Client, realm, clusterName string, useDataVolume bool) error {
-	types := []VolumeType{VolumeConfig, VolumeMunge}
-	if useDataVolume {
-		types = append(types, VolumeData)
+// CreateClusterVolume creates a single cluster volume.
+func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clusterName string, vtype VolumeType) error {
+	labels := docker.Labels{
+		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
+		docker.ComposeVolumeLabel:  string(vtype),
 	}
-	for _, vtype := range types {
-		labels := docker.Labels{
-			docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
-			docker.ComposeVolumeLabel:  string(vtype),
-		}
-		if err := client.CreateVolume(ctx, VolumeName(realm, clusterName, vtype), labels); err != nil {
-			return fmt.Errorf("creating %s volume: %w", vtype, err)
-		}
+	if err := client.CreateVolume(ctx, VolumeName(realm, clusterName, vtype), labels); err != nil {
+		return fmt.Errorf("creating %s volume: %w", vtype, err)
 	}
 	return nil
 }

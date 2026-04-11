@@ -83,21 +83,36 @@ func TestNodeShortNames(t *testing.T) {
 
 // --- PreflightCheck ---
 
+// preflightOnCall returns an OnCall handler where resources in the exists
+// set return success (resource found) and all others return not-found.
+func preflightOnCall(t *testing.T, exists map[string]bool) func([]string, string) mock.Result {
+	t.Helper()
+	notFound := testutil.ExitCode1(t)
+	return func(args []string, _ string) mock.Result {
+		// docker <type> inspect <name>
+		name := args[len(args)-1]
+		if exists[name] {
+			return mock.Result{}
+		}
+		return mock.Result{Stderr: "Error: No such object\n", Err: notFound}
+	}
+}
+
 func TestPreflightCheck_NoConflicts(t *testing.T) {
-	m := preflightMock(t, 6, false) // network + 3 volumes + 2 containers
-	c := docker.NewClient(m)
+	var m mock.Executor
+	m.OnCall = preflightOnCall(t, nil)
+	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
 	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.NoError(t, err)
-	assert.Len(t, m.Calls, 6)
+	assert.Len(t, m.Calls, 6) // network + 3 volumes + 2 containers
 }
 
 func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil) // network exists
-	addNotFound(t, &m, 5)    // volumes + containers
+	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-net": true})
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -109,11 +124,10 @@ func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
 
 func TestPreflightCheck_ConflictingVolumes(t *testing.T) {
 	var m mock.Executor
-	addNotFound(t, &m, 1)    // network
-	m.AddResult("", "", nil) // config volume exists
-	addNotFound(t, &m, 1)    // munge volume
-	m.AddResult("", "", nil) // data volume exists
-	addNotFound(t, &m, 2)    // containers
+	m.OnCall = preflightOnCall(t, map[string]bool{
+		"sind-dev-config": true,
+		"sind-dev-data":   true,
+	})
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -127,9 +141,7 @@ func TestPreflightCheck_ConflictingVolumes(t *testing.T) {
 
 func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 	var m mock.Executor
-	addNotFound(t, &m, 4)    // network + 3 volumes
-	m.AddResult("", "", nil) // controller exists
-	addNotFound(t, &m, 1)    // worker-0
+	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-controller": true})
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -142,10 +154,11 @@ func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 
 func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil) // network exists
-	addNotFound(t, &m, 3)    // volumes
-	m.AddResult("", "", nil) // controller exists
-	m.AddResult("", "", nil) // worker-0 exists
+	m.OnCall = preflightOnCall(t, map[string]bool{
+		"sind-dev-net":        true,
+		"sind-dev-controller": true,
+		"sind-dev-worker-0":   true,
+	})
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -159,7 +172,13 @@ func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 
 func TestPreflightCheck_NetworkCheckError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	m.OnCall = func(args []string, _ string) mock.Result {
+		name := args[len(args)-1]
+		if name == "sind-dev-net" {
+			return mock.Result{Err: fmt.Errorf("docker daemon not running")}
+		}
+		return mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(t)}
+	}
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -171,8 +190,13 @@ func TestPreflightCheck_NetworkCheckError(t *testing.T) {
 
 func TestPreflightCheck_VolumeCheckError(t *testing.T) {
 	var m mock.Executor
-	addNotFound(t, &m, 1) // network
-	m.AddResult("", "", fmt.Errorf("permission denied"))
+	m.OnCall = func(args []string, _ string) mock.Result {
+		name := args[len(args)-1]
+		if name == "sind-dev-config" {
+			return mock.Result{Err: fmt.Errorf("permission denied")}
+		}
+		return mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(t)}
+	}
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -184,8 +208,13 @@ func TestPreflightCheck_VolumeCheckError(t *testing.T) {
 
 func TestPreflightCheck_ContainerCheckError(t *testing.T) {
 	var m mock.Executor
-	addNotFound(t, &m, 4) // network + volumes
-	m.AddResult("", "", fmt.Errorf("connection refused"))
+	m.OnCall = func(args []string, _ string) mock.Result {
+		name := args[len(args)-1]
+		if name == "sind-dev-controller" {
+			return mock.Result{Err: fmt.Errorf("connection refused")}
+		}
+		return mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(t)}
+	}
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -196,13 +225,11 @@ func TestPreflightCheck_ContainerCheckError(t *testing.T) {
 }
 
 func TestPreflightCheck_MultiCompute(t *testing.T) {
-	// 1 controller + 3 worker = 4 containers + 1 network + 3 volumes = 8 checks
 	var m mock.Executor
-	addNotFound(t, &m, 4)    // network + volumes
-	addNotFound(t, &m, 1)    // controller
-	m.AddResult("", "", nil) // worker-0 exists
-	addNotFound(t, &m, 1)    // worker-1
-	m.AddResult("", "", nil) // worker-2 exists
+	m.OnCall = preflightOnCall(t, map[string]bool{
+		"sind-dev-worker-0": true,
+		"sind-dev-worker-2": true,
+	})
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{
@@ -222,31 +249,6 @@ func TestPreflightCheck_MultiCompute(t *testing.T) {
 
 // --- helpers ---
 
-func minimalConfig() *config.Cluster {
-	return &config.Cluster{
-		Name: "dev",
-		Nodes: []config.Node{
-			{Role: config.RoleController},
-			{Role: config.RoleWorker, Count: 1},
-		},
-	}
-}
-
-// preflightMock returns a MockExecutor with n "not found" results (exit code 1).
-// If existAll is true, all results return success instead.
-func preflightMock(t *testing.T, n int, existAll bool) *mock.Executor {
-	t.Helper()
-	var m mock.Executor
-	for i := 0; i < n; i++ {
-		if existAll {
-			m.AddResult("", "", nil)
-		} else {
-			addNotFound(t, &m, 1)
-		}
-	}
-	return &m
-}
-
 // addNotFound adds n "not found" results (exit code 1) to the mock.
 func addNotFound(t *testing.T, m *mock.Executor, n int) {
 	t.Helper()
@@ -256,4 +258,12 @@ func addNotFound(t *testing.T, m *mock.Executor, n int) {
 	}
 }
 
-// exitCode1 runs a command that exits with code 1 and returns its ProcessState.
+func minimalConfig() *config.Cluster {
+	return &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleWorker, Count: 1},
+		},
+	}
+}
