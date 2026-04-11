@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/monitor"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -448,4 +449,141 @@ func TestContainerRunning_OOMKilled(t *testing.T) {
 
 	var te *TerminalError
 	assert.ErrorAs(t, err, &te)
+}
+
+func TestUntilReadyWithEvents_AllPass(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	events := make(chan monitor.Event, 1)
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 1)
+}
+
+func TestUntilReadyWithEvents_EventTriggersImmediateCheck(t *testing.T) {
+	var m mock.Executor
+	// First attempt: not running. Second attempt (triggered by event): running.
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	events := make(chan monitor.Event, 1)
+	// Pre-load an event so the select picks it up instead of waiting for ticker.
+	events <- monitor.Event{Kind: monitor.EventContainerStart, Node: "controller", Container: testContainer}
+
+	probes := []Probe{{"container", ContainerRunning}}
+	// Use a very long interval so only the event can trigger the re-check.
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 2)
+}
+
+func TestUntilReadyWithEvents_ContainerDie(t *testing.T) {
+	var m mock.Executor
+	// First attempt: not running.
+	m.AddResult(inspectJSON("created"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	events := make(chan monitor.Event, 1)
+	events <- monitor.Event{
+		Kind:      monitor.EventContainerDie,
+		Node:      "controller",
+		Container: testContainer,
+		Detail:    "exitCode=1",
+	}
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
+	require.Error(t, err)
+
+	var te *TerminalError
+	assert.ErrorAs(t, err, &te)
+	assert.Contains(t, err.Error(), "not ready")
+	assert.Contains(t, err.Error(), "died")
+}
+
+func TestUntilReadyWithEvents_IgnoresOtherContainerEvents(t *testing.T) {
+	var m mock.Executor
+	// First attempt: not running. Second attempt (after ticker): running.
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	events := make(chan monitor.Event, 1)
+	// Event for a different container — should be ignored.
+	events <- monitor.Event{
+		Kind:      monitor.EventContainerStart,
+		Node:      "worker-0",
+		Container: "sind-dev-worker-0",
+	}
+
+	probes := []Probe{{"container", ContainerRunning}}
+	// Short interval so the ticker fires after the ignored event.
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
+	require.NoError(t, err)
+}
+
+func TestUntilReadyWithEvents_ContextCanceled(t *testing.T) {
+	var m mock.Executor
+	for range 100 {
+		m.AddResult(inspectJSON("created"), "", nil)
+	}
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // already cancelled
+
+	events := make(chan monitor.Event)
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not ready")
+}
+
+func TestUntilReadyWithEvents_Timeout(t *testing.T) {
+	var m mock.Executor
+	for range 100 {
+		m.AddResult(inspectJSON("created"), "", nil)
+	}
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	events := make(chan monitor.Event)
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not ready")
+}
+
+func TestUntilReadyWithEvents_TerminalError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSON("exited"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	events := make(chan monitor.Event)
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exited")
+	assert.Len(t, m.Calls, 1)
 }
