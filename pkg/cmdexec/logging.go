@@ -30,3 +30,9 @@ func (l *LoggingExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, nam
 	l.Log(ctx, name+" "+strings.Join(args, " "))
 	return l.Inner.RunWithStdin(ctx, stdin, name, args...)
 }
+
+// Start implements Executor.
+func (l *LoggingExecutor) Start(ctx context.Context, name string, args ...string) (*Process, error) {
+	l.Log(ctx, name+" "+strings.Join(args, " "))
+	return l.Inner.Start(ctx, name, args...)
+}

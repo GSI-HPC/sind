@@ -7,6 +7,13 @@ threshold:
   package: 50
   total: 80
 
+exclude:
+  paths:
+    # stream.go and exec.go use real os/exec and can only be covered by
+    # integration tests. logging.go is fully unit-testable and stays in.
+    - pkg/cmdexec/stream\.go
+    - pkg/cmdexec/exec\.go
+
 override:
   - path: ^pkg/
     threshold: 100

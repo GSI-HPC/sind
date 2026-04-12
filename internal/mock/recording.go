@@ -44,6 +44,13 @@ func (r *RecordingExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, n
 	return stdout, stderr, err
 }
 
+// Start implements cmdexec.Executor.
+func (r *RecordingExecutor) Start(ctx context.Context, name string, args ...string) (*cmdexec.Process, error) {
+	proc, err := r.Inner.Start(ctx, name, args...)
+	r.record(RecordedCall{Name: name, Args: args, Err: err})
+	return proc, err
+}
+
 func (r *RecordingExecutor) record(call RecordedCall) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
