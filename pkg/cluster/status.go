@@ -33,6 +33,7 @@ type NodeHealth struct {
 // clusterName is used to select the cluster network IP.
 func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
 	name := docker.ContainerName(containerName)
+	shortName := strings.TrimPrefix(containerName, ContainerPrefix(realm, clusterName))
 
 	info, err := client.InspectContainer(ctx, name)
 	if err != nil {
@@ -47,7 +48,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 
 	// If container is not running, skip all service checks.
 	if info.Status != docker.StateRunning {
-		for _, svc := range roleServices(role) {
+		for _, svc := range roleServices(role, shortName) {
 			health.Services[svc] = false
 		}
 		return health, nil
@@ -56,7 +57,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 	health.Munge = probe.MungeReady(ctx, client, name) == nil
 	health.SSHD = probe.SSHDReady(ctx, client, name) == nil
 
-	for _, svc := range roleServices(role) {
+	for _, svc := range roleServices(role, shortName) {
 		var check probe.Func
 		switch svc {
 		case "slurmctld":
@@ -257,8 +258,13 @@ func nodeStatusOrder(n *NodeStatus) string {
 	return roleSortKey(n.Role, n.Name)
 }
 
-// roleServices returns the Slurm service names for the given role.
-func roleServices(role config.Role) []string {
+// roleServices returns the Slurm service names for the given role. The
+// backup controller (short name "controller-backup") has no managed Slurm
+// service because sind does not start slurmctld on it.
+func roleServices(role config.Role, shortName string) []string {
+	if role == config.RoleController && shortName == ControllerBackupShortName {
+		return nil
+	}
 	if svc, ok := slurm.ServiceForRole(role); ok {
 		return []string{string(svc)}
 	}

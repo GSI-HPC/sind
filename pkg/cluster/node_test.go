@@ -494,6 +494,59 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 	assert.True(t, configs[3].Managed, "worker-2 managed")
 }
 
+func TestNodeRunConfigs_BackupController(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, BackupController: true, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+				CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+
+	require.Len(t, configs, 3)
+
+	primary := configs[0]
+	backup := configs[1]
+	assert.Equal(t, "controller", primary.ShortName)
+	assert.Equal(t, 1, primary.ContainerNumber)
+	assert.Equal(t, ControllerBackupShortName, backup.ShortName)
+	assert.Equal(t, "controller-backup", backup.ShortName)
+	assert.Equal(t, 2, backup.ContainerNumber)
+	assert.Equal(t, config.RoleController, backup.Role)
+	assert.False(t, primary.Managed, "Managed left zero on controller")
+	assert.False(t, backup.Managed, "Managed left zero on controller-backup")
+
+	// Every field other than ShortName and ContainerNumber must match between
+	// primary and backup so the two containers have identical resources,
+	// volumes, caps, devices, and security opts.
+	backupNormalized := backup
+	backupNormalized.ShortName = primary.ShortName
+	backupNormalized.ContainerNumber = primary.ContainerNumber
+	assert.Equal(t, primary, backupNormalized)
+
+	// Worker follows after the backup controller and keeps its own indexing.
+	assert.Equal(t, "worker-0", configs[2].ShortName)
+}
+
+func TestNodeRunConfigs_BackupControllerDisabled(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+
+	require.Len(t, configs, 2)
+	assert.Equal(t, "controller", configs[0].ShortName)
+	assert.Equal(t, "worker-0", configs[1].ShortName)
+}
+
 func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",

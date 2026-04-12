@@ -371,6 +371,9 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		if nc.Role == config.RoleWorker && !nc.Managed {
 			continue
 		}
+		if nc.Role == config.RoleController && nc.ShortName == ControllerBackupShortName {
+			continue
+		}
 		service, ok := slurm.ServiceForRole(nc.Role)
 		if !ok {
 			continue

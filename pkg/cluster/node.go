@@ -17,6 +17,12 @@ import (
 // DefaultDataMountPath is the default mount path for the shared data volume.
 const DefaultDataMountPath = "/data"
 
+// ControllerBackupShortName is the hostname used for the optional backup
+// controller container spawned when a controller node spec has
+// backupController: true. The corresponding slurmctld is not enabled so the
+// container can be used for manual debug runs or active/passive experiments.
+const ControllerBackupShortName = "controller-backup"
+
 // Label keys used on sind containers.
 const (
 	LabelRealm        = "sind.realm"
@@ -209,7 +215,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 	for _, n := range cfg.Nodes {
 		switch n.Role {
 		case config.RoleController, config.RoleSubmitter:
-			configs = append(configs, RunConfig{
+			base := RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
 				ShortName:       string(n.Role),
@@ -228,7 +234,14 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				CapDrop:         n.CapDrop,
 				Devices:         n.Devices,
 				SecurityOpt:     n.SecurityOpt,
-			})
+			}
+			configs = append(configs, base)
+			if n.Role == config.RoleController && n.BackupController {
+				backup := base
+				backup.ShortName = ControllerBackupShortName
+				backup.ContainerNumber = 2
+				configs = append(configs, backup)
+			}
 		case config.RoleWorker:
 			count := n.Count
 			if count <= 0 {
