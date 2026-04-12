@@ -459,6 +459,50 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	assert.Contains(t, err.Error(), "no results")
 }
 
+func TestInspectContainers_Multiple(t *testing.T) {
+	const multi = `[
+  {
+    "Id": "id-a",
+    "Name": "/sind-dev-controller",
+    "State": {"Status": "running"},
+    "Config": {"Labels": {"sind.role": "controller"}},
+    "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": "172.18.0.2"}}}
+  },
+  {
+    "Id": "id-b",
+    "Name": "/sind-dev-worker-0",
+    "State": {"Status": "running"},
+    "Config": {"Labels": {"sind.role": "worker"}},
+    "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": "172.18.0.3"}}}
+  }
+]`
+	var m mock.Executor
+	m.AddResult(multi, "", nil)
+	c := NewClient(&m)
+
+	infos, err := c.InspectContainers(t.Context(), "sind-dev-controller", "sind-dev-worker-0")
+	require.NoError(t, err)
+	require.Len(t, infos, 2)
+
+	assert.Equal(t, ContainerName("sind-dev-controller"), infos[0].Name)
+	assert.Equal(t, "172.18.0.2", infos[0].IPs["sind-dev-net"])
+	assert.Equal(t, ContainerName("sind-dev-worker-0"), infos[1].Name)
+	assert.Equal(t, "172.18.0.3", infos[1].IPs["sind-dev-net"])
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"inspect", "sind-dev-controller", "sind-dev-worker-0"}, m.Calls[0].Args)
+}
+
+func TestInspectContainers_Empty(t *testing.T) {
+	var m mock.Executor
+	c := NewClient(&m)
+
+	infos, err := c.InspectContainers(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, infos)
+	assert.Empty(t, m.Calls)
+}
+
 func TestInspectContainer_ExitCodeAndOOM(t *testing.T) {
 	json := `[{
   "Id": "abc123",

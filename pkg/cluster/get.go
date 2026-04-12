@@ -130,26 +130,41 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 	if len(containers) == 0 {
 		return nil, nil
 	}
-	result := make([]*NodeSummary, 0, len(containers))
+
+	// Filter containers that belong to a cluster and collect names for a
+	// single batched docker inspect call.
+	filtered := make([]docker.ContainerListEntry, 0, len(containers))
+	names := make([]docker.ContainerName, 0, len(containers))
 	for _, c := range containers {
-		clusterName := c.Labels[LabelCluster]
-		if clusterName == "" {
+		if c.Labels[LabelCluster] == "" {
 			continue
 		}
+		filtered = append(filtered, c)
+		names = append(names, c.Name)
+	}
+	if len(filtered) == 0 {
+		return nil, nil
+	}
+
+	ipByName := make(map[docker.ContainerName]map[docker.NetworkName]string, len(filtered))
+	if infos, err := client.InspectContainers(ctx, names...); err == nil {
+		for _, info := range infos {
+			ipByName[info.Name] = info.IPs
+		}
+	}
+
+	result := make([]*NodeSummary, 0, len(filtered))
+	for _, c := range filtered {
+		clusterName := c.Labels[LabelCluster]
 		prefix := ContainerPrefix(realm, clusterName)
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
-
-		var ip string
-		if info, err := client.InspectContainer(ctx, c.Name); err == nil {
-			ip = info.IPs[NetworkName(realm, clusterName)]
-		}
 
 		result = append(result, &NodeSummary{
 			Container: string(c.Name),
 			Cluster:   clusterName,
 			Role:      config.Role(c.Labels[LabelRole]),
 			FQDN:      DNSName(shortName, clusterName, realm),
-			IP:        ip,
+			IP:        ipByName[c.Name][NetworkName(realm, clusterName)],
 			State:     containerStateToState(c.State),
 		})
 	}
