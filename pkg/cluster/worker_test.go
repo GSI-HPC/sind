@@ -385,8 +385,12 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 }
 
 func TestWorkerAdd_Managed(t *testing.T) {
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
 	var m mock.Executor
 	m.OnCall = workerAddOnCall(t)
+	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
@@ -524,16 +528,16 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 		// Should not read/write sind-nodes.conf on controller
 		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat" &&
 			strings.Contains(joined, "sind-nodes.conf") {
-			t.Error("should not read sind-nodes.conf for unmanaged worker")
+			assert.Fail(t, "should not read sind-nodes.conf for unmanaged worker")
 		}
 		// Should not call scontrol reconfigure
 		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
-			t.Error("should not call scontrol reconfigure for unmanaged worker")
+			assert.Fail(t, "should not call scontrol reconfigure for unmanaged worker")
 		}
 		// Should not enable slurmd on new node
 		if args[0] == "exec" && len(args) > 3 && strings.Contains(args[1], "worker-1") &&
 			args[2] == "systemctl" && args[3] == "enable" {
-			t.Error("should not enable slurmd for unmanaged worker")
+			assert.Fail(t, "should not enable slurmd for unmanaged worker")
 		}
 	}
 }
@@ -673,7 +677,7 @@ func TestWorkerRemove_Unmanaged(t *testing.T) {
 	for _, call := range m.Calls {
 		args := call.Args
 		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
-			t.Error("should not call scontrol reconfigure for unmanaged removal")
+			assert.Fail(t, "should not call scontrol reconfigure for unmanaged removal")
 		}
 	}
 
@@ -937,7 +941,7 @@ func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
 	for _, call := range m.Calls {
 		args := call.Args
 		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
-			t.Error("should not call scontrol reconfigure for unmanaged workers")
+			assert.Fail(t, "should not call scontrol reconfigure for unmanaged workers")
 		}
 	}
 }
@@ -983,7 +987,7 @@ func TestWorkerRemove_NoController(t *testing.T) {
 	for _, call := range m.Calls {
 		args := call.Args
 		if args[0] == "exec" && len(args) > 1 && args[1] == "sind-dev-controller" {
-			t.Error("should not interact with controller when it doesn't exist")
+			assert.Fail(t, "should not interact with controller when it doesn't exist")
 		}
 	}
 
@@ -1325,7 +1329,7 @@ func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
 	// No "docker rm" calls on worker containers → cleanup did not run.
 	for _, call := range m.Calls {
 		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
-			t.Fatal("cleanup should not run when validation fails")
+			require.Fail(t, "cleanup should not run when validation fails")
 		}
 	}
 }

@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -16,6 +17,8 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/monitor"
+	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -212,7 +215,7 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 		if args[0] == "kill" {
 			return mock.Result{}
 		}
-		t.Errorf("unexpected docker call: %v", args)
+		assert.Failf(t, "unexpected docker call", "%v", args)
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 }
@@ -231,8 +234,12 @@ func createCfg() *config.Cluster {
 func TestCreate_FullCluster(t *testing.T) {
 	exitErr := notFoundErr(t)
 
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, nil)
+	m.OnStart = pipes.OnStart
 
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -310,6 +317,26 @@ func TestCreate_CreateResourcesFails(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating cluster network")
+	assert.Nil(t, cluster)
+}
+
+func TestCreate_VolumeCreateFails(t *testing.T) {
+	exitErr := notFoundErr(t)
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
+		if args[0] == "volume" && args[1] == "create" {
+			return mock.Result{Err: fmt.Errorf("volume quota exceeded")}, true
+		}
+		return mock.Result{}, false
+	})
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "volume")
 	assert.Nil(t, cluster)
 }
 
@@ -529,7 +556,7 @@ func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
 			continue
 		}
 		if seenPs && len(call.Args) >= 2 && call.Args[0] == "container" && call.Args[1] == "inspect" {
-			t.Fatal("mesh cleanup should not run when mesh was pre-existing")
+			require.Fail(t, "mesh cleanup should not run when mesh was pre-existing")
 		}
 	}
 }
@@ -551,7 +578,7 @@ func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 	// No "docker ps" calls → cleanup did not run.
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			t.Fatal("cleanup should not run when preflight fails")
+			require.Fail(t, "cleanup should not run when preflight fails")
 		}
 	}
 }
@@ -576,7 +603,7 @@ func TestCreate_NoClusterCleanupOnResolveInfraFailure(t *testing.T) {
 	require.Error(t, err)
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			t.Fatal("cluster cleanup should not run when resolveInfra fails")
+			require.Fail(t, "cluster cleanup should not run when resolveInfra fails")
 		}
 	}
 }
@@ -832,7 +859,8 @@ func TestSetupNodes_InspectError(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	_, err := setupNodes(ctx, client, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting node controller")
@@ -865,7 +893,8 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	_, err := setupNodes(ctx, client, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "injecting SSH key")
@@ -903,7 +932,8 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	_, err := setupNodes(ctx, client, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "collecting host key")
@@ -1035,8 +1065,74 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond)
+	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
+}
+
+func TestStartWatcher_Success(t *testing.T) {
+	pipes := &mock.Pipes{}
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	client := docker.NewClient(m)
+
+	w, stop := startWatcher(t.Context(), client, "sind-dev-", "dev")
+	assert.NotNil(t, w)
+	// Close pipe writers to unblock scanner reads before stopping.
+	pipes.CloseAll()
+	stop()
+}
+
+func TestStartWatcher_Fallback(t *testing.T) {
+	// When docker events fails to start, startWatcher returns nil
+	// and callers fall back to poll-only mode.
+	m := &mock.Executor{
+		OnStart: func(_ []string) mock.StreamResult {
+			return mock.StreamResult{Err: errors.New("docker not available")}
+		},
+	}
+	client := docker.NewClient(m)
+
+	w, stop := startWatcher(t.Context(), client, "sind-dev-", "dev")
+	defer stop()
+	assert.Nil(t, w)
+}
+
+func TestWaitReady_NilWatcher(t *testing.T) {
+	// waitReady with nil watcher should fall back to UntilReady.
+	containerName := ContainerName(mesh.DefaultRealm, "dev", "controller")
+	var m mock.Executor
+	m.AddResult(inspectJSON(t, string(containerName), "running", nil), "", nil)
+	client := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	probes := []probe.Probe{{Name: "container", Check: probe.ContainerRunning}}
+	err := waitReady(ctx, client, containerName, probes, time.Millisecond, nil)
+	require.NoError(t, err)
+}
+
+func TestWaitReady_WithWatcher(t *testing.T) {
+	// waitReady with a watcher should use UntilReadyWithEvents.
+	containerName := ContainerName(mesh.DefaultRealm, "dev", "controller")
+
+	pipes := &mock.Pipes{}
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	m.AddResult(inspectJSON(t, string(containerName), "running", nil), "", nil)
+	client := docker.NewClient(m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	w := monitor.NewWatcher(m, "sind-dev-", "dev")
+	require.NoError(t, w.Start(ctx, nil))
+
+	probes := []probe.Probe{{Name: "container", Check: probe.ContainerRunning}}
+	err := waitReady(ctx, client, containerName, probes, time.Millisecond, w)
+	require.NoError(t, err)
+
+	cancel()
+	pipes.CloseAll()
+	w.Wait()
 }
