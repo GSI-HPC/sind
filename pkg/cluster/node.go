@@ -11,7 +11,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -272,28 +271,6 @@ func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mes
 		_, err := CreateNode(ctx, client, meshMgr, cfg)
 		if err != nil {
 			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
-		}
-	}
-	return nil
-}
-
-// EnableSlurmServices enables the role-appropriate Slurm daemon on each node.
-// Controller nodes get slurmctld; managed worker nodes get slurmd.
-// Submitter and unmanaged worker nodes are skipped.
-func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []RunConfig) error {
-	for _, cfg := range configs {
-		if cfg.Role == config.RoleWorker && !cfg.Managed {
-			continue
-		}
-		service, ok := probe.ServiceForRole(cfg.Role)
-		if !ok {
-			continue
-		}
-
-		containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
-		_, err := client.Exec(ctx, containerName, "systemctl", "enable", "--now", string(service))
-		if err != nil {
-			return fmt.Errorf("enabling %s on %s: %w", service, cfg.ShortName, err)
 		}
 	}
 	return nil
