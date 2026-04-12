@@ -81,6 +81,20 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 	assert.True(t, health.Services["slurmd"])
 }
 
+func TestGetNodeHealth_ControllerBackup(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = healthyOnCall("sind-dev-controller-backup", "172.18.0.5")
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller-backup", config.RoleController, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, docker.StateRunning, health.Container)
+	assert.True(t, health.Munge)
+	assert.True(t, health.SSHD)
+	assert.Empty(t, health.Services)
+}
+
 func TestGetNodeHealth_Submitter(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = healthyOnCall("sind-dev-submitter", "172.18.0.4")

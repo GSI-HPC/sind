@@ -12,6 +12,7 @@ toc: true
 |------|-------------|------------------------|
 | Network | `<realm>-<cluster>-net` | `sind-dev-net` |
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
+| Backup controller | `<realm>-<cluster>-controller-backup` | `sind-dev-controller-backup` |
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |

@@ -1047,6 +1047,40 @@ func TestLogExtraPrivileges(t *testing.T) {
 	})
 }
 
+func TestEnableSlurm_SkipsBackupController(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		// systemctl enable --now slurmctld → success
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			return mock.Result{}
+		}
+		// scontrol ping → success for the readiness probe
+		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+			return mock.Result{}
+		}
+		return mock.Result{}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: ControllerBackupShortName, Role: config.RoleController},
+	}
+
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	require.NoError(t, err)
+
+	// Only the primary controller should have had systemctl enable invoked on it.
+	var enableCalls []mock.Call
+	for _, c := range m.Calls {
+		if len(c.Args) > 3 && c.Args[0] == "exec" && c.Args[2] == "systemctl" && c.Args[3] == "enable" {
+			enableCalls = append(enableCalls, c)
+		}
+	}
+	require.Len(t, enableCalls, 1)
+	assert.Equal(t, "sind-dev-controller", enableCalls[0].Args[1])
+}
+
 func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

@@ -168,6 +168,7 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - At least one `worker` node is required
 - `count` is only valid for worker nodes
 - `managed` is only valid for worker nodes
+- `backupController` is only valid for controller nodes
 - `count` must not be negative
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)

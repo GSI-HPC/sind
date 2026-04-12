@@ -24,6 +24,7 @@ toc: true
 | `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp` |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+| `backupController` | controller only | `false` | Also create an idle `controller-backup` container (see below) |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
 | `capDrop` | global + per-node | none | Dropped Linux capabilities |
 | `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
@@ -79,6 +80,38 @@ Unmanaged workers can also be created dynamically:
 ```bash
 sind create worker --count 2 --unmanaged
 ```
+
+## Backup controller
+
+Setting `backupController: true` on the controller node spec spawns a second
+controller container named `controller-backup` alongside the primary
+`controller`. The backup uses the same image, resources, volumes,
+capabilities, devices, and security options as the primary — both containers
+share the cluster's config, munge, and data volumes — but sind does **not**
+start `slurmctld` on it. It comes up idle, ready for manual debug runs or
+active/passive experiments.
+
+```yaml
+nodes:
+  - role: controller
+    backupController: true
+  - role: worker
+    count: 2
+```
+
+Typical uses:
+
+- Running `slurmctld -Dvvvvvv` by hand against the same `/etc/slurm` layout
+  to investigate controller behavior.
+- Trying out Slurm's active/passive `SlurmctldHost` failover configuration
+  without having to rebuild the cluster.
+
+The backup controller is addressable via DNS at
+`controller-backup.<cluster>.<realm>.sind` and can be entered with
+`sind enter controller-backup`. Worker discovery, `slurm.conf` generation,
+and the `sind create worker` / `sind delete worker` flows all continue to
+reference the primary `controller` container — the backup is invisible to
+them.
 
 ## Capabilities and devices
 
