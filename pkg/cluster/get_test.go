@@ -621,3 +621,94 @@ func TestGetMungeKey_CopyError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading munge key")
 }
+
+// --- GetRealms ---
+
+func TestGetRealms(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=worker",
+		},
+		testutil.PsEntry{
+			ID: "c", Names: "sind-prod-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "d", Names: "ci-42-default-controller", State: "running", Image: "img",
+			Labels: "sind.realm=ci-42,sind.cluster=default,sind.role=controller",
+		},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	realms, err := GetRealms(t.Context(), c)
+
+	require.NoError(t, err)
+	require.Len(t, realms, 2)
+	assert.Equal(t, "ci-42", realms[0].Name)
+	assert.Equal(t, 1, realms[0].Clusters)
+	assert.Equal(t, "sind", realms[1].Name)
+	assert.Equal(t, 2, realms[1].Clusters)
+}
+
+func TestGetRealms_Empty(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	realms, err := GetRealms(t.Context(), c)
+
+	require.NoError(t, err)
+	assert.Nil(t, realms)
+}
+
+func TestGetRealms_LabelFilter(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	_, _ = GetRealms(t.Context(), c)
+
+	require.Len(t, m.Calls, 1)
+	args := m.Calls[0].Args
+	filterIdx := indexOf(args, "--filter")
+	require.Greater(t, filterIdx, -1)
+	assert.Equal(t, "label="+LabelRealm, args[filterIdx+1])
+}
+
+func TestGetRealms_SkipsEmptyRealmLabel(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "orphan", State: "running", Image: "img",
+			Labels: "sind.cluster=dev",
+		},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	realms, err := GetRealms(t.Context(), c)
+
+	require.NoError(t, err)
+	require.Len(t, realms, 1)
+	assert.Equal(t, "sind", realms[0].Name)
+}
+
+func TestGetRealms_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetRealms(t.Context(), c)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing containers")
+}

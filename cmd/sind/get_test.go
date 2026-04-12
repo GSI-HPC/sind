@@ -293,6 +293,79 @@ func TestGetClusters_JSONEmpty(t *testing.T) {
 	assert.Equal(t, "null\n", stdout)
 }
 
+// --- Realms ---
+
+func TestGetRealms_CommandExists(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"get", "realms"})
+	require.NoError(t, err)
+	assert.Equal(t, "realms", c.Use)
+}
+
+func TestGetRealms_RejectsArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "realms", "extra")
+	assert.Error(t, err)
+}
+
+func TestGetRealms_Output(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "ci-42-default-controller", State: "running", Image: "img",
+			Labels: "sind.realm=ci-42,sind.cluster=default,sind.role=controller",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "realms")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "NAME")
+	assert.Contains(t, stdout, "CLUSTERS")
+	assert.Contains(t, stdout, "sind")
+	assert.Contains(t, stdout, "ci-42")
+}
+
+func TestGetRealms_JSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-prod-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=controller",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "realms", "--output", "json")
+	require.NoError(t, err)
+
+	var got []struct {
+		Name     string `json:"name"`
+		Clusters int    `json:"clusters"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.Len(t, got, 1)
+	assert.Equal(t, "sind", got[0].Name)
+	assert.Equal(t, 2, got[0].Clusters)
+}
+
+func TestGetRealms_Empty(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "realms")
+	require.NoError(t, err)
+	// Empty output still prints the header row for consistency with the
+	// other list commands.
+	assert.Contains(t, stdout, "NAME")
+	assert.Contains(t, stdout, "CLUSTERS")
+}
+
 func TestGetNodes_JSON(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(

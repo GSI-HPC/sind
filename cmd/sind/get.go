@@ -33,6 +33,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetNodeCommand())
 	cmd.AddCommand(newGetNodesCommand())
 	cmd.AddCommand(newGetNetworksCommand())
+	cmd.AddCommand(newGetRealmsCommand())
 	cmd.AddCommand(newGetVolumesCommand())
 	cmd.AddCommand(newGetMungeKeyCommand())
 	cmd.AddCommand(newGetDNSCommand())
@@ -113,6 +114,36 @@ func runGetClusters(cmd *cobra.Command) error {
 			c.SlurmVersion,
 			c.State,
 		)
+	}
+	return w.Flush()
+}
+
+func newGetRealmsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "realms",
+		Short: "List all realms",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetRealms(cmd)
+		},
+	}
+}
+
+func runGetRealms(cmd *cobra.Command) error {
+	client := clientFrom(cmd.Context())
+	realms, err := cluster.GetRealms(cmd.Context(), client)
+	if err != nil {
+		return err
+	}
+
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), realms)
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(w, "NAME\tCLUSTERS")
+	for _, r := range realms {
+		_, _ = fmt.Fprintf(w, "%s\t%d\n", r.Name, r.Clusters)
 	}
 	return w.Flush()
 }

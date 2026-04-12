@@ -265,6 +265,57 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 	return key, nil
 }
 
+// RealmSummary holds summary information about a sind realm.
+type RealmSummary struct {
+	Name     string `json:"name"`
+	Clusters int    `json:"clusters"`
+}
+
+// GetRealms lists all sind realms by querying Docker for containers with the
+// sind.realm label. Containers are grouped by realm, and clusters are counted
+// per realm.
+func GetRealms(ctx context.Context, client *docker.Client) ([]*RealmSummary, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelRealm)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	if len(containers) == 0 {
+		return nil, nil
+	}
+
+	// Group by realm, tracking unique cluster names per realm.
+	type realmData struct {
+		clusters map[string]struct{}
+	}
+	byRealm := make(map[string]*realmData)
+	for _, c := range containers {
+		realm := c.Labels[LabelRealm]
+		if realm == "" {
+			continue
+		}
+		rd, ok := byRealm[realm]
+		if !ok {
+			rd = &realmData{clusters: make(map[string]struct{})}
+			byRealm[realm] = rd
+		}
+		if cluster := c.Labels[LabelCluster]; cluster != "" {
+			rd.clusters[cluster] = struct{}{}
+		}
+	}
+
+	result := make([]*RealmSummary, 0, len(byRealm))
+	for name, rd := range byRealm {
+		result = append(result, &RealmSummary{
+			Name:     name,
+			Clusters: len(rd.clusters),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	return result, nil
+}
+
 // aggregateState determines the overall cluster status from node states.
 // If all nodes share the same status, that status is returned.
 // Mixed states return StateMixed; no nodes returns StateEmpty.
