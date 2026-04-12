@@ -648,6 +648,7 @@ Validation rules:
 | Role | Count | Required | Slurm Daemons | Description |
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
+| `db` | 0-1 | no | mariadb, slurmdbd | Accounting database |
 | `submitter` | 0-1 | no | none (clients only) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
@@ -666,6 +667,7 @@ Validation rules:
 
 - `nodes` - optional; if omitted, creates 1 controller + 1 worker
 - `role: controller` - exactly one (auto-created if nodes omitted)
+- `role: db` - at most one
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
 - `count` - only valid for worker role
@@ -1164,7 +1166,7 @@ This enables resource conservation when clusters are not actively in use without
 
 ### Database Role (slurmdbd)
 
-Planned support for a dedicated database node role:
+The `db` role runs MariaDB and slurmdbd for Slurm job accounting:
 
 ```yaml
 nodes:
@@ -1174,10 +1176,12 @@ nodes:
     count: 3
 ```
 
-The `db` role would run slurmdbd and MariaDB for job accounting. sind would:
-- Generate `slurmdbd.conf` with appropriate settings
-- Configure `slurm.conf` to use the accounting database
-- Initialize the MariaDB database schema
+sind handles the full lifecycle:
+- Generates `slurmdbd.conf` with MariaDB connection settings
+- Adds `AccountingStorageType` and `AccountingStorageHost` to `slurm.conf`
+- Initializes the MariaDB database schema at cluster creation
+- Starts services in order: mariadb → init DB → slurmdbd → slurmctld/slurmd
+- Custom slurmdbd configuration via the `slurm.slurmdbd` section (string or map form)
 
 This enables testing of Slurm accounting features and multi-cluster federation scenarios.
 

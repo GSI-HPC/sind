@@ -246,13 +246,65 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmd not ready")
 }
 
+func TestMariadbReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("1\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := MariadbReady(t.Context(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "mysql", "-e", "SELECT 1"}, m.Calls[0].Args)
+}
+
+func TestMariadbReady_NotReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := MariadbReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mariadb not ready")
+}
+
+func TestSlurmdbdReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := SlurmdbdReady(t.Context(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmdbd"}, m.Calls[0].Args)
+}
+
+func TestSlurmdbdReady_NotReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := SlurmdbdReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slurmdbd not ready")
+}
+
 func TestForService(t *testing.T) {
 	p := ForService(slurm.Slurmctld)
 	assert.Equal(t, "slurmctld", p.Name)
 	assert.NotNil(t, p.Check)
 
+	p = ForService(slurm.Slurmdbd)
+	assert.Equal(t, "slurmdbd", p.Name)
+	assert.NotNil(t, p.Check)
+
 	p = ForService(slurm.Slurmd)
 	assert.Equal(t, "slurmd", p.Name)
+	assert.NotNil(t, p.Check)
+
+	p = ForService(slurm.Mariadb)
+	assert.Equal(t, "mariadb", p.Name)
 	assert.NotNil(t, p.Check)
 
 	p = ForService("unknown")
@@ -266,6 +318,7 @@ func TestNodeProbes(t *testing.T) {
 		names []string
 	}{
 		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}},
+		{config.RoleDb, []string{"container", "systemd", "sshd", "mariadb", "slurmdbd"}},
 		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}},
 		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}},
 		{"unknown", []string{"container", "systemd", "sshd"}},

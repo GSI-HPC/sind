@@ -40,8 +40,12 @@ func ForService(svc slurm.Service) Probe {
 	switch svc {
 	case slurm.Slurmctld:
 		return Probe{Name: string(svc), Check: SlurmctldReady}
+	case slurm.Slurmdbd:
+		return Probe{Name: string(svc), Check: SlurmdbdReady}
 	case slurm.Slurmd:
 		return Probe{Name: string(svc), Check: SlurmdReady}
+	case slurm.Mariadb:
+		return Probe{Name: string(svc), Check: MariadbReady}
 	default:
 		return Probe{Name: string(svc)}
 	}
@@ -57,6 +61,11 @@ func NodeProbes(role config.Role) []Probe {
 	switch role {
 	case config.RoleController:
 		probes = append(probes, Probe{"slurmctld", SlurmctldReady})
+	case config.RoleDb:
+		probes = append(probes,
+			Probe{"mariadb", MariadbReady},
+			Probe{"slurmdbd", SlurmdbdReady},
+		)
 	case config.RoleWorker:
 		probes = append(probes, Probe{"slurmd", SlurmdReady})
 	}
@@ -238,6 +247,24 @@ func SlurmdReady(ctx context.Context, client *docker.Client, name docker.Contain
 	_, err := client.Exec(ctx, name, "systemctl", "is-active", "slurmd")
 	if err != nil {
 		return fmt.Errorf("slurmd not ready: %w", err)
+	}
+	return nil
+}
+
+// MariadbReady verifies that MariaDB is accepting connections.
+func MariadbReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	_, err := client.Exec(ctx, name, "mysql", "-e", "SELECT 1")
+	if err != nil {
+		return fmt.Errorf("mariadb not ready: %w", err)
+	}
+	return nil
+}
+
+// SlurmdbdReady verifies that the slurmdbd service is active.
+func SlurmdbdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	_, err := client.Exec(ctx, name, "systemctl", "is-active", "slurmdbd")
+	if err != nil {
+		return fmt.Errorf("slurmdbd not ready: %w", err)
 	}
 	return nil
 }

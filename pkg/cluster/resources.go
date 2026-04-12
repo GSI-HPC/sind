@@ -42,6 +42,7 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string, pull bool) error {
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
 	volName := VolumeName(realm, cfg.Name, VolumeConfig)
+	hasDb := hasDbNode(cfg.Nodes)
 
 	args := []string{
 		"--name", string(helperName),
@@ -52,15 +53,31 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	if pull {
 		args = append(args, "--pull", "always")
 	}
-	args = append(args, image)
-	_, err := client.CreateContainer(ctx, args...)
-	if err != nil {
-		return fmt.Errorf("creating config helper container: %w", err)
+
+	// When a db node is present we need to exec into the helper to fix
+	// slurmdbd.conf permissions, so we start it with a sleep command.
+	// Otherwise a plain create is sufficient for docker cp.
+	if hasDb {
+		args = append(args, image, "sleep", "30")
+		_, err := client.RunContainer(ctx, args...)
+		if err != nil {
+			return fmt.Errorf("creating config helper container: %w", err)
+		}
+		defer func() {
+			_ = client.KillContainer(ctx, helperName)
+			_ = client.RemoveContainer(ctx, helperName)
+		}()
+	} else {
+		args = append(args, image)
+		_, err := client.CreateContainer(ctx, args...)
+		if err != nil {
+			return fmt.Errorf("creating config helper container: %w", err)
+		}
+		defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 	}
-	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
 	files := docker.FileContents{
-		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main)),
+		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, hasDb)),
 		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
 		"cgroup.conf":       []byte(slurm.GenerateCgroupConf(cfg.Slurm.Cgroup)),
 		"plugstack.conf":    []byte(slurm.GeneratePlugstackConf(cfg.Slurm.Plugstack)),
@@ -88,9 +105,24 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		files["plugstack.conf.d/.keep"] = nil
 	}
 
-	err = client.CopyToContainer(ctx, helperName, slurm.ConfDir, files)
+	if hasDb {
+		files[slurm.SlurmdbdConfFile] = []byte(slurm.GenerateSlurmdbdConf(cfg.Name, cfg.Slurm.Slurmdbd))
+		addSectionFragments(files, "slurmdbd", cfg.Slurm.Slurmdbd)
+	}
+
+	err := client.CopyToContainer(ctx, helperName, slurm.ConfDir, files)
 	if err != nil {
 		return fmt.Errorf("writing slurm config: %w", err)
+	}
+
+	// slurmdbd.conf must be owned by SlurmUser with mode 0600.
+	if hasDb {
+		if _, err := client.Exec(ctx, helperName, "chown", "slurm:slurm", slurm.SlurmdbdConfPath); err != nil {
+			return fmt.Errorf("fixing slurmdbd.conf ownership: %w", err)
+		}
+		if _, err := client.Exec(ctx, helperName, "chmod", "0600", slurm.SlurmdbdConfPath); err != nil {
+			return fmt.Errorf("fixing slurmdbd.conf permissions: %w", err)
+		}
 	}
 
 	return nil
@@ -139,6 +171,16 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 	}
 
 	return nil
+}
+
+// hasDbNode returns true if any node in the list has the db role.
+func hasDbNode(nodes []config.Node) bool {
+	for _, n := range nodes {
+		if n.Role == config.RoleDb {
+			return true
+		}
+	}
+	return false
 }
 
 // addSectionFragments adds fragment files from a map-form section to the

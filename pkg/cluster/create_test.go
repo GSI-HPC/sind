@@ -1136,3 +1136,98 @@ func TestWaitReady_WithWatcher(t *testing.T) {
 	pipes.CloseAll()
 	w.Wait()
 }
+
+func TestEnableSlurm_WithDb(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(_ []string, _ string) mock.Result {
+		return mock.Result{}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDb},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},
+	}
+
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.NoError(t, err)
+
+	// Verify ordering: db services must come before controller/worker
+	var dbDone, ctldStarted, slurmdStarted bool
+	for _, call := range m.Calls {
+		if len(call.Args) < 3 {
+			continue
+		}
+		// db: enable mariadb, mysql init, enable slurmdbd, is-active slurmdbd
+		if call.Args[0] == "exec" && len(call.Args) > 3 && call.Args[1] == "sind-dev-db" {
+			if call.Args[2] == "systemctl" && call.Args[3] == "is-active" && call.Args[4] == "slurmdbd" {
+				dbDone = true
+			}
+		}
+		// controller: enable slurmctld
+		if call.Args[0] == "exec" && call.Args[1] == "sind-dev-controller" && len(call.Args) > 3 &&
+			call.Args[2] == "systemctl" && call.Args[3] == "enable" {
+			ctldStarted = true
+			assert.True(t, dbDone, "slurmctld should start after db is ready")
+		}
+		// worker: enable slurmd
+		if call.Args[0] == "exec" && call.Args[1] == "sind-dev-worker-0" && len(call.Args) > 3 &&
+			call.Args[2] == "systemctl" && call.Args[3] == "enable" {
+			slurmdStarted = true
+			assert.True(t, dbDone, "slurmd should start after db is ready")
+		}
+	}
+	assert.True(t, dbDone, "db services should be enabled")
+	assert.True(t, ctldStarted, "slurmctld should be enabled")
+	assert.True(t, slurmdStarted, "slurmd should be enabled")
+}
+
+func TestEnableSlurm_DbProbeTimeout(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		// enable mariadb, mysql init, enable slurmdbd all succeed
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			return mock.Result{}
+		}
+		if args[0] == "exec" && len(args) > 2 && args[2] == "mysql" {
+			return mock.Result{}
+		}
+		// is-active slurmdbd always fails → probe times out
+		if args[0] == "exec" && len(args) > 4 && args[2] == "systemctl" && args[3] == "is-active" && args[4] == "slurmdbd" {
+			return mock.Result{Err: fmt.Errorf("inactive")}
+		}
+		return mock.Result{}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDb},
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not ready")
+}
+
+func TestEnableSlurm_DbError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("mariadb failed")) // enable mariadb fails
+	client := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDb},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
+	}
+
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabling mariadb")
+	// Controller should NOT have been started
+	assert.Len(t, m.Calls, 1)
+}

@@ -32,6 +32,7 @@ type Role string
 // Valid node roles.
 const (
 	RoleController Role = "controller"
+	RoleDb         Role = "db"
 	RoleSubmitter  Role = "submitter"
 	RoleWorker     Role = "worker"
 )
@@ -179,6 +180,7 @@ type Slurm struct {
 	Gres      Section `json:"gres,omitempty"`
 	Topology  Section `json:"topology,omitempty"`
 	Plugstack Section `json:"plugstack,omitempty"`
+	Slurmdbd  Section `json:"slurmdbd,omitempty"`
 }
 
 // Cluster represents a sind cluster configuration.
@@ -283,17 +285,19 @@ func mergeStringSlices(base, overlay []string) []string {
 // Validate checks that the cluster configuration satisfies all constraints.
 // It should be called after ApplyDefaults.
 func (c *Cluster) Validate() error {
-	var controllers, submitters, workers int
+	var controllers, dbs, submitters, workers int
 	for _, n := range c.Nodes {
 		switch n.Role {
 		case RoleController:
 			controllers++
+		case RoleDb:
+			dbs++
 		case RoleSubmitter:
 			submitters++
 		case RoleWorker:
 			workers++
 		default:
-			return fmt.Errorf("invalid role %q, must be one of: controller, submitter, worker", n.Role)
+			return fmt.Errorf("invalid role %q, must be one of: controller, db, submitter, worker", n.Role)
 		}
 
 		if n.Count < 0 {
@@ -309,6 +313,9 @@ func (c *Cluster) Validate() error {
 
 	if controllers != 1 {
 		return fmt.Errorf("exactly one controller required, got %d", controllers)
+	}
+	if dbs > 1 {
+		return fmt.Errorf("at most one db node allowed, got %d", dbs)
 	}
 	if submitters > 1 {
 		return fmt.Errorf("at most one submitter allowed, got %d", submitters)
@@ -345,6 +352,7 @@ func (c *Cluster) Validate() error {
 		{"gres", c.Slurm.Gres},
 		{"topology", c.Slurm.Topology},
 		{"plugstack", c.Slurm.Plugstack},
+		{"slurmdbd", c.Slurm.Slurmdbd},
 	}
 	for _, s := range sections {
 		if err := validateSection(s.name, s.section); err != nil {

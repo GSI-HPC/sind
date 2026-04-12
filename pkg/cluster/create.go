@@ -355,10 +355,18 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 	return nodes, nil
 }
 
-// enableSlurm enables the Slurm daemon on each eligible node and waits for
-// the service to become ready — concurrently per node.
+// enableSlurm enables the Slurm daemons on each eligible node and waits for
+// readiness. The db node (if present) is started first because slurmdbd must
+// be available before slurmctld connects. Remaining nodes are started
+// concurrently.
 //
-//	┌────────────────────┐ ┌─────────────────────┐
+//	┌──────────────────────────────────┐
+//	│ db (serial, if present):         │
+//	│ enable mariadb → init DB         │
+//	│ enable slurmdbd → wait slurmdbd  │
+//	└────────────────┬─────────────────┘
+//	                 │
+//	┌────────────────┴───┐ ┌─────────────────────┐
 //	│ controller:        │ │ worker-0:            │
 //	│ enable slurmctld   │ │ enable slurmd        │ ...
 //	│ wait slurmctld     │ │ wait slurmd          │
@@ -366,8 +374,30 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	          └───────────┬───────────┘
 func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) error {
 	log := sindlog.From(ctx)
+
+	// Phase 1: enable db services first (mariadb → init → slurmdbd)
+	for _, nc := range nodeConfigs {
+		if nc.Role != config.RoleDb {
+			continue
+		}
+		containerName := ContainerName(realm, clusterName, nc.ShortName)
+		log.DebugContext(ctx, "enabling db services", "node", nc.ShortName)
+		if err := enableDbNode(ctx, client, containerName); err != nil {
+			return err
+		}
+		slurmdbdProbe := probe.ForService(slurm.Slurmdbd)
+		if err := waitReady(ctx, client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher); err != nil {
+			return err
+		}
+		log.DebugContext(ctx, "db services ready", "node", nc.ShortName)
+	}
+
+	// Phase 2: enable slurmctld/slurmd concurrently
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
+		if nc.Role == config.RoleDb {
+			continue // already handled
+		}
 		if nc.Role == config.RoleWorker && !nc.Managed {
 			continue
 		}

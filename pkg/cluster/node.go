@@ -208,7 +208,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
-		case config.RoleController, config.RoleSubmitter:
+		case config.RoleController, config.RoleDb, config.RoleSubmitter:
 			configs = append(configs, RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
@@ -278,10 +278,18 @@ func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mes
 
 // EnableSlurmServices enables the role-appropriate Slurm daemon on each node.
 // Controller nodes get slurmctld; managed worker nodes get slurmd.
+// Db nodes get mariadb (with schema init) then slurmdbd.
 // Submitter and unmanaged worker nodes are skipped.
 func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []RunConfig) error {
 	for _, cfg := range configs {
 		if cfg.Role == config.RoleWorker && !cfg.Managed {
+			continue
+		}
+		if cfg.Role == config.RoleDb {
+			containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
+			if err := enableDbNode(ctx, client, containerName); err != nil {
+				return err
+			}
 			continue
 		}
 		service, ok := slurm.ServiceForRole(cfg.Role)
@@ -294,6 +302,26 @@ func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []R
 		if err != nil {
 			return fmt.Errorf("enabling %s on %s: %w", service, cfg.ShortName, err)
 		}
+	}
+	return nil
+}
+
+// initAccountingDB creates the slurmdbd database and grants access to the
+// slurm user. It is safe to call repeatedly (CREATE IF NOT EXISTS / GRANT).
+const initAccountingSQL = "CREATE DATABASE IF NOT EXISTS slurm_acct_db; " +
+	"GRANT ALL ON slurm_acct_db.* TO 'slurm'@'localhost' IDENTIFIED BY '' WITH GRANT OPTION;"
+
+// enableDbNode enables mariadb, initializes the accounting database, then
+// enables slurmdbd on the given container.
+func enableDbNode(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	if _, err := client.Exec(ctx, name, "systemctl", "enable", "--now", string(slurm.Mariadb)); err != nil {
+		return fmt.Errorf("enabling mariadb on %s: %w", name, err)
+	}
+	if _, err := client.Exec(ctx, name, "mysql", "-e", initAccountingSQL); err != nil {
+		return fmt.Errorf("initializing accounting database on %s: %w", name, err)
+	}
+	if _, err := client.Exec(ctx, name, "systemctl", "enable", "--now", string(slurm.Slurmdbd)); err != nil {
+		return fmt.Errorf("enabling slurmdbd on %s: %w", name, err)
 	}
 	return nil
 }

@@ -120,17 +120,19 @@ func nodeOrder(n *NodeSummary) string {
 	return roleSortKey(n.Role, n.Name)
 }
 
-// roleSortKey returns a sort key that orders by role (controller, submitter, worker)
-// then by name within each role.
+// roleSortKey returns a sort key that orders by role
+// (controller, db, submitter, worker) then by name within each role.
 func roleSortKey(role config.Role, name string) string {
 	var prefix string
 	switch role {
 	case config.RoleController:
 		prefix = "0"
-	case config.RoleSubmitter:
+	case config.RoleDb:
 		prefix = "1"
-	case config.RoleWorker:
+	case config.RoleSubmitter:
 		prefix = "2"
+	case config.RoleWorker:
+		prefix = "3"
 	default:
 		prefix = "9"
 	}

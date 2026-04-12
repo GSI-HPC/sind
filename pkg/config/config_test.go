@@ -335,6 +335,23 @@ func TestValidate_Valid(t *testing.T) {
 				{Role: RoleWorker},
 			},
 		},
+		{
+			name: "controller, db, and worker",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDb},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "all roles",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDb},
+				{Role: RoleSubmitter},
+				{Role: RoleWorker},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -406,6 +423,16 @@ func TestValidate_Constraints(t *testing.T) {
 		wantErr string
 	}{
 		{
+			name: "multiple dbs",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDb},
+				{Role: RoleDb},
+				{Role: RoleWorker},
+			},
+			wantErr: "at most one db node",
+		},
+		{
 			name: "multiple submitters",
 			nodes: []Node{
 				{Role: RoleController},
@@ -419,6 +446,15 @@ func TestValidate_Constraints(t *testing.T) {
 			name: "count on controller",
 			nodes: []Node{
 				{Role: RoleController, Count: 2},
+				{Role: RoleWorker},
+			},
+			wantErr: "count is only valid for worker",
+		},
+		{
+			name: "count on db",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDb, Count: 2},
 				{Role: RoleWorker},
 			},
 			wantErr: "count is only valid for worker",
@@ -756,6 +792,30 @@ slurm:
 		require.Len(t, cfg.Slurm.Plugstack.Fragments, 1)
 	})
 
+	t.Run("slurmdbd string form", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  slurmdbd: |
+    ArchiveEvents=yes`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		assert.Contains(t, cfg.Slurm.Slurmdbd.Content, "ArchiveEvents=yes")
+	})
+
+	t.Run("slurmdbd map form", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  slurmdbd:
+    archive: |
+      ArchiveEvents=yes`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		require.Len(t, cfg.Slurm.Slurmdbd.Fragments, 1)
+		assert.Contains(t, cfg.Slurm.Slurmdbd.Fragments["archive"], "ArchiveEvents=yes")
+	})
+
 	t.Run("no slurm section", func(t *testing.T) {
 		cfg, err := Parse([]byte("kind: Cluster"))
 		require.NoError(t, err)
@@ -764,6 +824,7 @@ slurm:
 		assert.True(t, cfg.Slurm.Gres.IsEmpty())
 		assert.True(t, cfg.Slurm.Topology.IsEmpty())
 		assert.True(t, cfg.Slurm.Plugstack.IsEmpty())
+		assert.True(t, cfg.Slurm.Slurmdbd.IsEmpty())
 	})
 }
 

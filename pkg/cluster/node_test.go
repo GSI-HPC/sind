@@ -789,3 +789,94 @@ func TestNodeRunConfigs_SecurityFields(t *testing.T) {
 		assert.Equal(t, []string{"apparmor=unconfined"}, wc.SecurityOpt)
 	}
 }
+
+func TestEnableSlurmServices_DbNode(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil) // enable mariadb
+	m.AddResult("", "", nil) // mysql init
+	m.AddResult("", "", nil) // enable slurmdbd
+	m.AddResult("", "", nil) // enable slurmctld
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDb},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
+	}
+
+	err := EnableSlurmServices(t.Context(), c, configs)
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 4)
+	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "mariadb"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-db", "mysql", "-e", initAccountingSQL}, m.Calls[1].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "slurmdbd"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-controller", "systemctl", "enable", "--now", "slurmctld"}, m.Calls[3].Args)
+}
+
+func TestEnableSlurmServices_DbMariadbError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("mariadb failed"))
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDb},
+	}
+
+	err := EnableSlurmServices(t.Context(), c, configs)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabling mariadb")
+}
+
+func TestEnableSlurmServices_DbInitError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)                          // enable mariadb
+	m.AddResult("", "", fmt.Errorf("init db failed")) // mysql init
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDb},
+	}
+
+	err := EnableSlurmServices(t.Context(), c, configs)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "initializing accounting database")
+}
+
+func TestEnableSlurmServices_DbSlurmdbdError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)                           // enable mariadb
+	m.AddResult("", "", nil)                           // mysql init
+	m.AddResult("", "", fmt.Errorf("slurmdbd failed")) // enable slurmdbd
+	c := docker.NewClient(&m)
+
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDb},
+	}
+
+	err := EnableSlurmServices(t.Context(), c, configs)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabling slurmdbd")
+}
+
+func TestNodeRunConfigs_WithDb(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleDb, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+
+	require.Len(t, configs, 3)
+	assert.Equal(t, "controller", configs[0].ShortName)
+	assert.Equal(t, "db", configs[1].ShortName)
+	assert.Equal(t, config.RoleDb, configs[1].Role)
+	assert.Equal(t, 1, configs[1].ContainerNumber)
+	assert.Equal(t, "worker-0", configs[2].ShortName)
+}

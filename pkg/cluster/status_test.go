@@ -95,6 +95,30 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 	assert.Empty(t, health.Services)
 }
 
+func TestGetNodeHealth_Db(t *testing.T) {
+	var m mock.Executor
+	base := healthyOnCall("sind-dev-db", "172.18.0.5")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		// MariadbReady uses mysql -e "SELECT 1"
+		if len(args) >= 3 && args[2] == "mysql" {
+			return mock.Result{Stdout: "1\n"}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-db", config.RoleDb, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, docker.StateRunning, health.Container)
+	assert.True(t, health.Munge)
+	assert.True(t, health.SSHD)
+	require.Contains(t, health.Services, "mariadb")
+	assert.True(t, health.Services["mariadb"])
+	require.Contains(t, health.Services, "slurmdbd")
+	assert.True(t, health.Services["slurmdbd"])
+}
+
 func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
@@ -704,7 +728,7 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	var m mock.Executor
 	base := fullStatusOnCall(t)
 	m.OnCall = func(args []string, stdin string) mock.Result {
-		// Return nodes in non-sorted order including submitter.
+		// Return nodes in non-sorted order including all roles.
 		if args[0] == "ps" {
 			return mock.Result{Stdout: testutil.NDJSON(
 				testutil.PsEntry{
@@ -714,6 +738,10 @@ func TestGetStatus_SortOrder(t *testing.T) {
 				testutil.PsEntry{
 					ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=submitter",
+				},
+				testutil.PsEntry{
+					ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=db",
 				},
 				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
@@ -727,12 +755,18 @@ func TestGetStatus_SortOrder(t *testing.T) {
 			switch name {
 			case "sind-dev-controller":
 				ip = "172.18.0.2"
+			case "sind-dev-db":
+				ip = "172.18.0.5"
 			case "sind-dev-submitter":
 				ip = "172.18.0.4"
 			case "sind-dev-worker-0":
 				ip = "172.18.0.3"
 			}
 			return mock.Result{Stdout: statusInspectJSON(name, "running", ip)}
+		}
+		// Handle mysql probe for db node
+		if len(args) >= 3 && args[2] == "mysql" {
+			return mock.Result{Stdout: "1\n"}
 		}
 		return base(args, stdin)
 	}
@@ -741,10 +775,11 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
-	require.Len(t, status.Nodes, 3)
+	require.Len(t, status.Nodes, 4)
 	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
-	assert.Equal(t, config.RoleSubmitter, status.Nodes[1].Role)
-	assert.Equal(t, config.RoleWorker, status.Nodes[2].Role)
+	assert.Equal(t, config.RoleDb, status.Nodes[1].Role)
+	assert.Equal(t, config.RoleSubmitter, status.Nodes[2].Role)
+	assert.Equal(t, config.RoleWorker, status.Nodes[3].Role)
 }
 
 func TestGetStatus_MixedStates(t *testing.T) {
