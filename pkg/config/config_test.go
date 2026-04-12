@@ -105,6 +105,7 @@ nodes:
     cpus: 2
     memory: 4g
     tmpSize: 2g
+    backupController: true
   - role: submitter
   - role: worker
     count: 3
@@ -123,6 +124,7 @@ nodes:
 	assert.Equal(t, 2, cfg.Nodes[0].CPUs)
 	assert.Equal(t, "4g", cfg.Nodes[0].Memory)
 	assert.Equal(t, "2g", cfg.Nodes[0].TmpSize)
+	assert.True(t, cfg.Nodes[0].BackupController)
 
 	// submitter
 	assert.Equal(t, RoleSubmitter, cfg.Nodes[1].Role)
@@ -335,6 +337,13 @@ func TestValidate_Valid(t *testing.T) {
 				{Role: RoleWorker},
 			},
 		},
+		{
+			name: "controller with backupController",
+			nodes: []Node{
+				{Role: RoleController, BackupController: true},
+				{Role: RoleWorker},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -464,6 +473,23 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: RoleWorker, Count: -1},
 			},
 			wantErr: "count must not be negative",
+		},
+		{
+			name: "backupController on worker",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleWorker, BackupController: true},
+			},
+			wantErr: "backupController is only valid for controller",
+		},
+		{
+			name: "backupController on submitter",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleSubmitter, BackupController: true},
+				{Role: RoleWorker},
+			},
+			wantErr: "backupController is only valid for controller",
 		},
 	}
 
