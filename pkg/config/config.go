@@ -38,17 +38,18 @@ const (
 
 // Node represents a single node or node group in the cluster configuration.
 type Node struct {
-	Role        Role     `json:"role"`
-	Count       int      `json:"count,omitempty"`
-	Image       string   `json:"image,omitempty"`
-	CPUs        int      `json:"cpus,omitempty"`
-	Memory      string   `json:"memory,omitempty"`
-	TmpSize     string   `json:"tmpSize,omitempty"`
-	Managed     *bool    `json:"managed,omitempty"`
-	CapAdd      []string `json:"capAdd,omitempty"`
-	CapDrop     []string `json:"capDrop,omitempty"`
-	Devices     []string `json:"devices,omitempty"`
-	SecurityOpt []string `json:"securityOpt,omitempty"`
+	Role             Role     `json:"role"`
+	Count            int      `json:"count,omitempty"`
+	Image            string   `json:"image,omitempty"`
+	CPUs             int      `json:"cpus,omitempty"`
+	Memory           string   `json:"memory,omitempty"`
+	TmpSize          string   `json:"tmpSize,omitempty"`
+	Managed          *bool    `json:"managed,omitempty"`
+	BackupController bool     `json:"backupController,omitempty"`
+	CapAdd           []string `json:"capAdd,omitempty"`
+	CapDrop          []string `json:"capDrop,omitempty"`
+	Devices          []string `json:"devices,omitempty"`
+	SecurityOpt      []string `json:"securityOpt,omitempty"`
 }
 
 // UnmarshalJSON supports three YAML forms:
@@ -304,6 +305,9 @@ func (c *Cluster) Validate() error {
 		}
 		if n.Managed != nil && n.Role != RoleWorker {
 			return fmt.Errorf("managed is only valid for worker nodes, not %q", n.Role)
+		}
+		if n.BackupController && n.Role != RoleController {
+			return fmt.Errorf("backupController is only valid for controller nodes, not %q", n.Role)
 		}
 	}
 
