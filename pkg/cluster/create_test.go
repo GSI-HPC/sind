@@ -84,6 +84,24 @@ func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkN
 	return inspectJSONLabels(t, name, status, networks, docker.Labels{})
 }
 
+// inspectEntry describes one entry for inspectJSONBatch.
+type inspectEntry struct {
+	Name     string
+	Status   string
+	Networks map[docker.NetworkName]string
+}
+
+// inspectJSONBatch builds a JSON array for docker inspect with multiple
+// containers, matching the format of a single batched inspect call.
+func inspectJSONBatch(t *testing.T, entries ...inspectEntry) string {
+	t.Helper()
+	parts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		parts = append(parts, strings.TrimPrefix(strings.TrimSuffix(inspectJSON(t, e.Name, e.Status, e.Networks), "]"), "["))
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
 // notFoundErr returns an exec.ExitError with exit code 1 for "not found" mocking.
 func notFoundErr(t *testing.T) *exec.ExitError {
 	t.Helper()

@@ -169,31 +169,59 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
-		return nodeOrder(result[i]) < nodeOrder(result[j])
+		a, b := result[i], result[j]
+		if a.Cluster != b.Cluster {
+			return naturalSortKey(a.Cluster) < naturalSortKey(b.Cluster)
+		}
+		if ra, rb := rolePrefix(a.Role), rolePrefix(b.Role); ra != rb {
+			return ra < rb
+		}
+		return naturalSortKey(a.Container) < naturalSortKey(b.Container)
 	})
 	return result, nil
 }
 
-// nodeOrder returns a sort key that orders nodes by cluster, then role, then name.
-func nodeOrder(n *NodeSummary) string {
-	return n.Cluster + roleSortKey(n.Role, n.Container)
-}
-
-// roleSortKey returns a sort key that orders by role (controller, submitter, worker)
-// then by name within each role.
-func roleSortKey(role config.Role, name string) string {
-	var prefix string
+// rolePrefix returns a single-character sort prefix that orders nodes by role
+// (controller < submitter < worker < other).
+func rolePrefix(role config.Role) string {
 	switch role {
 	case config.RoleController:
-		prefix = "0"
+		return "0"
 	case config.RoleSubmitter:
-		prefix = "1"
+		return "1"
 	case config.RoleWorker:
-		prefix = "2"
+		return "2"
 	default:
-		prefix = "9"
+		return "9"
 	}
-	return prefix + name
+}
+
+// naturalSortKey returns a comparison key where runs of ASCII digits are
+// zero-padded to a fixed width so that lexical comparison yields natural
+// order (e.g. "worker-2" < "worker-10").
+func naturalSortKey(s string) string {
+	const padWidth = 20
+	var b strings.Builder
+	b.Grow(len(s) + padWidth)
+	i := 0
+	for i < len(s) {
+		if s[i] >= '0' && s[i] <= '9' {
+			j := i
+			for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+				j++
+			}
+			run := s[i:j]
+			for k := len(run); k < padWidth; k++ {
+				b.WriteByte('0')
+			}
+			b.WriteString(run)
+			i = j
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
 
 // NetworkSummary holds summary information about a sind network.

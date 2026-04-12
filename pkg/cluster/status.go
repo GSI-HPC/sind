@@ -252,9 +252,10 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}, nil
 }
 
-// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter, worker).
+// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter,
+// worker) with natural ordering of any numeric suffixes in the node name.
 func nodeStatusOrder(n *NodeStatus) string {
-	return roleSortKey(n.Role, n.Name)
+	return rolePrefix(n.Role) + naturalSortKey(n.Name)
 }
 
 // roleServices returns the Slurm service names for the given role.
