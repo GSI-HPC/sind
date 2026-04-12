@@ -8,6 +8,13 @@
     <language>en</language>
     <atom:link href="https://gsi-hpc.github.io/sind/next/index.xml" rel="self" type="application/rss+xml" />
     <item>
+      <title>Container exits with code 255</title>
+      <link>https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/</guid>
+      <description>&lt;div class=&#34;flex align-center gdoc-page__anchorwrap&#34;&gt;&#xA;    &lt;h2 id=&#34;symptom&#34;&#xA;    &gt;&#xA;        Symptom&#xA;    &lt;/h2&gt;&#xA;    &lt;a data-clipboard-text=&#34;https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#symptom&#34; class=&#34;gdoc-page__anchor clip flex align-center&#34; title=&#34;Anchor to: Symptom&#34; aria-label=&#34;Anchor to: Symptom&#34; href=&#34;#symptom&#34;&gt;&#xA;        &lt;svg class=&#34;gdoc-icon gdoc_link&#34;&gt;&lt;use xlink:href=&#34;#gdoc_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;&#xA;    &lt;/a&gt;&#xA;&lt;/div&gt;&#xA;&lt;p&gt;Cluster creation fails with containers exiting immediately:&lt;/p&gt;&#xA;&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255)&#xA;&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;This typically happens when creating clusters with many nodes (8+). Some containers start successfully while others crash within the first second.&lt;/p&gt;&#xA;&lt;div class=&#34;flex align-center gdoc-page__anchorwrap&#34;&gt;&#xA;    &lt;h2 id=&#34;cause&#34;&#xA;    &gt;&#xA;        Cause&#xA;    &lt;/h2&gt;&#xA;    &lt;a data-clipboard-text=&#34;https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#cause&#34; class=&#34;gdoc-page__anchor clip flex align-center&#34; title=&#34;Anchor to: Cause&#34; aria-label=&#34;Anchor to: Cause&#34; href=&#34;#cause&#34;&gt;&#xA;        &lt;svg class=&#34;gdoc-icon gdoc_link&#34;&gt;&lt;use xlink:href=&#34;#gdoc_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;&#xA;    &lt;/a&gt;&#xA;&lt;/div&gt;&#xA;&lt;p&gt;Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux &lt;code&gt;inotify&lt;/code&gt; instance limit being too low.&lt;/p&gt;</description>
+    </item>
+    <item>
       <title>Installation</title>
       <link>https://gsi-hpc.github.io/sind/next/getting-started/installation/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>

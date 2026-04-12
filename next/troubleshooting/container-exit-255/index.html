@@ -12,9 +12,11 @@
 <meta name="generator" content="Hugo 0.160.1">
 
 
-  <meta name="description" content="YAML configuration schema reference" />
+  <meta name="description" content=" Symptom Cluster creation fails with containers exiting immediately:
+waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8&#43;). Some containers start successfully while others crash within the first second.
+Cause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low." />
 
-    <title>Cluster Configuration | sind</title>
+    <title>Container exits with code 255 | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -35,46 +37,50 @@
     
   <meta
     property="og:title"
-    content="Cluster Configuration"
+    content="Container exits with code 255"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="YAML configuration schema reference" />
+  <meta property="og:description" content=" Symptom Cluster creation fails with containers exiting immediately:
+waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8&#43;). Some containers start successfully while others crash within the first second.
+Cause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low." />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/" />
 
-<meta property="article:section" content="Configuration" />
+<meta property="article:section" content="Troubleshooting" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T20:02:56+02:00"
+      content="2026-04-12T19:20:08+02:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Cluster Configuration" />
-  <meta name="twitter:description" content="YAML configuration schema reference" />
+<meta name="twitter:title" content="Container exits with code 255" />
+  <meta name="twitter:description" content=" Symptom Cluster creation fails with containers exiting immediately:
+waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8&#43;). Some containers start successfully while others crash within the first second.
+Cause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low." />
 
 
   <script type="application/ld+json">
   {
       "@context": "http://schema.org",
       "@type": "TechArticle",
-      "articleSection": "Configuration",
-      "name": "Cluster Configuration",
-      "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
-      "headline": "Cluster Configuration",
-      "description": "YAML configuration schema reference",
-      "wordCount": "477",
+      "articleSection": "Troubleshooting",
+      "name": "Container exits with code 255",
+      "url": "https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/",
+      "headline": "Container exits with code 255",
+      "description": " Symptom Cluster creation fails with containers exiting immediately:\nwaiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8\u002b). Some containers start successfully while others crash within the first second.\nCause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low.",
+      "wordCount": "230",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/"
+          "@id": "https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T20:02:56.00Z",
+      "dateModified": "2026-04-12T19:20:08.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -152,7 +158,7 @@
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -563,7 +569,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/configuration/cluster-config/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     Cluster Configuration
                   </a>
@@ -1581,7 +1587,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/troubleshooting/container-exit-255/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     Container exits with code 255
                   </a>
@@ -2058,7 +2064,7 @@
     
   
   
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/configuration/' href='/sind/next/configuration/'><span itemprop='name'>Configuration</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Cluster Configuration</span><meta itemprop='position' content='5' /></li>
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/troubleshooting/' href='/sind/next/troubleshooting/'><span itemprop='name'>Troubleshooting</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Container exits with code 255</span><meta itemprop='position' content='5' /></li>
   
 
   
@@ -2077,332 +2083,66 @@
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>Cluster Configuration</h1>
+    <h1>Container exits with code 255</h1>
     
     <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="minimal-configuration"
+    <h2 id="symptom"
     >
-        Minimal configuration
+        Symptom
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#minimal-configuration" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Minimal configuration" aria-label="Anchor to: Minimal configuration" href="#minimal-configuration">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#symptom" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Symptom" aria-label="Anchor to: Symptom" href="#symptom">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>The simplest valid configuration creates a cluster with one controller and one worker using the default image:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
-</span></span></span></code></pre></div><p>This is equivalent to the fully expanded form:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">default</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">defaults</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l">ghcr.io/gsi-hpc/sind-node:latest</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="m">1</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l">512m</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">tmpSize</span><span class="p">:</span><span class="w"> </span><span class="l">256m</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
-</span></span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="full-example"
-    >
-        Full example
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#full-example" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Full example" aria-label="Anchor to: Full example" href="#full-example">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">test-cluster</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">defaults</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l">ghcr.io/gsi-hpc/sind-node:latest</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="m">1</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l">512m</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">tmpSize</span><span class="p">:</span><span class="w"> </span><span class="l">256m</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">storage</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">dataStorage</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">volume</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l">/data</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">slurm</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">main</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
-</span></span></span><span class="line"><span class="cl"><span class="sd">    SelectType=select/cons_tres
-</span></span></span><span class="line"><span class="cl"><span class="sd">    SelectTypeParameters=CR_Core_Memory</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cgroup</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
-</span></span></span><span class="line"><span class="cl"><span class="sd">    ConstrainCores=yes</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l">1g</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">tmpSize</span><span class="p">:</span><span class="w"> </span><span class="l">512m</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">submitter</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">3</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l">1g</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">managed</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
-</span></span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="top-level-fields"
-    >
-        Top-level fields
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#top-level-fields" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Top-level fields" aria-label="Anchor to: Top-level fields" href="#top-level-fields">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Field</th>
-          <th>Required</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>kind</code></td>
-          <td>yes</td>
-          <td>—</td>
-          <td>Must be <code>&quot;Cluster&quot;</code></td>
-      </tr>
-      <tr>
-          <td><code>name</code></td>
-          <td>no</td>
-          <td><code>&quot;default&quot;</code></td>
-          <td>Cluster name, used in resource naming</td>
-      </tr>
-      <tr>
-          <td><code>realm</code></td>
-          <td>no</td>
-          <td><code>&quot;sind&quot;</code></td>
-          <td>Realm namespace for resource isolation</td>
-      </tr>
-      <tr>
-          <td><code>defaults</code></td>
-          <td>no</td>
-          <td>—</td>
-          <td>Default settings applied to all nodes</td>
-      </tr>
-      <tr>
-          <td><code>storage</code></td>
-          <td>no</td>
-          <td>—</td>
-          <td>Shared storage configuration</td>
-      </tr>
-      <tr>
-          <td><code>slurm</code></td>
-          <td>no</td>
-          <td>—</td>
-          <td>Slurm configuration extension</td>
-      </tr>
-      <tr>
-          <td><code>nodes</code></td>
-          <td>no</td>
-          <td>1 controller + 1 worker</td>
-          <td>Node definitions</td>
-      </tr>
-  </tbody>
-</table> </div>
+<p>Cluster creation fails with containers exiting immediately:</p>
+<pre tabindex="0"><code>waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255)
+</code></pre><p>This typically happens when creating clusters with many nodes (8+). Some containers start successfully while others crash within the first second.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="defaults-section"
+    <h2 id="cause"
     >
-        Defaults section
+        Cause
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#defaults-section" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Defaults section" aria-label="Anchor to: Defaults section" href="#defaults-section">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#cause" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Cause" aria-label="Anchor to: Cause" href="#cause">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>The <code>defaults</code> section sets values inherited by all nodes unless overridden at the node level.</p>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Field</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>image</code></td>
-          <td><code>ghcr.io/gsi-hpc/sind-node:latest</code></td>
-          <td>Container image</td>
-      </tr>
-      <tr>
-          <td><code>cpus</code></td>
-          <td><code>1</code></td>
-          <td>CPU limit per container</td>
-      </tr>
-      <tr>
-          <td><code>memory</code></td>
-          <td><code>&quot;512m&quot;</code></td>
-          <td>Memory limit per container</td>
-      </tr>
-      <tr>
-          <td><code>tmpSize</code></td>
-          <td><code>&quot;256m&quot;</code></td>
-          <td>tmpfs size for <code>/tmp</code></td>
-      </tr>
-      <tr>
-          <td><code>capAdd</code></td>
-          <td>none</td>
-          <td>Extra Linux capabilities</td>
-      </tr>
-      <tr>
-          <td><code>capDrop</code></td>
-          <td>none</td>
-          <td>Dropped Linux capabilities</td>
-      </tr>
-      <tr>
-          <td><code>devices</code></td>
-          <td>none</td>
-          <td>Host devices to expose</td>
-      </tr>
-      <tr>
-          <td><code>securityOpt</code></td>
-          <td>none</td>
-          <td>Extra security options</td>
-      </tr>
-  </tbody>
-</table> </div>
-<p>Scalar fields (<code>image</code>, <code>cpus</code>, <code>memory</code>, <code>tmpSize</code>) are overridden by per-node values. List fields (<code>capAdd</code>, <code>capDrop</code>, <code>devices</code>, <code>securityOpt</code>) are merged with per-node values.</p>
+<p>Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux <code>inotify</code> instance limit being too low.</p>
+<p>Each Docker container consumes several <code>inotify</code> file descriptors through containerd&rsquo;s cgroup event monitoring. systemd inside the container also requires inotify for service management. When the per-user limit is exhausted, new containers cannot initialize systemd and exit immediately with code 255.</p>
+<p>The default on many distributions (Fedora, Ubuntu) is 128 instances, which supports roughly 10-13 concurrent systemd containers depending on the workload.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="storage-section"
+    <h2 id="diagnosis"
     >
-        Storage section
+        Diagnosis
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#storage-section" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Storage section" aria-label="Anchor to: Storage section" href="#storage-section">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#diagnosis" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Diagnosis" aria-label="Anchor to: Diagnosis" href="#diagnosis">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">storage</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">dataStorage</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">volume      </span><span class="w"> </span><span class="c"># &#34;volume&#34; or &#34;hostPath&#34;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">hostPath</span><span class="p">:</span><span class="w"> </span><span class="l">./data  </span><span class="w"> </span><span class="c"># required if type is hostPath</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mountPath: /data   # default</span><span class="p">:</span><span class="w"> </span><span class="l">/data</span><span class="w">
-</span></span></span></code></pre></div><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Field</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>type</code></td>
-          <td><code>&quot;volume&quot;</code></td>
-          <td><code>&quot;volume&quot;</code> for a Docker volume, <code>&quot;hostPath&quot;</code> for a bind mount</td>
-      </tr>
-      <tr>
-          <td><code>hostPath</code></td>
-          <td>—</td>
-          <td>Path on the host (required when <code>type: hostPath</code>)</td>
-      </tr>
-      <tr>
-          <td><code>mountPath</code></td>
-          <td><code>&quot;/data&quot;</code></td>
-          <td>Mount point inside containers</td>
-      </tr>
-  </tbody>
-</table> </div>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="slurm-section"
+<p>Check the current limit and whether containerd is hitting it:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Current limit</span>
+</span></span><span class="line"><span class="cl">cat /proc/sys/fs/inotify/max_user_instances
+</span></span><span class="line"><span class="cl"><span class="c1"># 128</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># Check containerd logs for inotify errors</span>
+</span></span><span class="line"><span class="cl">journalctl -u docker --since <span class="s2">&#34;5 minutes ago&#34;</span> <span class="p">|</span> grep inotify
+</span></span><span class="line"><span class="cl"><span class="c1"># error from *cgroupsv2.Manager.EventChan: failed to create inotify fd: too many open files</span>
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="fix"
     >
-        Slurm section
+        Fix
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#slurm-section" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Slurm section" aria-label="Anchor to: Slurm section" href="#slurm-section">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#fix" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Fix" aria-label="Anchor to: Fix" href="#fix">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>The <code>slurm</code> section extends the generated Slurm configuration. Each key maps to a config file:</p>
-<div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Key</th>
-          <th>Config file</th>
-          <th style="text-align: center">sind generates defaults</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>main</code></td>
-          <td><code>slurm.conf</code></td>
-          <td style="text-align: center">yes</td>
-      </tr>
-      <tr>
-          <td><code>cgroup</code></td>
-          <td><code>cgroup.conf</code></td>
-          <td style="text-align: center">yes</td>
-      </tr>
-      <tr>
-          <td><code>gres</code></td>
-          <td><code>gres.conf</code></td>
-          <td style="text-align: center">no</td>
-      </tr>
-      <tr>
-          <td><code>topology</code></td>
-          <td><code>topology.conf</code></td>
-          <td style="text-align: center">no</td>
-      </tr>
-      <tr>
-          <td><code>plugstack</code></td>
-          <td><code>plugstack.conf</code></td>
-          <td style="text-align: center">yes (always scaffolded)</td>
-      </tr>
-  </tbody>
-</table> </div>
-<p>Each key supports two forms:</p>
-<p><strong>String form</strong> — content appended to the config file:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">slurm</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">main</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
-</span></span></span><span class="line"><span class="cl"><span class="sd">    SelectType=select/cons_tres
-</span></span></span><span class="line"><span class="cl"><span class="sd">    SelectTypeParameters=CR_Core_Memory</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cgroup</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
-</span></span></span><span class="line"><span class="cl"><span class="sd">    ConstrainCores=yes</span><span class="w">
-</span></span></span></code></pre></div><p><strong>Map form</strong> — named fragments placed in a <code>.conf.d/</code> directory:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">slurm</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">main</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">scheduling</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
-</span></span></span><span class="line"><span class="cl"><span class="sd">      SchedulerType=sched/backfill
-</span></span></span><span class="line"><span class="cl"><span class="sd">      SchedulerParameters=bf_continue</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">resources</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
-</span></span></span><span class="line"><span class="cl"><span class="sd">      SelectType=select/cons_tres</span><span class="w">
-</span></span></span></code></pre></div><p>Fragment validation:</p>
-<ul>
-<li>Names must be plain filenames (no path separators)</li>
-<li>Names and content must not be empty</li>
-</ul>
-<p>See <a
-  class="gdoc-markdown__link"
-  href="/sind/next/architecture/slurm-config/"
->Slurm Configuration</a> for details on the generated files.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="validation-rules"
-    >
-        Validation rules
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#validation-rules" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Validation rules" aria-label="Anchor to: Validation rules" href="#validation-rules">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<ul>
-<li><code>kind</code> must be <code>&quot;Cluster&quot;</code></li>
-<li>Exactly one <code>controller</code> node is required</li>
-<li>At most one <code>submitter</code> node is allowed</li>
-<li>At least one <code>worker</code> node is required</li>
-<li><code>count</code> is only valid for worker nodes</li>
-<li><code>managed</code> is only valid for worker nodes</li>
-<li><code>count</code> must not be negative</li>
-<li><code>capAdd</code>/<code>capDrop</code> values must be recognized Linux capability names (e.g. <code>SYS_ADMIN</code>, <code>NET_ADMIN</code>, <code>ALL</code>)</li>
-<li><code>devices</code> paths must be absolute (start with <code>/</code>)</li>
-</ul>
+<p>Increase the inotify instance limit. A value of 1024 supports approximately 100 concurrent containers:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Temporary (resets on reboot)</span>
+</span></span><span class="line"><span class="cl">sudo sysctl fs.inotify.max_user_instances<span class="o">=</span><span class="m">1024</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># Persistent</span>
+</span></span><span class="line"><span class="cl"><span class="nb">echo</span> <span class="s2">&#34;fs.inotify.max_user_instances = 1024&#34;</span> <span class="p">|</span> sudo tee /etc/sysctl.d/99-sind.conf
+</span></span><span class="line"><span class="cl">sudo sysctl --system
+</span></span></code></pre></div><p>No restart of Docker or running containers is required. The new limit takes effect immediately for new containers.</p>
 
   </article>
 
@@ -2623,6 +2363,772 @@
         
 
         
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
           
           
         
@@ -2632,6 +3138,12 @@
         
 
         
+        
+      
+    
+
+  
+
         
       
     
@@ -2661,778 +3173,6 @@
             
             
           
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
         
 
         
@@ -3595,11 +3335,11 @@
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/configuration/"
-      title="Configuration"
+      href="/sind/next/troubleshooting/"
+      title="Troubleshooting"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Configuration
+      Troubleshooting
     </a>
   
 </span>
@@ -3607,10 +3347,10 @@
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/configuration/node-definitions/"
-      title="Node Definitions"
+      href="/sind/next/contributing/"
+      title="Contributing"
     >
-      Node Definitions
+      Contributing
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

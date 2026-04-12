@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-04-06T00:41:05+02:00"
+      content="2026-04-12T19:20:08+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/overview/",
       "headline": "Design Overview",
       "description": "Operational model and design philosophy",
-      "wordCount": "417",
+      "wordCount": "496",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-06T00:41:05.00Z",
+      "dateModified": "2026-04-12T19:20:08.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1533,6 +1533,104 @@
               
                 <span class="flex">
                   <a
+                    href="/sind/next/troubleshooting/"
+                    class="gdoc-nav__entry"
+                  >
+                    Troubleshooting
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/troubleshooting/container-exit-255/"
+                    class="gdoc-nav__entry"
+                  >
+                    Container exits with code 255
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+  </ul>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
                     href="/sind/next/contributing/"
                     class="gdoc-nav__entry"
                   >
@@ -2042,18 +2140,15 @@
       │
 resolveInfra        DNS IP │ SSH key │ Slurm version
       │
-createResources     network │ volumes → config │ munge
+createResources     network ║ (config vol → write) ║ (munge vol → write)
       │
-createAllNodes      node₁ │ node₂ │ ... │ nodeₙ
+setupNodes          (create + wait + SSH + hostkey) per node
       │
-setupNodes          (wait + SSH + hostkey) per node
-      │
-registerMesh        DNS records + known_hosts
-      │
-enableSlurm         (enable + probe) per eligible node
+registerMesh ║ enableSlurm
       │
   *Cluster
-</code></pre><p>Nodes start in parallel because the global infrastructure (DNS, SSH) is already available. Slurm daemons handle transient connection failures during bootstrap.</p>
+</code></pre><p>Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.</p>
+<p>Mesh registration (batch DNS + known_hosts) and Slurm enablement run concurrently after all nodes are ready.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="readiness-probes"
     >
@@ -2063,7 +2158,12 @@ enableSlurm         (enable + probe) per eligible node
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>sind waits for each node to become ready before returning success:</p>
+<p>sind waits for each node to become ready before returning success. Probes are accelerated by two event sources:</p>
+<ul>
+<li><strong>Docker events</strong> — a single <code>docker events</code> stream watches all cluster containers for start/die events</li>
+<li><strong>Systemd D-Bus monitors</strong> — per-node <code>busctl monitor --watch-bind=yes</code> streams watch for unit state changes (e.g., sshd.service becoming active)</li>
+</ul>
+<p>When an event arrives, probes re-evaluate immediately instead of waiting for the next poll tick. If event sources are unavailable, sind falls back to poll-only mode.</p>
 <div class="table-wrap"> <table>
   <thead>
       <tr>
@@ -2952,6 +3052,80 @@ enableSlurm         (enable + probe) per eligible node
       
     
 
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
   
     
 
