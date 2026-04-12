@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/monitor"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -100,6 +101,60 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 		case <-ctx.Done():
 			return fmt.Errorf("node %s not ready: %w", name, lastErr)
 		case <-ticker.C:
+		}
+	}
+}
+
+// UntilReadyWithEvents is like UntilReady but also listens for events from
+// a monitor. Events trigger immediate probe re-evaluation instead of waiting
+// for the next poll interval, reducing detection latency for event-backed
+// state transitions. Container die events are treated as terminal errors.
+func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event) error {
+	log := sindlog.From(ctx)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	probeNames := make([]string, len(probes))
+	for i, p := range probes {
+		probeNames[i] = p.Name
+	}
+	log.DebugContext(ctx, "starting readiness probes (event-driven)", "node", string(name), "probes", strings.Join(probeNames, ","))
+
+	var lastErr error
+	for {
+		var failed bool
+		for _, p := range probes {
+			if err := p.Check(ctx, client, name); err != nil {
+				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
+				log.Log(ctx, sindlog.LevelTrace, "probe failed", "node", string(name), "probe", p.Name, "err", err)
+				failed = true
+				var te *TerminalError
+				if errors.As(err, &te) {
+					return fmt.Errorf("node %s not ready: %w", name, lastErr)
+				}
+				break
+			}
+		}
+		if !failed {
+			log.DebugContext(ctx, "all probes passed", "node", string(name))
+			return nil
+		}
+		for {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("node %s not ready: %w", name, lastErr)
+			case <-ticker.C:
+			case ev := <-events:
+				if ev.Kind == monitor.EventContainerDie && ev.Container == name {
+					return fmt.Errorf("node %s not ready: %w", name, &TerminalError{
+						Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
+					})
+				}
+				if ev.Container != name {
+					continue
+				}
+			}
+			break
 		}
 	}
 }

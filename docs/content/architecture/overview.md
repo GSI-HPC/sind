@@ -41,24 +41,27 @@ PreflightCheck
       │
 resolveInfra        DNS IP │ SSH key │ Slurm version
       │
-createResources     network │ volumes → config │ munge
+createResources     network ║ (config vol → write) ║ (munge vol → write)
       │
-createAllNodes      node₁ │ node₂ │ ... │ nodeₙ
+setupNodes          (create + wait + SSH + hostkey) per node
       │
-setupNodes          (wait + SSH + hostkey) per node
-      │
-registerMesh        DNS records + known_hosts
-      │
-enableSlurm         (enable + probe) per eligible node
+registerMesh ║ enableSlurm
       │
   *Cluster
 ```
 
-Nodes start in parallel because the global infrastructure (DNS, SSH) is already available. Slurm daemons handle transient connection failures during bootstrap.
+Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
+
+Mesh registration (batch DNS + known_hosts) and Slurm enablement run concurrently after all nodes are ready.
 
 ## Readiness probes
 
-sind waits for each node to become ready before returning success:
+sind waits for each node to become ready before returning success. Probes are accelerated by two event sources:
+
+- **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
+- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active)
+
+When an event arrives, probes re-evaluate immediately instead of waiting for the next poll tick. If event sources are unavailable, sind falls back to poll-only mode.
 
 | Check | Description |
 |-------|-------------|

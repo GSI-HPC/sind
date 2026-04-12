@@ -19,6 +19,11 @@ type Executor interface {
 
 	// RunWithStdin is like Run but pipes the given reader to the command's stdin.
 	RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (stdout string, stderr string, err error)
+
+	// Start starts a long-lived command and returns a Process for reading
+	// its stdout incrementally. The command is killed when ctx is cancelled.
+	// The caller must call Process.Close to release resources.
+	Start(ctx context.Context, name string, args ...string) (*Process, error)
 }
 
 // OSExecutor runs commands using os/exec.
@@ -42,4 +47,9 @@ func (e *OSExecutor) Run(ctx context.Context, name string, args ...string) (stri
 // RunWithStdin implements Executor.
 func (e *OSExecutor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	return e.run(ctx, stdin, name, args...)
+}
+
+// Start implements Executor.
+func (e *OSExecutor) Start(ctx context.Context, name string, args ...string) (*Process, error) {
+	return Start(ctx, name, args...)
 }

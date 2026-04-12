@@ -12,6 +12,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/monitor"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/ssh"
@@ -66,22 +67,18 @@ type nodeResult struct {
 //	      │
 //	resolveInfra        DNS IP ║ SSH key ║ Slurm version
 //	      │
-//	createResources     network ║ volumes → config ║ munge
+//	createResources     network ║ (config vol → write) ║ (munge vol → write)
 //	      │
-//	createAllNodes      node₁ ║ node₂ ║ ... ║ nodeₙ
+//	setupNodes          (create + wait + SSH + hostkey) per node
 //	      │
-//	setupNodes          (wait + SSH + hostkey) per node
-//	      │
-//	registerMesh        DNS records + known_hosts (serial)
-//	      │
-//	enableSlurm         (enable + probe) per eligible node
+//	registerMesh ║ enableSlurm
 //	      │
 //	  *Cluster
 func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (result *Cluster, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 
-	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(cfg.Nodes))
+	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(NodeShortNames(cfg.Nodes)))
 
 	// Register cleanup before any fallible operation. Mesh cleanup runs
 	// whenever this invocation created the mesh. Cluster resource cleanup
@@ -133,27 +130,44 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion)
 	logExtraPrivileges(ctx, nodeConfigs)
-	if err := createAllNodes(ctx, client, meshMgr, nodeConfigs); err != nil {
-		return nil, err
-	}
-	log.InfoContext(ctx, "node containers started", "count", len(nodeConfigs))
 
-	nodeResults, err := setupNodes(ctx, client, realm, cfg.Name, sshPubKey, nodeConfigs, readinessInterval)
+	// Start event watcher before creating nodes so it captures all
+	// container start events. If the watcher fails to start, fall back
+	// to poll-only mode.
+	prefix := ContainerPrefix(realm, cfg.Name)
+	watcher, stopWatcher := startWatcher(ctx, client, prefix, cfg.Name)
+	defer stopWatcher()
+
+	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, cfg.Name, sshPubKey, nodeConfigs, readinessInterval, watcher)
 	if err != nil {
 		return nil, err
 	}
 	log.InfoContext(ctx, "nodes ready", "count", len(nodeConfigs))
 
-	cluster, err := registerMesh(ctx, meshMgr, cfg.Name, slurmVersion, nodeConfigs, nodeResults)
-	if err != nil {
+	// registerMesh and enableSlurm are independent: Slurm uses short
+	// hostnames resolved by Docker embedded DNS on the cluster network.
+	// Mesh DNS records are for SSH relay and host-side resolution only.
+	var cluster *Cluster
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		var meshErr error
+		cluster, meshErr = registerMesh(gctx, meshMgr, cfg.Name, slurmVersion, nodeConfigs, nodeResults)
+		if meshErr != nil {
+			return meshErr
+		}
+		log.DebugContext(gctx, "mesh registration complete")
+		return nil
+	})
+	g.Go(func() error {
+		if err := enableSlurm(gctx, client, realm, cfg.Name, nodeConfigs, readinessInterval, watcher); err != nil {
+			return err
+		}
+		log.InfoContext(gctx, "slurm services enabled")
+		return nil
+	})
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	log.DebugContext(ctx, "mesh registration complete")
-
-	if err := enableSlurm(ctx, client, realm, cfg.Name, nodeConfigs, readinessInterval); err != nil {
-		return nil, err
-	}
-	log.InfoContext(ctx, "slurm services enabled")
 
 	return cluster, nil
 }
@@ -212,60 +226,37 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // createResources creates cluster network, volumes, config, and munge key.
 //
 //	┌─────────┐  ┌─────────┐
-//	│ network │  │ volumes │
-//	└────┬────┘  └────┬────┘
-//	     │       ┌────┴────┐
-//	     │  ┌────┴───┐ ┌───┴────┐
-//	     │  │ config │ │  munge │
-//	     │  └────┬───┘ └───┬────┘
-//	     └───────┼─────────┘
+//	network ║ (config vol → write config) ║ (munge vol → write munge key) ║ data vol
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
-	useDataVolume := cfg.Storage.DataStorage.HostPath == ""
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return CreateClusterNetwork(gctx, client, realm, cfg.Name) })
-	g.Go(func() error { return CreateClusterVolumes(gctx, client, realm, cfg.Name, useDataVolume) })
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
-	g, gctx = errgroup.WithContext(ctx)
-	g.Go(func() error { return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull) })
-	g.Go(func() error { return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull) })
-	return g.Wait()
-}
 
-// createAllNodes creates and starts all node containers concurrently.
-//
-//	┌───────┐ ┌───────┐     ┌───────┐
-//	│ node₁ │ │ node₂ │ ... │ nodeₙ │
-//	└───┬───┘ └───┬───┘     └───┬───┘
-//	    └─────────┼─────────────┘
-func createAllNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, nodeConfigs []RunConfig) error {
 	g, gctx := errgroup.WithContext(ctx)
-	for _, nc := range nodeConfigs {
-		g.Go(func() error {
-			_, err := CreateNode(gctx, client, meshMgr, nc)
-			if err != nil {
-				return fmt.Errorf("node %s: %w", nc.ShortName, err)
-			}
-			return nil
-		})
+	g.Go(func() error { return CreateClusterNetwork(gctx, client, realm, cfg.Name) })
+	g.Go(func() error {
+		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeConfig); err != nil {
+			return err
+		}
+		return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull)
+	})
+	g.Go(func() error {
+		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
+			return err
+		}
+		return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull)
+	})
+	if cfg.Storage.DataStorage.HostPath == "" {
+		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeData) })
 	}
 	return g.Wait()
 }
 
-// setupNodes waits for base readiness, injects SSH public keys, and collects
-// host keys from each node — all concurrently.
+// setupNodes creates each node, starts its systemd monitor, waits for base
+// readiness, injects SSH public keys, and collects host keys — all
+// concurrently per node with no barrier between creation and probing.
 //
-//	per node:  wait(container, systemd, sshd) → inspect → SSH inject → host key
-//
-//	┌───────────────┐ ┌───────────────┐     ┌───────────────┐
-//	│ node₁ setup   │ │ node₂ setup   │ ... │ nodeₙ setup   │
-//	└───────┬───────┘ └───────┬───────┘     └───────┬───────┘
-//	        └─────────────────┼─────────────────────┘
-func setupNodes(ctx context.Context, client *docker.Client, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration) ([]nodeResult, error) {
+//	per node:  create → monitor → wait(container, systemd, sshd) → inspect → SSH → hostkey
+func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) ([]nodeResult, error) {
 	log := sindlog.From(ctx)
 	baseProbes := []probe.Probe{
 		{Name: "container", Check: probe.ContainerRunning},
@@ -279,8 +270,19 @@ func setupNodes(ctx context.Context, client *docker.Client, realm, clusterName, 
 		g.Go(func() error {
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 
+			if _, err := CreateNode(gctx, client, meshMgr, nc); err != nil {
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
+			}
+
+			if watcher != nil {
+				watcher.AddNodes(gctx, []monitor.NodeTarget{{
+					ShortName: nc.ShortName,
+					Container: containerName,
+				}})
+			}
+
 			log.DebugContext(gctx, "waiting for node", "node", nc.ShortName)
-			if err := probe.UntilReady(gctx, client, containerName, baseProbes, interval); err != nil {
+			if err := waitReady(gctx, client, containerName, baseProbes, interval, watcher); err != nil {
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
 			}
 
@@ -305,9 +307,8 @@ func setupNodes(ctx context.Context, client *docker.Client, realm, clusterName, 
 	return results, g.Wait()
 }
 
-// registerMesh writes DNS records and known hosts for all nodes, and builds
-// the Cluster result. Serial because AddDNSRecord is a read-modify-write
-// on the shared Corefile.
+// registerMesh writes DNS records and known hosts for all nodes in batch,
+// and builds the Cluster result.
 func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurmVersion string, nodeConfigs []RunConfig, results []nodeResult) (*Cluster, error) {
 	nodes, err := registerNodes(ctx, meshMgr, clusterName, nodeConfigs, results)
 	if err != nil {
@@ -321,31 +322,36 @@ func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurm
 	}, nil
 }
 
-// registerNodes registers DNS records and known_hosts entries for each node,
-// and returns the resulting Node list. Serial because AddDNSRecord is a
-// read-modify-write on the shared Corefile.
+// registerNodes registers DNS records and known_hosts entries for all nodes
+// in batch, and returns the resulting Node list.
 func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig, results []nodeResult) ([]*Node, error) {
-	nodes := make([]*Node, 0, len(nodeConfigs))
+	dnsRecords := make([]mesh.DNSRecord, len(nodeConfigs))
+	hostEntries := make([]mesh.KnownHostEntry, len(nodeConfigs))
+	nodes := make([]*Node, len(nodeConfigs))
+
 	for i, nc := range nodeConfigs {
 		nr := results[i]
-		nodeIP := nr.info.IPs[NetworkName(meshMgr.Realm, clusterName)]
+		netName := NetworkName(meshMgr.Realm, clusterName)
 		dnsName := DNSName(nc.ShortName, clusterName, meshMgr.Realm)
 
-		if err := meshMgr.AddDNSRecord(ctx, dnsName, nodeIP); err != nil {
-			return nil, fmt.Errorf("registering DNS for %s: %w", nc.ShortName, err)
-		}
-		if err := meshMgr.AddKnownHost(ctx, dnsName, nr.hostKey); err != nil {
-			return nil, fmt.Errorf("registering host key for %s: %w", nc.ShortName, err)
-		}
-
-		nodes = append(nodes, &Node{
+		dnsRecords[i] = mesh.DNSRecord{Hostname: dnsName, IP: nr.info.IPs[netName]}
+		hostEntries[i] = mesh.KnownHostEntry{Hostname: dnsName, HostKey: nr.hostKey}
+		nodes[i] = &Node{
 			Name:        nc.ShortName,
 			Role:        nc.Role,
 			ContainerID: nr.info.ID,
-			IP:          nr.info.IPs[NetworkName(meshMgr.Realm, clusterName)],
+			IP:          nr.info.IPs[netName],
 			State:       StateRunning,
-		})
+		}
 	}
+
+	if err := meshMgr.AddDNSRecords(ctx, dnsRecords); err != nil {
+		return nil, fmt.Errorf("registering DNS: %w", err)
+	}
+	if err := meshMgr.AddKnownHosts(ctx, hostEntries); err != nil {
+		return nil, fmt.Errorf("registering host keys: %w", err)
+	}
+
 	return nodes, nil
 }
 
@@ -358,7 +364,7 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	│ wait slurmctld     │ │ wait slurmd          │
 //	└─────────┬──────────┘ └──────────┬───────────┘
 //	          └───────────┬───────────┘
-func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration) error {
+func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) error {
 	log := sindlog.From(ctx)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
@@ -377,8 +383,37 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 			if err != nil {
 				return fmt.Errorf("enabling %s on %s: %w", service, nc.ShortName, err)
 			}
-			return probe.UntilReady(gctx, client, containerName, []probe.Probe{slurmProbe}, interval)
+			return waitReady(gctx, client, containerName, []probe.Probe{slurmProbe}, interval, watcher)
 		})
 	}
 	return g.Wait()
+}
+
+// startWatcher creates and starts an event watcher for the given cluster.
+// If the watcher fails to start (e.g. docker events unavailable), nil is
+// returned and the caller falls back to poll-only mode. The returned stop
+// function cancels the watcher and waits for its goroutines to exit.
+func startWatcher(ctx context.Context, client *docker.Client, containerPrefix, clusterName string) (w *monitor.Watcher, stop func()) {
+	watchCtx, cancel := context.WithCancel(ctx)
+	w = monitor.NewWatcher(client.Executor, containerPrefix, clusterName)
+	if err := w.Start(watchCtx, nil); err != nil {
+		cancel()
+		sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "event watcher not available, using poll-only mode", "err", err)
+		return nil, func() {}
+	}
+	return w, func() {
+		cancel()
+		w.Wait()
+	}
+}
+
+// waitReady polls probes until ready, optionally accelerated by events from
+// a watcher. If watcher is nil, falls back to plain polling.
+func waitReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []probe.Probe, interval time.Duration, watcher *monitor.Watcher) error {
+	if watcher == nil {
+		return probe.UntilReady(ctx, client, name, probes, interval)
+	}
+	ch := watcher.Subscribe()
+	defer watcher.Unsubscribe(ch)
+	return probe.UntilReadyWithEvents(ctx, client, name, probes, interval, ch)
 }

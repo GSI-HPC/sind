@@ -4,6 +4,7 @@ package cmdexec_test
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -44,4 +45,26 @@ func TestLoggingExecutor_RunWithStdin(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ok", stdout)
 	assert.Equal(t, "cmd arg", logged)
+}
+
+func TestLoggingExecutor_Start(t *testing.T) {
+	inner := &mock.Executor{
+		OnStart: func(_ []string) mock.StreamResult {
+			pr, pw := io.Pipe()
+			t.Cleanup(func() { _ = pw.Close() })
+			return mock.StreamResult{Reader: pr}
+		},
+	}
+
+	var logged string
+	l := &cmdexec.LoggingExecutor{
+		Inner: inner,
+		Log:   func(_ context.Context, cmd string) { logged = cmd },
+	}
+
+	proc, err := l.Start(t.Context(), "docker", "events")
+	require.NoError(t, err)
+	_ = proc.Close()
+
+	assert.Equal(t, "docker events", logged)
 }

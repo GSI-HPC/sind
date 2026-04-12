@@ -10,6 +10,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"golang.org/x/sync/errgroup"
 )
 
 // Delete orchestrates the full cluster deletion flow.
@@ -102,14 +103,18 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	return nil
 }
 
-// DeleteContainers force-removes the given containers (docker rm -f).
+// DeleteContainers force-removes the given containers in parallel (docker rm -f).
 func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
+	g, gctx := errgroup.WithContext(ctx)
 	for _, c := range containers {
-		if err := client.RemoveContainer(ctx, c.Name); err != nil {
-			return fmt.Errorf("removing container %s: %w", c.Name, err)
-		}
+		g.Go(func() error {
+			if err := client.RemoveContainer(gctx, c.Name); err != nil {
+				return fmt.Errorf("removing container %s: %w", c.Name, err)
+			}
+			return nil
+		})
 	}
-	return nil
+	return g.Wait()
 }
 
 // DeleteNetwork removes the cluster network.
@@ -130,20 +135,25 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 	return nil
 }
 
-// DeregisterMesh removes DNS records and known_hosts entries for each container
-// in the cluster. This is the inverse of registerMesh during cluster creation.
+// DeregisterMesh removes DNS records and known_hosts entries for all
+// containers in batch. This is the inverse of registerMesh during cluster
+// creation.
 func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {
+	if len(containers) == 0 {
+		return nil
+	}
 	prefix := ContainerPrefix(meshMgr.Realm, clusterName)
-	for _, c := range containers {
+	hostnames := make([]string, len(containers))
+	for i, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
-		dnsName := DNSName(shortName, clusterName, meshMgr.Realm)
+		hostnames[i] = DNSName(shortName, clusterName, meshMgr.Realm)
+	}
 
-		if err := meshMgr.RemoveDNSRecord(ctx, dnsName); err != nil {
-			return fmt.Errorf("removing DNS record for %s: %w", shortName, err)
-		}
-		if err := meshMgr.RemoveKnownHost(ctx, dnsName); err != nil {
-			return fmt.Errorf("removing known host for %s: %w", shortName, err)
-		}
+	if err := meshMgr.RemoveDNSRecords(ctx, hostnames); err != nil {
+		return fmt.Errorf("removing DNS records: %w", err)
+	}
+	if err := meshMgr.RemoveKnownHosts(ctx, hostnames); err != nil {
+		return fmt.Errorf("removing known hosts: %w", err)
 	}
 	return nil
 }

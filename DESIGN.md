@@ -10,6 +10,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 - Linux host with cgroupv2 and `nsdelegate` mount option (`mount -o remount,nsdelegate /sys/fs/cgroup`)
 - Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true`)
+- For clusters with 10+ nodes: `fs.inotify.max_user_instances >= 1024` (default 128 is too low)
 
 ## Supported Versions
 
@@ -42,18 +43,29 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 3. Create `sind-ssh-config` volume and generate keypair (if not exists)
 4. Start `sind-ssh` container (if not exists)
 
-**Phase 2: Cluster Resources**
-1. Create cluster network (`sind-<cluster>-net`)
-2. Create cluster volumes (config, munge, data)
-3. Generate munge key and Slurm configuration
+**Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
+1. Create cluster network
+2. Create config volume → write Slurm configuration
+3. Create munge volume → generate and write munge key
+4. Create data volume (if needed)
 
 **Phase 3: Node Containers**
-1. Start all node containers in parallel
-2. Wait for each node to become ready
+1. Create and start each node container in parallel
+2. Start per-node systemd D-Bus monitor immediately after each container starts
+3. Wait for each node to become ready, accelerated by events
 
-Node containers start in parallel because the global infrastructure (DNS, SSH) is already available. Slurm daemons handle transient connection failures during cluster bootstrap.
+There is no barrier between node creation and readiness probing — each node's goroutine creates its container, starts a systemd monitor, and begins probing in a single pipeline. This allows early-starting nodes to be probed while later nodes are still being created.
 
-sind waits for each node to become ready before returning success:
+#### Event-Driven Readiness
+
+sind uses two event sources to accelerate readiness detection:
+
+- **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
+- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active)
+
+When an event arrives, readiness probes re-evaluate immediately instead of waiting for the next poll tick. If the event sources are unavailable, sind falls back to poll-only mode transparently.
+
+#### Readiness Checks
 
 | Check | Description |
 |-------|-------------|
@@ -64,6 +76,10 @@ sind waits for each node to become ready before returning success:
 | slurmd ready | slurmd service active (worker only) |
 
 If any node fails to become ready within the timeout, `sind create cluster` fails and reports which nodes/checks failed. Partial clusters are not automatically cleaned up—use `sind delete cluster` to remove.
+
+**Phase 4: Mesh Registration and Slurm** (concurrent)
+
+After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts) and Slurm enablement concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution.
 
 ### Design Goals
 

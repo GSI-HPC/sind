@@ -138,6 +138,102 @@ func (m *Manager) AddKnownHost(ctx context.Context, hostname, hostKey string) er
 	return nil
 }
 
+// KnownHostEntry holds a hostname and its SSH host key for batch registration.
+type KnownHostEntry struct {
+	Hostname string
+	HostKey  string
+}
+
+// AddKnownHosts adds host key entries to the known_hosts file. Existing
+// entries for the same hostnames are replaced, making the operation
+// idempotent on retry.
+func (m *Manager) AddKnownHosts(ctx context.Context, entries []KnownHostEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	name := m.SSHContainerName()
+	content, err := m.Docker.ReadFile(ctx, name, knownHostsPath)
+	if err != nil {
+		return fmt.Errorf("reading known_hosts: %w", err)
+	}
+
+	// Build set of hostnames being added for dedup.
+	newHostnames := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		newHostnames[e.Hostname] = true
+	}
+
+	// Keep existing lines that don't conflict with new entries.
+	lines := strings.Split(content, "\n")
+	var buf strings.Builder
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 1 && newHostnames[fields[0]] {
+			continue
+		}
+		buf.WriteString(line)
+		buf.WriteByte('\n')
+	}
+	for _, e := range entries {
+		buf.WriteString(e.Hostname)
+		buf.WriteByte(' ')
+		buf.WriteString(e.HostKey)
+		buf.WriteByte('\n')
+	}
+
+	err = m.Docker.WriteFile(ctx, name, knownHostsPath, buf.String())
+	if err != nil {
+		return fmt.Errorf("writing known_hosts: %w", err)
+	}
+	return nil
+}
+
+// RemoveKnownHosts removes all entries for the given hostnames from the
+// known_hosts file in a single operation.
+func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) error {
+	if len(hostnames) == 0 {
+		return nil
+	}
+	name := m.SSHContainerName()
+	content, err := m.Docker.ReadFile(ctx, name, knownHostsPath)
+	if err != nil {
+		return fmt.Errorf("reading known_hosts: %w", err)
+	}
+
+	remove := make(map[string]bool, len(hostnames))
+	for _, h := range hostnames {
+		remove[h] = true
+	}
+
+	lines := strings.Split(content, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 1 && remove[fields[0]] {
+			continue
+		}
+		kept = append(kept, line)
+	}
+
+	var result string
+	if len(kept) > 0 {
+		result = strings.Join(kept, "\n") + "\n"
+	}
+
+	err = m.Docker.WriteFile(ctx, name, knownHostsPath, result)
+	if err != nil {
+		return fmt.Errorf("writing known_hosts: %w", err)
+	}
+
+	return nil
+}
+
 // RemoveKnownHost removes all entries for the given hostname from the
 // known_hosts file in the SSH container.
 func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {

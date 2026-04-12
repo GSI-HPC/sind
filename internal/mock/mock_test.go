@@ -145,3 +145,84 @@ func TestRecordingExecutor_RunWithStdin(t *testing.T) {
 	require.Len(t, calls, 1)
 	assert.Equal(t, "ok", calls[0].Stdout)
 }
+
+func TestExecutor_Start_OnStart(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer func() { _ = pw.Close() }()
+
+	m := Executor{
+		OnStart: func(args []string) StreamResult {
+			if args[0] == "events" {
+				return StreamResult{Reader: pr}
+			}
+			return StreamResult{Err: fmt.Errorf("unknown")}
+		},
+	}
+
+	proc, err := m.Start(t.Context(), "docker", "events")
+	require.NoError(t, err)
+	assert.NotNil(t, proc)
+	_ = proc.Close()
+
+	_, err = m.Start(t.Context(), "docker", "other")
+	require.Error(t, err)
+}
+
+func TestExecutor_Start_NoOnStart(t *testing.T) {
+	var m Executor
+	_, err := m.Start(t.Context(), "docker", "events")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected Start call")
+}
+
+func TestPipes(t *testing.T) {
+	var p Pipes
+	m := Executor{OnStart: p.OnStart}
+
+	proc, err := m.Start(t.Context(), "docker", "events")
+	require.NoError(t, err)
+
+	// io.Pipe is unbuffered — write must happen concurrently with read.
+	go p.Write(0, "hello\n")
+
+	buf := make([]byte, 6)
+	_, err = io.ReadFull(proc.Stdout, buf)
+	require.NoError(t, err)
+	assert.Equal(t, "hello\n", string(buf))
+
+	assert.Equal(t, 1, p.Len())
+
+	p.CloseAll()
+	_ = proc.Close()
+}
+
+func TestPipes_CloseWithError(t *testing.T) {
+	var p Pipes
+	m := Executor{OnStart: p.OnStart}
+
+	proc, err := m.Start(t.Context(), "docker", "events")
+	require.NoError(t, err)
+
+	p.CloseWithError(0, fmt.Errorf("connection reset"))
+
+	buf := make([]byte, 1)
+	_, err = proc.Stdout.Read(buf)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "connection reset")
+	_ = proc.Close()
+}
+
+func TestRecordingExecutor_Start(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer func() { _ = pw.Close() }()
+
+	rec := NewRecorder()
+	rec.mock.OnStart = func(_ []string) StreamResult {
+		return StreamResult{Reader: pr}
+	}
+
+	proc, err := rec.Start(t.Context(), "docker", "events")
+	require.NoError(t, err)
+	assert.NotNil(t, proc)
+	_ = proc.Close()
+}
