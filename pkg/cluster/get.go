@@ -15,13 +15,13 @@ import (
 
 // Summary holds summary information about a sind cluster.
 type Summary struct {
-	Name         string
-	SlurmVersion string
-	State        State
-	NodeCount    int
-	Submitters   int
-	Controllers  int
-	Workers      int
+	Name         string `json:"name"`
+	SlurmVersion string `json:"slurm_version"`
+	State        State  `json:"status"`
+	NodeCount    int    `json:"nodes"`
+	Submitters   int    `json:"submitters"`
+	Controllers  int    `json:"controllers"`
+	Workers      int    `json:"workers"`
 }
 
 // GetClusters lists all sind clusters by querying Docker for containers
@@ -82,9 +82,9 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 
 // NodeSummary holds summary information about a node in a sind cluster.
 type NodeSummary struct {
-	Name  string      // short name: "controller", "worker-0"
-	Role  config.Role // "controller", "submitter", "worker"
-	State State
+	Name  string      `json:"name"` // short name: "controller", "worker-0"
+	Role  config.Role `json:"role"` // "controller", "submitter", "worker"
+	State State       `json:"status"`
 }
 
 // GetNodes lists all nodes in the named cluster.
@@ -139,10 +139,10 @@ func roleSortKey(role config.Role, name string) string {
 
 // NetworkSummary holds summary information about a sind network.
 type NetworkSummary struct {
-	Name    string
-	Driver  string
-	Subnet  string
-	Gateway string
+	Name    string `json:"name"`
+	Driver  string `json:"driver"`
+	Subnet  string `json:"subnet"`
+	Gateway string `json:"gateway"`
 }
 
 // GetNetworks lists all sind-related Docker networks with IPAM details.
@@ -176,8 +176,8 @@ func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*N
 
 // VolumeSummary holds summary information about a sind volume.
 type VolumeSummary struct {
-	Name   string
-	Driver string
+	Name   string `json:"name"`
+	Driver string `json:"driver"`
 }
 
 // GetVolumes lists all sind-related Docker volumes.

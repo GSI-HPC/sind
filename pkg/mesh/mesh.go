@@ -353,8 +353,8 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 
 // DNSRecord represents a single A record in the mesh DNS.
 type DNSRecord struct {
-	Hostname string
-	IP       string
+	Hostname string `json:"hostname"`
+	IP       string `json:"ip"`
 }
 
 // GetDNSRecords returns all A records currently served by the mesh DNS.

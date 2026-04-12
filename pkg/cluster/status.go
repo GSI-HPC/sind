@@ -20,11 +20,11 @@ type ServiceHealth map[string]bool
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	Container docker.ContainerState // container state from Docker (e.g. "running", "exited")
-	IP        string                // container IP address
-	Munge     bool                  // munge service healthy
-	SSHD      bool                  // sshd accepting connections
-	Services  ServiceHealth         // role-specific services (e.g., "slurmctld", "slurmd")
+	Container docker.ContainerState `json:"container"` // container state from Docker (e.g. "running", "exited")
+	IP        string                `json:"ip"`        // container IP address
+	Munge     bool                  `json:"munge"`     // munge service healthy
+	SSHD      bool                  `json:"sshd"`      // sshd accepting connections
+	Services  ServiceHealth         `json:"services"`  // role-specific services (e.g., "slurmctld", "slurmd")
 }
 
 // GetNodeHealth checks the health of a single node container.
@@ -72,18 +72,18 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 
 // NetworkHealth holds the health and IPAM details of cluster networking.
 type NetworkHealth struct {
-	Mesh           bool   // sind-mesh network exists
-	MeshName       string // mesh network name (e.g. "sind-mesh")
-	MeshDriver     string // mesh network driver (e.g. "bridge")
-	MeshSubnet     string // mesh network subnet
-	MeshGateway    string // mesh network gateway
-	DNS            bool   // sind-dns container exists
-	DNSName        string // DNS container name (e.g. "sind-dns")
-	Cluster        bool   // cluster network exists
-	ClusterName    string // cluster network name (e.g. "sind-dev-net")
-	ClusterDriver  string // cluster network driver (e.g. "bridge")
-	ClusterSubnet  string // cluster network subnet
-	ClusterGateway string // cluster network gateway
+	Mesh           bool   `json:"mesh_ok"`         // sind-mesh network exists
+	MeshName       string `json:"mesh_name"`       // mesh network name (e.g. "sind-mesh")
+	MeshDriver     string `json:"mesh_driver"`     // mesh network driver (e.g. "bridge")
+	MeshSubnet     string `json:"mesh_subnet"`     // mesh network subnet
+	MeshGateway    string `json:"mesh_gateway"`    // mesh network gateway
+	DNS            bool   `json:"dns_ok"`          // sind-dns container exists
+	DNSName        string `json:"dns_name"`        // DNS container name (e.g. "sind-dns")
+	Cluster        bool   `json:"cluster_ok"`      // cluster network exists
+	ClusterName    string `json:"cluster_name"`    // cluster network name (e.g. "sind-dev-net")
+	ClusterDriver  string `json:"cluster_driver"`  // cluster network driver (e.g. "bridge")
+	ClusterSubnet  string `json:"cluster_subnet"`  // cluster network subnet
+	ClusterGateway string `json:"cluster_gateway"` // cluster network gateway
 }
 
 // GetNetworkHealth checks the health of mesh, DNS, and cluster networking.
@@ -135,10 +135,10 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 
 // MountPoint describes a volume or bind mount on cluster containers.
 type MountPoint struct {
-	Path   string             // mount path inside the container (e.g. "/etc/slurm")
-	Source string             // volume name or host path
-	Type   config.StorageType // "volume" or "hostPath"
-	OK     bool               // true if the Docker volume exists (always true for hostPath)
+	Path   string             `json:"path"`   // mount path inside the container (e.g. "/etc/slurm")
+	Source string             `json:"source"` // volume name or host path
+	Type   config.StorageType `json:"type"`   // "volume" or "hostPath"
+	OK     bool               `json:"ok"`     // true if the Docker volume exists (always true for hostPath)
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
@@ -184,18 +184,18 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
-	Name   string      // DNS-style name: "controller.dev"
-	Role   config.Role // "controller", "submitter", "worker"
-	Health *NodeHealth
+	Name   string      `json:"name"`   // DNS-style name: "controller.dev"
+	Role   config.Role `json:"role"`   // "controller", "submitter", "worker"
+	Health *NodeHealth `json:"health"` //nolint:revive // nested health is intentional
 }
 
 // Status holds the full status of a sind cluster.
 type Status struct {
-	Name    string
-	State   State
-	Nodes   []*NodeStatus
-	Network *NetworkHealth
-	Mounts  []MountPoint
+	Name    string         `json:"name"`
+	State   State          `json:"status"`
+	Nodes   []*NodeStatus  `json:"nodes"`
+	Network *NetworkHealth `json:"network"`
+	Mounts  []MountPoint   `json:"mounts"`
 }
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
