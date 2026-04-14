@@ -649,6 +649,36 @@ func TestExec_Error(t *testing.T) {
 	assert.Empty(t, stdout)
 }
 
+func TestExecAllowNonZero_Success(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	c := NewClient(&m)
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+	require.NoError(t, err)
+	assert.Equal(t, "active\n", stdout)
+}
+
+func TestExecAllowNonZero_NonZeroExitReturnsStdout(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\ninactive\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge", "slurmd")
+	require.NoError(t, err)
+	assert.Equal(t, "active\ninactive\n", stdout)
+}
+
+func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := NewClient(&m)
+
+	_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "true")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "daemon")
+}
+
 func TestExecWithStdin(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
