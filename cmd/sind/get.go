@@ -25,9 +25,6 @@ func newGetCommand() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringP("output", "o", "human", "output format (human|json)")
-	cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		return validateOutputFlag(cmd)
-	}
 
 	cmd.AddCommand(newGetClusterCommand())
 	cmd.AddCommand(newGetClustersCommand())
@@ -96,6 +93,9 @@ func newGetVolumesCommand() *cobra.Command {
 }
 
 func runGetClusters(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	clusters, err := cluster.GetClusters(cmd.Context(), client, realmFromFlag(cmd))
 	if err != nil {
@@ -131,6 +131,9 @@ func newGetRealmsCommand() *cobra.Command {
 }
 
 func runGetRealms(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	realms, err := cluster.GetRealms(cmd.Context(), client)
 	if err != nil {
@@ -162,6 +165,9 @@ func newGetNodeCommand() *cobra.Command {
 }
 
 func runGetNode(cmd *cobra.Command, arg string) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	if strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
 		return fmt.Errorf("use NODE[.CLUSTER], not the FQDN %q", arg)
 	}
@@ -231,6 +237,9 @@ func sortedServiceNames(services cluster.ServiceHealth) []string {
 }
 
 func runGetAllNodes(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	nodes, err := cluster.GetAllNodes(cmd.Context(), client, realmFromFlag(cmd))
 	if err != nil {
@@ -250,6 +259,9 @@ func runGetAllNodes(cmd *cobra.Command) error {
 }
 
 func runGetNodes(cmd *cobra.Command, name string) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	nodes, err := cluster.GetNodes(cmd.Context(), client, realmFromFlag(cmd), name)
 	if err != nil {
@@ -269,6 +281,9 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 }
 
 func runGetNetworks(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	networks, err := cluster.GetNetworks(cmd.Context(), client, realmFromFlag(cmd))
 	if err != nil {
@@ -288,6 +303,9 @@ func runGetNetworks(cmd *cobra.Command) error {
 }
 
 func runGetVolumes(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	volumes, err := cluster.GetVolumes(cmd.Context(), client, realmFromFlag(cmd))
 	if err != nil {
@@ -318,6 +336,9 @@ func newGetDNSCommand() *cobra.Command {
 }
 
 func runGetDNS(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	realm := realmFromFlag(cmd)
 	mgr := meshMgrFrom(cmd.Context(), client, realm)
@@ -356,6 +377,9 @@ func newGetMungeKeyCommand() *cobra.Command {
 }
 
 func runGetMungeKey(cmd *cobra.Command, name string) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	key, err := cluster.GetMungeKey(cmd.Context(), client, realmFromFlag(cmd), name)
 	if err != nil {
@@ -377,6 +401,9 @@ func newGetSSHConfigCommand() *cobra.Command {
 		Short: "Show SSH config path for the current realm",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateOutputFlag(cmd); err != nil {
+				return err
+			}
 			realm := realmFromFlag(cmd)
 			dir, err := sindStateDir(realm)
 			if err != nil {
@@ -406,6 +433,9 @@ func newGetMeshCommand() *cobra.Command {
 }
 
 func runGetMesh(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	realm := realmFromFlag(cmd)
 	mgr := meshMgrFrom(cmd.Context(), client, realm)
@@ -449,6 +479,9 @@ func newGetClusterCommand() *cobra.Command {
 }
 
 func runGetCluster(cmd *cobra.Command, name string) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	status, err := cluster.GetStatus(cmd.Context(), client, realmFromFlag(cmd), name)
 	if err != nil {
@@ -594,6 +627,9 @@ func newGetSSHKnownHostsCommand() *cobra.Command {
 }
 
 func runGetSSHKey(cmd *cobra.Command, kind string) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
 	client := clientFrom(cmd.Context())
 	realm := realmFromFlag(cmd)
 	mgr := meshMgrFrom(cmd.Context(), client, realm)
