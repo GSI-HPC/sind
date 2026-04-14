@@ -11,6 +11,20 @@ CGO_ENABLED   ?= 0
 GOBUILD       ?= go build
 GOTEST        ?= go test
 
+# Sandbox for unit tests: blocks the host paths and service binaries the
+# doctor/mesh/docker/ssh code paths would otherwise read or exec, so a test
+# that forgets to inject a mock fs/executor trips a failure instead of
+# silently touching the runner. /bin/* and /usr/bin/* are both listed for
+# split-/usr portability; firejail ignores missing paths.
+FIREJAIL_TEST := firejail --quiet --noprofile \
+	--blacklist=/run/systemd \
+	--blacklist=/bin/systemctl --blacklist=/usr/bin/systemctl \
+	--blacklist=/bin/pkcheck --blacklist=/usr/bin/pkcheck \
+	--blacklist=/bin/resolvectl --blacklist=/usr/bin/resolvectl \
+	--blacklist=/bin/polkit-auth --blacklist=/usr/bin/polkit-auth \
+	--blacklist=/bin/docker --blacklist=/usr/bin/docker \
+	--blacklist=/bin/ssh --blacklist=/usr/bin/ssh
+
 .PHONY: build install lint lint-docs test test-integration coverage image clean help
 
 build: ## Build the sind binary
@@ -25,8 +39,8 @@ lint: ## Run golangci-lint
 lint-docs: ## Lint documentation markdown files
 	npx markdownlint-cli2 "docs/content/**/*.md"
 
-test: ## Run unit tests
-	$(GOTEST) -race ./...
+test: ## Run unit tests (sandboxed with firejail to catch host leaks)
+	$(FIREJAIL_TEST) -- $(GOTEST) -race ./...
 
 test-integration: ## Run integration tests (requires Docker)
 	$(GOTEST) -race -tags integration ./...
