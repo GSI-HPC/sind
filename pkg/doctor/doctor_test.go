@@ -5,6 +5,7 @@ package doctor
 import (
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,22 +60,19 @@ func TestCheckDockerVersion_Invalid(t *testing.T) {
 	assert.Contains(t, err.Error(), "unable to parse version")
 }
 
-func TestCgroupInfo(t *testing.T) {
-	mountPath, hasV2, hasNsd := CgroupInfo()
-	if !hasV2 {
-		t.Skip("no cgroup2 mount on this host")
-	}
-	assert.NotEmpty(t, mountPath)
-	// nsdelegate may or may not be set, just verify the function ran
-	_ = hasNsd
+func TestCgroupInfo_MemFs(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fs, "/proc/mounts",
+		[]byte("cgroup2 /sys/fs/cgroup cgroup2 rw,nsdelegate 0 0\n"), 0o644))
+
+	mountPath, hasV2, hasNsd := CgroupInfo(fs)
+	assert.Equal(t, "/sys/fs/cgroup", mountPath)
+	assert.True(t, hasV2)
+	assert.True(t, hasNsd)
 }
 
 func TestCgroupInfo_ReadError(t *testing.T) {
-	old := procMountsPath
-	procMountsPath = "/nonexistent/mounts"
-	t.Cleanup(func() { procMountsPath = old })
-
-	path, hasV2, hasNsd := CgroupInfo()
+	path, hasV2, hasNsd := CgroupInfo(afero.NewMemMapFs())
 	assert.Empty(t, path)
 	assert.False(t, hasV2)
 	assert.False(t, hasNsd)

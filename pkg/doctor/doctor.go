@@ -5,9 +5,10 @@ package doctor
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
+
+	"github.com/spf13/afero"
 )
 
 // MinDockerMajor is the minimum required Docker Engine major version.
@@ -47,13 +48,10 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
-// procMountsPath is the path to the mount table file. Tests may override it.
-var procMountsPath = "/proc/mounts"
-
-// CgroupInfo reads /proc/mounts and returns the cgroup2 mount path,
+// CgroupInfo reads /proc/mounts from fs and returns the cgroup2 mount path,
 // whether cgroup2 is mounted at all, and whether nsdelegate is enabled.
-func CgroupInfo() (mountPath string, hasV2, hasNsdelegate bool) {
-	data, err := os.ReadFile(procMountsPath)
+func CgroupInfo(fs afero.Fs) (mountPath string, hasV2, hasNsdelegate bool) {
+	data, err := afero.ReadFile(fs, "/proc/mounts")
 	if err != nil {
 		return "", false, false
 	}

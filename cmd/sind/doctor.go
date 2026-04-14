@@ -23,6 +23,7 @@ func newDoctorCommand() *cobra.Command {
 
 func runDoctor(cmd *cobra.Command) error {
 	ctx := cmd.Context()
+	fs := fsFrom(ctx)
 	client := clientFrom(ctx)
 	realm := realmFromFlag(cmd)
 	mgr := meshMgrFrom(ctx, client, realm)
@@ -43,7 +44,7 @@ func runDoctor(cmd *cobra.Command) error {
 	// Check cgroup2 with nsdelegate.
 	log := sindlog.From(ctx)
 	log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
-	mountPath, hasV2, hasNsd := doctor.CgroupInfo()
+	mountPath, hasV2, hasNsd := doctor.CgroupInfo(fs)
 	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd)
 	if !hasV2 {
 		printResult(cmd, false, "cgroup: v2 not mounted (sind requires cgroupv2)")

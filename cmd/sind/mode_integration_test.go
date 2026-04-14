@@ -17,6 +17,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/doctor"
+	"github.com/spf13/afero"
 )
 
 // testID is a per-process random suffix for unique resource names.
@@ -113,7 +114,7 @@ func checkPrerequisites(t *testing.T, c *docker.Client) {
 	if vErr := doctor.CheckDockerVersion(version); vErr != nil {
 		t.Skipf("%v", vErr)
 	}
-	_, _, hasNsd := doctor.CgroupInfo()
+	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())
 	if !hasNsd {
 		t.Skip("host cgroup mount lacks nsdelegate")
 	}

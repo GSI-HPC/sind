@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,21 @@ type contextKey int
 const (
 	clientKey contextKey = iota
 	meshMgrKey
+	fsKey
 )
+
+// withFs stores an afero.Fs in the context.
+func withFs(ctx context.Context, fs afero.Fs) context.Context {
+	return context.WithValue(ctx, fsKey, fs)
+}
+
+// fsFrom retrieves the afero.Fs from the context, falling back to the OS fs.
+func fsFrom(ctx context.Context) afero.Fs {
+	if fs, ok := ctx.Value(fsKey).(afero.Fs); ok {
+		return fs
+	}
+	return afero.NewOsFs()
+}
 
 // withClient stores a docker.Client in the context.
 func withClient(ctx context.Context, c *docker.Client) context.Context {
