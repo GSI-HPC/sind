@@ -103,36 +103,29 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		ClusterName: string(clusterNet),
 	}
 
-	meshExists, err := client.NetworkExists(ctx, meshMgr.NetworkName())
-	if err != nil {
+	// One inspect per resource: missing → not exists, any other error → propagate.
+	if info, err := client.InspectNetwork(ctx, meshMgr.NetworkName()); err == nil {
+		health.Mesh = true
+		health.MeshDriver = info.Driver
+		health.MeshSubnet = info.Subnet
+		health.MeshGateway = info.Gateway
+	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
-	health.Mesh = meshExists
-	if meshExists {
-		if info, err := client.InspectNetwork(ctx, meshMgr.NetworkName()); err == nil {
-			health.MeshDriver = info.Driver
-			health.MeshSubnet = info.Subnet
-			health.MeshGateway = info.Gateway
-		}
-	}
 
-	dnsExists, err := client.ContainerExists(ctx, meshMgr.DNSContainerName())
-	if err != nil {
+	if _, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
+		health.DNS = true
+	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
 	}
-	health.DNS = dnsExists
 
-	clusterExists, err := client.NetworkExists(ctx, clusterNet)
-	if err != nil {
+	if info, err := client.InspectNetwork(ctx, clusterNet); err == nil {
+		health.Cluster = true
+		health.ClusterDriver = info.Driver
+		health.ClusterSubnet = info.Subnet
+		health.ClusterGateway = info.Gateway
+	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking cluster network: %w", err)
-	}
-	health.Cluster = clusterExists
-	if clusterExists {
-		if info, err := client.InspectNetwork(ctx, clusterNet); err == nil {
-			health.ClusterDriver = info.Driver
-			health.ClusterSubnet = info.Subnet
-			health.ClusterGateway = info.Gateway
-		}
 	}
 
 	return health, nil

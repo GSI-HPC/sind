@@ -279,10 +279,8 @@ func netInspect(name, subnet, gw string) string {
 
 func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)                                                  // NetworkExists: sind-mesh
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)    // InspectNetwork: mesh
-	m.AddResult("[{}]\n", "", nil)                                                  // ContainerExists: sind-dns
-	m.AddResult("[{}]\n", "", nil)                                                  // NetworkExists: sind-dev-net
+	m.AddResult("[{}]\n", "", nil)                                                  // InspectContainer: sind-dns
 	m.AddResult(netInspect("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // InspectNetwork: cluster
 	c := docker.NewClient(&m)
 
@@ -325,9 +323,8 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	var m mock.Executor
 	notFound := testutil.ExitCode1(t)
-	m.AddResult("[{}]\n", "", nil)                                               // mesh exists
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                               // dns exists
+	m.AddResult("[{}]\n", "", nil)                                               // inspect dns
 	m.AddResult("", "Error: No such network\n", notFound)                        // cluster net missing
 	c := docker.NewClient(&m)
 
@@ -352,7 +349,6 @@ func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)                                               // mesh OK
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // dns error
 	c := docker.NewClient(&m)
@@ -365,9 +361,8 @@ func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)                                               // mesh OK
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                               // dns OK
+	m.AddResult("[{}]\n", "", nil)                                               // inspect dns
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // cluster net error
 	c := docker.NewClient(&m)
 
@@ -379,10 +374,8 @@ func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 
 func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)                                                      // mesh exists
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)        // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                                      // dns
-	m.AddResult("[{}]\n", "", nil)                                                      // cluster net exists
+	m.AddResult("[{}]\n", "", nil)                                                      // inspect dns
 	m.AddResult(netInspect("sind-default-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // inspect cluster
 	c := docker.NewClient(&m)
 
@@ -390,7 +383,7 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 
 	require.NoError(t, err)
 	// Verify cluster network name uses default.
-	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[3].Args)
+	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[2].Args)
 }
 
 // --- GetMountPoints ---
@@ -565,11 +558,8 @@ func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 			}
 		}
 
-		// docker network inspect / container inspect / volume inspect
+		// docker network inspect / volume inspect
 		if args[0] == "network" && args[1] == "inspect" {
-			return mock.Result{Stdout: "[{}]\n"}
-		}
-		if args[0] == "container" && args[1] == "inspect" {
 			return mock.Result{Stdout: "[{}]\n"}
 		}
 		if args[0] == "volume" && args[1] == "inspect" {
@@ -631,7 +621,8 @@ func TestGetStatus_Empty(t *testing.T) {
 		if (args[0] == "network" || args[0] == "volume") && args[1] == "inspect" {
 			return mock.Result{Stdout: "[{}]\n"}
 		}
-		if args[0] == "container" && args[1] == "inspect" {
+		// InspectContainer used by GetNetworkHealth for the DNS container.
+		if args[0] == "inspect" {
 			return mock.Result{Stdout: "[{}]\n"}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
