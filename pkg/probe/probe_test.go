@@ -12,7 +12,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/monitor"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -247,17 +246,33 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 }
 
 func TestForService(t *testing.T) {
-	p := ForService(slurm.Slurmctld)
+	p := ForService(ServiceSlurmctld)
 	assert.Equal(t, "slurmctld", p.Name)
 	assert.NotNil(t, p.Check)
 
-	p = ForService(slurm.Slurmd)
+	p = ForService(ServiceSlurmd)
 	assert.Equal(t, "slurmd", p.Name)
 	assert.NotNil(t, p.Check)
 
 	p = ForService("unknown")
 	assert.Equal(t, "unknown", p.Name)
 	assert.Nil(t, p.Check)
+}
+
+func TestServiceForRole(t *testing.T) {
+	svc, ok := ServiceForRole(config.RoleController)
+	assert.True(t, ok)
+	assert.Equal(t, ServiceSlurmctld, svc)
+
+	svc, ok = ServiceForRole(config.RoleWorker)
+	assert.True(t, ok)
+	assert.Equal(t, ServiceSlurmd, svc)
+
+	_, ok = ServiceForRole(config.RoleSubmitter)
+	assert.False(t, ok)
+
+	_, ok = ServiceForRole("unknown")
+	assert.False(t, ok)
 }
 
 func TestNodeProbes(t *testing.T) {

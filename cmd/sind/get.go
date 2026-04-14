@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/spf13/cobra"
 )
 
@@ -218,7 +219,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	_, _ = fmt.Fprintf(w, "munge\t%s\n", checkmark(health.Munge))
 	_, _ = fmt.Fprintf(w, "sshd\t%s\n", checkmark(health.SSHD))
 	for _, name := range sortedServiceNames(health.Services) {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", name, checkmark(health.Services[name]))
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", name, checkmark(health.Services[probe.Service(name)]))
 	}
 	return w.Flush()
 }
@@ -227,7 +228,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 func sortedServiceNames(services cluster.ServiceHealth) []string {
 	names := make([]string, 0, len(services))
 	for name := range services {
-		names = append(names, name)
+		names = append(names, string(name))
 	}
 	sort.Strings(names)
 	return names
@@ -555,12 +556,12 @@ func formatServices(services cluster.ServiceHealth) string {
 	}
 	names := make([]string, 0, len(services))
 	for name := range services {
-		names = append(names, name)
+		names = append(names, string(name))
 	}
 	sort.Strings(names)
 	var parts []string
 	for _, name := range names {
-		parts = append(parts, name+" "+checkmark(services[name]))
+		parts = append(parts, name+" "+checkmark(services[probe.Service(name)]))
 	}
 	return strings.Join(parts, " ")
 }

@@ -14,8 +14,35 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/monitor"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
+
+// Service identifies a per-node readiness check. The string value is the
+// systemd unit name for munge/sshd/slurmd and the slurm RPC endpoint name
+// for slurmctld, so it also doubles as the user-facing label for each
+// check in status output.
+type Service string
+
+// Per-node readiness services managed by sind.
+const (
+	ServiceMunge     Service = "munge"
+	ServiceSSHD      Service = "sshd"
+	ServiceSlurmctld Service = "slurmctld"
+	ServiceSlurmd    Service = "slurmd"
+)
+
+// ServiceForRole returns the Slurm readiness-check service associated with
+// a node role. Returns empty string and false for roles with no Slurm
+// service (e.g. submitter).
+func ServiceForRole(role config.Role) (Service, bool) {
+	switch role {
+	case config.RoleController:
+		return ServiceSlurmctld, true
+	case config.RoleWorker:
+		return ServiceSlurmd, true
+	default:
+		return "", false
+	}
+}
 
 // TerminalError indicates a probe failure that cannot be recovered by
 // retrying. For example, a container in "exited" or "dead" state will
@@ -35,12 +62,12 @@ type Probe struct {
 	Check Func
 }
 
-// ForService returns the readiness probe for a Slurm service.
-func ForService(svc slurm.Service) Probe {
+// ForService returns the readiness probe for a Slurm daemon service.
+func ForService(svc Service) Probe {
 	switch svc {
-	case slurm.Slurmctld:
+	case ServiceSlurmctld:
 		return Probe{Name: string(svc), Check: SlurmctldReady}
-	case slurm.Slurmd:
+	case ServiceSlurmd:
 		return Probe{Name: string(svc), Check: SlurmdReady}
 	default:
 		return Probe{Name: string(svc)}

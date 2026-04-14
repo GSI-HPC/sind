@@ -8,28 +8,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 )
 
-// Service identifies a Slurm daemon managed by sind.
-type Service string
-
-// Slurm daemon services.
-const (
-	Slurmctld Service = "slurmctld"
-	Slurmd    Service = "slurmd"
-)
-
-// ServiceForRole returns the Slurm service for the given node role.
-// Returns empty string and false for roles that have no Slurm service.
-func ServiceForRole(role config.Role) (Service, bool) {
-	switch role {
-	case config.RoleController:
-		return Slurmctld, true
-	case config.RoleWorker:
-		return Slurmd, true
-	default:
-		return "", false
-	}
-}
-
 // Container paths for Slurm configuration files.
 const (
 	ConfDir       = "/etc/slurm"

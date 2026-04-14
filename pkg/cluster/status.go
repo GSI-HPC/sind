@@ -15,8 +15,8 @@ import (
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
-// ServiceHealth maps service names to their health status (true = healthy).
-type ServiceHealth map[string]bool
+// ServiceHealth maps a readiness-check service to its health status.
+type ServiceHealth map[probe.Service]bool
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
@@ -59,9 +59,9 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 	for _, svc := range roleServices(role) {
 		var check probe.Func
 		switch svc {
-		case "slurmctld":
+		case probe.ServiceSlurmctld:
 			check = probe.SlurmctldReady
-		case "slurmd":
+		case probe.ServiceSlurmd:
 			check = probe.SlurmdReady
 		}
 		health.Services[svc] = check(ctx, client, name) == nil
@@ -258,10 +258,10 @@ func nodeStatusOrder(n *NodeStatus) string {
 	return rolePrefix(n.Role) + naturalSortKey(n.Name)
 }
 
-// roleServices returns the Slurm service names for the given role.
-func roleServices(role config.Role) []string {
-	if svc, ok := slurm.ServiceForRole(role); ok {
-		return []string{string(svc)}
+// roleServices returns the Slurm readiness-check services for the given role.
+func roleServices(role config.Role) []probe.Service {
+	if svc, ok := probe.ServiceForRole(role); ok {
+		return []probe.Service{svc}
 	}
 	return nil
 }

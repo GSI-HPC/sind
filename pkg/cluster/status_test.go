@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,8 +62,8 @@ func TestGetNodeHealth_Controller(t *testing.T) {
 	assert.Equal(t, "172.18.0.2", health.IP)
 	assert.True(t, health.Munge)
 	assert.True(t, health.SSHD)
-	require.Contains(t, health.Services, "slurmctld")
-	assert.True(t, health.Services["slurmctld"])
+	require.Contains(t, health.Services, probe.ServiceSlurmctld)
+	assert.True(t, health.Services[probe.ServiceSlurmctld])
 }
 
 func TestGetNodeHealth_Compute(t *testing.T) {
@@ -77,8 +78,8 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 	assert.Equal(t, "172.18.0.3", health.IP)
 	assert.True(t, health.Munge)
 	assert.True(t, health.SSHD)
-	require.Contains(t, health.Services, "slurmd")
-	assert.True(t, health.Services["slurmd"])
+	require.Contains(t, health.Services, probe.ServiceSlurmd)
+	assert.True(t, health.Services[probe.ServiceSlurmd])
 }
 
 func TestGetNodeHealth_Submitter(t *testing.T) {
@@ -111,7 +112,7 @@ func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 	assert.Equal(t, docker.StateExited, health.Container)
 	assert.False(t, health.Munge)
 	assert.False(t, health.SSHD)
-	assert.False(t, health.Services["slurmctld"])
+	assert.False(t, health.Services[probe.ServiceSlurmctld])
 }
 
 func TestGetNodeHealth_InspectError(t *testing.T) {
@@ -143,7 +144,7 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	assert.Equal(t, docker.StateRunning, health.Container)
 	assert.True(t, health.Munge)
 	assert.True(t, health.SSHD)
-	assert.False(t, health.Services["slurmd"])
+	assert.False(t, health.Services[probe.ServiceSlurmd])
 }
 
 func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
@@ -164,7 +165,7 @@ func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
 	assert.Equal(t, docker.StateRunning, health.Container)
 	assert.True(t, health.Munge)
 	assert.True(t, health.SSHD)
-	assert.False(t, health.Services["slurmctld"])
+	assert.False(t, health.Services[probe.ServiceSlurmctld])
 }
 
 func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
@@ -183,8 +184,8 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 	assert.Equal(t, docker.StateExited, health.Container)
 	assert.False(t, health.Munge)
 	assert.False(t, health.SSHD)
-	require.Contains(t, health.Services, "slurmd")
-	assert.False(t, health.Services["slurmd"])
+	require.Contains(t, health.Services, probe.ServiceSlurmd)
+	assert.False(t, health.Services[probe.ServiceSlurmd])
 }
 
 func TestGetNodeHealth_MungeFailing(t *testing.T) {
@@ -205,7 +206,7 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 	assert.Equal(t, docker.StateRunning, health.Container)
 	assert.False(t, health.Munge)
 	assert.True(t, health.SSHD)
-	assert.True(t, health.Services["slurmctld"])
+	assert.True(t, health.Services[probe.ServiceSlurmctld])
 }
 
 func TestGetNodeHealth_SSHDFailing(t *testing.T) {
@@ -225,7 +226,7 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 	assert.Equal(t, docker.StateRunning, health.Container)
 	assert.True(t, health.Munge)
 	assert.False(t, health.SSHD)
-	assert.True(t, health.Services["slurmctld"])
+	assert.True(t, health.Services[probe.ServiceSlurmctld])
 }
 
 func TestGetNodeHealth_MultipleIPs(t *testing.T) {
@@ -581,11 +582,11 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.Equal(t, "172.18.0.2", status.Nodes[0].Health.IP)
 	assert.True(t, status.Nodes[0].Health.Munge)
 	assert.True(t, status.Nodes[0].Health.SSHD)
-	assert.True(t, status.Nodes[0].Health.Services["slurmctld"])
+	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceSlurmctld])
 
 	assert.Equal(t, "worker-0.dev", status.Nodes[1].Name)
 	assert.Equal(t, config.RoleWorker, status.Nodes[1].Role)
-	assert.True(t, status.Nodes[1].Health.Services["slurmd"])
+	assert.True(t, status.Nodes[1].Health.Services[probe.ServiceSlurmd])
 
 	assert.Equal(t, "worker-1.dev", status.Nodes[2].Name)
 
