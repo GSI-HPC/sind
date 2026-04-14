@@ -32,13 +32,18 @@ type NodeHealth struct {
 // default to false. The role determines which Slurm services are checked.
 // clusterName is used to select the cluster network IP.
 func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
-	name := docker.ContainerName(containerName)
-
-	info, err := client.InspectContainer(ctx, name)
+	info, err := client.InspectContainer(ctx, docker.ContainerName(containerName))
 	if err != nil {
 		return nil, fmt.Errorf("inspecting container: %w", err)
 	}
+	return nodeHealthFromInfo(ctx, client, info, role, realm, clusterName), nil
+}
 
+// nodeHealthFromInfo runs readiness probes against a pre-inspected container
+// and returns its health. Callers that already hold a *docker.ContainerInfo
+// (e.g. from a batched InspectContainers) should use this to avoid re-issuing
+// a per-node docker inspect.
+func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker.ContainerInfo, role config.Role, realm, clusterName string) *NodeHealth {
 	health := &NodeHealth{
 		Container: info.Status,
 		IP:        info.IPs[NetworkName(realm, clusterName)],
@@ -50,11 +55,11 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 		for _, svc := range roleServices(role) {
 			health.Services[svc] = false
 		}
-		return health, nil
+		return health
 	}
 
-	health.Munge = probe.MungeReady(ctx, client, name) == nil
-	health.SSHD = probe.SSHDReady(ctx, client, name) == nil
+	health.Munge = probe.MungeReady(ctx, client, info.Name) == nil
+	health.SSHD = probe.SSHDReady(ctx, client, info.Name) == nil
 
 	for _, svc := range roleServices(role) {
 		var check probe.Func
@@ -64,10 +69,10 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 		case probe.ServiceSlurmd:
 			check = probe.SlurmdReady
 		}
-		health.Services[svc] = check(ctx, client, name) == nil
+		health.Services[svc] = check(ctx, client, info.Name) == nil
 	}
 
-	return health, nil
+	return health
 }
 
 // NetworkHealth holds the health and IPAM details of cluster networking.
@@ -209,6 +214,24 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
+	// Batch a single docker inspect for every container up front so that the
+	// per-node probe loop below has status + IP without additional round
+	// trips. One docker CLI fork instead of one per node.
+	infoByName := make(map[docker.ContainerName]*docker.ContainerInfo, len(containers))
+	if len(containers) > 0 {
+		names := make([]docker.ContainerName, len(containers))
+		for i, c := range containers {
+			names[i] = c.Name
+		}
+		infos, err := client.InspectContainers(ctx, names...)
+		if err != nil {
+			return nil, fmt.Errorf("inspecting cluster containers: %w", err)
+		}
+		for _, info := range infos {
+			infoByName[info.Name] = info
+		}
+	}
+
 	prefix := ContainerPrefix(realm, clusterName)
 	var nodes []*NodeStatus
 	var states []docker.ContainerState
@@ -216,10 +239,11 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := config.Role(c.Labels[LabelRole])
 
-		health, err := GetNodeHealth(ctx, client, string(c.Name), role, realm, clusterName)
-		if err != nil {
-			return nil, fmt.Errorf("checking node %s: %w", shortName, err)
+		info, ok := infoByName[c.Name]
+		if !ok {
+			return nil, fmt.Errorf("checking node %s: inspect returned no entry", shortName)
 		}
+		health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
 
 		nodes = append(nodes, &NodeStatus{
 			Name:   shortName + "." + clusterName,

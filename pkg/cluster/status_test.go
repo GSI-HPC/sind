@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -17,13 +18,29 @@ import (
 )
 
 func statusInspectJSON(name, status, ip string) string {
-	return fmt.Sprintf(`[{
+	return "[" + statusInspectEntry(name, status, ip) + "]"
+}
+
+func statusInspectEntry(name, status, ip string) string {
+	return fmt.Sprintf(`{
   "Id": "abc123",
   "Name": "/%s",
   "State": {"Status": %q},
   "Config": {"Labels": {}},
   "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": %q}}}
-}]`, name, status, ip)
+}`, name, status, ip)
+}
+
+// statusInspectJSONBatch builds a docker inspect JSON response covering every
+// container name in inspectArgs[1:]. resolver maps each name to (status, ip).
+// Used by mock dispatchers when GetStatus issues a batched inspect.
+func statusInspectJSONBatch(inspectArgs []string, resolver func(name string) (status, ip string)) string {
+	entries := make([]string, 0, len(inspectArgs)-1)
+	for _, name := range inspectArgs[1:] {
+		status, ip := resolver(name)
+		entries = append(entries, statusInspectEntry(name, status, ip))
+	}
+	return "[" + strings.Join(entries, ",") + "]"
 }
 
 // healthyOnCall returns a mock dispatcher where all checks pass.
@@ -517,19 +534,19 @@ func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 			)}
 		}
 
-		// docker inspect (container)
+		// docker inspect (container) — batched across all containers.
 		if args[0] == "inspect" {
-			name := args[1]
-			var ip string
-			switch name {
-			case "sind-dev-controller":
-				ip = "172.18.0.2"
-			case "sind-dev-worker-0":
-				ip = "172.18.0.3"
-			case "sind-dev-worker-1":
-				ip = "172.18.0.4"
-			}
-			return mock.Result{Stdout: statusInspectJSON(name, "running", ip)}
+			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
+				switch name {
+				case "sind-dev-controller":
+					return "running", "172.18.0.2"
+				case "sind-dev-worker-0":
+					return "running", "172.18.0.3"
+				case "sind-dev-worker-1":
+					return "running", "172.18.0.4"
+				}
+				return "running", ""
+			})}
 		}
 
 		// docker exec: service checks (all pass)
@@ -662,7 +679,7 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking node controller")
+	assert.Contains(t, err.Error(), "inspecting cluster containers")
 }
 
 func TestGetStatus_NetworkHealthError(t *testing.T) {
@@ -723,17 +740,17 @@ func TestGetStatus_SortOrder(t *testing.T) {
 			)}
 		}
 		if args[0] == "inspect" {
-			name := args[1]
-			var ip string
-			switch name {
-			case "sind-dev-controller":
-				ip = "172.18.0.2"
-			case "sind-dev-submitter":
-				ip = "172.18.0.4"
-			case "sind-dev-worker-0":
-				ip = "172.18.0.3"
-			}
-			return mock.Result{Stdout: statusInspectJSON(name, "running", ip)}
+			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
+				switch name {
+				case "sind-dev-controller":
+					return "running", "172.18.0.2"
+				case "sind-dev-submitter":
+					return "running", "172.18.0.4"
+				case "sind-dev-worker-0":
+					return "running", "172.18.0.3"
+				}
+				return "running", ""
+			})}
 		}
 		return base(args, stdin)
 	}
@@ -765,13 +782,15 @@ func TestGetStatus_MixedStates(t *testing.T) {
 			)}
 		}
 		if args[0] == "inspect" {
-			name := args[1]
-			switch name {
-			case "sind-dev-controller":
-				return mock.Result{Stdout: statusInspectJSON(name, "running", "172.18.0.2")}
-			case "sind-dev-worker-0":
-				return mock.Result{Stdout: statusInspectJSON(name, "exited", "")}
-			}
+			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
+				switch name {
+				case "sind-dev-controller":
+					return "running", "172.18.0.2"
+				case "sind-dev-worker-0":
+					return "exited", ""
+				}
+				return "running", ""
+			})}
 		}
 		return base(args, stdin)
 	}
@@ -784,4 +803,36 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	require.Len(t, status.Nodes, 2)
 	assert.Equal(t, docker.StateRunning, status.Nodes[0].Health.Container)
 	assert.Equal(t, docker.StateExited, status.Nodes[1].Health.Container)
+}
+
+// TestGetStatus_InspectMissingEntry exercises the defensive branch where the
+// batched docker inspect returns fewer entries than requested. In real docker
+// this should not happen, but we guard against it to avoid a silent nil deref.
+func TestGetStatus_InspectMissingEntry(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{
+					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=controller",
+				},
+				testutil.PsEntry{
+					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=worker",
+				},
+			)}
+		}
+		// Return only the controller, omitting worker-0 entirely.
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: statusInspectJSON("sind-dev-controller", "running", "172.18.0.2")}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+	}
+	c := docker.NewClient(&m)
+
+	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "inspect returned no entry")
 }

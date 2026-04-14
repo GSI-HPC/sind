@@ -10,6 +10,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -146,8 +147,14 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 		return nil, nil
 	}
 
-	ipByName := make(map[docker.ContainerName]map[docker.NetworkName]string, len(filtered))
-	if infos, err := client.InspectContainers(ctx, names...); err == nil {
+	// IPs are best-effort: GetNodes/GetAllNodes drives user-facing listings
+	// and shell completion, so an inspect failure should degrade to empty
+	// IPs rather than fail the whole call. Log the cause so it is still
+	// visible under -v.
+	ipByName := make(map[docker.ContainerName]map[docker.NetworkName]string, len(names))
+	if infos, err := client.InspectContainers(ctx, names...); err != nil {
+		sindlog.From(ctx).WarnContext(ctx, "inspecting cluster containers for IPs", "err", err)
+	} else {
 		for _, info := range infos {
 			ipByName[info.Name] = info.IPs
 		}

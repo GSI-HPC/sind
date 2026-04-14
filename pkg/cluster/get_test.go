@@ -368,6 +368,29 @@ func TestGetNodes_UnknownRole(t *testing.T) {
 	assert.Equal(t, config.Role("mystery"), nodes[1].Role)
 }
 
+// TestGetNodes_InspectError verifies that a failed batched inspect degrades
+// gracefully: summaries are still returned with empty IPs, and the error is
+// surfaced via logging (not propagated) so listings and shell completion
+// keep working even when the Docker daemon hiccups on inspect.
+func TestGetNodes_InspectError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+	), "", nil)
+	m.AddResult("", "", fmt.Errorf("docker daemon busy"))
+	c := docker.NewClient(&m)
+
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
+	assert.Empty(t, nodes[0].IP)
+}
+
 // --- GetAllNodes ---
 
 func TestGetAllNodes(t *testing.T) {
