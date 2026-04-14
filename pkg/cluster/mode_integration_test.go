@@ -16,6 +16,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -223,7 +224,7 @@ func checkPrerequisites(t *testing.T, c *docker.Client) {
 	if vErr := doctor.CheckDockerVersion(version); vErr != nil {
 		t.Skipf("%v", vErr)
 	}
-	_, _, hasNsd := doctor.CgroupInfo()
+	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())
 	if !hasNsd {
 		t.Skip("host cgroup mount lacks nsdelegate")
 	}

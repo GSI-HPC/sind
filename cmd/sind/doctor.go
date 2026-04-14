@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -23,19 +24,20 @@ func newDoctorCommand() *cobra.Command {
 
 func runDoctor(cmd *cobra.Command) error {
 	ctx := cmd.Context()
+	fs := fsFrom(ctx)
 	client := clientFrom(ctx)
 	realm := realmFromFlag(cmd)
 	mgr := meshMgrFrom(ctx, client, realm)
-	var failed bool
+	var failures []string
 
 	// Check Docker Engine version.
 	version, err := client.ServerVersion(ctx)
 	if err != nil {
 		printResult(cmd, false, "Docker Engine: not reachable")
-		failed = true
+		failures = append(failures, "docker")
 	} else if vErr := doctor.CheckDockerVersion(version); vErr != nil {
 		printResult(cmd, false, "Docker Engine: %s", vErr)
-		failed = true
+		failures = append(failures, "docker")
 	} else {
 		printResult(cmd, true, "Docker Engine: %s (>= %d.0)", version, doctor.MinDockerMajor)
 	}
@@ -43,11 +45,11 @@ func runDoctor(cmd *cobra.Command) error {
 	// Check cgroup2 with nsdelegate.
 	log := sindlog.From(ctx)
 	log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
-	mountPath, hasV2, hasNsd := doctor.CgroupInfo()
+	mountPath, hasV2, hasNsd := doctor.CgroupInfo(fs)
 	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd)
 	if !hasV2 {
 		printResult(cmd, false, "cgroup: v2 not mounted (sind requires cgroupv2)")
-		failed = true
+		failures = append(failures, "cgroup")
 	} else if !hasNsd {
 		printResult(cmd, false, "cgroupv2: nsdelegate not found")
 		cmd.Println()
@@ -61,7 +63,7 @@ func runDoctor(cmd *cobra.Command) error {
 		cmd.Println("echo -e '[Mount]\\nOptions=nsdelegate' \\")
 		cmd.Println("  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf")
 		cmd.Println("sudo systemctl daemon-reload")
-		failed = true
+		failures = append(failures, "cgroup-nsdelegate")
 	} else {
 		printResult(cmd, true, "cgroupv2: nsdelegate enabled (%s)", mountPath)
 	}
@@ -109,8 +111,8 @@ func runDoctor(cmd *cobra.Command) error {
 		}
 	}
 
-	if failed {
-		return fmt.Errorf("one or more checks failed")
+	if len(failures) > 0 {
+		return fmt.Errorf("checks failed: %s", strings.Join(failures, ", "))
 	}
 	return nil
 }
