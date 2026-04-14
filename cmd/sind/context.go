@@ -50,6 +50,11 @@ func clientFrom(ctx context.Context) *docker.Client {
 	return docker.NewClient(&cmdexec.OSExecutor{})
 }
 
+// withMeshMgr stores a mesh.Manager in the context.
+func withMeshMgr(ctx context.Context, m *mesh.Manager) context.Context {
+	return context.WithValue(ctx, meshMgrKey, m)
+}
+
 // meshMgrFrom retrieves the mesh.Manager from the context,
 // falling back to creating one from the given client and realm.
 func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh.Manager {
