@@ -28,11 +28,11 @@ type ServiceHealth map[probe.Service]bool
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	Container docker.ContainerState `json:"container"` // container state from Docker (e.g. "running", "exited")
-	IP        string                `json:"ip"`        // container IP address
-	Munge     bool                  `json:"munge"`     // munge service healthy
-	SSHD      bool                  `json:"sshd"`      // sshd accepting connections
-	Services  ServiceHealth         `json:"services"`  // role-specific services (e.g., "slurmctld", "slurmd")
+	State    docker.ContainerState `json:"status"`   // container state from Docker (e.g. "running", "exited")
+	IP       string                `json:"ip"`       // container IP address
+	Munge    bool                  `json:"munge"`    // munge service healthy
+	SSHD     bool                  `json:"sshd"`     // sshd accepting connections
+	Services ServiceHealth         `json:"services"` // role-specific services (e.g., "slurmctld", "slurmd")
 }
 
 // GetNodeHealth checks the health of a single node container.
@@ -53,9 +53,9 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 // a per-node docker inspect.
 func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker.ContainerInfo, role config.Role, realm, clusterName string) *NodeHealth {
 	health := &NodeHealth{
-		Container: info.Status,
-		IP:        info.IPs[NetworkName(realm, clusterName)],
-		Services:  make(ServiceHealth),
+		State:    info.Status,
+		IP:       info.IPs[NetworkName(realm, clusterName)],
+		Services: make(ServiceHealth),
 	}
 
 	// If container is not running, skip all service checks.

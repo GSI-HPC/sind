@@ -195,7 +195,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 			Role:      role,
 			FQDN:      cluster.DNSName(shortName, clusterName, realm),
 			IP:        health.IP,
-			Status:    health.Container,
+			Status:    health.State,
 			Munge:     health.Munge,
 			SSHD:      health.SSHD,
 			Services:  health.Services,
@@ -207,7 +207,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 
 	w := newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, role, fqdn, health.IP, health.Container)
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, role, fqdn, health.IP, health.State)
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -518,7 +518,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 			n.Name,
 			n.Role,
 			h.IP,
-			h.Container,
+			h.State,
 			checkmark(h.Munge),
 			checkmark(h.SSHD),
 			formatServices(h.Services),
@@ -530,7 +530,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 func formatState(status *cluster.Status) string {
 	var running, stopped, paused int
 	for _, n := range status.Nodes {
-		switch n.Health.Container {
+		switch n.Health.State {
 		case docker.StateRunning:
 			running++
 		case docker.StatePaused:

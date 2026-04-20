@@ -637,8 +637,8 @@ func TestFormatState(t *testing.T) {
 		{
 			"all running",
 			[]*cluster.NodeStatus{
-				{Health: &cluster.NodeHealth{Container: "running"}},
-				{Health: &cluster.NodeHealth{Container: "running"}},
+				{Health: &cluster.NodeHealth{State: "running"}},
+				{Health: &cluster.NodeHealth{State: "running"}},
 			},
 			cluster.StateRunning,
 			"running (2/0/0/2)",
@@ -646,8 +646,8 @@ func TestFormatState(t *testing.T) {
 		{
 			"mixed",
 			[]*cluster.NodeStatus{
-				{Health: &cluster.NodeHealth{Container: "running"}},
-				{Health: &cluster.NodeHealth{Container: "exited"}},
+				{Health: &cluster.NodeHealth{State: "running"}},
+				{Health: &cluster.NodeHealth{State: "exited"}},
 			},
 			cluster.StateMixed,
 			"mixed (1/1/0/2)",
@@ -661,7 +661,7 @@ func TestFormatState(t *testing.T) {
 		{
 			"paused",
 			[]*cluster.NodeStatus{
-				{Health: &cluster.NodeHealth{Container: "paused"}},
+				{Health: &cluster.NodeHealth{State: "paused"}},
 			},
 			cluster.StatePaused,
 			"paused (0/0/1/1)",
