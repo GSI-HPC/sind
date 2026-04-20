@@ -63,17 +63,13 @@ type nodeResult struct {
 // before calling Create. The context deadline controls the overall timeout;
 // readinessInterval controls the polling interval for readiness probes.
 //
-//	PreflightCheck
-//	      │
-//	resolveInfra        DNS IP ║ SSH key ║ Slurm version
-//	      │
-//	createResources     network ║ (config vol → write) ║ (munge vol → write)
-//	      │
-//	setupNodes          (create + wait + SSH + hostkey) per node
-//	      │
-//	registerMesh ║ enableSlurm
-//	      │
-//	  *Cluster
+//	┌ PreflightCheck → createResources → ConnectNetwork ┐
+//	┤                                                   ├→ setupNodes
+//	└ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┘
+//	                        │
+//	              registerMesh ║ enableSlurm
+//	                        │
+//	                    *Cluster
 func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (result *Cluster, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -106,27 +102,44 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		}
 	}()
 
-	if err := PreflightCheck(ctx, client, realm, cfg); err != nil {
-		return nil, err
-	}
-	log.DebugContext(ctx, "preflight check passed")
+	var dnsIP, sshPubKey, slurmVersion string
+	prepGroup, prepCtx := errgroup.WithContext(ctx)
 
-	dnsIP, sshPubKey, slurmVersion, err := resolveInfra(ctx, client, meshMgr, cfg)
-	if err != nil {
-		return nil, err
-	}
-	log.InfoContext(ctx, "resolved infrastructure", "slurm", slurmVersion)
+	// Branch A: preflight → createResources → SSH relay connect. Serialised
+	// because createResources only makes sense once preflight has passed,
+	// and the relay hop depends on the cluster network existing.
+	prepGroup.Go(func() error {
+		if err := PreflightCheck(prepCtx, client, realm, cfg); err != nil {
+			return err
+		}
+		log.DebugContext(prepCtx, "preflight check passed")
+		resourcesCreated = true
+		if err := createResources(prepCtx, client, realm, cfg); err != nil {
+			return err
+		}
+		clusterNet := NetworkName(realm, cfg.Name)
+		if err := client.ConnectNetwork(prepCtx, clusterNet, meshMgr.SSHContainerName()); err != nil {
+			return fmt.Errorf("connecting SSH relay to cluster network: %w", err)
+		}
+		log.DebugContext(prepCtx, "cluster resources created")
+		return nil
+	})
 
-	resourcesCreated = true
-	if err := createResources(ctx, client, realm, cfg); err != nil {
+	// Branch B: resolve mesh DNS/SSH details and Slurm version in parallel
+	// with Branch A's resource work.
+	prepGroup.Go(func() error {
+		ip, key, ver, err := resolveInfra(prepCtx, client, meshMgr, cfg)
+		if err != nil {
+			return err
+		}
+		dnsIP, sshPubKey, slurmVersion = ip, key, ver
+		log.InfoContext(prepCtx, "resolved infrastructure", "slurm", slurmVersion)
+		return nil
+	})
+
+	if err := prepGroup.Wait(); err != nil {
 		return nil, err
 	}
-	// Connect SSH relay to cluster network so it can reach nodes at cluster IPs.
-	clusterNet := NetworkName(realm, cfg.Name)
-	if err := client.ConnectNetwork(ctx, clusterNet, meshMgr.SSHContainerName()); err != nil {
-		return nil, fmt.Errorf("connecting SSH relay to cluster network: %w", err)
-	}
-	log.DebugContext(ctx, "cluster resources created")
 
 	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion)
 	logExtraPrivileges(ctx, nodeConfigs)
