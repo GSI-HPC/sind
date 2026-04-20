@@ -818,6 +818,74 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	assert.Equal(t, docker.StateExited, status.Nodes[1].Health.Container)
 }
 
+// TestGetStatus_Parallelism uses more nodes than statusNodeConcurrency to
+// exercise the bounded fan-out under the race detector, and confirms that
+// output ordering is deterministic despite non-deterministic probe
+// completion order.
+func TestGetStatus_Parallelism(t *testing.T) {
+	const nodeCount = statusNodeConcurrency + 4 // force at least one queued batch
+
+	// Build a stable list of worker containers; one controller at the head.
+	pss := make([]testutil.PsEntry, 0, nodeCount)
+	pss = append(pss, testutil.PsEntry{
+		ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
+		Labels: "sind.cluster=dev,sind.role=controller",
+	})
+	for i := 0; i < nodeCount-1; i++ {
+		pss = append(pss, testutil.PsEntry{
+			ID:     fmt.Sprintf("w%d", i),
+			Names:  fmt.Sprintf("sind-dev-worker-%d", i),
+			State:  "running",
+			Image:  "img",
+			Labels: "sind.cluster=dev,sind.role=worker",
+		})
+	}
+
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: testutil.NDJSON(pss...)}
+		}
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: statusInspectJSONBatch(args, func(string) (string, string) {
+				return "running", "172.18.0.1"
+			})}
+		}
+		if args[0] == "exec" && len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
+			var b strings.Builder
+			for range args[4:] {
+				b.WriteString("active\n")
+			}
+			return mock.Result{Stdout: b.String()}
+		}
+		if args[0] == "exec" && len(args) >= 3 && args[2] == "scontrol" {
+			return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
+		}
+		if args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{Stdout: "[{}]\n"}
+		}
+		if args[0] == "volume" && args[1] == "inspect" {
+			return mock.Result{Stdout: "[{}]\n"}
+		}
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: "[{}]\n"}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+	}
+	c := docker.NewClient(&m)
+
+	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+	require.NoError(t, err)
+	require.Len(t, status.Nodes, nodeCount)
+
+	// Controller first, workers sorted naturally (worker-0, worker-1, …).
+	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
+	for i := 1; i < nodeCount; i++ {
+		assert.Equal(t, config.RoleWorker, status.Nodes[i].Role)
+		assert.Equal(t, fmt.Sprintf("worker-%d.dev", i-1), status.Nodes[i].Name)
+	}
+}
+
 // TestGetStatus_InspectMissingEntry exercises the defensive branch where the
 // batched docker inspect returns fewer entries than requested. In real docker
 // this should not happen, but we guard against it to avoid a silent nil deref.

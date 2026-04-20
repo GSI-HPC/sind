@@ -14,7 +14,14 @@ import (
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
+	"golang.org/x/sync/errgroup"
 )
+
+// statusNodeConcurrency bounds the number of concurrent per-node readiness
+// probes issued by GetStatus. Each goroutine performs a small number of
+// docker exec round-trips, which are I/O-bound on the daemon socket; a
+// limit of 8 saturates a typical docker host without fork-storming the CLI.
+const statusNodeConcurrency = 8
 
 // ServiceHealth maps a readiness-check service to its health status.
 type ServiceHealth map[probe.Service]bool
@@ -230,9 +237,15 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 
 	prefix := ContainerPrefix(realm, clusterName)
-	var nodes []*NodeStatus
-	var states []docker.ContainerState
-	for _, c := range containers {
+	nodes := make([]*NodeStatus, len(containers))
+	states := make([]docker.ContainerState, len(containers))
+
+	// Probe nodes in parallel with a bounded worker pool. Each goroutine
+	// writes to its own pre-allocated index so no mutex is needed; the
+	// final sort restores deterministic output order.
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(statusNodeConcurrency)
+	for i, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := config.Role(c.Labels[LabelRole])
 
@@ -240,15 +253,20 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		if !ok {
 			return nil, fmt.Errorf("checking node %s: inspect returned no entry", shortName)
 		}
-		health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
-
-		nodes = append(nodes, &NodeStatus{
-			Name:   shortName + "." + clusterName,
-			Role:   role,
-			Health: health,
+		states[i] = c.State
+		g.Go(func() error {
+			health := nodeHealthFromInfo(gctx, client, info, role, realm, clusterName)
+			nodes[i] = &NodeStatus{
+				Name:   shortName + "." + clusterName,
+				Role:   role,
+				Health: health,
+			}
+			return nil
 		})
-		states = append(states, c.State)
 	}
+	// Goroutines above never return a non-nil error; Wait is purely a
+	// synchronisation barrier.
+	_ = g.Wait()
 
 	sort.Slice(nodes, func(i, j int) bool {
 		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
