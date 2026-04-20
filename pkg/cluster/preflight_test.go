@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -83,15 +84,26 @@ func TestNodeShortNames(t *testing.T) {
 
 // --- PreflightCheck ---
 
-// preflightOnCall returns an OnCall handler where resources in the exists
-// set return success (resource found) and all others return not-found.
-func preflightOnCall(t *testing.T, exists map[string]bool) func([]string, string) mock.Result {
+// preflightOnCall returns an OnCall handler for PreflightCheck dispatch:
+//   - Network/volume inspects return "exists" when the queried name is a key
+//     in existing, and "not found" otherwise.
+//   - The filtered `docker ps` call returns NDJSON rows for every name in
+//     existingContainers (simulating containers that already exist with the
+//     cluster's realm+name labels).
+func preflightOnCall(t *testing.T, existing map[string]bool, existingContainers ...string) func([]string, string) mock.Result {
 	t.Helper()
 	notFound := testutil.ExitCode1(t)
 	return func(args []string, _ string) mock.Result {
-		// docker <type> inspect <name>
+		if len(args) > 0 && args[0] == "ps" {
+			var lines []string
+			for _, name := range existingContainers {
+				lines = append(lines, fmt.Sprintf(
+					`{"ID":"cid","Names":"%s","State":"running","Image":"img","Labels":""}`, name))
+			}
+			return mock.Result{Stdout: strings.Join(lines, "\n")}
+		}
 		name := args[len(args)-1]
-		if exists[name] {
+		if existing[name] {
 			return mock.Result{}
 		}
 		return mock.Result{Stderr: "Error: No such object\n", Err: notFound}
@@ -107,7 +119,7 @@ func TestPreflightCheck_NoConflicts(t *testing.T) {
 	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.NoError(t, err)
-	assert.Len(t, m.Calls, 6) // network + 3 volumes + 2 containers
+	assert.Len(t, m.Calls, 5) // network + 3 volumes + 1 filtered ps
 }
 
 func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
@@ -141,7 +153,7 @@ func TestPreflightCheck_ConflictingVolumes(t *testing.T) {
 
 func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-controller": true})
+	m.OnCall = preflightOnCall(t, nil, "sind-dev-controller")
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -154,11 +166,9 @@ func TestPreflightCheck_ConflictingContainers(t *testing.T) {
 
 func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{
-		"sind-dev-net":        true,
-		"sind-dev-controller": true,
-		"sind-dev-worker-0":   true,
-	})
+	m.OnCall = preflightOnCall(t,
+		map[string]bool{"sind-dev-net": true},
+		"sind-dev-controller", "sind-dev-worker-0")
 	c := docker.NewClient(&m)
 
 	cfg := minimalConfig()
@@ -173,6 +183,9 @@ func TestPreflightCheck_MultipleConflicts(t *testing.T) {
 func TestPreflightCheck_NetworkCheckError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) > 0 && args[0] == "ps" {
+			return mock.Result{Stdout: ""}
+		}
 		name := args[len(args)-1]
 		if name == "sind-dev-net" {
 			return mock.Result{Err: fmt.Errorf("docker daemon not running")}
@@ -191,6 +204,9 @@ func TestPreflightCheck_NetworkCheckError(t *testing.T) {
 func TestPreflightCheck_VolumeCheckError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) > 0 && args[0] == "ps" {
+			return mock.Result{Stdout: ""}
+		}
 		name := args[len(args)-1]
 		if name == "sind-dev-config" {
 			return mock.Result{Err: fmt.Errorf("permission denied")}
@@ -209,8 +225,7 @@ func TestPreflightCheck_VolumeCheckError(t *testing.T) {
 func TestPreflightCheck_ContainerCheckError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
-		name := args[len(args)-1]
-		if name == "sind-dev-controller" {
+		if len(args) > 0 && args[0] == "ps" {
 			return mock.Result{Err: fmt.Errorf("connection refused")}
 		}
 		return mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(t)}
@@ -221,15 +236,12 @@ func TestPreflightCheck_ContainerCheckError(t *testing.T) {
 	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking container")
+	assert.Contains(t, err.Error(), "listing cluster containers")
 }
 
 func TestPreflightCheck_MultiCompute(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{
-		"sind-dev-worker-0": true,
-		"sind-dev-worker-2": true,
-	})
+	m.OnCall = preflightOnCall(t, nil, "sind-dev-worker-0", "sind-dev-worker-2")
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{

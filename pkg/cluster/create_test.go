@@ -282,11 +282,16 @@ func TestCreate_FullCluster(t *testing.T) {
 
 func TestCreate_PreflightFails(t *testing.T) {
 	// Network already exists → preflight returns conflict error.
-	var m mock.Executor
-	m.AddResult("", "", nil) // network exists (no error = exists)
 	exitErr := notFoundErr(t)
-	for i := 0; i < 5; i++ {
-		m.AddResult("", "Error: No such object\n", exitErr)
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{} // network exists → conflict
+		}
+		if len(args) > 0 && args[0] == "ps" {
+			return mock.Result{Stdout: ""} // no containers
+		}
+		return mock.Result{Stderr: "Error: No such object\n", Err: exitErr}
 	}
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -494,14 +499,15 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	// Verify cleanup ran: look for "docker ps" call from deleteClusterResources.
+	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
+	// deleteClusterResources. Preflight also calls ps once, hence 3 total.
 	var psCalls int
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
 			psCalls++
 		}
 	}
-	assert.Equal(t, 2, psCalls, "cleanup should call ListContainers for diagnostics and deletion")
+	assert.Equal(t, 3, psCalls, "preflight + diagnostics + deletion each call ListContainers")
 }
 
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
@@ -581,11 +587,16 @@ func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
 
 func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 	// When preflight fails (before any resources), cleanup should NOT run.
-	var m mock.Executor
-	m.AddResult("", "", nil) // network exists → conflict
 	exitErr := notFoundErr(t)
-	for i := 0; i < 5; i++ {
-		m.AddResult("", "Error: No such object\n", exitErr)
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{} // network exists → conflict
+		}
+		if len(args) > 0 && args[0] == "ps" {
+			return mock.Result{Stdout: ""}
+		}
+		return mock.Result{Stderr: "Error: No such object\n", Err: exitErr}
 	}
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -593,9 +604,10 @@ func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	// No "docker ps" calls → cleanup did not run.
+	// No resource rm calls → cleanup did not run.
 	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "ps" {
+		if len(call.Args) >= 2 && call.Args[1] == "rm" &&
+			(call.Args[0] == "network" || call.Args[0] == "volume") {
 			require.Fail(t, "cleanup should not run when preflight fails")
 		}
 	}
@@ -603,7 +615,7 @@ func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 
 func TestCreate_NoClusterCleanupOnResolveInfraFailure(t *testing.T) {
 	// When resolveInfra fails, cluster resource cleanup should NOT run
-	// (no "docker ps" call), but mesh cleanup should run if freshly created.
+	// (no network/volume rm), but mesh cleanup should run if freshly created.
 	exitErr := notFoundErr(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
@@ -620,7 +632,8 @@ func TestCreate_NoClusterCleanupOnResolveInfraFailure(t *testing.T) {
 
 	require.Error(t, err)
 	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "ps" {
+		if len(call.Args) >= 2 && call.Args[1] == "rm" &&
+			(call.Args[0] == "network" || call.Args[0] == "volume") {
 			require.Fail(t, "cluster cleanup should not run when resolveInfra fails")
 		}
 	}

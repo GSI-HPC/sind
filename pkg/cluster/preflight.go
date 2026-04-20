@@ -41,6 +41,10 @@ func NodeShortNames(nodes []config.Node) []string {
 // PreflightCheck verifies that no Docker resources conflict with the cluster
 // that would be created from the given configuration. It checks for existing
 // networks, volumes, and containers with matching names.
+//
+// Container existence is checked with a single `docker ps` filtered by the
+// cluster's realm + name labels; this keeps the call count constant regardless
+// of node count.
 func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
 	var (
 		mu        sync.Mutex
@@ -80,15 +84,28 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		})
 	}
 
-	// Check node containers.
-	for _, shortName := range NodeShortNames(cfg.Nodes) {
-		containerName := ContainerName(realm, cfg.Name, shortName)
-		g.Go(func() error {
-			return check(gctx, "container", string(containerName), func(ctx context.Context) (bool, error) {
-				return client.ContainerExists(ctx, containerName)
-			})
-		})
-	}
+	// Check node containers with a single filtered listing instead of N inspects.
+	g.Go(func() error {
+		entries, err := client.ListContainers(gctx,
+			"label="+LabelRealm+"="+realm,
+			"label="+LabelCluster+"="+cfg.Name)
+		if err != nil {
+			return fmt.Errorf("listing cluster containers: %w", err)
+		}
+		existing := make(map[docker.ContainerName]struct{}, len(entries))
+		for _, e := range entries {
+			existing[e.Name] = struct{}{}
+		}
+		for _, shortName := range NodeShortNames(cfg.Nodes) {
+			name := ContainerName(realm, cfg.Name, shortName)
+			if _, ok := existing[name]; ok {
+				mu.Lock()
+				conflicts = append(conflicts, "container "+string(name))
+				mu.Unlock()
+			}
+		}
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return err
