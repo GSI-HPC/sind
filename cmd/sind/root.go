@@ -32,8 +32,8 @@ func NewRootCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
-	cmd.Flags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
+	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
+	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
 
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newDeleteCommand())

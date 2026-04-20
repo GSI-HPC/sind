@@ -51,3 +51,16 @@ func TestRootCommand_NoArgs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "sind creates and manages containerized Slurm clusters")
 }
+
+// TestRootCommand_RealmFlagAfterSubcommand verifies --realm can appear in any
+// position — before or after the subcommand. A persistent flag is required for
+// the flag to be recognized when placed past the subcommand.
+func TestRootCommand_RealmFlagAfterSubcommand(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil) // empty container list for realms query
+
+	// Flag placed AFTER the subcommand must parse cleanly.
+	stdout, _, err := executeWithMock(&m, "get", "realms", "--realm", "someRealm", "-o", "json")
+	require.NoError(t, err)
+	assert.Equal(t, "[]\n", stdout)
+}
