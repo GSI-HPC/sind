@@ -10,6 +10,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
@@ -58,18 +59,21 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 		return health
 	}
 
-	health.Munge = probe.MungeReady(ctx, client, info.Name) == nil
-	health.SSHD = probe.SSHDReady(ctx, client, info.Name) == nil
-
-	for _, svc := range roleServices(role) {
-		var check probe.Func
-		switch svc {
-		case probe.ServiceSlurmctld:
-			check = probe.SlurmctldReady
-		case probe.ServiceSlurmd:
-			check = probe.SlurmdReady
+	// One fused readiness exec per node (plus scontrol ping for
+	// controllers) instead of three or four serial docker execs.
+	snap, err := probe.Snapshot(ctx, client, info.Name, role)
+	if err != nil {
+		sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
+		for _, svc := range roleServices(role) {
+			health.Services[svc] = false
 		}
-		health.Services[svc] = check(ctx, client, info.Name) == nil
+		return health
+	}
+
+	health.Munge = snap[probe.ServiceMunge]
+	health.SSHD = snap[probe.ServiceSSHD]
+	for _, svc := range roleServices(role) {
+		health.Services[svc] = snap[svc]
 	}
 
 	return health

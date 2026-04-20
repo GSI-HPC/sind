@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -715,11 +716,14 @@ func TestGetNode_Output(t *testing.T) {
 			if len(args) >= 2 && args[0] == "inspect" {
 				return mock.Result{Stdout: inspectWithLabels}
 			}
+			// probe.Snapshot fuses munge/sshd into a single call; emit one
+			// "active" line per requested unit.
 			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-				return mock.Result{Stdout: "active\n"}
-			}
-			if len(args) >= 3 && args[2] == "bash" {
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+				var b strings.Builder
+				for range args[4:] {
+					b.WriteString("active\n")
+				}
+				return mock.Result{Stdout: b.String()}
 			}
 			if len(args) >= 3 && args[2] == "scontrol" {
 				return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
@@ -751,11 +755,12 @@ func TestGetNode_JSON(t *testing.T) {
 			if len(args) >= 2 && args[0] == "inspect" {
 				return mock.Result{Stdout: inspectWithLabels}
 			}
-			if len(args) >= 4 && args[2] == "systemctl" {
-				return mock.Result{Stdout: "active\n"}
-			}
-			if len(args) >= 3 && args[2] == "bash" {
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
+				var b strings.Builder
+				for range args[4:] {
+					b.WriteString("active\n")
+				}
+				return mock.Result{Stdout: b.String()}
 			}
 			if len(args) >= 3 && args[2] == "scontrol" {
 				return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}

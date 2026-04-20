@@ -50,21 +50,47 @@ func healthyOnCall(containerName, ip string) func([]string, string) mock.Result 
 		if len(args) >= 2 && args[0] == "inspect" {
 			return mock.Result{Stdout: statusInspectJSON(containerName, "running", ip)}
 		}
+		// probe.Snapshot uses a fused "systemctl is-active <units...>"
+		// call whose stdout is one state line per unit.
 		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-			// munge or slurmd
-			return mock.Result{Stdout: "active\n"}
-		}
-		if len(args) >= 3 && args[2] == "sh" {
-			return mock.Result{Stdout: "running\n"}
-		}
-		if len(args) >= 3 && args[2] == "bash" {
-			return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+			var b strings.Builder
+			for range args[4:] {
+				b.WriteString("active\n")
+			}
+			return mock.Result{Stdout: b.String()}
 		}
 		if len(args) >= 3 && args[2] == "scontrol" {
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
+}
+
+// fusedIsActiveResponse emits one state line per unit in args[4:].
+// Units listed in failing produce "inactive" lines and the response carries
+// a non-zero exit error (matching real systemctl behaviour when any unit
+// is inactive). All other units emit "active".
+func fusedIsActiveResponse(t *testing.T, args []string, failing ...string) mock.Result {
+	t.Helper()
+	fail := make(map[string]bool, len(failing))
+	for _, u := range failing {
+		fail[u] = true
+	}
+	var b strings.Builder
+	anyFailed := false
+	for _, u := range args[4:] {
+		if fail[u] {
+			b.WriteString("inactive\n")
+			anyFailed = true
+			continue
+		}
+		b.WriteString("active\n")
+	}
+	res := mock.Result{Stdout: b.String()}
+	if anyFailed {
+		res.Err = testutil.ExitCode1(t)
+	}
+	return res
 }
 
 func TestGetNodeHealth_Controller(t *testing.T) {
@@ -147,9 +173,8 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	var m mock.Executor
 	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
 	m.OnCall = func(args []string, stdin string) mock.Result {
-		// slurmd fails
-		if len(args) >= 5 && args[2] == "systemctl" && args[4] == "slurmd" {
-			return mock.Result{Err: fmt.Errorf("exit status 1")}
+		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
+			return fusedIsActiveResponse(t, args, "slurmd")
 		}
 		return base(args, stdin)
 	}
@@ -209,9 +234,8 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 	var m mock.Executor
 	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
 	m.OnCall = func(args []string, stdin string) mock.Result {
-		// munge fails
-		if len(args) >= 5 && args[2] == "systemctl" && args[4] == "munge" {
-			return mock.Result{Err: fmt.Errorf("exit status 1")}
+		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
+			return fusedIsActiveResponse(t, args, "munge")
 		}
 		return base(args, stdin)
 	}
@@ -230,8 +254,8 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 	var m mock.Executor
 	base := healthyOnCall("sind-dev-controller", "172.18.0.2")
 	m.OnCall = func(args []string, stdin string) mock.Result {
-		if len(args) >= 3 && args[2] == "bash" {
-			return mock.Result{Err: fmt.Errorf("exit status 1")}
+		if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
+			return fusedIsActiveResponse(t, args, "sshd")
 		}
 		return base(args, stdin)
 	}
@@ -545,13 +569,11 @@ func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 		// docker exec: service checks (all pass)
 		if args[0] == "exec" {
 			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-				return mock.Result{Stdout: "active\n"}
-			}
-			if len(args) >= 3 && args[2] == "sh" {
-				return mock.Result{Stdout: "running\n"}
-			}
-			if len(args) >= 3 && args[2] == "bash" {
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.8\n"}
+				var b strings.Builder
+				for range args[4:] {
+					b.WriteString("active\n")
+				}
+				return mock.Result{Stdout: b.String()}
 			}
 			if len(args) >= 3 && args[2] == "scontrol" {
 				return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
