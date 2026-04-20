@@ -541,15 +541,15 @@ func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 			return mock.Result{Stdout: testutil.NDJSON(
 				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=controller",
+					Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.4",
 				},
 				testutil.PsEntry{
 					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker",
+					Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.4",
 				},
 				testutil.PsEntry{
 					ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker",
+					Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.4",
 				},
 			)}
 		}
@@ -604,6 +604,7 @@ func TestGetStatus_Full(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "dev", status.Name)
+	assert.Equal(t, "25.11.4", status.SlurmVersion)
 	assert.Equal(t, StateRunning, status.State)
 
 	// Nodes sorted: controller, worker-0, worker-1.

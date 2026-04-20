@@ -463,8 +463,8 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 
 	// Header table
 	w := newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "CLUSTER\tSTATUS (R/S/P/T)")
-	_, _ = fmt.Fprintf(w, "%s\t%s\n", status.Name, formatState(status))
+	_, _ = fmt.Fprintln(w, "CLUSTER\tSLURM\tSTATUS (R/S/P/T)")
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", status.Name, status.SlurmVersion, formatState(status))
 	if err := w.Flush(); err != nil {
 		return err
 	}

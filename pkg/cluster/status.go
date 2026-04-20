@@ -198,11 +198,12 @@ type NodeStatus struct {
 
 // Status holds the full status of a sind cluster.
 type Status struct {
-	Name    string         `json:"name"`
-	State   State          `json:"status"`
-	Nodes   []*NodeStatus  `json:"nodes"`
-	Network *NetworkHealth `json:"network"`
-	Mounts  []MountPoint   `json:"mounts"`
+	Name         string         `json:"name"`
+	SlurmVersion string         `json:"slurm_version"`
+	State        State          `json:"status"`
+	Nodes        []*NodeStatus  `json:"nodes"`
+	Network      *NetworkHealth `json:"network"`
+	Mounts       []MountPoint   `json:"mounts"`
 }
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
@@ -280,12 +281,18 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nil, err
 	}
 
+	var slurmVersion string
+	if len(containers) > 0 {
+		slurmVersion = containers[0].Labels[LabelSlurmVersion]
+	}
+
 	return &Status{
-		Name:    clusterName,
-		State:   aggregateState(states),
-		Nodes:   nodes,
-		Network: network,
-		Mounts:  mounts,
+		Name:         clusterName,
+		SlurmVersion: slurmVersion,
+		State:        aggregateState(states),
+		Nodes:        nodes,
+		Network:      network,
+		Mounts:       mounts,
 	}, nil
 }
 
