@@ -33,7 +33,7 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	if len(containers) == 0 {
-		return nil, nil
+		return []*Summary{}, nil
 	}
 
 	// Group containers by cluster name.
@@ -128,7 +128,7 @@ func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName str
 // buildNodeSummaries converts container list entries into node summaries.
 func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string, containers []docker.ContainerListEntry) ([]*NodeSummary, error) {
 	if len(containers) == 0 {
-		return nil, nil
+		return []*NodeSummary{}, nil
 	}
 
 	// Filter containers that belong to a cluster and collect names for a
@@ -143,7 +143,7 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 		names = append(names, c.Name)
 	}
 	if len(filtered) == 0 {
-		return nil, nil
+		return []*NodeSummary{}, nil
 	}
 
 	// IPs are best-effort: GetNodes/GetAllNodes drives user-facing listings
@@ -246,7 +246,7 @@ func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*N
 		return nil, fmt.Errorf("listing networks: %w", err)
 	}
 	if len(entries) == 0 {
-		return nil, nil
+		return []*NetworkSummary{}, nil
 	}
 	result := make([]*NetworkSummary, 0, len(entries))
 	for _, e := range entries {
@@ -280,7 +280,7 @@ func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*Vo
 		return nil, fmt.Errorf("listing volumes: %w", err)
 	}
 	if len(entries) == 0 {
-		return nil, nil
+		return []*VolumeSummary{}, nil
 	}
 	result := make([]*VolumeSummary, 0, len(entries))
 	for _, e := range entries {
@@ -329,7 +329,7 @@ func GetRealms(ctx context.Context, client *docker.Client) ([]*RealmSummary, err
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	if len(containers) == 0 {
-		return nil, nil
+		return []*RealmSummary{}, nil
 	}
 
 	// Group by realm, tracking unique cluster names per realm.

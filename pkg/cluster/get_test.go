@@ -81,6 +81,7 @@ func TestGetClusters_Empty(t *testing.T) {
 	clusters, err := GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
+	assert.NotNil(t, clusters, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, clusters)
 }
 
@@ -279,6 +280,7 @@ func TestGetNodes_Empty(t *testing.T) {
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "nonexistent")
 
 	require.NoError(t, err)
+	assert.NotNil(t, nodes, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, nodes)
 }
 
@@ -473,6 +475,7 @@ func TestGetAllNodes_OnlyOrphanContainers(t *testing.T) {
 
 	nodes, err := GetAllNodes(t.Context(), c, mesh.DefaultRealm)
 	require.NoError(t, err)
+	assert.NotNil(t, nodes, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, nodes)
 }
 
@@ -617,6 +620,7 @@ func TestGetNetworks_Empty(t *testing.T) {
 	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
+	assert.NotNil(t, networks, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, networks)
 }
 
@@ -668,6 +672,7 @@ func TestGetVolumes_Empty(t *testing.T) {
 	volumes, err := GetVolumes(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
+	assert.NotNil(t, volumes, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, volumes)
 }
 
@@ -779,7 +784,8 @@ func TestGetRealms_Empty(t *testing.T) {
 	realms, err := GetRealms(t.Context(), c)
 
 	require.NoError(t, err)
-	assert.Nil(t, realms)
+	assert.NotNil(t, realms, "empty result must be [] not nil so json emits []")
+	assert.Empty(t, realms)
 }
 
 func TestGetRealms_LabelFilter(t *testing.T) {

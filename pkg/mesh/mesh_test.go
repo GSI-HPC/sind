@@ -1296,6 +1296,7 @@ func TestGetDNSRecords_Empty(t *testing.T) {
 
 	records, err := mgr.GetDNSRecords(t.Context())
 	require.NoError(t, err)
+	assert.NotNil(t, records, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, records)
 }
 

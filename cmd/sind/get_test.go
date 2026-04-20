@@ -291,7 +291,7 @@ func TestGetClusters_JSONEmpty(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "clusters", "--output", "json")
 	require.NoError(t, err)
-	assert.Equal(t, "null\n", stdout)
+	assert.Equal(t, "[]\n", stdout)
 }
 
 // --- Realms ---
