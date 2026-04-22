@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/cobra"
@@ -45,8 +46,10 @@ func completeNodeNames(cmd *cobra.Command, _ []string, _ string) ([]string, cobr
 		if err != nil {
 			continue
 		}
+		prefix := cluster.ContainerPrefix(realm, cl)
 		for _, n := range nodes {
-			completions = append(completions, n.Name+"."+cl)
+			shortName := strings.TrimPrefix(n.Container, prefix)
+			completions = append(completions, shortName+"."+cl)
 		}
 	}
 	return completions, cobra.ShellCompDirectiveNoFileComp

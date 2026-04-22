@@ -7,8 +7,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"path"
 	"sort"
 	"strings"
@@ -138,7 +140,29 @@ type inspectResult struct {
 
 // InspectContainer returns detailed information about a container.
 func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*ContainerInfo, error) {
-	stdout, _, err := c.run(ctx, "inspect", string(name))
+	infos, err := c.InspectContainers(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if len(infos) == 0 {
+		return nil, fmt.Errorf("inspect returned no results for %q", name)
+	}
+	return infos[0], nil
+}
+
+// InspectContainers returns details for the given containers in a single
+// docker inspect invocation. The returned slice preserves argument order.
+// Returns nil when names is empty.
+func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) ([]*ContainerInfo, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	args := make([]string, 0, 1+len(names))
+	args = append(args, "inspect")
+	for _, n := range names {
+		args = append(args, string(n))
+	}
+	stdout, _, err := c.run(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -146,23 +170,23 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
 		return nil, fmt.Errorf("parsing inspect output: %w", err)
 	}
-	if len(results) == 0 {
-		return nil, fmt.Errorf("inspect returned no results for %q", name)
+	infos := make([]*ContainerInfo, 0, len(results))
+	for _, r := range results {
+		ips := make(map[NetworkName]string, len(r.NetworkSettings.Networks))
+		for net, info := range r.NetworkSettings.Networks {
+			ips[NetworkName(net)] = info.IPAddress
+		}
+		infos = append(infos, &ContainerInfo{
+			ID:        ContainerID(r.ID),
+			Name:      ContainerName(strings.TrimPrefix(r.Name, "/")),
+			Status:    ContainerState(r.State.Status),
+			ExitCode:  r.State.ExitCode,
+			OOMKilled: r.State.OOMKilled,
+			Labels:    r.Config.Labels,
+			IPs:       ips,
+		})
 	}
-	r := results[0]
-	ips := make(map[NetworkName]string, len(r.NetworkSettings.Networks))
-	for net, info := range r.NetworkSettings.Networks {
-		ips[NetworkName(net)] = info.IPAddress
-	}
-	return &ContainerInfo{
-		ID:        ContainerID(r.ID),
-		Name:      ContainerName(strings.TrimPrefix(r.Name, "/")),
-		Status:    ContainerState(r.State.Status),
-		ExitCode:  r.State.ExitCode,
-		OOMKilled: r.State.OOMKilled,
-		Labels:    r.Config.Labels,
-		IPs:       ips,
-	}, nil
+	return infos, nil
 }
 
 // ContainerListEntry holds summary information from docker ps.
@@ -236,6 +260,22 @@ func (c *Client) Exec(ctx context.Context, container ContainerName, command ...s
 		return "", err
 	}
 	return stdout, nil
+}
+
+// ExecAllowNonZero is like Exec but returns stdout even when the inner
+// command exits non-zero. The returned error is non-nil iff the exec itself
+// failed (daemon unreachable, container gone); command-level non-zero exits
+// are surfaced via the stdout return. Intended for commands whose stdout is
+// meaningful on failure (e.g. systemctl is-active, which exits non-zero
+// whenever any listed unit is inactive but still prints the unit states).
+func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, command ...string) (string, error) {
+	args := append([]string{"exec", string(container)}, command...)
+	stdout, _, err := c.run(ctx, args...)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return stdout, nil
+	}
+	return stdout, err
 }
 
 // ExecWithStdin runs a command inside a container, piping stdin to it.

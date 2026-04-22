@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -115,6 +116,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 		"volume", "create",
 		"--label", "com.docker.compose.project=sind-mesh",
 		"--label", "com.docker.compose.volume=ssh-config",
+		"--label", "sind.realm=" + DefaultRealm,
 		string(SSHVolumeName),
 	}, m.Calls[1].Args)
 	keygenName := string(mgr.SSHKeygenName())
@@ -687,6 +689,121 @@ func TestGenerateKeypair_KeysMatch(t *testing.T) {
 	pubFromPriv, _ := parseSSHString(t, pubSection)
 
 	assert.Equal(t, pubFromLine, pubFromPriv, "public keys from private and public files should match")
+}
+
+// --- GetSSH* ---
+
+func TestGetSSHPrivateKey(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
+	m.AddResult("-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	key, err := mgr.GetSSHPrivateKey(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, key, "BEGIN OPENSSH PRIVATE KEY")
+	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/id_ed25519"}, m.Calls[1].Args)
+}
+
+func TestGetSSHPrivateKey_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHPrivateKey(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading SSH private key")
+}
+
+func TestGetSSHPublicKey(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
+	m.AddResult("ssh-ed25519 AAAA... comment\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	key, err := mgr.GetSSHPublicKey(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, key, "ssh-ed25519")
+	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/id_ed25519.pub"}, m.Calls[1].Args)
+}
+
+func TestGetSSHKnownHosts(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
+	m.AddResult("host1 ssh-ed25519 AAAA...\nhost2 ssh-ed25519 BBBB...\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	hosts, err := mgr.GetSSHKnownHosts(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, hosts, "host1")
+	assert.Contains(t, hosts, "host2")
+	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/known_hosts"}, m.Calls[1].Args)
+}
+
+func TestGetSSHPublicKey_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHPublicKey(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading SSH public key")
+}
+
+func TestGetSSHKnownHosts_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHKnownHosts(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading SSH known_hosts")
+}
+
+// TestGetSSH*_NoMesh cover the typo/empty-realm case: the SSH container is
+// absent, so the getter must surface a clean "no mesh found" error instead
+// of leaking the raw docker exec failure.
+func TestGetSSHPrivateKey_NoMesh(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHPrivateKey(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `no mesh found for realm "sind"`)
+	assert.NotContains(t, err.Error(), "exit status")
+}
+
+func TestGetSSHPublicKey_NoMesh(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHPublicKey(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `no mesh found for realm "sind"`)
+}
+
+func TestGetSSHKnownHosts_NoMesh(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetSSHKnownHosts(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `no mesh found for realm "sind"`)
 }
 
 // --- test helpers ---

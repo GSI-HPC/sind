@@ -5,6 +5,8 @@ package probe
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -12,12 +14,22 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/monitor"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const testContainer docker.ContainerName = "sind-dev-controller"
+
+// exitCode1 runs a command that exits with code 1 and returns its
+// ProcessState so tests can construct a realistic *exec.ExitError.
+func exitCode1(t *testing.T) *os.ProcessState {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "exit 1")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	return exitErr.ProcessState
+}
 
 func inspectJSON(status string) string {
 	return inspectJSONFull(status, 0, false)
@@ -247,17 +259,33 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 }
 
 func TestForService(t *testing.T) {
-	p := ForService(slurm.Slurmctld)
+	p := ForService(ServiceSlurmctld)
 	assert.Equal(t, "slurmctld", p.Name)
 	assert.NotNil(t, p.Check)
 
-	p = ForService(slurm.Slurmd)
+	p = ForService(ServiceSlurmd)
 	assert.Equal(t, "slurmd", p.Name)
 	assert.NotNil(t, p.Check)
 
 	p = ForService("unknown")
 	assert.Equal(t, "unknown", p.Name)
 	assert.Nil(t, p.Check)
+}
+
+func TestServiceForRole(t *testing.T) {
+	svc, ok := ServiceForRole(config.RoleController)
+	assert.True(t, ok)
+	assert.Equal(t, ServiceSlurmctld, svc)
+
+	svc, ok = ServiceForRole(config.RoleWorker)
+	assert.True(t, ok)
+	assert.Equal(t, ServiceSlurmd, svc)
+
+	_, ok = ServiceForRole(config.RoleSubmitter)
+	assert.False(t, ok)
+
+	_, ok = ServiceForRole("unknown")
+	assert.False(t, ok)
 }
 
 func TestNodeProbes(t *testing.T) {
@@ -586,4 +614,115 @@ func TestUntilReadyWithEvents_TerminalError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exited")
 	assert.Len(t, m.Calls, 1)
+}
+
+func TestSnapshot_WorkerAllActive(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\nactive\nactive\n", "", nil)
+	c := docker.NewClient(&m)
+
+	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	require.NoError(t, err)
+	assert.True(t, snap[ServiceMunge])
+	assert.True(t, snap[ServiceSSHD])
+	assert.True(t, snap[ServiceSlurmd])
+	_, hasCtld := snap[ServiceSlurmctld]
+	assert.False(t, hasCtld)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "systemctl", "is-active", "munge", "sshd", "slurmd"},
+		m.Calls[0].Args,
+	)
+}
+
+func TestSnapshot_WorkerOneInactive(t *testing.T) {
+	var m mock.Executor
+	// systemctl exits non-zero when any unit is inactive but still prints
+	// the per-unit states. ExecAllowNonZero surfaces that stdout.
+	m.AddResult("active\nactive\nfailed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := docker.NewClient(&m)
+
+	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	require.NoError(t, err)
+	assert.True(t, snap[ServiceMunge])
+	assert.True(t, snap[ServiceSSHD])
+	assert.False(t, snap[ServiceSlurmd])
+}
+
+func TestSnapshot_Submitter(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\nactive\n", "", nil)
+	c := docker.NewClient(&m)
+
+	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleSubmitter)
+	require.NoError(t, err)
+	assert.True(t, snap[ServiceMunge])
+	assert.True(t, snap[ServiceSSHD])
+	assert.Len(t, snap, 2)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "systemctl", "is-active", "munge", "sshd"},
+		m.Calls[0].Args,
+	)
+}
+
+func TestSnapshot_ControllerWithScontrolPing(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\nactive\n", "", nil)           // systemctl is-active munge sshd
+	m.AddResult("Slurmctld(primary) is UP\n", "", nil) // scontrol ping
+	c := docker.NewClient(&m)
+
+	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleController)
+	require.NoError(t, err)
+	assert.True(t, snap[ServiceMunge])
+	assert.True(t, snap[ServiceSSHD])
+	assert.True(t, snap[ServiceSlurmctld])
+	_, hasSlurmd := snap[ServiceSlurmd]
+	assert.False(t, hasSlurmd)
+
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "systemctl", "is-active", "munge", "sshd"},
+		m.Calls[0].Args,
+	)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "scontrol", "ping"},
+		m.Calls[1].Args,
+	)
+}
+
+func TestSnapshot_ControllerScontrolFails(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\nactive\n", "", nil)
+	m.AddResult("", "", fmt.Errorf("scontrol: connection refused"))
+	c := docker.NewClient(&m)
+
+	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleController)
+	require.NoError(t, err)
+	assert.True(t, snap[ServiceMunge])
+	assert.True(t, snap[ServiceSSHD])
+	assert.False(t, snap[ServiceSlurmctld])
+}
+
+func TestSnapshot_ExecDaemonError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl is-active")
+}
+
+func TestSnapshot_MalformedOutput(t *testing.T) {
+	var m mock.Executor
+	// Only 2 lines for a 3-unit worker query.
+	m.AddResult("active\nactive\n", "", nil)
+	c := docker.NewClient(&m)
+
+	_, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "got 2 lines")
 }

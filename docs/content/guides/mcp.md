@@ -59,8 +59,10 @@ This exports the tool definitions to `mcp-tools.json`. The tools follow the nami
 | `sind_create_cluster` | Create a new cluster |
 | `sind_create_worker` | Add workers to a running cluster |
 | `sind_delete_cluster` | Delete a cluster |
-| `sind_status` | Show cluster status |
+| `sind_get_cluster` | Show cluster health status |
 | `sind_get_nodes` | List cluster nodes |
+| `sind_get_realms` | List active realms |
+| `sind_get_mesh` | Show mesh infrastructure info |
 | `sind_power_shutdown` | Shut down a node |
 | `sind_power_reboot` | Reboot a node |
 | `sind_ssh` | SSH into a node |

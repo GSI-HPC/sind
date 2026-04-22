@@ -92,17 +92,27 @@ Example output at `-vv` (colorized on interactive terminals):
 
 The `-v` flag belongs to the root command and must appear before the subcommand (e.g., `sind -v create cluster`).
 
+## JSON output
+
+Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is `human` (tabular text); `json` emits a machine-readable document for scripting and automation.
+
+```bash
+sind get clusters -o json
+sind get nodes -o json
+sind get cluster dev --output json
+```
+
 ## Cluster status
 
 ```bash
-sind status [CLUSTER]
+sind get cluster [NAME]
 ```
 
 Displays detailed health information:
 
 ```
-CLUSTER   STATUS (R/S/P/T)
-dev       running (3/0/0/3)
+CLUSTER   SLURM     STATUS (R/S/P/T)
+dev       25.11.4   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -120,10 +130,10 @@ MOUNT        SOURCE               TYPE       STATUS
 /data        /home/user/project   hostPath   ✓
 
 NODES
-NAME              ROLE        IP            CONTAINER   MUNGE  SSHD   SERVICES
-controller.dev    controller  172.18.0.2    running     ✓      ✓      slurmctld ✓
-worker-0.dev      worker      172.18.0.3    running     ✓      ✓      slurmd ✓
-worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd ✗
+NAME              ROLE        IP            STATUS    SERVICES
+controller.dev    controller  172.18.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
@@ -138,7 +148,7 @@ The `STATUS (R/S/P/T)` column shows the cluster state followed by container coun
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
-> **Tip:** Run `watch sind status` for a simple live dashboard that refreshes every two seconds.
+> **Tip:** Run `watch sind get cluster` for a simple live dashboard that refreshes every two seconds.
 
 ## Logs
 
@@ -164,11 +174,13 @@ sind logs worker-0 slurmd --follow
 sind get nodes [CLUSTER]
 ```
 
+Without a `CLUSTER` argument, lists every node in the realm with an extra `CLUSTER` column; with a cluster name, scopes to that cluster and drops the column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`.
+
 ```
-NAME                 ROLE         STATUS
-controller.default   controller   running
-worker-0.default     worker       running
-worker-1.default     worker       running
+CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
+sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
+sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
+sind-default-worker-1    default   worker       worker-1.default.sind.sind      172.19.0.4   running
 ```
 
 ## List networks
@@ -182,6 +194,20 @@ NAME              DRIVER   SUBNET           GATEWAY
 sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 sind-default-net  bridge   172.19.0.0/16    172.19.0.1
 ```
+
+## List realms
+
+```bash
+sind get realms
+```
+
+```
+NAME   CLUSTERS
+sind   2
+ci     1
+```
+
+Lists all active realms discovered from Docker container labels. Useful when working with multiple realms to see what's running.
 
 ## List volumes
 
@@ -216,6 +242,26 @@ sind get munge-key [CLUSTER]
 ```
 
 Outputs the cluster's munge key encoded as base64, suitable for injection into external tooling.
+
+## Mesh infrastructure
+
+```bash
+sind get mesh
+```
+
+Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions.
+
+If no mesh has been created yet, the command returns a friendly `no mesh found for realm "<name>"` error.
+
+## SSH credentials
+
+```bash
+sind get ssh-private-key
+sind get ssh-public-key
+sind get ssh-known-hosts
+```
+
+Dump the realm's SSH credentials to stdout. With `-o json`, each command emits a distinct top-level field (`private_key`, `public_key`, `known_hosts`) so consumers don't need to special-case the same JSON key for three payload types. Together with `sind get ssh-config`, this replaces the need to extract files from Docker volumes.
 
 ## SSH config path
 

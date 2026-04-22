@@ -118,6 +118,8 @@ func TestCreateClusterNetwork(t *testing.T) {
 		"network", "create",
 		"--label", "com.docker.compose.network=net",
 		"--label", "com.docker.compose.project=sind-dev",
+		"--label", "sind.cluster=dev",
+		"--label", "sind.realm=sind",
 		"sind-dev-net",
 	}, m.Calls[0].Args)
 }
@@ -148,6 +150,8 @@ func TestCreateClusterVolume(t *testing.T) {
 		"volume", "create",
 		"--label", "com.docker.compose.project=sind-dev",
 		"--label", "com.docker.compose.volume=config",
+		"--label", "sind.cluster=dev",
+		"--label", "sind.realm=sind",
 		"sind-dev-config",
 	}, m.Calls[0].Args)
 }

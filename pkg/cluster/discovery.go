@@ -39,8 +39,10 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 		Network: NetworkName(realm, clusterName),
 	}
 
-	// Find containers by label.
+	// Find containers by label. Filter by both realm and cluster so parallel
+	// realms with identically-named clusters don't see each other's containers.
 	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
@@ -72,39 +74,34 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 // DiscoverClusterNames finds cluster names from orphaned networks and volumes
 // that may not have containers. This supplements GetClusters (which only finds
 // clusters with running containers) for cleanup operations.
+//
+// Filters on both the realm and cluster labels so mesh resources (which carry
+// only the realm label) are skipped, and resources from other realms can't
+// match even when names collide.
 func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm string) ([]string, error) {
 	seen := make(map[string]struct{})
-	prefix := realm + "-"
+	filters := []string{
+		"label=" + LabelRealm + "=" + realm,
+		"label=" + LabelCluster,
+	}
 
-	// Extract cluster names from networks: <realm>-<cluster>-net
-	nets, err := client.ListNetworks(ctx, "name="+prefix)
+	nets, err := client.ListNetworks(ctx, filters...)
 	if err != nil {
 		return nil, fmt.Errorf("listing networks: %w", err)
 	}
 	for _, n := range nets {
-		name := strings.TrimPrefix(string(n.Name), prefix)
-		if cluster, ok := strings.CutSuffix(name, "-net"); ok {
+		if cluster := n.Labels[LabelCluster]; cluster != "" {
 			seen[cluster] = struct{}{}
 		}
 	}
 
-	// Extract cluster names from volumes: <realm>-<cluster>-{config,munge,data}
-	// Skip mesh volumes like <realm>-ssh-config which aren't cluster resources.
-	meshVolSuffix := "ssh-config"
-	vols, err := client.ListVolumes(ctx, "name="+prefix)
+	vols, err := client.ListVolumes(ctx, filters...)
 	if err != nil {
 		return nil, fmt.Errorf("listing volumes: %w", err)
 	}
 	for _, v := range vols {
-		name := strings.TrimPrefix(string(v.Name), prefix)
-		if name == meshVolSuffix {
-			continue
-		}
-		for _, suffix := range AllVolumeTypes {
-			if cluster, ok := strings.CutSuffix(name, "-"+string(suffix)); ok {
-				seen[cluster] = struct{}{}
-				break
-			}
+		if cluster := v.Labels[LabelCluster]; cluster != "" {
+			seen[cluster] = struct{}{}
 		}
 	}
 

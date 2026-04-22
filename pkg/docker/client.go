@@ -77,11 +77,19 @@ func SortedLabelFlags(labels Labels) []string {
 func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 	_, _, err := c.run(ctx, args...)
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		if IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
 	}
 	return true, nil
+}
+
+// IsNotFound reports whether err is a docker CLI "resource not found" error
+// (inspect exit code 1) rather than a genuine failure. Callers that want the
+// info from a single inspect call can use this to distinguish missing
+// resources without issuing a second existence probe.
+func IsNotFound(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
 }

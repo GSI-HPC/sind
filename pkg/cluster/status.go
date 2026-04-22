@@ -10,21 +10,27 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
+	"golang.org/x/sync/errgroup"
 )
 
-// ServiceHealth maps service names to their health status (true = healthy).
-type ServiceHealth map[string]bool
+// statusNodeConcurrency bounds the number of concurrent per-node readiness
+// probes issued by GetStatus. Each goroutine performs a small number of
+// docker exec round-trips, which are I/O-bound on the daemon socket; a
+// limit of 8 saturates a typical docker host without fork-storming the CLI.
+const statusNodeConcurrency = 8
+
+// ServiceHealth maps a readiness-check service to its health status.
+type ServiceHealth map[probe.Service]bool
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	Container docker.ContainerState // container state from Docker (e.g. "running", "exited")
-	IP        string                // container IP address
-	Munge     bool                  // munge service healthy
-	SSHD      bool                  // sshd accepting connections
-	Services  ServiceHealth         // role-specific services (e.g., "slurmctld", "slurmd")
+	State    docker.ContainerState `json:"status"`   // container state from Docker (e.g. "running", "exited")
+	IP       string                `json:"ip"`       // container IP address
+	Services ServiceHealth         `json:"services"` // all readiness-checked services (munge, sshd, and role-specific services like slurmctld/slurmd)
 }
 
 // GetNodeHealth checks the health of a single node container.
@@ -32,58 +38,66 @@ type NodeHealth struct {
 // default to false. The role determines which Slurm services are checked.
 // clusterName is used to select the cluster network IP.
 func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
-	name := docker.ContainerName(containerName)
-
-	info, err := client.InspectContainer(ctx, name)
+	info, err := client.InspectContainer(ctx, docker.ContainerName(containerName))
 	if err != nil {
 		return nil, fmt.Errorf("inspecting container: %w", err)
 	}
+	return nodeHealthFromInfo(ctx, client, info, role, realm, clusterName), nil
+}
 
+// nodeHealthFromInfo runs readiness probes against a pre-inspected container
+// and returns its health. Callers that already hold a *docker.ContainerInfo
+// (e.g. from a batched InspectContainers) should use this to avoid re-issuing
+// a per-node docker inspect.
+func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker.ContainerInfo, role config.Role, realm, clusterName string) *NodeHealth {
 	health := &NodeHealth{
-		Container: info.Status,
-		IP:        info.IPs[NetworkName(realm, clusterName)],
-		Services:  make(ServiceHealth),
+		State:    info.Status,
+		IP:       info.IPs[NetworkName(realm, clusterName)],
+		Services: make(ServiceHealth),
 	}
+
+	services := append([]probe.Service{probe.ServiceMunge, probe.ServiceSSHD}, roleServices(role)...)
 
 	// If container is not running, skip all service checks.
 	if info.Status != docker.StateRunning {
-		for _, svc := range roleServices(role) {
+		for _, svc := range services {
 			health.Services[svc] = false
 		}
-		return health, nil
+		return health
 	}
 
-	health.Munge = probe.MungeReady(ctx, client, name) == nil
-	health.SSHD = probe.SSHDReady(ctx, client, name) == nil
-
-	for _, svc := range roleServices(role) {
-		var check probe.Func
-		switch svc {
-		case "slurmctld":
-			check = probe.SlurmctldReady
-		case "slurmd":
-			check = probe.SlurmdReady
+	// One fused readiness exec per node (plus scontrol ping for
+	// controllers) instead of three or four serial docker execs.
+	snap, err := probe.Snapshot(ctx, client, info.Name, role)
+	if err != nil {
+		sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
+		for _, svc := range services {
+			health.Services[svc] = false
 		}
-		health.Services[svc] = check(ctx, client, name) == nil
+		return health
 	}
 
-	return health, nil
+	for _, svc := range services {
+		health.Services[svc] = snap[svc]
+	}
+
+	return health
 }
 
 // NetworkHealth holds the health and IPAM details of cluster networking.
 type NetworkHealth struct {
-	Mesh           bool   // sind-mesh network exists
-	MeshName       string // mesh network name (e.g. "sind-mesh")
-	MeshDriver     string // mesh network driver (e.g. "bridge")
-	MeshSubnet     string // mesh network subnet
-	MeshGateway    string // mesh network gateway
-	DNS            bool   // sind-dns container exists
-	DNSName        string // DNS container name (e.g. "sind-dns")
-	Cluster        bool   // cluster network exists
-	ClusterName    string // cluster network name (e.g. "sind-dev-net")
-	ClusterDriver  string // cluster network driver (e.g. "bridge")
-	ClusterSubnet  string // cluster network subnet
-	ClusterGateway string // cluster network gateway
+	Mesh           bool   `json:"mesh_ok"`         // sind-mesh network exists
+	MeshName       string `json:"mesh_name"`       // mesh network name (e.g. "sind-mesh")
+	MeshDriver     string `json:"mesh_driver"`     // mesh network driver (e.g. "bridge")
+	MeshSubnet     string `json:"mesh_subnet"`     // mesh network subnet
+	MeshGateway    string `json:"mesh_gateway"`    // mesh network gateway
+	DNS            bool   `json:"dns_ok"`          // sind-dns container exists
+	DNSName        string `json:"dns_name"`        // DNS container name (e.g. "sind-dns")
+	Cluster        bool   `json:"cluster_ok"`      // cluster network exists
+	ClusterName    string `json:"cluster_name"`    // cluster network name (e.g. "sind-dev-net")
+	ClusterDriver  string `json:"cluster_driver"`  // cluster network driver (e.g. "bridge")
+	ClusterSubnet  string `json:"cluster_subnet"`  // cluster network subnet
+	ClusterGateway string `json:"cluster_gateway"` // cluster network gateway
 }
 
 // GetNetworkHealth checks the health of mesh, DNS, and cluster networking.
@@ -98,36 +112,29 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		ClusterName: string(clusterNet),
 	}
 
-	meshExists, err := client.NetworkExists(ctx, meshMgr.NetworkName())
-	if err != nil {
+	// One inspect per resource: missing → not exists, any other error → propagate.
+	if info, err := client.InspectNetwork(ctx, meshMgr.NetworkName()); err == nil {
+		health.Mesh = true
+		health.MeshDriver = info.Driver
+		health.MeshSubnet = info.Subnet
+		health.MeshGateway = info.Gateway
+	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
-	health.Mesh = meshExists
-	if meshExists {
-		if info, err := client.InspectNetwork(ctx, meshMgr.NetworkName()); err == nil {
-			health.MeshDriver = info.Driver
-			health.MeshSubnet = info.Subnet
-			health.MeshGateway = info.Gateway
-		}
-	}
 
-	dnsExists, err := client.ContainerExists(ctx, meshMgr.DNSContainerName())
-	if err != nil {
+	if _, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
+		health.DNS = true
+	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
 	}
-	health.DNS = dnsExists
 
-	clusterExists, err := client.NetworkExists(ctx, clusterNet)
-	if err != nil {
+	if info, err := client.InspectNetwork(ctx, clusterNet); err == nil {
+		health.Cluster = true
+		health.ClusterDriver = info.Driver
+		health.ClusterSubnet = info.Subnet
+		health.ClusterGateway = info.Gateway
+	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking cluster network: %w", err)
-	}
-	health.Cluster = clusterExists
-	if clusterExists {
-		if info, err := client.InspectNetwork(ctx, clusterNet); err == nil {
-			health.ClusterDriver = info.Driver
-			health.ClusterSubnet = info.Subnet
-			health.ClusterGateway = info.Gateway
-		}
 	}
 
 	return health, nil
@@ -135,10 +142,10 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 
 // MountPoint describes a volume or bind mount on cluster containers.
 type MountPoint struct {
-	Path   string             // mount path inside the container (e.g. "/etc/slurm")
-	Source string             // volume name or host path
-	Type   config.StorageType // "volume" or "hostPath"
-	OK     bool               // true if the Docker volume exists (always true for hostPath)
+	Path   string             `json:"path"`   // mount path inside the container (e.g. "/etc/slurm")
+	Source string             `json:"source"` // volume name or host path
+	Type   config.StorageType `json:"type"`   // "volume" or "hostPath"
+	OK     bool               `json:"ok"`     // true if the Docker volume exists (always true for hostPath)
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
@@ -184,18 +191,19 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
-	Name   string      // DNS-style name: "controller.dev"
-	Role   config.Role // "controller", "submitter", "worker"
-	Health *NodeHealth
+	Name   string      `json:"name"`   // DNS-style name: "controller.dev"
+	Role   config.Role `json:"role"`   // "controller", "submitter", "worker"
+	Health *NodeHealth `json:"health"` //nolint:revive // nested health is intentional
 }
 
 // Status holds the full status of a sind cluster.
 type Status struct {
-	Name    string
-	State   State
-	Nodes   []*NodeStatus
-	Network *NetworkHealth
-	Mounts  []MountPoint
+	Name         string         `json:"name"`
+	SlurmVersion string         `json:"slurm_version"`
+	State        State          `json:"status"`
+	Nodes        []*NodeStatus  `json:"nodes"`
+	Network      *NetworkHealth `json:"network"`
+	Mounts       []MountPoint   `json:"mounts"`
 }
 
 // GetStatus returns the full status of a cluster, aggregating node, network,
@@ -209,25 +217,69 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
+	// Distinguish "no such cluster" from "partial teardown" (e.g. a failed
+	// delete that left the network behind). If no containers exist AND the
+	// cluster network is absent, the cluster was never created or is fully
+	// gone — surface it as a not-found error rather than a plausible-looking
+	// empty status report.
+	if len(containers) == 0 {
+		if _, nerr := client.InspectNetwork(ctx, NetworkName(realm, clusterName)); nerr != nil {
+			if docker.IsNotFound(nerr) {
+				return nil, fmt.Errorf("cluster %q not found in realm %q", clusterName, realm)
+			}
+			return nil, fmt.Errorf("checking cluster network: %w", nerr)
+		}
+	}
+
+	// Batch a single docker inspect for every container up front so that the
+	// per-node probe loop below has status + IP without additional round
+	// trips. One docker CLI fork instead of one per node.
+	infoByName := make(map[docker.ContainerName]*docker.ContainerInfo, len(containers))
+	if len(containers) > 0 {
+		names := make([]docker.ContainerName, len(containers))
+		for i, c := range containers {
+			names[i] = c.Name
+		}
+		infos, err := client.InspectContainers(ctx, names...)
+		if err != nil {
+			return nil, fmt.Errorf("inspecting cluster containers: %w", err)
+		}
+		for _, info := range infos {
+			infoByName[info.Name] = info
+		}
+	}
+
 	prefix := ContainerPrefix(realm, clusterName)
-	var nodes []*NodeStatus
-	var states []docker.ContainerState
-	for _, c := range containers {
+	nodes := make([]*NodeStatus, len(containers))
+	states := make([]docker.ContainerState, len(containers))
+
+	// Probe nodes in parallel with a bounded worker pool. Each goroutine
+	// writes to its own pre-allocated index so no mutex is needed; the
+	// final sort restores deterministic output order.
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(statusNodeConcurrency)
+	for i, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := config.Role(c.Labels[LabelRole])
 
-		health, err := GetNodeHealth(ctx, client, string(c.Name), role, realm, clusterName)
-		if err != nil {
-			return nil, fmt.Errorf("checking node %s: %w", shortName, err)
+		info, ok := infoByName[c.Name]
+		if !ok {
+			return nil, fmt.Errorf("checking node %s: inspect returned no entry", shortName)
 		}
-
-		nodes = append(nodes, &NodeStatus{
-			Name:   shortName + "." + clusterName,
-			Role:   role,
-			Health: health,
+		states[i] = c.State
+		g.Go(func() error {
+			health := nodeHealthFromInfo(gctx, client, info, role, realm, clusterName)
+			nodes[i] = &NodeStatus{
+				Name:   shortName + "." + clusterName,
+				Role:   role,
+				Health: health,
+			}
+			return nil
 		})
-		states = append(states, c.State)
 	}
+	// Goroutines above never return a non-nil error; Wait is purely a
+	// synchronisation barrier.
+	_ = g.Wait()
 
 	sort.Slice(nodes, func(i, j int) bool {
 		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
@@ -243,24 +295,31 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nil, err
 	}
 
+	var slurmVersion string
+	if len(containers) > 0 {
+		slurmVersion = containers[0].Labels[LabelSlurmVersion]
+	}
+
 	return &Status{
-		Name:    clusterName,
-		State:   aggregateState(states),
-		Nodes:   nodes,
-		Network: network,
-		Mounts:  mounts,
+		Name:         clusterName,
+		SlurmVersion: slurmVersion,
+		State:        aggregateState(states),
+		Nodes:        nodes,
+		Network:      network,
+		Mounts:       mounts,
 	}, nil
 }
 
-// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter, worker).
+// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter,
+// worker) with natural ordering of any numeric suffixes in the node name.
 func nodeStatusOrder(n *NodeStatus) string {
-	return roleSortKey(n.Role, n.Name)
+	return rolePrefix(n.Role) + naturalSortKey(n.Name)
 }
 
-// roleServices returns the Slurm service names for the given role.
-func roleServices(role config.Role) []string {
-	if svc, ok := slurm.ServiceForRole(role); ok {
-		return []string{string(svc)}
+// roleServices returns the Slurm readiness-check services for the given role.
+func roleServices(role config.Role) []probe.Service {
+	if svc, ok := probe.ServiceForRole(role); ok {
+		return []probe.Service{svc}
 	}
 	return nil
 }

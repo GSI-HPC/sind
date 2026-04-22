@@ -120,6 +120,28 @@ func TestPower_Shutdown_ListError(t *testing.T) {
 	assert.Contains(t, err.Error(), "listing")
 }
 
+// TestPower_LabelFilter asserts resolveTargets scopes the container list by
+// both realm and cluster labels so parallel realms with identically-named
+// clusters do not see each other's nodes.
+func TestPower_LabelFilter(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: powerContainers()}
+		}
+		return mock.Result{}
+	}
+	client := docker.NewClient(&m)
+
+	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-0"})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, m.Calls)
+	psArgs := m.Calls[0].Args
+	assert.Contains(t, psArgs, "label=sind.realm="+mesh.DefaultRealm)
+	assert.Contains(t, psArgs, "label=sind.cluster=dev")
+}
+
 // --- PowerCut ---
 
 func TestPower_Cut(t *testing.T) {
@@ -577,6 +599,7 @@ func TestPowerLifecycle(t *testing.T) {
 	// Create a labeled container.
 	_, err := c.CreateContainer(ctx,
 		"--name", string(ctrName),
+		"--label", LabelRealm+"="+mesh.DefaultRealm,
 		"--label", LabelCluster+"="+cluster,
 		"--label", LabelRole+"=worker",
 		"busybox:latest", "sleep", "120",

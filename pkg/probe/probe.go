@@ -14,8 +14,35 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/monitor"
-	"github.com/GSI-HPC/sind/pkg/slurm"
 )
+
+// Service identifies a per-node readiness check. The string value is the
+// systemd unit name for munge/sshd/slurmd and the slurm RPC endpoint name
+// for slurmctld, so it also doubles as the user-facing label for each
+// check in status output.
+type Service string
+
+// Per-node readiness services managed by sind.
+const (
+	ServiceMunge     Service = "munge"
+	ServiceSSHD      Service = "sshd"
+	ServiceSlurmctld Service = "slurmctld"
+	ServiceSlurmd    Service = "slurmd"
+)
+
+// ServiceForRole returns the Slurm readiness-check service associated with
+// a node role. Returns empty string and false for roles with no Slurm
+// service (e.g. submitter).
+func ServiceForRole(role config.Role) (Service, bool) {
+	switch role {
+	case config.RoleController:
+		return ServiceSlurmctld, true
+	case config.RoleWorker:
+		return ServiceSlurmd, true
+	default:
+		return "", false
+	}
+}
 
 // TerminalError indicates a probe failure that cannot be recovered by
 // retrying. For example, a container in "exited" or "dead" state will
@@ -35,12 +62,12 @@ type Probe struct {
 	Check Func
 }
 
-// ForService returns the readiness probe for a Slurm service.
-func ForService(svc slurm.Service) Probe {
+// ForService returns the readiness probe for a Slurm daemon service.
+func ForService(svc Service) Probe {
 	switch svc {
-	case slurm.Slurmctld:
+	case ServiceSlurmctld:
 		return Probe{Name: string(svc), Check: SlurmctldReady}
-	case slurm.Slurmd:
+	case ServiceSlurmd:
 		return Probe{Name: string(svc), Check: SlurmdReady}
 	default:
 		return Probe{Name: string(svc)}
@@ -240,4 +267,62 @@ func SlurmdReady(ctx context.Context, client *docker.Client, name docker.Contain
 		return fmt.Errorf("slurmd not ready: %w", err)
 	}
 	return nil
+}
+
+// Snapshot returns a one-shot readiness snapshot of a running node, fusing
+// the systemd-based checks (munge, sshd, and on workers slurmd) into a single
+// docker exec. Controllers additionally run scontrol ping because
+// "slurmctld is active" is weaker than "slurmctld answers RPCs" — the unit
+// can be active during startup while RPCs still fail.
+//
+// Snapshot is intended for status-query call sites such as cluster.GetStatus.
+// Unlike the individual *Ready probes, it does not surface per-probe errors;
+// a failing check simply maps to false. Callers that need retry granularity
+// (e.g. cluster-create readiness polling) should keep using NodeProbes and
+// UntilReady.
+//
+// The container must be running. Non-exit errors (daemon unreachable, etc.)
+// are propagated; a non-zero exit from systemctl (at least one unit
+// inactive) is expected and parsed normally.
+func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerName, role config.Role) (map[Service]bool, error) {
+	// Build the systemctl unit list for this role. sshd and munge are
+	// universal; slurmd is added for workers only.
+	units := []Service{ServiceMunge, ServiceSSHD}
+	if role == config.RoleWorker {
+		units = append(units, ServiceSlurmd)
+	}
+
+	args := append([]string{"systemctl", "is-active"}, serviceStrings(units)...)
+	stdout, err := client.ExecAllowNonZero(ctx, name, args...)
+	if err != nil {
+		return nil, fmt.Errorf("systemctl is-active: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	if len(lines) != len(units) {
+		return nil, fmt.Errorf("systemctl is-active: got %d lines, want %d (stdout=%q)",
+			len(lines), len(units), stdout)
+	}
+
+	result := make(map[Service]bool, len(units)+1)
+	for i, u := range units {
+		result[u] = strings.TrimSpace(lines[i]) == "active"
+	}
+
+	// Controllers need an additional RPC-level check for slurmctld.
+	if role == config.RoleController {
+		result[ServiceSlurmctld] = SlurmctldReady(ctx, client, name) == nil
+	}
+
+	return result, nil
+}
+
+// serviceStrings converts a slice of Service values to plain strings for
+// passing to exec argv.
+func serviceStrings(svcs []Service) []string {
+	out := make([]string, len(svcs))
+	for i, s := range svcs {
+		out[i] = string(s)
+	}
+	return out
 }

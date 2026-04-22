@@ -49,7 +49,7 @@ Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delet
 ~/.local/state/sind/<realm>/lock
 ```
 
-If another operation already holds the lock, sind waits until it completes. Read-only operations (`get`, `status`, `logs`, etc.) are not affected.
+If another operation already holds the lock, sind waits until it completes. Read-only operations (`get`, `logs`, etc.) are not affected.
 
 Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs.
 

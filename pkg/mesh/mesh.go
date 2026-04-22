@@ -7,14 +7,22 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/retry"
 )
 
 // DefaultRealm is the realm name that produces the standard resource names.
 const DefaultRealm = "sind"
+
+// LabelRealm is the Docker label applied to mesh resources (network, volumes)
+// so realm-scoped listings can filter by label rather than by name prefix.
+// pkg/cluster defines the same constant for cluster-scoped resources; keeping
+// it local here avoids a pkg/mesh → pkg/cluster import.
+const LabelRealm = "sind.realm"
 
 // Default-realm resource names. Production code uses Manager methods;
 // these constants are used in tests as expected values for DefaultRealm.
@@ -173,7 +181,8 @@ func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.Network
 	return m.Docker.RemoveNetwork(ctx, name)
 }
 
-// removeVolumeIfExists removes a volume if it exists.
+// removeVolumeIfExists removes a volume if it exists, retrying past the
+// dockerd async-cleanup race that follows `docker rm -f`.
 func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeName) error {
 	exists, err := m.Docker.VolumeExists(ctx, name)
 	if err != nil {
@@ -182,7 +191,10 @@ func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeNa
 	if !exists {
 		return nil
 	}
-	return m.Docker.RemoveVolume(ctx, name)
+	return retry.Do(ctx,
+		func() error { return m.Docker.RemoveVolume(ctx, name) },
+		docker.IsVolumeInUse,
+		6, 100*time.Millisecond)
 }
 
 // Created reports whether EnsureMesh created new mesh infrastructure in this
@@ -204,6 +216,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	}
 	m.created = true
 	networkLabels := docker.Labels{
+		LabelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeNetworkLabel: "mesh",
 	}
@@ -351,14 +364,72 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 	return m.writeDNSEntries(ctx, kept)
 }
 
+// Info holds information about the mesh infrastructure for a realm.
+type Info struct {
+	Network      string `json:"network"`
+	DNSContainer string `json:"dns_container"`
+	DNSIP        string `json:"dns_ip"`
+	DNSZone      string `json:"dns_zone"`
+	DNSImage     string `json:"dns_image"`
+	SSHContainer string `json:"ssh_container"`
+	SSHVolume    string `json:"ssh_volume"`
+	SSHImage     string `json:"ssh_image"`
+}
+
+// requireMeshContainer returns an error if the given mesh container does not
+// exist, translating docker's raw "exit status 1" into a "no mesh found for
+// realm" error. Used by getters to keep typo/empty-realm failures clean.
+func (m *Manager) requireMeshContainer(ctx context.Context, name docker.ContainerName) error {
+	exists, err := m.Docker.ContainerExists(ctx, name)
+	if err != nil {
+		return fmt.Errorf("checking %s: %w", name, err)
+	}
+	if !exists {
+		return fmt.Errorf("no mesh found for realm %q", m.Realm)
+	}
+	return nil
+}
+
+// GetInfo returns information about the mesh infrastructure for this realm.
+// The mesh must exist (DNS container must be running to resolve the DNS IP).
+// Returns an error containing "no mesh found for realm" if the DNS container
+// does not exist yet.
+func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
+	dnsName := m.DNSContainerName()
+	netName := m.NetworkName()
+
+	if err := m.requireMeshContainer(ctx, dnsName); err != nil {
+		return nil, err
+	}
+
+	dnsInfo, err := m.Docker.InspectContainer(ctx, dnsName)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting DNS container: %w", err)
+	}
+
+	return &Info{
+		Network:      string(netName),
+		DNSContainer: string(dnsName),
+		DNSIP:        dnsInfo.IPs[netName],
+		DNSZone:      m.Realm + ".sind",
+		DNSImage:     DNSImage,
+		SSHContainer: string(m.SSHContainerName()),
+		SSHVolume:    string(m.SSHVolumeName()),
+		SSHImage:     SSHImage,
+	}, nil
+}
+
 // DNSRecord represents a single A record in the mesh DNS.
 type DNSRecord struct {
-	Hostname string
-	IP       string
+	Hostname string `json:"hostname"`
+	IP       string `json:"ip"`
 }
 
 // GetDNSRecords returns all A records currently served by the mesh DNS.
 func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
+	if err := m.requireMeshContainer(ctx, m.DNSContainerName()); err != nil {
+		return nil, err
+	}
 	entries, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return nil, err

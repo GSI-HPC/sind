@@ -30,16 +30,26 @@ func (c *Client) RemoveVolume(ctx context.Context, name VolumeName) error {
 	return err
 }
 
+// IsVolumeInUse reports whether err indicates the volume is still held by a
+// just-removed container. dockerd releases volume mounts asynchronously after
+// `docker rm -f`, so callers tearing down a cluster race the daemon and can
+// retry this specific error.
+func IsVolumeInUse(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "volume is in use")
+}
+
 // VolumeListEntry holds summary information from docker volume ls.
 type VolumeListEntry struct {
 	Name   VolumeName
 	Driver string
+	Labels Labels
 }
 
 // volumeLsEntry maps the docker volume ls --format json output.
 type volumeLsEntry struct {
 	Name   string `json:"Name"`
 	Driver string `json:"Driver"`
+	Labels string `json:"Labels"`
 }
 
 // ListVolumes returns volumes matching the given filters.
@@ -66,6 +76,7 @@ func (c *Client) ListVolumes(ctx context.Context, filters ...string) ([]VolumeLi
 		entries = append(entries, VolumeListEntry{
 			Name:   VolumeName(v.Name),
 			Driver: v.Driver,
+			Labels: parseLabels(v.Labels),
 		})
 	}
 	return entries, nil

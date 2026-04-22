@@ -84,6 +84,24 @@ func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkN
 	return inspectJSONLabels(t, name, status, networks, docker.Labels{})
 }
 
+// inspectEntry describes one entry for inspectJSONBatch.
+type inspectEntry struct {
+	Name     string
+	Status   string
+	Networks map[docker.NetworkName]string
+}
+
+// inspectJSONBatch builds a JSON array for docker inspect with multiple
+// containers, matching the format of a single batched inspect call.
+func inspectJSONBatch(t *testing.T, entries ...inspectEntry) string {
+	t.Helper()
+	parts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		parts = append(parts, strings.TrimPrefix(strings.TrimSuffix(inspectJSON(t, e.Name, e.Status, e.Networks), "]"), "["))
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
 // notFoundErr returns an exec.ExitError with exit code 1 for "not found" mocking.
 func notFoundErr(t *testing.T) *exec.ExitError {
 	t.Helper()
@@ -264,12 +282,16 @@ func TestCreate_FullCluster(t *testing.T) {
 
 func TestCreate_PreflightFails(t *testing.T) {
 	// Network already exists → preflight returns conflict error.
-	var m mock.Executor
-	m.AddResult("", "", nil) // network exists (no error = exists)
+	// resolveInfra runs in parallel, so its happy-path responses are supplied
+	// too; otherwise the race could surface a resolveInfra error instead.
 	exitErr := notFoundErr(t)
-	for i := 0; i < 5; i++ {
-		m.AddResult("", "Error: No such object\n", exitErr)
-	}
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
+		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{}, true // network exists → preflight conflict
+		}
+		return mock.Result{}, false
+	})
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
@@ -476,14 +498,15 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	// Verify cleanup ran: look for "docker ps" call from deleteClusterResources.
+	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
+	// deleteClusterResources. Preflight also calls ps once, hence 3 total.
 	var psCalls int
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
 			psCalls++
 		}
 	}
-	assert.Equal(t, 2, psCalls, "cleanup should call ListContainers for diagnostics and deletion")
+	assert.Equal(t, 3, psCalls, "preflight + diagnostics + deletion each call ListContainers")
 }
 
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
@@ -562,39 +585,17 @@ func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
 }
 
 func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
-	// When preflight fails (before any resources), cleanup should NOT run.
-	var m mock.Executor
-	m.AddResult("", "", nil) // network exists → conflict
-	exitErr := notFoundErr(t)
-	for i := 0; i < 5; i++ {
-		m.AddResult("", "Error: No such object\n", exitErr)
-	}
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
-
-	require.Error(t, err)
-	// No "docker ps" calls → cleanup did not run.
-	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			require.Fail(t, "cleanup should not run when preflight fails")
-		}
-	}
-}
-
-func TestCreate_NoClusterCleanupOnResolveInfraFailure(t *testing.T) {
-	// When resolveInfra fails, cluster resource cleanup should NOT run
-	// (no "docker ps" call), but mesh cleanup should run if freshly created.
+	// When preflight fails (before resourcesCreated=true), cluster cleanup
+	// should NOT run. resolveInfra is allowed to succeed in parallel; the
+	// absence of network/volume rm calls proves no cluster cleanup happened.
 	exitErr := notFoundErr(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "inspect" && args[1] == "sind-dns" {
-			return mock.Result{Err: fmt.Errorf("container not running")}, true
+		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{}, true // network exists → preflight conflict
 		}
 		return mock.Result{}, false
 	})
-
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
@@ -602,8 +603,9 @@ func TestCreate_NoClusterCleanupOnResolveInfraFailure(t *testing.T) {
 
 	require.Error(t, err)
 	for _, call := range m.Calls {
-		if len(call.Args) > 0 && call.Args[0] == "ps" {
-			require.Fail(t, "cluster cleanup should not run when resolveInfra fails")
+		if len(call.Args) >= 2 && call.Args[1] == "rm" &&
+			(call.Args[0] == "network" || call.Args[0] == "volume") {
+			require.Fail(t, "cleanup should not run when preflight fails")
 		}
 	}
 }

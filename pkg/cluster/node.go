@@ -11,6 +11,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -284,7 +285,7 @@ func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []R
 		if cfg.Role == config.RoleWorker && !cfg.Managed {
 			continue
 		}
-		service, ok := slurm.ServiceForRole(cfg.Role)
+		service, ok := probe.ServiceForRole(cfg.Role)
 		if !ok {
 			continue
 		}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +20,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// exitCode1 runs a trivial shell command that exits with code 1 so tests can
+// synthesise a real *os.ProcessState for use with *exec.ExitError.
+func exitCode1(t *testing.T) *os.ProcessState {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "exit 1")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	return exitErr.ProcessState
+}
 
 // --- Lifecycle ---
 
@@ -448,6 +460,7 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 		"network", "create",
 		"--label", "com.docker.compose.network=mesh",
 		"--label", "com.docker.compose.project=sind-mesh",
+		"--label", "sind.realm=" + DefaultRealm,
 		string(NetworkName),
 	}, m.Calls[1].Args)
 }
@@ -1058,6 +1071,7 @@ func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
 		"network", "create",
 		"--label", "com.docker.compose.network=mesh",
 		"--label", "com.docker.compose.project=myrealm-mesh",
+		"--label", "sind.realm=myrealm",
 		"myrealm-mesh",
 	}, m.Calls[1].Args)
 }
@@ -1102,6 +1116,7 @@ func TestCustomRealm_EnsureSSHVolume(t *testing.T) {
 		"volume", "create",
 		"--label", "com.docker.compose.project=myrealm-mesh",
 		"--label", "com.docker.compose.volume=ssh-config",
+		"--label", "sind.realm=myrealm",
 		"myrealm-ssh-config",
 	}, m.Calls[1].Args)
 	assert.Equal(t, []string{
@@ -1175,11 +1190,93 @@ func dnsInspectJSON() string {
 	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 }
 
+// --- GetInfo ---
+
+func TestGetInfo(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil)         // ContainerExists(DNS) → true
+	m.AddResult(dnsInspectJSON(), "", nil) // InspectContainer(DNS)
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	info, err := mgr.GetInfo(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "sind-mesh", info.Network)
+	assert.Equal(t, "sind-dns", info.DNSContainer)
+	assert.Equal(t, "10.0.0.2", info.DNSIP)
+	assert.Equal(t, "sind.sind", info.DNSZone)
+	assert.Equal(t, string(DNSImage), info.DNSImage)
+	assert.Equal(t, "sind-ssh", info.SSHContainer)
+	assert.Equal(t, "sind-ssh-config", info.SSHVolume)
+	assert.Equal(t, SSHImage, info.SSHImage)
+}
+
+func TestGetInfo_CustomRealm(t *testing.T) {
+	inspectJSON := `[{"Id":"dns1","Name":"/ci-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"ci-mesh":{"IPAddress":"10.1.0.5"}}}}]`
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
+	m.AddResult(inspectJSON, "", nil)
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, "ci")
+
+	info, err := mgr.GetInfo(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "ci-mesh", info.Network)
+	assert.Equal(t, "ci-dns", info.DNSContainer)
+	assert.Equal(t, "10.1.0.5", info.DNSIP)
+	assert.Equal(t, "ci.sind", info.DNSZone)
+}
+
+func TestGetInfo_NoMesh(t *testing.T) {
+	var m mock.Executor
+	// ContainerExists uses exit code 1 to signal "not found".
+	m.AddResult("", "Error: No such object\n", &exec.ExitError{ProcessState: exitCode1(t)})
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetInfo(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no mesh found for realm")
+	assert.Contains(t, err.Error(), DefaultRealm)
+}
+
+func TestGetInfo_InspectError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetInfo(t.Context())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "inspecting DNS container")
+}
+
+func TestGetInfo_ContainerExistsError(t *testing.T) {
+	// ContainerExists failing with a non-exit-code-1 error (e.g. daemon
+	// unreachable) should surface as a "checking <container>" wrap naming
+	// the specific container the helper was probing.
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetInfo(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking sind-dns")
+}
+
 // --- GetDNSRecords ---
 
 func TestGetDNSRecords(t *testing.T) {
 	var m mock.Executor
 	entries := []string{"172.18.0.2 controller.dev.sind.sind", "172.18.0.3 worker-0.dev.sind.sind"}
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(corefileTar(t, entries), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -1195,23 +1292,41 @@ func TestGetDNSRecords(t *testing.T) {
 
 func TestGetDNSRecords_Empty(t *testing.T) {
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(corefileTar(t, nil), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
 	records, err := mgr.GetDNSRecords(t.Context())
 	require.NoError(t, err)
+	assert.NotNil(t, records, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, records)
 }
 
 func TestGetDNSRecords_ReadError(t *testing.T) {
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult("", "Error\n", fmt.Errorf("container not found"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
 	_, err := mgr.GetDNSRecords(t.Context())
 	assert.Error(t, err)
+}
+
+// TestGetDNSRecords_NoMesh covers the typo/empty-realm case: DNS container is
+// absent so GetDNSRecords must surface a clean "no mesh found" error instead
+// of leaking the raw docker exec failure.
+func TestGetDNSRecords_NoMesh(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS container missing
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetDNSRecords(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `no mesh found for realm "sind"`)
+	assert.NotContains(t, err.Error(), "exit status")
 }
 
 // --- HostDNS branches ---

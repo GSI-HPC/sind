@@ -3,10 +3,31 @@
 package docker
 
 import (
+	"fmt"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestIsNotFound_ExitCode1(t *testing.T) {
+	err := &exec.ExitError{ProcessState: exitCode1(t)}
+	assert.True(t, IsNotFound(err))
+}
+
+func TestIsNotFound_WrappedExitCode1(t *testing.T) {
+	inner := &exec.ExitError{ProcessState: exitCode1(t)}
+	wrapped := fmt.Errorf("inspect: %w", inner)
+	assert.True(t, IsNotFound(wrapped))
+}
+
+func TestIsNotFound_Nil(t *testing.T) {
+	assert.False(t, IsNotFound(nil))
+}
+
+func TestIsNotFound_OtherError(t *testing.T) {
+	assert.False(t, IsNotFound(fmt.Errorf("connection refused")))
+}
 
 func TestComposeLabels(t *testing.T) {
 	labels := ComposeLabels("myproject", "web", 2)

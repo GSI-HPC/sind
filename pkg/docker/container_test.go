@@ -459,6 +459,50 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	assert.Contains(t, err.Error(), "no results")
 }
 
+func TestInspectContainers_Multiple(t *testing.T) {
+	const multi = `[
+  {
+    "Id": "id-a",
+    "Name": "/sind-dev-controller",
+    "State": {"Status": "running"},
+    "Config": {"Labels": {"sind.role": "controller"}},
+    "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": "172.18.0.2"}}}
+  },
+  {
+    "Id": "id-b",
+    "Name": "/sind-dev-worker-0",
+    "State": {"Status": "running"},
+    "Config": {"Labels": {"sind.role": "worker"}},
+    "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": "172.18.0.3"}}}
+  }
+]`
+	var m mock.Executor
+	m.AddResult(multi, "", nil)
+	c := NewClient(&m)
+
+	infos, err := c.InspectContainers(t.Context(), "sind-dev-controller", "sind-dev-worker-0")
+	require.NoError(t, err)
+	require.Len(t, infos, 2)
+
+	assert.Equal(t, ContainerName("sind-dev-controller"), infos[0].Name)
+	assert.Equal(t, "172.18.0.2", infos[0].IPs["sind-dev-net"])
+	assert.Equal(t, ContainerName("sind-dev-worker-0"), infos[1].Name)
+	assert.Equal(t, "172.18.0.3", infos[1].IPs["sind-dev-net"])
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"inspect", "sind-dev-controller", "sind-dev-worker-0"}, m.Calls[0].Args)
+}
+
+func TestInspectContainers_Empty(t *testing.T) {
+	var m mock.Executor
+	c := NewClient(&m)
+
+	infos, err := c.InspectContainers(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, infos)
+	assert.Empty(t, m.Calls)
+}
+
 func TestInspectContainer_ExitCodeAndOOM(t *testing.T) {
 	json := `[{
   "Id": "abc123",
@@ -603,6 +647,36 @@ func TestExec_Error(t *testing.T) {
 	stdout, err := c.Exec(t.Context(), testContainerName, "false")
 	assert.Error(t, err)
 	assert.Empty(t, stdout)
+}
+
+func TestExecAllowNonZero_Success(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	c := NewClient(&m)
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge")
+	require.NoError(t, err)
+	assert.Equal(t, "active\n", stdout)
+}
+
+func TestExecAllowNonZero_NonZeroExitReturnsStdout(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\ninactive\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "munge", "slurmd")
+	require.NoError(t, err)
+	assert.Equal(t, "active\ninactive\n", stdout)
+}
+
+func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := NewClient(&m)
+
+	_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "true")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "daemon")
 }
 
 func TestExecWithStdin(t *testing.T) {

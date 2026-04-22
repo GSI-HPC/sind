@@ -165,14 +165,14 @@ sind <verb> <noun> [ARGS] [FLAGS]
 ```
 
 - Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
-- Single-purpose verbs (`status`, `ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
+- Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
 
 ### Argument Conventions
 
 | Pattern | Positional | Default | Examples |
 |---------|-----------|---------|---------|
-| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `status`, `enter`, `get nodes` |
+| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get nodes` |
 | Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
 | Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
 | Nodeset expansion | bracket patterns | — | `worker-[0-2].dev` |
@@ -188,8 +188,8 @@ Rules:
 - **Long-form only** by default; add short flags (`-f`) only for frequently-typed flags
 - **Kebab-case** for multi-word flags: `--tmp-size`, `--munge-key`
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
-- **One root-local flag**: `--realm` (local to root, inherited via `TraverseChildren`)
-- **One root-local counter**: `-v` (repeatable, controls log verbosity)
+- **One persistent root flag**: `--realm` (inherited by every subcommand)
+- **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
 
 ### Output Conventions
 
@@ -207,8 +207,8 @@ Rules:
 - Errors are always visible (slog error level is always enabled, even without `-v`)
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
-- Unicode checkmarks (✓/✗) only in `status` and `doctor` output
-- No `--json` or `--format` yet — human-readable only
+- Unicode checkmarks (✓/✗) only in `get cluster` and `doctor` output
+- All `get` subcommands accept `--output|-o {human,json}`; default is `human`
 
 ### Logging Conventions
 
@@ -274,12 +274,23 @@ Development follows Test-Driven Development (TDD) style:
 sind create cluster [NAME] [--config FILE] [--data PATH] [--pull]
 sind delete cluster [NAME]
 sind delete cluster --all
+sind get cluster [NAME]
 sind get clusters
+sind get node NODE[.CLUSTER]
 sind get nodes [CLUSTER]
 sind get networks
+sind get realms
 sind get volumes
+sind get mesh
+sind get dns
 sind get ssh-config
+sind get ssh-private-key
+sind get ssh-public-key
+sind get ssh-known-hosts
+sind get munge-key [CLUSTER]
 ```
+
+All `get` subcommands accept `--output|-o {human,json}`. The default is `human` (tabular text); `json` emits a machine-readable document.
 
 NAME/CLUSTER defaults to `default` if omitted.
 
@@ -289,7 +300,7 @@ NAME/CLUSTER defaults to `default` if omitted.
 - Deleting a non-existent cluster is not an error
 - Handles partial/broken clusters (e.g., failed creation)
 - Removes all matching Docker resources regardless of state
-- Updates `~/.sind/known_hosts` to remove deleted nodes
+- Updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes
 - Order: stops/removes containers → disconnects/removes networks → removes volumes
 
 Example output:
@@ -305,24 +316,32 @@ NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / *
 
 ```
 $ sind get nodes dev
-NAME              ROLE        STATUS
-controller.dev    controller  running
-worker-0.dev      worker      running
-worker-1.dev      worker      running
+CONTAINER            ROLE         FQDN                         IP           STATUS
+sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
+sind-dev-worker-0    worker       worker-0.dev.sind.sind       172.19.0.3   running
+sind-dev-worker-1    worker       worker-1.dev.sind.sind       172.19.0.4   running
+```
+
+Without a cluster argument, `sind get nodes` lists every node in the realm and adds a `CLUSTER` column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`:
+
+```
+$ sind get nodes
+CONTAINER                CLUSTER   ROLE         FQDN                             IP           STATUS
+sind-default-controller  default   controller   controller.default.sind.sind     172.19.0.2   running
+sind-default-worker-0    default   worker       worker-0.default.sind.sind       172.19.0.3   running
+sind-dev-controller      dev       controller   controller.dev.sind.sind         172.20.0.2   running
+sind-dev-worker-2        dev       worker       worker-2.dev.sind.sind           172.20.0.3   running
+sind-dev-worker-10       dev       worker       worker-10.dev.sind.sind          172.20.0.4   running
 ```
 
 ### Cluster Diagnostics
 
-```bash
-sind status [CLUSTER]
-```
-
-Displays detailed health information for a cluster:
+`sind get cluster [NAME]` displays detailed health information for a cluster:
 
 ```
-$ sind status dev
-CLUSTER   STATUS (R/S/P/T)
-dev       running (3/0/0/3)
+$ sind get cluster dev
+CLUSTER   SLURM     STATUS (R/S/P/T)
+dev       25.11.4   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -340,10 +359,24 @@ MOUNT        SOURCE                    TYPE       STATUS
 /data        /home/user/project        hostPath   ✓
 
 NODES
-NAME              ROLE        IP            CONTAINER   MUNGE  SSHD   SERVICES
-controller.dev    controller  172.18.0.2    running     ✓      ✓      slurmctld ✓
-worker-0.dev      worker      172.18.0.3    running     ✓      ✓      slurmd ✓
-worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd ✗
+NAME              ROLE        IP            STATUS    SERVICES
+controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
+```
+
+`sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (defaults to cluster "default"). Passing a full DNS FQDN ending in `.sind` is rejected — use the bare short name or the `NODE.CLUSTER` form:
+
+```
+$ sind get node controller.dev
+CONTAINER            ROLE         FQDN                         IP           STATUS
+sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
+
+SERVICES
+NAME        STATUS
+munge       ✓
+sshd        ✓
+slurmctld   ✓
 ```
 
 ### Node Access
@@ -444,6 +477,11 @@ sind logs worker-0 slurmd --follow    # follow slurmd logs
 sind version [--json]                  # print version information
 sind get munge-key [CLUSTER]           # output munge key (base64)
 sind get ssh-config                    # show SSH config path for Include
+sind get mesh                          # show mesh infrastructure info
+sind get dns                           # list mesh DNS records
+sind get ssh-private-key               # output SSH private key
+sind get ssh-public-key                # output SSH public key
+sind get ssh-known-hosts               # output SSH known_hosts
 ```
 
 `sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. The `--json` flag outputs all fields as JSON.
@@ -451,6 +489,10 @@ sind get ssh-config                    # show SSH config path for Include
 `sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
+
+`sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. Useful for external consumers that need to connect to sind networks.
+
+`sind get ssh-private-key`, `sind get ssh-public-key`, and `sind get ssh-known-hosts` dump SSH credentials to stdout. This replaces the need to extract files from Docker volumes.
 
 ## Node Arguments
 
@@ -659,8 +701,14 @@ Validation rules:
 | `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp |
 | `cpus` | global + per-node | `1` | CPU limit |
 | `memory` | global + per-node | `512m` | Memory limit |
+| `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
+| `capDrop` | global + per-node | none | Dropped Linux capabilities |
+| `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
+| `securityOpt` | global + per-node | none | Extra security options |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+
+Per-node scalar values override the `defaults` section. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
 
 ### Validation Rules
 
@@ -1124,7 +1172,7 @@ $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
 - `sind create worker`
 - `sind delete worker`
 
-Read-only operations (`get`, `status`, `logs`, `ssh`, etc.) do not acquire the lock.
+Read-only operations (`get`, `logs`, `ssh`, etc.) do not acquire the lock.
 
 ### Behavior
 

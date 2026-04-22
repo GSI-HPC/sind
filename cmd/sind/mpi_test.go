@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,15 +31,10 @@ func TestMPI(t *testing.T) {
 	meshMgr := mesh.NewManager(c, realm)
 	t.Cleanup(func() {
 		bg := context.Background()
-		for _, name := range []string{"controller", "worker-0", "worker-1", "worker-2"} {
-			cn := docker.ContainerName(realm + "-default-" + name)
-			_ = c.KillContainer(bg, cn)
-			_ = c.RemoveContainer(bg, cn)
+		names, _ := cluster.DiscoverClusterNames(bg, c, realm)
+		for _, name := range names {
+			_ = cluster.Delete(bg, c, meshMgr, name)
 		}
-		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-default-"+vt))
-		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-default-net"))
 		_ = meshMgr.CleanupMesh(bg)
 	})
 
