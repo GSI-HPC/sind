@@ -376,6 +376,20 @@ type Info struct {
 	SSHImage     string `json:"ssh_image"`
 }
 
+// requireMeshContainer returns an error if the given mesh container does not
+// exist, translating docker's raw "exit status 1" into a "no mesh found for
+// realm" error. Used by getters to keep typo/empty-realm failures clean.
+func (m *Manager) requireMeshContainer(ctx context.Context, name docker.ContainerName) error {
+	exists, err := m.Docker.ContainerExists(ctx, name)
+	if err != nil {
+		return fmt.Errorf("checking %s: %w", name, err)
+	}
+	if !exists {
+		return fmt.Errorf("no mesh found for realm %q", m.Realm)
+	}
+	return nil
+}
+
 // GetInfo returns information about the mesh infrastructure for this realm.
 // The mesh must exist (DNS container must be running to resolve the DNS IP).
 // Returns an error containing "no mesh found for realm" if the DNS container
@@ -384,12 +398,8 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	dnsName := m.DNSContainerName()
 	netName := m.NetworkName()
 
-	exists, err := m.Docker.ContainerExists(ctx, dnsName)
-	if err != nil {
-		return nil, fmt.Errorf("checking DNS container: %w", err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("no mesh found for realm %q", m.Realm)
+	if err := m.requireMeshContainer(ctx, dnsName); err != nil {
+		return nil, err
 	}
 
 	dnsInfo, err := m.Docker.InspectContainer(ctx, dnsName)
@@ -417,6 +427,9 @@ type DNSRecord struct {
 
 // GetDNSRecords returns all A records currently served by the mesh DNS.
 func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
+	if err := m.requireMeshContainer(ctx, m.DNSContainerName()); err != nil {
+		return nil, err
+	}
 	entries, err := m.readDNSEntries(ctx)
 	if err != nil {
 		return nil, err

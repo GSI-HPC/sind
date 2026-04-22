@@ -135,7 +135,11 @@ const publicKeyPath = "/root/.ssh/id_ed25519.pub"
 
 // GetSSHPrivateKey reads the SSH private key from the SSH container.
 func (m *Manager) GetSSHPrivateKey(ctx context.Context) (string, error) {
-	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), privateKeyPath)
+	sshName := m.SSHContainerName()
+	if err := m.requireMeshContainer(ctx, sshName); err != nil {
+		return "", err
+	}
+	content, err := m.Docker.ReadFile(ctx, sshName, privateKeyPath)
 	if err != nil {
 		return "", fmt.Errorf("reading SSH private key: %w", err)
 	}
@@ -144,7 +148,11 @@ func (m *Manager) GetSSHPrivateKey(ctx context.Context) (string, error) {
 
 // GetSSHPublicKey reads the SSH public key from the SSH container.
 func (m *Manager) GetSSHPublicKey(ctx context.Context) (string, error) {
-	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), publicKeyPath)
+	sshName := m.SSHContainerName()
+	if err := m.requireMeshContainer(ctx, sshName); err != nil {
+		return "", err
+	}
+	content, err := m.Docker.ReadFile(ctx, sshName, publicKeyPath)
 	if err != nil {
 		return "", fmt.Errorf("reading SSH public key: %w", err)
 	}
@@ -153,7 +161,11 @@ func (m *Manager) GetSSHPublicKey(ctx context.Context) (string, error) {
 
 // GetSSHKnownHosts reads the known_hosts file from the SSH container.
 func (m *Manager) GetSSHKnownHosts(ctx context.Context) (string, error) {
-	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), knownHostsPath)
+	sshName := m.SSHContainerName()
+	if err := m.requireMeshContainer(ctx, sshName); err != nil {
+		return "", err
+	}
+	content, err := m.Docker.ReadFile(ctx, sshName, knownHostsPath)
 	if err != nil {
 		return "", fmt.Errorf("reading SSH known_hosts: %w", err)
 	}

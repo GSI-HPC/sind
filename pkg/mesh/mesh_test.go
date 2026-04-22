@@ -1258,7 +1258,8 @@ func TestGetInfo_InspectError(t *testing.T) {
 
 func TestGetInfo_ContainerExistsError(t *testing.T) {
 	// ContainerExists failing with a non-exit-code-1 error (e.g. daemon
-	// unreachable) should surface as a "checking DNS container" wrap.
+	// unreachable) should surface as a "checking <container>" wrap naming
+	// the specific container the helper was probing.
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
 
@@ -1267,7 +1268,7 @@ func TestGetInfo_ContainerExistsError(t *testing.T) {
 
 	_, err := mgr.GetInfo(t.Context())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking DNS container")
+	assert.Contains(t, err.Error(), "checking sind-dns")
 }
 
 // --- GetDNSRecords ---
@@ -1275,6 +1276,7 @@ func TestGetInfo_ContainerExistsError(t *testing.T) {
 func TestGetDNSRecords(t *testing.T) {
 	var m mock.Executor
 	entries := []string{"172.18.0.2 controller.dev.sind.sind", "172.18.0.3 worker-0.dev.sind.sind"}
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(corefileTar(t, entries), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -1290,6 +1292,7 @@ func TestGetDNSRecords(t *testing.T) {
 
 func TestGetDNSRecords_Empty(t *testing.T) {
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(corefileTar(t, nil), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -1302,12 +1305,28 @@ func TestGetDNSRecords_Empty(t *testing.T) {
 
 func TestGetDNSRecords_ReadError(t *testing.T) {
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult("", "Error\n", fmt.Errorf("container not found"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
 	_, err := mgr.GetDNSRecords(t.Context())
 	assert.Error(t, err)
+}
+
+// TestGetDNSRecords_NoMesh covers the typo/empty-realm case: DNS container is
+// absent so GetDNSRecords must surface a clean "no mesh found" error instead
+// of leaking the raw docker exec failure.
+func TestGetDNSRecords_NoMesh(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // DNS container missing
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetDNSRecords(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `no mesh found for realm "sind"`)
+	assert.NotContains(t, err.Error(), "exit status")
 }
 
 // --- HostDNS branches ---

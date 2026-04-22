@@ -215,6 +215,7 @@ func TestGetDNS_Output(t *testing.T) {
 		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "dns")
@@ -233,6 +234,7 @@ func TestGetDNS_Empty(t *testing.T) {
 		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "dns")
@@ -412,6 +414,7 @@ func TestGetDNS_JSON(t *testing.T) {
 		".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
 
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "dns", "--output", "json")
@@ -528,6 +531,7 @@ func TestGetSSHPrivateKey_RejectsArgs(t *testing.T) {
 func TestGetSSHPrivateKey_Output(t *testing.T) {
 	pemData := "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
 	m.AddResult(pemData, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-private-key")
@@ -538,6 +542,7 @@ func TestGetSSHPrivateKey_Output(t *testing.T) {
 func TestGetSSHPrivateKey_JSON(t *testing.T) {
 	pemData := "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
 	m.AddResult(pemData, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-private-key", "--output", "json")
@@ -553,6 +558,7 @@ func TestGetSSHPrivateKey_JSON(t *testing.T) {
 func TestGetSSHPublicKey_Output(t *testing.T) {
 	pubKey := "ssh-ed25519 AAAA... comment\n"
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
 	m.AddResult(pubKey, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-public-key")
@@ -563,6 +569,7 @@ func TestGetSSHPublicKey_Output(t *testing.T) {
 func TestGetSSHPublicKey_JSON(t *testing.T) {
 	pubKey := "ssh-ed25519 AAAA... comment\n"
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
 	m.AddResult(pubKey, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-public-key", "--output", "json")
@@ -578,6 +585,7 @@ func TestGetSSHPublicKey_JSON(t *testing.T) {
 func TestGetSSHKnownHosts_Output(t *testing.T) {
 	hosts := "host1 ssh-ed25519 AAAA...\nhost2 ssh-ed25519 BBBB...\n"
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
 	m.AddResult(hosts, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-known-hosts")
@@ -588,6 +596,7 @@ func TestGetSSHKnownHosts_Output(t *testing.T) {
 func TestGetSSHKnownHosts_JSON(t *testing.T) {
 	hosts := "host1 ssh-ed25519 AAAA...\nhost2 ssh-ed25519 BBBB...\n"
 	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // SSH container exists
 	m.AddResult(hosts, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "ssh-known-hosts", "--output", "json")
