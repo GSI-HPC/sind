@@ -104,8 +104,8 @@ func TestGetNodeHealth_Controller(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
 	assert.Equal(t, "172.18.0.2", health.IP)
-	assert.True(t, health.Munge)
-	assert.True(t, health.SSHD)
+	assert.True(t, health.Services[probe.ServiceMunge])
+	assert.True(t, health.Services[probe.ServiceSSHD])
 	require.Contains(t, health.Services, probe.ServiceSlurmctld)
 	assert.True(t, health.Services[probe.ServiceSlurmctld])
 }
@@ -120,8 +120,8 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
 	assert.Equal(t, "172.18.0.3", health.IP)
-	assert.True(t, health.Munge)
-	assert.True(t, health.SSHD)
+	assert.True(t, health.Services[probe.ServiceMunge])
+	assert.True(t, health.Services[probe.ServiceSSHD])
 	require.Contains(t, health.Services, probe.ServiceSlurmd)
 	assert.True(t, health.Services[probe.ServiceSlurmd])
 }
@@ -135,9 +135,11 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Munge)
-	assert.True(t, health.SSHD)
-	assert.Empty(t, health.Services)
+	assert.True(t, health.Services[probe.ServiceMunge])
+	assert.True(t, health.Services[probe.ServiceSSHD])
+	// Submitters have no role-specific Slurm service (only munge + sshd).
+	assert.NotContains(t, health.Services, probe.ServiceSlurmctld)
+	assert.NotContains(t, health.Services, probe.ServiceSlurmd)
 }
 
 func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
@@ -154,8 +156,8 @@ func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateExited, health.State)
-	assert.False(t, health.Munge)
-	assert.False(t, health.SSHD)
+	assert.False(t, health.Services[probe.ServiceMunge])
+	assert.False(t, health.Services[probe.ServiceSSHD])
 	assert.False(t, health.Services[probe.ServiceSlurmctld])
 }
 
@@ -185,8 +187,8 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Munge)
-	assert.True(t, health.SSHD)
+	assert.True(t, health.Services[probe.ServiceMunge])
+	assert.True(t, health.Services[probe.ServiceSSHD])
 	assert.False(t, health.Services[probe.ServiceSlurmd])
 }
 
@@ -206,8 +208,8 @@ func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Munge)
-	assert.True(t, health.SSHD)
+	assert.True(t, health.Services[probe.ServiceMunge])
+	assert.True(t, health.Services[probe.ServiceSSHD])
 	assert.False(t, health.Services[probe.ServiceSlurmctld])
 }
 
@@ -225,8 +227,8 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateExited, health.State)
-	assert.False(t, health.Munge)
-	assert.False(t, health.SSHD)
+	assert.False(t, health.Services[probe.ServiceMunge])
+	assert.False(t, health.Services[probe.ServiceSSHD])
 	require.Contains(t, health.Services, probe.ServiceSlurmd)
 	assert.False(t, health.Services[probe.ServiceSlurmd])
 }
@@ -246,8 +248,8 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
-	assert.False(t, health.Munge)
-	assert.True(t, health.SSHD)
+	assert.False(t, health.Services[probe.ServiceMunge])
+	assert.True(t, health.Services[probe.ServiceSSHD])
 	assert.True(t, health.Services[probe.ServiceSlurmctld])
 }
 
@@ -266,8 +268,8 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
-	assert.True(t, health.Munge)
-	assert.False(t, health.SSHD)
+	assert.True(t, health.Services[probe.ServiceMunge])
+	assert.False(t, health.Services[probe.ServiceSSHD])
 	assert.True(t, health.Services[probe.ServiceSlurmctld])
 }
 
@@ -610,8 +612,8 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
 	assert.Equal(t, docker.StateRunning, status.Nodes[0].Health.State)
 	assert.Equal(t, "172.18.0.2", status.Nodes[0].Health.IP)
-	assert.True(t, status.Nodes[0].Health.Munge)
-	assert.True(t, status.Nodes[0].Health.SSHD)
+	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceMunge])
+	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceSSHD])
 	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceSlurmctld])
 
 	assert.Equal(t, "worker-0.dev", status.Nodes[1].Name)
@@ -927,4 +929,44 @@ func TestNodeHealth_JSONStatusKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"status":"running"`)
 	assert.NotContains(t, string(data), `"container":`)
+}
+
+// TestNodeHealth_JSONServicesMap locks in that munge and sshd live inside the
+// services map rather than as flat top-level keys. Flat fields reappearing
+// would be a schema regression for get node / get cluster consumers.
+func TestNodeHealth_JSONServicesMap(t *testing.T) {
+	h := NodeHealth{
+		State: docker.StateRunning,
+		IP:    "10.0.0.1",
+		Services: ServiceHealth{
+			probe.ServiceMunge:     true,
+			probe.ServiceSSHD:      true,
+			probe.ServiceSlurmctld: false,
+		},
+	}
+	data, err := json.Marshal(h)
+	require.NoError(t, err)
+
+	// Decode into a dynamic top-level map to verify the shape of the outer
+	// object: it must have exactly {status, ip, services} and no flat
+	// munge/sshd keys at the top level.
+	var top map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &top))
+	assert.ElementsMatch(t, []string{"status", "ip", "services"}, keys(top))
+
+	// And that munge/sshd live under services.
+	var svc map[string]bool
+	require.NoError(t, json.Unmarshal(top["services"], &svc))
+	assert.True(t, svc["munge"])
+	assert.True(t, svc["sshd"])
+	assert.False(t, svc["slurmctld"])
+}
+
+// keys returns the keys of a map sorted for stable assertion errors.
+func keys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

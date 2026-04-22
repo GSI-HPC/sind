@@ -30,9 +30,7 @@ type ServiceHealth map[probe.Service]bool
 type NodeHealth struct {
 	State    docker.ContainerState `json:"status"`   // container state from Docker (e.g. "running", "exited")
 	IP       string                `json:"ip"`       // container IP address
-	Munge    bool                  `json:"munge"`    // munge service healthy
-	SSHD     bool                  `json:"sshd"`     // sshd accepting connections
-	Services ServiceHealth         `json:"services"` // role-specific services (e.g., "slurmctld", "slurmd")
+	Services ServiceHealth         `json:"services"` // all readiness-checked services (munge, sshd, and role-specific services like slurmctld/slurmd)
 }
 
 // GetNodeHealth checks the health of a single node container.
@@ -58,9 +56,11 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 		Services: make(ServiceHealth),
 	}
 
+	services := append([]probe.Service{probe.ServiceMunge, probe.ServiceSSHD}, roleServices(role)...)
+
 	// If container is not running, skip all service checks.
 	if info.Status != docker.StateRunning {
-		for _, svc := range roleServices(role) {
+		for _, svc := range services {
 			health.Services[svc] = false
 		}
 		return health
@@ -71,15 +71,13 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 	snap, err := probe.Snapshot(ctx, client, info.Name, role)
 	if err != nil {
 		sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
-		for _, svc := range roleServices(role) {
+		for _, svc := range services {
 			health.Services[svc] = false
 		}
 		return health
 	}
 
-	health.Munge = snap[probe.ServiceMunge]
-	health.SSHD = snap[probe.ServiceSSHD]
-	for _, svc := range roleServices(role) {
+	for _, svc := range services {
 		health.Services[svc] = snap[svc]
 	}
 

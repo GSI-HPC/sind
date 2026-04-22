@@ -196,8 +196,6 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 			FQDN:      cluster.DNSName(shortName, clusterName, realm),
 			IP:        health.IP,
 			Status:    health.State,
-			Munge:     health.Munge,
-			SSHD:      health.SSHD,
 			Services:  health.Services,
 		})
 	}
@@ -216,8 +214,6 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	_, _ = fmt.Fprintln(out, "SERVICES")
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tSTATUS")
-	_, _ = fmt.Fprintf(w, "munge\t%s\n", checkmark(health.Munge))
-	_, _ = fmt.Fprintf(w, "sshd\t%s\n", checkmark(health.SSHD))
 	for _, name := range sortedServiceNames(health.Services) {
 		_, _ = fmt.Fprintf(w, "%s\t%s\n", name, checkmark(health.Services[probe.Service(name)]))
 	}
@@ -511,16 +507,14 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "NODES")
 	w = newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tSTATUS\tMUNGE\tSSHD\tSERVICES")
+	_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tSTATUS\tSERVICES")
 	for _, n := range status.Nodes {
 		h := n.Health
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			n.Name,
 			n.Role,
 			h.IP,
 			h.State,
-			checkmark(h.Munge),
-			checkmark(h.SSHD),
 			formatServices(h.Services),
 		)
 	}

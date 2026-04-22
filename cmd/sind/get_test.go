@@ -780,8 +780,8 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.Equal(t, "controller.dev.sind.sind", got.FQDN)
 	assert.Equal(t, "10.0.0.2", got.IP)
 	assert.Equal(t, docker.StateRunning, got.Status)
-	assert.True(t, got.Munge)
-	assert.True(t, got.SSHD)
+	assert.True(t, got.Services["munge"])
+	assert.True(t, got.Services["sshd"])
 	assert.True(t, got.Services["slurmctld"])
 }
 

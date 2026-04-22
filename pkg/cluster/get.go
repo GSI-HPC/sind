@@ -92,8 +92,9 @@ type NodeSummary struct {
 }
 
 // NodeDetail holds the full identity and health information for a single node
-// as reported by 'sind get node'. It extends NodeSummary with per-service
-// health flags derived from NodeHealth.
+// as reported by 'sind get node'. It extends NodeSummary with a per-service
+// health map. All readiness-checked services (munge, sshd, and the role's
+// Slurm services) are reported under Services.
 type NodeDetail struct {
 	Container string                `json:"container"`
 	Cluster   string                `json:"cluster"`
@@ -101,8 +102,6 @@ type NodeDetail struct {
 	FQDN      string                `json:"fqdn"`
 	IP        string                `json:"ip"`
 	Status    docker.ContainerState `json:"status"`
-	Munge     bool                  `json:"munge"`
-	SSHD      bool                  `json:"sshd"`
 	Services  ServiceHealth         `json:"services"`
 }
 
