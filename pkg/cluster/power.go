@@ -85,7 +85,9 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 		return nil, nil
 	}
 
-	entries, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
+	entries, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
+		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}

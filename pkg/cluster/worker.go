@@ -55,7 +55,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
 	// List cluster containers once for validation + index + image resolution.
-	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+opts.ClusterName)
+	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
+		"label="+LabelCluster+"="+opts.ClusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
@@ -182,7 +184,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 // controller (indicating sind-generated Slurm configuration is in use).
 // Unmanaged workers bypass the sind-nodes.conf check.
 func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string, opts WorkerAddOptions) error {
-	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+opts.ClusterName)
+	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
+		"label="+LabelCluster+"="+opts.ClusterName)
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)
 	}
@@ -208,7 +212,9 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string,
 // existing containers in the cluster. Returns max(existing indices) + 1,
 // or 0 if no worker containers exist.
 func NextComputeIndex(ctx context.Context, client *docker.Client, realm, clusterName string) (int, error) {
-	containers, err := client.ListContainers(ctx, "label="+LabelCluster+"="+clusterName)
+	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
+		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return 0, fmt.Errorf("listing containers: %w", err)
 	}

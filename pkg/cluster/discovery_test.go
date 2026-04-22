@@ -125,12 +125,11 @@ func TestListClusterResources_LabelFilter(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 5)
-	// First call is docker ps with label filter
+	// First call is docker ps; filter by both realm and cluster so parallel
+	// realms with identically-named clusters are isolated.
 	args := m.Calls[0].Args
-	assert.Contains(t, args, "--filter")
-	filterIdx := indexOf(args, "--filter")
-	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label=sind.cluster=myCluster", args[filterIdx+1])
+	assert.Contains(t, args, "label=sind.realm="+mesh.DefaultRealm)
+	assert.Contains(t, args, "label=sind.cluster=myCluster")
 }
 
 // --- HasOtherClusters ---

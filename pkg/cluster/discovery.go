@@ -39,8 +39,10 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 		Network: NetworkName(realm, clusterName),
 	}
 
-	// Find containers by label.
+	// Find containers by label. Filter by both realm and cluster so parallel
+	// realms with identically-named clusters don't see each other's containers.
 	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
