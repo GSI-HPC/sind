@@ -691,6 +691,30 @@ func TestGetStatus_ClusterNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), `realm "sind"`)
 }
 
+// TestGetStatus_NetworkInspectError covers the branch where no containers
+// exist AND the cluster-network inspect fails with something other than
+// "not found". The error must be surfaced, not swallowed into a misleading
+// "cluster not found".
+func TestGetStatus_NetworkInspectError(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: ""}
+		}
+		if args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{Err: fmt.Errorf("docker daemon not running")}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	c := docker.NewClient(&m)
+
+	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking cluster network")
+	assert.Contains(t, err.Error(), "docker daemon not running")
+}
+
 func TestGetStatus_ListError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
