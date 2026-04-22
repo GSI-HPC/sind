@@ -184,6 +184,9 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	containerName := string(cluster.ContainerName(realm, clusterName, shortName))
 
 	info, err := client.InspectContainer(cmd.Context(), docker.ContainerName(containerName))
+	if docker.IsNotFound(err) {
+		return fmt.Errorf("node %q not found in cluster %q", shortName, clusterName)
+	}
 	if err != nil {
 		return fmt.Errorf("inspecting container: %w", err)
 	}

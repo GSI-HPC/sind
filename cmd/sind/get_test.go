@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -715,6 +716,24 @@ func TestGetNode_RejectsFQDN(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "NODE[.CLUSTER]")
 	assert.Contains(t, err.Error(), "worker-0.dev.sind.sind")
+}
+
+// TestGetNode_NotFound covers the typo/unknown-node case: docker inspect
+// fails with exit status 1. The command must surface a clean
+// "node %q not found in cluster %q" error rather than leak the raw docker
+// exit status.
+func TestGetNode_NotFound(t *testing.T) {
+	runErr := exec.Command("sh", "-c", "exit 1").Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, runErr, &exitErr, "sanity: sh -c 'exit 1' produced an ExitError")
+
+	var m mock.Executor
+	m.AddResult("", "Error: No such container: sind-dev-ghost\n", exitErr)
+
+	_, _, err := executeWithMock(&m, "get", "node", "ghost.dev")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `node "ghost" not found in cluster "dev"`)
+	assert.NotContains(t, err.Error(), "exit status")
 }
 
 func TestGetNode_Output(t *testing.T) {
