@@ -45,7 +45,7 @@
 <meta property="article:section" content="Getting Started" />
     <meta
       property="article:modified_time"
-      content="2026-03-30T16:38:18+02:00"
+      content="2026-04-10T19:33:47+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/getting-started/quickstart/",
       "headline": "Quickstart",
       "description": "Create your first Slurm cluster in minutes",
-      "wordCount": "362",
+      "wordCount": "372",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-30T16:38:18.00Z",
+      "dateModified": "2026-04-10T19:33:47.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2119,11 +2119,11 @@
 default   2 (0/1/1)       25.11    running
 </code></pre><p>View individual nodes:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get nodes
-</span></span></code></pre></div><pre tabindex="0"><code>NAME                 ROLE         STATUS
-controller.default   controller   running
-worker-0.default     worker       running
+</span></span></code></pre></div><pre tabindex="0"><code>CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
+sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
+sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
 </code></pre><p>For detailed health information:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind status
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get cluster
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="run-slurm-commands"
     >

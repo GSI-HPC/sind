@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-03-30T18:53:04+02:00"
+      content="2026-04-22T14:34:33+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/cluster-lifecycle/",
       "headline": "Cluster Lifecycle",
       "description": "Creating, listing, and deleting clusters",
-      "wordCount": "363",
+      "wordCount": "365",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-30T18:53:04.00Z",
+      "dateModified": "2026-04-22T14:34:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2189,7 +2189,7 @@ dev       3 (0/1/2)       25.11    running
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind delete cluster <span class="o">[</span>NAME<span class="o">]</span>
 </span></span></code></pre></div><p>Deleting is idempotent — deleting a non-existent cluster is not an error. sind handles partial or broken clusters (e.g., from a failed creation).</p>
-<p>Deletion order: stops/removes containers, disconnects/removes networks, removes volumes. sind also updates <code>~/.sind/known_hosts</code> to remove deleted nodes.</p>
+<p>Deletion order: stops/removes containers, disconnects/removes networks, removes volumes. sind also updates <code>~/.local/state/sind/&lt;realm&gt;/known_hosts</code> (or <code>$XDG_STATE_HOME/sind/&lt;realm&gt;/known_hosts</code>) to remove deleted nodes.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Delete the default cluster</span>
 </span></span><span class="line"><span class="cl">sind delete cluster
 </span></span><span class="line"><span class="cl">
