@@ -107,10 +107,7 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 			_ = stdout.Close()
 		}()
 		if err := dm.Run(ctx, stdout, w.internalCh); err != nil && ctx.Err() == nil {
-			select {
-			case w.internalCh <- Event{Kind: EventMonitorError, Err: err, Detail: "docker events stream failed"}:
-			case <-ctx.Done():
-			}
+			w.emit(ctx, Event{Kind: EventMonitorError, Err: err, Detail: "docker events stream failed"})
 		}
 		close(runDone)
 	}()
@@ -161,15 +158,12 @@ func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
 	proc, err := w.executor.Start(ctx, "docker", args...)
 	if err != nil {
 		log.Log(ctx, sindlog.LevelTrace, "failed to start systemd monitor", "node", node.ShortName, "err", err)
-		select {
-		case w.internalCh <- Event{
+		w.emit(ctx, Event{
 			Kind:      EventMonitorError,
 			Node:      node.ShortName,
 			Container: node.Container,
 			Err:       err,
-		}:
-		case <-ctx.Done():
-		}
+		})
 		return
 	}
 
@@ -191,19 +185,27 @@ func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
 			_ = stdout.Close()
 		}()
 		if err := sm.Run(ctx, stdout, w.internalCh); err != nil && ctx.Err() == nil {
-			select {
-			case w.internalCh <- Event{
+			w.emit(ctx, Event{
 				Kind:      EventMonitorError,
 				Node:      node.ShortName,
 				Container: node.Container,
 				Err:       err,
 				Detail:    "systemd monitor stream failed",
-			}:
-			case <-ctx.Done():
-			}
+			})
 		}
 		close(runDone)
 	}()
+}
+
+// emit best-effort sends ev to the internal channel. The ctx.Done() branch
+// guards against sending into a drained channel after the watcher has been
+// torn down — a race that is possible when ctx is cancelled between the
+// caller's guard check and this select.
+func (w *Watcher) emit(ctx context.Context, ev Event) {
+	select {
+	case w.internalCh <- ev:
+	case <-ctx.Done():
+	}
 }
 
 // broadcastLoop reads events from the internal channel and sends them

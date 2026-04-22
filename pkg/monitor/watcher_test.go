@@ -355,3 +355,48 @@ func TestWatcher_WaitClosesSubscribers(t *testing.T) {
 	_, ok := <-sub
 	assert.False(t, ok, "subscriber channel should be closed after Wait")
 }
+
+// TestWatcher_Emit_SendsWhenChannelHasRoom covers the normal path: emit
+// delivers the event via internalCh when the buffer is not full.
+func TestWatcher_Emit_SendsWhenChannelHasRoom(t *testing.T) {
+	w := NewWatcher(&mock.Executor{}, "sind-dev-", "dev")
+
+	w.emit(t.Context(), Event{Kind: EventMonitorError, Detail: "boom"})
+
+	select {
+	case ev := <-w.internalCh:
+		assert.Equal(t, EventMonitorError, ev.Kind)
+		assert.Equal(t, "boom", ev.Detail)
+	default:
+		t.Fatal("expected event on internalCh")
+	}
+}
+
+// TestWatcher_Emit_CtxDoneWhenChannelFull covers the teardown path: when
+// the internal channel is full and the context is cancelled, emit returns
+// via the ctx.Done() branch rather than blocking forever.
+func TestWatcher_Emit_CtxDoneWhenChannelFull(t *testing.T) {
+	w := NewWatcher(&mock.Executor{}, "sind-dev-", "dev")
+
+	for range cap(w.internalCh) {
+		w.internalCh <- Event{}
+	}
+	require.Equal(t, cap(w.internalCh), len(w.internalCh), "precondition: channel full")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		w.emit(ctx, Event{Kind: EventMonitorError, Detail: "drop"})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("emit did not return on cancelled ctx with full channel")
+	}
+
+	assert.Equal(t, cap(w.internalCh), len(w.internalCh), "no slot should have been consumed")
+}
