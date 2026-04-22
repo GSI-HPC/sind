@@ -14,6 +14,8 @@ import (
 // CreateClusterNetwork creates the cluster-specific Docker bridge network.
 func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clusterName string) error {
 	labels := docker.Labels{
+		LabelRealm:                 realm,
+		LabelCluster:               clusterName,
 		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
 		docker.ComposeNetworkLabel: "net",
 	}
@@ -27,6 +29,8 @@ func CreateClusterNetwork(ctx context.Context, client *docker.Client, realm, clu
 // CreateClusterVolume creates a single cluster volume.
 func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clusterName string, vtype VolumeType) error {
 	labels := docker.Labels{
+		LabelRealm:                 realm,
+		LabelCluster:               clusterName,
 		docker.ComposeProjectLabel: ComposeProject(realm, clusterName),
 		docker.ComposeVolumeLabel:  string(vtype),
 	}

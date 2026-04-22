@@ -115,6 +115,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 		"volume", "create",
 		"--label", "com.docker.compose.project=sind-mesh",
 		"--label", "com.docker.compose.volume=ssh-config",
+		"--label", "sind.realm=" + DefaultRealm,
 		string(SSHVolumeName),
 	}, m.Calls[1].Args)
 	keygenName := string(mgr.SSHKeygenName())

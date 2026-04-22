@@ -460,6 +460,7 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 		"network", "create",
 		"--label", "com.docker.compose.network=mesh",
 		"--label", "com.docker.compose.project=sind-mesh",
+		"--label", "sind.realm=" + DefaultRealm,
 		string(NetworkName),
 	}, m.Calls[1].Args)
 }
@@ -1070,6 +1071,7 @@ func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
 		"network", "create",
 		"--label", "com.docker.compose.network=mesh",
 		"--label", "com.docker.compose.project=myrealm-mesh",
+		"--label", "sind.realm=myrealm",
 		"myrealm-mesh",
 	}, m.Calls[1].Args)
 }
@@ -1114,6 +1116,7 @@ func TestCustomRealm_EnsureSSHVolume(t *testing.T) {
 		"volume", "create",
 		"--label", "com.docker.compose.project=myrealm-mesh",
 		"--label", "com.docker.compose.volume=ssh-config",
+		"--label", "sind.realm=myrealm",
 		"myrealm-ssh-config",
 	}, m.Calls[1].Args)
 	assert.Equal(t, []string{

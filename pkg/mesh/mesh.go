@@ -16,6 +16,12 @@ import (
 // DefaultRealm is the realm name that produces the standard resource names.
 const DefaultRealm = "sind"
 
+// LabelRealm is the Docker label applied to mesh resources (network, volumes)
+// so realm-scoped listings can filter by label rather than by name prefix.
+// pkg/cluster defines the same constant for cluster-scoped resources; keeping
+// it local here avoids a pkg/mesh → pkg/cluster import.
+const LabelRealm = "sind.realm"
+
 // Default-realm resource names. Production code uses Manager methods;
 // these constants are used in tests as expected values for DefaultRealm.
 const (
@@ -204,6 +210,7 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	}
 	m.created = true
 	networkLabels := docker.Labels{
+		LabelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeNetworkLabel: "mesh",
 	}
