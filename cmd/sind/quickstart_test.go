@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -35,17 +36,9 @@ func TestQuickstart(t *testing.T) {
 	meshMgr := mesh.NewManager(c, realm)
 	t.Cleanup(func() {
 		bg := context.Background()
-		// Best-effort cleanup for all clusters used in the test.
-		for _, cluster := range []string{"default", "dev"} {
-			for _, name := range []string{"controller", "submitter", "worker-0", "worker-1", "worker-2", "worker-3", "worker-4", "worker-5", "worker-6", "worker-7"} {
-				cn := docker.ContainerName(realm + "-" + cluster + "-" + name)
-				_ = c.KillContainer(bg, cn)
-				_ = c.RemoveContainer(bg, cn)
-			}
-			for _, vt := range []string{"config", "munge", "data"} {
-				_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-"+cluster+"-"+vt))
-			}
-			_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-"+cluster+"-net"))
+		names, _ := cluster.DiscoverClusterNames(bg, c, realm)
+		for _, name := range names {
+			_ = cluster.Delete(bg, c, meshMgr, name)
 		}
 		_ = meshMgr.CleanupMesh(bg)
 	})
