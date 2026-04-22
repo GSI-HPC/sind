@@ -638,7 +638,11 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.True(t, status.Mounts[2].OK)
 }
 
-func TestGetStatus_Empty(t *testing.T) {
+// TestGetStatus_EmptyButClusterNetworkExists covers the partial-teardown case:
+// no cluster containers remain, but the cluster network still exists. The
+// status reports StateEmpty rather than surfacing a not-found error so that
+// operators can inspect what's left over.
+func TestGetStatus_EmptyButClusterNetworkExists(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if args[0] == "ps" {
@@ -661,6 +665,30 @@ func TestGetStatus_Empty(t *testing.T) {
 	assert.Equal(t, "dev", status.Name)
 	assert.Equal(t, StateEmpty, status.State)
 	assert.Empty(t, status.Nodes)
+}
+
+// TestGetStatus_ClusterNotFound covers the typo/unknown-cluster case: no
+// containers exist AND the cluster network is absent. GetStatus must return
+// a clear error rather than synthesize a plausible-looking empty report.
+func TestGetStatus_ClusterNotFound(t *testing.T) {
+	exitErr := notFoundErr(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: ""}
+		}
+		if args[0] == "network" && args[1] == "inspect" {
+			return mock.Result{Stderr: "Error: No such network: sind-dev-net\n", Err: exitErr}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	c := docker.NewClient(&m)
+
+	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `cluster "dev" not found`)
+	assert.Contains(t, err.Error(), `realm "sind"`)
 }
 
 func TestGetStatus_ListError(t *testing.T) {

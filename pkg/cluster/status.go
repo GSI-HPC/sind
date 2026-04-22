@@ -217,6 +217,20 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
+	// Distinguish "no such cluster" from "partial teardown" (e.g. a failed
+	// delete that left the network behind). If no containers exist AND the
+	// cluster network is absent, the cluster was never created or is fully
+	// gone — surface it as a not-found error rather than a plausible-looking
+	// empty status report.
+	if len(containers) == 0 {
+		if _, nerr := client.InspectNetwork(ctx, NetworkName(realm, clusterName)); nerr != nil {
+			if docker.IsNotFound(nerr) {
+				return nil, fmt.Errorf("cluster %q not found in realm %q", clusterName, realm)
+			}
+			return nil, fmt.Errorf("checking cluster network: %w", nerr)
+		}
+	}
+
 	// Batch a single docker inspect for every container up front so that the
 	// per-node probe loop below has status + IP without additional round
 	// trips. One docker CLI fork instead of one per node.
