@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.0">
+<meta name="generator" content="Hugo 0.160.1">
 
 
   <meta name="description" content="Operational model and design philosophy" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-04-06T00:41:05+02:00"
+      content="2026-04-10T19:33:47+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/architecture/overview/",
       "headline": "Design Overview",
       "description": "Operational model and design philosophy",
-      "wordCount": "417",
+      "wordCount": "495",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-06T00:41:05.00Z",
+      "dateModified": "2026-04-10T19:33:47.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -983,6 +983,13 @@
         
       
     
+  </ul>
+
+            
+          </li>
+        
+      
+    
       
 
       
@@ -1012,7 +1019,98 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/mcp/"
+                    href="/sind/guides/"
+                    class="gdoc-nav__entry"
+                  >
+                    Guides
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mpi-jobs/"
+                    class="gdoc-nav__entry"
+                  >
+                    Running MPI Jobs
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mcp/"
                     class="gdoc-nav__entry"
                   >
                     MCP Integration
@@ -1056,7 +1154,7 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/ci-cd/"
+                    href="/sind/guides/ci-cd/"
                     class="gdoc-nav__entry"
                   >
                     CI/CD
@@ -1388,6 +1486,104 @@
                     class="gdoc-nav__entry"
                   >
                     Building Images
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+  </ul>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/"
+                    class="gdoc-nav__entry"
+                  >
+                    Troubleshooting
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/container-exit-255/"
+                    class="gdoc-nav__entry"
+                  >
+                    Container exits with code 255
                   </a>
                 </span>
               
@@ -1898,7 +2094,7 @@
 <li>sind does not watch or reconcile cluster state</li>
 <li>sind does not automatically repair drift or failures</li>
 </ul>
-<p>sind provides commands for inspection (<code>get</code>, <code>status</code>), modification (<code>create/delete worker</code>), and simulation (<code>power</code>), but these are imperative operations, not declarative state management.</p>
+<p>sind provides commands for inspection (<code>get</code>), modification (<code>create/delete worker</code>), and simulation (<code>power</code>), but these are imperative operations, not declarative state management.</p>
 <p>This is intentional: sind is a development and testing tool, not a production cluster controller.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="container-per-node"
@@ -1944,18 +2140,15 @@
       │
 resolveInfra        DNS IP │ SSH key │ Slurm version
       │
-createResources     network │ volumes → config │ munge
+createResources     network ║ (config vol → write) ║ (munge vol → write)
       │
-createAllNodes      node₁ │ node₂ │ ... │ nodeₙ
+setupNodes          (create + wait + SSH + hostkey) per node
       │
-setupNodes          (wait + SSH + hostkey) per node
-      │
-registerMesh        DNS records + known_hosts
-      │
-enableSlurm         (enable + probe) per eligible node
+registerMesh ║ enableSlurm
       │
   *Cluster
-</code></pre><p>Nodes start in parallel because the global infrastructure (DNS, SSH) is already available. Slurm daemons handle transient connection failures during bootstrap.</p>
+</code></pre><p>Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.</p>
+<p>Mesh registration (batch DNS + known_hosts) and Slurm enablement run concurrently after all nodes are ready.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="readiness-probes"
     >
@@ -1965,7 +2158,12 @@ enableSlurm         (enable + probe) per eligible node
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>sind waits for each node to become ready before returning success:</p>
+<p>sind waits for each node to become ready before returning success. Probes are accelerated by two event sources:</p>
+<ul>
+<li><strong>Docker events</strong> — a single <code>docker events</code> stream watches all cluster containers for start/die events</li>
+<li><strong>Systemd D-Bus monitors</strong> — per-node <code>busctl monitor --watch-bind=yes</code> streams watch for unit state changes (e.g., sshd.service becoming active)</li>
+</ul>
+<p>When an event arrives, probes re-evaluate immediately instead of waiting for the next poll tick. If event sources are unavailable, sind falls back to poll-only mode.</p>
 <div class="table-wrap"> <table>
   <thead>
       <tr>
@@ -2567,6 +2765,80 @@ enableSlurm         (enable + probe) per eligible node
     
 
   
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
     
 
     
@@ -2780,6 +3052,80 @@ enableSlurm         (enable + probe) per eligible node
       
     
 
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
   
     
 

@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.0">
+<meta name="generator" content="Hugo 0.160.1">
 
 
   <meta name="description" content="Cluster health, logs, and resource inspection" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-04-02T15:14:37+02:00"
+      content="2026-04-22T14:32:25+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "769",
+      "wordCount": "1013",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-02T15:14:37.00Z",
+      "dateModified": "2026-04-22T14:32:25.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -983,6 +983,13 @@
         
       
     
+  </ul>
+
+            
+          </li>
+        
+      
+    
       
 
       
@@ -1012,7 +1019,98 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/mcp/"
+                    href="/sind/guides/"
+                    class="gdoc-nav__entry"
+                  >
+                    Guides
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mpi-jobs/"
+                    class="gdoc-nav__entry"
+                  >
+                    Running MPI Jobs
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mcp/"
                     class="gdoc-nav__entry"
                   >
                     MCP Integration
@@ -1056,7 +1154,7 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/ci-cd/"
+                    href="/sind/guides/ci-cd/"
                     class="gdoc-nav__entry"
                   >
                     CI/CD
@@ -1388,6 +1486,104 @@
                     class="gdoc-nav__entry"
                   >
                     Building Images
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+  </ul>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/"
+                    class="gdoc-nav__entry"
+                  >
+                    Troubleshooting
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/container-exit-255/"
+                    class="gdoc-nav__entry"
+                  >
+                    Container exits with code 255
                   </a>
                 </span>
               
@@ -2006,6 +2202,19 @@ sudo systemctl daemon-reload
 00:13:32.608 INFO slurm services enabled
 </code></pre><p>The <code>-v</code> flag belongs to the root command and must appear before the subcommand (e.g., <code>sind -v create cluster</code>).</p>
 <div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="json-output"
+    >
+        JSON output
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/usage/diagnostics/#json-output" class="gdoc-page__anchor clip flex align-center" title="Anchor to: JSON output" aria-label="Anchor to: JSON output" href="#json-output">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Every <code>sind get</code> subcommand accepts a persistent <code>--output|-o {human,json}</code> flag. The default is <code>human</code> (tabular text); <code>json</code> emits a machine-readable document for scripting and automation.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get clusters -o json
+</span></span><span class="line"><span class="cl">sind get nodes -o json
+</span></span><span class="line"><span class="cl">sind get cluster dev --output json
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="cluster-status"
     >
         Cluster status
@@ -2014,10 +2223,10 @@ sudo systemctl daemon-reload
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind status <span class="o">[</span>CLUSTER<span class="o">]</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get cluster <span class="o">[</span>NAME<span class="o">]</span>
 </span></span></code></pre></div><p>Displays detailed health information:</p>
-<pre tabindex="0"><code>CLUSTER   STATUS (R/S/P/T)
-dev       running (3/0/0/3)
+<pre tabindex="0"><code>CLUSTER   SLURM     STATUS (R/S/P/T)
+dev       25.11.4   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -2035,10 +2244,10 @@ MOUNT        SOURCE               TYPE       STATUS
 /data        /home/user/project   hostPath   ✓
 
 NODES
-NAME              ROLE        IP            CONTAINER   MUNGE  SSHD   SERVICES
-controller.dev    controller  172.18.0.2    running     ✓      ✓      slurmctld ✓
-worker-0.dev      worker      172.18.0.3    running     ✓      ✓      slurmd ✓
-worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd ✗
+NAME              ROLE        IP            STATUS    SERVICES
+controller.dev    controller  172.18.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
 </code></pre><p>The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
 <div class="table-wrap"> <table>
   <thead>
@@ -2072,7 +2281,7 @@ worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd
 </table> </div>
 <p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
 <blockquote>
-<p><strong>Tip:</strong> Run <code>watch sind status</code> for a simple live dashboard that refreshes every two seconds.</p>
+<p><strong>Tip:</strong> Run <code>watch sind get cluster</code> for a simple live dashboard that refreshes every two seconds.</p>
 </blockquote>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="logs"
@@ -2102,10 +2311,11 @@ worker-1.dev      worker      172.18.0.4    running     ✓      ✓      slurmd
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get nodes <span class="o">[</span>CLUSTER<span class="o">]</span>
-</span></span></code></pre></div><pre tabindex="0"><code>NAME                 ROLE         STATUS
-controller.default   controller   running
-worker-0.default     worker       running
-worker-1.default     worker       running
+</span></span></code></pre></div><p>Without a <code>CLUSTER</code> argument, lists every node in the realm with an extra <code>CLUSTER</code> column; with a cluster name, scopes to that cluster and drops the column. Rows are sorted by <code>(cluster, role, natural-name)</code> so <code>worker-2</code> precedes <code>worker-10</code>.</p>
+<pre tabindex="0"><code>CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
+sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
+sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
+sind-default-worker-1    default   worker       worker-1.default.sind.sind      172.19.0.4   running
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-networks"
     >
@@ -2120,6 +2330,20 @@ worker-1.default     worker       running
 sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 sind-default-net  bridge   172.19.0.0/16    172.19.0.1
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="list-realms"
+    >
+        List realms
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/usage/diagnostics/#list-realms" class="gdoc-page__anchor clip flex align-center" title="Anchor to: List realms" aria-label="Anchor to: List realms" href="#list-realms">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get realms
+</span></span></code></pre></div><pre tabindex="0"><code>NAME   CLUSTERS
+sind   2
+ci     1
+</code></pre><p>Lists all active realms discovered from Docker container labels. Useful when working with multiple realms to see what&rsquo;s running.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-volumes"
     >
         List volumes
@@ -2158,6 +2382,31 @@ worker-0.default.sind.sind           172.19.0.3
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get munge-key <span class="o">[</span>CLUSTER<span class="o">]</span>
 </span></span></code></pre></div><p>Outputs the cluster&rsquo;s munge key encoded as base64, suitable for injection into external tooling.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="mesh-infrastructure"
+    >
+        Mesh infrastructure
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/usage/diagnostics/#mesh-infrastructure" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Mesh infrastructure" aria-label="Anchor to: Mesh infrastructure" href="#mesh-infrastructure">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get mesh
+</span></span></code></pre></div><p>Shows the realm&rsquo;s mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions.</p>
+<p>If no mesh has been created yet, the command returns a friendly <code>no mesh found for realm &quot;&lt;name&gt;&quot;</code> error.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="ssh-credentials"
+    >
+        SSH credentials
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/usage/diagnostics/#ssh-credentials" class="gdoc-page__anchor clip flex align-center" title="Anchor to: SSH credentials" aria-label="Anchor to: SSH credentials" href="#ssh-credentials">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get ssh-private-key
+</span></span><span class="line"><span class="cl">sind get ssh-public-key
+</span></span><span class="line"><span class="cl">sind get ssh-known-hosts
+</span></span></code></pre></div><p>Dump the realm&rsquo;s SSH credentials to stdout. With <code>-o json</code>, each command emits a distinct top-level field (<code>private_key</code>, <code>public_key</code>, <code>known_hosts</code>) so consumers don&rsquo;t need to special-case the same JSON key for three payload types. Together with <code>sind get ssh-config</code>, this replaces the need to extract files from Docker volumes.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="ssh-config-path"
     >
@@ -2716,72 +2965,6 @@ worker-0.default.sind.sind           172.19.0.3
     
 
   
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
 
         
       
@@ -2921,6 +3104,220 @@ worker-0.default.sind.sind           172.19.0.3
       
     
 
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
   
     
 

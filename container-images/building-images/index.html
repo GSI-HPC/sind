@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.0">
+<meta name="generator" content="Hugo 0.160.1">
 
 
   <meta name="description" content="Default image and custom image requirements" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Container Images" />
     <meta
       property="article:modified_time"
-      content="2026-03-30T02:03:09+02:00"
+      content="2026-04-09T14:59:43+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/container-images/building-images/",
       "headline": "Building Images",
       "description": "Default image and custom image requirements",
-      "wordCount": "301",
+      "wordCount": "335",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-30T02:03:09.00Z",
+      "dateModified": "2026-04-09T14:59:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -983,6 +983,13 @@
         
       
     
+  </ul>
+
+            
+          </li>
+        
+      
+    
       
 
       
@@ -1012,7 +1019,98 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/mcp/"
+                    href="/sind/guides/"
+                    class="gdoc-nav__entry"
+                  >
+                    Guides
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mpi-jobs/"
+                    class="gdoc-nav__entry"
+                  >
+                    Running MPI Jobs
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mcp/"
                     class="gdoc-nav__entry"
                   >
                     MCP Integration
@@ -1056,7 +1154,7 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/ci-cd/"
+                    href="/sind/guides/ci-cd/"
                     class="gdoc-nav__entry"
                   >
                     CI/CD
@@ -1388,6 +1486,104 @@
                     class="gdoc-nav__entry is-active"
                   >
                     Building Images
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+  </ul>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/"
+                    class="gdoc-nav__entry"
+                  >
+                    Troubleshooting
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/container-exit-255/"
+                    class="gdoc-nav__entry"
+                  >
+                    Container exits with code 255
                   </a>
                 </span>
               
@@ -1899,8 +2095,10 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
 <p>The default image:</p>
 <ul>
 <li>Is based on Rocky Linux 10</li>
-<li>Builds Slurm from source</li>
-<li>Contains all daemons (slurmctld, slurmd, munge, sshd)</li>
+<li>Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source</li>
+<li>Contains all Slurm daemons (slurmctld, slurmd, munge, sshd) and a full MPI stack</li>
+<li>Slurm is built with PMIx support (<code>--with-pmix</code>) for native PMIx job launch</li>
+<li>OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent</li>
 <li>Uses systemd as init (PID 1)</li>
 </ul>
 <p>sind enables the appropriate Slurm services based on node role at container start.</p>
@@ -2564,6 +2762,80 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
     
 
   
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
     
 
     
@@ -2910,6 +3182,80 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
             
             
           
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         
@@ -3084,10 +3430,10 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/contributing/"
-      title="Contributing"
+      href="/sind/troubleshooting/"
+      title="Troubleshooting"
     >
-      Contributing
+      Troubleshooting
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

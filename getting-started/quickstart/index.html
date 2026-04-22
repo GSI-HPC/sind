@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.0">
+<meta name="generator" content="Hugo 0.160.1">
 
 
   <meta name="description" content="Create your first Slurm cluster in minutes" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Getting Started" />
     <meta
       property="article:modified_time"
-      content="2026-03-30T16:38:18+02:00"
+      content="2026-04-10T19:33:47+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/getting-started/quickstart/",
       "headline": "Quickstart",
       "description": "Create your first Slurm cluster in minutes",
-      "wordCount": "362",
+      "wordCount": "372",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-30T16:38:18.00Z",
+      "dateModified": "2026-04-10T19:33:47.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -983,6 +983,13 @@
         
       
     
+  </ul>
+
+            
+          </li>
+        
+      
+    
       
 
       
@@ -1012,7 +1019,98 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/mcp/"
+                    href="/sind/guides/"
+                    class="gdoc-nav__entry"
+                  >
+                    Guides
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mpi-jobs/"
+                    class="gdoc-nav__entry"
+                  >
+                    Running MPI Jobs
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mcp/"
                     class="gdoc-nav__entry"
                   >
                     MCP Integration
@@ -1056,7 +1154,7 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/ci-cd/"
+                    href="/sind/guides/ci-cd/"
                     class="gdoc-nav__entry"
                   >
                     CI/CD
@@ -1388,6 +1486,104 @@
                     class="gdoc-nav__entry"
                   >
                     Building Images
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+  </ul>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/"
+                    class="gdoc-nav__entry"
+                  >
+                    Troubleshooting
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/container-exit-255/"
+                    class="gdoc-nav__entry"
+                  >
+                    Container exits with code 255
                   </a>
                 </span>
               
@@ -1923,11 +2119,11 @@
 default   2 (0/1/1)       25.11    running
 </code></pre><p>View individual nodes:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get nodes
-</span></span></code></pre></div><pre tabindex="0"><code>NAME                 ROLE         STATUS
-controller.default   controller   running
-worker-0.default     worker       running
+</span></span></code></pre></div><pre tabindex="0"><code>CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
+sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
+sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
 </code></pre><p>For detailed health information:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind status
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get cluster
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="run-slurm-commands"
     >
@@ -2583,72 +2779,6 @@ worker-0.default     worker       running
     
 
   
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
 
         
       
@@ -2788,6 +2918,220 @@ worker-0.default     worker       running
       
     
 
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
   
     
 

@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.0">
+<meta name="generator" content="Hugo 0.160.1">
 
 
   <meta name="description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-03-30T15:34:18+02:00"
+      content="2026-04-10T20:02:56+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/configuration/node-definitions/",
       "headline": "Node Definitions",
       "description": "Node roles, shorthand syntax, and managed vs unmanaged workers",
-      "wordCount": "283",
+      "wordCount": "472",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-30T15:34:18.00Z",
+      "dateModified": "2026-04-10T20:02:56.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -983,6 +983,13 @@
         
       
     
+  </ul>
+
+            
+          </li>
+        
+      
+    
       
 
       
@@ -1012,7 +1019,98 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/mcp/"
+                    href="/sind/guides/"
+                    class="gdoc-nav__entry"
+                  >
+                    Guides
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mpi-jobs/"
+                    class="gdoc-nav__entry"
+                  >
+                    Running MPI Jobs
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/mcp/"
                     class="gdoc-nav__entry"
                   >
                     MCP Integration
@@ -1056,7 +1154,7 @@
               
                 <span class="flex">
                   <a
-                    href="/sind/usage/ci-cd/"
+                    href="/sind/guides/ci-cd/"
                     class="gdoc-nav__entry"
                   >
                     CI/CD
@@ -1388,6 +1486,104 @@
                     class="gdoc-nav__entry"
                   >
                     Building Images
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+  </ul>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/"
+                    class="gdoc-nav__entry"
+                  >
+                    Troubleshooting
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+              
+  
+
+
+  <ul class="gdoc-nav__list">
+    
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/troubleshooting/container-exit-255/"
+                    class="gdoc-nav__entry"
+                  >
+                    Container exits with code 255
                   </a>
                 </span>
               
@@ -1981,9 +2177,33 @@
           <td><code>true</code></td>
           <td>Start slurmd and add to slurm.conf</td>
       </tr>
+      <tr>
+          <td><code>capAdd</code></td>
+          <td>global + per-node</td>
+          <td>none</td>
+          <td>Extra Linux capabilities (e.g. <code>SYS_ADMIN</code>)</td>
+      </tr>
+      <tr>
+          <td><code>capDrop</code></td>
+          <td>global + per-node</td>
+          <td>none</td>
+          <td>Dropped Linux capabilities</td>
+      </tr>
+      <tr>
+          <td><code>devices</code></td>
+          <td>global + per-node</td>
+          <td>none</td>
+          <td>Host devices to expose (e.g. <code>/dev/fuse</code>)</td>
+      </tr>
+      <tr>
+          <td><code>securityOpt</code></td>
+          <td>global + per-node</td>
+          <td>none</td>
+          <td>Extra security options</td>
+      </tr>
   </tbody>
 </table> </div>
-<p>Per-node values override the <code>defaults</code> section, which in turn overrides the built-in defaults.</p>
+<p>Per-node scalar values override the <code>defaults</code> section. Security list fields (<code>capAdd</code>, <code>capDrop</code>, <code>devices</code>, <code>securityOpt</code>) are <strong>merged</strong> with defaults rather than replacing them.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="shorthand-syntax"
     >
@@ -2030,6 +2250,41 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">managed</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">        </span><span class="c"># 2 unmanaged workers</span><span class="w">
 </span></span></span></code></pre></div><p>Unmanaged workers can also be created dynamically:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create worker --count <span class="m">2</span> --unmanaged
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="capabilities-and-devices"
+    >
+        Capabilities and devices
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/configuration/node-definitions/#capabilities-and-devices" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Capabilities and devices" aria-label="Anchor to: Capabilities and devices" href="#capabilities-and-devices">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>sind&rsquo;s default security posture avoids extra capabilities and device access. When specific use cases require them (e.g. testing CVMFS provisioning or FUSE-based filesystems), you can grant targeted privileges per node.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">3</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">capAdd</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span>- <span class="l">SYS_ADMIN</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">devices</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span>- <span class="l">/dev/fuse</span><span class="w">
+</span></span></span></code></pre></div><p>Capability names follow Docker convention (without the <code>CAP_</code> prefix). Device strings use Docker&rsquo;s format: <code>/dev/fuse</code> or <code>/dev/sda:/dev/xvda:rwm</code>.</p>
+<p>When set in the <code>defaults</code> section, security fields apply to all nodes. Per-node values merge with (not replace) defaults:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">defaults</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">capAdd</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="l">SYS_ADMIN</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">devices</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="l">/dev/fuse</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">3</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">capAdd</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span>- <span class="l">NET_ADMIN   </span><span class="w"> </span><span class="c"># workers get both SYS_ADMIN and NET_ADMIN</span><span class="w">
+</span></span></span></code></pre></div><p>sind logs a notice at cluster creation when extra privileges are configured, making the escalation visible.</p>
+<p>Workers created via <code>sind create worker</code> also support these fields:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create worker --cap-add SYS_ADMIN --device /dev/fuse
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="default-nodes"
     >
@@ -2587,72 +2842,6 @@
     
 
   
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
 
         
       
@@ -2792,6 +2981,220 @@
       
     
 
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
   
     
 
