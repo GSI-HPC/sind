@@ -69,6 +69,23 @@ func TestVolumeLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestIsVolumeInUse(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"daemon says in use", fmt.Errorf("Error response from daemon: remove sind-dev-config: volume is in use - [abc123]"), true},
+		{"unrelated error", fmt.Errorf("Error: No such volume: sind-dev-config"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsVolumeInUse(tc.err))
+		})
+	}
+}
+
 func TestVolumeExists_True(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil)

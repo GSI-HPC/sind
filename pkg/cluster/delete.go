@@ -6,10 +6,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/retry"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -125,10 +127,15 @@ func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.Netwo
 	return nil
 }
 
-// DeleteVolumes removes the given cluster volumes.
+// DeleteVolumes removes the given cluster volumes. Each removal retries past
+// the dockerd async-cleanup race that follows `docker rm -f`.
 func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
 	for _, v := range volumes {
-		if err := client.RemoveVolume(ctx, v); err != nil {
+		err := retry.Do(ctx,
+			func() error { return client.RemoveVolume(ctx, v) },
+			docker.IsVolumeInUse,
+			6, 100*time.Millisecond)
+		if err != nil {
 			return fmt.Errorf("removing volume %s: %w", v, err)
 		}
 	}

@@ -7,10 +7,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/retry"
 )
 
 // DefaultRealm is the realm name that produces the standard resource names.
@@ -179,7 +181,8 @@ func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.Network
 	return m.Docker.RemoveNetwork(ctx, name)
 }
 
-// removeVolumeIfExists removes a volume if it exists.
+// removeVolumeIfExists removes a volume if it exists, retrying past the
+// dockerd async-cleanup race that follows `docker rm -f`.
 func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeName) error {
 	exists, err := m.Docker.VolumeExists(ctx, name)
 	if err != nil {
@@ -188,7 +191,10 @@ func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeNa
 	if !exists {
 		return nil
 	}
-	return m.Docker.RemoveVolume(ctx, name)
+	return retry.Do(ctx,
+		func() error { return m.Docker.RemoveVolume(ctx, name) },
+		docker.IsVolumeInUse,
+		6, 100*time.Millisecond)
 }
 
 // Created reports whether EnsureMesh created new mesh infrastructure in this
