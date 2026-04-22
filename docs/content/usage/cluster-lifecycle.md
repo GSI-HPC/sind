@@ -81,7 +81,7 @@ sind delete cluster [NAME]
 
 Deleting is idempotent — deleting a non-existent cluster is not an error. sind handles partial or broken clusters (e.g., from a failed creation).
 
-Deletion order: stops/removes containers, disconnects/removes networks, removes volumes. sind also updates `~/.sind/known_hosts` to remove deleted nodes.
+Deletion order: stops/removes containers, disconnects/removes networks, removes volumes. sind also updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes.
 
 ```bash
 # Delete the default cluster

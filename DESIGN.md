@@ -300,7 +300,7 @@ NAME/CLUSTER defaults to `default` if omitted.
 - Deleting a non-existent cluster is not an error
 - Handles partial/broken clusters (e.g., failed creation)
 - Removes all matching Docker resources regardless of state
-- Updates `~/.sind/known_hosts` to remove deleted nodes
+- Updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes
 - Order: stops/removes containers → disconnects/removes networks → removes volumes
 
 Example output:
@@ -701,8 +701,14 @@ Validation rules:
 | `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp |
 | `cpus` | global + per-node | `1` | CPU limit |
 | `memory` | global + per-node | `512m` | Memory limit |
+| `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
+| `capDrop` | global + per-node | none | Dropped Linux capabilities |
+| `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
+| `securityOpt` | global + per-node | none | Extra security options |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+
+Per-node scalar values override the `defaults` section. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
 
 ### Validation Rules
 
