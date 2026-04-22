@@ -188,8 +188,8 @@ Rules:
 - **Long-form only** by default; add short flags (`-f`) only for frequently-typed flags
 - **Kebab-case** for multi-word flags: `--tmp-size`, `--munge-key`
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
-- **One root-local flag**: `--realm` (local to root, inherited via `TraverseChildren`)
-- **One root-local counter**: `-v` (repeatable, controls log verbosity)
+- **One persistent root flag**: `--realm` (inherited by every subcommand)
+- **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
 
 ### Output Conventions
 
@@ -340,8 +340,8 @@ sind-dev-worker-10       dev       worker       worker-10.dev.sind.sind         
 
 ```
 $ sind get cluster dev
-CLUSTER   STATUS (R/S/P/T)
-dev       running (3/0/0/3)
+CLUSTER   SLURM     STATUS (R/S/P/T)
+dev       25.11.4   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -359,10 +359,10 @@ MOUNT        SOURCE                    TYPE       STATUS
 /data        /home/user/project        hostPath   ✓
 
 NODES
-NAME              ROLE        IP            STATUS    MUNGE  SSHD   SERVICES
-controller.dev    controller  172.19.0.2    running   ✓      ✓      slurmctld ✓
-worker-0.dev      worker      172.19.0.3    running   ✓      ✓      slurmd ✓
-worker-1.dev      worker      172.19.0.4    running   ✓      ✓      slurmd ✗
+NAME              ROLE        IP            STATUS    SERVICES
+controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 `sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (defaults to cluster "default"). Passing a full DNS FQDN ending in `.sind` is rejected — use the bare short name or the `NODE.CLUSTER` form:
@@ -490,7 +490,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
-`sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone, SSH container/volume/image. Useful for external consumers that need to connect to sind networks.
+`sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. Useful for external consumers that need to connect to sind networks.
 
 `sind get ssh-private-key`, `sind get ssh-public-key`, and `sind get ssh-known-hosts` dump SSH credentials to stdout. This replaces the need to extract files from Docker volumes.
 
@@ -1166,7 +1166,7 @@ $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
 - `sind create worker`
 - `sind delete worker`
 
-Read-only operations (`get`, `status`, `logs`, `ssh`, etc.) do not acquire the lock.
+Read-only operations (`get`, `logs`, `ssh`, etc.) do not acquire the lock.
 
 ### Behavior
 

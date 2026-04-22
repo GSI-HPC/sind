@@ -111,8 +111,8 @@ sind get cluster [NAME]
 Displays detailed health information:
 
 ```
-CLUSTER   STATUS (R/S/P/T)
-dev       running (3/0/0/3)
+CLUSTER   SLURM     STATUS (R/S/P/T)
+dev       25.11.4   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -130,10 +130,10 @@ MOUNT        SOURCE               TYPE       STATUS
 /data        /home/user/project   hostPath   ✓
 
 NODES
-NAME              ROLE        IP            STATUS    MUNGE  SSHD   SERVICES
-controller.dev    controller  172.18.0.2    running   ✓      ✓      slurmctld ✓
-worker-0.dev      worker      172.18.0.3    running   ✓      ✓      slurmd ✓
-worker-1.dev      worker      172.18.0.4    running   ✓      ✓      slurmd ✗
+NAME              ROLE        IP            STATUS    SERVICES
+controller.dev    controller  172.18.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
@@ -249,7 +249,7 @@ Outputs the cluster's munge key encoded as base64, suitable for injection into e
 sind get mesh
 ```
 
-Shows the realm's mesh infrastructure: network name, DNS container/IP/zone, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions.
+Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions.
 
 If no mesh has been created yet, the command returns a friendly `no mesh found for realm "<name>"` error.
 
