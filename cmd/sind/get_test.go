@@ -814,11 +814,12 @@ func TestGetLifecycle(t *testing.T) {
 		_ = c.RemoveNetwork(bg, netName)
 	})
 
-	_, err := c.CreateNetwork(ctx, netName, nil)
+	resourceLabels := docker.Labels{"sind.realm": realm, "sind.cluster": cluster}
+	_, err := c.CreateNetwork(ctx, netName, resourceLabels)
 	require.NoError(t, err)
-	require.NoError(t, c.CreateVolume(ctx, volConfig, nil))
-	require.NoError(t, c.CreateVolume(ctx, volMunge, nil))
-	require.NoError(t, c.CreateVolume(ctx, volData, nil))
+	require.NoError(t, c.CreateVolume(ctx, volConfig, resourceLabels))
+	require.NoError(t, c.CreateVolume(ctx, volMunge, resourceLabels))
+	require.NoError(t, c.CreateVolume(ctx, volData, resourceLabels))
 
 	_, err = c.RunContainer(ctx,
 		"--name", string(ctrName),

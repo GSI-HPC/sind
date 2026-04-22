@@ -34,12 +34,14 @@ func (c *Client) RemoveVolume(ctx context.Context, name VolumeName) error {
 type VolumeListEntry struct {
 	Name   VolumeName
 	Driver string
+	Labels Labels
 }
 
 // volumeLsEntry maps the docker volume ls --format json output.
 type volumeLsEntry struct {
 	Name   string `json:"Name"`
 	Driver string `json:"Driver"`
+	Labels string `json:"Labels"`
 }
 
 // ListVolumes returns volumes matching the given filters.
@@ -66,6 +68,7 @@ func (c *Client) ListVolumes(ctx context.Context, filters ...string) ([]VolumeLi
 		entries = append(entries, VolumeListEntry{
 			Name:   VolumeName(v.Name),
 			Driver: v.Driver,
+			Labels: parseLabels(v.Labels),
 		})
 	}
 	return entries, nil

@@ -92,12 +92,14 @@ func (c *Client) InspectNetwork(ctx context.Context, name NetworkName) (*Network
 type NetworkListEntry struct {
 	Name   NetworkName
 	Driver string
+	Labels Labels
 }
 
 // networkLsEntry maps the docker network ls --format json output.
 type networkLsEntry struct {
 	Name   string `json:"Name"`
 	Driver string `json:"Driver"`
+	Labels string `json:"Labels"`
 }
 
 // ListNetworks returns networks matching the given filters.
@@ -124,6 +126,7 @@ func (c *Client) ListNetworks(ctx context.Context, filters ...string) ([]Network
 		entries = append(entries, NetworkListEntry{
 			Name:   NetworkName(n.Name),
 			Driver: n.Driver,
+			Labels: parseLabels(n.Labels),
 		})
 	}
 	return entries, nil

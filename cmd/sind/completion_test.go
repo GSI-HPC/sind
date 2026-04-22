@@ -31,7 +31,8 @@ func TestCompleteClusterNames(t *testing.T) {
 	mock := &mock.Executor{}
 	// DiscoverClusterNames calls ListNetworks (NDJSON) then ListVolumes (NDJSON).
 	mock.AddResult(
-		"{\"Name\":\"sind-dev-net\"}\n{\"Name\":\"sind-prod-net\"}", "", nil)
+		`{"Name":"sind-dev-net","Labels":"sind.realm=sind,sind.cluster=dev"}`+"\n"+
+			`{"Name":"sind-prod-net","Labels":"sind.realm=sind,sind.cluster=prod"}`, "", nil)
 	mock.AddResult("", "", nil) // no volumes
 
 	sub := findCmd(completionCtx(mock), t, "get", "cluster")
@@ -52,7 +53,7 @@ func TestCompleteClusterNames_AlreadyHasArg(t *testing.T) {
 func TestCompleteNodeNames(t *testing.T) {
 	mock := &mock.Executor{}
 	// DiscoverClusterNames: ListNetworks + ListVolumes
-	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult(`{"Name":"sind-dev-net","Labels":"sind.realm=sind,sind.cluster=dev"}`, "", nil)
 	mock.AddResult("", "", nil)
 	// GetNodes for "dev": ListContainers (NDJSON)
 	mock.AddResult(
@@ -69,7 +70,7 @@ func TestCompleteNodeNames(t *testing.T) {
 
 func TestCompleteLogsArgs_Node(t *testing.T) {
 	mock := &mock.Executor{}
-	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult(`{"Name":"sind-dev-net","Labels":"sind.realm=sind,sind.cluster=dev"}`, "", nil)
 	mock.AddResult("", "", nil)
 	mock.AddResult(
 		"{\"Names\":\"sind-dev-controller\",\"State\":\"running\",\"Labels\":\"sind.cluster=dev,sind.role=controller\"}",
@@ -92,7 +93,7 @@ func TestCompleteLogsArgs_Service(t *testing.T) {
 
 func TestCompleteSSHNodeArg_EmptyArgs(t *testing.T) {
 	mock := &mock.Executor{}
-	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult(`{"Name":"sind-dev-net","Labels":"sind.realm=sind,sind.cluster=dev"}`, "", nil)
 	mock.AddResult("", "", nil)
 	mock.AddResult(
 		"{\"Names\":\"sind-dev-controller\",\"State\":\"running\",\"Labels\":\"sind.cluster=dev,sind.role=controller\"}",
@@ -107,7 +108,7 @@ func TestCompleteSSHNodeArg_EmptyArgs(t *testing.T) {
 
 func TestCompleteSSHNodeArg_SkipsSSHFlags(t *testing.T) {
 	mock := &mock.Executor{}
-	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult(`{"Name":"sind-dev-net","Labels":"sind.realm=sind,sind.cluster=dev"}`, "", nil)
 	mock.AddResult("", "", nil)
 	mock.AddResult(
 		"{\"Names\":\"sind-dev-controller\",\"State\":\"running\",\"Labels\":\"sind.cluster=dev,sind.role=controller\"}",
@@ -155,7 +156,7 @@ func TestCompleteSSHNodeArg_DashPrefix(t *testing.T) {
 
 func TestCompleteExecClusterArg_EmptyArgs(t *testing.T) {
 	mock := &mock.Executor{}
-	mock.AddResult("{\"Name\":\"sind-dev-net\"}", "", nil)
+	mock.AddResult(`{"Name":"sind-dev-net","Labels":"sind.realm=sind,sind.cluster=dev"}`, "", nil)
 	mock.AddResult("", "", nil)
 
 	sub := findCmd(completionCtx(mock), t, "exec")

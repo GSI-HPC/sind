@@ -235,7 +235,7 @@ type NetworkSummary struct {
 // GetNetworks lists all sind-related Docker networks with IPAM details.
 // This includes per-cluster networks (sind-<cluster>-net) and the mesh network (sind-mesh).
 func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*NetworkSummary, error) {
-	entries, err := client.ListNetworks(ctx, "name="+realm+"-")
+	entries, err := client.ListNetworks(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return nil, fmt.Errorf("listing networks: %w", err)
 	}
@@ -269,7 +269,7 @@ type VolumeSummary struct {
 
 // GetVolumes lists all sind-related Docker volumes.
 func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*VolumeSummary, error) {
-	entries, err := client.ListVolumes(ctx, "name="+realm+"-")
+	entries, err := client.ListVolumes(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return nil, fmt.Errorf("listing volumes: %w", err)
 	}

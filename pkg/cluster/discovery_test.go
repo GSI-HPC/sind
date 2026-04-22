@@ -221,9 +221,8 @@ func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 
 func TestDiscoverClusterNames_FromNetworks(t *testing.T) {
 	var m mock.Executor
-	// ListNetworks: returns cluster network + mesh network
-	m.AddResult(`{"Name":"sind-default-net","Driver":"bridge","ID":"a","Scope":"local"}
-{"Name":"sind-mesh","Driver":"bridge","ID":"b","Scope":"local"}`, "", nil)
+	// ListNetworks: filter excludes mesh (no sind.cluster label); returns cluster network only.
+	m.AddResult(`{"Name":"sind-default-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=default"}`, "", nil)
 	// ListVolumes: empty
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
@@ -238,10 +237,10 @@ func TestDiscoverClusterNames_FromVolumes(t *testing.T) {
 	var m mock.Executor
 	// ListNetworks: empty
 	m.AddResult("", "", nil)
-	// ListVolumes: orphaned volumes
-	m.AddResult(`{"Name":"sind-default-config","Driver":"local","Mountpoint":"/data","Scope":"local"}
-{"Name":"sind-default-munge","Driver":"local","Mountpoint":"/data","Scope":"local"}
-{"Name":"sind-ssh-config","Driver":"local","Mountpoint":"/data","Scope":"local"}`, "", nil)
+	// ListVolumes: cluster-scoped volumes carry the cluster label; mesh volumes are
+	// excluded by the filter.
+	m.AddResult(`{"Name":"sind-default-config","Driver":"local","Labels":"sind.realm=sind,sind.cluster=default"}
+{"Name":"sind-default-munge","Driver":"local","Labels":"sind.realm=sind,sind.cluster=default"}`, "", nil)
 	c := docker.NewClient(&m)
 
 	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
@@ -252,12 +251,11 @@ func TestDiscoverClusterNames_FromVolumes(t *testing.T) {
 
 func TestDiscoverClusterNames_MultipleClusters(t *testing.T) {
 	var m mock.Executor
-	// ListNetworks: two cluster networks
-	m.AddResult(`{"Name":"sind-dev-net","Driver":"bridge","ID":"a","Scope":"local"}
-{"Name":"sind-prod-net","Driver":"bridge","ID":"b","Scope":"local"}
-{"Name":"sind-mesh","Driver":"bridge","ID":"c","Scope":"local"}`, "", nil)
-	// ListVolumes: volumes for dev only
-	m.AddResult(`{"Name":"sind-dev-config","Driver":"local","Mountpoint":"/data","Scope":"local"}`, "", nil)
+	// ListNetworks: two cluster networks (mesh excluded by filter).
+	m.AddResult(`{"Name":"sind-dev-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=dev"}
+{"Name":"sind-prod-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=prod"}`, "", nil)
+	// ListVolumes: volumes for dev only.
+	m.AddResult(`{"Name":"sind-dev-config","Driver":"local","Labels":"sind.realm=sind,sind.cluster=dev"}`, "", nil)
 	c := docker.NewClient(&m)
 
 	names, err := DiscoverClusterNames(t.Context(), c, mesh.DefaultRealm)
