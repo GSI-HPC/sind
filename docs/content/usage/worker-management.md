@@ -21,6 +21,10 @@ sind create worker [CLUSTER] [FLAGS]
 | `--tmp-size` | `256m` | `/tmp` tmpfs size |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf |
 | `--pull` | `false` | Pull images before creating containers |
+| `--cap-add` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
+| `--cap-drop` | none | Drop Linux capability (repeatable) |
+| `--device` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
+| `--security-opt` | none | Security option (repeatable) |
 
 ### Examples
 

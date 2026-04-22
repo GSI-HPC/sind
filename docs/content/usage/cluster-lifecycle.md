@@ -9,7 +9,7 @@ toc: true
 ## Create a cluster
 
 ```bash
-sind create cluster [NAME] [--config FILE] [--pull]
+sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume]
 ```
 
 | Argument/Flag | Default | Description |
@@ -17,6 +17,7 @@ sind create cluster [NAME] [--config FILE] [--pull]
 | `NAME` | `default` | Cluster name (positional, optional) |
 | `--config` | — | Path to YAML configuration file |
 | `--pull` | `false` | Pull images before creating containers |
+| `--data` | `.` | Host directory to mount at `/data` on all nodes, or `volume` to use a Docker volume. Ignored if the config file already specifies data storage. |
 
 Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image. Configuration can also be piped via stdin instead of using `--config`.
 

@@ -379,6 +379,16 @@ sshd        ✓
 slurmctld   ✓
 ```
 
+### Host Diagnostics
+
+`sind doctor` validates host prerequisites for running sind:
+
+```bash
+sind doctor                              # check Docker version, cgroupv2, DNS policy
+```
+
+Checks the Docker Engine version, that cgroupv2 is mounted with `nsdelegate`, and that polkit allows host DNS resolution via systemd-resolved. Exits non-zero if any required prerequisite fails.
+
 ### Node Access
 
 ```bash
@@ -409,6 +419,10 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--tmp-size SIZE` | 256m | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf |
 | `--pull` | false | Pull images before creating containers |
+| `--cap-add CAP` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
+| `--cap-drop CAP` | none | Drop Linux capability (repeatable) |
+| `--device PATH` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
+| `--security-opt OPT` | none | Security option (repeatable) |
 
 Examples:
 
@@ -475,6 +489,8 @@ sind logs worker-0 slurmd --follow    # follow slurmd logs
 
 ```bash
 sind version [--json]                  # print version information
+sind doctor                            # check host prerequisites
+sind get realms                        # list active realms
 sind get munge-key [CLUSTER]           # output munge key (base64)
 sind get ssh-config                    # show SSH config path for Include
 sind get mesh                          # show mesh infrastructure info
@@ -941,15 +957,16 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 The generated `ssh_config` (for default realm `sind`):
 
 ```
+CanonicalizeHostname yes
+CanonicalDomains default.sind.sind sind.sind
+CanonicalizeMaxDots 2
+
 Host *.sind.sind
     ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/%h/22; cat <&3 & cat >&3; kill $!'
     IdentityFile ~/.local/state/sind/sind/id_ed25519
     UserKnownHostsFile ~/.local/state/sind/sind/known_hosts
     User root
     StrictHostKeyChecking yes
-    CanonicalizeHostname yes
-    CanonicalDomains default.sind.sind sind.sind
-    CanonicalizeMaxDots 2
 ```
 
 The `Canonicalize*` directives enable short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. For custom realms, the `CanonicalDomains` list reflects that realm's clusters.

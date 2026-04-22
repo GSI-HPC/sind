@@ -47,6 +47,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── delete.go    Cluster deletion
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
+  ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
@@ -61,10 +62,13 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
+pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, DNS policy)
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS, SSH)
-pkg/probe/         Node readiness probes
+pkg/monitor/       Event-driven Docker and systemd watchers for readiness
 pkg/nodeset/       Nodeset expansion (worker-[0-3])
+pkg/probe/         Node readiness probes
+pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm config generation and version discovery
 pkg/ssh/           SSH key generation and injection
 ```
@@ -72,18 +76,23 @@ pkg/ssh/           SSH key generation and injection
 ## Dependency flow
 
 ```
-cmd/sind → pkg/cluster → pkg/docker  → pkg/cmdexec
-                       → pkg/config
+cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
+         → pkg/doctor  → pkg/config
                        → pkg/log
-                       → pkg/mesh   → pkg/docker
-                                    → pkg/cmdexec
-                       → pkg/probe  → pkg/docker
-                       → pkg/slurm  → pkg/docker
-                       → pkg/ssh    → pkg/docker
+                       → pkg/mesh    → pkg/docker
+                                     → pkg/cmdexec
+                                     → pkg/retry
+                       → pkg/monitor → pkg/docker
+                                     → pkg/cmdexec
+                       → pkg/probe   → pkg/docker
+                                     → pkg/monitor
+                       → pkg/retry
+                       → pkg/slurm   → pkg/docker
+                       → pkg/ssh     → pkg/docker
                        → pkg/nodeset
 ```
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph.
 
 ## Adding a new CLI command
 
