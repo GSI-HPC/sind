@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-04-06T00:41:05+02:00"
+      content="2026-04-22T15:40:21+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/contributing/architecture-guide/",
       "headline": "Architecture Guide",
       "description": "Package structure and how to add new features",
-      "wordCount": "718",
+      "wordCount": "794",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-06T00:41:05.00Z",
+      "dateModified": "2026-04-22T15:40:21.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2126,6 +2126,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── delete.go    Cluster deletion
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
+  ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
@@ -2140,10 +2141,13 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
+pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, DNS policy)
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS, SSH)
-pkg/probe/         Node readiness probes
+pkg/monitor/       Event-driven Docker and systemd watchers for readiness
 pkg/nodeset/       Nodeset expansion (worker-[0-3])
+pkg/probe/         Node readiness probes
+pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm config generation and version discovery
 pkg/ssh/           SSH key generation and injection
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
@@ -2155,16 +2159,21 @@ pkg/ssh/           SSH key generation and injection
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<pre tabindex="0"><code>cmd/sind → pkg/cluster → pkg/docker  → pkg/cmdexec
-                       → pkg/config
+<pre tabindex="0"><code>cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
+         → pkg/doctor  → pkg/config
                        → pkg/log
-                       → pkg/mesh   → pkg/docker
-                                    → pkg/cmdexec
-                       → pkg/probe  → pkg/docker
-                       → pkg/slurm  → pkg/docker
-                       → pkg/ssh    → pkg/docker
+                       → pkg/mesh    → pkg/docker
+                                     → pkg/cmdexec
+                                     → pkg/retry
+                       → pkg/monitor → pkg/docker
+                                     → pkg/cmdexec
+                       → pkg/probe   → pkg/docker
+                                     → pkg/monitor
+                       → pkg/retry
+                       → pkg/slurm   → pkg/docker
+                       → pkg/ssh     → pkg/docker
                        → pkg/nodeset
-</code></pre><p>The <code>pkg/cmdexec</code> package provides the executor abstraction at the bottom of the stack. <code>pkg/docker</code> wraps Docker CLI commands and <code>pkg/mesh</code> uses a separate executor for system commands (resolvectl, systemctl). The <code>pkg/cluster</code> package orchestrates everything. The <code>internal/mock</code> and <code>internal/testutil</code> packages are test-only and not part of the production dependency graph.</p>
+</code></pre><p>The <code>pkg/cmdexec</code> package provides the executor abstraction at the bottom of the stack. <code>pkg/docker</code> wraps Docker CLI commands and <code>pkg/mesh</code> uses a separate executor for system commands (resolvectl, systemctl). The <code>pkg/cluster</code> package orchestrates everything. <code>pkg/doctor</code> runs host prerequisite checks directly from <code>cmd/sind</code> (no cluster orchestration). <code>pkg/monitor</code> streams Docker and systemd events for event-driven readiness. <code>pkg/retry</code> is a leaf helper used wherever dockerd async cleanup requires retry. The <code>internal/mock</code> and <code>internal/testutil</code> packages are test-only and not part of the production dependency graph.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="adding-a-new-cli-command"
     >

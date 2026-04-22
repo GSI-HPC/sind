@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-04-22T14:34:33+02:00"
+      content="2026-04-22T15:40:21+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/cluster-lifecycle/",
       "headline": "Cluster Lifecycle",
       "description": "Creating, listing, and deleting clusters",
-      "wordCount": "365",
+      "wordCount": "394",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-22T14:34:33.00Z",
+      "dateModified": "2026-04-22T15:40:21.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2088,7 +2088,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster <span class="o">[</span>NAME<span class="o">]</span> <span class="o">[</span>--config FILE<span class="o">]</span> <span class="o">[</span>--pull<span class="o">]</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster <span class="o">[</span>NAME<span class="o">]</span> <span class="o">[</span>--config FILE<span class="o">]</span> <span class="o">[</span>--pull<span class="o">]</span> <span class="o">[</span>--data PATH<span class="p">|</span>volume<span class="o">]</span>
 </span></span></code></pre></div><div class="table-wrap"> <table>
   <thead>
       <tr>
@@ -2112,6 +2112,11 @@
           <td><code>--pull</code></td>
           <td><code>false</code></td>
           <td>Pull images before creating containers</td>
+      </tr>
+      <tr>
+          <td><code>--data</code></td>
+          <td><code>.</code></td>
+          <td>Host directory to mount at <code>/data</code> on all nodes, or <code>volume</code> to use a Docker volume. Ignored if the config file already specifies data storage.</td>
       </tr>
   </tbody>
 </table> </div>

@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-03-30T15:34:18+02:00"
+      content="2026-04-22T15:40:21+02:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/worker-management/",
       "headline": "Worker Management",
       "description": "Dynamically adding and removing worker nodes",
-      "wordCount": "222",
+      "wordCount": "249",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-30T15:34:18.00Z",
+      "dateModified": "2026-04-22T15:40:21.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2132,6 +2132,26 @@
           <td><code>--pull</code></td>
           <td><code>false</code></td>
           <td>Pull images before creating containers</td>
+      </tr>
+      <tr>
+          <td><code>--cap-add</code></td>
+          <td>none</td>
+          <td>Add Linux capability (repeatable; e.g. <code>SYS_ADMIN</code>)</td>
+      </tr>
+      <tr>
+          <td><code>--cap-drop</code></td>
+          <td>none</td>
+          <td>Drop Linux capability (repeatable)</td>
+      </tr>
+      <tr>
+          <td><code>--device</code></td>
+          <td>none</td>
+          <td>Expose host device (repeatable; e.g. <code>/dev/fuse</code>)</td>
+      </tr>
+      <tr>
+          <td><code>--security-opt</code></td>
+          <td>none</td>
+          <td>Security option (repeatable)</td>
       </tr>
   </tbody>
 </table> </div>
