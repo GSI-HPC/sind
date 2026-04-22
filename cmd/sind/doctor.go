@@ -48,7 +48,7 @@ func runDoctor(cmd *cobra.Command) error {
 	mountPath, hasV2, hasNsd := doctor.CgroupInfo(fs)
 	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd)
 	if !hasV2 {
-		printResult(cmd, false, "cgroup: v2 not mounted (sind requires cgroupv2)")
+		printResult(cmd, false, "cgroupv2: not mounted (sind requires cgroupv2)")
 		failures = append(failures, "cgroup")
 	} else if !hasNsd {
 		printResult(cmd, false, "cgroupv2: nsdelegate not found")

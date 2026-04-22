@@ -148,7 +148,7 @@ func TestDoctorCommand_CgroupMissing(t *testing.T) {
 
 	err := cmd.Execute()
 	require.EqualError(t, err, "checks failed: cgroup")
-	assert.Contains(t, out.String(), "v2 not mounted")
+	assert.Contains(t, out.String(), "cgroupv2: not mounted")
 }
 
 func TestDoctorCommand_CgroupNsdelegateMissing(t *testing.T) {
