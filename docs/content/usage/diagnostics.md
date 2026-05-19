@@ -78,7 +78,7 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:28.438 INFO ensuring mesh infrastructure realm=sind
 00:13:28.826 INFO creating cluster name=dev nodes=3
 00:13:28.921 DEBU preflight check passed
-00:13:29.382 INFO resolved infrastructure slurm=25.11.4
+00:13:29.382 INFO resolved infrastructure slurm=25.11.6
 00:13:30.149 DEBU cluster resources created
 00:13:30.621 DEBU waiting for node node=controller
 00:13:30.622 DEBU waiting for node node=worker-0
@@ -112,7 +112,7 @@ Displays detailed health information:
 
 ```
 CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.4   running (3/0/0/3)
+dev       25.11.6   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
