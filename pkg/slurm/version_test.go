@@ -82,7 +82,7 @@ func TestDiscoverVersionLifecycle(t *testing.T) {
 	image := "ghcr.io/gsi-hpc/sind-node:latest"
 
 	if !rec.IsIntegration() {
-		rec.AddResult("slurm 25.11.4\n", "", nil)
+		rec.AddResult("slurm 25.11.6\n", "", nil)
 	}
 
 	version, err := DiscoverVersion(t.Context(), c, image, false)

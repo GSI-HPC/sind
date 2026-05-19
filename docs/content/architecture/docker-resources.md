@@ -67,5 +67,5 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
-| `sind.slurm.version` | `25.11.4` | Slurm version |
+| `sind.slurm.version` | `25.11.6` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |

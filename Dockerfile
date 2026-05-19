@@ -118,7 +118,7 @@ RUN tar xf prrte.tar.bz2 && \
 # ==============================================================================
 FROM builder-base AS slurm-builder
 
-ARG SLURM_VERSION=25.11.4
+ARG SLURM_VERSION=25.11.6
 
 # PMIx headers and libraries are needed for Slurm's PMIx launch plugin.
 COPY --from=pmix-builder /install/usr /usr
@@ -135,7 +135,7 @@ RUN dnf -y install \
 
 # Fetch the Slurm source tarball with integrity verification.
 # The checksum must be updated when SLURM_VERSION changes.
-ADD --checksum=sha256:237f515adcb37b99ff6cb3e1fa81691a5f7188e94c3b6b495858b4eaecf6531d \
+ADD --checksum=sha256:6695aee51a36799917a4db4b1d787610af926b27b17c2e4246bf14c0fd029664 \
     https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2 /tmp/slurm.tar.bz2
 
 # Configure and install Slurm into a staging root so only the built
@@ -193,7 +193,7 @@ RUN tar xf openmpi.tar.bz2 && \
 # ==============================================================================
 FROM quay.io/rockylinux/rockylinux:10
 
-ARG SLURM_VERSION=25.11.4
+ARG SLURM_VERSION=25.11.6
 ARG UCX_VERSION=1.20.0
 ARG PMIX_VERSION=6.1.0
 ARG PRRTE_VERSION=4.1.0

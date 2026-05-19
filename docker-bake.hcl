@@ -11,7 +11,7 @@ variable "IMAGE_NAME" {
 # Must match the ARG defaults in the Dockerfile. Pinned here because the
 # Dockerfile checksums are coupled to these exact versions.
 variable "SLURM_VERSION" {
-  default = "25.11.4"
+  default = "25.11.6"
 }
 
 variable "UCX_VERSION" {
