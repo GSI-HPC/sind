@@ -70,16 +70,13 @@ func TestMeshLifecycle(t *testing.T) {
 		rec.AddResult("[{}]\n", "", nil) // SSH vol
 		rec.AddResult("[{}]\n", "", nil) // SSH
 
-		// CleanupMesh: remove keygen (gone), SSH, DNS, network, volume
-		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // keygen exists → no
-		rec.AddResult("[{}]\n", "", nil)                    // SSH exists
+		// CleanupMesh: direct rm -f / network rm / volume rm; missing keygen
+		// is swallowed via IsNotFound.
+		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // rm -f keygen → not found
 		rec.AddResult("sind-ssh\n", "", nil)                // rm -f SSH
-		rec.AddResult("[{}]\n", "", nil)                    // DNS exists
 		rec.AddResult("sind-dns\n", "", nil)                // rm -f DNS
-		rec.AddResult("[{}]\n", "", nil)                    // network exists
-		rec.AddResult("sind-mesh\n", "", nil)               // rm network
-		rec.AddResult("[{}]\n", "", nil)                    // SSH vol exists
-		rec.AddResult("sind-ssh-config\n", "", nil)         // rm SSH vol
+		rec.AddResult("sind-mesh\n", "", nil)               // network rm
+		rec.AddResult("sind-ssh-config\n", "", nil)         // volume rm
 
 		// Verify: all gone
 		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // network
@@ -314,19 +311,15 @@ func TestEnsureMesh_SSHContainerError(t *testing.T) {
 
 func TestCleanupMesh(t *testing.T) {
 	var m mock.Executor
-	// removeContainerIfExists(keygen): not found
+	// rm -f keygen: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// removeContainerIfExists(SSH): exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
+	// rm -f SSH: success
 	m.AddResult("sind-ssh\n", "", nil)
-	// removeContainerIfExists(DNS): exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
+	// rm -f DNS: success
 	m.AddResult("sind-dns\n", "", nil)
-	// removeNetworkIfExists: exists, remove
-	m.AddResult("[{}]\n", "", nil)
+	// network rm: success
 	m.AddResult("sind-mesh\n", "", nil)
-	// removeVolumeIfExists: exists, remove
-	m.AddResult("[{}]\n", "", nil)
+	// volume rm: success
 	m.AddResult("sind-ssh-config\n", "", nil)
 
 	c := docker.NewClient(&m)
@@ -335,21 +328,18 @@ func TestCleanupMesh(t *testing.T) {
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
-	// Verify order: keygen container, SSH container, DNS container, network, volume.
-	assert.Equal(t, []string{"container", "inspect", "sind-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"container", "inspect", string(SSHContainerName)}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", string(SSHContainerName)}, m.Calls[2].Args)
-	assert.Equal(t, []string{"container", "inspect", string(DNSContainerName)}, m.Calls[3].Args)
-	assert.Equal(t, []string{"rm", "-f", string(DNSContainerName)}, m.Calls[4].Args)
-	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[5].Args)
-	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[6].Args)
-	assert.Equal(t, []string{"volume", "inspect", string(SSHVolumeName)}, m.Calls[7].Args)
-	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[8].Args)
+	// Verify order: keygen, SSH, DNS, network, volume.
+	require.Len(t, m.Calls, 5)
+	assert.Equal(t, []string{"rm", "-f", "sind-ssh-keygen"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "-f", string(SSHContainerName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", "-f", string(DNSContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[4].Args)
 }
 
 func TestCleanupMesh_NoneExist(t *testing.T) {
 	var m mock.Executor
-	// All five exist checks return not found (keygen, SSH, DNS, network, volume).
+	// All five remove ops return not found (IsNotFound, swallowed).
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
@@ -361,14 +351,14 @@ func TestCleanupMesh_NoneExist(t *testing.T) {
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
-	assert.Len(t, m.Calls, 5) // only exist checks, no removes
+	assert.Len(t, m.Calls, 5)
 }
 
 func TestCleanupMesh_SSHContainerError(t *testing.T) {
 	var m mock.Executor
-	// keygen: not found
+	// keygen rm: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH: connection refused
+	// SSH rm: real (non-IsNotFound) error
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -380,11 +370,11 @@ func TestCleanupMesh_SSHContainerError(t *testing.T) {
 
 func TestCleanupMesh_DNSContainerError(t *testing.T) {
 	var m mock.Executor
-	// keygen: not found
+	// keygen rm: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH container doesn't exist
+	// SSH rm: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// DNS container check fails
+	// DNS rm: real (non-IsNotFound) error
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -396,10 +386,10 @@ func TestCleanupMesh_DNSContainerError(t *testing.T) {
 
 func TestCleanupMesh_NetworkError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS
-	m.AddResult("", "", fmt.Errorf("connection refused")) // network
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen rm (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH rm (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS rm (swallowed)
+	m.AddResult("", "", fmt.Errorf("connection refused")) // network rm: real error
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -408,28 +398,13 @@ func TestCleanupMesh_NetworkError(t *testing.T) {
 	assert.Contains(t, err.Error(), "removing mesh network")
 }
 
-func TestCleanupMesh_RemoveContainerError(t *testing.T) {
-	var m mock.Executor
-	// keygen: not found
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH container: exists, rm -f fails
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("", "Error: removal in progress\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.CleanupMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "removing SSH container")
-}
-
 func TestCleanupMesh_VolumeError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // network
-	m.AddResult("", "", fmt.Errorf("connection refused")) // volume
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // network (swallowed)
+	m.AddResult("", "", fmt.Errorf("connection refused")) // volume: real error
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -1235,35 +1210,23 @@ func TestCustomRealm_EnsureSSH(t *testing.T) {
 
 func TestCustomRealm_CleanupMesh(t *testing.T) {
 	var m mock.Executor
-	// keygen container: not found
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH container: exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-ssh\n", "", nil)
-	// DNS container: exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-dns\n", "", nil)
-	// Network: exists, remove
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-mesh\n", "", nil)
-	// Volume: exists, remove
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-ssh-config\n", "", nil)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t)) // keygen rm: not found (swallowed)
+	m.AddResult("myrealm-ssh\n", "", nil)             // SSH rm
+	m.AddResult("myrealm-dns\n", "", nil)             // DNS rm
+	m.AddResult("myrealm-mesh\n", "", nil)            // network rm
+	m.AddResult("myrealm-ssh-config\n", "", nil)      // volume rm
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, "myrealm")
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"container", "inspect", "myrealm-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"container", "inspect", "myrealm-ssh"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"container", "inspect", "myrealm-dns"}, m.Calls[3].Args)
-	assert.Equal(t, []string{"rm", "-f", "myrealm-dns"}, m.Calls[4].Args)
-	assert.Equal(t, []string{"network", "inspect", "myrealm-mesh"}, m.Calls[5].Args)
-	assert.Equal(t, []string{"network", "rm", "myrealm-mesh"}, m.Calls[6].Args)
-	assert.Equal(t, []string{"volume", "inspect", "myrealm-ssh-config"}, m.Calls[7].Args)
-	assert.Equal(t, []string{"volume", "rm", "myrealm-ssh-config"}, m.Calls[8].Args)
+	require.Len(t, m.Calls, 5)
+	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh-keygen"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", "-f", "myrealm-dns"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "rm", "myrealm-mesh"}, m.Calls[3].Args)
+	assert.Equal(t, []string{"volume", "rm", "myrealm-ssh-config"}, m.Calls[4].Args)
 }
 
 // dnsInspectJSON returns a mock docker inspect result for the DNS container on the mesh network.

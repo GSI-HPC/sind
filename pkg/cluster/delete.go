@@ -80,9 +80,8 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	}
 
 	// Remove DNS records and known_hosts entries before deleting containers.
-	if err := DeregisterMesh(ctx, meshMgr, clusterName, res.Containers); err != nil {
-		return err
-	}
+	// Failures are logged inside DeregisterMesh; the teardown continues.
+	_ = DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 
 	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
 	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
@@ -105,50 +104,78 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	return nil
 }
 
-// DeleteContainers force-removes the given containers in parallel (docker rm -f).
+// DeleteContainers force-removes the given containers in parallel
+// (docker rm -f). A container that is already gone is logged and treated as
+// success — the caller asked for the resource removed, not for a particular
+// state transition.
 func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
+	log := sindlog.From(ctx)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, c := range containers {
 		g.Go(func() error {
-			if err := client.RemoveContainer(gctx, c.Name); err != nil {
-				return fmt.Errorf("removing container %s: %w", c.Name, err)
+			err := client.RemoveContainer(gctx, c.Name)
+			if err == nil {
+				return nil
 			}
-			return nil
+			if docker.IsNotFound(err) {
+				log.WarnContext(gctx, "container already gone, skipping",
+					"name", string(c.Name))
+				return nil
+			}
+			return fmt.Errorf("removing container %s: %w", c.Name, err)
 		})
 	}
 	return g.Wait()
 }
 
-// DeleteNetwork removes the cluster network.
+// DeleteNetwork removes the cluster network. A network that is already gone
+// is logged and treated as success.
 func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.NetworkName) error {
-	if err := client.RemoveNetwork(ctx, name); err != nil {
-		return fmt.Errorf("removing network %s: %w", name, err)
+	err := client.RemoveNetwork(ctx, name)
+	if err == nil {
+		return nil
 	}
-	return nil
+	if docker.IsNotFound(err) {
+		sindlog.From(ctx).WarnContext(ctx, "network already gone, skipping",
+			"name", string(name))
+		return nil
+	}
+	return fmt.Errorf("removing network %s: %w", name, err)
 }
 
 // DeleteVolumes removes the given cluster volumes. Each removal retries past
-// the dockerd async-cleanup race that follows `docker rm -f`.
+// the dockerd async-cleanup race that follows `docker rm -f`. A volume that
+// is already gone is logged and treated as success.
 func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
+	log := sindlog.From(ctx)
 	for _, v := range volumes {
 		err := retry.Do(ctx,
 			func() error { return client.RemoveVolume(ctx, v) },
 			docker.IsVolumeInUse,
 			6, 100*time.Millisecond)
-		if err != nil {
-			return fmt.Errorf("removing volume %s: %w", v, err)
+		if err == nil {
+			continue
 		}
+		if docker.IsNotFound(err) {
+			log.WarnContext(ctx, "volume already gone, skipping", "name", string(v))
+			continue
+		}
+		return fmt.Errorf("removing volume %s: %w", v, err)
 	}
 	return nil
 }
 
 // DeregisterMesh removes DNS records and known_hosts entries for all
 // containers in batch. This is the inverse of registerMesh during cluster
-// creation.
+// creation. Failures are logged and swallowed: the cluster is being torn
+// down, and stale entries in a mesh helper that's already unreachable will
+// be overwritten on next register or cleared when the mesh itself is torn
+// down.
 func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {
 	if len(containers) == 0 {
 		return nil
 	}
+	log := sindlog.From(ctx)
 	prefix := ContainerPrefix(meshMgr.Realm, clusterName)
 	hostnames := make([]string, len(containers))
 	for i, c := range containers {
@@ -157,10 +184,10 @@ func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName stri
 	}
 
 	if err := meshMgr.RemoveDNSRecords(ctx, hostnames); err != nil {
-		return fmt.Errorf("removing DNS records: %w", err)
+		log.WarnContext(ctx, "removing DNS records failed, continuing", "error", err)
 	}
 	if err := meshMgr.RemoveKnownHosts(ctx, hostnames); err != nil {
-		return fmt.Errorf("removing known hosts: %w", err)
+		log.WarnContext(ctx, "removing known_hosts entries failed, continuing", "error", err)
 	}
 	return nil
 }

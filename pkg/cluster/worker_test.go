@@ -1525,7 +1525,10 @@ func TestWorkerRemove_RemoveNodesConfError(t *testing.T) {
 	assert.Contains(t, err.Error(), "updating sind-nodes.conf")
 }
 
-func TestWorkerRemove_DeregisterMeshError(t *testing.T) {
+// TestWorkerRemove_DeregisterMeshContinuesOnDNSFailure verifies that a DNS
+// update failure during worker removal is logged and swallowed — workers
+// should still be removed.
+func TestWorkerRemove_DeregisterMeshContinuesOnDNSFailure(t *testing.T) {
 	var m mock.Executor
 	inner := workerRemoveOnCall(t, "")
 	m.OnCall = func(args []string, stdin string) mock.Result {
@@ -1538,8 +1541,7 @@ func TestWorkerRemove_DeregisterMeshError(t *testing.T) {
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1"})
-
-	require.Error(t, err)
+	require.NoError(t, err)
 }
 
 // --- Lifecycle ---

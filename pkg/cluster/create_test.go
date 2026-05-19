@@ -533,19 +533,20 @@ func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	// Verify mesh cleanup ran: CleanupMesh calls ContainerExists (container inspect)
-	// for sind-ssh and sind-dns after the cluster cleanup's "docker ps" call.
-	var containerInspectAfterPs int
+	// Verify mesh cleanup ran: CleanupMesh issues `rm -f` for the mesh
+	// helpers after the cluster cleanup's "docker ps" call.
+	var meshRmAfterPs int
 	seenPs := false
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
 			seenPs = true
 		}
-		if seenPs && len(call.Args) >= 2 && call.Args[0] == "container" && call.Args[1] == "inspect" {
-			containerInspectAfterPs++
+		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
+			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			meshRmAfterPs++
 		}
 	}
-	assert.GreaterOrEqual(t, containerInspectAfterPs, 1, "mesh cleanup should check mesh containers")
+	assert.GreaterOrEqual(t, meshRmAfterPs, 1, "mesh cleanup should remove mesh containers")
 }
 
 func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
@@ -570,15 +571,16 @@ func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
 	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	// After the "docker ps" cleanup call, there should be NO container inspect
-	// calls for mesh cleanup.
+	// After the "docker ps" cleanup call, there should be NO mesh-helper
+	// `rm -f` calls.
 	seenPs := false
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
 			seenPs = true
 			continue
 		}
-		if seenPs && len(call.Args) >= 2 && call.Args[0] == "container" && call.Args[1] == "inspect" {
+		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
+			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
 			require.Fail(t, "mesh cleanup should not run when mesh was pre-existing")
 		}
 	}
@@ -629,14 +631,15 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	// Mesh cleanup should run: ContainerExists (container inspect) for mesh containers.
-	var meshInspects int
+	// Mesh cleanup should run: `rm -f` for mesh containers.
+	var meshRm int
 	for _, call := range m.Calls {
-		if len(call.Args) >= 2 && call.Args[0] == "container" && call.Args[1] == "inspect" {
-			meshInspects++
+		if len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
+			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			meshRm++
 		}
 	}
-	assert.GreaterOrEqual(t, meshInspects, 1, "mesh cleanup should run on resolveInfra failure")
+	assert.GreaterOrEqual(t, meshRm, 1, "mesh cleanup should run on resolveInfra failure")
 }
 
 func TestCreate_CleanupResourcesError(t *testing.T) {
@@ -681,8 +684,10 @@ func TestCreate_CleanupMeshError(t *testing.T) {
 			inCleanup = true
 			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
 		}
-		// Make mesh cleanup fail: ContainerExists errors for mesh containers.
-		if inCleanup && args[0] == "container" && args[1] == "inspect" {
+		// Make mesh cleanup fail: rm -f on a mesh container errors with a
+		// non-IsNotFound failure (real docker daemon issue).
+		if inCleanup && args[0] == "rm" && len(args) >= 3 && args[1] == "-f" &&
+			(strings.Contains(args[2], "sind-ssh") || strings.Contains(args[2], "sind-dns")) {
 			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
 		}
 		return mock.Result{}, false
