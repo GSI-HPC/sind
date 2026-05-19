@@ -977,8 +977,12 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 		if args[0] == "cp" && args[1] == "-" {
 			return mock.Result{}
 		}
-		// SignalContainer
-		if args[0] == "kill" {
+		// InspectContainer (state check before DNS reload)
+		if args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns") {
+			return mock.Result{Stdout: dnsRunningInspectJSON}
+		}
+		// SignalContainer / StartContainer
+		if args[0] == "kill" || args[0] == "start" {
 			return mock.Result{}
 		}
 		// AppendFile → ExecWithStdin (exec -i)

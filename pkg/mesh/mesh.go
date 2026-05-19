@@ -455,6 +455,10 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 
 // writeDNSEntries generates a new Corefile, writes it to the container, and
 // sends SIGHUP to reload CoreDNS.
+// writeDNSEntries generates a new Corefile and writes it to the DNS
+// container. If the container is running, it is restarted to pick up the new
+// configuration; if it is not running, the new Corefile will be loaded when
+// it next starts.
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	name := m.DNSContainerName()
 	err := m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
@@ -462,6 +466,14 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("writing DNS Corefile: %w", err)
+	}
+
+	info, err := m.Docker.InspectContainer(ctx, name)
+	if err != nil {
+		return fmt.Errorf("inspecting DNS container: %w", err)
+	}
+	if info.Status != docker.StateRunning {
+		return nil
 	}
 
 	if err := m.Docker.KillContainer(ctx, name); err != nil {

@@ -189,8 +189,16 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 		if len(args) >= 2 && args[0] == "cp" && args[1] == "-" {
 			return mock.Result{}
 		}
+		// InspectContainer (state check) → running
+		if len(args) >= 2 && args[0] == "inspect" && strings.Contains(args[1], "sind-dns") {
+			return mock.Result{Stdout: dnsRunningInspectJSON}
+		}
 		// Signal DNS → success
 		if len(args) >= 2 && args[0] == "kill" {
+			return mock.Result{}
+		}
+		// Start DNS → success
+		if len(args) >= 2 && args[0] == "start" {
 			return mock.Result{}
 		}
 		// ReadFile (known_hosts via exec cat) → fail
@@ -450,6 +458,11 @@ func indexOf(slice []string, s string) int {
 	return -1
 }
 
+// dnsRunningInspectJSON is a mock docker inspect result reporting the
+// sind-dns container as running. Used by DeregisterMesh tests to satisfy the
+// container-state check that gates the DNS reload.
+const dnsRunningInspectJSON = `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
+
 // meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecord
 // and RemoveKnownHost operations for DeregisterMesh tests.
 func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.Result {
@@ -464,8 +477,14 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.
 		// CopyToContainer: docker cp - sind-dns:/
 		case args[0] == "cp" && len(args) >= 2 && args[1] == "-":
 			return mock.Result{}
+		// InspectContainer: docker inspect sind-dns (state check before reload)
+		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
+			return mock.Result{Stdout: dnsRunningInspectJSON}
 		// Signal: docker kill -s HUP sind-dns
 		case args[0] == "kill":
+			return mock.Result{}
+		// Start: docker start sind-dns (DNS reload)
+		case args[0] == "start":
 			return mock.Result{}
 		// ReadFile: docker exec sind-ssh cat /root/.ssh/known_hosts
 		case args[0] == "exec" && len(args) >= 3 && args[2] == "cat":
@@ -586,8 +605,16 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 			}
 			return mock.Result{}
 
+		// docker inspect sind-dns (state check before DNS reload)
+		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
+			return mock.Result{Stdout: dnsRunningInspectJSON}
+
 		// docker kill -s HUP (DNS reload)
 		case args[0] == "kill":
+			return mock.Result{}
+
+		// docker start sind-dns (DNS reload)
+		case args[0] == "start":
 			return mock.Result{}
 
 		// docker exec (known_hosts read/write for DeregisterMesh or CleanupMesh)

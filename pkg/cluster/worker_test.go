@@ -633,6 +633,9 @@ func workerRemoveOnCall(t *testing.T, nodesConf string) func([]string, string) m
 		// DNS: CopyToContainer / signal
 		case args[0] == "cp":
 			return mock.Result{}
+		// DNS: InspectContainer (state check before reload)
+		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
+			return mock.Result{Stdout: dnsRunningInspectJSON}
 		case args[0] == "kill":
 			return mock.Result{}
 
@@ -1022,7 +1025,9 @@ func TestWorkerRemove_NoController(t *testing.T) {
 			return mock.Result{Stdout: emptyCorefileTar()}
 		case args[0] == "cp":
 			return mock.Result{}
-		case args[0] == "kill":
+		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
+			return mock.Result{Stdout: dnsRunningInspectJSON}
+		case args[0] == "kill" || args[0] == "start":
 			return mock.Result{}
 		case args[0] == "exec" && args[1] == "sind-ssh":
 			return mock.Result{Stdout: "worker-0.dev.sind.sind ssh-ed25519 AAAA\n"}
