@@ -633,6 +633,9 @@ func workerRemoveOnCall(t *testing.T, nodesConf string) func([]string, string) m
 		// DNS: CopyToContainer / signal
 		case args[0] == "cp":
 			return mock.Result{}
+		// DNS: InspectContainer (state check before reload)
+		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
+			return mock.Result{Stdout: dnsRunningInspectJSON}
 		case args[0] == "kill":
 			return mock.Result{}
 
@@ -1022,7 +1025,9 @@ func TestWorkerRemove_NoController(t *testing.T) {
 			return mock.Result{Stdout: emptyCorefileTar()}
 		case args[0] == "cp":
 			return mock.Result{}
-		case args[0] == "kill":
+		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
+			return mock.Result{Stdout: dnsRunningInspectJSON}
+		case args[0] == "kill" || args[0] == "start":
 			return mock.Result{}
 		case args[0] == "exec" && args[1] == "sind-ssh":
 			return mock.Result{Stdout: "worker-0.dev.sind.sind ssh-ed25519 AAAA\n"}
@@ -1520,7 +1525,10 @@ func TestWorkerRemove_RemoveNodesConfError(t *testing.T) {
 	assert.Contains(t, err.Error(), "updating sind-nodes.conf")
 }
 
-func TestWorkerRemove_DeregisterMeshError(t *testing.T) {
+// TestWorkerRemove_DeregisterMeshContinuesOnDNSFailure verifies that a DNS
+// update failure during worker removal is logged and swallowed — workers
+// should still be removed.
+func TestWorkerRemove_DeregisterMeshContinuesOnDNSFailure(t *testing.T) {
 	var m mock.Executor
 	inner := workerRemoveOnCall(t, "")
 	m.OnCall = func(args []string, stdin string) mock.Result {
@@ -1533,8 +1541,7 @@ func TestWorkerRemove_DeregisterMeshError(t *testing.T) {
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1"})
-
-	require.Error(t, err)
+	require.NoError(t, err)
 }
 
 // --- Lifecycle ---

@@ -158,43 +158,39 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 }
 
 // removeContainerIfExists stops and removes a container if it exists.
+// removeContainerIfExists removes a container, treating "not found" as
+// success so the delete path survives a TOCTOU race or a user-driven manual
+// removal.
 func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.ContainerName) error {
-	exists, err := m.Docker.ContainerExists(ctx, name)
-	if err != nil {
+	if err := m.Docker.RemoveContainer(ctx, name); err != nil && !docker.IsNotFound(err) {
 		return err
 	}
-	if !exists {
-		return nil
-	}
-	return m.Docker.RemoveContainer(ctx, name)
+	return nil
 }
 
 // removeNetworkIfExists removes a network if it exists.
+// removeNetworkIfExists removes a network, treating "not found" as success.
 func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.NetworkName) error {
-	exists, err := m.Docker.NetworkExists(ctx, name)
-	if err != nil {
+	if err := m.Docker.RemoveNetwork(ctx, name); err != nil && !docker.IsNotFound(err) {
 		return err
 	}
-	if !exists {
-		return nil
-	}
-	return m.Docker.RemoveNetwork(ctx, name)
+	return nil
 }
 
 // removeVolumeIfExists removes a volume if it exists, retrying past the
 // dockerd async-cleanup race that follows `docker rm -f`.
+// removeVolumeIfExists removes a volume, retrying past the dockerd
+// async-cleanup race that follows `docker rm -f`, and treating "not found"
+// as success.
 func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeName) error {
-	exists, err := m.Docker.VolumeExists(ctx, name)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return nil
-	}
-	return retry.Do(ctx,
+	err := retry.Do(ctx,
 		func() error { return m.Docker.RemoveVolume(ctx, name) },
 		docker.IsVolumeInUse,
 		6, 100*time.Millisecond)
+	if err != nil && !docker.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 // Created reports whether EnsureMesh created new mesh infrastructure in this
@@ -455,6 +451,19 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 
 // writeDNSEntries generates a new Corefile, writes it to the container, and
 // sends SIGHUP to reload CoreDNS.
+// writeDNSEntries generates a new Corefile and writes it to the DNS
+// container. If the container is running, it is restarted to pick up the new
+// configuration; if it is not running, the new Corefile will be loaded when
+// it next starts.
+// writeDNSEntries generates a new Corefile and writes it to the DNS
+// container. A missing DNS container is treated as a no-op (the mesh is
+// being torn down or the user removed it manually). A stopped container
+// has its Corefile updated but no reload kick; CoreDNS will load the new
+// config on next start.
+// writeDNSEntries generates a new Corefile and writes it to the DNS
+// container. If the container is running, it is restarted to pick up the new
+// configuration; if it is not running, the new Corefile will be loaded when
+// it next starts.
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	name := m.DNSContainerName()
 	err := m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
@@ -462,6 +471,14 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("writing DNS Corefile: %w", err)
+	}
+
+	info, err := m.Docker.InspectContainer(ctx, name)
+	if err != nil {
+		return fmt.Errorf("inspecting DNS container: %w", err)
+	}
+	if info.Status != docker.StateRunning {
+		return nil
 	}
 
 	if err := m.Docker.KillContainer(ctx, name); err != nil {

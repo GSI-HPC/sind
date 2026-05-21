@@ -78,10 +78,9 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		// If ReadFile fails, sind-nodes.conf doesn't exist → treat as unmanaged.
 	}
 
-	// Deregister DNS + known_hosts.
-	if err := DeregisterMesh(ctx, meshMgr, clusterName, targets); err != nil {
-		return err
-	}
+	// Deregister DNS + known_hosts. Failures are logged inside DeregisterMesh;
+	// worker removal continues.
+	_ = DeregisterMesh(ctx, meshMgr, clusterName, targets)
 
 	// Stop + remove containers.
 	return DeleteContainers(ctx, client, targets)

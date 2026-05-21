@@ -70,16 +70,13 @@ func TestMeshLifecycle(t *testing.T) {
 		rec.AddResult("[{}]\n", "", nil) // SSH vol
 		rec.AddResult("[{}]\n", "", nil) // SSH
 
-		// CleanupMesh: remove keygen (gone), SSH, DNS, network, volume
-		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // keygen exists → no
-		rec.AddResult("[{}]\n", "", nil)                    // SSH exists
+		// CleanupMesh: direct rm -f / network rm / volume rm; missing keygen
+		// is swallowed via IsNotFound.
+		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // rm -f keygen → not found
 		rec.AddResult("sind-ssh\n", "", nil)                // rm -f SSH
-		rec.AddResult("[{}]\n", "", nil)                    // DNS exists
 		rec.AddResult("sind-dns\n", "", nil)                // rm -f DNS
-		rec.AddResult("[{}]\n", "", nil)                    // network exists
-		rec.AddResult("sind-mesh\n", "", nil)               // rm network
-		rec.AddResult("[{}]\n", "", nil)                    // SSH vol exists
-		rec.AddResult("sind-ssh-config\n", "", nil)         // rm SSH vol
+		rec.AddResult("sind-mesh\n", "", nil)               // network rm
+		rec.AddResult("sind-ssh-config\n", "", nil)         // volume rm
 
 		// Verify: all gone
 		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // network
@@ -158,21 +155,24 @@ func TestDNSRecordLifecycle(t *testing.T) {
 		rec.AddResult("ssh-id\n", "", nil)                  // create SSH
 		rec.AddResult("sind-ssh\n", "", nil)                // start SSH
 
-		// AddDNSRecord "a": read → write → kill → start
+		// AddDNSRecord "a": read → write → inspect → kill → start
 		rec.AddResult(corefileTar(t, nil), "", nil)
 		rec.AddResult("", "", nil)
+		rec.AddResult(dnsInspectJSON(), "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 
-		// AddDNSRecord "b": read → write → kill → start
+		// AddDNSRecord "b": read → write → inspect → kill → start
 		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.sind"}), "", nil)
 		rec.AddResult("", "", nil)
+		rec.AddResult(dnsInspectJSON(), "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 
-		// RemoveDNSRecord "a": read → write → kill → start
+		// RemoveDNSRecord "a": read → write → inspect → kill → start
 		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.sind", "172.18.0.3 b.test.sind.sind"}), "", nil)
 		rec.AddResult("", "", nil)
+		rec.AddResult(dnsInspectJSON(), "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 		rec.AddResult("sind-dns\n", "", nil)
 
@@ -311,19 +311,15 @@ func TestEnsureMesh_SSHContainerError(t *testing.T) {
 
 func TestCleanupMesh(t *testing.T) {
 	var m mock.Executor
-	// removeContainerIfExists(keygen): not found
+	// rm -f keygen: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// removeContainerIfExists(SSH): exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
+	// rm -f SSH: success
 	m.AddResult("sind-ssh\n", "", nil)
-	// removeContainerIfExists(DNS): exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
+	// rm -f DNS: success
 	m.AddResult("sind-dns\n", "", nil)
-	// removeNetworkIfExists: exists, remove
-	m.AddResult("[{}]\n", "", nil)
+	// network rm: success
 	m.AddResult("sind-mesh\n", "", nil)
-	// removeVolumeIfExists: exists, remove
-	m.AddResult("[{}]\n", "", nil)
+	// volume rm: success
 	m.AddResult("sind-ssh-config\n", "", nil)
 
 	c := docker.NewClient(&m)
@@ -332,21 +328,18 @@ func TestCleanupMesh(t *testing.T) {
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
-	// Verify order: keygen container, SSH container, DNS container, network, volume.
-	assert.Equal(t, []string{"container", "inspect", "sind-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"container", "inspect", string(SSHContainerName)}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", string(SSHContainerName)}, m.Calls[2].Args)
-	assert.Equal(t, []string{"container", "inspect", string(DNSContainerName)}, m.Calls[3].Args)
-	assert.Equal(t, []string{"rm", "-f", string(DNSContainerName)}, m.Calls[4].Args)
-	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[5].Args)
-	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[6].Args)
-	assert.Equal(t, []string{"volume", "inspect", string(SSHVolumeName)}, m.Calls[7].Args)
-	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[8].Args)
+	// Verify order: keygen, SSH, DNS, network, volume.
+	require.Len(t, m.Calls, 5)
+	assert.Equal(t, []string{"rm", "-f", "sind-ssh-keygen"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "-f", string(SSHContainerName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", "-f", string(DNSContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[4].Args)
 }
 
 func TestCleanupMesh_NoneExist(t *testing.T) {
 	var m mock.Executor
-	// All five exist checks return not found (keygen, SSH, DNS, network, volume).
+	// All five remove ops return not found (IsNotFound, swallowed).
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
@@ -358,14 +351,14 @@ func TestCleanupMesh_NoneExist(t *testing.T) {
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
-	assert.Len(t, m.Calls, 5) // only exist checks, no removes
+	assert.Len(t, m.Calls, 5)
 }
 
 func TestCleanupMesh_SSHContainerError(t *testing.T) {
 	var m mock.Executor
-	// keygen: not found
+	// keygen rm: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH: connection refused
+	// SSH rm: real (non-IsNotFound) error
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -377,11 +370,11 @@ func TestCleanupMesh_SSHContainerError(t *testing.T) {
 
 func TestCleanupMesh_DNSContainerError(t *testing.T) {
 	var m mock.Executor
-	// keygen: not found
+	// keygen rm: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH container doesn't exist
+	// SSH rm: not found (swallowed)
 	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// DNS container check fails
+	// DNS rm: real (non-IsNotFound) error
 	m.AddResult("", "", fmt.Errorf("connection refused"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -393,10 +386,10 @@ func TestCleanupMesh_DNSContainerError(t *testing.T) {
 
 func TestCleanupMesh_NetworkError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS
-	m.AddResult("", "", fmt.Errorf("connection refused")) // network
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen rm (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH rm (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS rm (swallowed)
+	m.AddResult("", "", fmt.Errorf("connection refused")) // network rm: real error
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -405,28 +398,13 @@ func TestCleanupMesh_NetworkError(t *testing.T) {
 	assert.Contains(t, err.Error(), "removing mesh network")
 }
 
-func TestCleanupMesh_RemoveContainerError(t *testing.T) {
-	var m mock.Executor
-	// keygen: not found
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH container: exists, rm -f fails
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("", "Error: removal in progress\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.CleanupMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "removing SSH container")
-}
-
 func TestCleanupMesh_VolumeError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // network
-	m.AddResult("", "", fmt.Errorf("connection refused")) // volume
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // keygen (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // SSH (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // DNS (swallowed)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t))     // network (swallowed)
+	m.AddResult("", "", fmt.Errorf("connection refused")) // volume: real error
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -640,6 +618,8 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	m.AddResult(corefileTar(t, nil), "", nil)
 	// CopyToContainer → success
 	m.AddResult("", "", nil)
+	// InspectContainer → running
+	m.AddResult(dnsInspectJSON(), "", nil)
 	// KillContainer → success
 	m.AddResult("sind-dns\n", "", nil)
 	// StartContainer → success
@@ -650,15 +630,16 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
 	require.NoError(t, err)
 
-	require.Len(t, m.Calls, 4)
+	require.Len(t, m.Calls, 5)
 	// Verify read
 	assert.Equal(t, []string{"cp", string(DNSContainerName) + ":/Corefile", "-"}, m.Calls[0].Args)
 	// Verify written Corefile contains the record
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
-	// Verify restart
-	assert.Equal(t, []string{"kill", string(DNSContainerName)}, m.Calls[2].Args)
-	assert.Equal(t, []string{"start", string(DNSContainerName)}, m.Calls[3].Args)
+	// Verify state inspection + restart
+	assert.Equal(t, []string{"inspect", string(DNSContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"kill", string(DNSContainerName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"start", string(DNSContainerName)}, m.Calls[4].Args)
 }
 
 func TestAddDNSRecord_Appends(t *testing.T) {
@@ -667,6 +648,7 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
@@ -707,6 +689,7 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, nil), "", nil)
 	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -720,6 +703,7 @@ func TestAddDNSRecord_RestartError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, nil), "", nil)               // read
 	m.AddResult("", "", nil)                                // write
+	m.AddResult(dnsInspectJSON(), "", nil)                  // inspect → running
 	m.AddResult("sind-dns\n", "", nil)                      // kill succeeds
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1")) // start fails
 	c := docker.NewClient(&m)
@@ -738,6 +722,7 @@ func TestAddDNSRecords(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil) // read
 	m.AddResult("", "", nil)                       // write
+	m.AddResult(dnsInspectJSON(), "", nil)         // inspect → running
 	m.AddResult("sind-dns\n", "", nil)             // kill
 	m.AddResult("sind-dns\n", "", nil)             // start
 	c := docker.NewClient(&m)
@@ -749,8 +734,8 @@ func TestAddDNSRecords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Only 4 docker calls total (read, write, kill, start).
-	require.Len(t, m.Calls, 4)
+	// Five docker calls total (read, write, inspect, kill, start).
+	require.Len(t, m.Calls, 5)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
@@ -767,6 +752,7 @@ func TestAddDNSRecords_Dedup(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil) // read
 	m.AddResult("", "", nil)                       // write
+	m.AddResult(dnsInspectJSON(), "", nil)         // inspect → running
 	m.AddResult("sind-dns\n", "", nil)             // kill
 	m.AddResult("sind-dns\n", "", nil)             // start
 	c := docker.NewClient(&m)
@@ -810,6 +796,7 @@ func TestRemoveDNSRecords(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil) // read
 	m.AddResult("", "", nil)                       // write
+	m.AddResult(dnsInspectJSON(), "", nil)         // inspect → running
 	m.AddResult("sind-dns\n", "", nil)             // kill
 	m.AddResult("sind-dns\n", "", nil)             // start
 	c := docker.NewClient(&m)
@@ -821,8 +808,8 @@ func TestRemoveDNSRecords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Only 4 docker calls total (read, write, kill, start).
-	require.Len(t, m.Calls, 4)
+	// Five docker calls total (read, write, inspect, kill, start).
+	require.Len(t, m.Calls, 5)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.NotContains(t, corefile, "controller.dev.sind.sind")
@@ -861,6 +848,70 @@ func TestRemoveDNSRecords_Empty(t *testing.T) {
 	assert.Empty(t, m.Calls, "no docker calls for empty slice")
 }
 
+// TestRemoveDNSRecords_DNSStopped covers issue #52: deleting a cluster while
+// the sind-dns container is stopped must not fail. The Corefile is rewritten
+// and the running-state check short-circuits the kill/start reload.
+func TestRemoveDNSRecords_DNSStopped(t *testing.T) {
+	existing := []string{
+		"172.18.0.2 controller.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
+	}
+
+	var m mock.Executor
+	m.AddResult(corefileTar(t, existing), "", nil) // read
+	m.AddResult("", "", nil)                       // write
+	m.AddResult(dnsInspectExitedJSON(), "", nil)   // inspect → exited
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.RemoveDNSRecords(t.Context(), []string{"controller.dev.sind.sind"})
+	require.NoError(t, err)
+
+	// Only 3 docker calls (read, write, inspect) — no kill, no start.
+	require.Len(t, m.Calls, 3)
+	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
+	assert.NotContains(t, corefile, "controller.dev.sind.sind")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
+}
+
+// TestRemoveDNSRecords_InspectError verifies that an inspect failure between
+// writing the Corefile and reloading DNS surfaces as a wrapped error.
+func TestRemoveDNSRecords_InspectError(t *testing.T) {
+	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
+
+	var m mock.Executor
+	m.AddResult(corefileTar(t, existing), "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.RemoveDNSRecords(t.Context(), []string{"controller.dev.sind.sind"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "inspecting DNS container")
+}
+
+// TestAddDNSRecords_DNSStopped is the symmetric counterpart: adding records
+// while the DNS container is stopped writes the new Corefile but skips the
+// restart.
+func TestAddDNSRecords_DNSStopped(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(corefileTar(t, nil), "", nil)    // read
+	m.AddResult("", "", nil)                     // write
+	m.AddResult(dnsInspectExitedJSON(), "", nil) // inspect → exited
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddDNSRecords(t.Context(), []DNSRecord{
+		{Hostname: "controller.dev.sind.sind", IP: "172.18.0.2"},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 3)
+	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
+	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
+}
+
 // --- RemoveDNSRecord ---
 
 func TestRemoveDNSRecord(t *testing.T) {
@@ -872,6 +923,7 @@ func TestRemoveDNSRecord(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
@@ -891,6 +943,7 @@ func TestRemoveDNSRecord_LastEntry(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
@@ -912,6 +965,7 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
@@ -930,6 +984,7 @@ func TestRemoveDNSRecord_ReloadError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -949,6 +1004,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
@@ -1154,40 +1210,33 @@ func TestCustomRealm_EnsureSSH(t *testing.T) {
 
 func TestCustomRealm_CleanupMesh(t *testing.T) {
 	var m mock.Executor
-	// keygen container: not found
-	m.AddResult("", "Error\n", testutil.ExitCode1(t))
-	// SSH container: exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-ssh\n", "", nil)
-	// DNS container: exists, rm -f
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-dns\n", "", nil)
-	// Network: exists, remove
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-mesh\n", "", nil)
-	// Volume: exists, remove
-	m.AddResult("[{}]\n", "", nil)
-	m.AddResult("myrealm-ssh-config\n", "", nil)
+	m.AddResult("", "Error\n", testutil.ExitCode1(t)) // keygen rm: not found (swallowed)
+	m.AddResult("myrealm-ssh\n", "", nil)             // SSH rm
+	m.AddResult("myrealm-dns\n", "", nil)             // DNS rm
+	m.AddResult("myrealm-mesh\n", "", nil)            // network rm
+	m.AddResult("myrealm-ssh-config\n", "", nil)      // volume rm
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, "myrealm")
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"container", "inspect", "myrealm-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"container", "inspect", "myrealm-ssh"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"container", "inspect", "myrealm-dns"}, m.Calls[3].Args)
-	assert.Equal(t, []string{"rm", "-f", "myrealm-dns"}, m.Calls[4].Args)
-	assert.Equal(t, []string{"network", "inspect", "myrealm-mesh"}, m.Calls[5].Args)
-	assert.Equal(t, []string{"network", "rm", "myrealm-mesh"}, m.Calls[6].Args)
-	assert.Equal(t, []string{"volume", "inspect", "myrealm-ssh-config"}, m.Calls[7].Args)
-	assert.Equal(t, []string{"volume", "rm", "myrealm-ssh-config"}, m.Calls[8].Args)
+	require.Len(t, m.Calls, 5)
+	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh-keygen"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", "-f", "myrealm-dns"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "rm", "myrealm-mesh"}, m.Calls[3].Args)
+	assert.Equal(t, []string{"volume", "rm", "myrealm-ssh-config"}, m.Calls[4].Args)
 }
 
 // dnsInspectJSON returns a mock docker inspect result for the DNS container on the mesh network.
 func dnsInspectJSON() string {
 	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
+}
+
+// dnsInspectExitedJSON returns a mock docker inspect result for a stopped DNS container.
+func dnsInspectExitedJSON() string {
+	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"exited"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
 }
 
 // --- GetInfo ---
