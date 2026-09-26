@@ -45,7 +45,7 @@
 <meta property="article:section" content="Getting Started" />
     <meta
       property="article:modified_time"
-      content="2026-04-08T15:30:21+02:00"
+      content="2026-09-26T20:01:58+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/getting-started/installation/",
       "headline": "Installation",
       "description": "Prerequisites and installation instructions",
-      "wordCount": "164",
+      "wordCount": "273",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-08T15:30:21.00Z",
+      "dateModified": "2026-09-26T20:01:58.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2099,10 +2099,11 @@
       id="tabs-install-0"
       checked="checked"/>
     <label for="tabs-install-0" class="gdoc-tabs__label">
-      Pre-built binary (linux/amd64)
+      Pre-built binary (Linux)
     </label>
     <div class="gdoc-markdown--nested gdoc-tabs__content">
-      <p>System-wide installation into <code>/usr/local/bin</code>:</p>
+      <p>Releases include binaries for linux/amd64 and linux/arm64. The commands below install the amd64 one; on 64-bit ARM, download <code>sind-linux-arm64</code> instead.</p>
+<p>System-wide installation into <code>/usr/local/bin</code>:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
 </span></span><span class="line"><span class="cl"><span class="c1"># install sets mode 755 and copies to the target directory</span>
 </span></span><span class="line"><span class="cl">sudo install ./sind /usr/local/bin/sind
@@ -2114,7 +2115,12 @@
 if the directory exists at login time. You may need to log out and back in
 after creating it.</p>
 </blockquote>
-</div>
+<p>Each release publishes a <code>checksums.txt</code> and a build provenance attestation for its binaries. Check where a download came from with the <a
+  class="gdoc-markdown__link"
+  href="https://cli.github.com/"
+>GitHub CLI</a>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">gh attestation verify ./sind --repo GSI-HPC/sind
+</span></span></code></pre></div></div>
     <input
       type="radio"
       class="gdoc-tabs__control hidden"
@@ -2122,6 +2128,23 @@ after creating it.</p>
       id="tabs-install-1"
       />
     <label for="tabs-install-1" class="gdoc-tabs__label">
+      mise
+    </label>
+    <div class="gdoc-markdown--nested gdoc-tabs__content">
+      <p>Install the release binary for your platform (linux/amd64 or linux/arm64) with <a
+  class="gdoc-markdown__link"
+  href="https://mise.jdx.dev/"
+>mise</a>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">mise use -g github:GSI-HPC/sind
+</span></span></code></pre></div><p>Drop <code>-g</code> to pin sind in the current project&rsquo;s <code>mise.toml</code> instead. mise checks the download against its published digest and verifies the release&rsquo;s build provenance attestation.</p>
+</div>
+    <input
+      type="radio"
+      class="gdoc-tabs__control hidden"
+      name="tabs-install"
+      id="tabs-install-2"
+      />
+    <label for="tabs-install-2" class="gdoc-tabs__label">
       From source
     </label>
     <div class="gdoc-markdown--nested gdoc-tabs__content">
@@ -2153,7 +2176,8 @@ after creating it.</p>
 </div>
 <p>sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is:</p>
 <pre tabindex="0"><code>ghcr.io/gsi-hpc/sind-node:latest
-</code></pre><p>Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use <code>--pull</code> to force a fresh pull:</p>
+</code></pre><p>It is published for linux/amd64 only. On an arm64 host, use an image built for arm64 instead.</p>
+<p>Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use <code>--pull</code> to force a fresh pull:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster --pull
 </span></span></code></pre></div><p>See <a
   class="gdoc-markdown__link"
