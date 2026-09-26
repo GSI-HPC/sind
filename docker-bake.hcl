@@ -16,8 +16,8 @@ variable "IMAGE_NAME" {
 variable "SLURM_RELEASES" {
   default = [
     {
-      version = "25.11.6"
-      sha256  = "6695aee51a36799917a4db4b1d787610af926b27b17c2e4246bf14c0fd029664"
+      version = "25.11.8"
+      sha256  = "34ace13f81011add6094569d13bfc4006ad8868201c2236e2905443c7e526393"
     },
   ]
 }
@@ -40,7 +40,7 @@ variable "OMPI_VERSION" {
   default = "5.0.10"
 }
 
-# Release line of a Slurm version, e.g. "25.11" for "25.11.6".
+# Release line of a Slurm version, e.g. "25.11" for "25.11.8".
 function "release_line" {
   params = [version]
   result = regex("^[0-9]+\\.[0-9]+", version)
