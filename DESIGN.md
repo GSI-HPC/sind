@@ -167,6 +167,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 - Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
+- Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits non-zero); `NewRootCommand` applies this to every group, including ones added later
 
 ### Argument Conventions
 
