@@ -45,56 +45,45 @@ jobs:
             if timeout 30 sind ssh "$n.diag" -- true 2>/dev/null; then echo "ssh $n: OK"; else echo "ssh $n: DENIED"; fi
           done
 
-      - name: Node state
+      - name: sshd debug log of a denied and an allowed login
         run: |
-          for n in controller worker-0 worker-1 worker-2 worker-3; do
-            echo "===== $n"
-            docker exec "sind-diag-$n" bash -c '
-              capeff=$(awk "/^CapEff/{print \$2}" /proc/self/status)
-              (( 0x$capeff & (1 << 21) )) && echo "CAP_SYS_ADMIN: yes" || echo "CAP_SYS_ADMIN: no"
-              echo "LSM profile: $(cat /proc/self/attr/current 2>/dev/null)"
-              echo "system state: $(systemctl is-system-running)"
-              echo "systemd-user-sessions: $(systemctl is-active systemd-user-sessions)"
-              for f in /run/nologin /etc/nologin /var/run/nologin; do [[ -e $f ]] && echo "present: $f"; done
-              findmnt -n /sys/fs/selinux >/dev/null && echo "selinuxfs: mounted" || echo "selinuxfs: not mounted"
-              chage -l root | head -4
-              journalctl -b --no-pager | grep -Ei "pam|sepermit|nologin|denied|selinux" | tail -12
-            ' || true
+          for short in worker-0 worker-2; do
+            node="sind-diag-$short"
+            docker exec "$node" bash -c 'echo "LogLevel DEBUG3" > /etc/ssh/sshd_config.d/00-debug.conf && systemctl reload sshd && sleep 1'
+            since=$(docker exec "$node" date +%s)
+            timeout 30 sind ssh "$short.diag" -- true 2>/dev/null && r=OK || r=DENIED
+            echo "===== $short: $r"
+            docker exec "$node" journalctl --no-pager -u sshd --since "@$since" | grep -Ei 'pam|account|fatal' | sed 's/^.*sshd-session/sshd-session/' | head -25
           done
 
-      - name: PAM configuration
+      - name: PAM account module subsets on worker-2
         run: |
-          docker exec sind-diag-worker-0 bash -c 'for f in /etc/pam.d/sshd /etc/pam.d/password-auth; do echo "--- $f"; grep -Ev "^\s*(#|$)" "$f"; done'
+          node=sind-diag-worker-2
+          orig=$(docker exec "$node" cat /etc/pam.d/sshd)
+          mapfile -t rest < <(awk '$1 !~ /^-?account$/' <<<"$orig")
+          mods=(pam_sepermit.so pam_nologin.so pam_unix.so)
+          for mask in 0 1 2 3 4 5 6 7; do
+            kept=()
+            for b in 0 1 2; do if (( mask & (1 << b) )); then kept+=("${mods[$b]}"); fi; done
+            { printf '%s\n' "${rest[@]}"
+              for m in "${kept[@]}"; do echo "account required $m"; done
+              echo "account required pam_permit.so"
+            } | docker exec -i "$node" tee /etc/pam.d/sshd >/dev/null
+            if timeout 30 sind ssh worker-2.diag -- true 2>/dev/null; then r="login OK"; else r="denied"; fi
+            echo "account stack [${kept[*]:-} pam_permit.so]: $r"
+          done
+          printf '%s\n' "$orig" | docker exec -i "$node" tee /etc/pam.d/sshd >/dev/null
 
-      - name: Bisect the PAM account stack on failing nodes
+      - name: Environment differences (worker-0 vs worker-2)
         run: |
-          for short in worker-1 worker-2 worker-3; do
-            node="sind-diag-$short"
-            if timeout 30 sind ssh "$short.diag" -- true 2>/dev/null; then echo "===== $short: login OK, nothing to bisect"; continue; fi
-            echo "===== $short: login denied, bisecting"
-            orig=$(docker exec "$node" cat /etc/pam.d/sshd)
-            mapfile -t rest < <(awk '$1 !~ /^-?account$/' <<<"$orig")
-            acct=()
-            while IFS= read -r line; do
-              read -r typ ctl mod _ <<<"$line"
-              [[ "$typ" =~ ^-?account$ ]] || continue
-              if [[ "$ctl" == include || "$ctl" == substack ]]; then
-                mapfile -t -O "${#acct[@]}" acct < <(docker exec "$node" awk '$1 ~ /^-?account$/' "/etc/pam.d/$mod")
-              else
-                acct+=("$line")
-              fi
-            done <<<"$orig"
-            printf '  stack: %s\n' "${acct[@]}"
-            for i in "${!acct[@]}"; do
-              { printf '%s\n' "${rest[@]}"
-                for j in "${!acct[@]}"; do
-                  if [[ "$j" != "$i" ]]; then printf '%s\n' "${acct[$j]}"; fi
-                done
-              } | docker exec -i "$node" tee /etc/pam.d/sshd >/dev/null
-              if timeout 30 sind ssh "$short.diag" -- true 2>/dev/null; then r="login OK"; else r="still denied"; fi
-              echo "  without [${acct[$i]}]: $r"
-            done
-            printf '%s\n' "$orig" | docker exec -i "$node" tee /etc/pam.d/sshd >/dev/null
+          for short in worker-0 worker-2; do
+            echo "===== $short"
+            docker exec "sind-diag-$short" bash -c '
+              echo "sepermit.conf: $(grep -Ev "^\s*(#|$)" /etc/security/sepermit.conf | tr "\n" " ")"
+              echo "pid1 LSM: $(cat /proc/1/attr/current 2>/dev/null)"
+              echo "loginuid: $(cat /proc/self/loginuid)"
+              ls -la /etc/shadow
+            '
           done
 
       - uses: GSI-HPC/sind-action/cleanup@v2
