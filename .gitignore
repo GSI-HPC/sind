@@ -20,10 +20,11 @@ Thumbs.db
 dist/
 .hugo_build.lock
 
-# Agents
+# Agents (shared skills under .claude/skills/ are tracked)
 .serena/
-.claude/
+.claude/*
+!.claude/skills/
 
 PLAN*.md
-CLAUDE.md
+CLAUDE.local.md
 dockmate-debug.log
