@@ -26,7 +26,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 
 ## AI disclosure
 
-Parts of this codebase were developed with the assistance of AI tools. All contributions are reviewed by humans.
+This project is developed with the help of AI coding tools. Since September 2026, changes written by Anthropic's Claude Code agent are committed as `Claude <noreply@anthropic.com>` and/or carry a `Co-Authored-By: Claude …` trailer; earlier AI-assisted commits are not individually marked.
 
 ## License
 
