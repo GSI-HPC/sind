@@ -42,7 +42,7 @@ sind get clusters
 
 ```
 NAME      NODES (S/C/W)   SLURM    STATUS
-default   2 (0/1/1)       25.11    running
+default   2 (0/1/1)       26.05.4  running
 ```
 
 View individual nodes:

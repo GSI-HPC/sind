@@ -26,7 +26,7 @@
 #   /etc/munge  — shared munge key
 #   /data       — user-facing shared data directory
 #
-# Build:
+# Build (one image per Slurm release line in docker-bake.hcl):
 #   docker buildx bake
 
 # ==============================================================================
@@ -118,7 +118,10 @@ RUN tar xf prrte.tar.bz2 && \
 # ==============================================================================
 FROM builder-base AS slurm-builder
 
-ARG SLURM_VERSION=25.11.6
+# Slurm version and the sha256 of its tarball. No defaults: docker-bake.hcl
+# sets both for each image (SLURM_RELEASES).
+ARG SLURM_VERSION
+ARG SLURM_SHA256
 
 # PMIx headers and libraries are needed for Slurm's PMIx launch plugin.
 COPY --from=pmix-builder /install/usr /usr
@@ -134,8 +137,7 @@ RUN dnf -y install \
     && dnf clean all
 
 # Fetch the Slurm source tarball with integrity verification.
-# The checksum must be updated when SLURM_VERSION changes.
-ADD --checksum=sha256:6695aee51a36799917a4db4b1d787610af926b27b17c2e4246bf14c0fd029664 \
+ADD --checksum=sha256:${SLURM_SHA256} \
     https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2 /tmp/slurm.tar.bz2
 
 # Configure and install Slurm into a staging root so only the built
@@ -193,7 +195,7 @@ RUN tar xf openmpi.tar.bz2 && \
 # ==============================================================================
 FROM quay.io/rockylinux/rockylinux:10
 
-ARG SLURM_VERSION=25.11.6
+ARG SLURM_VERSION
 ARG UCX_VERSION=1.20.0
 ARG PMIX_VERSION=6.1.0
 ARG PRRTE_VERSION=4.1.0
@@ -257,6 +259,13 @@ RUN ssh-keygen -A && \
     sed -i 's/#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
+
+# Let root read the shadow files as their owner. Rocky ships them with mode
+# 0000, so reading them needs CAP_DAC_OVERRIDE. On nodes with
+# apparmor=unconfined, the host's unix-chkpwd AppArmor profile (e.g. on
+# Ubuntu 24.04) attaches to unix_chkpwd and denies that capability. pam_unix's
+# account check then fails and sshd refuses root logins.
+RUN chmod 0400 /etc/shadow /etc/gshadow
 
 # Only munge and sshd are enabled unconditionally — Slurm services
 # (slurmctld, slurmdbd, slurmd) are enabled by sind at container start

@@ -14,7 +14,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 ## Supported Versions
 
-- Slurm 25.11
+- Slurm 26.05 and 25.11 (one node image per release line)
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.20)
 
 ## Overview
@@ -344,7 +344,7 @@ sind-dev-worker-10       dev       worker       worker-10.dev.sind.sind         
 ```
 $ sind get cluster dev
 CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.6   running (3/0/0/3)
+dev       25.11.8   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -608,7 +608,7 @@ name: test-cluster                       # default: "default"
 realm: sind                              # default: "sind"
 
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:25.11.2  # default: sind-node:latest
+  image: ghcr.io/gsi-hpc/sind-node:25.11 # default: sind-node:latest
   tmpSize: 256m                          # per-node /tmp tmpfs size
   cpus: 1                                # container CPU limit
   memory: 512m                           # container memory limit
@@ -814,7 +814,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
-| `sind.slurm.version` | `25.11.6` | Slurm version |
+| `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
 
 ### Enter and Exec
@@ -1018,23 +1018,25 @@ One-shot command execution. Equivalent to `sind ssh <target> -- <cmd>`.
 
 ### Generic Image
 
-sind provides an generic multi-role image that works for all node types:
+sind provides a generic multi-role image that works for all node types, built for each supported Slurm release line:
 
 ```
-ghcr.io/gsi-hpc/sind-node:latest
-ghcr.io/gsi-hpc/sind-node:<slurm-version>
+ghcr.io/gsi-hpc/sind-node:latest                # newest release line
+ghcr.io/gsi-hpc/sind-node:<YY>.<MM>             # newest patch release of a line, e.g. 25.11
+ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.8
 ```
 
-This is the default image when `defaults.image` is not specified in the cluster configuration.
+`latest` is the default image when `defaults.image` is not specified in the cluster configuration.
 
 The generic image:
+- Published for linux/amd64 and linux/arm64
 - Based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
 - Contains all Slurm daemons (slurmctld, slurmd) and a full MPI stack
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - sind enables the appropriate services based on node role
 
-The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. Component versions are pinned as `ARG` defaults in the Dockerfile and mirrored in `docker-bake.hcl`.
+The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. UCX, PMIx, PRRTE and OpenMPI versions are pinned as `ARG` defaults in the Dockerfile and mirrored in `docker-bake.hcl`. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`. Targets build for linux/amd64 and linux/arm64; CI builds each platform on a native runner and merges them into one multi-platform image per tag, while `make image` builds for the host platform only.
 
 ### Custom Images
 
@@ -1043,6 +1045,7 @@ Custom images must provide:
 **All roles:**
 - systemd as init (PID 1)
 - sshd service (enabled, sind injects authorized_keys at runtime)
+- `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (e.g. `0400 root:root`; Rocky's default `0000` is not). On nodes with `apparmor=unconfined`, the host's `unix-chkpwd` AppArmor profile (e.g. Ubuntu 24.04) denies that capability, and sshd's `pam_unix` account check would refuse root
 - munge service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
 

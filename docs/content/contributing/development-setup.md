@@ -41,7 +41,7 @@ All common tasks are available via `make`:
 | `make coverage` | Generate HTML coverage report |
 | `make lint` | Run golangci-lint |
 | `make lint-docs` | Lint documentation markdown files |
-| `make image` | Build the container image via docker buildx bake |
+| `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
 | `make clean` | Remove build artifacts and coverage files |
 | `make help` | Show all available targets |
 

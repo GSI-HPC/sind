@@ -2,22 +2,35 @@
 weight: 510
 title: "Building Images"
 icon: "build"
-description: "Default image and custom image requirements"
+description: "Official images and custom image requirements"
 toc: true
 ---
 
-## Default image
+## Official images
 
-sind provides a default multi-role image that works for all node types:
+sind publishes a multi-role node image for each supported Slurm release line to `ghcr.io/gsi-hpc/sind-node`:
 
+| Slurm release line | Image tags |
+|--------------------|------------|
+| 26.05 | `latest`, `26.05`, `26.05.4` |
+| 25.11 | `25.11`, `25.11.8` |
+
+- `latest` is the newest release line. sind uses it when `defaults.image` is not specified.
+- `<YY>.<MM>` (e.g. `25.11`) follows the newest patch release of that line. Use it to stay on one Slurm release line.
+- `<YY>.<MM>.<patch>` (e.g. `25.11.8`) pins a patch release.
+
+Every tag is a multi-platform image for linux/amd64 and linux/arm64; Docker pulls the variant that matches the host.
+
+The images are rebuilt when the image build changes, so the tags above pick up image fixes. Tags of superseded patch releases and of release lines that are no longer supported stay available but are not updated.
+
+To run a cluster on a specific release line, set its image in the [cluster configuration](../../configuration/cluster-config/):
+
+```yaml
+defaults:
+  image: ghcr.io/gsi-hpc/sind-node:25.11
 ```
-ghcr.io/gsi-hpc/sind-node:latest
-ghcr.io/gsi-hpc/sind-node:<slurm-version>
-```
 
-This is the default image when `defaults.image` is not specified.
-
-The default image:
+Every official image:
 
 - Is based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
@@ -30,11 +43,16 @@ sind enables the appropriate Slurm services based on node role at container star
 
 ### Building locally
 
-Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root:
+Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root. `SLURM_RELEASES` in `docker-bake.hcl` lists the Slurm release and tarball checksum of each image, and each entry becomes a bake target named `slurm-<YY>-<MM>`:
 
 ```bash
-make image
+make image                                                # all release lines
+docker buildx bake --set '*.platform=local' slurm-25-11   # a single release line
 ```
+
+Both build for the host platform only. Without `--set '*.platform=local'`, bake builds every platform in `docker-bake.hcl`, which needs a builder that supports multi-platform builds, and compiles the whole stack under QEMU emulation for the other architecture, which takes hours. CI builds each platform on a native runner instead.
+
+The Dockerfile has no default Slurm version. To build it without bake, pass `--build-arg SLURM_VERSION=<version>` and `--build-arg SLURM_SHA256=<checksum>`.
 
 ## Custom image requirements
 
@@ -44,6 +62,7 @@ Custom images must provide the following:
 
 - **systemd** as init (PID 1)
 - **sshd** service (enabled) — sind injects authorized_keys at runtime
+- `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (see [Shadow file permissions](#shadow-file-permissions))
 - **munge** service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
 
@@ -87,6 +106,16 @@ RUN ssh-keygen -A && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
 ```
+
+### Shadow file permissions
+
+Root must be able to read `/etc/shadow` as its owner, without `CAP_DAC_OVERRIDE`: mode `0400 root:root`, or `0640 root:shadow` as on Debian and Ubuntu. RHEL-family images such as Rocky Linux ship it with mode `0000` and need a fix:
+
+```dockerfile
+RUN chmod 0400 /etc/shadow /etc/gshadow
+```
+
+On login, sshd's PAM account check (`pam_unix`) runs `unix_chkpwd` to read root's shadow entry. On nodes with `securityOpt: [apparmor=unconfined]`, AppArmor attaches the host's `unix-chkpwd` profile (shipped by Ubuntu 24.04, for example, including GitHub's `ubuntu-latest` runners) to that binary. The profile denies `CAP_DAC_OVERRIDE`, so with mode `0000` the check fails and `sind ssh` into those nodes ends with `Connection closed`. Nodes on Docker's default AppArmor profile are not affected.
 
 ### Masked systemd units
 
