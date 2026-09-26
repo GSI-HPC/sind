@@ -30,6 +30,23 @@ install -D ./sind ~/.local/bin/sind
 > if the directory exists at login time. You may need to log out and back in
 > after creating it.
 
+Each release publishes a `checksums.txt` and a build provenance attestation for its binary. Check where a download came from with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify ./sind --repo GSI-HPC/sind
+```
+
+{{< /tab >}}
+{{< tab "mise" >}}
+
+Install the linux/amd64 release binary with [mise](https://mise.jdx.dev/):
+
+```bash
+mise use -g github:GSI-HPC/sind
+```
+
+Drop `-g` to pin sind in the current project's `mise.toml` instead. mise checks the download against its published digest and verifies the release's build provenance attestation.
+
 {{< /tab >}}
 {{< tab "From source" >}}
 Build and install with Go:
