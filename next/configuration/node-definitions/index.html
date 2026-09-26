@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2089,38 +2089,38 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Role</th>
-          <th>Count</th>
-          <th>Required</th>
-          <th>Slurm daemons</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>controller</code></td>
-          <td>exactly 1</td>
-          <td>yes</td>
-          <td>slurmctld</td>
-          <td>Cluster controller</td>
-      </tr>
-      <tr>
-          <td><code>submitter</code></td>
-          <td>0–1</td>
-          <td>no</td>
-          <td>none (clients only)</td>
-          <td>Job submission node</td>
-      </tr>
-      <tr>
-          <td><code>worker</code></td>
-          <td>1+</td>
-          <td>yes</td>
-          <td>slurmd</td>
-          <td>Worker nodes</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Role</th>
+					<th>Count</th>
+					<th>Required</th>
+					<th>Slurm daemons</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>controller</code></td>
+					<td>exactly 1</td>
+					<td>yes</td>
+					<td>slurmctld</td>
+					<td>Cluster controller</td>
+			</tr>
+			<tr>
+					<td><code>submitter</code></td>
+					<td>0–1</td>
+					<td>no</td>
+					<td>none (clients only)</td>
+					<td>Job submission node</td>
+			</tr>
+			<tr>
+					<td><code>worker</code></td>
+					<td>1+</td>
+					<td>yes</td>
+					<td>slurmd</td>
+					<td>Worker nodes</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="node-parameters"
@@ -2132,76 +2132,76 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Parameter</th>
-          <th>Scope</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>image</code></td>
-          <td>global + per-node</td>
-          <td><code>ghcr.io/gsi-hpc/sind-node:latest</code></td>
-          <td>Container image</td>
-      </tr>
-      <tr>
-          <td><code>cpus</code></td>
-          <td>global + per-node</td>
-          <td><code>1</code></td>
-          <td>CPU limit</td>
-      </tr>
-      <tr>
-          <td><code>memory</code></td>
-          <td>global + per-node</td>
-          <td><code>&quot;512m&quot;</code></td>
-          <td>Memory limit</td>
-      </tr>
-      <tr>
-          <td><code>tmpSize</code></td>
-          <td>global + per-node</td>
-          <td><code>&quot;256m&quot;</code></td>
-          <td>tmpfs size for <code>/tmp</code></td>
-      </tr>
-      <tr>
-          <td><code>count</code></td>
-          <td>worker only</td>
-          <td><code>1</code></td>
-          <td>Number of worker nodes</td>
-      </tr>
-      <tr>
-          <td><code>managed</code></td>
-          <td>worker only</td>
-          <td><code>true</code></td>
-          <td>Start slurmd and add to slurm.conf</td>
-      </tr>
-      <tr>
-          <td><code>capAdd</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Extra Linux capabilities (e.g. <code>SYS_ADMIN</code>)</td>
-      </tr>
-      <tr>
-          <td><code>capDrop</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Dropped Linux capabilities</td>
-      </tr>
-      <tr>
-          <td><code>devices</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Host devices to expose (e.g. <code>/dev/fuse</code>)</td>
-      </tr>
-      <tr>
-          <td><code>securityOpt</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Extra security options</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Parameter</th>
+					<th>Scope</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>image</code></td>
+					<td>global + per-node</td>
+					<td><code>ghcr.io/gsi-hpc/sind-node:latest</code></td>
+					<td>Container image</td>
+			</tr>
+			<tr>
+					<td><code>cpus</code></td>
+					<td>global + per-node</td>
+					<td><code>1</code></td>
+					<td>CPU limit</td>
+			</tr>
+			<tr>
+					<td><code>memory</code></td>
+					<td>global + per-node</td>
+					<td><code>&quot;512m&quot;</code></td>
+					<td>Memory limit</td>
+			</tr>
+			<tr>
+					<td><code>tmpSize</code></td>
+					<td>global + per-node</td>
+					<td><code>&quot;256m&quot;</code></td>
+					<td>tmpfs size for <code>/tmp</code></td>
+			</tr>
+			<tr>
+					<td><code>count</code></td>
+					<td>worker only</td>
+					<td><code>1</code></td>
+					<td>Number of worker nodes</td>
+			</tr>
+			<tr>
+					<td><code>managed</code></td>
+					<td>worker only</td>
+					<td><code>true</code></td>
+					<td>Start slurmd and add to slurm.conf</td>
+			</tr>
+			<tr>
+					<td><code>capAdd</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Extra Linux capabilities (e.g. <code>SYS_ADMIN</code>)</td>
+			</tr>
+			<tr>
+					<td><code>capDrop</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Dropped Linux capabilities</td>
+			</tr>
+			<tr>
+					<td><code>devices</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Host devices to expose (e.g. <code>/dev/fuse</code>)</td>
+			</tr>
+			<tr>
+					<td><code>securityOpt</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Extra security options</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>Per-node scalar values override the <code>defaults</code> section. Security list fields (<code>capAdd</code>, <code>capDrop</code>, <code>devices</code>, <code>securityOpt</code>) are <strong>merged</strong> with defaults rather than replacing them.</p>
 <div class="flex align-center gdoc-page__anchorwrap">

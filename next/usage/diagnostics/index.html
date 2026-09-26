@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Cluster health, logs, and resource inspection" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2094,30 +2094,30 @@
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
 ✓ DNS policy: host resolution available
 </code></pre><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Check</th>
-          <th>Required</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>Docker Engine</td>
-          <td>yes</td>
-          <td>Docker &gt;= 28.0 reachable</td>
-      </tr>
-      <tr>
-          <td>cgroupv2</td>
-          <td>yes</td>
-          <td>cgroup2 mounted with <code>nsdelegate</code> option</td>
-      </tr>
-      <tr>
-          <td>DNS policy</td>
-          <td>no</td>
-          <td>polkit authorization for host DNS resolution via systemd-resolved</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Check</th>
+					<th>Required</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Docker Engine</td>
+					<td>yes</td>
+					<td>Docker &gt;= 28.0 reachable</td>
+			</tr>
+			<tr>
+					<td>cgroupv2</td>
+					<td>yes</td>
+					<td>cgroup2 mounted with <code>nsdelegate</code> option</td>
+			</tr>
+			<tr>
+					<td>DNS policy</td>
+					<td>no</td>
+					<td>polkit authorization for host DNS resolution via systemd-resolved</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>When a required check fails, <code>sind doctor</code> exits with a non-zero status and prints remediation steps. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
   class="gdoc-markdown__link"
@@ -2150,35 +2150,35 @@ sudo systemctl daemon-reload
 </span></span><span class="line"><span class="cl">sind -vv create cluster          <span class="c1"># debug: individual operations</span>
 </span></span><span class="line"><span class="cl">sind -vvv create cluster         <span class="c1"># trace: docker commands, probe retries</span>
 </span></span></code></pre></div><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Flag</th>
-          <th>Level</th>
-          <th>What&rsquo;s logged</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>(none)</td>
-          <td>error</td>
-          <td>Errors only — commands are silent on success</td>
-      </tr>
-      <tr>
-          <td><code>-v</code></td>
-          <td>info</td>
-          <td>Phase transitions: &ldquo;creating cluster&rdquo;, &ldquo;nodes ready&rdquo;, &ldquo;slurm services enabled&rdquo;</td>
-      </tr>
-      <tr>
-          <td><code>-vv</code></td>
-          <td>debug</td>
-          <td>Individual operations: &ldquo;waiting for node&rdquo;, &ldquo;enabling slurmd&rdquo;, &ldquo;creating network&rdquo;</td>
-      </tr>
-      <tr>
-          <td><code>-vvv</code></td>
-          <td>trace</td>
-          <td>Docker commands, probe retry attempts with error details</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Flag</th>
+					<th>Level</th>
+					<th>What&rsquo;s logged</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>(none)</td>
+					<td>error</td>
+					<td>Errors only — commands are silent on success</td>
+			</tr>
+			<tr>
+					<td><code>-v</code></td>
+					<td>info</td>
+					<td>Phase transitions: &ldquo;creating cluster&rdquo;, &ldquo;nodes ready&rdquo;, &ldquo;slurm services enabled&rdquo;</td>
+			</tr>
+			<tr>
+					<td><code>-vv</code></td>
+					<td>debug</td>
+					<td>Individual operations: &ldquo;waiting for node&rdquo;, &ldquo;enabling slurmd&rdquo;, &ldquo;creating network&rdquo;</td>
+			</tr>
+			<tr>
+					<td><code>-vvv</code></td>
+					<td>trace</td>
+					<td>Docker commands, probe retry attempts with error details</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>Log output goes to stderr in structured <code>key=value</code> format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Capture logs while piping output</span>
@@ -2250,34 +2250,34 @@ worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd 
 worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
 </code></pre><p>The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Status</th>
-          <th>Meaning</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>running</code></td>
-          <td>All containers are running</td>
-      </tr>
-      <tr>
-          <td><code>stopped</code></td>
-          <td>All containers are stopped (exited, dead, or created)</td>
-      </tr>
-      <tr>
-          <td><code>paused</code></td>
-          <td>All containers are paused</td>
-      </tr>
-      <tr>
-          <td><code>mixed</code></td>
-          <td>Containers are in different states</td>
-      </tr>
-      <tr>
-          <td><code>empty</code></td>
-          <td>No nodes exist</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Status</th>
+					<th>Meaning</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>running</code></td>
+					<td>All containers are running</td>
+			</tr>
+			<tr>
+					<td><code>stopped</code></td>
+					<td>All containers are stopped (exited, dead, or created)</td>
+			</tr>
+			<tr>
+					<td><code>paused</code></td>
+					<td>All containers are paused</td>
+			</tr>
+			<tr>
+					<td><code>mixed</code></td>
+					<td>Containers are in different states</td>
+			</tr>
+			<tr>
+					<td><code>empty</code></td>
+					<td>No nodes exist</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
 <blockquote>

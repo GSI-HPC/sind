@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Clone, build, and run sind locally" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2128,50 +2128,50 @@
 </div>
 <p>All common tasks are available via <code>make</code>:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Target</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>make build</code></td>
-          <td>Build the sind binary</td>
-      </tr>
-      <tr>
-          <td><code>make test</code></td>
-          <td>Run unit tests with race detector</td>
-      </tr>
-      <tr>
-          <td><code>make test-integration</code></td>
-          <td>Run integration tests (requires Docker)</td>
-      </tr>
-      <tr>
-          <td><code>make coverage</code></td>
-          <td>Generate HTML coverage report</td>
-      </tr>
-      <tr>
-          <td><code>make lint</code></td>
-          <td>Run golangci-lint</td>
-      </tr>
-      <tr>
-          <td><code>make lint-docs</code></td>
-          <td>Lint documentation markdown files</td>
-      </tr>
-      <tr>
-          <td><code>make image</code></td>
-          <td>Build the container image via docker buildx bake</td>
-      </tr>
-      <tr>
-          <td><code>make clean</code></td>
-          <td>Remove build artifacts and coverage files</td>
-      </tr>
-      <tr>
-          <td><code>make help</code></td>
-          <td>Show all available targets</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Target</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>make build</code></td>
+					<td>Build the sind binary</td>
+			</tr>
+			<tr>
+					<td><code>make test</code></td>
+					<td>Run unit tests with race detector</td>
+			</tr>
+			<tr>
+					<td><code>make test-integration</code></td>
+					<td>Run integration tests (requires Docker)</td>
+			</tr>
+			<tr>
+					<td><code>make coverage</code></td>
+					<td>Generate HTML coverage report</td>
+			</tr>
+			<tr>
+					<td><code>make lint</code></td>
+					<td>Run golangci-lint</td>
+			</tr>
+			<tr>
+					<td><code>make lint-docs</code></td>
+					<td>Lint documentation markdown files</td>
+			</tr>
+			<tr>
+					<td><code>make image</code></td>
+					<td>Build the container image via docker buildx bake</td>
+			</tr>
+			<tr>
+					<td><code>make clean</code></td>
+					<td>Remove build artifacts and coverage files</td>
+			</tr>
+			<tr>
+					<td><code>make help</code></td>
+					<td>Show all available targets</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>The build version defaults to <code>git describe --tags --always --dirty</code> and can be overridden:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make build <span class="nv">VERSION</span><span class="o">=</span>v1.0.0
@@ -2186,50 +2186,50 @@
 </div>
 <p>sind uses a minimal set of dependencies:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Dependency</th>
-          <th>Purpose</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>github.com/spf13/cobra</code></td>
-          <td>CLI framework</td>
-      </tr>
-      <tr>
-          <td><code>sigs.k8s.io/yaml</code></td>
-          <td>YAML configuration parsing</td>
-      </tr>
-      <tr>
-          <td><code>github.com/charmbracelet/log</code></td>
-          <td>Colorized log output (slog handler)</td>
-      </tr>
-      <tr>
-          <td><code>github.com/mattn/go-isatty</code></td>
-          <td>TTY detection for interactive commands</td>
-      </tr>
-      <tr>
-          <td><code>github.com/njayp/ophis</code></td>
-          <td>MCP server framework</td>
-      </tr>
-      <tr>
-          <td><code>github.com/spf13/afero</code></td>
-          <td>Filesystem abstraction for testability</td>
-      </tr>
-      <tr>
-          <td><code>golang.org/x/sync</code></td>
-          <td>Errgroup for concurrent operations</td>
-      </tr>
-      <tr>
-          <td><code>golang.org/x/sys</code></td>
-          <td>Advisory file locking (flock) for realm locks</td>
-      </tr>
-      <tr>
-          <td><code>github.com/stretchr/testify</code></td>
-          <td>Test assertions (test only)</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Dependency</th>
+					<th>Purpose</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>github.com/spf13/cobra</code></td>
+					<td>CLI framework</td>
+			</tr>
+			<tr>
+					<td><code>sigs.k8s.io/yaml</code></td>
+					<td>YAML configuration parsing</td>
+			</tr>
+			<tr>
+					<td><code>github.com/charmbracelet/log</code></td>
+					<td>Colorized log output (slog handler)</td>
+			</tr>
+			<tr>
+					<td><code>github.com/mattn/go-isatty</code></td>
+					<td>TTY detection for interactive commands</td>
+			</tr>
+			<tr>
+					<td><code>github.com/njayp/ophis</code></td>
+					<td>MCP server framework</td>
+			</tr>
+			<tr>
+					<td><code>github.com/spf13/afero</code></td>
+					<td>Filesystem abstraction for testability</td>
+			</tr>
+			<tr>
+					<td><code>golang.org/x/sync</code></td>
+					<td>Errgroup for concurrent operations</td>
+			</tr>
+			<tr>
+					<td><code>golang.org/x/sys</code></td>
+					<td>Advisory file locking (flock) for realm locks</td>
+			</tr>
+			<tr>
+					<td><code>github.com/stretchr/testify</code></td>
+					<td>Test assertions (test only)</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="run-tests"

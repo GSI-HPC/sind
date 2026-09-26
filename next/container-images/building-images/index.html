@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Default image and custom image requirements" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2148,26 +2148,26 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Role</th>
-          <th>Additional requirements</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>controller</td>
-          <td>slurmctld installed, <strong>not enabled</strong></td>
-      </tr>
-      <tr>
-          <td>worker</td>
-          <td>slurmd installed, <strong>not enabled</strong></td>
-      </tr>
-      <tr>
-          <td>submitter</td>
-          <td>Slurm client tools only</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Role</th>
+					<th>Additional requirements</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>controller</td>
+					<td>slurmctld installed, <strong>not enabled</strong></td>
+			</tr>
+			<tr>
+					<td>worker</td>
+					<td>slurmd installed, <strong>not enabled</strong></td>
+			</tr>
+			<tr>
+					<td>submitter</td>
+					<td>Slurm client tools only</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>sind enables Slurm services at container start based on the node&rsquo;s role. Services must be installed but <strong>not</strong> enabled in the image.</p>
 <div class="flex align-center gdoc-page__anchorwrap">

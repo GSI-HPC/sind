@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Resource naming conventions, volumes, and labels" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2089,50 +2089,50 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Type</th>
-          <th>Name pattern</th>
-          <th>Example (<code>sind create cluster dev</code>)</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>Network</td>
-          <td><code>&lt;realm&gt;-&lt;cluster&gt;-net</code></td>
-          <td><code>sind-dev-net</code></td>
-      </tr>
-      <tr>
-          <td>Controller</td>
-          <td><code>&lt;realm&gt;-&lt;cluster&gt;-controller</code></td>
-          <td><code>sind-dev-controller</code></td>
-      </tr>
-      <tr>
-          <td>Submitter</td>
-          <td><code>&lt;realm&gt;-&lt;cluster&gt;-submitter</code></td>
-          <td><code>sind-dev-submitter</code></td>
-      </tr>
-      <tr>
-          <td>Worker</td>
-          <td><code>&lt;realm&gt;-&lt;cluster&gt;-worker-&lt;N&gt;</code></td>
-          <td><code>sind-dev-worker-0</code></td>
-      </tr>
-      <tr>
-          <td>Config volume</td>
-          <td><code>&lt;realm&gt;-&lt;cluster&gt;-config</code></td>
-          <td><code>sind-dev-config</code></td>
-      </tr>
-      <tr>
-          <td>Munge volume</td>
-          <td><code>&lt;realm&gt;-&lt;cluster&gt;-munge</code></td>
-          <td><code>sind-dev-munge</code></td>
-      </tr>
-      <tr>
-          <td>Data volume</td>
-          <td><code>&lt;realm&gt;-&lt;cluster&gt;-data</code></td>
-          <td><code>sind-dev-data</code></td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Type</th>
+					<th>Name pattern</th>
+					<th>Example (<code>sind create cluster dev</code>)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Network</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-net</code></td>
+					<td><code>sind-dev-net</code></td>
+			</tr>
+			<tr>
+					<td>Controller</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-controller</code></td>
+					<td><code>sind-dev-controller</code></td>
+			</tr>
+			<tr>
+					<td>Submitter</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-submitter</code></td>
+					<td><code>sind-dev-submitter</code></td>
+			</tr>
+			<tr>
+					<td>Worker</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-worker-&lt;N&gt;</code></td>
+					<td><code>sind-dev-worker-0</code></td>
+			</tr>
+			<tr>
+					<td>Config volume</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-config</code></td>
+					<td><code>sind-dev-config</code></td>
+			</tr>
+			<tr>
+					<td>Munge volume</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-munge</code></td>
+					<td><code>sind-dev-munge</code></td>
+			</tr>
+			<tr>
+					<td>Data volume</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-data</code></td>
+					<td><code>sind-dev-data</code></td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>The default realm is <code>sind</code> and the default cluster name is <code>default</code>, resulting in prefixes like <code>sind-default-*</code>. See <a
   class="gdoc-markdown__link"
@@ -2148,35 +2148,35 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Type</th>
-          <th>Name pattern</th>
-          <th>Example</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>Mesh network</td>
-          <td><code>&lt;realm&gt;-mesh</code></td>
-          <td><code>sind-mesh</code></td>
-      </tr>
-      <tr>
-          <td>DNS container</td>
-          <td><code>&lt;realm&gt;-dns</code></td>
-          <td><code>sind-dns</code></td>
-      </tr>
-      <tr>
-          <td>SSH container</td>
-          <td><code>&lt;realm&gt;-ssh</code></td>
-          <td><code>sind-ssh</code></td>
-      </tr>
-      <tr>
-          <td>SSH volume</td>
-          <td><code>&lt;realm&gt;-ssh-config</code></td>
-          <td><code>sind-ssh-config</code></td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Type</th>
+					<th>Name pattern</th>
+					<th>Example</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Mesh network</td>
+					<td><code>&lt;realm&gt;-mesh</code></td>
+					<td><code>sind-mesh</code></td>
+			</tr>
+			<tr>
+					<td>DNS container</td>
+					<td><code>&lt;realm&gt;-dns</code></td>
+					<td><code>sind-dns</code></td>
+			</tr>
+			<tr>
+					<td>SSH container</td>
+					<td><code>&lt;realm&gt;-ssh</code></td>
+					<td><code>sind-ssh</code></td>
+			</tr>
+			<tr>
+					<td>SSH volume</td>
+					<td><code>&lt;realm&gt;-ssh-config</code></td>
+					<td><code>sind-ssh-config</code></td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="volume-mounts"
@@ -2188,59 +2188,59 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Volume</th>
-          <th>Mount point</th>
-          <th>Controller</th>
-          <th>Worker</th>
-          <th>Submitter</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind-&lt;cluster&gt;-config</code></td>
-          <td><code>/etc/slurm</code></td>
-          <td>rw</td>
-          <td>ro</td>
-          <td>ro</td>
-      </tr>
-      <tr>
-          <td><code>sind-&lt;cluster&gt;-munge</code></td>
-          <td><code>/etc/munge</code></td>
-          <td>ro</td>
-          <td>ro</td>
-          <td>ro</td>
-      </tr>
-      <tr>
-          <td><code>sind-&lt;cluster&gt;-data</code></td>
-          <td><code>/data</code></td>
-          <td>rw</td>
-          <td>rw</td>
-          <td>rw</td>
-      </tr>
-      <tr>
-          <td>tmpfs</td>
-          <td><code>/tmp</code></td>
-          <td>configurable</td>
-          <td>configurable</td>
-          <td>configurable</td>
-      </tr>
-      <tr>
-          <td>tmpfs</td>
-          <td><code>/run</code></td>
-          <td>exec,mode=755</td>
-          <td>exec,mode=755</td>
-          <td>exec,mode=755</td>
-      </tr>
-      <tr>
-          <td>tmpfs</td>
-          <td><code>/run/lock</code></td>
-          <td>—</td>
-          <td>—</td>
-          <td>—</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Volume</th>
+					<th>Mount point</th>
+					<th>Controller</th>
+					<th>Worker</th>
+					<th>Submitter</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>sind-&lt;cluster&gt;-config</code></td>
+					<td><code>/etc/slurm</code></td>
+					<td>rw</td>
+					<td>ro</td>
+					<td>ro</td>
+			</tr>
+			<tr>
+					<td><code>sind-&lt;cluster&gt;-munge</code></td>
+					<td><code>/etc/munge</code></td>
+					<td>ro</td>
+					<td>ro</td>
+					<td>ro</td>
+			</tr>
+			<tr>
+					<td><code>sind-&lt;cluster&gt;-data</code></td>
+					<td><code>/data</code></td>
+					<td>rw</td>
+					<td>rw</td>
+					<td>rw</td>
+			</tr>
+			<tr>
+					<td>tmpfs</td>
+					<td><code>/tmp</code></td>
+					<td>configurable</td>
+					<td>configurable</td>
+					<td>configurable</td>
+			</tr>
+			<tr>
+					<td>tmpfs</td>
+					<td><code>/run</code></td>
+					<td>exec,mode=755</td>
+					<td>exec,mode=755</td>
+					<td>exec,mode=755</td>
+			</tr>
+			<tr>
+					<td>tmpfs</td>
+					<td><code>/run/lock</code></td>
+					<td>—</td>
+					<td>—</td>
+					<td>—</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>SELinux relabeling (<code>:z</code>) is not used because containers run with <code>--security-opt label=disable</code>. This avoids expensive recursive relabeling of bind-mounted host directories.</p>
 <pre tabindex="0"><code>-v sind-dev-config:/etc/slurm:rw      # controller
@@ -2270,40 +2270,40 @@
 </div>
 <p>sind applies labels to containers for filtering and metadata:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Label</th>
-          <th>Example</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind.realm</code></td>
-          <td><code>sind</code></td>
-          <td>Realm namespace</td>
-      </tr>
-      <tr>
-          <td><code>sind.cluster</code></td>
-          <td><code>dev</code></td>
-          <td>Cluster name</td>
-      </tr>
-      <tr>
-          <td><code>sind.role</code></td>
-          <td><code>worker</code></td>
-          <td>Node role</td>
-      </tr>
-      <tr>
-          <td><code>sind.slurm.version</code></td>
-          <td><code>25.11.6</code></td>
-          <td>Slurm version</td>
-      </tr>
-      <tr>
-          <td><code>sind.data.hostpath</code></td>
-          <td><code>/home/user/project</code></td>
-          <td>Resolved data mount host path</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Label</th>
+					<th>Example</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>sind.realm</code></td>
+					<td><code>sind</code></td>
+					<td>Realm namespace</td>
+			</tr>
+			<tr>
+					<td><code>sind.cluster</code></td>
+					<td><code>dev</code></td>
+					<td>Cluster name</td>
+			</tr>
+			<tr>
+					<td><code>sind.role</code></td>
+					<td><code>worker</code></td>
+					<td>Node role</td>
+			</tr>
+			<tr>
+					<td><code>sind.slurm.version</code></td>
+					<td><code>25.11.6</code></td>
+					<td>Slurm version</td>
+			</tr>
+			<tr>
+					<td><code>sind.data.hostpath</code></td>
+					<td><code>/home/user/project</code></td>
+					<td>Resolved data mount host path</td>
+			</tr>
+	</tbody>
 </table> </div>
 
   </article>

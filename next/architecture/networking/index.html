@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Cluster networks, mesh, DNS, and SSH infrastructure" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2104,30 +2104,30 @@
 </div>
 <p>All clusters join a shared mesh network for cross-cluster communication:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Event</th>
-          <th>Result</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>First cluster created</td>
-          <td>Creates <code>sind-mesh</code> network, starts <code>sind-dns</code> and <code>sind-ssh</code></td>
-      </tr>
-      <tr>
-          <td>Subsequent clusters</td>
-          <td>Connects nodes to <code>sind-mesh</code>, updates DNS</td>
-      </tr>
-      <tr>
-          <td>Cluster deleted</td>
-          <td>Disconnects nodes, updates DNS</td>
-      </tr>
-      <tr>
-          <td>Last cluster deleted</td>
-          <td>Removes <code>sind-dns</code>, <code>sind-ssh</code>, and <code>sind-mesh</code></td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Event</th>
+					<th>Result</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>First cluster created</td>
+					<td>Creates <code>sind-mesh</code> network, starts <code>sind-dns</code> and <code>sind-ssh</code></td>
+			</tr>
+			<tr>
+					<td>Subsequent clusters</td>
+					<td>Connects nodes to <code>sind-mesh</code>, updates DNS</td>
+			</tr>
+			<tr>
+					<td>Cluster deleted</td>
+					<td>Disconnects nodes, updates DNS</td>
+			</tr>
+			<tr>
+					<td>Last cluster deleted</td>
+					<td>Removes <code>sind-dns</code>, <code>sind-ssh</code>, and <code>sind-mesh</code></td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="dns"
@@ -2248,45 +2248,45 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Resource</th>
-          <th>Purpose</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind-ssh</code> container</td>
-          <td>SSH client for accessing nodes</td>
-      </tr>
-      <tr>
-          <td><code>sind-ssh-config</code> volume</td>
-          <td>SSH keypair and known_hosts</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Resource</th>
+					<th>Purpose</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>sind-ssh</code> container</td>
+					<td>SSH client for accessing nodes</td>
+			</tr>
+			<tr>
+					<td><code>sind-ssh-config</code> volume</td>
+					<td>SSH keypair and known_hosts</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>The <code>sind-ssh-config</code> volume contains:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>File</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>id_ed25519</code></td>
-          <td>Private key (generated on first cluster)</td>
-      </tr>
-      <tr>
-          <td><code>id_ed25519.pub</code></td>
-          <td>Public key (injected into nodes)</td>
-      </tr>
-      <tr>
-          <td><code>known_hosts</code></td>
-          <td>Host keys of all nodes (updated dynamically)</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>id_ed25519</code></td>
+					<td>Private key (generated on first cluster)</td>
+			</tr>
+			<tr>
+					<td><code>id_ed25519.pub</code></td>
+					<td>Public key (injected into nodes)</td>
+			</tr>
+			<tr>
+					<td><code>known_hosts</code></td>
+					<td>Host keys of all nodes (updated dynamically)</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="lifecycle"
@@ -2298,38 +2298,38 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Event</th>
-          <th>Result</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>First cluster created</td>
-          <td>Generates Ed25519 keypair, starts <code>sind-ssh</code></td>
-      </tr>
-      <tr>
-          <td>Cluster created</td>
-          <td>Connects <code>sind-ssh</code> to cluster network</td>
-      </tr>
-      <tr>
-          <td>Node created</td>
-          <td>Public key injected, host key collected and added to <code>known_hosts</code></td>
-      </tr>
-      <tr>
-          <td>Node deleted</td>
-          <td>Entry removed from <code>known_hosts</code></td>
-      </tr>
-      <tr>
-          <td>Cluster deleted</td>
-          <td>Disconnects <code>sind-ssh</code> from cluster network</td>
-      </tr>
-      <tr>
-          <td>Last cluster deleted</td>
-          <td>SSH container and volume removed</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Event</th>
+					<th>Result</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>First cluster created</td>
+					<td>Generates Ed25519 keypair, starts <code>sind-ssh</code></td>
+			</tr>
+			<tr>
+					<td>Cluster created</td>
+					<td>Connects <code>sind-ssh</code> to cluster network</td>
+			</tr>
+			<tr>
+					<td>Node created</td>
+					<td>Public key injected, host key collected and added to <code>known_hosts</code></td>
+			</tr>
+			<tr>
+					<td>Node deleted</td>
+					<td>Entry removed from <code>known_hosts</code></td>
+			</tr>
+			<tr>
+					<td>Cluster deleted</td>
+					<td>Disconnects <code>sind-ssh</code> from cluster network</td>
+			</tr>
+			<tr>
+					<td>Last cluster deleted</td>
+					<td>SSH container and volume removed</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>The SSH relay connects to each cluster network so it can reach nodes at their cluster network IPs (which are the addresses registered in DNS).</p>
 <div class="flex align-center gdoc-page__anchorwrap">

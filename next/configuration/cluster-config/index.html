@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="YAML configuration schema reference" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2157,58 +2157,58 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Field</th>
-          <th>Required</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>kind</code></td>
-          <td>yes</td>
-          <td>—</td>
-          <td>Must be <code>&quot;Cluster&quot;</code></td>
-      </tr>
-      <tr>
-          <td><code>name</code></td>
-          <td>no</td>
-          <td><code>&quot;default&quot;</code></td>
-          <td>Cluster name, used in resource naming</td>
-      </tr>
-      <tr>
-          <td><code>realm</code></td>
-          <td>no</td>
-          <td><code>&quot;sind&quot;</code></td>
-          <td>Realm namespace for resource isolation</td>
-      </tr>
-      <tr>
-          <td><code>defaults</code></td>
-          <td>no</td>
-          <td>—</td>
-          <td>Default settings applied to all nodes</td>
-      </tr>
-      <tr>
-          <td><code>storage</code></td>
-          <td>no</td>
-          <td>—</td>
-          <td>Shared storage configuration</td>
-      </tr>
-      <tr>
-          <td><code>slurm</code></td>
-          <td>no</td>
-          <td>—</td>
-          <td>Slurm configuration extension</td>
-      </tr>
-      <tr>
-          <td><code>nodes</code></td>
-          <td>no</td>
-          <td>1 controller + 1 worker</td>
-          <td>Node definitions</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Field</th>
+					<th>Required</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>kind</code></td>
+					<td>yes</td>
+					<td>—</td>
+					<td>Must be <code>&quot;Cluster&quot;</code></td>
+			</tr>
+			<tr>
+					<td><code>name</code></td>
+					<td>no</td>
+					<td><code>&quot;default&quot;</code></td>
+					<td>Cluster name, used in resource naming</td>
+			</tr>
+			<tr>
+					<td><code>realm</code></td>
+					<td>no</td>
+					<td><code>&quot;sind&quot;</code></td>
+					<td>Realm namespace for resource isolation</td>
+			</tr>
+			<tr>
+					<td><code>defaults</code></td>
+					<td>no</td>
+					<td>—</td>
+					<td>Default settings applied to all nodes</td>
+			</tr>
+			<tr>
+					<td><code>storage</code></td>
+					<td>no</td>
+					<td>—</td>
+					<td>Shared storage configuration</td>
+			</tr>
+			<tr>
+					<td><code>slurm</code></td>
+					<td>no</td>
+					<td>—</td>
+					<td>Slurm configuration extension</td>
+			</tr>
+			<tr>
+					<td><code>nodes</code></td>
+					<td>no</td>
+					<td>1 controller + 1 worker</td>
+					<td>Node definitions</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="defaults-section"
@@ -2221,55 +2221,55 @@
 </div>
 <p>The <code>defaults</code> section sets values inherited by all nodes unless overridden at the node level.</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Field</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>image</code></td>
-          <td><code>ghcr.io/gsi-hpc/sind-node:latest</code></td>
-          <td>Container image</td>
-      </tr>
-      <tr>
-          <td><code>cpus</code></td>
-          <td><code>1</code></td>
-          <td>CPU limit per container</td>
-      </tr>
-      <tr>
-          <td><code>memory</code></td>
-          <td><code>&quot;512m&quot;</code></td>
-          <td>Memory limit per container</td>
-      </tr>
-      <tr>
-          <td><code>tmpSize</code></td>
-          <td><code>&quot;256m&quot;</code></td>
-          <td>tmpfs size for <code>/tmp</code></td>
-      </tr>
-      <tr>
-          <td><code>capAdd</code></td>
-          <td>none</td>
-          <td>Extra Linux capabilities</td>
-      </tr>
-      <tr>
-          <td><code>capDrop</code></td>
-          <td>none</td>
-          <td>Dropped Linux capabilities</td>
-      </tr>
-      <tr>
-          <td><code>devices</code></td>
-          <td>none</td>
-          <td>Host devices to expose</td>
-      </tr>
-      <tr>
-          <td><code>securityOpt</code></td>
-          <td>none</td>
-          <td>Extra security options</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Field</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>image</code></td>
+					<td><code>ghcr.io/gsi-hpc/sind-node:latest</code></td>
+					<td>Container image</td>
+			</tr>
+			<tr>
+					<td><code>cpus</code></td>
+					<td><code>1</code></td>
+					<td>CPU limit per container</td>
+			</tr>
+			<tr>
+					<td><code>memory</code></td>
+					<td><code>&quot;512m&quot;</code></td>
+					<td>Memory limit per container</td>
+			</tr>
+			<tr>
+					<td><code>tmpSize</code></td>
+					<td><code>&quot;256m&quot;</code></td>
+					<td>tmpfs size for <code>/tmp</code></td>
+			</tr>
+			<tr>
+					<td><code>capAdd</code></td>
+					<td>none</td>
+					<td>Extra Linux capabilities</td>
+			</tr>
+			<tr>
+					<td><code>capDrop</code></td>
+					<td>none</td>
+					<td>Dropped Linux capabilities</td>
+			</tr>
+			<tr>
+					<td><code>devices</code></td>
+					<td>none</td>
+					<td>Host devices to expose</td>
+			</tr>
+			<tr>
+					<td><code>securityOpt</code></td>
+					<td>none</td>
+					<td>Extra security options</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>Scalar fields (<code>image</code>, <code>cpus</code>, <code>memory</code>, <code>tmpSize</code>) are overridden by per-node values. List fields (<code>capAdd</code>, <code>capDrop</code>, <code>devices</code>, <code>securityOpt</code>) are merged with per-node values.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
@@ -2285,32 +2285,32 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">dataStorage</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">volume      </span><span class="w"> </span><span class="c"># &#34;volume&#34; or &#34;hostPath&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">hostPath</span><span class="p">:</span><span class="w"> </span><span class="l">./data  </span><span class="w"> </span><span class="c"># required if type is hostPath</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mountPath: /data   # default</span><span class="p">:</span><span class="w"> </span><span class="l">/data</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l">/data  </span><span class="w"> </span><span class="c"># default: /data</span><span class="w">
 </span></span></span></code></pre></div><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Field</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>type</code></td>
-          <td><code>&quot;volume&quot;</code></td>
-          <td><code>&quot;volume&quot;</code> for a Docker volume, <code>&quot;hostPath&quot;</code> for a bind mount</td>
-      </tr>
-      <tr>
-          <td><code>hostPath</code></td>
-          <td>—</td>
-          <td>Path on the host (required when <code>type: hostPath</code>)</td>
-      </tr>
-      <tr>
-          <td><code>mountPath</code></td>
-          <td><code>&quot;/data&quot;</code></td>
-          <td>Mount point inside containers</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Field</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>type</code></td>
+					<td><code>&quot;volume&quot;</code></td>
+					<td><code>&quot;volume&quot;</code> for a Docker volume, <code>&quot;hostPath&quot;</code> for a bind mount</td>
+			</tr>
+			<tr>
+					<td><code>hostPath</code></td>
+					<td>—</td>
+					<td>Path on the host (required when <code>type: hostPath</code>)</td>
+			</tr>
+			<tr>
+					<td><code>mountPath</code></td>
+					<td><code>&quot;/data&quot;</code></td>
+					<td>Mount point inside containers</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurm-section"
@@ -2323,40 +2323,40 @@
 </div>
 <p>The <code>slurm</code> section extends the generated Slurm configuration. Each key maps to a config file:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Key</th>
-          <th>Config file</th>
-          <th style="text-align: center">sind generates defaults</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>main</code></td>
-          <td><code>slurm.conf</code></td>
-          <td style="text-align: center">yes</td>
-      </tr>
-      <tr>
-          <td><code>cgroup</code></td>
-          <td><code>cgroup.conf</code></td>
-          <td style="text-align: center">yes</td>
-      </tr>
-      <tr>
-          <td><code>gres</code></td>
-          <td><code>gres.conf</code></td>
-          <td style="text-align: center">no</td>
-      </tr>
-      <tr>
-          <td><code>topology</code></td>
-          <td><code>topology.conf</code></td>
-          <td style="text-align: center">no</td>
-      </tr>
-      <tr>
-          <td><code>plugstack</code></td>
-          <td><code>plugstack.conf</code></td>
-          <td style="text-align: center">yes (always scaffolded)</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Key</th>
+					<th>Config file</th>
+					<th style="text-align: center">sind generates defaults</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>main</code></td>
+					<td><code>slurm.conf</code></td>
+					<td style="text-align: center">yes</td>
+			</tr>
+			<tr>
+					<td><code>cgroup</code></td>
+					<td><code>cgroup.conf</code></td>
+					<td style="text-align: center">yes</td>
+			</tr>
+			<tr>
+					<td><code>gres</code></td>
+					<td><code>gres.conf</code></td>
+					<td style="text-align: center">no</td>
+			</tr>
+			<tr>
+					<td><code>topology</code></td>
+					<td><code>topology.conf</code></td>
+					<td style="text-align: center">no</td>
+			</tr>
+			<tr>
+					<td><code>plugstack</code></td>
+					<td><code>plugstack.conf</code></td>
+					<td style="text-align: center">yes (always scaffolded)</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>Each key supports two forms:</p>
 <p><strong>String form</strong> — content appended to the config file:</p>

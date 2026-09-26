@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.161.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="SSH, interactive shells, and command execution" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/next/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/next/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/next/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/next/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/next/main-ce430795.min.css"
+  href="/sind/next/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/next/js/search-14869ba5.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/next/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -2145,26 +2145,26 @@
 <p>By default, <code>sind create cluster</code> bind-mounts the current working directory into all containers at <code>/data</code>. Both <code>sind enter</code> and <code>sind exec</code> set <code>/data</code> as the working directory, so files from the host are immediately accessible.</p>
 <p>Use the <code>--data</code> flag to change this behavior:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Flag value</th>
-          <th>Behavior</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>--data .</code> (default)</td>
-          <td>Bind-mount CWD as <code>/data</code></td>
-      </tr>
-      <tr>
-          <td><code>--data /path/to/dir</code></td>
-          <td>Bind-mount the given directory as <code>/data</code></td>
-      </tr>
-      <tr>
-          <td><code>--data volume</code></td>
-          <td>Use a Docker-managed volume instead of a host mount</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Flag value</th>
+					<th>Behavior</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>--data .</code> (default)</td>
+					<td>Bind-mount CWD as <code>/data</code></td>
+			</tr>
+			<tr>
+					<td><code>--data /path/to/dir</code></td>
+					<td>Bind-mount the given directory as <code>/data</code></td>
+			</tr>
+			<tr>
+					<td><code>--data volume</code></td>
+					<td>Use a Docker-managed volume instead of a host mount</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Mount a specific directory</span>
 </span></span><span class="line"><span class="cl">sind create cluster --data /home/user/shared
@@ -2190,26 +2190,26 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Command</th>
-          <th>Target node</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind ssh &lt;node&gt;</code></td>
-          <td>Explicit node</td>
-      </tr>
-      <tr>
-          <td><code>sind enter [cluster]</code></td>
-          <td>Submitter if exists, otherwise controller</td>
-      </tr>
-      <tr>
-          <td><code>sind exec [cluster]</code></td>
-          <td>Submitter if exists, otherwise controller</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Command</th>
+					<th>Target node</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>sind ssh &lt;node&gt;</code></td>
+					<td>Explicit node</td>
+			</tr>
+			<tr>
+					<td><code>sind enter [cluster]</code></td>
+					<td>Submitter if exists, otherwise controller</td>
+			</tr>
+			<tr>
+					<td><code>sind exec [cluster]</code></td>
+					<td>Submitter if exists, otherwise controller</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="user-ssh-client-integration"
@@ -2222,26 +2222,26 @@
 </div>
 <p>sind automatically exports SSH configuration per realm to <code>$XDG_STATE_HOME/sind/&lt;realm&gt;/</code> (defaulting to <code>~/.local/state/sind/&lt;realm&gt;/</code>):</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>File</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>ssh_config</code></td>
-          <td>SSH config snippet</td>
-      </tr>
-      <tr>
-          <td><code>id_ed25519</code></td>
-          <td>Private key</td>
-      </tr>
-      <tr>
-          <td><code>known_hosts</code></td>
-          <td>Host keys</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>ssh_config</code></td>
+					<td>SSH config snippet</td>
+			</tr>
+			<tr>
+					<td><code>id_ed25519</code></td>
+					<td>Private key</td>
+			</tr>
+			<tr>
+					<td><code>known_hosts</code></td>
+					<td>Host keys</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>These files are updated on every create/delete operation and removed when the last cluster in a realm is deleted.</p>
 <p>To find the path for your current realm:</p>
