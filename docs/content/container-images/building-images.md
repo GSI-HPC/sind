@@ -19,6 +19,8 @@ sind publishes a multi-role node image for each supported Slurm release line to 
 - `<YY>.<MM>` (e.g. `25.11`) follows the newest patch release of that line. Use it to stay on one Slurm release line.
 - `<YY>.<MM>.<patch>` (e.g. `25.11.8`) pins a patch release.
 
+Every tag is a multi-platform image for linux/amd64 and linux/arm64; Docker pulls the variant that matches the host.
+
 The images are rebuilt when the image build changes, so the tags above pick up image fixes. Tags of superseded patch releases and of release lines that are no longer supported stay available but are not updated.
 
 To run a cluster on a specific release line, set its image in the [cluster configuration](../../configuration/cluster-config/):
@@ -44,9 +46,11 @@ sind enables the appropriate Slurm services based on node role at container star
 Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root. `SLURM_RELEASES` in `docker-bake.hcl` lists the Slurm release and tarball checksum of each image, and each entry becomes a bake target named `slurm-<YY>-<MM>`:
 
 ```bash
-make image                       # all release lines
-docker buildx bake slurm-25-11   # a single release line
+make image                                                # all release lines
+docker buildx bake --set '*.platform=local' slurm-25-11   # a single release line
 ```
+
+Both build for the host platform only. Without `--set '*.platform=local'`, bake builds every platform in `docker-bake.hcl`, which needs a builder that supports multi-platform builds, and compiles the whole stack under QEMU emulation for the other architecture, which takes hours. CI builds each platform on a native runner instead.
 
 The Dockerfile has no default Slurm version. To build it without bake, pass `--build-arg SLURM_VERSION=<version>` and `--build-arg SLURM_SHA256=<checksum>`.
 

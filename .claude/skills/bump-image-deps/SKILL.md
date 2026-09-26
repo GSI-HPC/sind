@@ -55,5 +55,5 @@ bump needs no Go code changes, only the files below.
    Precedent: commit `53347ed` (from before `SLURM_RELEASES`).
 6. **PR to `next`.** Link the release notes
    (`https://github.com/SchedMD/slurm/releases/tag/slurm-X-Y-Z-1`). The CI Integration
-   Test builds the image of every release line from its tarball and runs the integration
-   suite against each. That is the real verification, since cloud sessions have no Docker.
+   Test builds the image of every release line from its tarball, on linux/amd64 and
+   linux/arm64, and runs the integration suite against each. That is the real verification, since cloud sessions have no Docker.

@@ -83,15 +83,17 @@ jobs:
       - uses: actions/checkout@v7
 
       # One bake target per Slurm release line (SLURM_RELEASES in
-      # docker-bake.hcl).
+      # docker-bake.hcl), once per platform.
       - name: List node image targets
         id: targets
         uses: docker/bake-action/subaction/matrix@v7
+        with:
+          fields: platforms
 
   integration-test-image:
-    name: Integration Test (${{ matrix.target }})
+    name: Integration Test (${{ matrix.target }}, ${{ matrix.platforms }})
     needs: image-targets
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -103,6 +105,11 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The integration tests skip when the host lacks sind's prerequisites;
+      # fail here instead so a runner change cannot turn this job green.
+      - name: Check prerequisites
+        run: go run ./cmd/sind doctor
+
       - uses: docker/setup-buildx-action@v4
 
       - name: Build sind-node image
@@ -112,9 +119,15 @@ jobs:
           load: true
           allow: network.host
           set: |
-            *.cache-from=type=gha,scope=${{ matrix.target }}
-            *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}
+            *.platform=${{ matrix.platforms }}
+            *.cache-from=type=gha,scope=${{ matrix.target }}-${{ runner.arch }}
+            *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}-${{ runner.arch }}
             *.tags=local/sind-node:ci
+
+      # The mesh's SSH relay runs sind-node:latest, which Docker only pulls
+      # when missing. Use the image under test so it matches this platform.
+      - name: Use the image under test for the SSH relay
+        run: docker tag local/sind-node:ci ghcr.io/gsi-hpc/sind-node:latest
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
@@ -129,12 +142,12 @@ jobs:
         uses: dorny/test-reporter@v3
         if: always()
         with:
-          name: Integration Test Results (${{ matrix.target }})
+          name: Integration Test Results (${{ matrix.target }}, ${{ matrix.platforms }})
           path: integration-tests.xml
           reporter: java-junit
 
-  # Single check over all release lines, so its name stays stable when
-  # SLURM_RELEASES changes.
+  # Single check over all release lines and platforms, so its name stays
+  # stable when SLURM_RELEASES or the platforms change.
   integration-test:
     name: Integration Test
     needs: integration-test-image

@@ -54,12 +54,16 @@ group "default" {
   targets = ["slurm"]
 }
 
+# Official images are published for both platforms; CI builds each one on a
+# native runner. `make image` builds for the host platform only
+# (--set '*.platform=local').
 target "slurm" {
   name       = "slurm-${replace(release_line(r.version), ".", "-")}"
   matrix     = { r = SLURM_RELEASES }
   context    = "."
   dockerfile = "Dockerfile"
   network    = "host"
+  platforms  = ["linux/amd64", "linux/arm64"]
   args = {
     SLURM_VERSION = r.version
     SLURM_SHA256  = r.sha256
