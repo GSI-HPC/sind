@@ -1043,6 +1043,7 @@ Custom images must provide:
 **All roles:**
 - systemd as init (PID 1)
 - sshd service (enabled, sind injects authorized_keys at runtime)
+- `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (e.g. `0400 root:root`; Rocky's default `0000` is not). On nodes with `apparmor=unconfined`, the host's `unix-chkpwd` AppArmor profile (e.g. Ubuntu 24.04) denies that capability, and sshd's `pam_unix` account check would refuse root
 - munge service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
 

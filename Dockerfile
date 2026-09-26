@@ -258,6 +258,13 @@ RUN ssh-keygen -A && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
 
+# Let root read the shadow files as their owner. Rocky ships them with mode
+# 0000, so reading them needs CAP_DAC_OVERRIDE. On nodes with
+# apparmor=unconfined, the host's unix-chkpwd AppArmor profile (e.g. on
+# Ubuntu 24.04) attaches to unix_chkpwd and denies that capability. pam_unix's
+# account check then fails and sshd refuses root logins.
+RUN chmod 0400 /etc/shadow /etc/gshadow
+
 # Only munge and sshd are enabled unconditionally — Slurm services
 # (slurmctld, slurmdbd, slurmd) are enabled by sind at container start
 # depending on the node's role.

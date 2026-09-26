@@ -44,6 +44,7 @@ Custom images must provide the following:
 
 - **systemd** as init (PID 1)
 - **sshd** service (enabled) — sind injects authorized_keys at runtime
+- `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (see [Shadow file permissions](#shadow-file-permissions))
 - **munge** service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
 
@@ -87,6 +88,16 @@ RUN ssh-keygen -A && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
 ```
+
+### Shadow file permissions
+
+Root must be able to read `/etc/shadow` as its owner, without `CAP_DAC_OVERRIDE`: mode `0400 root:root`, or `0640 root:shadow` as on Debian and Ubuntu. RHEL-family images such as Rocky Linux ship it with mode `0000` and need a fix:
+
+```dockerfile
+RUN chmod 0400 /etc/shadow /etc/gshadow
+```
+
+On login, sshd's PAM account check (`pam_unix`) runs `unix_chkpwd` to read root's shadow entry. On nodes with `securityOpt: [apparmor=unconfined]`, AppArmor attaches the host's `unix-chkpwd` profile (shipped by Ubuntu 24.04, for example, including GitHub's `ubuntu-latest` runners) to that binary. The profile denies `CAP_DAC_OVERRIDE`, so with mode `0000` the check fails and `sind ssh` into those nodes ends with `Connection closed`. Nodes on Docker's default AppArmor profile are not affected.
 
 ### Masked systemd units
 
