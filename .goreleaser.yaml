@@ -23,7 +23,7 @@ builds:
     ldflags:
       - -s -w -X main.version=v{{ .Version }} -X main.commit={{ .ShortCommit }}
     goos: [linux]
-    goarch: [amd64]
+    goarch: [amd64, arm64]
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 # Plain binaries under the names every release has used (sind-linux-amd64),
