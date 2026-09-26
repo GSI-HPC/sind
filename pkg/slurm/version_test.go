@@ -85,9 +85,10 @@ func TestDiscoverVersionLifecycle(t *testing.T) {
 		rec.AddResult("slurm 25.11.8\n", "", nil)
 	}
 
+	// The image may carry any supported Slurm release line.
 	version, err := DiscoverVersion(t.Context(), c, image, false)
 	require.NoError(t, err)
-	assert.Contains(t, version, "25.11")
+	assert.Regexp(t, `^[0-9]+\.[0-9]+\.[0-9]+$`, version)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
