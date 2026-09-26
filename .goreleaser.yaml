@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+#
+# Release build, run by .github/workflows/release.yml for every pushed vX.Y.Z
+# tag. `goreleaser release --snapshot --clean` builds the same locally.
+
+version: 2
+
+project_name: sind
+
+before:
+  hooks:
+    - go mod download
+    - go mod verify
+
+builds:
+  - id: sind
+    main: ./cmd/sind
+    binary: sind
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version=v{{ .Version }} -X main.commit={{ .ShortCommit }}
+    goos: [linux]
+    goarch: [amd64]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# Plain binaries under the names every release has used (sind-linux-amd64),
+# which sind-action and the install docs download directly.
+archives:
+  - formats: [binary]
+    name_template: "sind-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# GitHub's generated notes, as a starting point for the maintainer to edit
+# in the draft.
+changelog:
+  use: github-native
+
+release:
+  # The workflow leaves the release as a draft; the maintainer edits its
+  # notes and publishes it. A re-run fills in the same draft, replacing its
+  # assets and keeping its notes.
+  draft: true
+  use_existing_draft: true
+  replace_existing_artifacts: true
+  mode: keep-existing
+  prerelease: auto

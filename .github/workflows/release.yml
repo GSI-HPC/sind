@@ -1,26 +1,42 @@
 name: Release
 
+# Pushing a vX.Y.Z tag builds and attests the binaries into a draft release
+# (.goreleaser.yaml). The maintainer then edits its notes and publishes it.
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: write
+  # Mint a Sigstore signing certificate and store the attestation.
+  id-token: write
+  attestations: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # GoReleaser finds the previous release among the tags.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
-      - name: Build binary
-        run: make LDFLAGS="-s -w -X main.version=${{ github.event.release.tag_name }} -X main.commit=$(git rev-parse --short HEAD)" build
-
-      - name: Upload release asset
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --clean
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" sind-linux-amd64
+          GITHUB_TOKEN: ${{ github.token }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+
+      # Build provenance for every asset listed in checksums.txt, in place
+      # before the release is published. mise's github: backend verifies it
+      # on install; `gh attestation verify` does the same by hand.
+      - name: Attest release assets
+        uses: actions/attest@v4
+        with:
+          subject-checksums: dist/checksums.txt

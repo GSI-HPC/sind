@@ -8,7 +8,9 @@ Personal, uncommitted instructions belong in `CLAUDE.local.md` (gitignored).
 ## Branches and PRs
 
 - Feature and fix PRs target `next`. `main` only moves at release, when the maintainer
-  updates it from `next` and publishes a GitHub release `vX.Y.Z`.
+  updates it from `next` and pushes a tag `vX.Y.Z`. The Release workflow builds and
+  attests the binaries into a draft release (`.goreleaser.yaml`), which the maintainer
+  publishes.
 - Exception: changes that only take effect on the default branch (e.g.
   `.github/dependabot.yml`) target `main`.
 - Update a feature branch by rebasing it onto its PR target (never merge the target in),
@@ -28,6 +30,7 @@ make test-integration        # needs Docker and SIND_TEST_IMAGE (see ci.yml)
 go vet -tags integration ./... # compile-check integration tests without Docker
 make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
+goreleaser release --snapshot --clean # release binaries and checksums.txt into dist/
 ```
 
 - `make test` runs inside firejail with systemctl, docker, ssh, resolvectl and polkit
