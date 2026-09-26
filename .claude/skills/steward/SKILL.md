@@ -44,6 +44,7 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml` |
 | Integration Test | builds the node image with `docker buildx bake`, then `make test-integration` |
 | Build | `make build` |
+| Release Snapshot | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
 
 - Integration Test downloads the Slurm, UCX, PMIx, PRRTE and Open MPI tarballs while
   building the image. A failure in that build step with a network error on one of those
