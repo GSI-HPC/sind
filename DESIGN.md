@@ -1018,14 +1018,15 @@ One-shot command execution. Equivalent to `sind ssh <target> -- <cmd>`.
 
 ### Generic Image
 
-sind provides an generic multi-role image that works for all node types:
+sind provides a generic multi-role image that works for all node types, built for each supported Slurm release line:
 
 ```
-ghcr.io/gsi-hpc/sind-node:latest
-ghcr.io/gsi-hpc/sind-node:<slurm-version>
+ghcr.io/gsi-hpc/sind-node:latest                # newest release line
+ghcr.io/gsi-hpc/sind-node:<YY>.<MM>             # newest patch release of a line, e.g. 25.11
+ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.6
 ```
 
-This is the default image when `defaults.image` is not specified in the cluster configuration.
+`latest` is the default image when `defaults.image` is not specified in the cluster configuration.
 
 The generic image:
 - Based on Rocky Linux 10
@@ -1034,7 +1035,7 @@ The generic image:
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - sind enables the appropriate services based on node role
 
-The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. Component versions are pinned as `ARG` defaults in the Dockerfile and mirrored in `docker-bake.hcl`.
+The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. UCX, PMIx, PRRTE and OpenMPI versions are pinned as `ARG` defaults in the Dockerfile and mirrored in `docker-bake.hcl`. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`.
 
 ### Custom Images
 

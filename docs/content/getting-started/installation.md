@@ -80,6 +80,8 @@ ghcr.io/gsi-hpc/sind-node:latest
 
 It is published for linux/amd64 only. On an arm64 host, use an image built for arm64 instead.
 
+`latest` carries the newest supported Slurm release line. To stay on a specific release line, set `defaults.image` in the cluster configuration to its tag, e.g. `ghcr.io/gsi-hpc/sind-node:25.11`. See [Official images](../../container-images/building-images/#official-images) for the available tags.
+
 Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use `--pull` to force a fresh pull:
 
 ```bash

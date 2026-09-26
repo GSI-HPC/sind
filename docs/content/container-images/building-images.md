@@ -2,22 +2,32 @@
 weight: 510
 title: "Building Images"
 icon: "build"
-description: "Default image and custom image requirements"
+description: "Official images and custom image requirements"
 toc: true
 ---
 
-## Default image
+## Official images
 
-sind provides a default multi-role image that works for all node types:
+sind publishes a multi-role node image for each supported Slurm release line to `ghcr.io/gsi-hpc/sind-node`:
 
+| Slurm release line | Image tags |
+|--------------------|------------|
+| 25.11 | `latest`, `25.11`, `25.11.6` |
+
+- `latest` is the newest release line. sind uses it when `defaults.image` is not specified.
+- `<YY>.<MM>` (e.g. `25.11`) follows the newest patch release of that line. Use it to stay on one Slurm release line.
+- `<YY>.<MM>.<patch>` (e.g. `25.11.6`) pins a patch release.
+
+The images are rebuilt when the image build changes, so the tags above pick up image fixes. Tags of superseded patch releases and of release lines that are no longer supported stay available but are not updated.
+
+To run a cluster on a specific release line, set its image in the [cluster configuration](../../configuration/cluster-config/):
+
+```yaml
+defaults:
+  image: ghcr.io/gsi-hpc/sind-node:25.11
 ```
-ghcr.io/gsi-hpc/sind-node:latest
-ghcr.io/gsi-hpc/sind-node:<slurm-version>
-```
 
-This is the default image when `defaults.image` is not specified.
-
-The default image:
+Every official image:
 
 - Is based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
@@ -30,11 +40,14 @@ sind enables the appropriate Slurm services based on node role at container star
 
 ### Building locally
 
-Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root:
+Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The `Dockerfile` and `docker-bake.hcl` are in the repository root. `SLURM_RELEASES` in `docker-bake.hcl` lists the Slurm release and tarball checksum of each image, and each entry becomes a bake target named `slurm-<YY>-<MM>`:
 
 ```bash
-make image
+make image                       # all release lines
+docker buildx bake slurm-25-11   # a single release line
 ```
+
+The Dockerfile has no default Slurm version. To build it without bake, pass `--build-arg SLURM_VERSION=<version>` and `--build-arg SLURM_SHA256=<checksum>`.
 
 ## Custom image requirements
 
