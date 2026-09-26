@@ -9,7 +9,9 @@ toc: true
 ## Install
 
 {{< tabs "install" >}}
-{{< tab "Pre-built binary (linux/amd64)" >}}
+{{< tab "Pre-built binary (Linux)" >}}
+
+Releases include binaries for linux/amd64 and linux/arm64. The commands below install the amd64 one; on 64-bit ARM, download `sind-linux-arm64` instead.
 
 System-wide installation into `/usr/local/bin`:
 
@@ -29,6 +31,23 @@ install -D ./sind ~/.local/bin/sind
 > Most distributions include `~/.local/bin` in `$PATH` by default, but only
 > if the directory exists at login time. You may need to log out and back in
 > after creating it.
+
+Each release publishes a `checksums.txt` and a build provenance attestation for its binaries. Check where a download came from with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify ./sind --repo GSI-HPC/sind
+```
+
+{{< /tab >}}
+{{< tab "mise" >}}
+
+Install the release binary for your platform (linux/amd64 or linux/arm64) with [mise](https://mise.jdx.dev/):
+
+```bash
+mise use -g github:GSI-HPC/sind
+```
+
+Drop `-g` to pin sind in the current project's `mise.toml` instead. mise checks the download against its published digest and verifies the release's build provenance attestation.
 
 {{< /tab >}}
 {{< tab "From source" >}}
@@ -58,6 +77,8 @@ sind requires a container image with systemd, munge, sshd, and Slurm installed. 
 ```
 ghcr.io/gsi-hpc/sind-node:latest
 ```
+
+It is published for linux/amd64 only. On an arm64 host, use an image built for arm64 instead.
 
 Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use `--pull` to force a fresh pull:
 

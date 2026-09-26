@@ -131,3 +131,22 @@ jobs:
         with:
           name: sind-linux-amd64
           path: sind-linux-amd64
+
+  release-snapshot:
+    name: Release Snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # The release build (.goreleaser.yaml) for every platform, without
+      # publishing, so a broken config fails here instead of at release.
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean
