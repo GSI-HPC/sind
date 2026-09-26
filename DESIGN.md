@@ -14,7 +14,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 ## Supported Versions
 
-- Slurm 25.11
+- Slurm 26.05 and 25.11 (one node image per release line)
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.20)
 
 ## Overview
@@ -608,7 +608,7 @@ name: test-cluster                       # default: "default"
 realm: sind                              # default: "sind"
 
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:25.11.2  # default: sind-node:latest
+  image: ghcr.io/gsi-hpc/sind-node:25.11 # default: sind-node:latest
   tmpSize: 256m                          # per-node /tmp tmpfs size
   cpus: 1                                # container CPU limit
   memory: 512m                           # container memory limit

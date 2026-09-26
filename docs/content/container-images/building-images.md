@@ -12,7 +12,8 @@ sind publishes a multi-role node image for each supported Slurm release line to 
 
 | Slurm release line | Image tags |
 |--------------------|------------|
-| 25.11 | `latest`, `25.11`, `25.11.8` |
+| 26.05 | `latest`, `26.05`, `26.05.4` |
+| 25.11 | `25.11`, `25.11.8` |
 
 - `latest` is the newest release line. sind uses it when `defaults.image` is not specified.
 - `<YY>.<MM>` (e.g. `25.11`) follows the newest patch release of that line. Use it to stay on one Slurm release line.

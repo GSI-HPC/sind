@@ -30,7 +30,9 @@ bump needs no Go code changes, only the files below.
    asks for it: insert it as the first entry, since that one becomes `latest`, and
    review the generated `slurm.conf` and `cgroup.conf` (`pkg/slurm/config.go`) and the
    Dockerfile's `configure` flags against its `RELEASE_NOTES.md`. Dropping a line
-   removes its entry; its published tags stay but are no longer rebuilt.
+   removes its entry; its published tags stay but are no longer rebuilt. Adding or
+   dropping a line also updates the release lines listed in `README.md` and under
+   "Supported Versions" in `DESIGN.md`.
 2. **Checksum the exact tarball the Dockerfile downloads:** `curl -fsSL <url> | sha256sum`.
    GitHub's auto-generated source archives differ from SchedMD's tarballs, so never use
    them. If the host is unreachable (cloud sessions may block `download.schedmd.com`),
