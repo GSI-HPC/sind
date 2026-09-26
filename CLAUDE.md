@@ -37,6 +37,9 @@ make lint-docs               # markdownlint-cli2 on docs/content
   50%, total 80%.
 - Cloud sessions have no Docker daemon and may lack firejail
   (`apt-get install -y firejail`); integration tests then only run in CI.
+- If golangci-lint fails with "the Go language version ... used to build golangci-lint
+  is lower than the targeted Go version", rebuild it with the toolchain from `go.mod`:
+  `GOTOOLCHAIN=go$(go list -m -f '{{.GoVersion}}') go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`.
 
 ## Code conventions
 
