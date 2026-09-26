@@ -152,6 +152,8 @@ The git history follows [Conventional Commits](https://www.conventionalcommits.o
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`, `ci`
 
+Footer: commits written with substantial help from an AI coding tool carry a `Co-Authored-By:` trailer naming the tool (e.g. `Co-Authored-By: Claude <noreply@anthropic.com>`); see the AI disclosure in the README.
+
 ## CLI Design Guidelines
 
 Rules for maintaining consistency when adding new commands, flags, and output.

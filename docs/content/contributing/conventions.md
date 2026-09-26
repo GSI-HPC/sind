@@ -44,6 +44,20 @@ fix(probe): handle systemd degraded state as ready
   units fail, which is expected in containers
 ```
 
+### AI-assisted commits
+
+Commits written with substantial help from an AI coding tool carry a `Co-Authored-By:` trailer naming the tool:
+
+```
+fix(mesh): tolerate stopped DNS container when updating records
+
+- ...
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+Commits made by Anthropic's Claude Code agent are additionally authored as `Claude <noreply@anthropic.com>`. Please follow the same convention in your contributions.
+
 ## Code style
 
 - Standard Go conventions (`gofmt`, `go vet`)
