@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -50,6 +51,41 @@ func TestRootCommand_NoArgs(t *testing.T) {
 	stdout, _, err := executeCommand()
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "sind creates and manages containerized Slurm clusters")
+}
+
+// TestUnknownSubcommand verifies that command groups reject unknown or
+// removed subcommands instead of printing help and exiting successfully.
+func TestUnknownSubcommand(t *testing.T) {
+	tests := []struct {
+		args    []string
+		wantErr string
+	}{
+		{[]string{"status", "default"}, `unknown command "status" for "sind"`},
+		{[]string{"-v", "status"}, `unknown command "status" for "sind"`},
+		{[]string{"gte"}, `unknown command "gte" for "sind" (did you mean "get"?)`},
+		{[]string{"get", "clsuter"}, `unknown command "clsuter" for "sind get" (did you mean "cluster"?)`},
+		{[]string{"create", "bogus"}, `unknown command "bogus" for "sind create"`},
+		{[]string{"delete", "bogus"}, `unknown command "bogus" for "sind delete"`},
+		{[]string{"power", "bogus"}, `unknown command "bogus" for "sind power"`},
+		{[]string{"mcp", "claude", "bogus"}, `unknown command "bogus" for "sind mcp claude"`},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(tt.args...)
+			require.EqualError(t, err, tt.wantErr)
+			assert.Empty(t, stdout)
+		})
+	}
+}
+
+func TestCommandGroup_NoArgsPrintsHelp(t *testing.T) {
+	for _, group := range []string{"get", "create", "delete", "power", "mcp"} {
+		t.Run(group, func(t *testing.T) {
+			stdout, _, err := executeCommand(group)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "Available Commands:")
+		})
+	}
 }
 
 // TestRootCommand_RealmFlagAfterSubcommand verifies --realm can appear in any
