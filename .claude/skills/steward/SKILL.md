@@ -42,7 +42,8 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
 | Lint | golangci-lint |
 | Unit Test | `make test` under firejail |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml` |
-| Integration Test | builds the node image with `docker buildx bake`, then `make test-integration` |
+| Integration Test (slurm-YY-MM) | one job per Slurm release line (bake target): builds that node image with `docker buildx bake`, then `make test-integration` |
+| Integration Test | passes when every Integration Test (slurm-YY-MM) job passed |
 | Build | `make build` |
 | Release Snapshot | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
 

@@ -13,8 +13,28 @@ permissions:
   packages: write
 
 jobs:
-  build:
+  targets:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # One bake target per Slurm release line (SLURM_RELEASES in
+      # docker-bake.hcl). The bake file also sets the tags, including
+      # latest on the newest release line.
+      - name: List node image targets
+        id: targets
+        uses: docker/bake-action/subaction/matrix@v7
+
+  build:
+    name: build (${{ matrix.target }})
+    needs: targets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.targets.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -31,28 +51,9 @@ jobs:
       - name: Build and push
         uses: docker/bake-action@v7
         with:
+          targets: ${{ matrix.target }}
           push: ${{ github.event_name != 'pull_request' }}
           allow: network.host
           set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
-
-      - name: Tag latest if this is the highest version
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          image=ghcr.io/gsi-hpc/sind-node
-          built=$(grep -m1 -oP 'ARG SLURM_VERSION=\K[0-9.]+' Dockerfile)
-
-          # Find the highest existing version tag in the registry
-          highest=$(gh api --paginate \
-            /orgs/GSI-HPC/packages/container/sind-node/versions \
-            --jq '.[].metadata.container.tags[]' \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -V | tail -1)
-
-          # Tag as latest only if the built version is >= the highest published
-          if [ -z "$highest" ] || [ "$(printf '%s\n%s' "$highest" "$built" | sort -V | tail -1)" = "$built" ]; then
-            docker buildx imagetools create "$image:$built" --tag "$image:latest"
-          fi
+            *.cache-from=type=gha,scope=${{ matrix.target }}
+            *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}

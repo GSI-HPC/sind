@@ -74,9 +74,28 @@ jobs:
         with:
           config: .testcoverage.yml
 
-  integration-test:
-    name: Integration Test
+  image-targets:
+    name: Image Targets
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # One bake target per Slurm release line (SLURM_RELEASES in
+      # docker-bake.hcl).
+      - name: List node image targets
+        id: targets
+        uses: docker/bake-action/subaction/matrix@v7
+
+  integration-test-image:
+    name: Integration Test (${{ matrix.target }})
+    needs: image-targets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.image-targets.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -89,11 +108,12 @@ jobs:
       - name: Build sind-node image
         uses: docker/bake-action@v7
         with:
+          targets: ${{ matrix.target }}
           load: true
           allow: network.host
           set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
+            *.cache-from=type=gha,scope=${{ matrix.target }}
+            *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}
             *.tags=local/sind-node:ci
 
       - name: Install gotestsum
@@ -109,9 +129,22 @@ jobs:
         uses: dorny/test-reporter@v3
         if: always()
         with:
-          name: Integration Test Results
+          name: Integration Test Results (${{ matrix.target }})
           path: integration-tests.xml
           reporter: java-junit
+
+  # Single check over all release lines, so its name stays stable when
+  # SLURM_RELEASES changes.
+  integration-test:
+    name: Integration Test
+    needs: integration-test-image
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check integration test results
+        env:
+          RESULT: ${{ needs.integration-test-image.result }}
+        run: '[[ "$RESULT" == success ]]'
 
   build:
     name: Build
