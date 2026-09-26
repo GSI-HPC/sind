@@ -45,28 +45,21 @@ jobs:
             if timeout 30 sind ssh "$n.diag" -- true 2>/dev/null; then echo "ssh $n: OK"; else echo "ssh $n: DENIED"; fi
           done
 
-      - name: pam_unix account internals (worker-0 allowed, worker-2 denied)
+      - name: Host AppArmor profiles and denials during a failed login
         run: |
+          echo "--- host AppArmor profiles matching chkpwd/ssh:"
+          sudo aa-status 2>/dev/null | grep -iE 'chkpwd|ssh|unix' || echo "none loaded"
+          find /etc/apparmor.d -maxdepth 1 \( -iname '*chkpwd*' -o -iname '*ssh*' \) -print
+          echo "--- AppArmor labels of sshd processes inside the nodes:"
           for short in worker-0 worker-2; do
-            node="sind-diag-$short"
-            echo "===== $short"
-            docker exec "$node" bash -c '
-              sed -i -E "s/^(account\s+required\s+pam_unix\.so)\s*$/\1 debug/" /etc/pam.d/password-auth
-              grep -E "^account" /etc/pam.d/password-auth
-              ls -l /usr/sbin/unix_chkpwd
-              /usr/sbin/unix_chkpwd root chkexpiry </dev/null; echo "unix_chkpwd root chkexpiry: rc=$?"
-              getent shadow root >/dev/null && echo "getent shadow root: OK" || echo "getent shadow root: FAILED"
-              dnf -y -q install libselinux-utils >/dev/null 2>&1
-              selinuxenabled; echo "selinuxenabled: rc=$? (0 = enabled)"
-              echo "getenforce: $(getenforce 2>&1)"
-              echo "/proc/self/attr/current: $(cat /proc/self/attr/current)"
-              grep -E "selinuxfs|securityfs" /proc/mounts || echo "no selinuxfs/securityfs mounts"
-            ' || true
-            since=$(docker exec "$node" date +%s)
-            timeout 30 sind ssh "$short.diag" -- true 2>/dev/null && r=OK || r=DENIED
-            echo "sind ssh: $r"
-            docker exec "$node" journalctl --no-pager --since "@$since" | grep -Ei 'pam_unix|unix_chkpwd|chkpwd|selinux' | sed 's/^.*\]: //' | head -15
+            docker exec "sind-diag-$short" bash -c 'ps -eo label=,comm= | grep -E "sshd" | sort -u' | sed "s/^/$short: /"
           done
+          sudo dmesg --clear
+          timeout 30 sind ssh worker-2.diag -- true 2>/dev/null && echo "sind ssh worker-2: OK" || echo "sind ssh worker-2: DENIED"
+          docker exec sind-diag-worker-2 /usr/sbin/unix_chkpwd root chkexpiry </dev/null; echo "unix_chkpwd on worker-2: rc=$?"
+          docker exec sind-diag-worker-0 /usr/sbin/unix_chkpwd root chkexpiry </dev/null; echo "unix_chkpwd on worker-0: rc=$?"
+          echo "--- kernel AppArmor messages:"
+          sudo dmesg | grep -i apparmor | sed -E 's/^\[[^]]*\] //' | tail -25 || true
 
       - uses: GSI-HPC/sind-action/cleanup@v2
         if: always()
