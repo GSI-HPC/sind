@@ -82,7 +82,7 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:30.149 DEBU cluster resources created
 00:13:30.621 DEBU waiting for node node=controller
 00:13:30.622 DEBU waiting for node node=worker-0
-00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd
+00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd,munge
 00:13:31.252 DEBU all probes passed node=sind-dev-controller
 00:13:31.474 INFO nodes ready count=3
 00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld

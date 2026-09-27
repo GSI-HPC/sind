@@ -72,6 +72,7 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
+| munge ready | munge service active |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers only; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (worker only) |
 

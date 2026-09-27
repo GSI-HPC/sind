@@ -271,13 +271,14 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 // readiness, injects SSH public keys, and collects host keys — all
 // concurrently per node with no barrier between creation and probing.
 //
-//	per node:  create → monitor → wait(container, systemd, sshd) → inspect → SSH → hostkey
+//	per node:  create → monitor → wait(container, systemd, sshd, munge) → inspect → SSH → hostkey
 func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) ([]nodeResult, error) {
 	log := sindlog.From(ctx)
 	baseProbes := []probe.Probe{
 		{Name: "container", Check: probe.ContainerRunning},
 		{Name: "systemd", Check: probe.SystemdReady},
 		{Name: "sshd", Check: probe.SSHDReady},
+		{Name: "munge", Check: probe.MungeReady},
 	}
 	results := make([]nodeResult, len(nodeConfigs))
 

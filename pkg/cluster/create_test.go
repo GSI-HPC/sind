@@ -966,6 +966,38 @@ func TestSetupNodes_InspectError(t *testing.T) {
 	assert.Contains(t, err.Error(), "inspecting node controller")
 }
 
+func TestSetupNodes_WaitsForMunge(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: inspectJSON(t, args[1], "running", nil)}
+		}
+		if args[0] == "exec" {
+			joined := strings.Join(args, " ")
+			switch {
+			case strings.Contains(joined, "is-system-running"):
+				return mock.Result{Stdout: "running\n"}
+			case strings.Contains(joined, "/dev/tcp"):
+				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+			case strings.HasSuffix(joined, "systemctl is-active munge"):
+				return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")}
+			}
+		}
+		return mock.Result{}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "probe munge")
+}
+
 func TestSetupNodes_InjectKeyError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
