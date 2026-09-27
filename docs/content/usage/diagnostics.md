@@ -148,6 +148,8 @@ The `STATUS (R/S/P/T)` column shows the cluster state followed by container coun
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
+Nodes where sind does not manage Slurm (unmanaged workers, and every node of an unmanaged cluster) list only `munge` and `sshd`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
+
 Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`.
 
 > **Tip:** Run `watch sind get cluster` for a simple live dashboard that refreshes every two seconds.

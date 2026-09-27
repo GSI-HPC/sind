@@ -812,6 +812,7 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.Equal(t, "sind-dev-controller", got.Container)
 	assert.Equal(t, "dev", got.Cluster)
 	assert.Equal(t, config.RoleController, got.Role)
+	assert.True(t, got.Managed, "no sind.managed label: created before it existed")
 	assert.Equal(t, "controller.dev.sind.sind", got.FQDN)
 	assert.Equal(t, "10.0.0.2", got.IP)
 	assert.Equal(t, docker.StateRunning, got.Status)
@@ -820,6 +821,30 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.True(t, got.Services["slurmctld"])
 	assert.Nil(t, got.HA)
 	assert.NotContains(t, stdout, `"ha"`)
+}
+
+func TestGetNode_JSONUnmanaged(t *testing.T) {
+	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-worker-0","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"worker","sind.cluster":"dev","sind.managed":"false"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.3"}}}}]`
+
+	m := &mock.Executor{
+		OnCall: func(args []string, _ string) mock.Result {
+			if len(args) >= 2 && args[0] == "inspect" {
+				return mock.Result{Stdout: inspectWithLabels}
+			}
+			if len(args) == 6 && args[2] == "systemctl" && args[3] == "is-active" {
+				return mock.Result{Stdout: "active\nactive\n"}
+			}
+			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+		},
+	}
+
+	stdout, _, err := executeWithMock(m, "get", "node", "worker-0.dev", "--output", "json")
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, false, got["managed"])
+	assert.Equal(t, map[string]any{"munge": true, "sshd": true}, got["services"])
 }
 
 // pairOnCall serves get cluster / get node for a cluster with a controller

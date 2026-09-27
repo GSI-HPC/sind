@@ -203,6 +203,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 			Container: containerName,
 			Cluster:   clusterName,
 			Role:      role,
+			Managed:   cluster.IsManaged(info.Labels),
 			FQDN:      cluster.DNSName(shortName, clusterName, realm),
 			IP:        health.IP,
 			Status:    health.State,

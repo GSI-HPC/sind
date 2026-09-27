@@ -369,6 +369,8 @@ worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd 
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
+`SERVICES` lists munge and sshd for every node, plus slurmctld or slurmd where sind manages Slurm. Unmanaged nodes (unmanaged workers, and every node of an unmanaged cluster) list only munge and sshd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
+
 Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Workers and submitters leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither.
 
 ```

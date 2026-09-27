@@ -23,13 +23,18 @@ func statusInspectJSON(name, status, ip string) string {
 }
 
 func statusInspectEntry(name, status, ip string) string {
+	return statusInspectEntryLabels(name, status, ip, docker.Labels{})
+}
+
+func statusInspectEntryLabels(name, status, ip string, labels docker.Labels) string {
+	labelsJSON, _ := json.Marshal(labels)
 	return fmt.Sprintf(`{
   "Id": "abc123",
   "Name": "/%s",
   "State": {"Status": %q},
-  "Config": {"Labels": {}},
+  "Config": {"Labels": %s},
   "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": %q}}}
-}`, name, status, ip)
+}`, name, status, labelsJSON, ip)
 }
 
 // statusInspectJSONBatch builds a docker inspect JSON response covering every
@@ -140,6 +145,44 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 	// Submitters have no role-specific Slurm service (only munge + sshd).
 	assert.NotContains(t, health.Services, probe.ServiceSlurmctld)
 	assert.NotContains(t, health.Services, probe.ServiceSlurmd)
+}
+
+func TestGetNodeHealth_UnmanagedWorker(t *testing.T) {
+	var m mock.Executor
+	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if len(args) >= 2 && args[0] == "inspect" {
+			return mock.Result{Stdout: "[" + statusInspectEntryLabels("sind-dev-worker-0", "running", "172.18.0.3",
+				docker.Labels{LabelRole: "worker", LabelManaged: "false"}) + "]"}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services,
+		"slurmd is not sind's on an unmanaged worker")
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "systemctl", "is-active", "munge", "sshd"}, m.Calls[1].Args)
+}
+
+func TestGetNodeHealth_UnmanagedNotRunning(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) >= 2 && args[0] == "inspect" {
+			return mock.Result{Stdout: "[" + statusInspectEntryLabels("sind-dev-worker-0", "exited", "",
+				docker.Labels{LabelManaged: "false"}) + "]"}
+		}
+		return mock.Result{Err: fmt.Errorf("container not running")}
+	}
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, ServiceHealth{probe.ServiceMunge: false, probe.ServiceSSHD: false}, health.Services)
 }
 
 func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
@@ -547,6 +590,43 @@ func TestGetMountPoints_DataCheckError(t *testing.T) {
 }
 
 // --- GetStatus ---
+
+func TestGetStatus_UnmanagedNodes(t *testing.T) {
+	labels := map[string]docker.Labels{
+		"sind-dev-controller": {LabelRole: "controller", LabelManaged: "true"},
+		"sind-dev-worker-0":   {LabelRole: "worker", LabelManaged: "false"},
+	}
+	var m mock.Executor
+	base := fullStatusOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		switch args[0] {
+		case "ps":
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=controller,sind.managed=true"},
+				testutil.PsEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=worker,sind.managed=false"},
+			)}
+		case "inspect":
+			entries := make([]string, 0, len(args)-1)
+			for _, name := range args[1:] {
+				entries = append(entries, statusInspectEntryLabels(name, "running", "172.18.0.9", labels[name]))
+			}
+			return mock.Result{Stdout: "[" + strings.Join(entries, ",") + "]"}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, status.Nodes, 2)
+	assert.True(t, status.Nodes[0].Managed)
+	assert.Contains(t, status.Nodes[0].Health.Services, probe.ServiceSlurmctld)
+	assert.False(t, status.Nodes[1].Managed)
+	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, status.Nodes[1].Health.Services)
+}
 
 // fullStatusOnCall returns a mock dispatcher for GetStatus with all healthy nodes.
 func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
@@ -1033,6 +1113,14 @@ func TestNodeHealth_JSONServicesMap(t *testing.T) {
 	assert.True(t, svc["munge"])
 	assert.True(t, svc["sshd"])
 	assert.False(t, svc["slurmctld"])
+}
+
+// TestNodeStatus_JSONManaged locks in that managed is always present, also
+// when false.
+func TestNodeStatus_JSONManaged(t *testing.T) {
+	data, err := json.Marshal(NodeStatus{Name: "worker-0.dev", Role: config.RoleWorker})
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"managed":false`)
 }
 
 // keys returns the keys of a map sorted for stable assertion errors.
