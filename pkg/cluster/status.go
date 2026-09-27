@@ -28,9 +28,10 @@ type ServiceHealth map[probe.Service]bool
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	State    docker.ContainerState `json:"status"`   // container state from Docker (e.g. "running", "exited")
-	IP       string                `json:"ip"`       // container IP address
-	Services ServiceHealth         `json:"services"` // all readiness-checked services (munge, sshd, and role-specific services like slurmctld/slurmd)
+	State    docker.ContainerState `json:"status"`       // container state from Docker (e.g. "running", "exited")
+	IP       string                `json:"ip"`           // container IP address
+	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge, sshd, and role-specific services like slurmctld/slurmd)
+	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
 // GetNodeHealth checks the health of a single node container.
@@ -42,7 +43,14 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 	if err != nil {
 		return nil, fmt.Errorf("inspecting container: %w", err)
 	}
-	return nodeHealthFromInfo(ctx, client, info, role, realm, clusterName), nil
+	health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
+	if role == config.RoleController {
+		shortName := strings.TrimPrefix(containerName, ContainerPrefix(realm, clusterName))
+		if health.HA, err = nodeHA(ctx, client, realm, clusterName, shortName, health); err != nil {
+			return nil, err
+		}
+	}
+	return health, nil
 }
 
 // nodeHealthFromInfo runs readiness probes against a pre-inspected container
@@ -294,6 +302,10 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
 	})
 
+	if _, ok := infoByName[ContainerName(realm, clusterName, ControllerBackupShortName)]; ok {
+		setControllerHA(ctx, client, realm, clusterName, nodes)
+	}
+
 	network, err := GetNetworkHealth(ctx, client, realm, clusterName)
 	if err != nil {
 		return nil, err
@@ -321,8 +333,12 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 
 // nodeStatusOrder returns a sort key for NodeStatus (controller, submitter,
 // worker) with natural ordering of any numeric suffixes in the node name.
+// The key uses the short name, so "controller" sorts before
+// "controller-backup" ("-" < "." would otherwise put "controller-backup.dev"
+// first).
 func nodeStatusOrder(n *NodeStatus) string {
-	return rolePrefix(n.Role) + naturalSortKey(n.Name)
+	shortName, _, _ := strings.Cut(n.Name, ".")
+	return rolePrefix(n.Role) + naturalSortKey(shortName)
 }
 
 // roleServices returns the Slurm readiness-check services for the given role.
