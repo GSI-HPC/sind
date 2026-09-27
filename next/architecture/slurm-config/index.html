@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-26T20:06:38+00:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/slurm-config/",
       "headline": "Slurm Configuration",
       "description": "Generated configuration files and version discovery",
-      "wordCount": "475",
+      "wordCount": "515",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-26T20:06:38.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1213,6 +1213,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2132,7 +2176,10 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>sind generates a multi-file Slurm configuration and writes it to the <code>sind-&lt;cluster&gt;-config</code> volume:</p>
+<p>sind generates a multi-file Slurm configuration and writes it to the <code>sind-&lt;cluster&gt;-config</code> volume. For an <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/unmanaged-cluster/"
+>unmanaged cluster</a> it writes nothing: the volume stays empty for your own configuration.</p>
 <pre tabindex="0"><code>/etc/slurm/
 ├── slurm.conf              # main config
 ├── sind-nodes.conf         # sind-managed node definitions
@@ -2239,6 +2286,7 @@ PlugStackConfig=/etc/slurm/plugstack.conf
 <li>Generating version-appropriate configuration</li>
 <li>Displaying version information in CLI output</li>
 </ul>
+<p>sind skips the discovery for unmanaged clusters, where the Slurm you provision may differ from the one in the image. Their <code>SLURM</code> column shows <code>-</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="mixed-versions"
     >
@@ -2840,6 +2888,39 @@ PlugStackConfig=/etc/slurm/plugstack.conf
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

@@ -12,9 +12,9 @@
 <meta name="generator" content="Hugo 0.166.0">
 
 
-  <meta name="description" content="Using sind with AI assistants via the Model Context Protocol" />
+  <meta name="description" content="Leave Slurm to your own tooling: test Chef or Ansible provisioning, or run slurmctld by hand" />
 
-    <title>MCP Integration | sind</title>
+    <title>Unmanaged Cluster | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -35,23 +35,23 @@
     
   <meta
     property="og:title"
-    content="MCP Integration"
+    content="Unmanaged Cluster"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="Using sind with AI assistants via the Model Context Protocol" />
+  <meta property="og:description" content="Leave Slurm to your own tooling: test Chef or Ansible provisioning, or run slurmctld by hand" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/mcp/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/" />
 
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T19:33:47+02:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="MCP Integration" />
-  <meta name="twitter:description" content="Using sind with AI assistants via the Model Context Protocol" />
+<meta name="twitter:title" content="Unmanaged Cluster" />
+  <meta name="twitter:description" content="Leave Slurm to your own tooling: test Chef or Ansible provisioning, or run slurmctld by hand" />
 
 
   <script type="application/ld+json">
@@ -59,22 +59,22 @@
       "@context": "http://schema.org",
       "@type": "TechArticle",
       "articleSection": "Guides",
-      "name": "MCP Integration",
-      "url": "https://gsi-hpc.github.io/sind/next/guides/mcp/",
-      "headline": "MCP Integration",
-      "description": "Using sind with AI assistants via the Model Context Protocol",
-      "wordCount": "221",
+      "name": "Unmanaged Cluster",
+      "url": "https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/",
+      "headline": "Unmanaged Cluster",
+      "description": "Leave Slurm to your own tooling: test Chef or Ansible provisioning, or run slurmctld by hand",
+      "wordCount": "658",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/guides/mcp/"
+          "@id": "https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T19:33:47.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -152,7 +152,7 @@
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/guides/mcp/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -1111,7 +1111,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/guides/mcp/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     MCP Integration
                   </a>
@@ -1243,7 +1243,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/guides/unmanaged-cluster/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     Unmanaged Cluster
                   </a>
@@ -2146,7 +2146,7 @@
     
   
   
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/guides/' href='/sind/next/guides/'><span itemprop='name'>Guides</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>MCP Integration</span><meta itemprop='position' content='5' /></li>
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/guides/' href='/sind/next/guides/'><span itemprop='name'>Guides</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Unmanaged Cluster</span><meta itemprop='position' content='5' /></li>
   
 
   
@@ -2165,126 +2165,173 @@
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>MCP Integration</h1>
+    <h1>Unmanaged Cluster</h1>
     
-    <p>sind includes a built-in <a
-  class="gdoc-markdown__link"
-  href="https://modelcontextprotocol.io/"
->Model Context Protocol</a> (MCP) server that exposes all CLI commands as tools for AI assistants. This lets tools like Claude, VS Code Copilot, or Cursor create clusters, check status, manage workers, and control node power states through natural language.</p>
+    <p>An unmanaged cluster gives you sind&rsquo;s nodes (systemd containers with networking, DNS, SSH access and a shared munge key) and leaves Slurm to you. Use it to test Chef or Ansible code that provisions Slurm end to end, or to debug a configuration by running <code>slurmctld -Dvvvvvv</code> by hand.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="quick-setup"
+    <h2 id="create-an-unmanaged-cluster"
     >
-        Quick setup
+        Create an unmanaged cluster
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#quick-setup" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Quick setup" aria-label="Anchor to: Quick setup" href="#quick-setup">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/#create-an-unmanaged-cluster" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Create an unmanaged cluster" aria-label="Anchor to: Create an unmanaged cluster" href="#create-an-unmanaged-cluster">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Register sind with your editor:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Claude Desktop</span>
-</span></span><span class="line"><span class="cl">sind mcp claude <span class="nb">enable</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># VS Code</span>
-</span></span><span class="line"><span class="cl">sind mcp vscode <span class="nb">enable</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Cursor</span>
-</span></span><span class="line"><span class="cl">sind mcp cursor <span class="nb">enable</span>
-</span></span></code></pre></div><p>To unregister:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp claude disable
-</span></span><span class="line"><span class="cl">sind mcp vscode disable
-</span></span><span class="line"><span class="cl">sind mcp cursor disable
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="manual-configuration"
+<p>Set <code>managed: false</code> on the controller:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">dev</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">managed</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">submitter</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster --config unmanaged.yaml
+</span></span></code></pre></div><p>The flag applies to the whole cluster:</p>
+<ul>
+<li>Every node is unmanaged. A worker with <code>managed: true</code> is rejected.</li>
+<li><code>slurm</code> sections (<code>main</code>, <code>cgroup</code>, <code>gres</code>, <code>topology</code>, <code>plugstack</code>) are rejected, because sind writes no Slurm configuration.</li>
+<li><code>backupController: true</code> still adds <code>controller-backup</code> and the shared state volume (see <a
+  class="gdoc-markdown__link"
+  href="#controller-pair"
+>Controller pair</a>).</li>
+</ul>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="what-sind-sets-up"
     >
-        Manual configuration
+        What sind sets up
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#manual-configuration" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Manual configuration" aria-label="Anchor to: Manual configuration" href="#manual-configuration">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/#what-sind-sets-up" class="gdoc-page__anchor clip flex align-center" title="Anchor to: What sind sets up" aria-label="Anchor to: What sind sets up" href="#what-sind-sets-up">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>If you prefer to configure the MCP server manually, add the following to your editor&rsquo;s MCP config:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-json" data-lang="json"><span class="line"><span class="cl"><span class="p">{</span>
-</span></span><span class="line"><span class="cl">  <span class="nt">&#34;mcpServers&#34;</span><span class="p">:</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;sind&#34;</span><span class="p">:</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">      <span class="nt">&#34;command&#34;</span><span class="p">:</span> <span class="s2">&#34;sind&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">      <span class="nt">&#34;args&#34;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;mcp&#34;</span><span class="p">,</span> <span class="s2">&#34;start&#34;</span><span class="p">]</span>
-</span></span><span class="line"><span class="cl">    <span class="p">}</span>
-</span></span><span class="line"><span class="cl">  <span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="available-tools"
-    >
-        Available tools
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#available-tools" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Available tools" aria-label="Anchor to: Available tools" href="#available-tools">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>All sind commands are automatically exposed as MCP tools. To see the full list:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp tools
-</span></span></code></pre></div><p>This exports the tool definitions to <code>mcp-tools.json</code>. The tools follow the naming convention <code>sind_&lt;command&gt;_&lt;subcommand&gt;</code>, for example:</p>
 <div class="table-wrap"> <table>
 	<thead>
 			<tr>
-					<th>Tool</th>
-					<th>Description</th>
+					<th></th>
+					<th>Managed cluster</th>
+					<th>Unmanaged cluster</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td><code>sind_create_cluster</code></td>
-					<td>Create a new cluster</td>
+					<td>Containers, networks, DNS, SSH access</td>
+					<td>✓</td>
+					<td>✓</td>
 			</tr>
 			<tr>
-					<td><code>sind_create_worker</code></td>
-					<td>Add workers to a running cluster</td>
+					<td>munge key, munge running</td>
+					<td>✓</td>
+					<td>✓</td>
 			</tr>
 			<tr>
-					<td><code>sind_delete_cluster</code></td>
-					<td>Delete a cluster</td>
+					<td><code>/etc/slurm</code></td>
+					<td>generated configuration</td>
+					<td>empty</td>
 			</tr>
 			<tr>
-					<td><code>sind_get_cluster</code></td>
-					<td>Show cluster health status</td>
+					<td>slurmctld and slurmd</td>
+					<td>running</td>
+					<td>not started</td>
 			</tr>
 			<tr>
-					<td><code>sind_get_nodes</code></td>
-					<td>List cluster nodes</td>
-			</tr>
-			<tr>
-					<td><code>sind_get_realms</code></td>
-					<td>List active realms</td>
-			</tr>
-			<tr>
-					<td><code>sind_get_mesh</code></td>
-					<td>Show mesh infrastructure info</td>
-			</tr>
-			<tr>
-					<td><code>sind_power_shutdown</code></td>
-					<td>Shut down a node</td>
-			</tr>
-			<tr>
-					<td><code>sind_power_reboot</code></td>
-					<td>Reboot a node</td>
-			</tr>
-			<tr>
-					<td><code>sind_ssh</code></td>
-					<td>SSH into a node</td>
+					<td>Slurm version (<code>sind.slurm.version</code> label)</td>
+					<td>discovered from the image</td>
+					<td>empty</td>
 			</tr>
 	</tbody>
 </table> </div>
+<p><code>/etc/slurm</code> is one volume shared by all nodes, like an NFS share: writable on the controllers, read-only on the submitter and the workers. <code>/etc/munge</code> holds sind&rsquo;s munge key and is read-only on every node. <code>sind create cluster</code> returns once each node runs systemd, sshd and munge.</p>
+<p>The stock <code>sind-node</code> image has Slurm installed but not enabled. sind neither runs nor queries Slurm on an unmanaged cluster, so a custom image may also leave Slurm out for your provisioning to install (see <a
+  class="gdoc-markdown__link"
+  href="/sind/next/container-images/building-images/"
+>Building Images</a>).</p>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="http-mode"
+    <h2 id="provision-slurm"
     >
-        HTTP mode
+        Provision Slurm
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#http-mode" class="gdoc-page__anchor clip flex align-center" title="Anchor to: HTTP mode" aria-label="Anchor to: HTTP mode" href="#http-mode">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/#provision-slurm" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Provision Slurm" aria-label="Anchor to: Provision Slurm" href="#provision-slurm">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>For remote or multi-client setups, sind can serve MCP over HTTP:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp stream --host localhost --port <span class="m">8080</span>
-</span></span></code></pre></div>
+<p>Write the configuration to <code>/etc/slurm</code> on a controller, then start the daemons. By hand, a minimal setup for the cluster above looks like this:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh controller.dev -- <span class="s1">&#39;cat &gt; /etc/slurm/slurm.conf&#39;</span> <span class="s">&lt;&lt;&#39;EOF&#39;
+</span></span></span><span class="line"><span class="cl"><span class="s">ClusterName=dev
+</span></span></span><span class="line"><span class="cl"><span class="s">SlurmctldHost=controller
+</span></span></span><span class="line"><span class="cl"><span class="s">SlurmUser=slurm
+</span></span></span><span class="line"><span class="cl"><span class="s">StateSaveLocation=/var/spool/slurmctld
+</span></span></span><span class="line"><span class="cl"><span class="s">SlurmdSpoolDir=/var/spool/slurmd
+</span></span></span><span class="line"><span class="cl"><span class="s">ProctrackType=proctrack/cgroup
+</span></span></span><span class="line"><span class="cl"><span class="s">TaskPlugin=task/cgroup,task/affinity
+</span></span></span><span class="line"><span class="cl"><span class="s">ReturnToService=2
+</span></span></span><span class="line"><span class="cl"><span class="s">NodeName=worker-[0-1] CPUs=1 State=UNKNOWN
+</span></span></span><span class="line"><span class="cl"><span class="s">PartitionName=all Nodes=ALL Default=YES MaxTime=INFINITE State=UP
+</span></span></span><span class="line"><span class="cl"><span class="s">EOF</span>
+</span></span><span class="line"><span class="cl">sind ssh controller.dev -- <span class="s1">&#39;echo CgroupPlugin=autodetect &gt; /etc/slurm/cgroup.conf&#39;</span>
+</span></span><span class="line"><span class="cl">sind ssh controller.dev -- systemctl start slurmctld
+</span></span><span class="line"><span class="cl">sind ssh worker-0.dev -- systemctl start slurmd
+</span></span><span class="line"><span class="cl">sind ssh worker-1.dev -- systemctl start slurmd
+</span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- srun -N2 hostname
+</span></span></code></pre></div><p>Chef, Ansible and similar tools reach the nodes over SSH as root. Include sind&rsquo;s exported SSH configuration (see <a
+  class="gdoc-markdown__link"
+  href="/sind/next/usage/node-access/#user-ssh-client-integration"
+>User SSH client integration</a>) and use the node names as hosts, for example in an Ansible inventory:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-ini" data-lang="ini"><span class="line"><span class="cl"><span class="k">[slurm_controller]</span>
+</span></span><span class="line"><span class="cl"><span class="na">controller.dev.sind.sind</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">[slurm_submitter]</span>
+</span></span><span class="line"><span class="cl"><span class="na">submitter.dev.sind.sind</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">[slurm_workers]</span>
+</span></span><span class="line"><span class="cl"><span class="na">worker-0.dev.sind.sind</span>
+</span></span><span class="line"><span class="cl"><span class="na">worker-1.dev.sind.sind</span>
+</span></span></code></pre></div><p>Keep in mind:</p>
+<ul>
+<li>Write Slurm files on a controller. On the submitter and the workers <code>/etc/slurm</code> is read-only, and every node reads the same files.</li>
+<li>munge is sind&rsquo;s. <code>/etc/munge</code> is read-only, so recipes that manage the munge key must leave it as it is. <code>sind get munge-key dev</code> prints the key base64-encoded if your tooling needs it.</li>
+<li><code>sind get cluster dev</code> reports munge and sshd only. Check Slurm itself with <code>sind exec dev -- sinfo</code> and <code>sind logs controller.dev slurmctld</code>.</li>
+</ul>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="run-slurmctld-by-hand"
+    >
+        Run slurmctld by hand
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/#run-slurmctld-by-hand" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Run slurmctld by hand" aria-label="Anchor to: Run slurmctld by hand" href="#run-slurmctld-by-hand">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>To debug a configuration, run <code>slurmctld</code> in the foreground with full verbosity instead of starting the service:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh -t controller.dev -- slurmctld -Dvvvvvv
+</span></span></code></pre></div><p>Stop it with Ctrl-C, edit the files under <code>/etc/slurm</code> on a controller, and run it again. <code>slurmd -Dvvvvvv</code> works the same way on a worker.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="controller-pair"
+    >
+        Controller pair
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/#controller-pair" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Controller pair" aria-label="Anchor to: Controller pair" href="#controller-pair">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>With <code>backupController: true</code>, sind creates <code>controller-backup</code> next to <code>controller</code> and mounts the shared state volume <code>&lt;realm&gt;-&lt;cluster&gt;-state</code> at <code>/var/spool/slurmctld</code> on both. Use it as <code>StateSaveLocation</code>, and list the controllers in this order so that your pair matches sind&rsquo;s names:</p>
+<pre tabindex="0"><code>SlurmctldHost=controller
+SlurmctldHost=controller-backup
+StateSaveLocation=/var/spool/slurmctld
+</code></pre><p>sind shows no <code>HA</code> column for an unmanaged pair, because it cannot tell which controller is in control. Ask Slurm instead with <code>sind exec dev -- scontrol ping</code>. Without a submitter, <code>sind enter</code> and <code>sind exec</code> target <code>controller</code> if it runs, otherwise <code>controller-backup</code>. <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/controller-failover/"
+>Controller Failover</a> shows how to trigger failovers; the power commands work the same way on an unmanaged pair.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="workers"
+    >
+        Workers
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/#workers" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Workers" aria-label="Anchor to: Workers" href="#workers">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>sind create worker dev</code> adds unmanaged workers, with or without <code>--unmanaged</code>: sind does not register them with Slurm or start slurmd. Add them to your configuration and start slurmd yourself. <code>sind delete worker</code> removes the containers and never edits <code>/etc/slurm</code>.</p>
+
   </article>
 
 
@@ -2916,6 +2963,105 @@
         
 
         
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
           
           
         
@@ -2925,6 +3071,12 @@
         
 
         
+        
+      
+    
+
+  
+
         
       
     
@@ -2954,111 +3106,6 @@
             
             
           
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
         
 
         
@@ -3542,11 +3589,11 @@
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/guides/mpi-jobs/"
-      title="Running MPI Jobs"
+      href="/sind/next/guides/controller-failover/"
+      title="Controller Failover"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Running MPI Jobs
+      Controller Failover
     </a>
   
 </span>
@@ -3554,10 +3601,10 @@
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/guides/ci-cd/"
-      title="CI/CD"
+      href="/sind/next/architecture/"
+      title="Architecture"
     >
-      CI/CD
+      Architecture
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T11:29:01+00:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/docker-resources/",
       "headline": "Docker Resources",
       "description": "Resource naming conventions, volumes, and labels",
-      "wordCount": "248",
+      "wordCount": "289",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T11:29:01.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1213,6 +1213,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2303,6 +2347,7 @@
 			</tr>
 	</tbody>
 </table> </div>
+<p>Unmanaged clusters use the same mounts; their config volume starts empty.</p>
 <p>SELinux relabeling (<code>:z</code>) is not used because containers run with <code>--security-opt label=disable</code>. This avoids expensive recursive relabeling of bind-mounted host directories.</p>
 <pre tabindex="0"><code>-v sind-dev-config:/etc/slurm:rw      # controller
 -v sind-dev-config:/etc/slurm:ro      # all others
@@ -2354,6 +2399,11 @@
 					<td><code>sind.role</code></td>
 					<td><code>worker</code></td>
 					<td>Node role</td>
+			</tr>
+			<tr>
+					<td><code>sind.managed</code></td>
+					<td><code>true</code></td>
+					<td>Whether sind manages Slurm on the node: <code>false</code> for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed.</td>
 			</tr>
 			<tr>
 					<td><code>sind.slurm.version</code></td>
@@ -2943,6 +2993,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

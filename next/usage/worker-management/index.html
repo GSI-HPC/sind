@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-04-22T15:40:21+02:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/worker-management/",
       "headline": "Worker Management",
       "description": "Dynamically adding and removing worker nodes",
-      "wordCount": "249",
+      "wordCount": "276",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-22T15:40:21.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1213,6 +1213,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2170,7 +2214,7 @@
 			<tr>
 					<td><code>--unmanaged</code></td>
 					<td><code>false</code></td>
-					<td>Don&rsquo;t start slurmd, don&rsquo;t add to slurm.conf</td>
+					<td>Don&rsquo;t start slurmd, don&rsquo;t add to slurm.conf (implied on unmanaged clusters)</td>
 			</tr>
 			<tr>
 					<td><code>--pull</code></td>
@@ -2239,6 +2283,10 @@
 <li>Starts slurmd on the new node(s)</li>
 </ol>
 <p>This requires <code>sind-nodes.conf</code> to exist in <code>/etc/slurm</code>. If you replaced the generated Slurm configuration, use <code>--unmanaged</code> instead.</p>
+<p>On an <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/unmanaged-cluster/"
+>unmanaged cluster</a>, every new worker is unmanaged, with or without <code>--unmanaged</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="remove-workers"
     >
@@ -2249,7 +2297,7 @@
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind delete worker NODES
-</span></span></code></pre></div><p>For managed workers, sind removes them from <code>sind-nodes.conf</code> and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes.</p>
+</span></span></code></pre></div><p>For managed workers, sind removes them from <code>sind-nodes.conf</code> and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes. On an unmanaged cluster, sind never edits the Slurm configuration.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Remove a single worker</span>
 </span></span><span class="line"><span class="cl">sind delete worker worker-2
 </span></span><span class="line"><span class="cl">
@@ -2846,6 +2894,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

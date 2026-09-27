@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T11:29:01+00:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
       "headline": "Cluster Configuration",
       "description": "YAML configuration schema reference",
-      "wordCount": "500",
+      "wordCount": "521",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T11:29:01.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1202,6 +1202,50 @@
                     class="gdoc-nav__entry"
                   >
                     Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2442,7 +2486,8 @@
 <li>At most one <code>submitter</code> node is allowed</li>
 <li>At least one <code>worker</code> node is required</li>
 <li><code>count</code> is only valid for worker nodes</li>
-<li><code>managed</code> is only valid for worker nodes</li>
+<li><code>managed</code> is only valid for controller and worker nodes</li>
+<li>With <code>managed: false</code> on the controller, no worker may set <code>managed: true</code> and no <code>slurm</code> section may be set</li>
 <li><code>backupController</code> is only valid for controller nodes</li>
 <li>With <code>backupController</code>, <code>slurm.main</code> must not set <code>SlurmctldHost</code> (or its deprecated forms <code>ControlMachine</code>, <code>BackupController</code>, <code>BackupAddr</code>) or <code>StateSaveLocation</code></li>
 <li><code>count</code> must not be negative</li>
@@ -3033,6 +3078,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

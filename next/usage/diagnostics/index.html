@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T11:29:01+00:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1048",
+      "wordCount": "1115",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T11:29:01.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1213,6 +1213,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2238,7 +2282,7 @@ sudo systemctl daemon-reload
 00:13:30.149 DEBU cluster resources created
 00:13:30.621 DEBU waiting for node node=controller
 00:13:30.622 DEBU waiting for node node=worker-0
-00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd
+00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd,munge
 00:13:31.252 DEBU all probes passed node=sind-dev-controller
 00:13:31.474 INFO nodes ready count=3
 00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld
@@ -2292,7 +2336,7 @@ NAME              ROLE        IP            STATUS    SERVICES
 controller.dev    controller  172.18.0.2    running   munge ✓ slurmctld ✓ sshd ✓
 worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd ✓
 worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
-</code></pre><p>The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
+</code></pre><p><code>SLURM</code> shows <code>-</code> when sind does not know the version, as for unmanaged clusters. The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
 <div class="table-wrap"> <table>
 	<thead>
 			<tr>
@@ -2324,10 +2368,14 @@ worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd 
 	</tbody>
 </table> </div>
 <p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
+<p>Nodes where sind does not manage Slurm (unmanaged workers, and every node of an <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/unmanaged-cluster/"
+>unmanaged cluster</a>) list only <code>munge</code> and <code>sshd</code>. The JSON output marks each node with <code>&quot;managed&quot;: true|false</code>, as does <code>sind get node -o json</code>.</p>
 <p>Clusters with a <a
   class="gdoc-markdown__link"
   href="/sind/next/guides/controller-failover/"
->backup controller</a> get an <code>HA</code> column in the <code>NODES</code> table: <code>primary</code> or <code>backup</code> for each controller, with <code>*</code> on the one in control. The shared state volume appears under <code>MOUNTS</code> as <code>/var/spool/slurmctld</code>.</p>
+>backup controller</a> get an <code>HA</code> column in the <code>NODES</code> table: <code>primary</code> or <code>backup</code> for each controller, with <code>*</code> on the one in control. The shared state volume appears under <code>MOUNTS</code> as <code>/var/spool/slurmctld</code>. Unmanaged clusters show no <code>HA</code> column: sind cannot tell which of their controllers is in control.</p>
 <blockquote>
 <p><strong>Tip:</strong> Run <code>watch sind get cluster</code> for a simple live dashboard that refreshes every two seconds.</p>
 </blockquote>
@@ -3053,6 +3101,39 @@ worker-0.default.sind.sind           172.19.0.3
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T11:29:01+00:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/guides/controller-failover/",
       "headline": "Controller Failover",
       "description": "Run a primary\/backup slurmctld pair and trigger graceful or outage failovers",
-      "wordCount": "603",
+      "wordCount": "616",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T11:29:01.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1213,6 +1213,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2251,6 +2295,10 @@ Slurmctld(backup) at controller-backup is UP
 <li><code>sind create worker</code> and <code>sind delete worker</code> update <code>sind-nodes.conf</code> and reconfigure Slurm through a running controller, so they keep working while the primary is down.</li>
 <li><code>sind ssh controller</code> and <code>sind logs controller</code> still address the primary container by name.</li>
 </ul>
+<p>To run a pair whose Slurm configuration you provision yourself, see <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/unmanaged-cluster/"
+>Unmanaged Cluster</a>.</p>
 
   </article>
 
@@ -2963,6 +3011,44 @@ Slurmctld(backup) at controller-backup is UP
     
 
   
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+          
+            
+            
+          
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
 
         
       
@@ -2988,11 +3074,6 @@ Slurmctld(backup) at controller-backup is UP
         
         
 
-        
-          
-            
-            
-          
         
 
         
@@ -3488,10 +3569,10 @@ Slurmctld(backup) at controller-backup is UP
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/architecture/"
-      title="Architecture"
+      href="/sind/next/guides/unmanaged-cluster/"
+      title="Unmanaged Cluster"
     >
-      Architecture
+      Unmanaged Cluster
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

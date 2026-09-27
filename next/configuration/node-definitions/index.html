@@ -12,7 +12,7 @@
 <meta name="generator" content="Hugo 0.166.0">
 
 
-  <meta name="description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
+  <meta name="description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
 
     <title>Node Definitions | sind</title>
 
@@ -38,20 +38,20 @@
     content="Node Definitions"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
+  <meta property="og:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://gsi-hpc.github.io/sind/next/configuration/node-definitions/" />
 
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T11:29:01+00:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
 <meta name="twitter:title" content="Node Definitions" />
-  <meta name="twitter:description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
+  <meta name="twitter:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
 
 
   <script type="application/ld+json">
@@ -62,8 +62,8 @@
       "name": "Node Definitions",
       "url": "https://gsi-hpc.github.io/sind/next/configuration/node-definitions/",
       "headline": "Node Definitions",
-      "description": "Node roles, shorthand syntax, and managed vs unmanaged workers",
-      "wordCount": "607",
+      "description": "Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters",
+      "wordCount": "725",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T11:29:01.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1213,6 +1213,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2217,9 +2261,9 @@
 			</tr>
 			<tr>
 					<td><code>managed</code></td>
-					<td>worker only</td>
+					<td>controller + worker</td>
 					<td><code>true</code></td>
-					<td>Start slurmd and add to slurm.conf</td>
+					<td>Worker: start slurmd and add to slurm.conf. Controller: <code>false</code> makes the whole cluster unmanaged (see below)</td>
 			</tr>
 			<tr>
 					<td><code>backupController</code></td>
@@ -2300,7 +2344,11 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">managed</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">        </span><span class="c"># 2 unmanaged workers</span><span class="w">
 </span></span></span></code></pre></div><p>Unmanaged workers can also be created dynamically:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create worker --count <span class="m">2</span> --unmanaged
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+</span></span></code></pre></div><p>In an <a
+  class="gdoc-markdown__link"
+  href="#unmanaged-cluster"
+>unmanaged cluster</a> every worker is unmanaged.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="backup-controller"
     >
         Backup controller
@@ -2325,6 +2373,30 @@
   class="gdoc-markdown__link"
   href="/sind/next/guides/controller-failover/"
 >Controller Failover</a> for checking which controller is in control and triggering a failover.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="unmanaged-cluster"
+    >
+        Unmanaged cluster
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/node-definitions/#unmanaged-cluster" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Unmanaged cluster" aria-label="Anchor to: Unmanaged cluster" href="#unmanaged-cluster">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>managed: false</code> on the controller makes the whole cluster unmanaged: sind creates the nodes, the volumes and the munge key, but writes no Slurm configuration and starts no Slurm daemon, so your own tooling can provision Slurm.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">managed</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><ul>
+<li>Every worker is unmanaged. A worker with <code>managed: true</code> is rejected, and so is any <code>slurm</code> section.</li>
+<li><code>backupController: true</code> still adds <code>controller-backup</code> and the shared state volume.</li>
+<li><code>managed</code> is not valid on the submitter, which runs no Slurm daemon.</li>
+</ul>
+<p>See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/unmanaged-cluster/"
+>Unmanaged Cluster</a> for provisioning Slurm on such a cluster.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="capabilities-and-devices"
     >
@@ -2957,6 +3029,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 
