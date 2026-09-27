@@ -140,8 +140,8 @@ func TestHasOtherClusters_True(t *testing.T) {
 	var m mock.Executor
 	// ListContainers returns containers from two clusters
 	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-		testutil.PsEntry{ID: "b", Names: "sind-prod-controller", State: "running", Image: "img"},
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
+		testutil.PsEntry{ID: "b", Names: "sind-prod-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=prod"},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -155,8 +155,8 @@ func TestHasOtherClusters_False(t *testing.T) {
 	var m mock.Executor
 	// Only containers from the same cluster
 	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-		testutil.PsEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img"},
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -204,11 +204,10 @@ func TestHasOtherClusters_LabelFilter(t *testing.T) {
 
 func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 	// Cluster "dev" must not match container "sind-dev2-controller".
-	// The prefix includes the trailing dash: "sind-dev-".
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
-		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
-		testutil.PsEntry{ID: "b", Names: "sind-dev2-controller", State: "running", Image: "img"},
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev2-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev2"},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -216,6 +215,37 @@ func TestHasOtherClusters_PrefixAmbiguity(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, has, "sind-dev2-controller should not match cluster dev")
+}
+
+func TestHasOtherClusters_HyphenatedSibling(t *testing.T) {
+	// After "sind delete cluster dev", the containers of cluster "dev-2"
+	// share the name prefix "sind-dev-" but are another cluster: the mesh
+	// must stay.
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-2-controller", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev-2"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev-2-worker-0", State: "running", Image: "img", Labels: "sind.realm=sind,sind.cluster=dev-2"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, has)
+}
+
+func TestHasOtherClusters_ContainerWithoutClusterLabel(t *testing.T) {
+	// A realm container sind cannot attribute to a cluster keeps the mesh.
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.realm=sind"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	has, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, has)
 }
 
 // --- DiscoverClusterNames ---

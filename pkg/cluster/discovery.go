@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
@@ -120,17 +119,18 @@ func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm stri
 // HasOtherClusters checks whether any sind cluster containers exist besides
 // the named cluster. This is used to decide whether to clean up mesh
 // infrastructure after deleting a cluster.
+//
+// A container belongs to clusterName only if its sind.cluster label says so.
+// The name prefix "<realm>-<clusterName>-" cannot tell: it also matches the
+// containers of cluster "<clusterName>-2". A realm container without a
+// cluster label counts as another cluster, which keeps the mesh.
 func HasOtherClusters(ctx context.Context, client *docker.Client, realm, clusterName string) (bool, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return false, fmt.Errorf("listing containers: %w", err)
 	}
 	for _, c := range containers {
-		// Check if any container belongs to a different cluster by inspecting
-		// the container name prefix. Containers for clusterName have the
-		// prefix "<realm>-<clusterName>-".
-		prefix := ContainerPrefix(realm, clusterName)
-		if !strings.HasPrefix(string(c.Name), prefix) {
+		if c.Labels[LabelCluster] != clusterName {
 			return true, nil
 		}
 	}
