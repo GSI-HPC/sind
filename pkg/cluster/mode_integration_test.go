@@ -17,6 +17,8 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -322,6 +324,164 @@ slurm:
 	waitInControl(t, c, realm, clusterName, "controller")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// TestUnmanagedCluster creates an unmanaged cluster with a controller pair,
+// a submitter and a worker, checks that sind leaves Slurm alone, then
+// provisions Slurm by hand the way a user's Chef or Ansible run would.
+func TestUnmanagedCluster(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-unmanaged")
+	clusterName := "it-unmanaged"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+nodes:
+  - role: controller
+    managed: false
+    backupController: true
+  - submitter
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+	assert.Empty(t, result.SlurmVersion)
+	require.Len(t, result.Nodes, 4)
+
+	primary := ContainerName(realm, clusterName, "controller")
+	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
+	submitter := ContainerName(realm, clusterName, "submitter")
+	worker := ContainerName(realm, clusterName, "worker-0")
+
+	// sind wrote no Slurm configuration and started no Slurm daemon.
+	out, err := c.Exec(ctx, primary, "ls", "-A", slurm.ConfDir)
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(out), "config volume stays empty")
+	for _, n := range []docker.ContainerName{primary, backup} {
+		out, err = c.ExecAllowNonZero(ctx, n, "systemctl", "is-active", "slurmctld")
+		require.NoError(t, err)
+		assert.NotEqual(t, "active", strings.TrimSpace(out), "slurmctld on %s", n)
+	}
+	out, err = c.ExecAllowNonZero(ctx, worker, "systemctl", "is-active", "slurmd")
+	require.NoError(t, err)
+	assert.NotEqual(t, "active", strings.TrimSpace(out), "slurmd on %s", worker)
+
+	// The config volume is shared and writable on the controllers only.
+	_, err = c.Exec(ctx, primary, "touch", slurm.ConfDir+"/from-controller")
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, backup, "rm", slurm.ConfDir+"/from-controller")
+	require.NoError(t, err, "the backup sees and edits the primary's file")
+	for _, n := range []docker.ContainerName{submitter, worker} {
+		_, err = c.Exec(ctx, n, "touch", slurm.ConfDir+"/from-elsewhere")
+		assert.Error(t, err, "%s mounts the config volume read-only", n)
+	}
+
+	// Both controllers share the slurmctld state volume.
+	_, err = c.Exec(ctx, primary, "touch", slurm.StateSaveLocation+"/from-primary")
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, backup, "rm", slurm.StateSaveLocation+"/from-primary")
+	require.NoError(t, err)
+
+	// munge stays sind's: a credential from the worker decodes on the controller.
+	cred, err := c.Exec(ctx, worker, "munge", "-n")
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, primary, "sh", "-c", "echo '"+strings.TrimSpace(cred)+"' | unmunge")
+	require.NoError(t, err)
+
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.Empty(t, status.SlurmVersion)
+	require.Len(t, status.Nodes, 4)
+	for _, n := range status.Nodes {
+		assert.False(t, n.Managed, n.Name)
+		assert.Nil(t, n.Health.HA, n.Name)
+		assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, n.Health.Services, n.Name)
+	}
+
+	// Workers added later are unmanaged too.
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	require.NoError(t, err)
+	require.Len(t, added, 1)
+	info, err := c.InspectContainer(ctx, ContainerName(realm, clusterName, added[0].Name))
+	require.NoError(t, err)
+	assert.False(t, IsManaged(info.Labels))
+
+	// The blank slate is usable: configure and start Slurm by hand.
+	require.NoError(t, c.WriteFile(ctx, primary, slurm.ConfDir+"/slurm.conf", "ClusterName="+clusterName+`
+SlurmctldHost=controller
+SlurmUser=slurm
+StateSaveLocation=`+slurm.StateSaveLocation+`
+SlurmdSpoolDir=/var/spool/slurmd
+ProctrackType=proctrack/cgroup
+TaskPlugin=task/cgroup,task/affinity
+ReturnToService=2
+NodeName=worker-0 CPUs=1 State=UNKNOWN
+PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP
+`))
+	require.NoError(t, c.WriteFile(ctx, primary, slurm.ConfDir+"/cgroup.conf", "CgroupPlugin=autodetect\n"))
+	_, err = c.Exec(ctx, primary, "systemctl", "start", "slurmctld")
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, worker, "systemctl", "start", "slurmd")
+	require.NoError(t, err)
+	waitNodeIdle(t, c, submitter, "worker-0")
+	out, err = c.Exec(ctx, submitter, "srun", "-N1", "hostname")
+	require.NoError(t, err)
+	assert.Equal(t, "worker-0", strings.TrimSpace(out))
+
+	// Removing a worker leaves the user's configuration alone.
+	conf, err := c.ReadFile(ctx, primary, slurm.ConfDir+"/slurm.conf")
+	require.NoError(t, err)
+	require.NoError(t, WorkerRemove(ctx, c, meshMgr, clusterName, []string{added[0].Name}))
+	after, err := c.ReadFile(ctx, primary, slurm.ConfDir+"/slurm.conf")
+	require.NoError(t, err)
+	assert.Equal(t, conf, after)
+	out, err = c.Exec(ctx, primary, "ls", "-A", slurm.ConfDir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cgroup.conf", "slurm.conf"}, strings.Fields(out))
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// waitNodeIdle polls sinfo on from until the Slurm node is idle.
+func waitNodeIdle(t *testing.T, c *docker.Client, from docker.ContainerName, node string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Minute)
+	var last string
+	for time.Now().Before(deadline) {
+		out, err := c.Exec(t.Context(), from, "sinfo", "-h", "-n", node, "-o", "%T")
+		last = fmt.Sprintf("%q (err: %v)", out, err)
+		if err == nil && strings.TrimSpace(out) == "idle" {
+			return
+		}
+		time.Sleep(time.Second)
+	}
+	t.Fatalf("%s not idle after 2m; last sinfo: %s", node, last)
 }
 
 // waitInControl polls GetStatus until the controller shortName is reported
