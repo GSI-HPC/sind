@@ -116,6 +116,29 @@ type DataStorage struct {
 	MountPath string      `json:"mountPath,omitempty"`
 }
 
+// UsesHostPath reports whether the data is a bind mount of HostPath rather
+// than the cluster's Docker volume: with type hostPath, or with no type and a
+// host path. With type volume, HostPath is ignored.
+func (d DataStorage) UsesHostPath() bool {
+	return d.Type == StorageHostPath || (d.Type == "" && d.HostPath != "")
+}
+
+// validate checks the data storage fields.
+func (d DataStorage) validate() error {
+	switch d.Type {
+	case "", StorageVolume, StorageHostPath:
+	default:
+		return fmt.Errorf("storage.dataStorage.type must be %q or %q, got %q", StorageVolume, StorageHostPath, d.Type)
+	}
+	if d.Type == StorageHostPath && d.HostPath == "" {
+		return fmt.Errorf("storage.dataStorage.hostPath is required with type %q", StorageHostPath)
+	}
+	if d.MountPath != "" && !strings.HasPrefix(d.MountPath, "/") {
+		return fmt.Errorf("storage.dataStorage.mountPath must be absolute, got %q", d.MountPath)
+	}
+	return nil
+}
+
 // Storage configures cluster storage options.
 type Storage struct {
 	DataStorage DataStorage `json:"dataStorage,omitempty"`
@@ -347,6 +370,10 @@ func (c *Cluster) Validate() error {
 	}
 	if workers < 1 {
 		return fmt.Errorf("at least one worker node required, got %d", workers)
+	}
+
+	if err := c.Storage.DataStorage.validate(); err != nil {
+		return err
 	}
 
 	for _, n := range c.Nodes {

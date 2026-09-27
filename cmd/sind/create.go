@@ -66,12 +66,9 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		cfg.Name = name
 	}
 
-	// Apply --data flag when config doesn't already specify data storage.
-	if cfg.Storage.DataStorage.Type == "" && cfg.Storage.DataStorage.HostPath == "" {
-		dataFlag, _ := cmd.Flags().GetString("data")
-		if err := applyDataFlag(cfg, dataFlag); err != nil {
-			return err
-		}
+	dataFlag, _ := cmd.Flags().GetString("data")
+	if err := applyDataStorage(cfg, dataFlag); err != nil {
+		return err
 	}
 
 	pull, _ := cmd.Flags().GetBool("pull")
@@ -120,6 +117,27 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		}
 	}
 
+	return nil
+}
+
+// applyDataStorage settles where the cluster's data comes from: the config's
+// dataStorage or, when that sets neither type nor hostPath, the --data flag.
+// A relative hostPath from the config is taken relative to the working
+// directory and made absolute, because sind create worker reuses it from a
+// container label, possibly run from another directory.
+func applyDataStorage(cfg *config.Cluster, dataFlag string) error {
+	ds := &cfg.Storage.DataStorage
+	if ds.Type == "" && ds.HostPath == "" {
+		return applyDataFlag(cfg, dataFlag)
+	}
+	if ds.HostPath == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(ds.HostPath)
+	if err != nil {
+		return fmt.Errorf("resolving data path %q: %w", ds.HostPath, err)
+	}
+	ds.HostPath = abs
 	return nil
 }
 

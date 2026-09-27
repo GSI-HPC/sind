@@ -221,7 +221,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 
 	dataHostPath := ""
 	dataMountPath := ""
-	if cfg.Storage.DataStorage.Type == config.StorageHostPath {
+	if cfg.Storage.DataStorage.UsesHostPath() {
 		dataHostPath = cfg.Storage.DataStorage.HostPath
 	}
 	if cfg.Storage.DataStorage.MountPath != "" {

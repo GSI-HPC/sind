@@ -149,6 +149,49 @@ func TestApplyDataFlag_Volume(t *testing.T) {
 	assert.Empty(t, cfg.Storage.DataStorage.HostPath)
 }
 
+func TestApplyDataStorage(t *testing.T) {
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		ds       config.DataStorage
+		dataFlag string
+		want     config.DataStorage
+	}{
+		{
+			name:     "no storage uses --data",
+			dataFlag: "/srv/project",
+			want:     config.DataStorage{Type: config.StorageHostPath, HostPath: "/srv/project"},
+		},
+		{
+			name:     "relative hostPath becomes absolute",
+			ds:       config.DataStorage{Type: config.StorageHostPath, HostPath: "./data"},
+			dataFlag: "/ignored",
+			want:     config.DataStorage{Type: config.StorageHostPath, HostPath: filepath.Join(wd, "data")},
+		},
+		{
+			name:     "hostPath without type",
+			ds:       config.DataStorage{HostPath: "data"},
+			dataFlag: "/ignored",
+			want:     config.DataStorage{HostPath: filepath.Join(wd, "data")},
+		},
+		{
+			name:     "volume type ignores --data",
+			ds:       config.DataStorage{Type: config.StorageVolume, MountPath: "/scratch"},
+			dataFlag: "/ignored",
+			want:     config.DataStorage{Type: config.StorageVolume, MountPath: "/scratch"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Cluster{Storage: config.Storage{DataStorage: tt.ds}}
+			require.NoError(t, applyDataStorage(cfg, tt.dataFlag))
+			assert.Equal(t, tt.want, cfg.Storage.DataStorage)
+		})
+	}
+}
+
 func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {
 	_, _, err := executeCommand("create", "cluster", "name", "extra")
 	assert.Error(t, err)
