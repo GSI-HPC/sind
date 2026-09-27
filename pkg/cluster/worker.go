@@ -251,6 +251,14 @@ func findController(containers []docker.ContainerListEntry, realm, clusterName s
 	return docker.ContainerListEntry{}, false
 }
 
+// clusterManaged reports whether sind manages the Slurm configuration and
+// daemons of a cluster: the sind.managed label of the controller container
+// findController picks. A cluster without a controller counts as managed.
+func clusterManaged(containers []docker.ContainerListEntry, realm, clusterName string) bool {
+	controller, ok := findController(containers, realm, clusterName)
+	return !ok || IsManaged(controller.Labels)
+}
+
 var errSindNodesConfMissing = errors.New("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
 
 // resolveWorkerInfra fetches DNS IP, SSH public key, and slurm version

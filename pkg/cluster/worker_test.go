@@ -1725,3 +1725,33 @@ func TestFindController(t *testing.T) {
 		})
 	}
 }
+
+func TestClusterManaged(t *testing.T) {
+	entry := func(short string, state docker.ContainerState, managed string) docker.ContainerListEntry {
+		return docker.ContainerListEntry{
+			Name:   ContainerName(mesh.DefaultRealm, "dev", short),
+			State:  state,
+			Labels: docker.Labels{LabelManaged: managed},
+		}
+	}
+	tests := []struct {
+		name       string
+		containers []docker.ContainerListEntry
+		want       bool
+	}{
+		{name: "managed controller", containers: []docker.ContainerListEntry{entry("controller", docker.StateRunning, "true")}, want: true},
+		{name: "unmanaged controller", containers: []docker.ContainerListEntry{entry("controller", docker.StateRunning, "false")}},
+		{name: "label from the backup after failover", containers: []docker.ContainerListEntry{
+			entry("controller", docker.StateExited, "true"), entry("controller-backup", docker.StateRunning, "false"),
+		}},
+		{name: "unmanaged worker of a managed cluster", containers: []docker.ContainerListEntry{
+			entry("controller", docker.StateRunning, "true"), entry("worker-0", docker.StateRunning, "false"),
+		}, want: true},
+		{name: "no controller", containers: []docker.ContainerListEntry{entry("worker-0", docker.StateRunning, "false")}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, clusterManaged(tt.containers, mesh.DefaultRealm, "dev"))
+		})
+	}
+}

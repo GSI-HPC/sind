@@ -45,7 +45,8 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, containerName str
 		return nil, fmt.Errorf("inspecting container: %w", err)
 	}
 	health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
-	if role == config.RoleController {
+	// sind cannot tell which controller of an unmanaged pair is in control.
+	if role == config.RoleController && IsManaged(info.Labels) {
 		shortName := strings.TrimPrefix(containerName, ContainerPrefix(realm, clusterName))
 		if health.HA, err = nodeHA(ctx, client, realm, clusterName, shortName, health); err != nil {
 			return nil, err
@@ -305,7 +306,8 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
 	})
 
-	if _, ok := infoByName[ContainerName(realm, clusterName, ControllerBackupShortName)]; ok {
+	// sind cannot tell which controller of an unmanaged pair is in control.
+	if _, ok := infoByName[ContainerName(realm, clusterName, ControllerBackupShortName)]; ok && clusterManaged(containers, realm, clusterName) {
 		setControllerHA(ctx, client, realm, clusterName, nodes)
 	}
 

@@ -227,6 +227,41 @@ func TestEnter_TargetSelection_ControllerPair(t *testing.T) {
 	}
 }
 
+func TestEnter_TargetSelection_UnmanagedPair(t *testing.T) {
+	tests := []struct {
+		name         string
+		primaryState string
+		backupState  string
+		want         string
+	}{
+		{name: "both running", primaryState: "running", backupState: "running", want: "controller"},
+		{name: "only backup runs", primaryState: "exited", backupState: "running", want: "controller-backup"},
+		{name: "both stopped", primaryState: "exited", backupState: "exited", want: "controller"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.OnCall = func(args []string, _ string) mock.Result {
+				if args[0] == "ps" {
+					return mock.Result{Stdout: testutil.NDJSON(
+						testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: tt.primaryState, Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=controller,sind.managed=false"},
+						testutil.PsEntry{ID: "c2", Names: "sind-dev-controller-backup", State: tt.backupState, Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=controller,sind.managed=false"},
+					)}
+				}
+				return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+			}
+
+			target, err := EnterTarget(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, target)
+			assert.Len(t, m.Calls, 1, "no heartbeat read")
+		})
+	}
+}
+
 func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

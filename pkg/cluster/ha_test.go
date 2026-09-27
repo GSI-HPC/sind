@@ -176,6 +176,38 @@ func TestGetStatus_ControllerPair(t *testing.T) {
 	})
 }
 
+func TestGetStatus_UnmanagedPairHasNoHA(t *testing.T) {
+	var m mock.Executor
+	base := pairStatusOnCall(t, nil, "", mock.Result{Stdout: heartbeatOutput(1000, 995, 0)})
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" {
+			var entries []testutil.PsEntry
+			for _, short := range []string{"controller", "controller-backup", "worker-0"} {
+				role := "controller"
+				if short == "worker-0" {
+					role = "worker"
+				}
+				entries = append(entries, testutil.PsEntry{
+					ID: short, Names: "sind-dev-" + short, State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.managed=false,sind.role=" + role,
+				})
+			}
+			return mock.Result{Stdout: testutil.NDJSON(entries...)}
+		}
+		return base(args, stdin)
+	}
+	status, err := GetStatus(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, status.Nodes, 3)
+	for _, n := range status.Nodes {
+		assert.Nil(t, n.Health.HA, n.Name)
+	}
+	for _, c := range m.Calls {
+		assert.False(t, isHeartbeatRead(c.Args), "no heartbeat read on an unmanaged cluster")
+	}
+}
+
 func TestGetStatus_SingleControllerHasNoHA(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = fullStatusOnCall(t)
@@ -214,6 +246,28 @@ func nodeHAOnCall(t *testing.T, states map[string]string, inspectErr error, hb m
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
+}
+
+func TestGetNodeHealth_UnmanagedControllerHasNoHA(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "inspect" && args[1] == "sind-dev-controller-backup":
+			return mock.Result{Stdout: "[" + statusInspectEntryLabels(args[1], "running", "172.18.0.9",
+				docker.Labels{LabelManaged: "false"}) + "]"}
+		case args[0] == "exec" && args[2] == "systemctl":
+			return fusedIsActiveResponse(t, args)
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+
+	health, err := GetNodeHealth(t.Context(), docker.NewClient(&m), "sind-dev-controller-backup",
+		config.RoleController, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Nil(t, health.HA)
+	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services)
+	assert.Len(t, m.Calls, 2, "no partner inspect, scontrol ping or heartbeat read")
 }
 
 func TestGetNodeHealth_ControllerHA(t *testing.T) {
