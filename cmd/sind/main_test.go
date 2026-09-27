@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -197,4 +201,47 @@ func TestFailureExits1(t *testing.T) {
 	assert.Equal(t, 1, exitErr.ExitCode())
 	assert.NotContains(t, stderr.String(), "interrupted")
 	assert.True(t, strings.Contains(stderr.String(), "Cannot connect to the Docker daemon"), stderr.String())
+}
+
+// failingDocker returns a context whose docker client fails its first call
+// with exit code 1 and stderr.
+func failingDocker(ctx context.Context, t *testing.T, stderr string) context.Context {
+	t.Helper()
+	var m mock.Executor
+	m.AddResult("", stderr, testutil.ExitCode1(t))
+	return withClient(ctx, docker.NewClient(&m))
+}
+
+func TestRun_Success(t *testing.T) {
+	var stderr bytes.Buffer
+	assert.Equal(t, 0, run(t.Context(), []string{"version", "--json"}, &stderr))
+	assert.Empty(t, stderr.String())
+}
+
+// TestRun_EscapesTheError checks that control characters docker or a
+// container wrote into an error do not reach the terminal: the logger
+// quotes attribute values but not the message.
+func TestRun_EscapesTheError(t *testing.T) {
+	ctx := failingDocker(t.Context(), t, "Error response from daemon: \x1b]52;c;ZXZpbA==\x07\r\x1b[1Aforged\n")
+	var stderr bytes.Buffer
+
+	code := run(ctx, []string{"get", "clusters"}, &stderr)
+
+	assert.Equal(t, 1, code)
+	assert.NotContains(t, stderr.String(), "\x1b")
+	assert.NotContains(t, stderr.String(), "\x07")
+	assert.NotContains(t, stderr.String(), "\r")
+	assert.Contains(t, stderr.String(), `Error response from daemon: \x1b]52;c;ZXZpbA==\x07\r\x1b[1Aforged`)
+}
+
+func TestRun_Interrupted(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	ctx = failingDocker(ctx, t, "")
+	var stderr bytes.Buffer
+
+	code := run(ctx, []string{"get", "clusters"}, &stderr)
+
+	assert.Equal(t, exitInterrupted, code)
+	assert.Contains(t, stderr.String(), "interrupted: ")
 }

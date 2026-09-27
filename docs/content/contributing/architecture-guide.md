@@ -26,6 +26,8 @@ internal/mock/     Test doubles for cmdexec.Executor
   ├── recorder.go  mock.RecordingExecutor for integration tests
   └── recording.go Recorded call types
 
+internal/termtext/ Escaping of untrusted text for the terminal (final error line)
+
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Ptr[T], realm helpers
   ├── client.go    NewClient (unit test client factory)
@@ -93,7 +95,7 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                        → pkg/nodeset
 ```
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
 
 ## Adding a new CLI command
 

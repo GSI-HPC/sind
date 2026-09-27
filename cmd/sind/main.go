@@ -4,10 +4,12 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/GSI-HPC/sind/internal/termtext"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -18,7 +20,7 @@ const exitInterrupted = 130
 
 func main() {
 	ctx, stop := interruptContext()
-	code := run(ctx)
+	code := run(ctx, os.Args[1:], os.Stderr)
 	stop()
 	os.Exit(code)
 }
@@ -46,27 +48,34 @@ func interruptContext() (context.Context, context.CancelFunc) {
 	}
 }
 
-// run executes the command tree and returns the process exit status. A
-// command that fails after ctx was cancelled was interrupted, whatever its
-// error says: a docker call killed by the cancellation reports only
-// "signal: killed".
-func run(ctx context.Context) int {
+// run executes the command tree with args and returns the process exit
+// status. A command that fails after ctx was cancelled was interrupted,
+// whatever its error says: a docker call killed by the cancellation reports
+// only "signal: killed".
+//
+// The error is written to stderr escaped: it can quote what docker or a
+// container wrote, and the logger quotes attribute values but not the
+// message, so a control sequence in it would otherwise reach the terminal.
+func run(ctx context.Context, args []string, stderr io.Writer) int {
 	cmd := NewRootCommand()
+	cmd.SetArgs(args)
+	cmd.SetErr(stderr)
 
 	// Seed context with an error-level logger so errors are visible even
 	// when PersistentPreRunE doesn't run (e.g., unknown flag, help).
 	// PersistentPreRunE upgrades this based on the -v flag count.
-	cmd.SetContext(sindlog.With(ctx, newLogger(os.Stderr, 0)))
+	cmd.SetContext(sindlog.With(ctx, newLogger(stderr, 0)))
 
 	err := cmd.Execute()
 	if err == nil {
 		return 0
 	}
+	msg := termtext.EscapeText(err.Error())
 	log := sindlog.From(cmd.Context())
 	if ctx.Err() != nil {
-		log.ErrorContext(cmd.Context(), "interrupted: "+err.Error())
+		log.ErrorContext(cmd.Context(), "interrupted: "+msg)
 		return exitInterrupted
 	}
-	log.ErrorContext(cmd.Context(), err.Error())
+	log.ErrorContext(cmd.Context(), msg)
 	return 1
 }

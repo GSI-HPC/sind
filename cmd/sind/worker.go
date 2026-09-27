@@ -5,6 +5,7 @@ package main
 import (
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/afero"
@@ -88,7 +89,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", exportErr)
+			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeText(exportErr.Error()))
 		}
 	}
 
@@ -133,7 +134,7 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", exportErr)
+			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeText(exportErr.Error()))
 		}
 	}
 

@@ -209,6 +209,7 @@ Rules:
 Rules:
 - Mutations are silent — `exit 0` is the confirmation; use `-v` for progress
 - Errors are always visible (slog error level is always enabled, even without `-v`)
+- The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗) only in `get cluster` and `doctor` output
