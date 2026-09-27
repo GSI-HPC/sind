@@ -546,7 +546,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 
 - The server reports itself as `sind` with the version `sind version` prints.
 
-- `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces.
+- `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces. Stopped by SIGINT or SIGTERM, it shuts down and exits 0.
 - Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `create cluster`, `create worker`, `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `delete`, `exec`, and the other `power` actions). A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.

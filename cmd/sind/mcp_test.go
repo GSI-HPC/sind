@@ -5,13 +5,17 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -251,4 +255,29 @@ func TestRefuseFlagArgs(t *testing.T) {
 	require.Error(t, call(withJSON, "sind_get_nodes", "-o", "human"))
 	require.NoError(t, call(withJSON, "sind_get_nodes", "dev"))
 	assert.Equal(t, map[string]any{"output": "json"}, called.Flags)
+}
+
+// TestMCPStream_StopsCleanly checks that a stream stopped through its
+// context, as an interrupt stops it, ends without an error.
+func TestMCPStream_StopsCleanly(t *testing.T) {
+	root := NewRootCommand()
+	root.SetArgs([]string{"mcp", "stream", "--port", "0"})
+	root.SetOut(io.Discard)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- root.ExecuteContext(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the stream did not stop")
+	}
+}
+
+func TestStopCleanly_KeepsOtherErrors(t *testing.T) {
+	cmd := &cobra.Command{RunE: func(*cobra.Command, []string) error { return errors.New("listen tcp: address in use") }}
+	stopCleanly(cmd)
+	assert.EqualError(t, cmd.RunE(cmd, nil), "listen tcp: address in use")
 }

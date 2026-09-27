@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -196,6 +198,7 @@ func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 		if sub.Name() != "stream" {
 			continue
 		}
+		stopCleanly(sub)
 		// ophis listens on all interfaces by default.
 		host := sub.Flags().Lookup("host")
 		host.DefValue = mcpStreamHost
@@ -214,5 +217,19 @@ func withServerVersion(cmd *cobra.Command) {
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cmd.Root().Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
+	}
+}
+
+// stopCleanly makes `sind mcp stream` succeed when it is stopped. ophis
+// shuts the HTTP server down on SIGINT or SIGTERM, or when the context
+// ends, and then returns http.ErrServerClosed; whether sind saw the signal
+// first decided whether that exited 1 or 130.
+func stopCleanly(cmd *cobra.Command) {
+	run := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if err := run(cmd, args); !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
 	}
 }
