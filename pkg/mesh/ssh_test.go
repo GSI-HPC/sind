@@ -127,7 +127,7 @@ func TestEnsureSSHVolume_Creates(t *testing.T) {
 		sshKeygenImage,
 	}, m.Calls[2].Args)
 	assert.Equal(t, []string{"cp", "-", keygenName + ":/ssh"}, m.Calls[3].Args)
-	assert.Equal(t, []string{"rm", "-f", keygenName}, m.Calls[4].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", keygenName}, m.Calls[4].Args)
 
 	// Verify all three files are in the tar archive.
 	privKey := extractTarFile(t, m.Calls[3].Stdin, "id_ed25519")
@@ -215,7 +215,7 @@ func TestEnsureSSHVolume_CopyError(t *testing.T) {
 	assert.Contains(t, err.Error(), "writing SSH keys")
 
 	// Verify temp container is still cleaned up on error.
-	assert.Equal(t, []string{"rm", "-f", string(mgr.SSHKeygenName())}, m.Calls[4].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", string(mgr.SSHKeygenName())}, m.Calls[4].Args)
 }
 
 func TestEnsureSSHVolume_Pull(t *testing.T) {

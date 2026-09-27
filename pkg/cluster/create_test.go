@@ -680,7 +680,7 @@ func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 			seenPs = true
 		}
 		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
 			meshRmAfterPs++
 		}
 	}
@@ -718,7 +718,7 @@ func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
 			continue
 		}
 		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
 			require.Fail(t, "mesh cleanup should not run when mesh was pre-existing")
 		}
 	}
@@ -773,7 +773,7 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	var meshRm int
 	for _, call := range m.Calls {
 		if len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
 			meshRm++
 		}
 	}
@@ -825,7 +825,7 @@ func TestCreate_CleanupMeshError(t *testing.T) {
 		// Make mesh cleanup fail: rm -f on a mesh container errors with a
 		// non-IsNotFound failure (real docker daemon issue).
 		if inCleanup && args[0] == "rm" && len(args) >= 3 && args[1] == "-f" &&
-			(strings.Contains(args[2], "sind-ssh") || strings.Contains(args[2], "sind-dns")) {
+			(strings.Contains(args[len(args)-1], "sind-ssh") || strings.Contains(args[len(args)-1], "sind-dns")) {
 			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
 		}
 		return mock.Result{}, false
