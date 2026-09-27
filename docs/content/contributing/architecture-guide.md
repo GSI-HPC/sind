@@ -62,25 +62,25 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
   ├── node.go      Node initialization and setup
-  ├── discovery.go Cluster/node discovery queries
+  ├── discovery.go Cluster/node discovery queries, VolumeType
   ├── resources.go Resource creation helpers
-  ├── types.go     Shared types (SlurmService, VolumeType, etc.)
-  ├── ssh.go       SSH arg building, host key collection
+  ├── types.go     Shared types (Cluster, Node, State)
+  ├── ssh.go       ssh/enter/exec arg building and target selection
   ├── logs.go      Log command arg building
-  ├── dns.go       DNS record management
+  ├── dns.go       Node DNS names and search domain
   ├── naming.go    Resource naming conventions
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
 pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, DNS policy)
 pkg/log/           Context-based structured logging (slog)
-pkg/mesh/          Global infrastructure (mesh network, DNS, SSH)
+pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
 pkg/nodeset/       Nodeset expansion (worker-[0-3])
 pkg/probe/         Node readiness probes
 pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm config generation and version discovery
-pkg/ssh/           SSH key generation and injection
+pkg/ssh/           SSH key injection, host key collection, ssh_config export
 ```
 
 ## Dependency flow
@@ -122,7 +122,8 @@ The `pkg/cmdexec` package provides the executor abstraction at the bottom of the
    ```
 
 5. **Implement the operation** in `pkg/cluster/` (not in `cmd/sind/`)
-6. **Write tests** for both the CLI layer and the cluster operation
+6. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
+7. **Write tests** for both the CLI layer and the cluster operation
 
 The CLI layer should be thin — argument parsing, flag handling, and output formatting. Business logic belongs in `pkg/cluster/`.
 
