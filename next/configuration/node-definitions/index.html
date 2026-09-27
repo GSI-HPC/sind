@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T20:02:56+02:00"
+      content="2026-09-27T11:29:01+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/node-definitions/",
       "headline": "Node Definitions",
       "description": "Node roles, shorthand syntax, and managed vs unmanaged workers",
-      "wordCount": "472",
+      "wordCount": "607",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T20:02:56.00Z",
+      "dateModified": "2026-09-27T11:29:01.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1169,6 +1169,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2178,6 +2222,12 @@
 					<td>Start slurmd and add to slurm.conf</td>
 			</tr>
 			<tr>
+					<td><code>backupController</code></td>
+					<td>controller only</td>
+					<td><code>false</code></td>
+					<td>Add a backup controller, <code>controller-backup</code> (see below)</td>
+			</tr>
+			<tr>
 					<td><code>capAdd</code></td>
 					<td>global + per-node</td>
 					<td>none</td>
@@ -2251,6 +2301,31 @@
 </span></span></span></code></pre></div><p>Unmanaged workers can also be created dynamically:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create worker --count <span class="m">2</span> --unmanaged
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="backup-controller"
+    >
+        Backup controller
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/node-definitions/#backup-controller" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Backup controller" aria-label="Anchor to: Backup controller" href="#backup-controller">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>backupController: true</code> on the controller node adds a second controller, <code>controller-backup</code>, and configures Slurm&rsquo;s active/passive controller pair:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">backupController</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><ul>
+<li><code>controller-backup</code> uses the same image, resources, volumes, capabilities, devices and security options as <code>controller</code>.</li>
+<li><code>slurm.conf</code> lists both hosts (<code>SlurmctldHost=controller</code>, then <code>SlurmctldHost=controller-backup</code>) and sets <code>SlurmctldTimeout=20</code> unless the <code>main</code> section sets it.</li>
+<li>Both controllers mount the shared state volume <code>&lt;realm&gt;-&lt;cluster&gt;-state</code> at <code>/var/spool/slurmctld</code> (<code>StateSaveLocation</code>).</li>
+<li><code>slurmctld</code> runs on both. The backup takes over when the primary stops responding for <code>SlurmctldTimeout</code> seconds, and hands control back when the primary&rsquo;s <code>slurmctld</code> starts again.</li>
+</ul>
+<p><code>SlurmctldHost</code> and <code>StateSaveLocation</code> cannot be set in <code>slurm.main</code> when the backup is enabled. See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/controller-failover/"
+>Controller Failover</a> for checking which controller is in control and triggering a failover.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="capabilities-and-devices"
     >
         Capabilities and devices
@@ -2882,6 +2957,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

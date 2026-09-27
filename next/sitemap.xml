@@ -21,10 +21,10 @@
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/cluster-config/</loc>
-    <lastmod>2026-04-10T20:02:56+02:00</lastmod>
+    <lastmod>2026-09-27T11:29:01+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/node-definitions/</loc>
-    <lastmod>2026-04-10T20:02:56+02:00</lastmod>
+    <lastmod>2026-09-27T11:29:01+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/realms/</loc>
     <lastmod>2026-04-10T19:33:47+02:00</lastmod>
@@ -36,7 +36,7 @@
     <lastmod>2026-04-22T15:40:21+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-access/</loc>
-    <lastmod>2026-04-01T21:58:52+02:00</lastmod>
+    <lastmod>2026-09-27T11:29:01+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/worker-management/</loc>
     <lastmod>2026-04-22T15:40:21+02:00</lastmod>
@@ -45,7 +45,7 @@
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/diagnostics/</loc>
-    <lastmod>2026-09-26T20:06:38+00:00</lastmod>
+    <lastmod>2026-09-27T11:29:01+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/</loc>
     <lastmod>2026-04-09T16:23:27+02:00</lastmod>
@@ -58,6 +58,9 @@
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/ci-cd/</loc>
     <lastmod>2026-04-09T16:23:27+02:00</lastmod>
+  </url><url>
+    <loc>https://gsi-hpc.github.io/sind/next/guides/controller-failover/</loc>
+    <lastmod>2026-09-27T11:29:01+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-arguments/</loc>
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
@@ -72,7 +75,7 @@
     <lastmod>2026-04-02T15:17:16+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/docker-resources/</loc>
-    <lastmod>2026-09-26T20:06:38+00:00</lastmod>
+    <lastmod>2026-09-27T11:29:01+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/slurm-config/</loc>
     <lastmod>2026-09-26T20:06:38+00:00</lastmod>

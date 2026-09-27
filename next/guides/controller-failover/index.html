@@ -12,9 +12,9 @@
 <meta name="generator" content="Hugo 0.166.0">
 
 
-  <meta name="description" content="Simulate power events on cluster nodes" />
+  <meta name="description" content="Run a primary/backup slurmctld pair and trigger graceful or outage failovers" />
 
-    <title>Power Control | sind</title>
+    <title>Controller Failover | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -35,46 +35,46 @@
     
   <meta
     property="og:title"
-    content="Power Control"
+    content="Controller Failover"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="Simulate power events on cluster nodes" />
+  <meta property="og:description" content="Run a primary/backup slurmctld pair and trigger graceful or outage failovers" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/usage/power-control/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/controller-failover/" />
 
-<meta property="article:section" content="Usage" />
+<meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-03-27T11:26:56+01:00"
+      content="2026-09-27T11:29:01+00:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Power Control" />
-  <meta name="twitter:description" content="Simulate power events on cluster nodes" />
+<meta name="twitter:title" content="Controller Failover" />
+  <meta name="twitter:description" content="Run a primary/backup slurmctld pair and trigger graceful or outage failovers" />
 
 
   <script type="application/ld+json">
   {
       "@context": "http://schema.org",
       "@type": "TechArticle",
-      "articleSection": "Usage",
-      "name": "Power Control",
-      "url": "https://gsi-hpc.github.io/sind/next/usage/power-control/",
-      "headline": "Power Control",
-      "description": "Simulate power events on cluster nodes",
-      "wordCount": "208",
+      "articleSection": "Guides",
+      "name": "Controller Failover",
+      "url": "https://gsi-hpc.github.io/sind/next/guides/controller-failover/",
+      "headline": "Controller Failover",
+      "description": "Run a primary\/backup slurmctld pair and trigger graceful or outage failovers",
+      "wordCount": "603",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/usage/power-control/"
+          "@id": "https://gsi-hpc.github.io/sind/next/guides/controller-failover/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-27T11:26:56.00Z",
+      "dateModified": "2026-09-27T11:29:01.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -152,7 +152,7 @@
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/usage/power-control/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/guides/controller-failover/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -881,7 +881,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/usage/power-control/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     Power Control
                   </a>
@@ -1199,7 +1199,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/guides/controller-failover/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     Controller Failover
                   </a>
@@ -2102,7 +2102,7 @@
     
   
   
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/usage/' href='/sind/next/usage/'><span itemprop='name'>Usage</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Power Control</span><meta itemprop='position' content='5' /></li>
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/guides/' href='/sind/next/guides/'><span itemprop='name'>Guides</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Controller Failover</span><meta itemprop='position' content='5' /></li>
   
 
   
@@ -2121,125 +2121,137 @@
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>Power Control</h1>
+    <h1>Controller Failover</h1>
     
-    <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="commands"
+    <p>sind can run Slurm&rsquo;s active/passive controller setup: a primary <code>slurmctld</code> on <code>controller</code> and a backup <code>slurmctld</code> on <code>controller-backup</code>. This guide shows how to create the pair, check which controller is in control, and trigger a failover gracefully or by simulating an outage.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="create-a-cluster-with-a-backup-controller"
     >
-        Commands
+        Create a cluster with a backup controller
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/power-control/#commands" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Commands" aria-label="Anchor to: Commands" href="#commands">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/controller-failover/#create-a-cluster-with-a-backup-controller" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Create a cluster with a backup controller" aria-label="Anchor to: Create a cluster with a backup controller" href="#create-a-cluster-with-a-backup-controller">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind power &lt;action&gt; NODES
-</span></span></code></pre></div><div class="table-wrap"> <table>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">dev</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">backupController</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster --config ha.yaml
+</span></span></code></pre></div><p>sind then:</p>
+<ul>
+<li>creates <code>controller-backup</code> next to <code>controller</code>, with the same image, resources, volumes, capabilities, devices and security options</li>
+<li>writes both hosts to <code>slurm.conf</code> (<code>SlurmctldHost=controller</code>, then <code>SlurmctldHost=controller-backup</code>) and sets <code>SlurmctldTimeout=20</code></li>
+<li>mounts a shared state volume, <code>&lt;realm&gt;-&lt;cluster&gt;-state</code>, at <code>/var/spool/slurmctld</code> (<code>StateSaveLocation</code>) on both controllers</li>
+<li>starts <code>slurmctld</code> on both; the backup waits in backup mode and takes over when the primary stops responding for <code>SlurmctldTimeout</code> seconds</li>
+</ul>
+<p><code>sind create cluster</code> waits until both controllers answer <code>scontrol ping</code>.</p>
+<p>To change the takeover delay, set <code>SlurmctldTimeout</code> in the <code>main</code> section:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">slurm</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">main</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
+</span></span></span><span class="line"><span class="cl"><span class="sd">    SlurmctldTimeout=10</span><span class="w">
+</span></span></span></code></pre></div><p><code>SlurmctldHost</code> and <code>StateSaveLocation</code> are generated for the pair and cannot be set in <code>slurm.main</code>.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="check-which-controller-is-in-control"
+    >
+        Check which controller is in control
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/controller-failover/#check-which-controller-is-in-control" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Check which controller is in control" aria-label="Anchor to: Check which controller is in control" href="#check-which-controller-is-in-control">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>sind get cluster</code> adds an <code>HA</code> column for the pair. It shows each controller&rsquo;s position, and <code>*</code> marks the one in control:</p>
+<pre tabindex="0"><code>NODES
+NAME                    ROLE        HA         IP            STATUS    SERVICES
+controller.dev          controller  primary*   172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+controller-backup.dev   controller  backup     172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
+</code></pre><p>With <code>-o json</code>, each controller carries <code>&quot;ha&quot;: {&quot;position&quot;: &quot;primary&quot;, &quot;in_control&quot;: true}</code>. <code>sind get node controller-backup.dev</code> shows the same information for one node.</p>
+<p>sind reads this from the heartbeat file the controller in control writes to <code>StateSaveLocation</code>. A controller counts as in control when it wrote the heartbeat within the last 60 seconds and its own <code>slurmctld</code> answers <code>scontrol ping</code>.</p>
+<p>From inside the cluster, <code>scontrol ping</code> reports whether each <code>slurmctld</code> is up:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- scontrol ping
+</span></span></code></pre></div><pre tabindex="0"><code>Slurmctld(primary) at controller is UP
+Slurmctld(backup) at controller-backup is UP
+</code></pre><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="graceful-failover"
+    >
+        Graceful failover
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/controller-failover/#graceful-failover" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Graceful failover" aria-label="Anchor to: Graceful failover" href="#graceful-failover">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Ask the backup to take over:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- scontrol takeover
+</span></span></code></pre></div><p>The backup takes control and the primary&rsquo;s <code>slurmctld</code> stops. Running and pending jobs are kept because both controllers share the saved state. <code>sind get cluster</code> then shows <code>backup*</code> and <code>slurmctld ✗</code> on <code>controller</code>.</p>
+<p>Hand control back by starting the primary&rsquo;s <code>slurmctld</code> again. On start, the primary tells the backup to return to backup mode and takes over:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh controller -- systemctl start slurmctld
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="failover-by-outage"
+    >
+        Failover by outage
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/controller-failover/#failover-by-outage" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Failover by outage" aria-label="Anchor to: Failover by outage" href="#failover-by-outage">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Use <a
+  class="gdoc-markdown__link"
+  href="/sind/next/usage/power-control/"
+>power control</a> to simulate the primary failing. The backup takes over once the primary has been unresponsive for <code>SlurmctldTimeout</code> seconds.</p>
+<div class="table-wrap"> <table>
 	<thead>
 			<tr>
+					<th>Scenario</th>
 					<th>Command</th>
-					<th>Description</th>
-					<th>Docker operation</th>
+					<th>Recovery</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td><code>shutdown</code></td>
-					<td>Graceful shutdown</td>
-					<td><code>docker stop</code> (SIGTERM, then SIGKILL)</td>
+					<td>Host crash</td>
+					<td><code>sind power cut controller</code></td>
+					<td><code>sind power on controller</code></td>
 			</tr>
 			<tr>
-					<td><code>cut</code></td>
-					<td>Hard power off</td>
-					<td><code>docker kill</code> (immediate SIGKILL)</td>
+					<td>Clean host shutdown</td>
+					<td><code>sind power shutdown controller</code></td>
+					<td><code>sind power on controller</code></td>
 			</tr>
 			<tr>
-					<td><code>on</code></td>
-					<td>Power on</td>
-					<td><code>docker start</code></td>
+					<td>Hung controller</td>
+					<td><code>sind power freeze controller</code></td>
+					<td><code>sind power unfreeze controller</code>, then <code>sind ssh controller -- systemctl restart slurmctld</code></td>
 			</tr>
 			<tr>
-					<td><code>reboot</code></td>
-					<td>Graceful reboot</td>
-					<td><code>docker stop</code> + <code>docker start</code></td>
-			</tr>
-			<tr>
-					<td><code>cycle</code></td>
-					<td>Hard power cycle</td>
-					<td><code>docker kill</code> + <code>docker start</code></td>
-			</tr>
-			<tr>
-					<td><code>freeze</code></td>
-					<td>Simulate unresponsive node</td>
-					<td><code>docker pause</code> (cgroup freezer)</td>
-			</tr>
-			<tr>
-					<td><code>unfreeze</code></td>
-					<td>Resume frozen node</td>
-					<td><code>docker unpause</code></td>
+					<td>Daemon crash</td>
+					<td><code>sind ssh controller -- systemctl kill -s KILL slurmctld</code></td>
+					<td><code>sind ssh controller -- systemctl start slurmctld</code></td>
 			</tr>
 	</tbody>
 </table> </div>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="examples"
-    >
-        Examples
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/power-control/#examples" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Examples" aria-label="Anchor to: Examples" href="#examples">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Graceful shutdown of a single worker</span>
-</span></span><span class="line"><span class="cl">sind power shutdown worker-0
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Hard power off multiple workers</span>
-</span></span><span class="line"><span class="cl">sind power cut worker-<span class="o">[</span>0-3<span class="o">]</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Power on after shutdown</span>
-</span></span><span class="line"><span class="cl">sind power on worker-<span class="o">[</span>0-3<span class="o">]</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Graceful reboot</span>
-</span></span><span class="line"><span class="cl">sind power reboot controller
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Hard cycle</span>
-</span></span><span class="line"><span class="cl">sind power cycle worker-<span class="o">[</span>0-1<span class="o">]</span>.dev
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Freeze a node (stays &#34;running&#34; but completely unresponsive)</span>
-</span></span><span class="line"><span class="cl">sind power freeze worker-0
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Resume a frozen node</span>
-</span></span><span class="line"><span class="cl">sind power unfreeze worker-0
+<p>When the primary&rsquo;s container starts again, systemd starts its <code>slurmctld</code>, which reclaims control from the backup. A frozen primary resumes without knowing that the backup took over, so restart its <code>slurmctld</code> after unfreezing it to hand control back cleanly.</p>
+<p>Watch the takeover and the logs of either controller:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">watch sind get cluster
+</span></span><span class="line"><span class="cl">sind logs controller-backup slurmctld --follow
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="freeze-and-unfreeze"
+    <h2 id="while-the-backup-is-in-control"
     >
-        Freeze and unfreeze
+        While the backup is in control
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/power-control/#freeze-and-unfreeze" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Freeze and unfreeze" aria-label="Anchor to: Freeze and unfreeze" href="#freeze-and-unfreeze">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/controller-failover/#while-the-backup-is-in-control" class="gdoc-page__anchor clip flex align-center" title="Anchor to: While the backup is in control" aria-label="Anchor to: While the backup is in control" href="#while-the-backup-is-in-control">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p><code>freeze</code> uses Docker&rsquo;s cgroup freezer to suspend all processes in the container. The container remains in a &ldquo;running&rdquo; state but is completely unresponsive — it won&rsquo;t respond to network requests, SSH connections, or Slurm RPCs.</p>
-<p>This is useful for simulating:</p>
 <ul>
-<li>Hung or unreachable nodes</li>
-<li>Network partitions (from the node&rsquo;s perspective)</li>
-<li>Slurm&rsquo;s node health detection and <code>SlurmdTimeout</code> behavior</li>
+<li><code>sind enter</code> and <code>sind exec</code> run on the controller in control when the cluster has no submitter.</li>
+<li><code>sind create worker</code> and <code>sind delete worker</code> update <code>sind-nodes.conf</code> and reconfigure Slurm through a running controller, so they keep working while the primary is down.</li>
+<li><code>sind ssh controller</code> and <code>sind logs controller</code> still address the primary container by name.</li>
 </ul>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="node-arguments"
-    >
-        Node arguments
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/power-control/#node-arguments" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Node arguments" aria-label="Anchor to: Node arguments" href="#node-arguments">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>All power commands accept <a
-  class="gdoc-markdown__link"
-  href="../node-arguments/"
->nodeset notation</a> for targeting multiple nodes:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind power shutdown controller,worker-<span class="o">[</span>0-3<span class="o">]</span>
-</span></span><span class="line"><span class="cl">sind power cycle worker-<span class="o">[</span>0-1<span class="o">]</span>.dev,worker-<span class="o">[</span>0-3<span class="o">]</span>.default
-</span></span></code></pre></div>
+
   </article>
 
 
@@ -2698,6 +2710,245 @@
         
 
         
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
           
           
         
@@ -2707,6 +2958,12 @@
         
 
         
+        
+      
+    
+
+  
+
         
       
     
@@ -2736,251 +2993,6 @@
             
             
           
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
         
 
         
@@ -3464,11 +3476,11 @@
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/usage/worker-management/"
-      title="Worker Management"
+      href="/sind/next/guides/ci-cd/"
+      title="CI/CD"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Worker Management
+      CI/CD
     </a>
   
 </span>
@@ -3476,10 +3488,10 @@
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/usage/diagnostics/"
-      title="Diagnostics"
+      href="/sind/next/architecture/"
+      title="Architecture"
     >
-      Diagnostics
+      Architecture
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-26T20:06:38+00:00"
+      content="2026-09-27T11:29:01+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/docker-resources/",
       "headline": "Docker Resources",
       "description": "Resource naming conventions, volumes, and labels",
-      "wordCount": "219",
+      "wordCount": "248",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-26T20:06:38.00Z",
+      "dateModified": "2026-09-27T11:29:01.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1169,6 +1169,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2108,6 +2152,11 @@
 					<td><code>sind-dev-controller</code></td>
 			</tr>
 			<tr>
+					<td>Backup controller</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-controller-backup</code></td>
+					<td><code>sind-dev-controller-backup</code></td>
+			</tr>
+			<tr>
 					<td>Submitter</td>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-submitter</code></td>
 					<td><code>sind-dev-submitter</code></td>
@@ -2131,6 +2180,11 @@
 					<td>Data volume</td>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-data</code></td>
 					<td><code>sind-dev-data</code></td>
+			</tr>
+			<tr>
+					<td>State volume (backup controller only)</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-state</code></td>
+					<td><code>sind-dev-state</code></td>
 			</tr>
 	</tbody>
 </table> </div>
@@ -2220,6 +2274,13 @@
 					<td>rw</td>
 			</tr>
 			<tr>
+					<td><code>sind-&lt;cluster&gt;-state</code></td>
+					<td><code>/var/spool/slurmctld</code></td>
+					<td>rw (backup controller pairs only)</td>
+					<td>—</td>
+					<td>—</td>
+			</tr>
+			<tr>
 					<td>tmpfs</td>
 					<td><code>/tmp</code></td>
 					<td>configurable</td>
@@ -2247,6 +2308,7 @@
 -v sind-dev-config:/etc/slurm:ro      # all others
 -v sind-dev-munge:/etc/munge:ro       # all nodes
 -v sind-dev-data:/data:rw             # all nodes
+-v sind-dev-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 --tmpfs /tmp:rw,nosuid,nodev,size=256m  # configurable size
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="host-path-storage"
@@ -2881,6 +2943,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

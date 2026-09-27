@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-26T20:06:38+00:00"
+      content="2026-09-27T11:29:01+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1013",
+      "wordCount": "1048",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-26T20:06:38.00Z",
+      "dateModified": "2026-09-27T11:29:01.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1158,6 +1158,50 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
                   </a>
                 </span>
               
@@ -2280,6 +2324,10 @@ worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd 
 	</tbody>
 </table> </div>
 <p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
+<p>Clusters with a <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/controller-failover/"
+>backup controller</a> get an <code>HA</code> column in the <code>NODES</code> table: <code>primary</code> or <code>backup</code> for each controller, with <code>*</code> on the one in control. The shared state volume appears under <code>MOUNTS</code> as <code>/var/spool/slurmctld</code>.</p>
 <blockquote>
 <p><strong>Tip:</strong> Run <code>watch sind get cluster</code> for a simple live dashboard that refreshes every two seconds.</p>
 </blockquote>
@@ -3005,6 +3053,39 @@ worker-0.default.sind.sind           172.19.0.3
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 
