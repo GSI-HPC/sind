@@ -102,3 +102,14 @@ func TestMCPExcluded_NamesExistingCommands(t *testing.T) {
 		assert.Equal(t, path, commandPath(cmd))
 	}
 }
+
+func TestMCPTools_Flags(t *testing.T) {
+	tools := exportMCPTools(t)
+	for name, tool := range tools {
+		flags := tool.InputSchema.Properties.Flags.Properties
+		assert.NotContains(t, flags, "verbose", name)
+		assert.NotContains(t, flags, "follow", name)
+		assert.Contains(t, flags, "realm", name)
+	}
+	assert.Contains(t, tools["sind_create_cluster"].InputSchema.Properties.Flags.Properties, "config")
+}

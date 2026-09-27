@@ -7,6 +7,7 @@ import (
 
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // mcpStreamHost is the address `sind mcp stream` listens on unless --host
@@ -28,7 +29,9 @@ var mcpExcluded = map[string]bool{
 func mcpConfig() *ophis.Config {
 	return &ophis.Config{
 		Selectors: []ophis.Selector{{
-			CmdSelector: isMCPTool,
+			CmdSelector:           isMCPTool,
+			LocalFlagSelector:     isMCPFlag,
+			InheritedFlagSelector: isMCPFlag,
 		}},
 	}
 }
@@ -38,6 +41,21 @@ func mcpConfig() *ophis.Config {
 // runnable only so that an unknown subcommand fails.
 func isMCPTool(cmd *cobra.Command) bool {
 	return !cmd.HasSubCommands() && !mcpExcluded[commandPath(cmd)]
+}
+
+// mcpExcludedFlags lists the flags that are not offered to MCP tools.
+var mcpExcludedFlags = map[string]bool{
+	// A count flag is passed as "--verbose 2", which pflag reads as
+	// --verbose and a stray positional argument: unknown command "2".
+	"verbose": true,
+	// logs --follow never ends, and a tool's output is returned only when
+	// the command exits.
+	"follow": true,
+}
+
+// isMCPFlag reports whether a flag is offered in a tool's input schema.
+func isMCPFlag(f *pflag.Flag) bool {
+	return !mcpExcludedFlags[f.Name]
 }
 
 // commandPath returns the path of cmd below the root, e.g. "get munge-key".

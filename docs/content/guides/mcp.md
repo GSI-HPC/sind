@@ -52,6 +52,8 @@ Every sind command is exposed as an MCP tool, except:
 - `sind enter` and `sind ssh`, which need an interactive terminal
 - `sind get ssh-private-key` and `sind get munge-key`, which print secrets
 
+The tools take the same arguments and flags as the commands, except `-v` and `sind logs --follow`, which a tool call cannot use.
+
 To see the full list:
 
 ```bash
