@@ -344,6 +344,35 @@ func TestValidate_Valid(t *testing.T) {
 				{Role: RoleWorker},
 			},
 		},
+		{
+			name: "managed true on controller",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(true)},
+				{Role: RoleWorker, Managed: testutil.Ptr(true)},
+			},
+		},
+		{
+			name: "unmanaged controller",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleSubmitter},
+				{Role: RoleWorker, Count: 2},
+			},
+		},
+		{
+			name: "unmanaged controller with explicitly unmanaged worker",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleWorker, Managed: testutil.Ptr(false)},
+			},
+		},
+		{
+			name: "unmanaged controller with backupController",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false), BackupController: true},
+				{Role: RoleWorker},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -451,20 +480,31 @@ func TestValidate_Constraints(t *testing.T) {
 			wantErr: `invalid role "compute"`,
 		},
 		{
-			name: "managed false on non-worker",
+			name: "managed false on submitter",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleController},
+				{Role: RoleSubmitter, Managed: testutil.Ptr(false)},
 				{Role: RoleWorker},
 			},
-			wantErr: "managed is only valid for worker",
+			wantErr: `managed is only valid for controller and worker nodes, not "submitter"`,
 		},
 		{
-			name: "managed true on non-worker",
+			name: "managed true on submitter",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(true)},
+				{Role: RoleController},
+				{Role: RoleSubmitter, Managed: testutil.Ptr(true)},
 				{Role: RoleWorker},
 			},
-			wantErr: "managed is only valid for worker",
+			wantErr: `managed is only valid for controller and worker nodes, not "submitter"`,
+		},
+		{
+			name: "managed worker under unmanaged controller",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleWorker, Managed: testutil.Ptr(false)},
+				{Role: RoleWorker, Managed: testutil.Ptr(true)},
+			},
+			wantErr: "worker managed: true requires a managed controller",
 		},
 		{
 			name: "negative count",
@@ -902,6 +942,42 @@ func TestValidate_BackupControllerSlurmMain(t *testing.T) {
 		cfg.Nodes[0].BackupController = false
 		require.NoError(t, cfg.Validate())
 	})
+}
+
+func TestValidate_UnmanagedSlurmSections(t *testing.T) {
+	sections := map[string]func(*Slurm){
+		"main":      func(s *Slurm) { s.Main = Section{Content: "SchedulerType=sched/backfill\n"} },
+		"cgroup":    func(s *Slurm) { s.Cgroup = Section{Content: "ConstrainCores=yes\n"} },
+		"gres":      func(s *Slurm) { s.Gres = Section{Fragments: map[string]string{"gpu": "Name=gpu\n"}} },
+		"topology":  func(s *Slurm) { s.Topology = Section{Content: "SwitchName=s0\n"} },
+		"plugstack": func(s *Slurm) { s.Plugstack = Section{Content: "optional x.so\n"} },
+	}
+	for name, set := range sections {
+		t.Run("rejects "+name, func(t *testing.T) {
+			cfg := &Cluster{
+				Kind: "Cluster",
+				Name: "default",
+				Nodes: []Node{
+					{Role: RoleController, Managed: testutil.Ptr(false), BackupController: true},
+					{Role: RoleWorker},
+				},
+			}
+			set(&cfg.Slurm)
+			err := cfg.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "slurm "+name+" requires a managed controller")
+		})
+	}
+}
+
+func TestCluster_Managed(t *testing.T) {
+	c := &Cluster{Nodes: []Node{{Role: RoleController}, {Role: RoleWorker, Managed: testutil.Ptr(false)}}}
+	assert.True(t, c.Managed(), "controller without managed")
+	c.Nodes[0].Managed = testutil.Ptr(true)
+	assert.True(t, c.Managed(), "managed: true")
+	c.Nodes[0].Managed = testutil.Ptr(false)
+	assert.False(t, c.Managed(), "managed: false")
+	assert.True(t, (&Cluster{}).Managed(), "no controller")
 }
 
 func TestSection_SetsParameter(t *testing.T) {

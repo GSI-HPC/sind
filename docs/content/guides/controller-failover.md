@@ -111,3 +111,5 @@ sind logs controller-backup slurmctld --follow
 - `sind enter` and `sind exec` run on the controller in control when the cluster has no submitter.
 - `sind create worker` and `sind delete worker` update `sind-nodes.conf` and reconfigure Slurm through a running controller, so they keep working while the primary is down.
 - `sind ssh controller` and `sind logs controller` still address the primary container by name.
+
+To run a pair whose Slurm configuration you provision yourself, see [Unmanaged Cluster]({{< relref "/guides/unmanaged-cluster" >}}).

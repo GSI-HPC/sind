@@ -2,7 +2,7 @@
 weight: 220
 title: "Node Definitions"
 icon: "dns"
-description: "Node roles, shorthand syntax, and managed vs unmanaged workers"
+description: "Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters"
 toc: true
 ---
 
@@ -23,7 +23,7 @@ toc: true
 | `memory` | global + per-node | `"512m"` | Memory limit |
 | `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp` |
 | `count` | worker only | `1` | Number of worker nodes |
-| `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+| `managed` | controller + worker | `true` | Worker: start slurmd and add to slurm.conf. Controller: `false` makes the whole cluster unmanaged (see below) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` (see below) |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
 | `capDrop` | global + per-node | none | Dropped Linux capabilities |
@@ -81,6 +81,8 @@ Unmanaged workers can also be created dynamically:
 sind create worker --count 2 --unmanaged
 ```
 
+In an [unmanaged cluster](#unmanaged-cluster) every worker is unmanaged.
+
 ## Backup controller
 
 `backupController: true` on the controller node adds a second controller, `controller-backup`, and configures Slurm's active/passive controller pair:
@@ -99,6 +101,24 @@ nodes:
 - `slurmctld` runs on both. The backup takes over when the primary stops responding for `SlurmctldTimeout` seconds, and hands control back when the primary's `slurmctld` starts again.
 
 `SlurmctldHost` and `StateSaveLocation` cannot be set in `slurm.main` when the backup is enabled. See [Controller Failover]({{< relref "/guides/controller-failover" >}}) for checking which controller is in control and triggering a failover.
+
+## Unmanaged cluster
+
+`managed: false` on the controller makes the whole cluster unmanaged: sind creates the nodes, the volumes and the munge key, but writes no Slurm configuration and starts no Slurm daemon, so your own tooling can provision Slurm.
+
+```yaml
+nodes:
+  - role: controller
+    managed: false
+  - role: worker
+    count: 2
+```
+
+- Every worker is unmanaged. A worker with `managed: true` is rejected, and so is any `slurm` section.
+- `backupController: true` still adds `controller-backup` and the shared state volume.
+- `managed` is not valid on the submitter, which runs no Slurm daemon.
+
+See [Unmanaged Cluster]({{< relref "/guides/unmanaged-cluster" >}}) for provisioning Slurm on such a cluster.
 
 ## Capabilities and devices
 

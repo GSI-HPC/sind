@@ -22,7 +22,9 @@ import (
 //  3. Deregister DNS + known_hosts
 //  4. Stop + remove containers
 //
-// For unmanaged nodes, only steps 3–4 are performed.
+// For unmanaged nodes, and every node of an unmanaged cluster, only steps
+// 3–4 are performed: the Slurm configuration of an unmanaged cluster is the
+// user's, even if it contains a sind-nodes.conf.
 func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -67,7 +69,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	}
 
 	// For managed nodes: check if sind-nodes.conf exists and update it.
-	if hasController {
+	if hasController && IsManaged(controller.Labels) {
 		nodesConf, err := client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
 		if err == nil {
 			// sind-nodes.conf exists → remove managed nodes from it.

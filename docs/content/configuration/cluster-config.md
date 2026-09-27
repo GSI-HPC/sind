@@ -167,7 +167,8 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - At most one `submitter` node is allowed
 - At least one `worker` node is required
 - `count` is only valid for worker nodes
-- `managed` is only valid for worker nodes
+- `managed` is only valid for controller and worker nodes
+- With `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
 - `backupController` is only valid for controller nodes
 - With `backupController`, `slurm.main` must not set `SlurmctldHost` (or its deprecated forms `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `count` must not be negative

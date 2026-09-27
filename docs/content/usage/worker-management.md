@@ -19,7 +19,7 @@ sind create worker [CLUSTER] [FLAGS]
 | `--cpus` | cluster default (1) | CPU limit per node |
 | `--memory` | cluster default (512m) | Memory limit |
 | `--tmp-size` | `256m` | `/tmp` tmpfs size |
-| `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf |
+| `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | `false` | Pull images before creating containers |
 | `--cap-add` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
 | `--cap-drop` | none | Drop Linux capability (repeatable) |
@@ -56,13 +56,15 @@ For managed workers (the default), sind:
 
 This requires `sind-nodes.conf` to exist in `/etc/slurm`. If you replaced the generated Slurm configuration, use `--unmanaged` instead.
 
+On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), every new worker is unmanaged, with or without `--unmanaged`.
+
 ## Remove workers
 
 ```bash
 sind delete worker NODES
 ```
 
-For managed workers, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes.
+For managed workers, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes. On an unmanaged cluster, sind never edits the Slurm configuration.
 
 ```bash
 # Remove a single worker

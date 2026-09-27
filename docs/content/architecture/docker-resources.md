@@ -43,6 +43,8 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 |
 | tmpfs | `/run/lock` | — | — | — |
 
+Unmanaged clusters use the same mounts; their config volume starts empty.
+
 SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories.
 
 ```
@@ -71,5 +73,6 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
+| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |

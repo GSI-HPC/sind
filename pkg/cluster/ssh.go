@@ -32,7 +32,9 @@ func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster, realm string
 // EnterTarget determines the target node for an interactive shell.
 // Returns "submitter" if present in the cluster, otherwise the controller:
 // in a primary/backup pair the one in control, falling back to "controller"
-// when that cannot be determined.
+// when that cannot be determined. In an unmanaged cluster sind does not know
+// which controller is in control, so the running one is picked, preferring
+// "controller".
 func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName string) (string, error) {
 	entries, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
@@ -54,6 +56,9 @@ func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 	if controller.Name != primary {
 		// Only the backup runs.
 		return ControllerBackupShortName, nil
+	}
+	if !IsManaged(controller.Labels) {
+		return string(config.RoleController), nil
 	}
 	// Both controllers run: the heartbeat tells whether the backup has
 	// taken over (e.g. after scontrol takeover, which leaves the primary

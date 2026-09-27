@@ -92,6 +92,22 @@ func TestGetClusters_Output(t *testing.T) {
 	assert.Contains(t, stdout, "running")
 }
 
+func TestGetClusters_UnknownSlurmVersion(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=controller,sind.managed=false",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "clusters")
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, []string{"dev", "1", "(0/1/0)", "-", "running"}, strings.Fields(lines[1]))
+}
+
 func TestGetNodes_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"get", "nodes"})
@@ -812,6 +828,7 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.Equal(t, "sind-dev-controller", got.Container)
 	assert.Equal(t, "dev", got.Cluster)
 	assert.Equal(t, config.RoleController, got.Role)
+	assert.True(t, got.Managed, "no sind.managed label: created before it existed")
 	assert.Equal(t, "controller.dev.sind.sind", got.FQDN)
 	assert.Equal(t, "10.0.0.2", got.IP)
 	assert.Equal(t, docker.StateRunning, got.Status)
@@ -820,6 +837,30 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.True(t, got.Services["slurmctld"])
 	assert.Nil(t, got.HA)
 	assert.NotContains(t, stdout, `"ha"`)
+}
+
+func TestGetNode_JSONUnmanaged(t *testing.T) {
+	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-worker-0","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"worker","sind.cluster":"dev","sind.managed":"false"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.3"}}}}]`
+
+	m := &mock.Executor{
+		OnCall: func(args []string, _ string) mock.Result {
+			if len(args) >= 2 && args[0] == "inspect" {
+				return mock.Result{Stdout: inspectWithLabels}
+			}
+			if len(args) == 6 && args[2] == "systemctl" && args[3] == "is-active" {
+				return mock.Result{Stdout: "active\nactive\n"}
+			}
+			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+		},
+	}
+
+	stdout, _, err := executeWithMock(m, "get", "node", "worker-0.dev", "--output", "json")
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, false, got["managed"])
+	assert.Equal(t, map[string]any{"munge": true, "sshd": true}, got["services"])
 }
 
 // pairOnCall serves get cluster / get node for a cluster with a controller
@@ -889,6 +930,13 @@ func TestGetCluster_ControllerPair(t *testing.T) {
 	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][2], "workers leave the HA column empty")
 }
 
+func TestGetCluster_UnknownSlurmVersion(t *testing.T) {
+	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev")
+	require.NoError(t, err)
+	lines := strings.Split(stdout, "\n")
+	assert.Equal(t, []string{"dev", "-", "running", "(3/0/0/3)"}, strings.Fields(lines[1]))
+}
+
 func TestGetCluster_ControllerPairJSON(t *testing.T) {
 	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev", "-o", "json")
 	require.NoError(t, err)
@@ -912,6 +960,11 @@ func TestGetNode_ControllerPair(t *testing.T) {
 	var got cluster.NodeDetail
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	assert.Equal(t, &cluster.HAStatus{Position: "backup", InControl: true}, got.HA)
+}
+
+func TestFormatSlurmVersion(t *testing.T) {
+	assert.Equal(t, "25.11.8", formatSlurmVersion("25.11.8"))
+	assert.Equal(t, "-", formatSlurmVersion(""))
 }
 
 func TestFormatHA(t *testing.T) {

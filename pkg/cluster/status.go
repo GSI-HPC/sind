@@ -30,21 +30,23 @@ type ServiceHealth map[probe.Service]bool
 type NodeHealth struct {
 	State    docker.ContainerState `json:"status"`       // container state from Docker (e.g. "running", "exited")
 	IP       string                `json:"ip"`           // container IP address
-	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge, sshd, and role-specific services like slurmctld/slurmd)
+	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge, sshd, and on managed nodes the role's slurmctld/slurmd)
 	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
 // GetNodeHealth checks the health of a single node container.
 // If the container is not running, remaining checks are skipped and
-// default to false. The role determines which Slurm services are checked.
-// clusterName is used to select the cluster network IP.
+// default to false. The role determines which Slurm service is checked;
+// unmanaged nodes (see IsManaged) get none. clusterName is used to select
+// the cluster network IP.
 func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
 	info, err := client.InspectContainer(ctx, docker.ContainerName(containerName))
 	if err != nil {
 		return nil, fmt.Errorf("inspecting container: %w", err)
 	}
 	health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
-	if role == config.RoleController {
+	// sind cannot tell which controller of an unmanaged pair is in control.
+	if role == config.RoleController && IsManaged(info.Labels) {
 		shortName := strings.TrimPrefix(containerName, ContainerPrefix(realm, clusterName))
 		if health.HA, err = nodeHA(ctx, client, realm, clusterName, shortName, health); err != nil {
 			return nil, err
@@ -64,7 +66,7 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 		Services: make(ServiceHealth),
 	}
 
-	services := append([]probe.Service{probe.ServiceMunge, probe.ServiceSSHD}, roleServices(role)...)
+	services := nodeServices(role, IsManaged(info.Labels))
 
 	// If container is not running, skip all service checks.
 	if info.Status != docker.StateRunning {
@@ -76,7 +78,7 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 
 	// One fused readiness exec per node (plus scontrol ping for
 	// controllers) instead of three or four serial docker execs.
-	snap, err := probe.Snapshot(ctx, client, info.Name, role)
+	snap, err := probe.Snapshot(ctx, client, info.Name, services)
 	if err != nil {
 		sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
 		for _, svc := range services {
@@ -208,9 +210,10 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
-	Name   string      `json:"name"`   // DNS-style name: "controller.dev"
-	Role   config.Role `json:"role"`   // "controller", "submitter", "worker"
-	Health *NodeHealth `json:"health"` //nolint:revive // nested health is intentional
+	Name    string      `json:"name"`    // DNS-style name: "controller.dev"
+	Role    config.Role `json:"role"`    // "controller", "submitter", "worker"
+	Managed bool        `json:"managed"` // sind manages Slurm on the node (see IsManaged)
+	Health  *NodeHealth `json:"health"`  //nolint:revive // nested health is intentional
 }
 
 // Status holds the full status of a sind cluster.
@@ -287,9 +290,10 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		g.Go(func() error {
 			health := nodeHealthFromInfo(gctx, client, info, role, realm, clusterName)
 			nodes[i] = &NodeStatus{
-				Name:   shortName + "." + clusterName,
-				Role:   role,
-				Health: health,
+				Name:    shortName + "." + clusterName,
+				Role:    role,
+				Managed: IsManaged(info.Labels),
+				Health:  health,
 			}
 			return nil
 		})
@@ -302,7 +306,8 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
 	})
 
-	if _, ok := infoByName[ContainerName(realm, clusterName, ControllerBackupShortName)]; ok {
+	// sind cannot tell which controller of an unmanaged pair is in control.
+	if _, ok := infoByName[ContainerName(realm, clusterName, ControllerBackupShortName)]; ok && clusterManaged(containers, realm, clusterName) {
 		setControllerHA(ctx, client, realm, clusterName, nodes)
 	}
 
@@ -341,10 +346,12 @@ func nodeStatusOrder(n *NodeStatus) string {
 	return rolePrefix(n.Role) + naturalSortKey(shortName)
 }
 
-// roleServices returns the Slurm readiness-check services for the given role.
-func roleServices(role config.Role) []probe.Service {
-	if svc, ok := probe.ServiceForRole(role); ok {
-		return []probe.Service{svc}
+// nodeServices returns the services checked on a node: munge and sshd, plus
+// the role's Slurm daemon when sind manages Slurm on the node.
+func nodeServices(role config.Role, managed bool) []probe.Service {
+	services := []probe.Service{probe.ServiceMunge, probe.ServiceSSHD}
+	if svc, ok := probe.ServiceForRole(role); ok && managed {
+		services = append(services, svc)
 	}
-	return nil
+	return services
 }

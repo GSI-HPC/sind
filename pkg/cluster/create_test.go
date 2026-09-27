@@ -834,6 +834,66 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 	assert.Equal(t, []string{"sind-dev-controller"}, slurmCmds)
 }
 
+func TestCreate_UnmanagedCluster(t *testing.T) {
+	exitErr := notFoundErr(t)
+
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Managed: testutil.Ptr(false), BackupController: true,
+				Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, exitErr, nil)
+	m.OnStart = pipes.OnStart
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+
+	require.NoError(t, err)
+	assert.Empty(t, cluster.SlurmVersion, "no version discovered")
+	require.Len(t, cluster.Nodes, 4)
+
+	var volumes, nodes []string
+	for _, c := range m.Calls {
+		args := c.Args
+		joined := strings.Join(args, " ")
+		switch {
+		case args[0] == "run" && args[1] == "--rm":
+			assert.Failf(t, "Slurm version discovered", "%v", args)
+		case args[0] == "volume" && args[1] == "create":
+			volumes = append(volumes, args[len(args)-1])
+		case args[0] == "create" && strings.Contains(joined, "config-helper"):
+			assert.Failf(t, "Slurm configuration written", "%v", args)
+		case args[0] == "create":
+			name, _ := testutil.ArgValue(args, "--name")
+			nodes = append(nodes, name)
+			labels := testutil.ArgValues(args, "--label")
+			assert.Contains(t, labels, LabelManaged+"=false", name)
+			assert.Contains(t, labels, LabelSlurmVersion+"=", name)
+		case args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable",
+			args[0] == "exec" && len(args) > 2 && args[2] == "scontrol":
+			assert.Failf(t, "Slurm daemon touched", "%v", args)
+		}
+	}
+	assert.ElementsMatch(t, []string{"sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state"}, volumes)
+	assert.ElementsMatch(t, []string{"sind-dev-controller", "sind-dev-controller-backup", "sind-dev-submitter", "sind-dev-worker-0"}, nodes)
+	assert.True(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
+		return c.Args[0] == "run" && slices.Contains(c.Args, "sind-dev-munge-helper")
+	}), "munge key written")
+}
+
 func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 	exitErr := notFoundErr(t)
 
@@ -964,6 +1024,38 @@ func TestSetupNodes_InspectError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting node controller")
+}
+
+func TestSetupNodes_WaitsForMunge(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stdout: inspectJSON(t, args[1], "running", nil)}
+		}
+		if args[0] == "exec" {
+			joined := strings.Join(args, " ")
+			switch {
+			case strings.Contains(joined, "is-system-running"):
+				return mock.Result{Stdout: "running\n"}
+			case strings.Contains(joined, "/dev/tcp"):
+				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+			case strings.HasSuffix(joined, "systemctl is-active munge"):
+				return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")}
+			}
+		}
+		return mock.Result{}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "probe munge")
 }
 
 func TestSetupNodes_InjectKeyError(t *testing.T) {
@@ -1165,7 +1257,7 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	}
 
 	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true}}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()

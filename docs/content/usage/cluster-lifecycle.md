@@ -72,7 +72,7 @@ default   4 (1/1/2)       25.11    running
 dev       3 (0/1/2)       25.11    running
 ```
 
-The `NODES` column shows the total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker.
+The `NODES` column shows the total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker. `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters.
 
 ## Delete a cluster
 
