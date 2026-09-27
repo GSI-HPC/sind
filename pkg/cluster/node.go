@@ -65,6 +65,7 @@ type RunConfig struct {
 	DataHostPath    string      // host path for data volume (empty = use docker volume)
 	DataMountPath   string      // mount point for data (default: /data)
 	Managed         bool        // start slurmd and add to slurm.conf (worker only)
+	SharedState     bool        // mount the shared slurmctld state volume (controllers of a backup pair)
 	ContainerNumber int         // 1-based compose container instance number
 	Pull            bool        // force fresh image pull (--pull always)
 	CapAdd          []string    // extra Linux capabilities (e.g. "SYS_ADMIN")
@@ -111,6 +112,13 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw")
 	} else {
 		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeData))+":"+dataMountPath+":rw")
+	}
+
+	// Shared slurmctld state for a primary/backup controller pair. An empty
+	// named volume is seeded from the image's directory, so it starts out
+	// owned by the slurm user.
+	if cfg.SharedState {
+		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeState))+":"+slurm.StateSaveLocation+":rw")
 	}
 
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd

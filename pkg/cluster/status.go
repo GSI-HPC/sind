@@ -174,6 +174,15 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume})
 	}
 
+	// Primary/backup controller pairs share the slurmctld state volume.
+	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
+	for _, c := range containers {
+		if c.Name == backup {
+			mounts = append(mounts, MountPoint{Path: slurm.StateSaveLocation, Source: string(VolumeName(realm, clusterName, VolumeState)), Type: config.StorageVolume})
+			break
+		}
+	}
+
 	// Check existence of Docker volumes.
 	for i := range mounts {
 		if mounts[i].Type != config.StorageVolume {

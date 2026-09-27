@@ -74,8 +74,11 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		})
 	})
 
-	// Check cluster volumes.
+	// Check the volumes this cluster will create.
 	for _, vtype := range AllVolumeTypes {
+		if vtype == VolumeState && !cfg.HasBackupController() {
+			continue
+		}
 		volName := VolumeName(realm, cfg.Name, vtype)
 		g.Go(func() error {
 			return check(gctx, "volume", string(volName), func(ctx context.Context) (bool, error) {

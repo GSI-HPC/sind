@@ -122,6 +122,19 @@ func TestPreflightCheck_NoConflicts(t *testing.T) {
 	assert.Len(t, m.Calls, 5) // network + 3 volumes + 1 filtered ps
 }
 
+func TestPreflightCheck_BackupControllerStateVolume(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-state": true})
+	c := docker.NewClient(&m)
+
+	cfg := minimalConfig()
+	cfg.Nodes[0].BackupController = true
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "volume sind-dev-state")
+}
+
 func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-net": true})

@@ -19,10 +19,14 @@ const (
 	VolumeConfig VolumeType = "config"
 	VolumeMunge  VolumeType = "munge"
 	VolumeData   VolumeType = "data"
+	// VolumeState holds the slurmctld StateSaveLocation shared by the
+	// primary and backup controller. Only clusters with a backup controller
+	// have it.
+	VolumeState VolumeType = "state"
 )
 
 // AllVolumeTypes lists the cluster volume types in creation order.
-var AllVolumeTypes = []VolumeType{VolumeConfig, VolumeMunge, VolumeData}
+var AllVolumeTypes = []VolumeType{VolumeConfig, VolumeMunge, VolumeData, VolumeState}
 
 // Resources holds the Docker resources belonging to a cluster.
 type Resources struct {

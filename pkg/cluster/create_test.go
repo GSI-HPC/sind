@@ -249,6 +249,24 @@ func createCfg() *config.Cluster {
 	}
 }
 
+func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	client := docker.NewClient(&m)
+
+	cfg := createCfg()
+	cfg.Nodes[0].BackupController = true
+	require.NoError(t, createResources(t.Context(), client, mesh.DefaultRealm, cfg))
+
+	var created []string
+	for _, c := range m.Calls {
+		if len(c.Args) > 2 && c.Args[0] == "volume" && c.Args[1] == "create" {
+			created = append(created, c.Args[len(c.Args)-1])
+		}
+	}
+	assert.Contains(t, created, "sind-dev-state")
+}
+
 func TestCreate_FullCluster(t *testing.T) {
 	exitErr := notFoundErr(t)
 

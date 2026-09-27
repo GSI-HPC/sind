@@ -3,7 +3,15 @@
 // Package cluster provides types and operations for sind cluster management.
 package cluster
 
-import "github.com/GSI-HPC/sind/pkg/docker"
+import (
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/slurm"
+)
+
+// ControllerBackupShortName is the hostname of the backup controller created
+// when the controller node spec sets backupController: true. It matches the
+// second SlurmctldHost line in the generated slurm.conf.
+const ControllerBackupShortName = slurm.BackupControllerHost
 
 // NetworkName returns the Docker network name for a cluster.
 func NetworkName(realm, cluster string) docker.NetworkName {

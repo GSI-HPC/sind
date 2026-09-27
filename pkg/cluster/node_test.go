@@ -206,6 +206,14 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 	}
 }
 
+func TestBuildRunArgs_Mounts_SharedState(t *testing.T) {
+	cfg := defaultRunConfig()
+	assert.NotContains(t, testutil.ArgValues(BuildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
+
+	cfg.SharedState = true
+	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
+}
+
 func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataHostPath = "/home/user/data"
