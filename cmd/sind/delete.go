@@ -28,7 +28,7 @@ func newDeleteClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "cluster [NAME]",
 		Short:             "Delete a cluster",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			all, _ := cmd.Flags().GetBool("all")
@@ -54,7 +54,10 @@ func newDeleteClusterCommand() *cobra.Command {
 func runDeleteCluster(cmd *cobra.Command, name string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 
 	unlock, err := acquireRealmLock(ctx, realm, "")
 	if err != nil {
@@ -80,7 +83,10 @@ func runDeleteCluster(cmd *cobra.Command, name string) error {
 func runDeleteClustersAll(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 
 	unlock, err := acquireRealmLock(ctx, realm, "")
 	if err != nil {

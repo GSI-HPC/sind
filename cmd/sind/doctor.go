@@ -26,7 +26,10 @@ func runDoctor(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 	fs := fsFrom(ctx)
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	mgr := meshMgrFrom(ctx, client, realm)
 	var failures []string
 

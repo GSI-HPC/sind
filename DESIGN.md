@@ -762,6 +762,17 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `count` - only valid for worker role
 - `managed` - only valid for controller and worker roles; with `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
+- `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
+
+### Cluster and Realm Names
+
+Cluster and realm names become part of Docker resource names, of DNS names (`<node>.<cluster>.<realm>.sind`) and of state paths (`$XDG_STATE_HOME/sind/<realm>/`), so each must be one DNS label as RFC 1123 defines it:
+
+- lowercase ASCII letters, digits and `-` only; uppercase is rejected, because DNS ignores case and `Dev` and `dev` would share DNS names
+- 1 to 63 characters
+- not beginning or ending with `-`
+
+sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
 
 ### Backup Controller
 

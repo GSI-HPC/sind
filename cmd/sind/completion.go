@@ -20,7 +20,10 @@ func completeClusterNames(cmd *cobra.Command, args []string, _ string) ([]string
 		ctx = context.Background()
 	}
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
 	names, err := cluster.DiscoverClusterNames(ctx, client, realm)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
@@ -35,7 +38,10 @@ func completeNodeNames(cmd *cobra.Command, _ []string, _ string) ([]string, cobr
 		ctx = context.Background()
 	}
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
 	clusters, err := cluster.DiscoverClusterNames(ctx, client, realm)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError

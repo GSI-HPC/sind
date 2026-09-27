@@ -16,7 +16,7 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "worker [CLUSTER]",
 		Short:             "Add worker nodes to a cluster",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := config.DefaultClusterName
@@ -72,7 +72,10 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 
 	unlock, err := acquireRealmLock(ctx, realm, "")
 	if err != nil {
@@ -116,7 +119,10 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 
 	unlock, lockErr := acquireRealmLock(ctx, realm, "")
 	if lockErr != nil {

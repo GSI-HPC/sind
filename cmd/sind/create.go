@@ -38,7 +38,7 @@ func newCreateClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "cluster [NAME] [--config FILE]",
 		Short:             "Create a Slurm cluster",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var name string
@@ -84,7 +84,10 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	realm := resolveRealm(cmd, cfg.Realm)
+	realm, err := resolveRealm(cmd, cfg.Realm)
+	if err != nil {
+		return err
+	}
 
 	unlock, err := acquireRealmLock(ctx, realm, "")
 	if err != nil {

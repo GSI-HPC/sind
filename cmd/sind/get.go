@@ -60,7 +60,7 @@ func newGetNodesCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "nodes [CLUSTER]",
 		Short:             "List nodes",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
@@ -98,7 +98,11 @@ func runGetClusters(cmd *cobra.Command) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	clusters, err := cluster.GetClusters(cmd.Context(), client, realmFromFlag(cmd))
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	clusters, err := cluster.GetClusters(cmd.Context(), client, realm)
 	if err != nil {
 		return err
 	}
@@ -172,16 +176,22 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	if strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
 		return fmt.Errorf("use NODE[.CLUSTER], not the FQDN %q", arg)
 	}
-	// Parse shortName.cluster on the first dot (node short names do not
-	// contain dots; cluster names may).
+	// Parse shortName.cluster on the first dot (neither node short names
+	// nor cluster names contain dots).
 	shortName, clusterName := arg, config.DefaultClusterName
 	if i := strings.Index(arg, "."); i >= 0 {
 		shortName = arg[:i]
 		clusterName = arg[i+1:]
 	}
+	if err := config.CheckName("cluster", clusterName); err != nil {
+		return fmt.Errorf("invalid node name %q: %w", arg, err)
+	}
 
 	client := clientFrom(cmd.Context())
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	containerName := string(cluster.ContainerName(realm, clusterName, shortName))
 
 	info, err := client.InspectContainer(cmd.Context(), docker.ContainerName(containerName))
@@ -252,7 +262,11 @@ func runGetAllNodes(cmd *cobra.Command) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	nodes, err := cluster.GetAllNodes(cmd.Context(), client, realmFromFlag(cmd))
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	nodes, err := cluster.GetAllNodes(cmd.Context(), client, realm)
 	if err != nil {
 		return err
 	}
@@ -274,7 +288,11 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	nodes, err := cluster.GetNodes(cmd.Context(), client, realmFromFlag(cmd), name)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	nodes, err := cluster.GetNodes(cmd.Context(), client, realm, name)
 	if err != nil {
 		return err
 	}
@@ -296,7 +314,11 @@ func runGetNetworks(cmd *cobra.Command) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	networks, err := cluster.GetNetworks(cmd.Context(), client, realmFromFlag(cmd))
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	networks, err := cluster.GetNetworks(cmd.Context(), client, realm)
 	if err != nil {
 		return err
 	}
@@ -318,7 +340,11 @@ func runGetVolumes(cmd *cobra.Command) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	volumes, err := cluster.GetVolumes(cmd.Context(), client, realmFromFlag(cmd))
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	volumes, err := cluster.GetVolumes(cmd.Context(), client, realm)
 	if err != nil {
 		return err
 	}
@@ -351,7 +377,10 @@ func runGetDNS(cmd *cobra.Command) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	mgr := meshMgrFrom(cmd.Context(), client, realm)
 
 	records, err := mgr.GetDNSRecords(cmd.Context())
@@ -375,7 +404,7 @@ func newGetMungeKeyCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "munge-key [CLUSTER]",
 		Short:             "Output munge key (base64)",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := config.DefaultClusterName
@@ -392,7 +421,11 @@ func runGetMungeKey(cmd *cobra.Command, name string) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	key, err := cluster.GetMungeKey(cmd.Context(), client, realmFromFlag(cmd), name)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	key, err := cluster.GetMungeKey(cmd.Context(), client, realm, name)
 	if err != nil {
 		return err
 	}
@@ -415,7 +448,10 @@ func newGetSSHConfigCommand() *cobra.Command {
 			if err := validateOutputFlag(cmd); err != nil {
 				return err
 			}
-			realm := realmFromFlag(cmd)
+			realm, err := realmFromFlag(cmd)
+			if err != nil {
+				return err
+			}
 			dir, err := sindStateDir(realm)
 			if err != nil {
 				return err
@@ -448,7 +484,10 @@ func runGetMesh(cmd *cobra.Command) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	mgr := meshMgrFrom(cmd.Context(), client, realm)
 
 	info, err := mgr.GetInfo(cmd.Context())
@@ -477,7 +516,7 @@ func newGetClusterCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "cluster [NAME]",
 		Short:             "Show cluster health status",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := config.DefaultClusterName
@@ -494,7 +533,11 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	status, err := cluster.GetStatus(cmd.Context(), client, realmFromFlag(cmd), name)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	status, err := cluster.GetStatus(cmd.Context(), client, realm, name)
 	if err != nil {
 		return err
 	}
@@ -673,11 +716,13 @@ func runGetSSHKey(cmd *cobra.Command, kind string) error {
 		return err
 	}
 	client := clientFrom(cmd.Context())
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	mgr := meshMgrFrom(cmd.Context(), client, realm)
 
 	var content string
-	var err error
 	switch kind {
 	case "private":
 		content, err = mgr.GetSSHPrivateKey(cmd.Context())

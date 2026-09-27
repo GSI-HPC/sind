@@ -6,8 +6,22 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/nodeset"
+	"github.com/spf13/cobra"
 )
+
+// optionalCluster is the argument check of a command whose only, optional
+// argument is a cluster name.
+func optionalCluster(cmd *cobra.Command, args []string) error {
+	if err := cobra.MaximumNArgs(1)(cmd, args); err != nil {
+		return err
+	}
+	if len(args) == 1 {
+		return config.CheckName("cluster", args[0])
+	}
+	return nil
+}
 
 // nodeTarget is a resolved node with its short name and cluster.
 type nodeTarget struct {
@@ -32,6 +46,9 @@ func parseNodeArgs(args string) ([]nodeTarget, error) {
 		}
 		if t.ShortName == "" || t.Cluster == "" {
 			return nil, fmt.Errorf("invalid node name %q", name)
+		}
+		if err := config.CheckName("cluster", t.Cluster); err != nil {
+			return nil, fmt.Errorf("invalid node name %q: %w", name, err)
 		}
 		targets = append(targets, t)
 	}

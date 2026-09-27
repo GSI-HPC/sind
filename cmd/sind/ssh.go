@@ -44,7 +44,10 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	}
 
 	isTTY := stdinIsTTY()
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
 	dockerArgs := cluster.BuildSSHArgs(sshContainer, target[0].ShortName, target[0].Cluster, realm, isTTY, sshOptions, command)
 
@@ -55,7 +58,7 @@ func newEnterCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "enter [CLUSTER]",
 		Short:             "Interactive shell on submitter or controller",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := config.DefaultClusterName
@@ -70,7 +73,10 @@ func newEnterCommand() *cobra.Command {
 func runEnter(cmd *cobra.Command, clusterName string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 
 	target, err := cluster.EnterTarget(ctx, client, realm, clusterName)
 	if err != nil {
@@ -106,7 +112,10 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
-	realm := realmFromFlag(cmd)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 
 	target, err := cluster.EnterTarget(ctx, client, realm, clusterName)
 	if err != nil {
@@ -185,6 +194,9 @@ func parseExecArgs(args []string) (clusterName string, command []string, err err
 	clusterName = "default"
 	if dashIdx == 1 {
 		clusterName = args[0]
+		if err := config.CheckName("cluster", clusterName); err != nil {
+			return "", nil, err
+		}
 	}
 
 	return clusterName, command, nil

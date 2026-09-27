@@ -76,12 +76,14 @@ nodes:
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `kind` | yes | — | Must be `"Cluster"` |
-| `name` | no | `"default"` | Cluster name, used in resource naming |
-| `realm` | no | `"sind"` | Realm namespace for resource isolation |
+| `name` | no | `"default"` | Cluster name, used in resource naming; must be a valid name (see below) |
+| `realm` | no | `"sind"` | Realm namespace for resource isolation; must be a valid name (see below) |
 | `defaults` | no | — | Default settings applied to all nodes |
 | `storage` | no | — | Shared storage configuration |
 | `slurm` | no | — | Slurm configuration extension |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
+
+Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`.
 
 ## Defaults section
 

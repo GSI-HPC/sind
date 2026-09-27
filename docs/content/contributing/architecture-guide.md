@@ -26,6 +26,8 @@ internal/mock/     Test doubles for cmdexec.Executor
   ├── recorder.go  mock.RecordingExecutor for integration tests
   └── recording.go Recorded call types
 
+internal/hostname/ DNS label check behind config.CheckName (cluster and realm names)
+
 internal/termtext/ Escaping of untrusted text for the terminal (final error line)
 
 internal/testutil/ Shared test helpers

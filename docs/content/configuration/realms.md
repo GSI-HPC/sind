@@ -29,6 +29,8 @@ Realm is determined by the following precedence (highest first):
 | `SIND_REALM` environment variable | `export SIND_REALM=ci-42` |
 | Default | `sind` |
 
+A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source; `SIND_REALM` is only checked when it is the realm in effect.
+
 ## Resource naming
 
 With realm `ci-42`, resources are prefixed accordingly:
