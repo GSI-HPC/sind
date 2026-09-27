@@ -533,6 +533,19 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind get ssh-private-key`, `sind get ssh-public-key`, and `sind get ssh-known-hosts` dump SSH credentials to stdout. This replaces the need to extract files from Docker volumes.
 
+### MCP Server
+
+```bash
+sind mcp start                          # MCP server on stdio
+sind mcp stream [--host H] [--port P]   # MCP server over HTTP (default 127.0.0.1:8080)
+sind mcp tools                          # export the tool definitions to mcp-tools.json
+sind mcp {claude,vscode,cursor} {enable,disable}  # register sind with an editor
+```
+
+The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
+
+- `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces.
+
 ## Node Arguments
 
 Commands accepting node arguments use DNS-style names with optional nodeset expansion.

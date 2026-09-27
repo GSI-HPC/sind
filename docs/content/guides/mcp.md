@@ -69,8 +69,10 @@ This exports the tool definitions to `mcp-tools.json`. The tools follow the nami
 
 ## HTTP mode
 
-For remote or multi-client setups, sind can serve MCP over HTTP:
+For multi-client setups, sind can serve MCP over HTTP:
 
 ```bash
-sind mcp stream --host localhost --port 8080
+sind mcp stream --port 8080
 ```
+
+The stream listens on `127.0.0.1` unless `--host` names another address. It has no authentication, and its tools create and delete containers, so only pass `--host 0.0.0.0` (all interfaces) on a network you trust, or put an authenticating proxy in front of it.
