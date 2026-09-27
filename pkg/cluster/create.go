@@ -70,6 +70,10 @@ type nodeResult struct {
 //	              registerMesh ║ enableSlurm
 //	                        │
 //	                    *Cluster
+//
+// An unmanaged cluster (managed: false on the controller) gets the same
+// containers, volumes and munge key, but sind writes no Slurm configuration,
+// does not discover the Slurm version and enables no Slurm daemon.
 func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (result *Cluster, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -171,13 +175,15 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		log.DebugContext(gctx, "mesh registration complete")
 		return nil
 	})
-	g.Go(func() error {
-		if err := enableSlurm(gctx, client, realm, cfg.Name, nodeConfigs, readinessInterval, watcher); err != nil {
-			return err
-		}
-		log.InfoContext(gctx, "slurm services enabled")
-		return nil
-	})
+	if cfg.Managed() {
+		g.Go(func() error {
+			if err := enableSlurm(gctx, client, realm, cfg.Name, nodeConfigs, readinessInterval, watcher); err != nil {
+				return err
+			}
+			log.InfoContext(gctx, "slurm services enabled")
+			return nil
+		})
+	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
@@ -210,6 +216,9 @@ func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.
 }
 
 // resolveInfra fetches mesh details and the Slurm version concurrently.
+// The version stays empty for an unmanaged cluster: sind does not know which
+// Slurm it runs, as the provisioning under test may install another one than
+// the image ships.
 //
 //	┌──────────┐  ┌──────────┐  ┌──────────────┐
 //	│  DNS IP  │  │ SSH key  │  │Slurm version │
@@ -224,22 +233,25 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client, meshMgr)
 		return meshErr
 	})
-	g.Go(func() error {
-		ver, err := slurm.DiscoverVersion(gctx, client, image, cfg.Pull)
-		if err != nil {
-			return fmt.Errorf("discovering Slurm version: %w", err)
-		}
-		slurmVersion = ver
-		return nil
-	})
+	if cfg.Managed() {
+		g.Go(func() error {
+			ver, err := slurm.DiscoverVersion(gctx, client, image, cfg.Pull)
+			if err != nil {
+				return fmt.Errorf("discovering Slurm version: %w", err)
+			}
+			slurmVersion = ver
+			return nil
+		})
+	}
 	err = g.Wait()
 	return
 }
 
 // createResources creates cluster network, volumes, config, and munge key.
+// The config volume of an unmanaged cluster stays empty.
 //
 //	┌─────────┐  ┌─────────┐
-//	network ║ (config vol → write config) ║ (munge vol → write munge key) ║ data vol ║ state vol (backup pair only)
+//	network ║ (config vol → write config, managed only) ║ (munge vol → write munge key) ║ data vol ║ state vol (backup pair only)
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
@@ -249,6 +261,9 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 	g.Go(func() error {
 		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeConfig); err != nil {
 			return err
+		}
+		if !cfg.Managed() {
+			return nil
 		}
 		return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull)
 	})
@@ -372,8 +387,8 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 	return nodes, nil
 }
 
-// enableSlurm enables the Slurm daemon on each eligible node and waits for
-// the service to become ready — concurrently per node.
+// enableSlurm enables the Slurm daemon on each managed node with a Slurm
+// role and waits for the service to become ready — concurrently per node.
 //
 //	┌────────────────────┐ ┌─────────────────────┐
 //	│ controller:        │ │ worker-0:            │
@@ -385,7 +400,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 	log := sindlog.From(ctx)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
-		if nc.Role == config.RoleWorker && !nc.Managed {
+		if !nc.Managed {
 			continue
 		}
 		service, ok := probe.ServiceForRole(nc.Role)
