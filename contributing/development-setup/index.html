@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Clone, build, and run sind locally" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-04-07T17:31:09+02:00"
+      content="2026-09-27T22:09:18+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/contributing/development-setup/",
       "headline": "Development Setup",
       "description": "Clone, build, and run sind locally",
-      "wordCount": "204",
+      "wordCount": "288",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-07T17:31:09.00Z",
+      "dateModified": "2026-09-27T22:09:18.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2089,9 +2177,10 @@
     </a>
 </div>
 <ul>
-<li><strong>Go 1.25+</strong></li>
+<li><strong>Go 1.26+</strong></li>
 <li><strong>Docker Engine 28.0+</strong></li>
 <li><strong>Linux host</strong> with cgroupv2 and <code>nsdelegate</code> mount option</li>
+<li><strong>firejail</strong>, which sandboxes <code>make test</code></li>
 </ul>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="clone-and-build"
@@ -2105,7 +2194,7 @@
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">git clone https://github.com/GSI-HPC/sind.git
 </span></span><span class="line"><span class="cl"><span class="nb">cd</span> sind
 </span></span><span class="line"><span class="cl">make build
-</span></span></code></pre></div><p>The binary is built at <code>./sind</code>.</p>
+</span></span></code></pre></div><p>The binary is built at <code>./sind-&lt;os&gt;-&lt;arch&gt;</code>, e.g. <code>./sind-linux-amd64</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="run"
     >
@@ -2115,8 +2204,8 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">./sind version
-</span></span><span class="line"><span class="cl">./sind create cluster
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">./sind-linux-amd64 version
+</span></span><span class="line"><span class="cl">./sind-linux-amd64 create cluster
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="make-targets"
     >
@@ -2128,54 +2217,66 @@
 </div>
 <p>All common tasks are available via <code>make</code>:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Target</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>make build</code></td>
-          <td>Build the sind binary</td>
-      </tr>
-      <tr>
-          <td><code>make test</code></td>
-          <td>Run unit tests with race detector</td>
-      </tr>
-      <tr>
-          <td><code>make test-integration</code></td>
-          <td>Run integration tests (requires Docker)</td>
-      </tr>
-      <tr>
-          <td><code>make coverage</code></td>
-          <td>Generate HTML coverage report</td>
-      </tr>
-      <tr>
-          <td><code>make lint</code></td>
-          <td>Run golangci-lint</td>
-      </tr>
-      <tr>
-          <td><code>make lint-docs</code></td>
-          <td>Lint documentation markdown files</td>
-      </tr>
-      <tr>
-          <td><code>make image</code></td>
-          <td>Build the container image via docker buildx bake</td>
-      </tr>
-      <tr>
-          <td><code>make clean</code></td>
-          <td>Remove build artifacts and coverage files</td>
-      </tr>
-      <tr>
-          <td><code>make help</code></td>
-          <td>Show all available targets</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Target</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>make build</code></td>
+					<td>Build the sind binary</td>
+			</tr>
+			<tr>
+					<td><code>make install</code></td>
+					<td>Install sind to <code>GOPATH/bin</code></td>
+			</tr>
+			<tr>
+					<td><code>make test</code></td>
+					<td>Run unit tests with race detector, sandboxed with firejail</td>
+			</tr>
+			<tr>
+					<td><code>make test-integration</code></td>
+					<td>Run integration tests (requires Docker)</td>
+			</tr>
+			<tr>
+					<td><code>make coverage</code></td>
+					<td>Generate HTML coverage report</td>
+			</tr>
+			<tr>
+					<td><code>make check-coverage</code></td>
+					<td>Check the coverage thresholds in <code>.testcoverage.yml</code> (requires <a
+  class="gdoc-markdown__link"
+  href="https://github.com/vladopajic/go-test-coverage"
+>go-test-coverage</a>)</td>
+			</tr>
+			<tr>
+					<td><code>make lint</code></td>
+					<td>Run golangci-lint</td>
+			</tr>
+			<tr>
+					<td><code>make lint-docs</code></td>
+					<td>Lint documentation markdown files</td>
+			</tr>
+			<tr>
+					<td><code>make image</code></td>
+					<td>Build the node images (one per Slurm release line) for the host platform via docker buildx bake</td>
+			</tr>
+			<tr>
+					<td><code>make clean</code></td>
+					<td>Remove build artifacts and coverage files</td>
+			</tr>
+			<tr>
+					<td><code>make help</code></td>
+					<td>Show all available targets</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>The build version defaults to <code>git describe --tags --always --dirty</code> and can be overridden:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make build <span class="nv">VERSION</span><span class="o">=</span>v1.0.0
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+</span></span></code></pre></div><p>A binary built without a version reports <code>dev</code>, except one installed with <code>go install github.com/GSI-HPC/sind/cmd/sind@&lt;version&gt;</code>, which reports the module version the Go toolchain recorded.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="dependencies"
     >
         Dependencies
@@ -2186,50 +2287,54 @@
 </div>
 <p>sind uses a minimal set of dependencies:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Dependency</th>
-          <th>Purpose</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>github.com/spf13/cobra</code></td>
-          <td>CLI framework</td>
-      </tr>
-      <tr>
-          <td><code>sigs.k8s.io/yaml</code></td>
-          <td>YAML configuration parsing</td>
-      </tr>
-      <tr>
-          <td><code>github.com/charmbracelet/log</code></td>
-          <td>Colorized log output (slog handler)</td>
-      </tr>
-      <tr>
-          <td><code>github.com/mattn/go-isatty</code></td>
-          <td>TTY detection for interactive commands</td>
-      </tr>
-      <tr>
-          <td><code>github.com/njayp/ophis</code></td>
-          <td>MCP server framework</td>
-      </tr>
-      <tr>
-          <td><code>github.com/spf13/afero</code></td>
-          <td>Filesystem abstraction for testability</td>
-      </tr>
-      <tr>
-          <td><code>golang.org/x/sync</code></td>
-          <td>Errgroup for concurrent operations</td>
-      </tr>
-      <tr>
-          <td><code>golang.org/x/sys</code></td>
-          <td>Advisory file locking (flock) for realm locks</td>
-      </tr>
-      <tr>
-          <td><code>github.com/stretchr/testify</code></td>
-          <td>Test assertions (test only)</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Dependency</th>
+					<th>Purpose</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>github.com/spf13/cobra</code></td>
+					<td>CLI framework</td>
+			</tr>
+			<tr>
+					<td><code>sigs.k8s.io/yaml</code></td>
+					<td>YAML configuration parsing</td>
+			</tr>
+			<tr>
+					<td><code>github.com/charmbracelet/log</code></td>
+					<td>Colorized log output (slog handler)</td>
+			</tr>
+			<tr>
+					<td><code>github.com/mattn/go-isatty</code></td>
+					<td>TTY detection for interactive commands</td>
+			</tr>
+			<tr>
+					<td><code>github.com/njayp/ophis</code></td>
+					<td>MCP server framework</td>
+			</tr>
+			<tr>
+					<td><code>github.com/modelcontextprotocol/go-sdk</code></td>
+					<td>MCP request and result types for the ophis tool middleware</td>
+			</tr>
+			<tr>
+					<td><code>github.com/spf13/afero</code></td>
+					<td>Filesystem abstraction for testability</td>
+			</tr>
+			<tr>
+					<td><code>golang.org/x/sync</code></td>
+					<td>Errgroup for concurrent operations</td>
+			</tr>
+			<tr>
+					<td><code>golang.org/x/sys</code></td>
+					<td>Advisory file locking (flock) for realm locks</td>
+			</tr>
+			<tr>
+					<td><code>github.com/stretchr/testify</code></td>
+					<td>Test assertions (test only)</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="run-tests"
@@ -2240,8 +2345,9 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Unit tests (no Docker required):</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make <span class="nb">test</span>
+<p>Unit tests (no Docker required). firejail breaks DNS inside the sandbox, so download the modules first:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">go mod download
+</span></span><span class="line"><span class="cl">make <span class="nb">test</span>
 </span></span></code></pre></div><p>Integration tests (requires Docker):</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make test-integration
 </span></span></code></pre></div><p>See <a
@@ -2824,6 +2930,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="What is sind and why use it?" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Introduction" />
     <meta
       property="article:modified_time"
-      content="2026-04-01T21:58:52+02:00"
+      content="2026-09-27T22:09:59+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/introduction/",
       "headline": "Introduction",
       "description": "What is sind and why use it?",
-      "wordCount": "495",
+      "wordCount": "547",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-01T21:58:52.00Z",
+      "dateModified": "2026-09-27T22:09:59.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2070,6 +2158,7 @@
     id="main-content" tabindex="-1"
   >
     <h1>Introduction</h1>
+    
     <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="what-is-sind"
     >
@@ -2130,7 +2219,10 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Unlike typical Docker containers that run a single application process, sind nodes are full system containers running systemd as init — closely emulating bare-metal machines. Services like munge, sshd, and slurmctld start and interact exactly as they would on real nodes, with proper service dependencies, process supervision, and signal handling. This means you can apply the same configuration management tools you use on bare metal — Ansible, Chef, Puppet, Salt — directly to sind nodes.</p>
+<p>Unlike typical Docker containers that run a single application process, sind nodes are full system containers running systemd as init — closely emulating bare-metal machines. Services like munge, sshd, and slurmctld start and interact exactly as they would on real nodes, with proper service dependencies, process supervision, and signal handling. This means you can apply the same configuration management tools you use on bare metal — Ansible, Chef, Puppet, Salt — directly to sind nodes. An <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/unmanaged-cluster/"
+>unmanaged cluster</a> leaves Slurm itself to them, for end-to-end tests of your Slurm provisioning.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="designed-for-cicd"
     >
@@ -2144,6 +2236,19 @@
   class="gdoc-markdown__link"
   href="https://github.com/GSI-HPC/sind-action"
 >sind-action</a> GitHub Action installs sind and creates clusters in a single workflow step. Use realms to isolate parallel matrix jobs on the same runner.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="multiple-slurm-versions"
+    >
+        Multiple Slurm versions
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/introduction/#multiple-slurm-versions" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Multiple Slurm versions" aria-label="Anchor to: Multiple Slurm versions" href="#multiple-slurm-versions">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><a
+  class="gdoc-markdown__link"
+  href="/sind/container-images/building-images/#official-images"
+>Official node images</a> cover the supported Slurm release lines, 26.05 and 25.11, on linux/amd64 and linux/arm64, each with a full MPI stack. Pin a release line, test against several, or bring your own image.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="worker-lifecycle"
     >
@@ -2186,7 +2291,7 @@
 <p>sind includes a built-in <a
   class="gdoc-markdown__link"
   href="https://modelcontextprotocol.io/"
->Model Context Protocol</a> (MCP) server that exposes all CLI commands as tools for AI assistants. Run <code>sind mcp start</code> to let tools like Claude, VS Code Copilot, or Cursor create clusters, check status, and manage nodes on your behalf. Register sind with your editor in one command — <code>sind mcp claude enable</code>, <code>sind mcp vscode enable</code>, or <code>sind mcp cursor enable</code>.</p>
+>Model Context Protocol</a> (MCP) server that exposes its CLI commands as tools for AI assistants. Run <code>sind mcp start</code> to let tools like Claude, VS Code Copilot, or Cursor create clusters, check status, and manage nodes on your behalf. Register sind with your editor in one command — <code>sind mcp claude enable</code>, <code>sind mcp vscode enable</code>, or <code>sind mcp cursor enable</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="next-steps"
     >
@@ -2784,6 +2889,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

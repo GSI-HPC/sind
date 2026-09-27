@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Dynamically adding and removing worker nodes" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-04-22T15:40:21+02:00"
+      content="2026-09-27T22:44:37+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/usage/worker-management/",
       "headline": "Worker Management",
       "description": "Dynamically adding and removing worker nodes",
-      "wordCount": "249",
+      "wordCount": "305",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-22T15:40:21.00Z",
+      "dateModified": "2026-09-27T22:44:37.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2090,71 +2178,72 @@
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create worker <span class="o">[</span>CLUSTER<span class="o">]</span> <span class="o">[</span>FLAGS<span class="o">]</span>
 </span></span></code></pre></div><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Flag</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>--count</code></td>
-          <td><code>1</code></td>
-          <td>Number of nodes to add</td>
-      </tr>
-      <tr>
-          <td><code>--image</code></td>
-          <td>cluster default</td>
-          <td>Container image</td>
-      </tr>
-      <tr>
-          <td><code>--cpus</code></td>
-          <td>cluster default (1)</td>
-          <td>CPU limit per node</td>
-      </tr>
-      <tr>
-          <td><code>--memory</code></td>
-          <td>cluster default (512m)</td>
-          <td>Memory limit</td>
-      </tr>
-      <tr>
-          <td><code>--tmp-size</code></td>
-          <td><code>256m</code></td>
-          <td><code>/tmp</code> tmpfs size</td>
-      </tr>
-      <tr>
-          <td><code>--unmanaged</code></td>
-          <td><code>false</code></td>
-          <td>Don&rsquo;t start slurmd, don&rsquo;t add to slurm.conf</td>
-      </tr>
-      <tr>
-          <td><code>--pull</code></td>
-          <td><code>false</code></td>
-          <td>Pull images before creating containers</td>
-      </tr>
-      <tr>
-          <td><code>--cap-add</code></td>
-          <td>none</td>
-          <td>Add Linux capability (repeatable; e.g. <code>SYS_ADMIN</code>)</td>
-      </tr>
-      <tr>
-          <td><code>--cap-drop</code></td>
-          <td>none</td>
-          <td>Drop Linux capability (repeatable)</td>
-      </tr>
-      <tr>
-          <td><code>--device</code></td>
-          <td>none</td>
-          <td>Expose host device (repeatable; e.g. <code>/dev/fuse</code>)</td>
-      </tr>
-      <tr>
-          <td><code>--security-opt</code></td>
-          <td>none</td>
-          <td>Security option (repeatable)</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Flag</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>--count</code></td>
+					<td><code>1</code></td>
+					<td>Number of nodes to add</td>
+			</tr>
+			<tr>
+					<td><code>--image</code></td>
+					<td>the controller&rsquo;s image</td>
+					<td>Container image</td>
+			</tr>
+			<tr>
+					<td><code>--cpus</code></td>
+					<td><code>1</code></td>
+					<td>CPU limit per node</td>
+			</tr>
+			<tr>
+					<td><code>--memory</code></td>
+					<td><code>512m</code></td>
+					<td>Memory limit</td>
+			</tr>
+			<tr>
+					<td><code>--tmp-size</code></td>
+					<td><code>256m</code></td>
+					<td><code>/tmp</code> tmpfs size</td>
+			</tr>
+			<tr>
+					<td><code>--unmanaged</code></td>
+					<td><code>false</code></td>
+					<td>Don&rsquo;t start slurmd, don&rsquo;t add to slurm.conf (implied on unmanaged clusters)</td>
+			</tr>
+			<tr>
+					<td><code>--pull</code></td>
+					<td><code>false</code></td>
+					<td>Pull images before creating containers</td>
+			</tr>
+			<tr>
+					<td><code>--cap-add</code></td>
+					<td>none</td>
+					<td>Add Linux capability (repeatable; e.g. <code>SYS_ADMIN</code>)</td>
+			</tr>
+			<tr>
+					<td><code>--cap-drop</code></td>
+					<td>none</td>
+					<td>Drop Linux capability (repeatable)</td>
+			</tr>
+			<tr>
+					<td><code>--device</code></td>
+					<td>none</td>
+					<td>Expose host device (repeatable; e.g. <code>/dev/fuse</code>)</td>
+			</tr>
+			<tr>
+					<td><code>--security-opt</code></td>
+					<td>none</td>
+					<td>Security option (repeatable)</td>
+			</tr>
+	</tbody>
 </table> </div>
+<p><code>--cap-add</code> and <code>--cap-drop</code> take the capability names the cluster config&rsquo;s <code>capAdd</code> and <code>capDrop</code> accept, and <code>--device</code> needs an absolute host path, as <code>devices</code> does; sind checks them before it creates any container.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="examples"
     >
@@ -2164,7 +2253,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># 1 managed worker with cluster defaults</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># 1 managed worker with default resources</span>
 </span></span><span class="line"><span class="cl">sind create worker
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># 3 managed workers</span>
@@ -2195,6 +2284,10 @@
 <li>Starts slurmd on the new node(s)</li>
 </ol>
 <p>This requires <code>sind-nodes.conf</code> to exist in <code>/etc/slurm</code>. If you replaced the generated Slurm configuration, use <code>--unmanaged</code> instead.</p>
+<p>On an <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/unmanaged-cluster/"
+>unmanaged cluster</a>, every new worker is unmanaged, with or without <code>--unmanaged</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="remove-workers"
     >
@@ -2205,7 +2298,7 @@
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind delete worker NODES
-</span></span></code></pre></div><p>For managed workers, sind removes them from <code>sind-nodes.conf</code> and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes.</p>
+</span></span></code></pre></div><p>For managed workers, sind removes them from <code>sind-nodes.conf</code> and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes. On an unmanaged cluster, sind never edits the Slurm configuration.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Remove a single worker</span>
 </span></span><span class="line"><span class="cl">sind delete worker worker-2
 </span></span><span class="line"><span class="cl">
@@ -2802,6 +2895,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

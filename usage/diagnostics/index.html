@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Cluster health, logs, and resource inspection" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-04-22T14:32:25+02:00"
+      content="2026-09-27T22:35:22+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1013",
+      "wordCount": "1255",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-22T14:32:25.00Z",
+      "dateModified": "2026-09-27T22:35:22.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2094,32 +2182,32 @@
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
 ✓ DNS policy: host resolution available
 </code></pre><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Check</th>
-          <th>Required</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>Docker Engine</td>
-          <td>yes</td>
-          <td>Docker &gt;= 28.0 reachable</td>
-      </tr>
-      <tr>
-          <td>cgroupv2</td>
-          <td>yes</td>
-          <td>cgroup2 mounted with <code>nsdelegate</code> option</td>
-      </tr>
-      <tr>
-          <td>DNS policy</td>
-          <td>no</td>
-          <td>polkit authorization for host DNS resolution via systemd-resolved</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Check</th>
+					<th>Required</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Docker Engine</td>
+					<td>yes</td>
+					<td>Docker &gt;= 28.0 reachable</td>
+			</tr>
+			<tr>
+					<td>cgroupv2</td>
+					<td>yes</td>
+					<td>cgroup2 mounted with <code>nsdelegate</code> option</td>
+			</tr>
+			<tr>
+					<td>DNS policy</td>
+					<td>no</td>
+					<td>polkit authorization for host DNS resolution via systemd-resolved</td>
+			</tr>
+	</tbody>
 </table> </div>
-<p>When a required check fails, <code>sind doctor</code> exits with a non-zero status and prints remediation steps. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
+<p>When a required check fails, <code>sind doctor</code> exits with a non-zero status; for a missing <code>nsdelegate</code> it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
   class="gdoc-markdown__link"
   href="../../architecture/networking/#polkit-policy"
 >Polkit policy</a> for details.</p>
@@ -2150,35 +2238,35 @@ sudo systemctl daemon-reload
 </span></span><span class="line"><span class="cl">sind -vv create cluster          <span class="c1"># debug: individual operations</span>
 </span></span><span class="line"><span class="cl">sind -vvv create cluster         <span class="c1"># trace: docker commands, probe retries</span>
 </span></span></code></pre></div><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Flag</th>
-          <th>Level</th>
-          <th>What&rsquo;s logged</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>(none)</td>
-          <td>error</td>
-          <td>Errors only — commands are silent on success</td>
-      </tr>
-      <tr>
-          <td><code>-v</code></td>
-          <td>info</td>
-          <td>Phase transitions: &ldquo;creating cluster&rdquo;, &ldquo;nodes ready&rdquo;, &ldquo;slurm services enabled&rdquo;</td>
-      </tr>
-      <tr>
-          <td><code>-vv</code></td>
-          <td>debug</td>
-          <td>Individual operations: &ldquo;waiting for node&rdquo;, &ldquo;enabling slurmd&rdquo;, &ldquo;creating network&rdquo;</td>
-      </tr>
-      <tr>
-          <td><code>-vvv</code></td>
-          <td>trace</td>
-          <td>Docker commands, probe retry attempts with error details</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Flag</th>
+					<th>Level</th>
+					<th>What&rsquo;s logged</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>(none)</td>
+					<td>error</td>
+					<td>Errors only — commands are silent on success</td>
+			</tr>
+			<tr>
+					<td><code>-v</code></td>
+					<td>info</td>
+					<td>Phase transitions: &ldquo;creating cluster&rdquo;, &ldquo;nodes ready&rdquo;, &ldquo;slurm services enabled&rdquo;</td>
+			</tr>
+			<tr>
+					<td><code>-vv</code></td>
+					<td>debug</td>
+					<td>Individual operations: &ldquo;waiting for node&rdquo;, &ldquo;starting readiness probes&rdquo;, &ldquo;enabling slurm service&rdquo;</td>
+			</tr>
+			<tr>
+					<td><code>-vvv</code></td>
+					<td>trace</td>
+					<td>Docker commands, probe retry attempts with error details</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>Log output goes to stderr in structured <code>key=value</code> format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Capture logs while piping output</span>
@@ -2190,17 +2278,17 @@ sudo systemctl daemon-reload
 <pre tabindex="0"><code>00:13:28.438 INFO ensuring mesh infrastructure realm=sind
 00:13:28.826 INFO creating cluster name=dev nodes=3
 00:13:28.921 DEBU preflight check passed
-00:13:29.382 INFO resolved infrastructure slurm=25.11.4
+00:13:29.382 INFO resolved infrastructure slurm=25.11.8
 00:13:30.149 DEBU cluster resources created
 00:13:30.621 DEBU waiting for node node=controller
 00:13:30.622 DEBU waiting for node node=worker-0
-00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd
+00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd,munge
 00:13:31.252 DEBU all probes passed node=sind-dev-controller
 00:13:31.474 INFO nodes ready count=3
 00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld
 00:13:32.363 DEBU enabling slurm service node=worker-0 service=slurmd
 00:13:32.608 INFO slurm services enabled
-</code></pre><p>The <code>-v</code> flag belongs to the root command and must appear before the subcommand (e.g., <code>sind -v create cluster</code>).</p>
+</code></pre><p><code>-v</code> is a global flag and may come before or after the subcommand (<code>sind -v create cluster</code>, <code>sind create cluster -v</code>). <code>sind ssh</code> passes its arguments through to SSH, so for it <code>-v</code> must come first: <code>sind -v ssh worker-0</code> logs sind&rsquo;s steps, while <code>sind ssh -v worker-0</code> makes SSH verbose. The same holds for <code>--realm</code>. <code>sind exec</code> takes both anywhere before its <code>--</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="json-output"
     >
@@ -2226,7 +2314,7 @@ sudo systemctl daemon-reload
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get cluster <span class="o">[</span>NAME<span class="o">]</span>
 </span></span></code></pre></div><p>Displays detailed health information:</p>
 <pre tabindex="0"><code>CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.4   running (3/0/0/3)
+dev       25.11.8   running (3/0/0/3)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -2245,44 +2333,76 @@ MOUNT        SOURCE               TYPE       STATUS
 
 NODES
 NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.18.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
-</code></pre><p>The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
+controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
+</code></pre><p><code>SLURM</code> shows <code>-</code> when sind does not know the version, as for unmanaged clusters. The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Status</th>
-          <th>Meaning</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>running</code></td>
-          <td>All containers are running</td>
-      </tr>
-      <tr>
-          <td><code>stopped</code></td>
-          <td>All containers are stopped (exited, dead, or created)</td>
-      </tr>
-      <tr>
-          <td><code>paused</code></td>
-          <td>All containers are paused</td>
-      </tr>
-      <tr>
-          <td><code>mixed</code></td>
-          <td>Containers are in different states</td>
-      </tr>
-      <tr>
-          <td><code>empty</code></td>
-          <td>No nodes exist</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Status</th>
+					<th>Meaning</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>running</code></td>
+					<td>All containers are running</td>
+			</tr>
+			<tr>
+					<td><code>stopped</code></td>
+					<td>All containers are stopped (exited, dead, or created)</td>
+			</tr>
+			<tr>
+					<td><code>paused</code></td>
+					<td>All containers are paused</td>
+			</tr>
+			<tr>
+					<td><code>mixed</code></td>
+					<td>Containers are in different states</td>
+			</tr>
+			<tr>
+					<td><code>empty</code></td>
+					<td>No nodes exist</td>
+			</tr>
+			<tr>
+					<td><code>unknown</code></td>
+					<td>All containers are in a state sind does not map, e.g. <code>restarting</code></td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
+<p>Nodes where sind does not manage Slurm (unmanaged workers, and every node of an <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/unmanaged-cluster/"
+>unmanaged cluster</a>) list only <code>munge</code> and <code>sshd</code>. The JSON output marks each node with <code>&quot;managed&quot;: true|false</code>, as does <code>sind get node -o json</code>.</p>
+<p>Clusters with a <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/controller-failover/"
+>backup controller</a> get an <code>HA</code> column in the <code>NODES</code> table: <code>primary</code> or <code>backup</code> for each controller, with <code>*</code> on the one in control. The shared state volume appears under <code>MOUNTS</code> as <code>/var/spool/slurmctld</code>. Unmanaged clusters show no <code>HA</code> column: sind cannot tell which of their controllers is in control.</p>
 <blockquote>
 <p><strong>Tip:</strong> Run <code>watch sind get cluster</code> for a simple live dashboard that refreshes every two seconds.</p>
 </blockquote>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="node-status"
+    >
+        Node status
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/usage/diagnostics/#node-status" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Node status" aria-label="Anchor to: Node status" href="#node-status">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get node NODE<span class="o">[</span>.CLUSTER<span class="o">]</span>
+</span></span></code></pre></div><p>Shows the health of a single node. <code>NODE</code> is a short name, optionally followed by its cluster (<code>worker-0.dev</code>); the cluster defaults to <code>default</code>. A full DNS name ending in <code>.sind</code> is rejected.</p>
+<pre tabindex="0"><code>CONTAINER             ROLE         FQDN                       IP           STATUS
+sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
+
+SERVICES
+NAME        STATUS
+munge       ✓
+slurmctld   ✓
+sshd        ✓
+</code></pre><p>Controllers of a backup pair get the same <code>HA</code> column as in <code>sind get cluster</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="logs"
     >
@@ -2327,8 +2447,8 @@ sind-default-worker-1    default   worker       worker-1.default.sind.sind      
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get networks
 </span></span></code></pre></div><pre tabindex="0"><code>NAME              DRIVER   SUBNET           GATEWAY
-sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 sind-default-net  bridge   172.19.0.0/16    172.19.0.1
+sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-realms"
     >
@@ -2340,8 +2460,8 @@ sind-default-net  bridge   172.19.0.0/16    172.19.0.1
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get realms
 </span></span></code></pre></div><pre tabindex="0"><code>NAME   CLUSTERS
-sind   2
 ci     1
+sind   2
 </code></pre><p>Lists all active realms discovered from Docker container labels. Useful when working with multiple realms to see what&rsquo;s running.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-volumes"
@@ -2355,8 +2475,8 @@ ci     1
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get volumes
 </span></span></code></pre></div><pre tabindex="0"><code>NAME                  DRIVER
 sind-default-config   local
-sind-default-munge    local
 sind-default-data     local
+sind-default-munge    local
 sind-ssh-config       local
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="dns-records"
@@ -3005,6 +3125,72 @@ worker-0.default.sind.sind           172.19.0.3
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

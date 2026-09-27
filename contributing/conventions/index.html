@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Commit style, code patterns, and contribution guidelines" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-03-27T11:26:56+01:00"
+      content="2026-09-27T22:09:18+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/contributing/conventions/",
       "headline": "Conventions",
       "description": "Commit style, code patterns, and contribution guidelines",
-      "wordCount": "188",
+      "wordCount": "251",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-27T11:26:56.00Z",
+      "dateModified": "2026-09-27T22:09:18.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2139,6 +2227,22 @@
 - systemctl is-system-running returns &#34;degraded&#34; when non-critical
   units fail, which is expected in containers
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="ai-assisted-commits"
+    >
+        AI-assisted commits
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/contributing/conventions/#ai-assisted-commits" class="gdoc-page__anchor clip flex align-center" title="Anchor to: AI-assisted commits" aria-label="Anchor to: AI-assisted commits" href="#ai-assisted-commits">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Commits written with substantial help from an AI coding tool carry a <code>Co-Authored-By:</code> trailer naming the tool:</p>
+<pre tabindex="0"><code>fix(mesh): tolerate stopped DNS container when updating records
+
+- ...
+
+Co-Authored-By: Claude &lt;noreply@anthropic.com&gt;
+</code></pre><p>Commits made by Anthropic&rsquo;s Claude Code agent are additionally authored as <code>Claude &lt;noreply@anthropic.com&gt;</code>. Please follow the same convention in your contributions.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="code-style"
     >
         Code style
@@ -2174,9 +2278,10 @@
     </a>
 </div>
 <ul>
+<li>Target the <code>next</code> branch; <code>main</code> only moves at release</li>
 <li>One logical change per PR</li>
 <li>Include tests for new functionality</li>
-<li>Ensure all existing tests pass (<code>go test ./...</code>)</li>
+<li>Ensure <code>make lint</code>, <code>make test</code> and <code>make check-coverage</code> pass</li>
 <li>Follow the commit message conventions above</li>
 </ul>
 
@@ -2755,6 +2860,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

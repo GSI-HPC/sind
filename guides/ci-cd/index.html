@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Using sind in GitHub Actions and other CI systems" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-04-09T16:23:27+02:00"
+      content="2026-09-27T22:09:59+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/guides/ci-cd/",
       "headline": "CI/CD",
       "description": "Using sind in GitHub Actions and other CI systems",
-      "wordCount": "113",
+      "wordCount": "125",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-09T16:23:27.00Z",
+      "dateModified": "2026-09-27T22:09:59.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry is-active"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2091,7 +2179,7 @@
 <p>The <a
   class="gdoc-markdown__link"
   href="https://github.com/GSI-HPC/sind-action"
->sind-action</a> GitHub Action installs sind and creates clusters in your workflow. sind runs rootless on standard <code>ubuntu-latest</code> runners — no privileged containers or custom runner images required.</p>
+>sind-action</a> GitHub Action installs sind and creates clusters in your workflow. sind runs rootless on standard GitHub-hosted Ubuntu runners, x64 (<code>ubuntu-latest</code>) and ARM64 (<code>ubuntu-24.04-arm</code>) — no privileged containers or custom runner images required.</p>
 <p>See the <a
   class="gdoc-markdown__link"
   href="https://github.com/GSI-HPC/sind-action#readme"
@@ -2114,7 +2202,8 @@
 </span></span><span class="line"><span class="cl">chmod +x sind
 </span></span><span class="line"><span class="cl">./sind doctor
 </span></span><span class="line"><span class="cl">./sind create cluster --config cluster.yml
-</span></span></code></pre></div><p>sind requires Docker Engine 28.0+ and a Linux host with cgroupv2 and <code>nsdelegate</code>. Most modern CI runners meet these requirements out of the box.</p>
+</span></span></code></pre></div><p>On 64-bit ARM, download <code>sind-linux-arm64</code> instead.</p>
+<p>sind requires Docker Engine 28.0+ and a Linux host with cgroupv2 and <code>nsdelegate</code>. Most modern CI runners meet these requirements out of the box.</p>
 
   </article>
 
@@ -2794,7 +2883,39 @@
     
 
   
+    
 
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+          
+            
+            
+          
+        
+
+        
+
+        
+          
+        
+
+        
         
       
     
@@ -2820,10 +2941,44 @@
         
 
         
+
+        
+
+        
           
-            
-            
-          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         
@@ -3319,10 +3474,10 @@
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/architecture/"
-      title="Architecture"
+      href="/sind/guides/controller-failover/"
+      title="Controller Failover"
     >
-      Architecture
+      Controller Failover
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   

@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Test infrastructure, mocking patterns, and integration tests" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-04-06T00:41:05+02:00"
+      content="2026-09-27T22:09:18+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/contributing/testing/",
       "headline": "Testing",
       "description": "Test infrastructure, mocking patterns, and integration tests",
-      "wordCount": "327",
+      "wordCount": "406",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-06T00:41:05.00Z",
+      "dateModified": "2026-09-27T22:09:18.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2176,9 +2264,12 @@ mode_integration_test.go  // build tag: integration
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>For methods like <code>ContainerExists()</code> that check exit codes, a plain <code>fmt.Errorf</code> won&rsquo;t work. You need a real <code>*exec.ExitError</code> with exit code 1:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">exec</span><span class="p">.</span><span class="nx">ExitError</span><span class="p">{</span><span class="nx">ProcessState</span><span class="p">:</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">)})</span><span class="w">
-</span></span></span></code></pre></div><p>The <code>testutil.ExitCode1(t)</code> helper (from <code>internal/testutil</code>) runs <code>sh -c &quot;exit 1&quot;</code> to obtain a real <code>*os.ProcessState</code>.</p>
+<p>The real executor returns a failed command as a <code>*cmdexec.ExitError</code> that carries the exit code and what the command wrote to stderr. The mock returns a queued <code>*exec.ExitError</code> in the same shape, wrapped with the result&rsquo;s stderr.</p>
+<p>Docker exits 1 for many failures, so <code>docker.IsNotFound</code> and <code>docker.IsVolumeInUse</code> read docker&rsquo;s message, not only the exit code. Queue a real <code>*exec.ExitError</code> with exit code 1 together with the stderr docker prints:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">NoSuchContainer</span><span class="p">(</span><span class="s">&#34;sind-dev-controller&#34;</span><span class="p">),</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">NoSuchNetwork</span><span class="p">(</span><span class="s">&#34;sind-dev-net&#34;</span><span class="p">),</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">NoSuchVolume</span><span class="p">(</span><span class="s">&#34;sind-dev-config&#34;</span><span class="p">),</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">))</span><span class="w">
+</span></span></span></code></pre></div><p><code>testutil.ExitCode1(t)</code> (from <code>internal/testutil</code>) runs <code>sh -c &quot;exit 1&quot;</code> to obtain a real <code>*exec.ExitError</code>. An exit code 1 with any other stderr, such as <code>volume is in use</code>, is not a missing resource.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="recording-executor"
     >
@@ -2205,8 +2296,8 @@ mode_integration_test.go  // build tag: integration
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Integration tests use unique realms to avoid resource conflicts when running in parallel. Each test package generates a random realm prefix:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">realm</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">fmt</span><span class="p">.</span><span class="nf">Sprintf</span><span class="p">(</span><span class="s">&#34;test-%d-%d&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nf">Getpid</span><span class="p">(),</span><span class="w"> </span><span class="nx">rand</span><span class="p">.</span><span class="nf">Int</span><span class="p">())</span><span class="w">
+<p>Integration tests use unique realms to avoid resource conflicts when running in parallel. Each test gets a random realm from <code>testutil.Realm</code>, which appends eight random hex digits to a prefix:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">realm</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">Realm</span><span class="p">(</span><span class="s">&#34;it-cluster&#34;</span><span class="p">)</span><span class="w"> </span><span class="c1">// e.g. it-cluster-3f9a0c1e</span><span class="w">
 </span></span></span></code></pre></div><p>This ensures tests can run concurrently without interfering with each other or with the user&rsquo;s sind clusters.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="test-assertions"
@@ -2803,6 +2894,72 @@ mode_integration_test.go  // build tag: integration
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

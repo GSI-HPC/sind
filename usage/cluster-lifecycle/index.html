@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Creating, listing, and deleting clusters" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-04-22T15:40:21+02:00"
+      content="2026-09-27T22:08:20+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/usage/cluster-lifecycle/",
       "headline": "Cluster Lifecycle",
       "description": "Creating, listing, and deleting clusters",
-      "wordCount": "394",
+      "wordCount": "460",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-22T15:40:21.00Z",
+      "dateModified": "2026-09-27T22:08:20.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2090,35 +2178,35 @@
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster <span class="o">[</span>NAME<span class="o">]</span> <span class="o">[</span>--config FILE<span class="o">]</span> <span class="o">[</span>--pull<span class="o">]</span> <span class="o">[</span>--data PATH<span class="p">|</span>volume<span class="o">]</span>
 </span></span></code></pre></div><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Argument/Flag</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>NAME</code></td>
-          <td><code>default</code></td>
-          <td>Cluster name (positional, optional)</td>
-      </tr>
-      <tr>
-          <td><code>--config</code></td>
-          <td>—</td>
-          <td>Path to YAML configuration file</td>
-      </tr>
-      <tr>
-          <td><code>--pull</code></td>
-          <td><code>false</code></td>
-          <td>Pull images before creating containers</td>
-      </tr>
-      <tr>
-          <td><code>--data</code></td>
-          <td><code>.</code></td>
-          <td>Host directory to mount at <code>/data</code> on all nodes, or <code>volume</code> to use a Docker volume. Ignored if the config file already specifies data storage.</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Argument/Flag</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>NAME</code></td>
+					<td><code>default</code></td>
+					<td>Cluster name (positional, optional)</td>
+			</tr>
+			<tr>
+					<td><code>--config</code></td>
+					<td>—</td>
+					<td>Path to YAML configuration file</td>
+			</tr>
+			<tr>
+					<td><code>--pull</code></td>
+					<td><code>false</code></td>
+					<td>Pull images before creating containers</td>
+			</tr>
+			<tr>
+					<td><code>--data</code></td>
+					<td><code>.</code></td>
+					<td>Host directory to mount at <code>/data</code> on all nodes, or <code>volume</code> to use a Docker volume. Ignored if the config file already specifies data storage.</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>Without <code>--config</code>, sind creates a minimal cluster (1 controller + 1 worker) using the default image. Configuration can also be piped via stdin instead of using <code>--config</code>.</p>
 <p>When both a positional <code>NAME</code> and a config file with a <code>name:</code> field are provided, the positional argument takes precedence.</p>
@@ -2158,7 +2246,8 @@
 <li>All node containers start in parallel</li>
 <li>sind waits for each node to become ready (systemd, sshd, Slurm daemons)</li>
 </ol>
-<p>If any node fails to become ready within the timeout, the command fails. The partial cluster is not cleaned up automatically — use <code>sind delete cluster</code> to remove it.</p>
+<p>If any node fails to become ready within the timeout, the command fails and sind removes the resources it created, including a mesh that this invocation set up. If that cleanup fails too, use <code>sind delete cluster</code> to remove what is left.</p>
+<p>Ctrl-C (SIGINT) or SIGTERM, as sent by <code>timeout</code> or <code>docker stop</code>, stops the creation and runs the same cleanup; sind then exits with status 130. A second signal ends sind at once, without waiting for the cleanup to finish.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="preflight-checks"
     >
@@ -2179,10 +2268,10 @@
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get clusters
-</span></span></code></pre></div><pre tabindex="0"><code>NAME      NODES (S/C/W)   SLURM    STATUS
-default   4 (1/1/2)       25.11    running
-dev       3 (0/1/2)       25.11    running
-</code></pre><p>The <code>NODES</code> column shows the total count and breakdown: <strong>S</strong>ubmitter / <strong>C</strong>ontroller / <strong>W</strong>orker.</p>
+</span></span></code></pre></div><pre tabindex="0"><code>NAME      NODES (S/C/W)   SLURM     STATUS
+default   4 (1/1/2)       26.05.4   running
+dev       3 (0/1/2)       25.11.8   running
+</code></pre><p>The <code>NODES</code> column shows the total count and breakdown: <strong>S</strong>ubmitter / <strong>C</strong>ontroller / <strong>W</strong>orker. <code>SLURM</code> shows <code>-</code> when sind does not know the version, as for unmanaged clusters.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="delete-a-cluster"
     >
@@ -2788,6 +2877,72 @@ dev       3 (0/1/2)       25.11    running
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

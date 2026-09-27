@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Using sind with AI assistants via the Model Context Protocol" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T19:33:47+02:00"
+      content="2026-09-27T22:16:17+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/guides/mcp/",
       "headline": "MCP Integration",
       "description": "Using sind with AI assistants via the Model Context Protocol",
-      "wordCount": "221",
+      "wordCount": "559",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T19:33:47.00Z",
+      "dateModified": "2026-09-27T22:16:17.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2082,7 +2170,7 @@
     <p>sind includes a built-in <a
   class="gdoc-markdown__link"
   href="https://modelcontextprotocol.io/"
->Model Context Protocol</a> (MCP) server that exposes all CLI commands as tools for AI assistants. This lets tools like Claude, VS Code Copilot, or Cursor create clusters, check status, manage workers, and control node power states through natural language.</p>
+>Model Context Protocol</a> (MCP) server that exposes its CLI commands as tools for AI assistants. This lets tools like Claude, VS Code Copilot, or Cursor create clusters, check status, manage workers, and control node power states through natural language.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="quick-setup"
     >
@@ -2105,7 +2193,8 @@
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp claude disable
 </span></span><span class="line"><span class="cl">sind mcp vscode disable
 </span></span><span class="line"><span class="cl">sind mcp cursor disable
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+</span></span></code></pre></div><p><code>sind mcp &lt;editor&gt; list</code> shows the MCP servers registered with that editor. <code>enable</code> takes <code>--server-name</code>, <code>--log-level</code>, <code>--config-path</code> and <code>--env KEY=VALUE</code> (e.g. <code>--env SIND_REALM=ci</code> to serve another realm), and for VS Code and Cursor <code>--workspace</code> to register sind in the workspace settings instead; see <code>sind mcp &lt;editor&gt; enable --help</code>.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="manual-configuration"
     >
         Manual configuration
@@ -2132,58 +2221,68 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>All sind commands are automatically exposed as MCP tools. To see the full list:</p>
+<p>Every sind command is exposed as an MCP tool, except:</p>
+<ul>
+<li>command groups such as <code>sind get</code>, which only print help</li>
+<li><code>sind help</code>, <code>sind completion</code> and the <code>sind mcp</code> commands</li>
+<li><code>sind enter</code> and <code>sind ssh</code>, which need an interactive terminal</li>
+<li><code>sind get ssh-private-key</code> and <code>sind get munge-key</code>, which print secrets</li>
+</ul>
+<p>The tools take the same arguments and flags as the commands, except <code>-v</code> and <code>sind logs --follow</code>, which a tool call cannot use. Flags go in the call&rsquo;s <code>flags</code> object; a call that puts a flag in <code>args</code> is refused, except for the command after <code>--</code> in <code>sind_exec</code>.</p>
+<p>Each tool tells the client what it does, so that the client can decide when to ask before calling it: the <code>get</code> tools, <code>sind_logs</code>, <code>sind_doctor</code> and <code>sind_version</code> are marked read-only; <code>sind_create_*</code>, <code>sind_power_on</code> and <code>sind_power_unfreeze</code> only add or restore; <code>sind_delete_*</code>, <code>sind_exec</code> and the other <code>sind_power_*</code> tools are marked destructive.</p>
+<p>The <code>sind_get_*</code> tools always return JSON: the server runs them with <code>-o json</code>, so they take no <code>-o</code> flag.</p>
+<p>To see the full list:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp tools
 </span></span></code></pre></div><p>This exports the tool definitions to <code>mcp-tools.json</code>. The tools follow the naming convention <code>sind_&lt;command&gt;_&lt;subcommand&gt;</code>, for example:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Tool</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind_create_cluster</code></td>
-          <td>Create a new cluster</td>
-      </tr>
-      <tr>
-          <td><code>sind_create_worker</code></td>
-          <td>Add workers to a running cluster</td>
-      </tr>
-      <tr>
-          <td><code>sind_delete_cluster</code></td>
-          <td>Delete a cluster</td>
-      </tr>
-      <tr>
-          <td><code>sind_get_cluster</code></td>
-          <td>Show cluster health status</td>
-      </tr>
-      <tr>
-          <td><code>sind_get_nodes</code></td>
-          <td>List cluster nodes</td>
-      </tr>
-      <tr>
-          <td><code>sind_get_realms</code></td>
-          <td>List active realms</td>
-      </tr>
-      <tr>
-          <td><code>sind_get_mesh</code></td>
-          <td>Show mesh infrastructure info</td>
-      </tr>
-      <tr>
-          <td><code>sind_power_shutdown</code></td>
-          <td>Shut down a node</td>
-      </tr>
-      <tr>
-          <td><code>sind_power_reboot</code></td>
-          <td>Reboot a node</td>
-      </tr>
-      <tr>
-          <td><code>sind_ssh</code></td>
-          <td>SSH into a node</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Tool</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>sind_create_cluster</code></td>
+					<td>Create a Slurm cluster</td>
+			</tr>
+			<tr>
+					<td><code>sind_create_worker</code></td>
+					<td>Add worker nodes to a cluster</td>
+			</tr>
+			<tr>
+					<td><code>sind_delete_cluster</code></td>
+					<td>Delete a cluster</td>
+			</tr>
+			<tr>
+					<td><code>sind_get_cluster</code></td>
+					<td>Show cluster health status</td>
+			</tr>
+			<tr>
+					<td><code>sind_get_nodes</code></td>
+					<td>List nodes</td>
+			</tr>
+			<tr>
+					<td><code>sind_get_realms</code></td>
+					<td>List all realms</td>
+			</tr>
+			<tr>
+					<td><code>sind_get_mesh</code></td>
+					<td>Show mesh infrastructure info</td>
+			</tr>
+			<tr>
+					<td><code>sind_power_shutdown</code></td>
+					<td>Graceful shutdown</td>
+			</tr>
+			<tr>
+					<td><code>sind_power_reboot</code></td>
+					<td>Graceful reboot</td>
+			</tr>
+			<tr>
+					<td><code>sind_exec</code></td>
+					<td>Run a command on submitter or controller</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="http-mode"
@@ -2194,9 +2293,20 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>For remote or multi-client setups, sind can serve MCP over HTTP:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp stream --host localhost --port <span class="m">8080</span>
-</span></span></code></pre></div>
+<p>For multi-client setups, sind can serve MCP over HTTP:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp stream --port <span class="m">8080</span>
+</span></span></code></pre></div><p>The stream listens on <code>127.0.0.1</code> unless <code>--host</code> names another address. It has no authentication, and its tools create and delete containers, so only pass <code>--host 0.0.0.0</code> (all interfaces) on a network you trust, or put an authenticating proxy in front of it.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="security"
+    >
+        Security
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/guides/mcp/#security" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Security" aria-label="Anchor to: Security" href="#security">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>The MCP server is not a sandbox. Its tools run sind with your Docker access: <code>sind_exec</code> runs any command inside a cluster, and <code>sind_create_cluster</code> bind-mounts a host directory read-write at <code>/data</code>: the one <code>--data</code> names or, without it, the MCP server&rsquo;s working directory. Pass <code>data: &quot;volume&quot;</code> to keep host files out. Leaving out <code>sind get ssh-private-key</code> and <code>sind get munge-key</code> keeps those secrets out of routine tool output, but an agent that may call <code>sind_exec</code> can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.</p>
+
   </article>
 
 
@@ -2866,6 +2976,72 @@
             
             
           
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         

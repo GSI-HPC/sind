@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Generated configuration files and version discovery" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-04-07T15:04:50+02:00"
+      content="2026-09-27T22:19:08+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/architecture/slurm-config/",
       "headline": "Slurm Configuration",
       "description": "Generated configuration files and version discovery",
-      "wordCount": "475",
+      "wordCount": "551",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-07T15:04:50.00Z",
+      "dateModified": "2026-09-27T22:19:08.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2088,7 +2176,10 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>sind generates a multi-file Slurm configuration and writes it to the <code>sind-&lt;cluster&gt;-config</code> volume:</p>
+<p>sind generates a multi-file Slurm configuration and writes it to the <code>&lt;realm&gt;-&lt;cluster&gt;-config</code> volume. For an <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/unmanaged-cluster/"
+>unmanaged cluster</a> it writes nothing: the volume stays empty for your own configuration.</p>
 <pre tabindex="0"><code>/etc/slurm/
 ├── slurm.conf              # main config
 ├── sind-nodes.conf         # sind-managed node definitions
@@ -2098,7 +2189,9 @@
 ├── slurm.conf.d/           # main config fragments (if slurm.main is a map)
 ├── cgroup.conf.d/          # cgroup fragments (if slurm.cgroup is a map)
 ├── gres.conf               # generic resources (if slurm.gres is set)
-└── topology.conf           # network topology (if slurm.topology is set)
+├── gres.conf.d/            # gres fragments (if slurm.gres is a map)
+├── topology.conf           # network topology (if slurm.topology is set)
+└── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurmconf"
     >
@@ -2187,24 +2280,11 @@ PlugStackConfig=/etc/slurm/plugstack.conf
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>sind discovers the Slurm version before creating any cluster resources by running an ephemeral container:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">docker run --rm &lt;image&gt; scontrol --version
-</span></span><span class="line"><span class="cl"><span class="c1"># Output: &#34;slurm 25.11.4&#34;</span>
-</span></span></code></pre></div><p>This happens once per unique image. The version is stored as a label on cluster resources (<code>sind.slurm.version</code>) and used for:</p>
-<ul>
-<li>Generating version-appropriate configuration</li>
-<li>Displaying version information in CLI output</li>
-</ul>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h3 id="mixed-versions"
-    >
-        Mixed versions
-    </h3>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/architecture/slurm-config/#mixed-versions" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Mixed versions" aria-label="Anchor to: Mixed versions" href="#mixed-versions">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>When different images report different Slurm versions, sind logs a warning but continues. The controller image&rsquo;s version is used for configuration generation.</p>
+<p>While it creates the cluster network and volumes, sind discovers the Slurm version of the controller&rsquo;s image by running an ephemeral container:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">docker run --rm &lt;controller image&gt; slurmctld -V
+</span></span><span class="line"><span class="cl"><span class="c1"># Output: &#34;slurm 26.05.4&#34;</span>
+</span></span></code></pre></div><p>The version is stored as the <code>sind.slurm.version</code> label on each node container and shown in the <code>SLURM</code> column of <code>sind get clusters</code> and <code>sind get cluster</code>. It does not change the generated configuration. Workers added with <code>sind create worker</code> copy the controller&rsquo;s label, and nodes with a different <code>image</code> carry the controller&rsquo;s version too: sind does not compare versions across images.</p>
+<p>sind skips the discovery for unmanaged clusters, where the Slurm you provision may differ from the one in the image. Their <code>SLURM</code> column shows <code>-</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="post-creation-customization"
     >
@@ -2796,6 +2876,72 @@ PlugStackConfig=/etc/slurm/plugstack.conf
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

@@ -9,10 +9,10 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
-  <meta name="description" content="Default image and custom image requirements" />
+  <meta name="description" content="Official images and custom image requirements" />
 
     <title>Building Images | sind</title>
 
@@ -38,20 +38,20 @@
     content="Building Images"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="Default image and custom image requirements" />
+  <meta property="og:description" content="Official images and custom image requirements" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://gsi-hpc.github.io/sind/container-images/building-images/" />
 
 <meta property="article:section" content="Container Images" />
     <meta
       property="article:modified_time"
-      content="2026-04-09T14:59:43+02:00"
+      content="2026-09-27T22:20:05+00:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
 <meta name="twitter:title" content="Building Images" />
-  <meta name="twitter:description" content="Default image and custom image requirements" />
+  <meta name="twitter:description" content="Official images and custom image requirements" />
 
 
   <script type="application/ld+json">
@@ -62,8 +62,8 @@
       "name": "Building Images",
       "url": "https://gsi-hpc.github.io/sind/container-images/building-images/",
       "headline": "Building Images",
-      "description": "Default image and custom image requirements",
-      "wordCount": "335",
+      "description": "Official images and custom image requirements",
+      "wordCount": "736",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-09T14:59:43.00Z",
+      "dateModified": "2026-09-27T22:20:05.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2080,28 +2168,56 @@
     <h1>Building Images</h1>
     
     <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="default-image"
+    <h2 id="official-images"
     >
-        Default image
+        Official images
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/container-images/building-images/#default-image" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Default image" aria-label="Anchor to: Default image" href="#default-image">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/container-images/building-images/#official-images" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Official images" aria-label="Anchor to: Official images" href="#official-images">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>sind provides a default multi-role image that works for all node types:</p>
-<pre tabindex="0"><code>ghcr.io/gsi-hpc/sind-node:latest
-ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
-</code></pre><p>This is the default image when <code>defaults.image</code> is not specified.</p>
-<p>The default image:</p>
+<p>sind publishes a multi-role node image for each supported Slurm release line to <code>ghcr.io/gsi-hpc/sind-node</code>:</p>
+<div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>Slurm release line</th>
+					<th>Image tags</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>26.05</td>
+					<td><code>latest</code>, <code>26.05</code>, <code>26.05.4</code></td>
+			</tr>
+			<tr>
+					<td>25.11</td>
+					<td><code>25.11</code>, <code>25.11.8</code></td>
+			</tr>
+	</tbody>
+</table> </div>
+<ul>
+<li><code>latest</code> is the newest release line. sind uses it when <code>defaults.image</code> is not specified.</li>
+<li><code>&lt;YY&gt;.&lt;MM&gt;</code> (e.g. <code>25.11</code>) follows the newest patch release of that line. Use it to stay on one Slurm release line.</li>
+<li><code>&lt;YY&gt;.&lt;MM&gt;.&lt;patch&gt;</code> (e.g. <code>25.11.8</code>) pins a patch release.</li>
+</ul>
+<p>Every tag is a multi-platform image for linux/amd64 and linux/arm64; Docker pulls the variant that matches the host.</p>
+<p>The images are rebuilt when the image build changes, so the tags above pick up image fixes. Tags of superseded patch releases and of release lines that are no longer supported stay available but are not updated.</p>
+<p>To run a cluster on a specific release line, set its image in the <a
+  class="gdoc-markdown__link"
+  href="../../configuration/cluster-config/"
+>cluster configuration</a>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">defaults</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l">ghcr.io/gsi-hpc/sind-node:25.11</span><span class="w">
+</span></span></span></code></pre></div><p>Every official image:</p>
 <ul>
 <li>Is based on Rocky Linux 10</li>
 <li>Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source</li>
-<li>Contains all Slurm daemons (slurmctld, slurmd, munge, sshd) and a full MPI stack</li>
+<li>Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack</li>
 <li>Slurm is built with PMIx support (<code>--with-pmix</code>) for native PMIx job launch</li>
 <li>OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent</li>
 <li>Uses systemd as init (PID 1)</li>
 </ul>
-<p>sind enables the appropriate Slurm services based on node role at container start.</p>
+<p>sind enables the appropriate Slurm services based on node role once every node is ready.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="building-locally"
     >
@@ -2111,9 +2227,12 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The <code>Dockerfile</code> and <code>docker-bake.hcl</code> are in the repository root:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make image
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+<p>Pre-built images are published to GHCR, so building locally is only needed when modifying the Dockerfile or developing sind itself. The <code>Dockerfile</code> and <code>docker-bake.hcl</code> are in the repository root. <code>SLURM_RELEASES</code> in <code>docker-bake.hcl</code> lists the Slurm release and tarball checksum of each image, and each entry becomes a bake target named <code>slurm-&lt;YY&gt;-&lt;MM&gt;</code>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make image                                                <span class="c1"># all release lines</span>
+</span></span><span class="line"><span class="cl">docker buildx bake --set <span class="s1">&#39;*.platform=local&#39;</span> slurm-25-11   <span class="c1"># a single release line</span>
+</span></span></code></pre></div><p>Both build for the host platform only. Without <code>--set '*.platform=local'</code>, bake builds every platform in <code>docker-bake.hcl</code>, which needs a builder that supports multi-platform builds, and compiles the whole stack under QEMU emulation for the other architecture, which takes hours. CI builds each platform on a native runner instead.</p>
+<p>The Dockerfile has no default Slurm version. To build it without bake, pass <code>--build-arg SLURM_VERSION=&lt;version&gt;</code> and <code>--build-arg SLURM_SHA256=&lt;checksum&gt;</code>.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="custom-image-requirements"
     >
         Custom image requirements
@@ -2135,6 +2254,10 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
 <ul>
 <li><strong>systemd</strong> as init (PID 1)</li>
 <li><strong>sshd</strong> service (enabled) — sind injects authorized_keys at runtime</li>
+<li><code>/etc/shadow</code> readable by root without <code>CAP_DAC_OVERRIDE</code> (see <a
+  class="gdoc-markdown__link"
+  href="#shadow-file-permissions"
+>Shadow file permissions</a>)</li>
 <li><strong>munge</strong> service (enabled)</li>
 <li>Slurm client tools (srun, sbatch, squeue, etc.)</li>
 </ul>
@@ -2148,28 +2271,32 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Role</th>
-          <th>Additional requirements</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>controller</td>
-          <td>slurmctld installed, <strong>not enabled</strong></td>
-      </tr>
-      <tr>
-          <td>worker</td>
-          <td>slurmd installed, <strong>not enabled</strong></td>
-      </tr>
-      <tr>
-          <td>submitter</td>
-          <td>Slurm client tools only</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Role</th>
+					<th>Additional requirements</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>controller</td>
+					<td>slurmctld installed, <strong>not enabled</strong></td>
+			</tr>
+			<tr>
+					<td>worker</td>
+					<td>slurmd installed, <strong>not enabled</strong></td>
+			</tr>
+			<tr>
+					<td>submitter</td>
+					<td>Slurm client tools only</td>
+			</tr>
+	</tbody>
 </table> </div>
-<p>sind enables Slurm services at container start based on the node&rsquo;s role. Services must be installed but <strong>not</strong> enabled in the image.</p>
+<p>sind enables Slurm services based on the node&rsquo;s role (<code>systemctl enable --now</code>) once every node is ready. Services must be installed but <strong>not</strong> enabled in the image.</p>
+<p>The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/unmanaged-cluster/"
+>unmanaged cluster</a>, so its image may leave Slurm for the provisioning under test to install.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="container-settings"
     >
@@ -2211,6 +2338,18 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
 </span></span></span><span class="line"><span class="cl">    sed -i <span class="s1">&#39;s/#PubkeyAuthentication.*/PubkeyAuthentication yes/&#39;</span> /etc/ssh/sshd_config <span class="o">&amp;&amp;</span> <span class="se">\
 </span></span></span><span class="line"><span class="cl">    mkdir -p /root/.ssh <span class="o">&amp;&amp;</span> chmod <span class="m">700</span> /root/.ssh<span class="err">
 </span></span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="shadow-file-permissions"
+    >
+        Shadow file permissions
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/container-images/building-images/#shadow-file-permissions" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Shadow file permissions" aria-label="Anchor to: Shadow file permissions" href="#shadow-file-permissions">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Root must be able to read <code>/etc/shadow</code> as its owner, without <code>CAP_DAC_OVERRIDE</code>: mode <code>0400 root:root</code>, or <code>0640 root:shadow</code> as on Debian and Ubuntu. RHEL-family images such as Rocky Linux ship it with mode <code>0000</code> and need a fix:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-dockerfile" data-lang="dockerfile"><span class="line"><span class="cl"><span class="k">RUN</span> chmod <span class="m">0400</span> /etc/shadow /etc/gshadow<span class="err">
+</span></span></span></code></pre></div><p>On login, sshd&rsquo;s PAM account check (<code>pam_unix</code>) runs <code>unix_chkpwd</code> to read root&rsquo;s shadow entry. On nodes with <code>securityOpt: [apparmor=unconfined]</code>, AppArmor attaches the host&rsquo;s <code>unix-chkpwd</code> profile (shipped by Ubuntu 24.04, for example, including GitHub&rsquo;s <code>ubuntu-latest</code> runners) to that binary. The profile denies <code>CAP_DAC_OVERRIDE</code>, so with mode <code>0000</code> the check fails and <code>sind ssh</code> into those nodes ends with <code>Connection closed</code>. Nodes on Docker&rsquo;s default AppArmor profile are not affected.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="masked-systemd-units"
     >
         Masked systemd units
@@ -2222,11 +2361,10 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
 <p>For a clean container environment, mask unnecessary systemd units:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-dockerfile" data-lang="dockerfile"><span class="line"><span class="cl"><span class="k">RUN</span> systemctl mask <span class="se">\
 </span></span></span><span class="line"><span class="cl">    dev-hugepages.mount <span class="se">\
-</span></span></span><span class="line"><span class="cl">    sys-fs-fuse-connections.mount <span class="se">\
-</span></span></span><span class="line"><span class="cl">    systemd-logind.service <span class="se">\
 </span></span></span><span class="line"><span class="cl">    getty.target <span class="se">\
 </span></span></span><span class="line"><span class="cl">    console-getty.service<span class="err">
-</span></span></span></code></pre></div>
+</span></span></span></code></pre></div><p>Leave <code>sys-fs-fuse-connections.mount</code> unmasked: FUSE inside a node (<code>capAdd: [SYS_ADMIN]</code> and the <code>/dev/fuse</code> device) needs it, and without <code>/dev/fuse</code> it does nothing.</p>
+
   </article>
 
 
@@ -2802,6 +2940,72 @@ ghcr.io/gsi-hpc/sind-node:&lt;slurm-version&gt;
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

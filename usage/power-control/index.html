@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Simulate power events on cluster nodes" />
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2090,50 +2178,50 @@
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind power &lt;action&gt; NODES
 </span></span></code></pre></div><div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Command</th>
-          <th>Description</th>
-          <th>Docker operation</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>shutdown</code></td>
-          <td>Graceful shutdown</td>
-          <td><code>docker stop</code> (SIGTERM, then SIGKILL)</td>
-      </tr>
-      <tr>
-          <td><code>cut</code></td>
-          <td>Hard power off</td>
-          <td><code>docker kill</code> (immediate SIGKILL)</td>
-      </tr>
-      <tr>
-          <td><code>on</code></td>
-          <td>Power on</td>
-          <td><code>docker start</code></td>
-      </tr>
-      <tr>
-          <td><code>reboot</code></td>
-          <td>Graceful reboot</td>
-          <td><code>docker stop</code> + <code>docker start</code></td>
-      </tr>
-      <tr>
-          <td><code>cycle</code></td>
-          <td>Hard power cycle</td>
-          <td><code>docker kill</code> + <code>docker start</code></td>
-      </tr>
-      <tr>
-          <td><code>freeze</code></td>
-          <td>Simulate unresponsive node</td>
-          <td><code>docker pause</code> (cgroup freezer)</td>
-      </tr>
-      <tr>
-          <td><code>unfreeze</code></td>
-          <td>Resume frozen node</td>
-          <td><code>docker unpause</code></td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Command</th>
+					<th>Description</th>
+					<th>Docker operation</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>shutdown</code></td>
+					<td>Graceful shutdown</td>
+					<td><code>docker stop</code> (SIGTERM, then SIGKILL)</td>
+			</tr>
+			<tr>
+					<td><code>cut</code></td>
+					<td>Hard power off</td>
+					<td><code>docker kill</code> (immediate SIGKILL)</td>
+			</tr>
+			<tr>
+					<td><code>on</code></td>
+					<td>Power on</td>
+					<td><code>docker start</code></td>
+			</tr>
+			<tr>
+					<td><code>reboot</code></td>
+					<td>Graceful reboot</td>
+					<td><code>docker stop</code> + <code>docker start</code></td>
+			</tr>
+			<tr>
+					<td><code>cycle</code></td>
+					<td>Hard power cycle</td>
+					<td><code>docker kill</code> + <code>docker start</code></td>
+			</tr>
+			<tr>
+					<td><code>freeze</code></td>
+					<td>Simulate unresponsive node</td>
+					<td><code>docker pause</code> (cgroup freezer)</td>
+			</tr>
+			<tr>
+					<td><code>unfreeze</code></td>
+					<td>Resume frozen node</td>
+					<td><code>docker unpause</code></td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="examples"
@@ -2779,6 +2867,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

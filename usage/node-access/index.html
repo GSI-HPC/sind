@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="SSH, interactive shells, and command execution" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-04-01T21:58:52+02:00"
+      content="2026-09-27T22:40:34+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/usage/node-access/",
       "headline": "Node Access",
       "description": "SSH, interactive shells, and command execution",
-      "wordCount": "502",
+      "wordCount": "643",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-01T21:58:52.00Z",
+      "dateModified": "2026-09-27T22:40:34.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2104,8 +2192,9 @@
 </span></span><span class="line"><span class="cl"><span class="c1"># Port forwarding</span>
 </span></span><span class="line"><span class="cl">sind ssh -L 8080:localhost:80 controller
 </span></span></code></pre></div><p>Internally, <code>sind ssh</code> executes SSH via the mesh SSH container:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">docker <span class="nb">exec</span> -it sind-ssh ssh &lt;node&gt;.&lt;realm&gt;.sind
-</span></span></code></pre></div><p>Shell completion is available for both <code>sind ssh</code> and <code>sind exec</code> — press Tab to complete node and cluster names.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">docker <span class="nb">exec</span> -i -t sind-ssh ssh <span class="o">[</span>SSH_OPTIONS<span class="o">]</span> &lt;node&gt;.&lt;cluster&gt;.&lt;realm&gt;.sind <span class="o">[</span>COMMAND...<span class="o">]</span>
+</span></span></code></pre></div><p>The relay container is <code>&lt;realm&gt;-ssh</code>, and <code>-t</code> is only passed when stdin is a terminal.</p>
+<p>Shell completion is available for both <code>sind ssh</code> and <code>sind exec</code> — press Tab to complete node and cluster names. Load it with <code>source &lt;(sind completion bash)</code>, or the <code>zsh</code>, <code>fish</code> or <code>powershell</code> variant; <code>sind completion &lt;shell&gt; --help</code> shows how to install it permanently.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="enter"
     >
@@ -2116,7 +2205,7 @@
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter <span class="o">[</span>CLUSTER<span class="o">]</span>
-</span></span></code></pre></div><p>Opens an interactive shell on the cluster&rsquo;s submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is <code>/data</code>.</p>
+</span></span></code></pre></div><p>Opens an interactive shell on the cluster&rsquo;s submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is the data mount, <code>/data</code> unless the cluster config sets another <code>mountPath</code>.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter          <span class="c1"># default cluster</span>
 </span></span><span class="line"><span class="cl">sind enter dev      <span class="c1"># dev cluster</span>
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
@@ -2129,7 +2218,7 @@
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> <span class="o">[</span>CLUSTER<span class="o">]</span> -- COMMAND <span class="o">[</span>ARGS...<span class="o">]</span>
-</span></span></code></pre></div><p>Runs a one-shot command on the submitter (or controller). The <code>--</code> separator is required. The working directory inside the container is <code>/data</code>.</p>
+</span></span></code></pre></div><p>Runs a one-shot command on the submitter (or controller). The <code>--</code> separator is required. The working directory inside the container is the data mount, as for <code>enter</code>.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sinfo
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> -- srun hostname
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- sbatch job.sh
@@ -2145,26 +2234,26 @@
 <p>By default, <code>sind create cluster</code> bind-mounts the current working directory into all containers at <code>/data</code>. Both <code>sind enter</code> and <code>sind exec</code> set <code>/data</code> as the working directory, so files from the host are immediately accessible.</p>
 <p>Use the <code>--data</code> flag to change this behavior:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Flag value</th>
-          <th>Behavior</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>--data .</code> (default)</td>
-          <td>Bind-mount CWD as <code>/data</code></td>
-      </tr>
-      <tr>
-          <td><code>--data /path/to/dir</code></td>
-          <td>Bind-mount the given directory as <code>/data</code></td>
-      </tr>
-      <tr>
-          <td><code>--data volume</code></td>
-          <td>Use a Docker-managed volume instead of a host mount</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Flag value</th>
+					<th>Behavior</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>--data .</code> (default)</td>
+					<td>Bind-mount CWD as <code>/data</code></td>
+			</tr>
+			<tr>
+					<td><code>--data /path/to/dir</code></td>
+					<td>Bind-mount the given directory as <code>/data</code></td>
+			</tr>
+			<tr>
+					<td><code>--data volume</code></td>
+					<td>Use a Docker-managed volume instead of a host mount</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Mount a specific directory</span>
 </span></span><span class="line"><span class="cl">sind create cluster --data /home/user/shared
@@ -2190,27 +2279,31 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Command</th>
-          <th>Target node</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>sind ssh &lt;node&gt;</code></td>
-          <td>Explicit node</td>
-      </tr>
-      <tr>
-          <td><code>sind enter [cluster]</code></td>
-          <td>Submitter if exists, otherwise controller</td>
-      </tr>
-      <tr>
-          <td><code>sind exec [cluster]</code></td>
-          <td>Submitter if exists, otherwise controller</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Command</th>
+					<th>Target node</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>sind ssh &lt;node&gt;</code></td>
+					<td>Explicit node</td>
+			</tr>
+			<tr>
+					<td><code>sind enter [cluster]</code></td>
+					<td>Submitter if exists, otherwise the controller in control</td>
+			</tr>
+			<tr>
+					<td><code>sind exec [cluster]</code></td>
+					<td>Submitter if exists, otherwise the controller in control</td>
+			</tr>
+	</tbody>
 </table> </div>
+<p>On an <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/unmanaged-cluster/"
+>unmanaged cluster</a>, sind does not know which controller is in control: without a submitter, <code>enter</code> and <code>exec</code> target <code>controller</code> if it runs, otherwise <code>controller-backup</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="user-ssh-client-integration"
     >
@@ -2220,37 +2313,41 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>sind automatically exports SSH configuration per realm to <code>$XDG_STATE_HOME/sind/&lt;realm&gt;/</code> (defaulting to <code>~/.local/state/sind/&lt;realm&gt;/</code>):</p>
+<p>sind automatically exports SSH configuration per realm to <code>$XDG_STATE_HOME/sind/&lt;realm&gt;/</code> (defaulting to <code>~/.local/state/sind/&lt;realm&gt;/</code>, which is also used when <code>XDG_STATE_HOME</code> is a relative path):</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>File</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>ssh_config</code></td>
-          <td>SSH config snippet</td>
-      </tr>
-      <tr>
-          <td><code>id_ed25519</code></td>
-          <td>Private key</td>
-      </tr>
-      <tr>
-          <td><code>known_hosts</code></td>
-          <td>Host keys</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>ssh_config</code></td>
+					<td>SSH config snippet</td>
+			</tr>
+			<tr>
+					<td><code>id_ed25519</code></td>
+					<td>Private key</td>
+			</tr>
+			<tr>
+					<td><code>known_hosts</code></td>
+					<td>Host keys</td>
+			</tr>
+			<tr>
+					<td><code>lock</code></td>
+					<td>Advisory lock that serializes creating and deleting clusters and workers in the realm</td>
+			</tr>
+	</tbody>
 </table> </div>
-<p>These files are updated on every create/delete operation and removed when the last cluster in a realm is deleted.</p>
+<p>The SSH files are updated on every create/delete operation and removed when the last cluster in a realm is deleted; the directory stays, as it holds the <code>lock</code> file.</p>
 <p>To find the path for your current realm:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get ssh-config
 </span></span></code></pre></div><p>Add to the <strong>top</strong> of your <code>~/.ssh/config</code> (before any <code>Host</code> or <code>Match</code> blocks) for a single realm:</p>
 <pre tabindex="0"><code>Include ~/.local/state/sind/sind/ssh_config
 </code></pre><p>Or include all realms at once using a wildcard:</p>
 <pre tabindex="0"><code>Include ~/.local/state/sind/*/ssh_config
-</code></pre><p>The generated SSH config includes <code>CanonicalizeHostname</code> directives that expand short names automatically:</p>
+</code></pre><p>For the default realm <code>sind</code>, the generated SSH config includes <code>CanonicalizeHostname</code> directives that expand short names automatically. Other realms get no such directives; use full names such as <code>controller.dev.ci.sind</code> there.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">ssh controller                        <span class="c1"># → controller.default.sind.sind</span>
 </span></span><span class="line"><span class="cl">ssh controller.dev                    <span class="c1"># → controller.dev.sind.sind</span>
 </span></span><span class="line"><span class="cl">ssh controller.default.sind.sind      <span class="c1"># full FQDN</span>
@@ -2848,6 +2945,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

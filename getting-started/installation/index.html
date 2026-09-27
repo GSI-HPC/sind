@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Prerequisites and installation instructions" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Getting Started" />
     <meta
       property="article:modified_time"
-      content="2026-04-08T15:30:21+02:00"
+      content="2026-09-27T22:18:18+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/getting-started/installation/",
       "headline": "Installation",
       "description": "Prerequisites and installation instructions",
-      "wordCount": "164",
+      "wordCount": "339",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-08T15:30:21.00Z",
+      "dateModified": "2026-09-27T22:18:18.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2099,10 +2187,11 @@
       id="tabs-install-0"
       checked="checked"/>
     <label for="tabs-install-0" class="gdoc-tabs__label">
-      Pre-built binary (linux/amd64)
+      Pre-built binary (Linux)
     </label>
     <div class="gdoc-markdown--nested gdoc-tabs__content">
-      <p>System-wide installation into <code>/usr/local/bin</code>:</p>
+      <p>Releases include binaries for linux/amd64 and linux/arm64. The commands below install the amd64 one; on 64-bit ARM, download <code>sind-linux-arm64</code> instead.</p>
+<p>System-wide installation into <code>/usr/local/bin</code>:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
 </span></span><span class="line"><span class="cl"><span class="c1"># install sets mode 755 and copies to the target directory</span>
 </span></span><span class="line"><span class="cl">sudo install ./sind /usr/local/bin/sind
@@ -2114,7 +2203,12 @@
 if the directory exists at login time. You may need to log out and back in
 after creating it.</p>
 </blockquote>
-</div>
+<p>Each release publishes a <code>checksums.txt</code> and a build provenance attestation for its binaries. Check where a download came from with the <a
+  class="gdoc-markdown__link"
+  href="https://cli.github.com/"
+>GitHub CLI</a>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">gh attestation verify ./sind --repo GSI-HPC/sind
+</span></span></code></pre></div></div>
     <input
       type="radio"
       class="gdoc-tabs__control hidden"
@@ -2122,6 +2216,23 @@ after creating it.</p>
       id="tabs-install-1"
       />
     <label for="tabs-install-1" class="gdoc-tabs__label">
+      mise
+    </label>
+    <div class="gdoc-markdown--nested gdoc-tabs__content">
+      <p>Install the release binary for your platform (linux/amd64 or linux/arm64) with <a
+  class="gdoc-markdown__link"
+  href="https://mise.jdx.dev/"
+>mise</a>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">mise use -g github:GSI-HPC/sind
+</span></span></code></pre></div><p>Drop <code>-g</code> to pin sind in the current project&rsquo;s <code>mise.toml</code> instead. mise checks the download against its published digest and verifies the release&rsquo;s build provenance attestation.</p>
+</div>
+    <input
+      type="radio"
+      class="gdoc-tabs__control hidden"
+      name="tabs-install"
+      id="tabs-install-2"
+      />
+    <label for="tabs-install-2" class="gdoc-tabs__label">
       From source
     </label>
     <div class="gdoc-markdown--nested gdoc-tabs__content">
@@ -2153,9 +2264,14 @@ after creating it.</p>
 </div>
 <p>sind requires a container image with systemd, munge, sshd, and Slurm installed. The default image is:</p>
 <pre tabindex="0"><code>ghcr.io/gsi-hpc/sind-node:latest
-</code></pre><p>Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use <code>--pull</code> to force a fresh pull:</p>
+</code></pre><p>It is published for linux/amd64 and linux/arm64. <code>latest</code> carries the newest supported Slurm release line. To stay on a specific release line, set <code>defaults.image</code> in the cluster configuration to its tag, e.g. <code>ghcr.io/gsi-hpc/sind-node:25.11</code>. See <a
+  class="gdoc-markdown__link"
+  href="../../container-images/building-images/#official-images"
+>Official images</a> for the available tags.</p>
+<p>Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use <code>--pull</code> to force a fresh pull:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster --pull
-</span></span></code></pre></div><p>See <a
+</span></span></code></pre></div><p>Besides the node image, each realm&rsquo;s mesh runs <code>coredns/coredns:latest</code> (DNS) and <code>busybox:latest</code> (a helper that writes the SSH keys) from Docker Hub, and its SSH relay runs <code>ghcr.io/gsi-hpc/sind-node:latest</code> whatever <code>defaults.image</code> says. Hosts that cannot reach Docker Hub or ghcr.io need these images preloaded.</p>
+<p>See <a
   class="gdoc-markdown__link"
   href="../../container-images/building-images/"
 >Container Images</a> for details on building custom images.</p>
@@ -2743,6 +2859,72 @@ after creating it.</p>
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

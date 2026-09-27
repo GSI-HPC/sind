@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
   <meta name="description" content="Isolated mesh namespaces for parallel environments" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T19:33:47+02:00"
+      content="2026-09-27T22:42:55+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/configuration/realms/",
       "headline": "Realms",
       "description": "Isolated mesh namespaces for parallel environments",
-      "wordCount": "276",
+      "wordCount": "374",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T19:33:47.00Z",
+      "dateModified": "2026-09-27T22:42:55.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2090,6 +2178,7 @@
 </div>
 <p>A <strong>realm</strong> is a namespace that isolates all sind resources — mesh network, DNS, SSH, and cluster resources. Different realms have completely separate infrastructure and cannot see each other.</p>
 <p>The default realm is <code>sind</code>, which produces resource names like <code>sind-mesh</code>, <code>sind-dns</code>, <code>sind-default-net</code>, etc.</p>
+<p>Because names join realm and cluster with <code>-</code>, realm <code>ci</code> with cluster <code>42-dev</code> and realm <code>ci-42</code> with cluster <code>dev</code> would share the resource names <code>ci-42-dev-*</code>. sind refuses to create the second of them, and deleting one leaves the other&rsquo;s network and volumes alone.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="when-to-use-realms"
     >
@@ -2115,31 +2204,32 @@
 </div>
 <p>Realm is determined by the following precedence (highest first):</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Source</th>
-          <th>Example</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>--realm</code> flag</td>
-          <td><code>sind --realm ci-42 create cluster</code></td>
-      </tr>
-      <tr>
-          <td>Config file</td>
-          <td><code>realm: ci-42</code> in the YAML config</td>
-      </tr>
-      <tr>
-          <td><code>SIND_REALM</code> environment variable</td>
-          <td><code>export SIND_REALM=ci-42</code></td>
-      </tr>
-      <tr>
-          <td>Default</td>
-          <td><code>sind</code></td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Source</th>
+					<th>Example</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>--realm</code> flag</td>
+					<td><code>sind --realm ci-42 create cluster</code></td>
+			</tr>
+			<tr>
+					<td>Config file</td>
+					<td><code>realm: ci-42</code> in the YAML config</td>
+			</tr>
+			<tr>
+					<td><code>SIND_REALM</code> environment variable</td>
+					<td><code>export SIND_REALM=ci-42</code></td>
+			</tr>
+			<tr>
+					<td>Default</td>
+					<td><code>sind</code></td>
+			</tr>
+	</tbody>
 </table> </div>
+<p>A realm name must be a single DNS label: lowercase ASCII letters, digits and <code>-</code>, 1 to 63 characters, not beginning or ending with <code>-</code> (for example <code>ci-42</code>, not <code>CI-42</code>, <code>ci_42</code> or <code>ci.42</code>). sind rejects an invalid realm from any source; <code>SIND_REALM</code> is only checked when it is the realm in effect.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="resource-naming"
     >
@@ -2151,40 +2241,40 @@
 </div>
 <p>With realm <code>ci-42</code>, resources are prefixed accordingly:</p>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Resource</th>
-          <th>Default realm (<code>sind</code>)</th>
-          <th>Custom realm (<code>ci-42</code>)</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td>Mesh network</td>
-          <td><code>sind-mesh</code></td>
-          <td><code>ci-42-mesh</code></td>
-      </tr>
-      <tr>
-          <td>DNS container</td>
-          <td><code>sind-dns</code></td>
-          <td><code>ci-42-dns</code></td>
-      </tr>
-      <tr>
-          <td>SSH container</td>
-          <td><code>sind-ssh</code></td>
-          <td><code>ci-42-ssh</code></td>
-      </tr>
-      <tr>
-          <td>Cluster network</td>
-          <td><code>sind-default-net</code></td>
-          <td><code>ci-42-default-net</code></td>
-      </tr>
-      <tr>
-          <td>Container</td>
-          <td><code>sind-default-controller</code></td>
-          <td><code>ci-42-default-controller</code></td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Resource</th>
+					<th>Default realm (<code>sind</code>)</th>
+					<th>Custom realm (<code>ci-42</code>)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Mesh network</td>
+					<td><code>sind-mesh</code></td>
+					<td><code>ci-42-mesh</code></td>
+			</tr>
+			<tr>
+					<td>DNS container</td>
+					<td><code>sind-dns</code></td>
+					<td><code>ci-42-dns</code></td>
+			</tr>
+			<tr>
+					<td>SSH container</td>
+					<td><code>sind-ssh</code></td>
+					<td><code>ci-42-ssh</code></td>
+			</tr>
+			<tr>
+					<td>Cluster network</td>
+					<td><code>sind-default-net</code></td>
+					<td><code>ci-42-default-net</code></td>
+			</tr>
+			<tr>
+					<td>Container</td>
+					<td><code>sind-default-controller</code></td>
+					<td><code>ci-42-default-controller</code></td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="advisory-locking"
@@ -2196,7 +2286,7 @@
     </a>
 </div>
 <p>Mutating operations (<code>create cluster</code>, <code>delete cluster</code>, <code>create worker</code>, <code>delete worker</code>) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:</p>
-<pre tabindex="0"><code>~/.local/state/sind/&lt;realm&gt;/lock
+<pre tabindex="0"><code>$XDG_STATE_HOME/sind/&lt;realm&gt;/lock    # default: ~/.local/state/sind/&lt;realm&gt;/lock
 </code></pre><p>If another operation already holds the lock, sind waits until it completes. Read-only operations (<code>get</code>, <code>logs</code>, etc.) are not affected.</p>
 <p>Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
@@ -2803,6 +2893,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

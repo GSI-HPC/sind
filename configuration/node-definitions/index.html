@@ -9,10 +9,10 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.160.1">
+<meta name="generator" content="Hugo 0.166.0">
 
 
-  <meta name="description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
+  <meta name="description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
 
     <title>Node Definitions | sind</title>
 
@@ -38,20 +38,20 @@
     content="Node Definitions"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
+  <meta property="og:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://gsi-hpc.github.io/sind/configuration/node-definitions/" />
 
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T20:02:56+02:00"
+      content="2026-09-27T17:00:43+00:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
 <meta name="twitter:title" content="Node Definitions" />
-  <meta name="twitter:description" content="Node roles, shorthand syntax, and managed vs unmanaged workers" />
+  <meta name="twitter:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
 
 
   <script type="application/ld+json">
@@ -62,8 +62,8 @@
       "name": "Node Definitions",
       "url": "https://gsi-hpc.github.io/sind/configuration/node-definitions/",
       "headline": "Node Definitions",
-      "description": "Node roles, shorthand syntax, and managed vs unmanaged workers",
-      "wordCount": "472",
+      "description": "Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters",
+      "wordCount": "725",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T20:02:56.00Z",
+      "dateModified": "2026-09-27T17:00:43.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -91,8 +91,8 @@
 
 
     
-  <script src="/sind/js/colortheme-6c1bf822.bundle.min.js"></script>
-<script src="/sind/js/main-1b467c45.bundle.min.js"></script>
+  <script src="/sind/js/colortheme-58dc8372.bundle.min.js"></script>
+<script src="/sind/js/main-588b5d2c.bundle.min.js"></script>
 
 <link
   rel="preload"
@@ -111,12 +111,12 @@
 
 <link
   rel="preload"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   as="style"
 />
 <link
   rel="stylesheet"
-  href="/sind/main-7800dd97.min.css"
+  href="/sind/main-55bec514.min.css"
   media="all"
 />
 
@@ -271,7 +271,7 @@
           <aside class="gdoc-nav">
             <nav>
   
-  <script defer src="/sind/js/search-8a051f6b.bundle.min.js"></script><div class="gdoc-search flex align-center">
+  <script defer src="/sind/js/search-796b3748.bundle.min.js"></script><div class="gdoc-search flex align-center">
     <svg class="gdoc-icon gdoc_search"><use xlink:href="#gdoc_search"></use></svg>
     <input
       type="text"
@@ -1158,6 +1158,94 @@
                     class="gdoc-nav__entry"
                   >
                     CI/CD
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/controller-failover/"
+                    class="gdoc-nav__entry"
+                  >
+                    Controller Failover
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/guides/unmanaged-cluster/"
+                    class="gdoc-nav__entry"
+                  >
+                    Unmanaged Cluster
                   </a>
                 </span>
               
@@ -2089,38 +2177,38 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Role</th>
-          <th>Count</th>
-          <th>Required</th>
-          <th>Slurm daemons</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>controller</code></td>
-          <td>exactly 1</td>
-          <td>yes</td>
-          <td>slurmctld</td>
-          <td>Cluster controller</td>
-      </tr>
-      <tr>
-          <td><code>submitter</code></td>
-          <td>0–1</td>
-          <td>no</td>
-          <td>none (clients only)</td>
-          <td>Job submission node</td>
-      </tr>
-      <tr>
-          <td><code>worker</code></td>
-          <td>1+</td>
-          <td>yes</td>
-          <td>slurmd</td>
-          <td>Worker nodes</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Role</th>
+					<th>Count</th>
+					<th>Required</th>
+					<th>Slurm daemons</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>controller</code></td>
+					<td>exactly 1</td>
+					<td>yes</td>
+					<td>slurmctld</td>
+					<td>Cluster controller</td>
+			</tr>
+			<tr>
+					<td><code>submitter</code></td>
+					<td>0–1</td>
+					<td>no</td>
+					<td>none (clients only)</td>
+					<td>Job submission node</td>
+			</tr>
+			<tr>
+					<td><code>worker</code></td>
+					<td>1+</td>
+					<td>yes</td>
+					<td>slurmd</td>
+					<td>Worker nodes</td>
+			</tr>
+	</tbody>
 </table> </div>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="node-parameters"
@@ -2132,76 +2220,82 @@
     </a>
 </div>
 <div class="table-wrap"> <table>
-  <thead>
-      <tr>
-          <th>Parameter</th>
-          <th>Scope</th>
-          <th>Default</th>
-          <th>Description</th>
-      </tr>
-  </thead>
-  <tbody>
-      <tr>
-          <td><code>image</code></td>
-          <td>global + per-node</td>
-          <td><code>ghcr.io/gsi-hpc/sind-node:latest</code></td>
-          <td>Container image</td>
-      </tr>
-      <tr>
-          <td><code>cpus</code></td>
-          <td>global + per-node</td>
-          <td><code>1</code></td>
-          <td>CPU limit</td>
-      </tr>
-      <tr>
-          <td><code>memory</code></td>
-          <td>global + per-node</td>
-          <td><code>&quot;512m&quot;</code></td>
-          <td>Memory limit</td>
-      </tr>
-      <tr>
-          <td><code>tmpSize</code></td>
-          <td>global + per-node</td>
-          <td><code>&quot;256m&quot;</code></td>
-          <td>tmpfs size for <code>/tmp</code></td>
-      </tr>
-      <tr>
-          <td><code>count</code></td>
-          <td>worker only</td>
-          <td><code>1</code></td>
-          <td>Number of worker nodes</td>
-      </tr>
-      <tr>
-          <td><code>managed</code></td>
-          <td>worker only</td>
-          <td><code>true</code></td>
-          <td>Start slurmd and add to slurm.conf</td>
-      </tr>
-      <tr>
-          <td><code>capAdd</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Extra Linux capabilities (e.g. <code>SYS_ADMIN</code>)</td>
-      </tr>
-      <tr>
-          <td><code>capDrop</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Dropped Linux capabilities</td>
-      </tr>
-      <tr>
-          <td><code>devices</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Host devices to expose (e.g. <code>/dev/fuse</code>)</td>
-      </tr>
-      <tr>
-          <td><code>securityOpt</code></td>
-          <td>global + per-node</td>
-          <td>none</td>
-          <td>Extra security options</td>
-      </tr>
-  </tbody>
+	<thead>
+			<tr>
+					<th>Parameter</th>
+					<th>Scope</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>image</code></td>
+					<td>global + per-node</td>
+					<td><code>ghcr.io/gsi-hpc/sind-node:latest</code></td>
+					<td>Container image</td>
+			</tr>
+			<tr>
+					<td><code>cpus</code></td>
+					<td>global + per-node</td>
+					<td><code>1</code></td>
+					<td>CPU limit</td>
+			</tr>
+			<tr>
+					<td><code>memory</code></td>
+					<td>global + per-node</td>
+					<td><code>&quot;512m&quot;</code></td>
+					<td>Memory limit</td>
+			</tr>
+			<tr>
+					<td><code>tmpSize</code></td>
+					<td>global + per-node</td>
+					<td><code>&quot;256m&quot;</code></td>
+					<td>tmpfs size for <code>/tmp</code></td>
+			</tr>
+			<tr>
+					<td><code>count</code></td>
+					<td>worker only</td>
+					<td><code>1</code></td>
+					<td>Number of worker nodes</td>
+			</tr>
+			<tr>
+					<td><code>managed</code></td>
+					<td>controller + worker</td>
+					<td><code>true</code></td>
+					<td>Worker: start slurmd and add to slurm.conf. Controller: <code>false</code> makes the whole cluster unmanaged (see below)</td>
+			</tr>
+			<tr>
+					<td><code>backupController</code></td>
+					<td>controller only</td>
+					<td><code>false</code></td>
+					<td>Add a backup controller, <code>controller-backup</code> (see below)</td>
+			</tr>
+			<tr>
+					<td><code>capAdd</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Extra Linux capabilities (e.g. <code>SYS_ADMIN</code>)</td>
+			</tr>
+			<tr>
+					<td><code>capDrop</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Dropped Linux capabilities</td>
+			</tr>
+			<tr>
+					<td><code>devices</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Host devices to expose (e.g. <code>/dev/fuse</code>)</td>
+			</tr>
+			<tr>
+					<td><code>securityOpt</code></td>
+					<td>global + per-node</td>
+					<td>none</td>
+					<td>Extra security options</td>
+			</tr>
+	</tbody>
 </table> </div>
 <p>Per-node scalar values override the <code>defaults</code> section. Security list fields (<code>capAdd</code>, <code>capDrop</code>, <code>devices</code>, <code>securityOpt</code>) are <strong>merged</strong> with defaults rather than replacing them.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
@@ -2250,7 +2344,60 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">managed</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">        </span><span class="c"># 2 unmanaged workers</span><span class="w">
 </span></span></span></code></pre></div><p>Unmanaged workers can also be created dynamically:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create worker --count <span class="m">2</span> --unmanaged
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+</span></span></code></pre></div><p>In an <a
+  class="gdoc-markdown__link"
+  href="#unmanaged-cluster"
+>unmanaged cluster</a> every worker is unmanaged.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="backup-controller"
+    >
+        Backup controller
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/configuration/node-definitions/#backup-controller" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Backup controller" aria-label="Anchor to: Backup controller" href="#backup-controller">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>backupController: true</code> on the controller node adds a second controller, <code>controller-backup</code>, and configures Slurm&rsquo;s active/passive controller pair:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">backupController</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><ul>
+<li><code>controller-backup</code> uses the same image, resources, volumes, capabilities, devices and security options as <code>controller</code>.</li>
+<li><code>slurm.conf</code> lists both hosts (<code>SlurmctldHost=controller</code>, then <code>SlurmctldHost=controller-backup</code>) and sets <code>SlurmctldTimeout=20</code> unless the <code>main</code> section sets it.</li>
+<li>Both controllers mount the shared state volume <code>&lt;realm&gt;-&lt;cluster&gt;-state</code> at <code>/var/spool/slurmctld</code> (<code>StateSaveLocation</code>).</li>
+<li><code>slurmctld</code> runs on both. The backup takes over when the primary stops responding for <code>SlurmctldTimeout</code> seconds, and hands control back when the primary&rsquo;s <code>slurmctld</code> starts again.</li>
+</ul>
+<p><code>SlurmctldHost</code> and <code>StateSaveLocation</code> cannot be set in <code>slurm.main</code> when the backup is enabled. See <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/controller-failover/"
+>Controller Failover</a> for checking which controller is in control and triggering a failover.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="unmanaged-cluster"
+    >
+        Unmanaged cluster
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/configuration/node-definitions/#unmanaged-cluster" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Unmanaged cluster" aria-label="Anchor to: Unmanaged cluster" href="#unmanaged-cluster">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>managed: false</code> on the controller makes the whole cluster unmanaged: sind creates the nodes, the volumes and the munge key, but writes no Slurm configuration and starts no Slurm daemon, so your own tooling can provision Slurm.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">managed</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><ul>
+<li>Every worker is unmanaged. A worker with <code>managed: true</code> is rejected, and so is any <code>slurm</code> section.</li>
+<li><code>backupController: true</code> still adds <code>controller-backup</code> and the shared state volume.</li>
+<li><code>managed</code> is not valid on the submitter, which runs no Slurm daemon.</li>
+</ul>
+<p>See <a
+  class="gdoc-markdown__link"
+  href="/sind/guides/unmanaged-cluster/"
+>Unmanaged Cluster</a> for provisioning Slurm on such a cluster.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="capabilities-and-devices"
     >
         Capabilities and devices
@@ -2882,6 +3029,72 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 
