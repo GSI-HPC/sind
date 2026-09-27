@@ -42,6 +42,7 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
 | Lint | golangci-lint |
 | Unit Test | `make test` under firejail |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml` |
+| Image Targets | lists the bake targets and platforms the Integration Test jobs run (`docker/bake-action/subaction/matrix`) |
 | Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-24.04-arm` for linux/arm64): `sind doctor`, builds that node image with `docker buildx bake`, then `make test-integration` |
 | Integration Test | passes when every Integration Test (slurm-YY-MM, platform) job passed |
 | Build | `make build` |

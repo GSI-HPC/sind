@@ -29,6 +29,8 @@ sind mcp vscode disable
 sind mcp cursor disable
 ```
 
+`sind mcp <editor> list` shows the MCP servers registered with that editor. `enable` takes `--server-name`, `--log-level`, `--config-path` and `--env KEY=VALUE` (e.g. `--env SIND_REALM=ci` to serve another realm), and for VS Code and Cursor `--workspace` to register sind in the workspace settings instead; see `sind mcp <editor> enable --help`.
+
 ## Manual configuration
 
 If you prefer to configure the MCP server manually, add the following to your editor's MCP config:
@@ -49,6 +51,7 @@ If you prefer to configure the MCP server manually, add the following to your ed
 Every sind command is exposed as an MCP tool, except:
 
 - command groups such as `sind get`, which only print help
+- `sind help`, `sind completion` and the `sind mcp` commands
 - `sind enter` and `sind ssh`, which need an interactive terminal
 - `sind get ssh-private-key` and `sind get munge-key`, which print secrets
 
@@ -68,15 +71,15 @@ This exports the tool definitions to `mcp-tools.json`. The tools follow the nami
 
 | Tool | Description |
 |---|---|
-| `sind_create_cluster` | Create a new cluster |
-| `sind_create_worker` | Add workers to a running cluster |
+| `sind_create_cluster` | Create a Slurm cluster |
+| `sind_create_worker` | Add worker nodes to a cluster |
 | `sind_delete_cluster` | Delete a cluster |
 | `sind_get_cluster` | Show cluster health status |
-| `sind_get_nodes` | List cluster nodes |
-| `sind_get_realms` | List active realms |
+| `sind_get_nodes` | List nodes |
+| `sind_get_realms` | List all realms |
 | `sind_get_mesh` | Show mesh infrastructure info |
-| `sind_power_shutdown` | Shut down a node |
-| `sind_power_reboot` | Reboot a node |
+| `sind_power_shutdown` | Graceful shutdown |
+| `sind_power_reboot` | Graceful reboot |
 | `sind_exec` | Run a command on submitter or controller |
 
 ## HTTP mode
@@ -91,4 +94,4 @@ The stream listens on `127.0.0.1` unless `--host` names another address. It has 
 
 ## Security
 
-The MCP server is not a sandbox. Its tools run sind with your Docker access: `sind_exec` runs any command inside a cluster, and `sind_create_cluster` can bind-mount a host directory with `--data`. Leaving out `sind get ssh-private-key` and `sind get munge-key` keeps those secrets out of routine tool output, but an agent that may call `sind_exec` can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.
+The MCP server is not a sandbox. Its tools run sind with your Docker access: `sind_exec` runs any command inside a cluster, and `sind_create_cluster` bind-mounts a host directory read-write at `/data`: the one `--data` names or, without it, the MCP server's working directory. Pass `data: "volume"` to keep host files out. Leaving out `sind get ssh-private-key` and `sind get munge-key` keeps those secrets out of routine tool output, but an agent that may call `sind_exec` can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.

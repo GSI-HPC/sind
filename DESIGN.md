@@ -48,6 +48,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 2. Create config volume → write Slurm configuration (managed clusters only; see Unmanaged Cluster)
 3. Create munge volume → generate and write munge key
 4. Create data volume (if needed)
+5. Create state volume (backup controller only)
 
 **Phase 3: Node Containers**
 1. Create and start each node container in parallel
@@ -73,10 +74,10 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
 | munge ready | munge service active |
-| slurmctld ready | `scontrol ping` reports this controller UP (controllers only; each controller of a backup pair is checked for its own host) |
-| slurmd ready | slurmd service active (worker only) |
+| slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
+| slurmd ready | slurmd service active (managed workers only) |
 
-If any node fails to become ready within the timeout, `sind create cluster` fails and reports which nodes/checks failed. Partial clusters are not automatically cleaned up—use `sind delete cluster` to remove.
+If any node fails to become ready within the timeout, `sind create cluster` fails, reports which nodes/checks failed and removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
 
 **Phase 4: Mesh Registration and Slurm** (concurrent)
 
@@ -110,7 +111,9 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
+| `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
+| `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
 
 **Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
@@ -177,7 +180,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 
 | Pattern | Positional | Default | Examples |
 |---------|-----------|---------|---------|
-| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get nodes` |
+| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get munge-key` |
 | Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
 | Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
 | Nodeset expansion | bracket patterns | — | `worker-[0-2].dev` |
@@ -186,15 +189,16 @@ sind <verb> <noun> [ARGS] [FLAGS]
 Rules:
 - Cluster names are **always positional**, never flags
 - Node targets support nodeset expansion and comma-separated specs
-- Use `cobra.MaximumNArgs(1)` for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
+- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
 
 ### Flag Conventions
 
 - **Long-form only** by default; add short flags (`-f`) only for frequently-typed flags
-- **Kebab-case** for multi-word flags: `--tmp-size`, `--munge-key`
+- **Kebab-case** for multi-word flags: `--tmp-size`, `--cap-add`
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
 - **One persistent root flag**: `--realm` (inherited by every subcommand)
 - **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
+- `ssh` and `exec` disable flag parsing to pass their arguments through, so `--realm` and `-v` must precede them (`sind -v ssh worker-0`)
 
 ### Output Conventions
 
@@ -213,7 +217,7 @@ Rules:
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
-- Unicode checkmarks (✓/✗) only in `get cluster` and `doctor` output
+- Unicode checkmarks (✓/✗) only in `get cluster`, `get node` and `doctor` output
 - All `get` subcommands accept `--output|-o {human,json}`; default is `human`
 
 Exit status and signals:
@@ -229,7 +233,7 @@ Logging uses `pkg/log` with context-based injection. Silent by default. All log 
 |-------|------|------------|
 | Error | — | Always visible; command failures |
 | Info | `-v` | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
-| Debug | `-vv` | Individual operations: "waiting for node", "creating network", "enabling slurmd" |
+| Debug | `-vv` | Individual operations: "waiting for node", "starting readiness probes", "enabling slurm service" |
 | Trace | `-vvv` | Docker commands, probe retry attempts with error details |
 
 Rules:
@@ -261,7 +265,8 @@ When introducing a new command:
 6. **Logging**: info for phases, debug for operations, trace for raw commands
 7. **Errors**: wrap with `fmt.Errorf("context: %w", err)`, no error prefixes
 8. **Tests**: unit test with mock executor, integration test in lifecycle test
-9. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
+9. **MCP**: classify the command in `mcpEffects`, or list it in `mcpExcluded` (`cmd/sind/mcp.go`)
+10. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
 
 ## Testing
 
@@ -275,7 +280,7 @@ Development follows Test-Driven Development (TDD) style:
 
 - High unit test coverage for all packages
 - Integration tests for CLI commands and cluster operations
-- Tests run in CI for every commit
+- Tests run in CI for every pull request and every push to `main`
 
 ## CLI Commands
 
@@ -303,9 +308,9 @@ sind get munge-key [CLUSTER]
 
 All `get` subcommands accept `--output|-o {human,json}`. The default is `human` (tabular text); `json` emits a machine-readable document.
 
-NAME/CLUSTER defaults to `default` if omitted.
+NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which then lists the nodes of every cluster.
 
-`sind create cluster` validates the environment before creating, warning or failing if conflicting resources (containers, networks, volumes with matching names) already exist.
+`sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist.
 
 `sind delete cluster` is idempotent and robust:
 - Deleting a non-existent cluster is not an error
@@ -318,9 +323,9 @@ Example output:
 
 ```
 $ sind get clusters
-NAME      NODES (S/C/W)   SLURM   STATUS
-default   4 (1/1/2)       25.11   running
-dev       3 (0/1/2)       25.11   running
+NAME      NODES (S/C/W)   SLURM     STATUS
+default   4 (1/1/2)       26.05.4   running
+dev       3 (0/1/2)       25.11.8   running
 ```
 
 NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
@@ -392,14 +397,14 @@ worker-0.dev            worker                 172.19.0.4    running   munge ✓
 
 ```
 $ sind get node controller.dev
-CONTAINER            ROLE         FQDN                         IP           STATUS
-sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
+CONTAINER             ROLE         FQDN                       IP           STATUS
+sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
 
 SERVICES
 NAME        STATUS
 munge       ✓
-sshd        ✓
 slurmctld   ✓
+sshd        ✓
 ```
 
 ### Host Diagnostics
@@ -436,9 +441,9 @@ sind delete worker NODES               # remove worker nodes from cluster
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--count N` | 1 | Number of nodes to add |
-| `--image IMAGE` | cluster default | Container image |
-| `--cpus N` | cluster default (1) | CPU limit per node |
-| `--memory SIZE` | cluster default (512m) | Memory limit |
+| `--image IMAGE` | the controller's image | Container image |
+| `--cpus N` | 1 | CPU limit per node |
+| `--memory SIZE` | 512m | Memory limit |
 | `--tmp-size SIZE` | 256m | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | false | Pull images before creating containers |
@@ -450,7 +455,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 Examples:
 
 ```bash
-sind create worker                           # 1 managed node with cluster defaults
+sind create worker                           # 1 managed node with default resources
 sind create worker --count 3                 # 3 managed nodes
 sind create worker --count 2 --unmanaged     # 2 unmanaged nodes (slurmd not started)
 sind create worker --cpus 2 --memory 1g      # 1 managed node with resource limits
@@ -523,7 +528,7 @@ sind get ssh-public-key                # output SSH public key
 sind get ssh-known-hosts               # output SSH known_hosts
 ```
 
-`sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@v0.9.0`, reports the module version the Go toolchain recorded (`sind 0.9.0`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
+`sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
 `sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
 
@@ -539,7 +544,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 sind mcp start                          # MCP server on stdio
 sind mcp stream [--host H] [--port P]   # MCP server over HTTP (default 127.0.0.1:8080)
 sind mcp tools                          # export the tool definitions to mcp-tools.json
-sind mcp {claude,vscode,cursor} {enable,disable}  # register sind with an editor
+sind mcp {claude,vscode,cursor} {enable,disable,list}  # register sind with an editor
 ```
 
 The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
@@ -547,7 +552,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - The server reports itself as `sind` with the version `sind version` prints.
 
 - `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces. Stopped by SIGINT or SIGTERM, it shuts down and exits 0.
-- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help.
+- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `create cluster`, `create worker`, `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `delete`, `exec`, and the other `power` actions). A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).
@@ -657,9 +662,9 @@ defaults:
 
 storage:
   dataStorage:
-    type: volume                         # volume | hostPath
-    hostPath: ./data                     # only if type=hostPath
-    mountPath: /data                     # default: /data
+    type: hostPath                       # hostPath | volume (default: from --data)
+    hostPath: ./data                     # only for type=hostPath
+    mountPath: /data                     # default: /data (nodes created with the cluster)
 
 slurm:
   main: |                                # appended to slurm.conf
@@ -779,10 +784,13 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `role: controller` - exactly one (auto-created if nodes omitted)
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
-- `count` - only valid for worker role
+- `count` - only valid for worker role; must not be negative, and `0` means the default, 1
 - `managed` - only valid for controller and worker roles; with `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
+- `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
+- `devices` - absolute paths
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
+- unknown keys are rejected
 
 ### Cluster and Realm Names
 
@@ -847,12 +855,14 @@ The runtime command `sind create controller --unmanaged` is not provided: the mo
 
 ### Global Resources (Mesh)
 
-| Type | Name Pattern | Example |
-|------|-------------|---------|
-| Mesh network | `<realm>-mesh` | `sind-mesh` |
-| DNS container | `<realm>-dns` | `sind-dns` |
-| SSH container | `<realm>-ssh` | `sind-ssh` |
-| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` |
+| Type | Name Pattern | Example | Image |
+|------|-------------|---------|-------|
+| Mesh network | `<realm>-mesh` | `sind-mesh` | — |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:latest` |
+| SSH container | `<realm>-ssh` | `sind-ssh` | `ghcr.io/gsi-hpc/sind-node:latest` (runs `sleep infinity`) |
+| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | written by a `busybox:latest` helper, `<realm>-ssh-keygen` |
+
+The mesh images do not follow `defaults.image`; `--pull` pulls them too.
 
 ### Defaults
 
@@ -862,10 +872,10 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 
 | Volume | Mount Point | Controller | Worker | Submitter |
 |--------|-------------|------------|---------|-----------|
-| `sind-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
-| `sind-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
-| `sind-<cluster>-data` | `/data` | rw | rw | rw |
-| `sind-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
+| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
+| `<realm>-<cluster>-data` | `/data` | rw | rw | rw |
+| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
 | tmpfs | `/tmp` | per-node | per-node | per-node |
 
 ### Mount Options
@@ -874,11 +884,11 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 
 Container mount flags:
 ```
--v sind-<cluster>-config:/etc/slurm:rw     # controller
--v sind-<cluster>-config:/etc/slurm:ro     # all others
--v sind-<cluster>-munge:/etc/munge:ro      # all nodes
--v sind-<cluster>-data:/data:rw            # all nodes
--v sind-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
+-v <realm>-<cluster>-config:/etc/slurm:rw     # controller
+-v <realm>-<cluster>-config:/etc/slurm:ro     # all others
+-v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes
+-v <realm>-<cluster>-data:/data:rw            # all nodes
+-v <realm>-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 --tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
 --tmpfs /run:exec,mode=755                 # systemd runtime
 --tmpfs /run/lock                          # systemd lock files
@@ -894,12 +904,15 @@ By default, `sind create cluster` bind-mounts the current working directory as `
 The `--data` flag controls the mount source:
 - `--data .` (default) — bind-mount the current working directory
 - `--data /path` — bind-mount a specific host directory
-- `--data volume` — use a Docker-managed volume (`sind-<cluster>-data`)
+- `--data volume` — use a Docker-managed volume (`<realm>-<cluster>-data`)
 
 When a YAML config specifies `storage.dataStorage`, the config takes precedence over `--data`.
 
 The resolved host path is stored on each container as the `sind.data.hostpath` label so that
-dynamically added workers (`sind create worker`) inherit the same mount.
+dynamically added workers (`sind create worker`) inherit the same mount. `storage.dataStorage.mountPath`
+is not recorded: added workers mount the data at `/data`, `sind get cluster` reports `/data`, and
+`enter` and `exec` start in `/data`. A relative `hostPath` from the config is passed to Docker as
+given, so it is relative to the directory `sind create cluster` runs in.
 
 ### Container Labels
 
@@ -926,7 +939,7 @@ with the working directory set to `/data`. This means commands operate on the sh
 ### Cluster Network
 
 Each cluster has an isolated Docker bridge network:
-- Name: `sind-<cluster>-net`
+- Name: `<realm>-<cluster>-net`
 - Nodes can reach each other by container hostname
 
 ### Mesh Network
@@ -950,7 +963,7 @@ The `sind-dns` container (CoreDNS) provides name resolution across meshed cluste
 
 Records follow the pattern:
 ```
-<role>.<cluster>.<realm>.sind → container IP
+<node>.<cluster>.<realm>.sind → container IP
 ```
 
 Nodes are configured with:
@@ -963,7 +976,7 @@ The DNS container is lightweight and does not run systemd/sshd.
 
 ### SSH
 
-The `sind-ssh` container provides SSH access to all cluster nodes. It is a lightweight container (no systemd) that runs on the mesh network.
+The `sind-ssh` container provides SSH access to all cluster nodes. It runs the `sind-node:latest` image with `sleep infinity` instead of systemd, on the mesh network, and joins each cluster network.
 
 #### Global SSH Resources
 
@@ -994,10 +1007,10 @@ The `sind-ssh-config` volume contains:
 When sind creates a node, it waits for sshd to start, then collects the host key:
 
 ```bash
-docker exec <node> cat /etc/ssh/ssh_host_ed25519_key.pub
+docker exec <node> ssh-keyscan -t ed25519 localhost
 ```
 
-The key is added to `known_hosts` with the node's DNS name:
+The `localhost` field is dropped and the key is added to `known_hosts` with the node's DNS name:
 
 ```
 controller.dev.sind.sind ssh-ed25519 AAAA...
@@ -1030,7 +1043,7 @@ sind ssh [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]
 Internally:
 
 ```bash
-docker exec -it sind-ssh ssh [SSH_OPTIONS] <node>.<realm>.sind [COMMAND [ARGS...]]
+docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND [ARGS...]]  # -t only when stdin is a terminal
 ```
 
 All SSH options and arguments are passed through verbatim. Examples:
@@ -1053,8 +1066,9 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 | `ssh_config` | SSH config snippet |
 | `id_ed25519` | Private key (copy from volume) |
 | `known_hosts` | Host keys (copy from volume) |
+| `lock` | Advisory realm lock (see Realm Advisory Locking) |
 
-The generated `ssh_config` (for default realm `sind`):
+The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path):
 
 ```
 CanonicalizeHostname yes
@@ -1063,13 +1077,13 @@ CanonicalizeMaxDots 2
 
 Host *.sind.sind
     ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/%h/22; cat <&3 & cat >&3; kill $!'
-    IdentityFile ~/.local/state/sind/sind/id_ed25519
-    UserKnownHostsFile ~/.local/state/sind/sind/known_hosts
+    IdentityFile /home/user/.local/state/sind/sind/id_ed25519
+    UserKnownHostsFile /home/user/.local/state/sind/sind/known_hosts
     User root
     StrictHostKeyChecking yes
 ```
 
-The `Canonicalize*` directives enable short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. For custom realms, the `CanonicalDomains` list reflects that realm's clusters.
+The `Canonicalize*` directives enable short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. Other realms get no `Canonicalize*` directives, only their `Host *.<realm>.sind` block; use full names such as `controller.dev.ci.sind` there.
 
 To find the path for a realm, use `sind get ssh-config`. Add to the **top** of `~/.ssh/config` (before any `Host` or `Match` blocks) for a single realm:
 
@@ -1091,7 +1105,7 @@ ssh worker-0.dev.sind.sind hostname
 scp file.txt controller.dev.sind.sind:/tmp/
 ```
 
-sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, the files and realm directory are removed.
+sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file.
 
 ## Command Routing
 
@@ -1107,11 +1121,11 @@ On an unmanaged cluster sind does not know which controller is in control; `ente
 
 ### sind enter
 
-Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Equivalent to `sind ssh submitter` or `sind ssh controller`.
+Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Unlike `sind ssh`, it runs `bash -l` through `docker exec` rather than the SSH relay, in `/data` (see Enter and Exec).
 
 ### sind exec
 
-One-shot command execution. Equivalent to `sind ssh <target> -- <cmd>`.
+One-shot command execution on the same target as `sind enter`, through `docker exec` in `/data` rather than the SSH relay.
 
 ## Container Images
 
@@ -1131,7 +1145,7 @@ The generic image:
 - Published for linux/amd64 and linux/arm64
 - Based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
-- Contains all Slurm daemons (slurmctld, slurmd) and a full MPI stack
+- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - sind enables the appropriate services based on node role
 
@@ -1156,21 +1170,21 @@ Custom images must provide:
 | worker | slurmd (installed, not enabled) |
 | submitter | Slurm client tools only |
 
-sind enables Slurm services at container start based on the node's role. Services should be installed but not enabled in the image.
+sind enables Slurm services based on the node's role once every node is ready (`systemctl enable --now`). Services should be installed but not enabled in the image.
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an unmanaged cluster, so its image may leave Slurm for the provisioning under test to install.
 
-Example Dockerfiles are provided in the `images/` directory.
+The repository's `Dockerfile`, which builds the official images, serves as the reference.
 
 ## Generated Configuration
 
 ### Munge
 
-During `sind create cluster`, before starting any containers, sind generates a random munge key and writes it to the `sind-<cluster>-munge` volume. This ensures all nodes share the same key from first boot.
+During `sind create cluster`, before starting any containers, sind generates a random munge key and writes it to the `<realm>-<cluster>-munge` volume. This ensures all nodes share the same key from first boot.
 
 ### Slurm Configuration
 
-sind auto-generates a minimal Slurm configuration based on cluster topology and writes it to the `sind-<cluster>-config` volume. For an unmanaged cluster it writes nothing: the volume stays empty for the user's own configuration (see Unmanaged Cluster).
+sind auto-generates a minimal Slurm configuration based on cluster topology and writes it to the `<realm>-<cluster>-config` volume. For an unmanaged cluster it writes nothing: the volume stays empty for the user's own configuration (see Unmanaged Cluster).
 
 #### Multi-file Configuration
 
@@ -1186,7 +1200,9 @@ sind generates a multi-file configuration structure:
 ├── slurm.conf.d/           # main config fragments (if slurm.main is a map)
 ├── cgroup.conf.d/          # cgroup fragments (if slurm.cgroup is a map)
 ├── gres.conf               # generic resources (if slurm.gres is set)
-└── topology.conf           # network topology (if slurm.topology is set)
+├── gres.conf.d/            # gres fragments (if slurm.gres is a map)
+├── topology.conf           # network topology (if slurm.topology is set)
+└── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ```
 
 The main `slurm.conf` always contains:
@@ -1224,38 +1240,26 @@ Users may:
 
 ## Slurm Version Discovery
 
-sind does not manage Slurm versions directly—the version is implicit in the chosen container images. However, sind discovers the Slurm version before cluster creation to:
-
-1. Generate version-appropriate configuration (slurm.conf)
-2. Display version information in CLI output
-3. Store version metadata on containers and volumes
+sind does not manage Slurm versions directly—the version is implicit in the chosen container images. sind discovers the Slurm version of the controller's image to show it in CLI output (the `SLURM` column, `slurm_version` in JSON) and to label the node containers with it. The generated configuration does not depend on the version.
 
 sind skips the discovery for unmanaged clusters: the Slurm the user provisions may differ from the one in the image.
 
 ### Discovery Method
 
-Before creating any cluster resources, sind runs an ephemeral container to discover the Slurm version:
+While it creates the cluster network and volumes, sind runs an ephemeral container of the controller's image:
 
 ```bash
-docker run --rm <image> scontrol --version
-# Output: "slurm 25.11.0"
+docker run --rm <controller image> slurmctld -V
+# Output: "slurm 26.05.4"
 ```
 
-This happens once per unique image in the cluster configuration. The discovered version is then stored as labels on cluster resources:
+The discovered version is stored as a label on each node container:
 
 ```
---label sind.slurm.version=25.11.0
+--label sind.slurm.version=26.05.4
 ```
 
-### Version Consistency
-
-When the cluster configuration specifies multiple images (e.g., different images per role), sind discovers the version from each unique image. If images report different Slurm versions, sind logs a warning but continues with cluster creation. The controller image's version is used for configuration generation.
-
-Mismatched Slurm versions can cause subtle runtime issues, but users may have legitimate reasons for mixed versions (e.g., testing rolling upgrades).
-
-### Config Adaptation
-
-sind maintains awareness of version-specific configuration changes and generates compatible slurm.conf. This includes handling deprecated parameters and new required parameters across Slurm versions.
+Workers added with `sind create worker` copy the controller's label. Nodes whose `image` differs from the controller's carry the controller's version too: sind does not discover versions per image or compare them.
 
 ## DNS Naming Convention
 

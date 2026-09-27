@@ -34,12 +34,12 @@ Every official image:
 
 - Is based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
-- Contains all Slurm daemons (slurmctld, slurmd, munge, sshd) and a full MPI stack
+- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
 - Slurm is built with PMIx support (`--with-pmix`) for native PMIx job launch
 - OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1)
 
-sind enables the appropriate Slurm services based on node role at container start.
+sind enables the appropriate Slurm services based on node role once every node is ready.
 
 ### Building locally
 
@@ -74,7 +74,7 @@ Custom images must provide the following:
 | worker | slurmd installed, **not enabled** |
 | submitter | Slurm client tools only |
 
-sind enables Slurm services at container start based on the node's role. Services must be installed but **not** enabled in the image.
+sind enables Slurm services based on the node's role (`systemctl enable --now`) once every node is ready. Services must be installed but **not** enabled in the image.
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), so its image may leave Slurm for the provisioning under test to install.
 
@@ -126,8 +126,8 @@ For a clean container environment, mask unnecessary systemd units:
 ```dockerfile
 RUN systemctl mask \
     dev-hugepages.mount \
-    sys-fs-fuse-connections.mount \
-    systemd-logind.service \
     getty.target \
     console-getty.service
 ```
+
+Leave `sys-fs-fuse-connections.mount` unmasked: FUSE inside a node (`capAdd: [SYS_ADMIN]` and the `/dev/fuse` device) needs it, and without `/dev/fuse` it does nothing.

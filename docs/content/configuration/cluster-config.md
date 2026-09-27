@@ -107,16 +107,20 @@ Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node 
 ```yaml
 storage:
   dataStorage:
-    type: volume       # "volume" or "hostPath"
-    hostPath: ./data   # required if type is hostPath
+    type: hostPath     # "hostPath" or "volume"
+    hostPath: ./data   # host directory for type: hostPath
     mountPath: /data   # default: /data
 ```
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `type` | `"volume"` | `"volume"` for a Docker volume, `"hostPath"` for a bind mount |
-| `hostPath` | — | Path on the host (required when `type: hostPath`) |
-| `mountPath` | `"/data"` | Mount point inside containers |
+| `type` | set by `--data` | `"hostPath"` bind-mounts `hostPath`; `"volume"` (or any other value) uses the Docker volume `<realm>-<cluster>-data` |
+| `hostPath` | — | Host directory for `type: hostPath`, relative to the directory `sind create cluster` runs in. Without it, `type: hostPath` falls back to the Docker volume |
+| `mountPath` | `"/data"` | Mount point inside the nodes created with the cluster |
+
+If the config sets neither `type` nor `hostPath`, the `--data` flag of `sind create cluster` decides; its default, `.`, bind-mounts the working directory (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})).
+
+`mountPath` only applies to the nodes created with the cluster: workers added with `sind create worker` mount the data at `/data`, `sind get cluster` reports it at `/data`, and `sind enter` and `sind exec` start in `/data`.
 
 ## Slurm section
 
@@ -173,6 +177,7 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - With `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
 - `backupController` is only valid for controller nodes
 - With `backupController`, `slurm.main` must not set `SlurmctldHost` (or its deprecated forms `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
-- `count` must not be negative
+- `count` must not be negative; `0` means the default, 1
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
+- Unknown keys are rejected

@@ -10,7 +10,7 @@ toc: true
 
 Each cluster has an isolated Docker bridge network:
 
-- Name: `sind-<cluster>-net` (e.g., `sind-dev-net`)
+- Name: `<realm>-<cluster>-net` (e.g., `sind-dev-net`)
 - Nodes can reach each other by container hostname within this network
 
 ## Mesh network
@@ -29,7 +29,7 @@ All clusters join a shared mesh network for cross-cluster communication:
 The `sind-dns` container runs CoreDNS and provides name resolution across all clusters using a realm-aware zone:
 
 ```
-<role>.<cluster>.<realm>.sind → container IP
+<node>.<cluster>.<realm>.sind → container IP
 ```
 
 Examples (default realm `sind`):
@@ -59,7 +59,7 @@ ping controller.default.sind.sind
 resolvectl query worker-0.dev.sind.sind
 ```
 
-For the default realm, a search domain is also configured so that bare hostnames resolve for the default cluster:
+sind also sets the search domain `default.<realm>.sind` on the mesh bridge, in every realm, so that bare hostnames resolve to the realm's `default` cluster:
 
 ```bash
 ping controller    # → controller.default.sind.sind
@@ -67,7 +67,7 @@ ping controller    # → controller.default.sind.sind
 
 This feature is **best-effort**: it is silently skipped when systemd-resolved is not running or when the required polkit authorization is missing. Run `sind doctor` to check prerequisites and get a copyable install command.
 
-Host DNS is configured during `sind create cluster` (first cluster) and reverted during `sind delete cluster` (last cluster).
+Host DNS is configured during every `sind create cluster` (the settings are idempotent) and reverted during `sind delete cluster` (last cluster).
 
 #### Polkit policy
 
@@ -156,7 +156,7 @@ docker exec <node> sh -c 'cat >> /root/.ssh/authorized_keys' < pubkey
 Host keys are then collected:
 
 ```bash
-docker exec <node> cat /etc/ssh/ssh_host_ed25519_key.pub
+docker exec <node> ssh-keyscan -t ed25519 localhost
 ```
 
 And stored in `known_hosts` with the node's DNS name:

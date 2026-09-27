@@ -15,9 +15,9 @@ sind create worker [CLUSTER] [FLAGS]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--count` | `1` | Number of nodes to add |
-| `--image` | cluster default | Container image |
-| `--cpus` | cluster default (1) | CPU limit per node |
-| `--memory` | cluster default (512m) | Memory limit |
+| `--image` | the controller's image | Container image |
+| `--cpus` | `1` | CPU limit per node |
+| `--memory` | `512m` | Memory limit |
 | `--tmp-size` | `256m` | `/tmp` tmpfs size |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | `false` | Pull images before creating containers |
@@ -29,7 +29,7 @@ sind create worker [CLUSTER] [FLAGS]
 ### Examples
 
 ```bash
-# 1 managed worker with cluster defaults
+# 1 managed worker with default resources
 sind create worker
 
 # 3 managed workers

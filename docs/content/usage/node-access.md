@@ -33,10 +33,12 @@ sind ssh -L 8080:localhost:80 controller
 Internally, `sind ssh` executes SSH via the mesh SSH container:
 
 ```bash
-docker exec -it sind-ssh ssh <node>.<realm>.sind
+docker exec -i -t sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND...]
 ```
 
-Shell completion is available for both `sind ssh` and `sind exec` — press Tab to complete node and cluster names.
+The relay container is `<realm>-ssh`, and `-t` is only passed when stdin is a terminal.
+
+Shell completion is available for both `sind ssh` and `sind exec` — press Tab to complete node and cluster names. Load it with `source <(sind completion bash)`, or the `zsh`, `fish` or `powershell` variant; `sind completion <shell> --help` shows how to install it permanently.
 
 ## enter
 
@@ -108,8 +110,9 @@ sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/
 | `ssh_config` | SSH config snippet |
 | `id_ed25519` | Private key |
 | `known_hosts` | Host keys |
+| `lock` | Advisory lock that serializes creating and deleting clusters and workers in the realm |
 
-These files are updated on every create/delete operation and removed when the last cluster in a realm is deleted.
+The SSH files are updated on every create/delete operation and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file.
 
 To find the path for your current realm:
 
@@ -129,7 +132,7 @@ Or include all realms at once using a wildcard:
 Include ~/.local/state/sind/*/ssh_config
 ```
 
-The generated SSH config includes `CanonicalizeHostname` directives that expand short names automatically:
+For the default realm `sind`, the generated SSH config includes `CanonicalizeHostname` directives that expand short names automatically. Other realms get no such directives; use full names such as `controller.dev.ci.sind` there.
 
 ```bash
 ssh controller                        # → controller.default.sind.sind

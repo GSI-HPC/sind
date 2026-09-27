@@ -65,6 +65,10 @@ Built-in [MCP](https://modelcontextprotocol.io/) server lets AI assistants manag
 
 <--->
 
+## Multiple Slurm versions
+
+Official node images for Slurm 26.05 and 25.11 on linux/amd64 and linux/arm64 — or bring your own.
+
 <--->
 
 {{< /columns >}}

@@ -55,14 +55,14 @@ controller-backup.dev   controller  backup     172.19.0.3    running   munge ✓
 worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
 ```
 
-With `-o json`, each controller carries `"ha": {"position": "primary", "in_control": true}`. `sind get node controller-backup.dev` shows the same information for one node.
+With `-o json`, each controller's `health` carries `"ha": {"position": "primary", "in_control": true}`. `sind get node controller-backup.dev` shows the same information for one node.
 
 sind reads this from the heartbeat file the controller in control writes to `StateSaveLocation`. A controller counts as in control when it wrote the heartbeat within the last 60 seconds and its own `slurmctld` answers `scontrol ping`.
 
 From inside the cluster, `scontrol ping` reports whether each `slurmctld` is up:
 
 ```bash
-sind exec -- scontrol ping
+sind exec dev -- scontrol ping
 ```
 
 ```
@@ -75,15 +75,15 @@ Slurmctld(backup) at controller-backup is UP
 Ask the backup to take over:
 
 ```bash
-sind exec -- scontrol takeover
+sind exec dev -- scontrol takeover
 ```
 
-The backup takes control and the primary's `slurmctld` stops. Running and pending jobs are kept because both controllers share the saved state. `sind get cluster` then shows `backup*` and `slurmctld ✗` on `controller`.
+The backup takes control and the primary's `slurmctld` stops. Running and pending jobs are kept because both controllers share the saved state. `sind get cluster dev` then shows `backup*` and `slurmctld ✗` on `controller`.
 
 Hand control back by starting the primary's `slurmctld` again. On start, the primary tells the backup to return to backup mode and takes over:
 
 ```bash
-sind ssh controller -- systemctl start slurmctld
+sind ssh controller.dev -- systemctl start slurmctld
 ```
 
 ## Failover by outage
@@ -92,24 +92,24 @@ Use [power control]({{< relref "/usage/power-control" >}}) to simulate the prima
 
 | Scenario | Command | Recovery |
 |----------|---------|----------|
-| Host crash | `sind power cut controller` | `sind power on controller` |
-| Clean host shutdown | `sind power shutdown controller` | `sind power on controller` |
-| Hung controller | `sind power freeze controller` | `sind power unfreeze controller`, then `sind ssh controller -- systemctl restart slurmctld` |
-| Daemon crash | `sind ssh controller -- systemctl kill -s KILL slurmctld` | `sind ssh controller -- systemctl start slurmctld` |
+| Host crash | `sind power cut controller.dev` | `sind power on controller.dev` |
+| Clean host shutdown | `sind power shutdown controller.dev` | `sind power on controller.dev` |
+| Hung controller | `sind power freeze controller.dev` | `sind power unfreeze controller.dev`, then `sind ssh controller.dev -- systemctl restart slurmctld` |
+| Daemon crash | `sind ssh controller.dev -- systemctl kill -s KILL slurmctld` | `sind ssh controller.dev -- systemctl start slurmctld` |
 
 When the primary's container starts again, systemd starts its `slurmctld`, which reclaims control from the backup. A frozen primary resumes without knowing that the backup took over, so restart its `slurmctld` after unfreezing it to hand control back cleanly.
 
 Watch the takeover and the logs of either controller:
 
 ```bash
-watch sind get cluster
-sind logs controller-backup slurmctld --follow
+watch sind get cluster dev
+sind logs controller-backup.dev slurmctld --follow
 ```
 
 ## While the backup is in control
 
 - `sind enter` and `sind exec` run on the controller in control when the cluster has no submitter.
 - `sind create worker` and `sind delete worker` update `sind-nodes.conf` and reconfigure Slurm through a running controller, so they keep working while the primary is down.
-- `sind ssh controller` and `sind logs controller` still address the primary container by name.
+- `sind ssh controller.dev` and `sind logs controller.dev` still address the primary container by name.
 
 To run a pair whose Slurm configuration you provision yourself, see [Unmanaged Cluster]({{< relref "/guides/unmanaged-cluster" >}}).

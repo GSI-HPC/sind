@@ -32,23 +32,25 @@ Containers require specific security options for systemd:
 
 ## Concurrency
 
-Mutating operations acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations are unaffected. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}).
+Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations and `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}).
 
 ## Creation flow
 
 ```
-PreflightCheck
-      │
-resolveInfra        DNS IP │ SSH key │ Slurm version
-      │
-createResources     network ║ (config vol → write) ║ (munge vol → write)
-      │
-setupNodes          (create + wait + SSH + hostkey) per node
-      │
-registerMesh ║ enableSlurm
-      │
-  *Cluster
+┌ PreflightCheck → createResources → connect SSH relay ┐
+┤                                                      ├→ setupNodes
+└ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┘
+                           │
+                 registerMesh ║ enableSlurm
+                           │
+                       *Cluster
 ```
+
+- `createResources` creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key, the data volume (unless the data is a host path) and, for a backup controller pair, the state volume, all in parallel.
+- `resolveInfra` looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
+- `setupNodes` creates, waits for, and sets up SSH and host keys on every node.
+- `enableSlurm` starts slurmctld and slurmd on managed clusters only.
+- If any step fails, `sind create cluster` removes what it created.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 
@@ -69,8 +71,8 @@ When an event arrives, probes re-evaluate immediately instead of waiting for the
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
 | munge ready | munge service active |
-| slurmctld ready | `scontrol ping` succeeds (controller only) |
-| slurmd ready | slurmd service active (worker only) |
+| slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
+| slurmd ready | slurmd service active (managed workers only) |
 
 ## Docker CLI, not SDK
 
