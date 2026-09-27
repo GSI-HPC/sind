@@ -557,6 +557,8 @@ sind power shutdown controller,worker-[0-3]
 sind power cycle worker-[0-1].dev,worker-[0-3].default
 ```
 
+A pattern expands to at most 2^20 names, matching clusterctl's nodeset, so a pattern such as `worker-[0-99999999]` is rejected before any name is allocated. An expanded name that begins with `-` is rejected, since a command it is passed to could read it as an option.
+
 ### Examples
 
 ```bash

@@ -385,6 +385,62 @@ func TestExpand_LargeRange(t *testing.T) {
 	assert.Equal(t, "node-999", got[999])
 }
 
+// lowerCap lowers the expansion cap for one test.
+func lowerCap(t *testing.T, n int) {
+	t.Helper()
+	old := maxNames
+	t.Cleanup(func() { maxNames = old })
+	maxNames = n
+}
+
+func TestExpand_TooManyNames(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		wantErr string
+	}{
+		{"one past the cap", "worker-[1-11]", "range 1-11 has more than 10 names"},
+		{"ranges in one bracket", "worker-[0-5,0-5]", "more than 10 names"},
+		{"comma-separated patterns", "a-[0-5],b-[0-5]", `"a-[0-5],b-[0-5]" expands to more than 10 names`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lowerCap(t, 10)
+			_, err := Expand(tt.pattern)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestExpand_AtTheCap(t *testing.T) {
+	lowerCap(t, 10)
+	got, err := Expand("a-[1-5],b-[1-5]")
+	require.NoError(t, err)
+	assert.Len(t, got, 10)
+}
+
+func TestExpand_HugeRange(t *testing.T) {
+	// Refused before any name is allocated, with the real cap.
+	for _, pattern := range []string{"worker-[0-99999999]", "worker-[0-9223372036854775807]"} {
+		t.Run(pattern, func(t *testing.T) {
+			_, err := Expand(pattern)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "has more than 1048576 names")
+		})
+	}
+}
+
+func TestExpand_LeadingHyphen(t *testing.T) {
+	for _, pattern := range []string{"-rf", "worker-0,-oProxyCommand=x", "-[0-1]"} {
+		t.Run(pattern, func(t *testing.T) {
+			_, err := Expand(pattern)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), `begins with "-"`)
+		})
+	}
+}
+
 func TestExpand_NegativeNumbers(t *testing.T) {
 	// Negative numbers are not supported in nodeset notation
 	// The "-" is interpreted as a range separator
