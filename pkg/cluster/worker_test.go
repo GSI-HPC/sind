@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,23 @@ func TestWorkerAdd_AllowsUnmanaged(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+}
+
+func TestValidateWorkerAdd_UnmanagedCluster(t *testing.T) {
+	// Workers of an unmanaged cluster are unmanaged without --unmanaged.
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: unmanagedClusterContainers("worker-0")}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{ClusterName: "dev", Count: 1})
+
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 1, "no sind-nodes.conf read")
 }
 
 func TestWorkerAdd_ClusterNotFound(t *testing.T) {
@@ -319,6 +337,41 @@ func TestNextComputeIndex_LabelFilter(t *testing.T) {
 	psArgs := m.Calls[0].Args
 	assert.Contains(t, psArgs, "label=sind.realm="+mesh.DefaultRealm)
 	assert.Contains(t, psArgs, "label=sind.cluster=dev")
+}
+
+// unmanagedClusterContainers returns the containers of an unmanaged cluster:
+// every node carries sind.managed=false.
+func unmanagedClusterContainers(computes ...string) string {
+	entries := []testutil.PsEntry{
+		{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=controller,sind.managed=false"},
+	}
+	for _, c := range computes {
+		entries = append(entries, testutil.PsEntry{
+			ID: "c" + c, Names: "sind-dev-" + c, State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=worker,sind.managed=false",
+		})
+	}
+	return testutil.NDJSON(entries...)
+}
+
+// assertNoSlurmChanges fails when the calls read or wrote sind-nodes.conf,
+// ran scontrol or enabled a Slurm daemon.
+func assertNoSlurmChanges(t *testing.T, calls []mock.Call) {
+	t.Helper()
+	for _, call := range calls {
+		args := call.Args
+		joined := strings.Join(args, " ")
+		if strings.Contains(joined, "sind-nodes.conf") && !strings.Contains(joined, "sind-ssh") {
+			assert.Failf(t, "sind-nodes.conf touched", "%v", args)
+		}
+		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+			assert.Failf(t, "scontrol called", "%v", args)
+		}
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			assert.Failf(t, "Slurm daemon enabled", "%v", args)
+		}
+	}
 }
 
 // --- WorkerAdd (managed) ---
@@ -593,6 +646,35 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 	}
 }
 
+func TestWorkerAdd_UnmanagedCluster(t *testing.T) {
+	var m mock.Executor
+	base := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: unmanagedClusterContainers("worker-0")}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	// No Unmanaged option: the cluster makes the worker unmanaged.
+	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assert.Equal(t, "worker-1", nodes[0].Name)
+	assertNoSlurmChanges(t, m.Calls)
+	for _, call := range m.Calls {
+		if call.Args[0] == "create" {
+			assert.Contains(t, testutil.ArgValues(call.Args, "--label"), LabelManaged+"=false")
+		}
+	}
+}
+
 // --- WorkerRemove (managed) ---
 
 // workerRemoveOnCall returns a mock OnCall handler for WorkerRemove tests.
@@ -744,6 +826,29 @@ func TestWorkerRemove_Unmanaged(t *testing.T) {
 		}
 	}
 	assert.True(t, removed, "container should be removed")
+}
+
+func TestWorkerRemove_UnmanagedCluster(t *testing.T) {
+	// The user's configuration of an unmanaged cluster is never edited, even
+	// if it has a sind-nodes.conf.
+	var m mock.Executor
+	base := workerRemoveOnCall(t, "NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: unmanagedClusterContainers("worker-0", "worker-1")}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-1"})
+
+	require.NoError(t, err)
+	assertNoSlurmChanges(t, m.Calls)
+	assert.True(t, slices.ContainsFunc(m.Calls, func(c mock.Call) bool {
+		return c.Args[0] == "rm" && slices.Contains(c.Args, "sind-dev-worker-1")
+	}), "container removed")
 }
 
 // --- Additional test combinatorics ---
