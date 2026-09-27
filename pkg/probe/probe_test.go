@@ -489,6 +489,7 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestUntilReady_TerminalError(t *testing.T) {
@@ -625,6 +626,7 @@ func TestUntilReadyWithEvents_ContextCanceled(t *testing.T) {
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestUntilReadyWithEvents_Timeout(t *testing.T) {
@@ -642,6 +644,8 @@ func TestUntilReadyWithEvents_Timeout(t *testing.T) {
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Contains(t, err.Error(), "last probe error: probe container")
 }
 
 func TestUntilReadyWithEvents_TerminalError(t *testing.T) {
@@ -798,4 +802,25 @@ func TestSnapshot_MalformedOutput(t *testing.T) {
 	_, err := Snapshot(t.Context(), c, testContainer, workerServices)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "got 2 lines")
+}
+
+func TestWaitEnded_NoProbeFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := waitEnded(ctx, testContainer, nil)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled", err.Error())
+}
+
+func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	probeErr := &TerminalError{Msg: "boom"}
+
+	err := waitEnded(ctx, testContainer, probeErr)
+	require.ErrorIs(t, err, context.Canceled)
+	var te *TerminalError
+	require.ErrorAs(t, err, &te)
+	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled; last probe error: boom", err.Error())
 }
