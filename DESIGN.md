@@ -48,6 +48,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 2. Create config volume → write Slurm configuration (managed clusters only; see Unmanaged Cluster)
 3. Create munge volume → generate and write munge key
 4. Create data volume (if needed)
+5. Create state volume (backup controller only)
 
 **Phase 3: Node Containers**
 1. Create and start each node container in parallel
@@ -76,7 +77,7 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers only; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (worker only) |
 
-If any node fails to become ready within the timeout, `sind create cluster` fails and reports which nodes/checks failed. Partial clusters are not automatically cleaned up—use `sind delete cluster` to remove.
+If any node fails to become ready within the timeout, `sind create cluster` fails, reports which nodes/checks failed and removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
 
 **Phase 4: Mesh Registration and Slurm** (concurrent)
 
@@ -179,7 +180,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 
 | Pattern | Positional | Default | Examples |
 |---------|-----------|---------|---------|
-| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get nodes` |
+| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get munge-key` |
 | Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
 | Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
 | Nodeset expansion | bracket patterns | — | `worker-[0-2].dev` |
@@ -188,15 +189,16 @@ sind <verb> <noun> [ARGS] [FLAGS]
 Rules:
 - Cluster names are **always positional**, never flags
 - Node targets support nodeset expansion and comma-separated specs
-- Use `cobra.MaximumNArgs(1)` for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
+- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
 
 ### Flag Conventions
 
 - **Long-form only** by default; add short flags (`-f`) only for frequently-typed flags
-- **Kebab-case** for multi-word flags: `--tmp-size`, `--munge-key`
+- **Kebab-case** for multi-word flags: `--tmp-size`, `--cap-add`
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
 - **One persistent root flag**: `--realm` (inherited by every subcommand)
 - **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
+- `ssh` and `exec` disable flag parsing to pass their arguments through, so `--realm` and `-v` must precede them (`sind -v ssh worker-0`)
 
 ### Output Conventions
 
@@ -215,7 +217,7 @@ Rules:
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
-- Unicode checkmarks (✓/✗) only in `get cluster` and `doctor` output
+- Unicode checkmarks (✓/✗) only in `get cluster`, `get node` and `doctor` output
 - All `get` subcommands accept `--output|-o {human,json}`; default is `human`
 
 Exit status and signals:
@@ -231,7 +233,7 @@ Logging uses `pkg/log` with context-based injection. Silent by default. All log 
 |-------|------|------------|
 | Error | — | Always visible; command failures |
 | Info | `-v` | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
-| Debug | `-vv` | Individual operations: "waiting for node", "creating network", "enabling slurmd" |
+| Debug | `-vv` | Individual operations: "waiting for node", "starting readiness probes", "enabling slurm service" |
 | Trace | `-vvv` | Docker commands, probe retry attempts with error details |
 
 Rules:
@@ -263,7 +265,8 @@ When introducing a new command:
 6. **Logging**: info for phases, debug for operations, trace for raw commands
 7. **Errors**: wrap with `fmt.Errorf("context: %w", err)`, no error prefixes
 8. **Tests**: unit test with mock executor, integration test in lifecycle test
-9. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
+9. **MCP**: classify the command in `mcpEffects`, or list it in `mcpExcluded` (`cmd/sind/mcp.go`)
+10. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
 
 ## Testing
 
@@ -305,9 +308,9 @@ sind get munge-key [CLUSTER]
 
 All `get` subcommands accept `--output|-o {human,json}`. The default is `human` (tabular text); `json` emits a machine-readable document.
 
-NAME/CLUSTER defaults to `default` if omitted.
+NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which then lists the nodes of every cluster.
 
-`sind create cluster` validates the environment before creating, warning or failing if conflicting resources (containers, networks, volumes with matching names) already exist.
+`sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist.
 
 `sind delete cluster` is idempotent and robust:
 - Deleting a non-existent cluster is not an error
@@ -394,14 +397,14 @@ worker-0.dev            worker                 172.19.0.4    running   munge ✓
 
 ```
 $ sind get node controller.dev
-CONTAINER            ROLE         FQDN                         IP           STATUS
-sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
+CONTAINER             ROLE         FQDN                       IP           STATUS
+sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
 
 SERVICES
 NAME        STATUS
 munge       ✓
-sshd        ✓
 slurmctld   ✓
+sshd        ✓
 ```
 
 ### Host Diagnostics
@@ -438,9 +441,9 @@ sind delete worker NODES               # remove worker nodes from cluster
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--count N` | 1 | Number of nodes to add |
-| `--image IMAGE` | cluster default | Container image |
-| `--cpus N` | cluster default (1) | CPU limit per node |
-| `--memory SIZE` | cluster default (512m) | Memory limit |
+| `--image IMAGE` | the controller's image | Container image |
+| `--cpus N` | 1 | CPU limit per node |
+| `--memory SIZE` | 512m | Memory limit |
 | `--tmp-size SIZE` | 256m | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | false | Pull images before creating containers |
@@ -452,7 +455,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 Examples:
 
 ```bash
-sind create worker                           # 1 managed node with cluster defaults
+sind create worker                           # 1 managed node with default resources
 sind create worker --count 3                 # 3 managed nodes
 sind create worker --count 2 --unmanaged     # 2 unmanaged nodes (slurmd not started)
 sind create worker --cpus 2 --memory 1g      # 1 managed node with resource limits
@@ -525,7 +528,7 @@ sind get ssh-public-key                # output SSH public key
 sind get ssh-known-hosts               # output SSH known_hosts
 ```
 
-`sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@v0.9.0`, reports the module version the Go toolchain recorded (`sind 0.9.0`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
+`sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
 `sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
 
@@ -541,7 +544,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 sind mcp start                          # MCP server on stdio
 sind mcp stream [--host H] [--port P]   # MCP server over HTTP (default 127.0.0.1:8080)
 sind mcp tools                          # export the tool definitions to mcp-tools.json
-sind mcp {claude,vscode,cursor} {enable,disable}  # register sind with an editor
+sind mcp {claude,vscode,cursor} {enable,disable,list}  # register sind with an editor
 ```
 
 The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
@@ -549,7 +552,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - The server reports itself as `sind` with the version `sind version` prints.
 
 - `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces. Stopped by SIGINT or SIGTERM, it shuts down and exits 0.
-- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help.
+- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `create cluster`, `create worker`, `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `delete`, `exec`, and the other `power` actions). A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).

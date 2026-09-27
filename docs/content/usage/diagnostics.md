@@ -26,7 +26,7 @@ Checks system prerequisites and reports pass/fail for each:
 | cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-When a required check fails, `sind doctor` exits with a non-zero status and prints remediation steps. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
@@ -59,7 +59,7 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 |------|-------|---------------|
 | (none) | error | Errors only — commands are silent on success |
 | `-v` | info | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
-| `-vv` | debug | Individual operations: "waiting for node", "enabling slurmd", "creating network" |
+| `-vv` | debug | Individual operations: "waiting for node", "starting readiness probes", "enabling slurm service" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |
 
 Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.
@@ -90,7 +90,7 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:32.608 INFO slurm services enabled
 ```
 
-The `-v` flag belongs to the root command and must appear before the subcommand (e.g., `sind -v create cluster`).
+`-v` is a global flag and may come before or after the subcommand (`sind -v create cluster`, `sind create cluster -v`). `sind ssh` and `sind exec` pass their arguments through, so for them it must come first: `sind -v ssh worker-0` logs sind's steps, while `sind ssh -v worker-0` makes SSH verbose. The same holds for `--realm`.
 
 ## JSON output
 
@@ -131,9 +131,9 @@ MOUNT        SOURCE               TYPE       STATUS
 
 NODES
 NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.18.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
+controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters. The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
@@ -145,6 +145,7 @@ worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd 
 | `paused`  | All containers are paused                             |
 | `mixed`   | Containers are in different states                    |
 | `empty`   | No nodes exist                                        |
+| `unknown` | All containers are in a state sind does not map, e.g. `restarting` |
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
@@ -153,6 +154,27 @@ Nodes where sind does not manage Slurm (unmanaged workers, and every node of an 
 Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`. Unmanaged clusters show no `HA` column: sind cannot tell which of their controllers is in control.
 
 > **Tip:** Run `watch sind get cluster` for a simple live dashboard that refreshes every two seconds.
+
+## Node status
+
+```bash
+sind get node NODE[.CLUSTER]
+```
+
+Shows the health of a single node. `NODE` is a short name, optionally followed by its cluster (`worker-0.dev`); the cluster defaults to `default`. A full DNS name ending in `.sind` is rejected.
+
+```
+CONTAINER             ROLE         FQDN                       IP           STATUS
+sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
+
+SERVICES
+NAME        STATUS
+munge       ✓
+slurmctld   ✓
+sshd        ✓
+```
+
+Controllers of a backup pair get the same `HA` column as in `sind get cluster`.
 
 ## Logs
 
@@ -195,8 +217,8 @@ sind get networks
 
 ```
 NAME              DRIVER   SUBNET           GATEWAY
-sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 sind-default-net  bridge   172.19.0.0/16    172.19.0.1
+sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 ```
 
 ## List realms
@@ -207,8 +229,8 @@ sind get realms
 
 ```
 NAME   CLUSTERS
-sind   2
 ci     1
+sind   2
 ```
 
 Lists all active realms discovered from Docker container labels. Useful when working with multiple realms to see what's running.
@@ -222,8 +244,8 @@ sind get volumes
 ```
 NAME                  DRIVER
 sind-default-config   local
-sind-default-munge    local
 sind-default-data     local
+sind-default-munge    local
 sind-ssh-config       local
 ```
 
