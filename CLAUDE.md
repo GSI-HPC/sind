@@ -26,7 +26,7 @@ Personal, uncommitted instructions belong in `CLAUDE.local.md` (gitignored).
 make build                   # ./sind-<os>-<arch>
 make lint                    # golangci-lint v2 (.golangci.yml, gofmt + goimports)
 go mod download && make test # unit tests, -race, sandboxed with firejail
-make test-integration        # needs Docker and SIND_TEST_IMAGE (see ci.yml)
+make test-integration        # needs Docker; SIND_TEST_IMAGE overrides sind-node:latest
 go vet -tags integration ./... # compile-check integration tests without Docker
 make check-coverage          # go-test-coverage thresholds (.testcoverage.yml)
 make lint-docs               # markdownlint-cli2 on docs/content
@@ -36,8 +36,9 @@ goreleaser release --snapshot --clean # release binaries and checksums.txt into 
 - `make test` runs inside firejail with systemctl, docker, ssh, resolvectl and polkit
   tools blacklisted; a unit test that forgets to inject a mock fails instead of touching
   the host. Prime the module cache first because firejail breaks DNS.
-- Coverage: every file under `pkg/` and `internal/` must stay at 100%; other packages
-  50%, total 80%.
+- Coverage: every file under `pkg/` and `internal/` must stay at 100%, except the
+  os/exec wrappers `pkg/cmdexec/{exec,stream}.go` that only integration tests reach;
+  other packages 50%, total 80%.
 - Cloud sessions have no Docker daemon and may lack firejail
   (`apt-get install -y firejail`); integration tests then only run in CI.
 - If golangci-lint fails with "the Go language version ... used to build golangci-lint
@@ -77,6 +78,8 @@ docs site; `main` publishes the release docs.
 ## sind-action
 
 [GSI-HPC/sind-action](https://github.com/GSI-HPC/sind-action) drives this CLI in CI:
-`sind version --json`, `sind doctor`, `sind create cluster --config`, `sind get cluster`
-(`sind status` before v0.9.0), `sind delete cluster --all`, and `SIND_REALM`. Removing
-or renaming any of these needs a matching sind-action change.
+the release assets `sind-linux-amd64`/`sind-linux-arm64` and the `releases/latest`
+redirect, `sind version --json` (its `version` field), the root `-v` flag,
+`sind doctor`, `sind create cluster --config [--pull]`, `sind get cluster` (`sind status`
+before v0.9.0), `sind delete cluster --all`, and `SIND_REALM`. Removing or renaming any
+of these needs a matching sind-action change.
