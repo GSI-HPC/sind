@@ -516,7 +516,7 @@ sind get ssh-public-key                # output SSH public key
 sind get ssh-known-hosts               # output SSH known_hosts
 ```
 
-`sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. The `--json` flag outputs all fields as JSON.
+`sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@v0.9.0`, reports the module version the Go toolchain recorded (`sind 0.9.0`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
 `sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
 

@@ -51,6 +51,8 @@ The build version defaults to `git describe --tags --always --dirty` and can be 
 make build VERSION=v1.0.0
 ```
 
+A binary built without a version reports `dev`, except one installed with `go install github.com/GSI-HPC/sind/cmd/sind@<version>`, which reports the module version the Go toolchain recorded.
+
 ## Dependencies
 
 sind uses a minimal set of dependencies:

@@ -35,7 +35,8 @@ func newVersionCommand() *cobra.Command {
 }
 
 func runVersion(cmd *cobra.Command) error {
-	v := strings.TrimPrefix(version, "v")
+	full := resolveVersion()
+	v := strings.TrimPrefix(full, "v")
 	c := resolveCommit()
 
 	asJSON, _ := cmd.Flags().GetBool("json")
@@ -50,13 +51,44 @@ func runVersion(cmd *cobra.Command) error {
 		return enc.Encode(info)
 	}
 
-	if c != "" && !strings.Contains(version, "-g") {
+	if c != "" && !strings.Contains(full, "-g") {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "sind %s (%s)\n", v, c)
 	} else {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "sind %s\n", v)
 	}
 
 	return nil
+}
+
+// resolveVersion returns the version set at build time, or, for a binary
+// built without one, the module version the toolchain recorded.
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	bi, _ := debug.ReadBuildInfo()
+	return versionFromBuildInfo(bi)
+}
+
+// versionFromBuildInfo returns the module version of a binary built by
+// "go install github.com/GSI-HPC/sind/cmd/sind@v0.9.0", whose version the
+// checksum database vouches for, and "dev" for anything else; bi may be nil.
+//
+// A build from a checkout carries VCS stamps. The toolchain derives a
+// module version for it too, from a tag the commit carries or as a
+// pseudo-version, but a local tag is not a release, so that is ignored.
+//
+// Adapted from GSI-HPC/clusterctl internal/version.
+func versionFromBuildInfo(bi *debug.BuildInfo) string {
+	if bi == nil || bi.Main.Version == "" || bi.Main.Version == "(devel)" {
+		return "dev"
+	}
+	for _, s := range bi.Settings {
+		if s.Key == "vcs.revision" {
+			return "dev"
+		}
+	}
+	return bi.Main.Version
 }
 
 func resolveCommit() string {
