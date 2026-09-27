@@ -8,7 +8,7 @@ toc: true
 
 ## GitHub Action
 
-The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in your workflow. sind runs rootless on standard `ubuntu-latest` runners — no privileged containers or custom runner images required.
+The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in your workflow. sind runs rootless on standard GitHub-hosted Ubuntu runners, x64 (`ubuntu-latest`) and ARM64 (`ubuntu-24.04-arm`) — no privileged containers or custom runner images required.
 
 See the [sind-action documentation](https://github.com/GSI-HPC/sind-action#readme) for inputs, outputs, cluster definitions, and examples including parallel job isolation via realms.
 
@@ -23,5 +23,7 @@ chmod +x sind
 ./sind doctor
 ./sind create cluster --config cluster.yml
 ```
+
+On 64-bit ARM, download `sind-linux-arm64` instead.
 
 sind requires Docker Engine 28.0+ and a Linux host with cgroupv2 and `nsdelegate`. Most modern CI runners meet these requirements out of the box.

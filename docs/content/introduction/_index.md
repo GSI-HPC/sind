@@ -32,6 +32,10 @@ Unlike typical Docker containers that run a single application process, sind nod
 
 sind runs rootless on standard GitHub Actions runners — no privileged containers, no custom runner images. The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in a single workflow step. Use realms to isolate parallel matrix jobs on the same runner.
 
+### Multiple Slurm versions
+
+[Official node images]({{< relref "/container-images/building-images#official-images" >}}) cover the supported Slurm release lines, 26.05 and 25.11, on linux/amd64 and linux/arm64, each with a full MPI stack. Pin a release line, test against several, or bring your own image.
+
 ### Worker lifecycle
 
 Dynamically add and remove worker nodes from running clusters. Test how your workloads react to nodes joining and leaving — without touching the controller.
@@ -46,7 +50,7 @@ sind needs nothing but Docker and a container image. Install a single binary and
 
 ### AI-ready via MCP
 
-sind includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes all CLI commands as tools for AI assistants. Run `sind mcp start` to let tools like Claude, VS Code Copilot, or Cursor create clusters, check status, and manage nodes on your behalf. Register sind with your editor in one command — `sind mcp claude enable`, `sind mcp vscode enable`, or `sind mcp cursor enable`.
+sind includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes its CLI commands as tools for AI assistants. Run `sind mcp start` to let tools like Claude, VS Code Copilot, or Cursor create clusters, check status, and manage nodes on your behalf. Register sind with your editor in one command — `sind mcp claude enable`, `sind mcp vscode enable`, or `sind mcp cursor enable`.
 
 ## Next steps
 
