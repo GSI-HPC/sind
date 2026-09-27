@@ -30,21 +30,21 @@ func TestKnownHostLifecycle(t *testing.T) {
 
 	if !rec.IsIntegration() {
 		// EnsureMesh
-		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // network exists → no
-		rec.AddResult("net-id\n", "", nil)                  // create network
-		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // DNS exists → no
-		rec.AddResult("dns-id\n", "", nil)                  // create DNS
-		rec.AddResult("", "", nil)                          // copy Corefile
-		rec.AddResult("sind-dns\n", "", nil)                // start DNS
-		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // SSH vol exists → no
-		rec.AddResult("sind-ssh-config\n", "", nil)         // create SSH vol
-		rec.AddResult("keygen-id\n", "", nil)               // create keygen container
-		rec.AddResult("", "", nil)                          // copy keygen script
-		rec.AddResult("", "", nil)                          // remove keygen container
-		rec.AddResult("", "Error\n", testutil.ExitCode1(t)) // SSH exists → no
-		rec.AddResult(dnsInspectJSON(), "", nil)            // inspect DNS for IP
-		rec.AddResult("ssh-id\n", "", nil)                  // create SSH
-		rec.AddResult("sind-ssh\n", "", nil)                // start SSH
+		rec.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))      // network exists → no
+		rec.AddResult("net-id\n", "", nil)                                                 // create network
+		rec.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))     // DNS exists → no
+		rec.AddResult("dns-id\n", "", nil)                                                 // create DNS
+		rec.AddResult("", "", nil)                                                         // copy Corefile
+		rec.AddResult("sind-dns\n", "", nil)                                               // start DNS
+		rec.AddResult("", testutil.NoSuchVolume("sind-ssh-config"), testutil.ExitCode1(t)) // SSH vol exists → no
+		rec.AddResult("sind-ssh-config\n", "", nil)                                        // create SSH vol
+		rec.AddResult("keygen-id\n", "", nil)                                              // create keygen container
+		rec.AddResult("", "", nil)                                                         // copy keygen script
+		rec.AddResult("", "", nil)                                                         // remove keygen container
+		rec.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))     // SSH exists → no
+		rec.AddResult(dnsInspectJSON(), "", nil)                                           // inspect DNS for IP
+		rec.AddResult("ssh-id\n", "", nil)                                                 // create SSH
+		rec.AddResult("sind-ssh\n", "", nil)                                               // start SSH
 
 		// AddKnownHost "a"
 		rec.AddResult("", "", nil)
@@ -774,7 +774,7 @@ func TestGetSSHKnownHosts_Error(t *testing.T) {
 // of leaking the raw docker exec failure.
 func TestGetSSHPrivateKey_NoMesh(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), &exec.ExitError{ProcessState: exitCode1(t)})
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -786,7 +786,7 @@ func TestGetSSHPrivateKey_NoMesh(t *testing.T) {
 
 func TestGetSSHPublicKey_NoMesh(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), &exec.ExitError{ProcessState: exitCode1(t)})
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -797,7 +797,7 @@ func TestGetSSHPublicKey_NoMesh(t *testing.T) {
 
 func TestGetSSHKnownHosts_NoMesh(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), &exec.ExitError{ProcessState: exitCode1(t)})
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 

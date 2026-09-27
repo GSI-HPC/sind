@@ -58,8 +58,12 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	for clusterName, shortNames := range groupByCluster(targets) {
-		if err := fn(ctx, client, realmFromFlag(cmd), clusterName, shortNames); err != nil {
+		if err := fn(ctx, client, realm, clusterName, shortNames); err != nil {
 			return err
 		}
 	}

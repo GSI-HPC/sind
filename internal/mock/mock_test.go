@@ -5,9 +5,11 @@ package mock
 import (
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -225,4 +227,29 @@ func TestRecordingExecutor_Start(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, proc)
 	_ = proc.Close()
+}
+
+// TestExecutor_ExitErrorShape checks that a queued *exec.ExitError comes back
+// the way the real executor returns it: as a *cmdexec.ExitError carrying the
+// result's stderr, in both dispatch modes.
+func TestExecutor_ExitErrorShape(t *testing.T) {
+	runErr := exec.Command("sh", "-c", "exit 1").Run()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, runErr, &exitErr)
+	const stderr = "Error response from daemon: No such container: x\n"
+
+	var fifo Executor
+	fifo.AddResult("", stderr, exitErr)
+	var onCall Executor
+	onCall.OnCall = func([]string, string) Result { return Result{Stderr: stderr, Err: exitErr} }
+
+	for name, m := range map[string]*Executor{"fifo": &fifo, "OnCall": &onCall} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := m.Run(t.Context(), "docker", "inspect", "x")
+			var got *cmdexec.ExitError
+			require.ErrorAs(t, err, &got)
+			assert.Equal(t, stderr, got.Stderr)
+			assert.Equal(t, 1, got.ExitCode())
+		})
+	}
 }

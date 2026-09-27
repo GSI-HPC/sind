@@ -126,7 +126,7 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("node %s not ready: %w", name, lastErr)
+			return waitEnded(ctx, name, lastErr)
 		case <-ticker.C:
 		}
 	}
@@ -169,7 +169,7 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 		for {
 			select {
 			case <-ctx.Done():
-				return fmt.Errorf("node %s not ready: %w", name, lastErr)
+				return waitEnded(ctx, name, lastErr)
 			case <-ticker.C:
 			case ev := <-events:
 				if ev.Kind == monitor.EventContainerDie && ev.Container == name {
@@ -184,6 +184,17 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 			break
 		}
 	}
+}
+
+// waitEnded is the error of a readiness wait that its context ended: an
+// interrupt or a timeout, not a failed node. It wraps ctx.Err() so callers
+// can tell the two apart with errors.Is, and keeps the last probe failure,
+// if there was one, to say what the node was still waiting for.
+func waitEnded(ctx context.Context, name docker.ContainerName, lastErr error) error {
+	if lastErr == nil {
+		return fmt.Errorf("node %s not ready: %w", name, ctx.Err())
+	}
+	return fmt.Errorf("node %s not ready: %w; last probe error: %w", name, ctx.Err(), lastErr)
 }
 
 // ContainerRunning verifies that the container is in the "running" state.

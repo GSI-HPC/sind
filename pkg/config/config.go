@@ -303,6 +303,15 @@ func mergeStringSlices(base, overlay []string) []string {
 // Validate checks that the cluster configuration satisfies all constraints.
 // It should be called after ApplyDefaults.
 func (c *Cluster) Validate() error {
+	if err := CheckName("cluster", c.Name); err != nil {
+		return err
+	}
+	if c.Realm != "" {
+		if err := CheckName("realm", c.Realm); err != nil {
+			return err
+		}
+	}
+
 	var controllers, submitters, workers int
 	for _, n := range c.Nodes {
 		switch n.Role {

@@ -5,9 +5,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -75,22 +77,31 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 // resolveRealm determines the realm with the following precedence:
 //
 //	--realm flag > config file > SIND_REALM env var > mesh.DefaultRealm
-func resolveRealm(cmd *cobra.Command, configRealm string) string {
+//
+// The realm that wins must be a valid name (config.CheckName); a config
+// file's realm has already been checked by config.Validate.
+func resolveRealm(cmd *cobra.Command, configRealm string) (string, error) {
 	if cmd.Root().Flags().Changed("realm") {
 		r, _ := cmd.Root().Flags().GetString("realm")
-		return r
+		if err := config.CheckName("realm", r); err != nil {
+			return "", fmt.Errorf("--realm: %w", err)
+		}
+		return r, nil
 	}
 	if configRealm != "" {
-		return configRealm
+		return configRealm, nil
 	}
 	if env := os.Getenv("SIND_REALM"); env != "" {
-		return env
+		if err := config.CheckName("realm", env); err != nil {
+			return "", fmt.Errorf("SIND_REALM: %w", err)
+		}
+		return env, nil
 	}
-	return mesh.DefaultRealm
+	return mesh.DefaultRealm, nil
 }
 
 // realmFromFlag resolves the realm when no config is available.
 // Precedence: --realm flag > SIND_REALM env var > mesh.DefaultRealm
-func realmFromFlag(cmd *cobra.Command) string {
+func realmFromFlag(cmd *cobra.Command) (string, error) {
 	return resolveRealm(cmd, "")
 }

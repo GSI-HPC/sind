@@ -92,3 +92,21 @@ func ExitCode1(t *testing.T) *exec.ExitError {
 	require.ErrorAs(t, err, &exitErr)
 	return exitErr
 }
+
+// NoSuchContainer returns what docker writes to stderr, with exit code 1,
+// for a container that does not exist. Paired with ExitCode1 in a mock
+// result, it gives the error the real executor returns, which
+// docker.IsNotFound recognises.
+func NoSuchContainer(name string) string {
+	return "Error response from daemon: No such container: " + name + "\n"
+}
+
+// NoSuchNetwork is NoSuchContainer for a network.
+func NoSuchNetwork(name string) string {
+	return "Error response from daemon: network " + name + " not found\n"
+}
+
+// NoSuchVolume is NoSuchContainer for a volume.
+func NoSuchVolume(name string) string {
+	return "Error response from daemon: get " + name + ": no such volume\n"
+}

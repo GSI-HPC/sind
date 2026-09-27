@@ -37,6 +37,8 @@ sind supports Slurm-style nodeset notation for specifying multiple nodes:
 
 Zero-padding is preserved: `worker-[00-03]` produces `worker-00` through `worker-03`.
 
+A pattern may expand to at most 1,048,576 (2^20) names, and no expanded name may begin with `-`. sind rejects a pattern that breaks either rule before it acts on any node.
+
 ## Multiple nodes
 
 Comma-separate multiple nodesets:

@@ -1,0 +1,283 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/njayp/ophis"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestMCPStream_ListensOnLocalhost(t *testing.T) {
+	stream, _, err := NewRootCommand().Find([]string{"mcp", "stream"})
+	require.NoError(t, err)
+
+	host := stream.Flags().Lookup("host")
+	require.NotNil(t, host)
+	assert.Equal(t, "127.0.0.1", host.DefValue)
+	assert.Equal(t, "127.0.0.1", host.Value.String())
+	assert.Equal(t, "8080", stream.Flags().Lookup("port").DefValue)
+}
+
+// mcpTool is the part of an exported MCP tool definition the tests look at.
+type mcpTool struct {
+	Name        string `json:"name"`
+	InputSchema struct {
+		Properties struct {
+			Flags struct {
+				Properties map[string]json.RawMessage `json:"properties"`
+			} `json:"flags"`
+		} `json:"properties"`
+	} `json:"inputSchema"`
+	Annotations map[string]any `json:"annotations"`
+}
+
+// exportMCPTools runs `sind mcp tools` in a temporary directory and returns
+// the tools it exported, by name.
+func exportMCPTools(t *testing.T) map[string]mcpTool {
+	t.Helper()
+	t.Chdir(t.TempDir())
+	_, _, err := executeCommand("mcp", "tools")
+	require.NoError(t, err)
+	data, err := os.ReadFile("mcp-tools.json")
+	require.NoError(t, err)
+	var list []mcpTool
+	require.NoError(t, json.Unmarshal(data, &list))
+	tools := make(map[string]mcpTool, len(list))
+	for _, tool := range list {
+		tools[tool.Name] = tool
+	}
+	return tools
+}
+
+func TestMCPTools_Set(t *testing.T) {
+	tools := exportMCPTools(t)
+	names := make([]string, 0, len(tools))
+	for name := range tools {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	assert.Equal(t, []string{
+		"sind_create_cluster",
+		"sind_create_worker",
+		"sind_delete_cluster",
+		"sind_delete_worker",
+		"sind_doctor",
+		"sind_exec",
+		"sind_get_cluster",
+		"sind_get_clusters",
+		"sind_get_dns",
+		"sind_get_mesh",
+		"sind_get_networks",
+		"sind_get_node",
+		"sind_get_nodes",
+		"sind_get_realms",
+		"sind_get_ssh-config",
+		"sind_get_ssh-known-hosts",
+		"sind_get_ssh-public-key",
+		"sind_get_volumes",
+		"sind_logs",
+		"sind_power_cut",
+		"sind_power_cycle",
+		"sind_power_freeze",
+		"sind_power_on",
+		"sind_power_reboot",
+		"sind_power_shutdown",
+		"sind_power_unfreeze",
+		"sind_version",
+	}, names)
+}
+
+func TestMCPExcluded_NamesExistingCommands(t *testing.T) {
+	root := NewRootCommand()
+	for path := range mcpExcluded {
+		cmd, rest, err := root.Find(strings.Fields(path))
+		require.NoError(t, err, path)
+		assert.Empty(t, rest, path)
+		assert.Equal(t, path, commandPath(cmd))
+	}
+}
+
+func TestMCPTools_Flags(t *testing.T) {
+	tools := exportMCPTools(t)
+	for name, tool := range tools {
+		flags := tool.InputSchema.Properties.Flags.Properties
+		assert.NotContains(t, flags, "verbose", name)
+		assert.NotContains(t, flags, "follow", name)
+		assert.Contains(t, flags, "realm", name)
+	}
+	assert.Contains(t, tools["sind_create_cluster"].InputSchema.Properties.Flags.Properties, "config")
+}
+
+func TestMCPTools_GetHasNoOutputFlag(t *testing.T) {
+	tools := exportMCPTools(t)
+	var get int
+	for name, tool := range tools {
+		if strings.HasPrefix(name, "sind_get_") {
+			get++
+			assert.NotContains(t, tool.InputSchema.Properties.Flags.Properties, "output", name)
+		}
+	}
+	assert.Equal(t, 12, get)
+}
+
+func TestForceJSONOutput(t *testing.T) {
+	in := ophis.ToolInput{Flags: map[string]any{"output": "human", "realm": "ci-42"}, Args: []string{"dev"}}
+	var got ophis.ToolInput
+	next := func(_ context.Context, _ *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		got = in
+		return nil, ophis.ToolOutput{}, nil
+	}
+
+	_, _, err := forceJSONOutput(t.Context(), &mcp.CallToolRequest{}, in, next)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"output": "json", "realm": "ci-42"}, got.Flags)
+	assert.Equal(t, []string{"dev"}, got.Args)
+	assert.Equal(t, "human", in.Flags["output"], "the caller's map is not modified")
+
+	_, _, err = forceJSONOutput(t.Context(), &mcp.CallToolRequest{}, ophis.ToolInput{}, next)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"output": "json"}, got.Flags)
+}
+
+// TestMCPTools_Hints checks that every tool says whether it is read-only
+// and, if not, whether it is destructive. A new command has to be added to
+// mcpEffects.
+func TestMCPTools_Hints(t *testing.T) {
+	tools := exportMCPTools(t)
+	for name, tool := range tools {
+		// go-sdk leaves readOnlyHint out when it is false, but always
+		// writes destructiveHint when it is set.
+		readOnly := tool.Annotations["readOnlyHint"] == true
+		_, hasDestructive := tool.Annotations["destructiveHint"]
+		assert.True(t, readOnly != hasDestructive,
+			"%s must be read-only or say whether it is destructive; add it to mcpEffects", name)
+	}
+	assert.Equal(t, true, tools["sind_get_nodes"].Annotations["readOnlyHint"])
+	assert.Equal(t, false, tools["sind_create_cluster"].Annotations["destructiveHint"])
+	assert.Equal(t, true, tools["sind_delete_cluster"].Annotations["destructiveHint"])
+	assert.Equal(t, true, tools["sind_exec"].Annotations["destructiveHint"])
+}
+
+func TestMCPEffects_NameTools(t *testing.T) {
+	root := NewRootCommand()
+	for path := range mcpEffects {
+		cmd, rest, err := root.Find(strings.Fields(path))
+		require.NoError(t, err, path)
+		assert.Empty(t, rest, path)
+		assert.True(t, isMCPTool(cmd), "%s is not an MCP tool", path)
+	}
+}
+
+// TestMCPServer_VersionAndTools runs `sind mcp start` over an in-memory
+// transport and checks what a client sees: sind's version and the tools
+// with their hints.
+func TestMCPServer_VersionAndTools(t *testing.T) {
+	setVersion(t, "v1.2.3", "")
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	cfg := mcpConfig()
+	cfg.Transport = serverTransport
+
+	root := NewRootCommand()
+	old, _, err := root.Find([]string{"mcp"})
+	require.NoError(t, err)
+	root.RemoveCommand(old)
+	root.AddCommand(newMCPCommand(cfg))
+	root.SetArgs([]string{"mcp", "start"})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	served := make(chan error, 1)
+	go func() { served <- root.ExecuteContext(ctx) }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+
+	info := session.InitializeResult().ServerInfo
+	assert.Equal(t, "sind", info.Name)
+	assert.Equal(t, "1.2.3", info.Version)
+	assert.Empty(t, root.Flags().Lookup("version"), "the root has no --version flag")
+
+	tools, err := session.ListTools(ctx, nil)
+	require.NoError(t, err)
+	assert.Len(t, tools.Tools, 27)
+	for _, tool := range tools.Tools {
+		require.NotNil(t, tool.Annotations, tool.Name)
+	}
+
+	require.NoError(t, session.Close())
+	cancel()
+	<-served
+}
+
+func TestRefuseFlagArgs(t *testing.T) {
+	var called ophis.ToolInput
+	run := func(_ context.Context, _ *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		called = in
+		return nil, ophis.ToolOutput{}, nil
+	}
+	call := func(mw ophis.MiddlewareFunc, tool string, args ...string) error {
+		called = ophis.ToolInput{}
+		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tool}}
+		_, _, err := mw(t.Context(), req, ophis.ToolInput{Args: args}, run)
+		return err
+	}
+
+	plain := refuseFlagArgs(nil)
+	require.NoError(t, call(plain, "sind_get_node", "worker-0.dev"))
+	assert.Equal(t, []string{"worker-0.dev"}, called.Args)
+	for _, args := range [][]string{{"-v"}, {"worker-0", "--follow"}, {"--", "-x"}} {
+		err := call(plain, "sind_logs", args...)
+		require.Error(t, err, args)
+		assert.Contains(t, err.Error(), "is a flag")
+	}
+
+	// exec's command after "--" may hold flags; its own arguments may not.
+	require.NoError(t, call(plain, "sind_exec", "dev", "--", "ls", "-la"))
+	require.Error(t, call(plain, "sind_exec", "-v", "dev", "--", "ls"))
+	require.Error(t, call(plain, "sind_logs", "controller", "--", "-f"))
+
+	// A -o in the arguments cannot override the forced JSON output.
+	withJSON := refuseFlagArgs(forceJSONOutput)
+	require.Error(t, call(withJSON, "sind_get_nodes", "-o", "human"))
+	require.NoError(t, call(withJSON, "sind_get_nodes", "dev"))
+	assert.Equal(t, map[string]any{"output": "json"}, called.Flags)
+}
+
+// TestMCPStream_StopsCleanly checks that a stream stopped through its
+// context, as an interrupt stops it, ends without an error.
+func TestMCPStream_StopsCleanly(t *testing.T) {
+	root := NewRootCommand()
+	root.SetArgs([]string{"mcp", "stream", "--port", "0"})
+	root.SetOut(io.Discard)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- root.ExecuteContext(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the stream did not stop")
+	}
+}
+
+func TestStopCleanly_KeepsOtherErrors(t *testing.T) {
+	cmd := &cobra.Command{RunE: func(*cobra.Command, []string) error { return errors.New("listen tcp: address in use") }}
+	stopCleanly(cmd)
+	assert.EqualError(t, cmd.RunE(cmd, nil), "listen tcp: address in use")
+}

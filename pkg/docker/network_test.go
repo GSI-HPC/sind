@@ -23,16 +23,16 @@ func TestNetworkLifecycle(t *testing.T) {
 	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("6f02052f\n", "", nil)                                                       // create
-		rec.AddResult("[{}]\n", "", nil)                                                           // exists → true
-		rec.AddResult(n+"\n", "", nil)                                                             // remove
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})                  // exists → false
-		rec.AddResult("6f02052f\n", "", nil)                                                       // re-create
-		rec.AddResult(`{"Name":"`+n+`","Driver":"bridge","ID":"x","Scope":"local"}`+"\n", "", nil) // list
-		rec.AddResult("", "Error: network already exists\n", fmt.Errorf("exit status 1"))          // create duplicate (error)
-		rec.AddResult("", "", nil)                                                                 // list no matches (empty)
-		rec.AddResult(n+"\n", "", nil)                                                             // remove (ok)
-		rec.AddResult("", "Error: No such network\n", fmt.Errorf("exit status 1"))                 // remove again (error)
+		rec.AddResult("6f02052f\n", "", nil)                                                                                    // create
+		rec.AddResult("[{}]\n", "", nil)                                                                                        // exists → true
+		rec.AddResult(n+"\n", "", nil)                                                                                          // remove
+		rec.AddResult("", "Error response from daemon: network "+n+" not found\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists → false
+		rec.AddResult("6f02052f\n", "", nil)                                                                                    // re-create
+		rec.AddResult(`{"Name":"`+n+`","Driver":"bridge","ID":"x","Scope":"local"}`+"\n", "", nil)                              // list
+		rec.AddResult("", "Error: network already exists\n", fmt.Errorf("exit status 1"))                                       // create duplicate (error)
+		rec.AddResult("", "", nil)                                                                                              // list no matches (empty)
+		rec.AddResult(n+"\n", "", nil)                                                                                          // remove (ok)
+		rec.AddResult("", "Error: No such network\n", fmt.Errorf("exit status 1"))                                              // remove again (error)
 	}
 	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
 

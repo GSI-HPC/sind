@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"runtime/debug"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,4 +81,59 @@ func TestVersionCommand_JSONOutput_NoCommit(t *testing.T) {
 func TestVersionCommand_ExtraArgs(t *testing.T) {
 	_, _, err := executeCommand("version", "extra")
 	assert.Error(t, err)
+}
+
+func TestResolveVersion_LdflagsWin(t *testing.T) {
+	setVersion(t, "v1.2.3", "")
+
+	assert.Equal(t, "v1.2.3", resolveVersion())
+}
+
+func TestResolveVersion_TestBinaryIsDev(t *testing.T) {
+	setVersion(t, "dev", "")
+
+	// A test binary reports "(devel)" or no main module version.
+	assert.Equal(t, "dev", resolveVersion())
+}
+
+func TestVersionFromBuildInfo(t *testing.T) {
+	tests := []struct {
+		name string
+		bi   *debug.BuildInfo
+		want string
+	}{
+		{"no build info", nil, "dev"},
+		{"no module version", &debug.BuildInfo{}, "dev"},
+		{"devel", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, "dev"},
+		{"go install @version", &debug.BuildInfo{Main: debug.Module{Version: "v0.9.0"}}, "v0.9.0"},
+		{
+			"go install @version with build settings",
+			&debug.BuildInfo{
+				Main:     debug.Module{Version: "v0.9.0"},
+				Settings: []debug.BuildSetting{{Key: "CGO_ENABLED", Value: "0"}},
+			},
+			"v0.9.0",
+		},
+		{
+			"checkout carrying a tag",
+			&debug.BuildInfo{
+				Main:     debug.Module{Version: "v0.9.0"},
+				Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "abc1234def"}},
+			},
+			"dev",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, versionFromBuildInfo(tt.bi))
+		})
+	}
+}
+
+func TestVersionCommand_ModuleVersion(t *testing.T) {
+	setVersion(t, "v0.9.0-0.20260927120000-abcdef123456", "")
+
+	stdout, _, err := executeCommand("version")
+	require.NoError(t, err)
+	assert.Equal(t, "sind 0.9.0-0.20260927120000-abcdef123456\n", stdout)
 }

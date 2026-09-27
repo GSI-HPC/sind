@@ -40,11 +40,15 @@ func runLogs(cmd *cobra.Command, args []string, follow bool) error {
 	}
 
 	node := targets[0]
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
 	var dockerArgs []string
 	if len(args) == 2 {
-		dockerArgs = cluster.ServiceLogArgs(realmFromFlag(cmd), node.ShortName, node.Cluster, args[1], follow)
+		dockerArgs = cluster.ServiceLogArgs(realm, node.ShortName, node.Cluster, args[1], follow)
 	} else {
-		dockerArgs = cluster.ContainerLogArgs(realmFromFlag(cmd), node.ShortName, node.Cluster, follow)
+		dockerArgs = cluster.ContainerLogArgs(realm, node.ShortName, node.Cluster, follow)
 	}
 
 	return dockerExec(cmd, dockerArgs)

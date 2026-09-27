@@ -13,6 +13,12 @@ import (
 	"strings"
 )
 
+// maxNames caps how many node names a pattern may expand to, so that a
+// pattern such as "worker-[0-99999999]" is refused before its names are
+// allocated. It matches the cap of GSI-HPC/clusterctl's nodeset. A variable
+// only so that tests can lower it.
+var maxNames = 1 << 20
+
 // Expand expands a nodeset pattern into a list of individual node names.
 // Patterns can include:
 //   - Simple names: "worker-0" → ["worker-0"]
@@ -21,6 +27,10 @@ import (
 //   - Padded ranges: "node-[00-03]" → ["node-00", "node-01", "node-02", "node-03"]
 //   - Lists: "node-[0,2,5]" → ["node-0", "node-2", "node-5"]
 //   - Mixed: "node-[0-2,5]" → ["node-0", "node-1", "node-2", "node-5"]
+//
+// A pattern that expands to more than 2^20 names, or to a name that
+// begins with "-", which a command it is passed to could read as an option,
+// is an error.
 func Expand(pattern string) ([]string, error) {
 	if pattern == "" {
 		return nil, fmt.Errorf("empty pattern")
@@ -36,12 +46,18 @@ func Expand(pattern string) ([]string, error) {
 			return nil, err
 		}
 		result = append(result, expanded...)
+		if len(result) > maxNames {
+			return nil, fmt.Errorf("%q expands to more than %d names", pattern, maxNames)
+		}
 	}
 
 	// Deduplicate preserving first occurrence
 	seen := make(map[string]struct{}, len(result))
 	deduped := make([]string, 0, len(result))
 	for _, s := range result {
+		if strings.HasPrefix(s, "-") {
+			return nil, fmt.Errorf("invalid node name %q: begins with \"-\"", s)
+		}
 		if _, ok := seen[s]; !ok {
 			seen[s] = struct{}{}
 			deduped = append(deduped, s)
@@ -144,6 +160,9 @@ func expandBracket(content string) ([]string, error) {
 			return nil, err
 		}
 		result = append(result, expanded...)
+		if len(result) > maxNames {
+			return nil, fmt.Errorf("more than %d names", maxNames)
+		}
 	}
 	return result, nil
 }
@@ -173,6 +192,9 @@ func expandRange(startStr, endStr string) ([]string, error) {
 
 	if start > end {
 		return nil, fmt.Errorf("invalid range: start %d > end %d", start, end)
+	}
+	if end-start >= maxNames {
+		return nil, fmt.Errorf("range %d-%d has more than %d names", start, end, maxNames)
 	}
 
 	// Determine padding width from the start string

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestVolumeLifecycle(t *testing.T) {
 		rec.AddResult(`{"Name":"`+n+`","Driver":"local","Mountpoint":"/var/lib/docker/volumes/`+n+`/_data","Scope":"local"}`+"\n", "", nil) // list
 		rec.AddResult("", "", nil)                                                                                                          // list no matches
 		rec.AddResult(n+"\n", "", nil)                                                                                                      // remove (ok)
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)})                                                           // exists → false
+		rec.AddResult("", "Error response from daemon: get "+n+": no such volume\n", &exec.ExitError{ProcessState: exitCode1(t)})           // exists → false
 		rec.AddResult("", "Error: No such volume\n", fmt.Errorf("exit status 1"))                                                           // remove again (error)
 	}
 	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), name) })
@@ -78,6 +79,12 @@ func TestIsVolumeInUse(t *testing.T) {
 		{"nil", nil, false},
 		{"daemon says in use", fmt.Errorf("Error response from daemon: remove sind-dev-config: volume is in use - [abc123]"), true},
 		{"unrelated error", fmt.Errorf("Error: No such volume: sind-dev-config"), false},
+		{
+			"real executor error",
+			cmdexec.WrapExitError(&exec.ExitError{ProcessState: exitCode1(t)},
+				"Error response from daemon: remove sind-dev-config: volume is in use - [abc123]\n"),
+			true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

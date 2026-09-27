@@ -68,6 +68,13 @@ func TestUnknownSubcommand(t *testing.T) {
 		{[]string{"delete", "bogus"}, `unknown command "bogus" for "sind delete"`},
 		{[]string{"power", "bogus"}, `unknown command "bogus" for "sind power"`},
 		{[]string{"mcp", "claude", "bogus"}, `unknown command "bogus" for "sind mcp claude"`},
+		{[]string{"completion", "fish-typo"}, `unknown command "fish-typo" for "sind completion"`},
+		{[]string{"completion", "zshh"}, `unknown command "zshh" for "sind completion" (did you mean "zsh"?)`},
+		{[]string{"help", "bogus"}, `unknown help topic "bogus": unknown command "bogus" for "sind" (did you mean "logs"?)`},
+		{[]string{"help", "crate"}, `unknown help topic "crate": unknown command "crate" for "sind" (did you mean "create"?)`},
+		{[]string{"help", "get", "bogus"}, `unknown help topic "get bogus": unknown command "bogus" for "sind get"`},
+		{[]string{"help", "get", "clustr"}, `unknown help topic "get clustr": unknown command "clustr" for "sind get" (did you mean "cluster"?)`},
+		{[]string{"help", "version", "extra"}, `unknown help topic "version extra": unknown command "extra" for "sind version"`},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
@@ -78,8 +85,26 @@ func TestUnknownSubcommand(t *testing.T) {
 	}
 }
 
+// TestHelpTopic verifies that help still prints the help of every command
+// it names in full.
+func TestHelpTopic(t *testing.T) {
+	for _, args := range [][]string{
+		{"help"},
+		{"help", "get"},
+		{"help", "get", "cluster"},
+		{"help", "completion", "bash"},
+		{"help", "help"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(args...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "Usage:")
+		})
+	}
+}
+
 func TestCommandGroup_NoArgsPrintsHelp(t *testing.T) {
-	for _, group := range []string{"get", "create", "delete", "power", "mcp"} {
+	for _, group := range []string{"get", "create", "delete", "power", "mcp", "completion"} {
 		t.Run(group, func(t *testing.T) {
 			stdout, _, err := executeCommand(group)
 			require.NoError(t, err)

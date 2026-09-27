@@ -33,6 +33,32 @@ func TestSindStateDir_XDGFallback(t *testing.T) {
 	assert.Equal(t, "/home/user/.local/state/sind/sind", dir)
 }
 
+func TestSindStateDir_RelativeXDGIgnored(t *testing.T) {
+	for _, xdg := range []string{"state", "./state", "../state"} {
+		t.Run(xdg, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", xdg)
+			t.Setenv("HOME", "/home/user")
+			dir, err := sindStateDir("sind")
+			require.NoError(t, err)
+			assert.Equal(t, "/home/user/.local/state/sind/sind", dir)
+		})
+	}
+}
+
+func TestSindStateDir_NoHome(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "")
+	_, err := sindStateDir("sind")
+	require.Error(t, err)
+}
+
+func TestSindStateDir_RelativeHome(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "state")
+	t.Setenv("HOME", "home")
+	_, err := sindStateDir("sind")
+	require.EqualError(t, err, "HOME is not an absolute path and XDG_STATE_HOME is not set to one")
+}
+
 func TestSindStateDir_CustomRealm(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "/custom/state")
 	dir, err := sindStateDir("ci-42")

@@ -171,6 +171,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
 - Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits non-zero); `NewRootCommand` applies this to every group, including ones added later
+- cobra's built-in `help` and `completion` commands follow the same rule: `sind completion fish-typo` fails like any group, and `sind help TOPIC` fails unless TOPIC names a command in full (`sind help bogus`, `sind help get bogus`)
 
 ### Argument Conventions
 
@@ -209,10 +210,16 @@ Rules:
 Rules:
 - Mutations are silent — `exit 0` is the confirmation; use `-v` for progress
 - Errors are always visible (slog error level is always enabled, even without `-v`)
+- The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗) only in `get cluster` and `doctor` output
 - All `get` subcommands accept `--output|-o {human,json}`; default is `human`
+
+Exit status and signals:
+- `0` on success, `1` on failure, `130` when SIGINT or SIGTERM interrupted the command
+- The first SIGINT or SIGTERM cancels the command's context; deferred cleanup (e.g. the rollback of a failed `create cluster`) still runs under `context.WithoutCancel`
+- The signal handler is removed before the context is cancelled, so a second signal gets the default action and ends sind at once, even during a hung cleanup
 
 ### Logging Conventions
 
@@ -516,7 +523,7 @@ sind get ssh-public-key                # output SSH public key
 sind get ssh-known-hosts               # output SSH known_hosts
 ```
 
-`sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. The `--json` flag outputs all fields as JSON.
+`sind version` prints version, commit, Go version, and platform. For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@v0.9.0`, reports the module version the Go toolchain recorded (`sind 0.9.0`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
 `sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
 
@@ -525,6 +532,26 @@ sind get ssh-known-hosts               # output SSH known_hosts
 `sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. Useful for external consumers that need to connect to sind networks.
 
 `sind get ssh-private-key`, `sind get ssh-public-key`, and `sind get ssh-known-hosts` dump SSH credentials to stdout. This replaces the need to extract files from Docker volumes.
+
+### MCP Server
+
+```bash
+sind mcp start                          # MCP server on stdio
+sind mcp stream [--host H] [--port P]   # MCP server over HTTP (default 127.0.0.1:8080)
+sind mcp tools                          # export the tool definitions to mcp-tools.json
+sind mcp {claude,vscode,cursor} {enable,disable}  # register sind with an editor
+```
+
+The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
+
+- The server reports itself as `sind` with the version `sind version` prints.
+
+- `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces. Stopped by SIGINT or SIGTERM, it shuts down and exits 0.
+- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help.
+- Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `create cluster`, `create worker`, `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `delete`, `exec`, and the other `power` actions). A new command has to be classified there; a unit test fails otherwise.
+- Tools for commands with `-o` (every `get` subcommand) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
+- Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).
+- A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
 
 ## Node Arguments
 
@@ -556,6 +583,8 @@ Multiple nodesets can be comma-separated:
 sind power shutdown controller,worker-[0-3]
 sind power cycle worker-[0-1].dev,worker-[0-3].default
 ```
+
+A pattern expands to at most 2^20 names, matching clusterctl's nodeset, so a pattern such as `worker-[0-99999999]` is rejected before any name is allocated. An expanded name that begins with `-` is rejected, since a command it is passed to could read it as an option.
 
 ### Examples
 
@@ -753,6 +782,17 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `count` - only valid for worker role
 - `managed` - only valid for controller and worker roles; with `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
+- `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
+
+### Cluster and Realm Names
+
+Cluster and realm names become part of Docker resource names, of DNS names (`<node>.<cluster>.<realm>.sind`) and of state paths (`$XDG_STATE_HOME/sind/<realm>/`), so each must be one DNS label as RFC 1123 defines it:
+
+- lowercase ASCII letters, digits and `-` only; uppercase is rejected, because DNS ignores case and `Dev` and `dev` would share DNS names
+- 1 to 63 characters
+- not beginning or ending with `-`
+
+sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
 
 ### Backup Controller
 
@@ -1006,7 +1046,7 @@ sind ssh -L 8080:localhost:80 controller     # port forwarding
 
 #### User SSH Client Integration
 
-sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`) for integration with the user's SSH client:
+sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`; a relative `XDG_STATE_HOME` is ignored, as the XDG Base Directory specification requires) for integration with the user's SSH client:
 
 | File | Description |
 |------|-------------|

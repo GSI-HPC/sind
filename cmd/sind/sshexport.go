@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -40,12 +41,18 @@ func syncSSHExport(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 
 // sindStateDir returns the per-realm SSH export directory path.
 // Uses $XDG_STATE_HOME/sind/<realm>, falling back to ~/.local/state/sind/<realm>.
+// A relative XDG_STATE_HOME is ignored, as the XDG Base Directory
+// specification requires; the state would otherwise move with the working
+// directory. Adapted from GSI-HPC/clusterctl internal/config/paths.go.
 func sindStateDir(realm string) (string, error) {
 	base := os.Getenv("XDG_STATE_HOME")
-	if base == "" {
+	if !filepath.IsAbs(base) {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
+		}
+		if !filepath.IsAbs(home) {
+			return "", fmt.Errorf("HOME is not an absolute path and XDG_STATE_HOME is not set to one")
 		}
 		base = filepath.Join(home, ".local", "state")
 	}
