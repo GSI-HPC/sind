@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -43,7 +44,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ssh requires exactly one node, got %d", len(target))
 	}
 
-	isTTY := stdinIsTTY()
+	isTTY := stdinIsTTY(cmd.InOrStdin())
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err
@@ -84,7 +85,7 @@ func runEnter(cmd *cobra.Command, clusterName string) error {
 	}
 
 	containerName := cluster.ContainerName(realm, clusterName, target)
-	isTTY := stdinIsTTY()
+	isTTY := stdinIsTTY(cmd.InOrStdin())
 	dockerArgs := cluster.BuildContainerExecArgs(containerName, isTTY, nil)
 
 	return dockerExec(cmd, dockerArgs)
@@ -128,8 +129,14 @@ func runExec(cmd *cobra.Command, args []string) error {
 	return dockerExec(cmd, dockerArgs)
 }
 
-func stdinIsTTY() bool {
-	return isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+// stdinIsTTY reports whether stdin, the command's input, is a terminal. A
+// reader that is not a file, as set with cmd.SetIn, is not.
+func stdinIsTTY(stdin io.Reader) bool {
+	f, ok := stdin.(*os.File)
+	if !ok {
+		return false
+	}
+	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 }
 
 // parseSSHArgs separates SSH options, node target, and remote command.
@@ -265,7 +272,7 @@ func completeExecClusterArg(cmd *cobra.Command, args []string, toComplete string
 // dockerExec runs a docker command with stdin/stdout/stderr from the cobra command.
 func dockerExec(cmd *cobra.Command, args []string) error {
 	dockerCmd := exec.CommandContext(cmd.Context(), "docker", args...)
-	dockerCmd.Stdin = os.Stdin
+	dockerCmd.Stdin = cmd.InOrStdin()
 	dockerCmd.Stdout = cmd.OutOrStdout()
 	dockerCmd.Stderr = cmd.ErrOrStderr()
 	return dockerCmd.Run()
