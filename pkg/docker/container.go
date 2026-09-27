@@ -56,10 +56,14 @@ func (c *Client) StopContainer(ctx context.Context, name ContainerName) error {
 	return err
 }
 
-// RemoveContainer force-removes a container. If the container is running it
-// is killed first. This is equivalent to docker rm -f.
+// RemoveContainer force-removes a container and its anonymous volumes. If the
+// container is running it is killed first. This is equivalent to
+// docker rm -f -v: the sind-node image declares /etc/slurm, /etc/munge and
+// /data as volumes, so a container that mounts no named volume there, such
+// as a config helper or the SSH relay, gets anonymous ones. Named volumes
+// are left alone.
 func (c *Client) RemoveContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "rm", "-f", string(name))
+	_, _, err := c.run(ctx, "rm", "-f", "-v", string(name))
 	return err
 }
 

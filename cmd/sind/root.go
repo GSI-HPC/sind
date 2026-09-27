@@ -28,9 +28,7 @@ func NewRootCommand() *cobra.Command {
 		SilenceErrors:    true,
 		TraverseChildren: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			v, _ := cmd.Root().Flags().GetCount("verbose")
-			logger := newLogger(cmd.ErrOrStderr(), v)
-			cmd.SetContext(sindlog.With(cmd.Context(), logger))
+			applyVerbosity(cmd)
 			return nil
 		},
 	}
@@ -55,6 +53,12 @@ func NewRootCommand() *cobra.Command {
 	annotateMCPTools(cmd)
 
 	return cmd
+}
+
+// applyVerbosity installs the logger for the -v count parsed so far.
+func applyVerbosity(cmd *cobra.Command) {
+	v, _ := cmd.Root().Flags().GetCount("verbose")
+	cmd.SetContext(sindlog.With(cmd.Context(), newLogger(cmd.ErrOrStderr(), v)))
 }
 
 // builtins adds cobra's help and completion commands to the tree now,

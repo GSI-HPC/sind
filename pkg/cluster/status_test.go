@@ -536,6 +536,27 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 	require.Len(t, m.Calls, 2)
 }
 
+func TestGetMountPoints_CustomMountPath(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // config
+	m.AddResult("[{}]\n", "", nil) // munge
+	m.AddResult("[{}]\n", "", nil) // data
+	c := docker.NewClient(&m)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller", Labels: docker.Labels{
+			"sind.role":           "controller",
+			"sind.data.mountpath": "/shared",
+		}},
+	}
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
+
+	require.NoError(t, err)
+	require.Len(t, mounts, 3)
+	assert.Equal(t, "/shared", mounts[2].Path)
+	assert.Equal(t, "sind-dev-data", mounts[2].Source)
+}
+
 func TestGetMountPoints_NoneExist(t *testing.T) {
 	var m mock.Executor
 	notFound := testutil.ExitCode1(t)

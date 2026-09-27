@@ -576,6 +576,64 @@ func TestWorkerAdd_Managed_UsesControllerImage(t *testing.T) {
 	}
 }
 
+func TestWorkerAdd_InheritsDataMount(t *testing.T) {
+	// New workers mount the data where the cluster's nodes do.
+	base := workerAddOnCall(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if len(args) > 0 && args[0] == "ps" {
+			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{
+				ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+				Labels: "sind.cluster=dev,sind.role=controller,sind.data.hostpath=/srv/project,sind.data.mountpath=/shared",
+			})}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	require.NoError(t, err)
+
+	var created bool
+	for _, call := range m.Calls {
+		if call.Args[0] == "create" {
+			created = true
+			assert.Contains(t, testutil.ArgValues(call.Args, "-v"), "/srv/project:/shared:rw")
+			assert.Contains(t, testutil.ArgValues(call.Args, "--label"), LabelDataMountPath+"=/shared")
+		}
+	}
+	assert.True(t, created)
+}
+
+func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    WorkerAddOptions
+		wantErr string
+	}{
+		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
+		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device path must be absolute, got "dev/fuse"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			client := docker.NewClient(&m)
+			tt.opts.ClusterName = "dev"
+
+			_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), tt.opts, time.Millisecond)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Empty(t, m.Calls, "docker must not be called")
+		})
+	}
+}
+
 func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

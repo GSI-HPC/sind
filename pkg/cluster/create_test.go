@@ -268,6 +268,51 @@ func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
 	assert.Contains(t, created, "sind-dev-state")
 }
 
+// createdVolumes runs createResources for cfg and returns the volumes it
+// created.
+func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
+	t.Helper()
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg))
+
+	var created []string
+	for _, c := range m.Calls {
+		if len(c.Args) > 2 && c.Args[0] == "volume" && c.Args[1] == "create" {
+			created = append(created, c.Args[len(c.Args)-1])
+		}
+	}
+	return created
+}
+
+func TestCreateResources_DataVolume(t *testing.T) {
+	tests := []struct {
+		name       string
+		ds         config.DataStorage
+		wantVolume bool
+	}{
+		{"no storage", config.DataStorage{}, true},
+		{"volume", config.DataStorage{Type: config.StorageVolume}, true},
+		// The nodes mount the volume, so it must exist with its labels
+		// rather than be created by docker run without them.
+		{"volume ignores hostPath", config.DataStorage{Type: config.StorageVolume, HostPath: "/srv/data"}, true},
+		{"hostPath", config.DataStorage{Type: config.StorageHostPath, HostPath: "/srv/data"}, false},
+		{"hostPath without type", config.DataStorage{HostPath: "/srv/data"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := createCfg()
+			cfg.Storage.DataStorage = tt.ds
+			created := createdVolumes(t, cfg)
+			if tt.wantVolume {
+				assert.Contains(t, created, "sind-dev-data")
+			} else {
+				assert.NotContains(t, created, "sind-dev-data")
+			}
+		})
+	}
+}
+
 func TestCreate_FullCluster(t *testing.T) {
 	exitErr := notFoundErr(t)
 
@@ -635,7 +680,7 @@ func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 			seenPs = true
 		}
 		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
 			meshRmAfterPs++
 		}
 	}
@@ -673,7 +718,7 @@ func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
 			continue
 		}
 		if seenPs && len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
 			require.Fail(t, "mesh cleanup should not run when mesh was pre-existing")
 		}
 	}
@@ -728,7 +773,7 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	var meshRm int
 	for _, call := range m.Calls {
 		if len(call.Args) >= 3 && call.Args[0] == "rm" && call.Args[1] == "-f" &&
-			(strings.Contains(call.Args[2], "sind-ssh") || strings.Contains(call.Args[2], "sind-dns")) {
+			(strings.Contains(call.Args[len(call.Args)-1], "sind-ssh") || strings.Contains(call.Args[len(call.Args)-1], "sind-dns")) {
 			meshRm++
 		}
 	}
@@ -780,7 +825,7 @@ func TestCreate_CleanupMeshError(t *testing.T) {
 		// Make mesh cleanup fail: rm -f on a mesh container errors with a
 		// non-IsNotFound failure (real docker daemon issue).
 		if inCleanup && args[0] == "rm" && len(args) >= 3 && args[1] == "-f" &&
-			(strings.Contains(args[2], "sind-ssh") || strings.Contains(args[2], "sind-dns")) {
+			(strings.Contains(args[len(args)-1], "sind-ssh") || strings.Contains(args[len(args)-1], "sind-dns")) {
 			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
 		}
 		return mock.Result{}, false

@@ -138,6 +138,67 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestNetworkLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"sind.cluster":"dev","sind.realm":"sind"}`+"\n", "", nil)
+	c := NewClient(&m)
+
+	labels, exists, err := c.NetworkLabels(t.Context(), testNetworkName)
+
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, Labels{"sind.cluster": "dev", "sind.realm": "sind"}, labels)
+	assert.Equal(t, []string{"network", "inspect", string(testNetworkName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
+}
+
+func TestNetworkLabels_NoLabels(t *testing.T) {
+	for _, out := range []string{"", "null\n", "{}\n"} {
+		var m mock.Executor
+		m.AddResult(out, "", nil)
+		c := NewClient(&m)
+
+		labels, exists, err := c.NetworkLabels(t.Context(), testNetworkName)
+
+		require.NoError(t, err, out)
+		assert.True(t, exists, out)
+		assert.Empty(t, labels, out)
+	}
+}
+
+func TestNetworkLabels_NotFound(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	labels, exists, err := c.NetworkLabels(t.Context(), testNetworkName)
+
+	require.NoError(t, err)
+	assert.False(t, exists)
+	assert.Nil(t, labels)
+}
+
+func TestNetworkLabels_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := NewClient(&m)
+
+	_, _, err := c.NetworkLabels(t.Context(), testNetworkName)
+
+	require.Error(t, err)
+}
+
+func TestNetworkLabels_BadJSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil)
+	c := NewClient(&m)
+
+	_, _, err := c.NetworkLabels(t.Context(), testNetworkName)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing labels")
+}
+
 func TestNetworkExists_True(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil)

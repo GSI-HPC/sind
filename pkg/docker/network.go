@@ -14,6 +14,12 @@ func (c *Client) NetworkExists(ctx context.Context, name NetworkName) (bool, err
 	return c.exists(ctx, "network", "inspect", string(name))
 }
 
+// NetworkLabels returns the labels of the given network, and whether it
+// exists.
+func (c *Client) NetworkLabels(ctx context.Context, name NetworkName) (Labels, bool, error) {
+	return c.labels(ctx, "network", "inspect", string(name), "--format", "{{json .Labels}}")
+}
+
 // CreateNetwork creates a Docker network and returns its ID.
 // Labels are applied as --label flags when non-nil.
 func (c *Client) CreateNetwork(ctx context.Context, name NetworkName, labels Labels) (NetworkID, error) {

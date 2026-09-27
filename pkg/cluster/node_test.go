@@ -266,6 +266,29 @@ func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
 	assert.Contains(t, volumes, "sind-dev-data:/shared:rw")
 }
 
+func TestBuildRunArgs_DataMountPathLabel(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataMountPath = "/shared"
+
+	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/shared")
+}
+
+func TestBuildRunArgs_NoDataMountPathLabelForDefault(t *testing.T) {
+	for _, mountPath := range []string{"", DefaultDataMountPath} {
+		cfg := defaultRunConfig()
+		cfg.DataMountPath = mountPath
+
+		for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
+			assert.NotContains(t, l, LabelDataMountPath)
+		}
+	}
+}
+
+func TestDataMountPath(t *testing.T) {
+	assert.Equal(t, DefaultDataMountPath, DataMountPath(nil))
+	assert.Equal(t, "/shared", DataMountPath(docker.Labels{LabelDataMountPath: "/shared"}))
+}
+
 func TestBuildRunArgs_Resources(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.CPUs = 4
@@ -638,6 +661,33 @@ func TestNodeRunConfigs_VolumeStorageCustomMount(t *testing.T) {
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath, "volume type uses docker volume, not host path")
 	assert.Equal(t, "/shared", configs[0].DataMountPath)
+}
+
+func TestNodeRunConfigs_StorageTypeDecidesTheMount(t *testing.T) {
+	tests := []struct {
+		name         string
+		ds           config.DataStorage
+		wantHostPath string
+	}{
+		{"volume ignores hostPath", config.DataStorage{Type: config.StorageVolume, HostPath: "/srv/data"}, ""},
+		{"hostPath without type", config.DataStorage{HostPath: "/srv/data"}, "/srv/data"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Cluster{
+				Name:    "dev",
+				Storage: config.Storage{DataStorage: tt.ds},
+				Nodes: []config.Node{
+					{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+				},
+			}
+
+			configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+
+			require.Len(t, configs, 1)
+			assert.Equal(t, tt.wantHostPath, configs[0].DataHostPath)
+		})
+	}
 }
 
 func TestNodeRunConfigs_EmptyNodes(t *testing.T) {

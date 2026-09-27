@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -86,36 +87,111 @@ func TestParseSSHArgs_OnlyDash(t *testing.T) {
 	assert.Contains(t, err.Error(), "node argument required")
 }
 
+// parseExecArgs gets exec's arguments as cobra's flag parsing leaves them:
+// without the -- and with the number of arguments that preceded it.
+
 func TestParseExecArgs_Simple(t *testing.T) {
-	cluster, cmd, err := parseExecArgs([]string{"--", "hostname"})
+	cluster, cmd, err := parseExecArgs([]string{"hostname"}, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "default", cluster)
 	assert.Equal(t, []string{"hostname"}, cmd)
 }
 
 func TestParseExecArgs_WithCluster(t *testing.T) {
-	cluster, cmd, err := parseExecArgs([]string{"dev", "--", "squeue"})
+	cluster, cmd, err := parseExecArgs([]string{"dev", "squeue"}, 1)
 	require.NoError(t, err)
 	assert.Equal(t, "dev", cluster)
 	assert.Equal(t, []string{"squeue"}, cmd)
 }
 
 func TestParseExecArgs_MissingSeparator(t *testing.T) {
-	_, _, err := parseExecArgs([]string{"hostname"})
+	_, _, err := parseExecArgs([]string{"hostname"}, -1)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "-- separator")
 }
 
 func TestParseExecArgs_MissingCommand(t *testing.T) {
-	_, _, err := parseExecArgs([]string{"--"})
+	_, _, err := parseExecArgs(nil, 0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "command required")
 }
 
 func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
-	_, _, err := parseExecArgs([]string{"a", "b", "--", "cmd"})
+	_, _, err := parseExecArgs([]string{"a", "b", "cmd"}, 2)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "at most one argument before --")
+}
+
+func TestSSH_Help(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			stdout, _, err := executeCommand("ssh", flag)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "SSH into a cluster node")
+		})
+	}
+}
+
+func TestExec_Help(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			stdout, _, err := executeCommand("exec", flag)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "Run a command on submitter or controller")
+		})
+	}
+}
+
+// TestExec_FlagsAfterExec checks that exec parses --realm wherever it stands
+// before the --, as in the "exec --realm R CLUSTER -- COMMAND" the MCP server
+// runs.
+func TestExec_FlagsAfterExec(t *testing.T) {
+	for name, args := range map[string][]string{
+		"before cluster": {"exec", "--realm", "ci", "dev", "--", "hostname"},
+		"after cluster":  {"exec", "dev", "--realm=ci", "--", "hostname"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", "", assert.AnError) // docker ps for the exec target
+
+			_, _, err := executeWithMock(&m, args...)
+
+			require.Error(t, err)
+			require.Len(t, m.Calls, 1)
+			assert.Contains(t, m.Calls[0].Args, "label=sind.realm=ci")
+			assert.Contains(t, m.Calls[0].Args, "label=sind.cluster=dev")
+		})
+	}
+}
+
+func TestExec_FlagsAfterDashBelongToTheCommand(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", assert.AnError) // docker ps for the exec target
+
+	// --realm after -- is part of the command, so its invalid value is not
+	// checked, and the realm stays the default.
+	_, _, err := executeWithMock(&m, "exec", "--", "ls", "--realm", "Not_A_Realm")
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "invalid realm name")
+	require.Len(t, m.Calls, 1)
+	assert.Contains(t, m.Calls[0].Args, "label=sind.realm=sind")
+}
+
+func TestExec_VerboseAfterExec(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", assert.AnError) // docker ps for the exec target
+
+	_, stderr, err := executeWithMock(&m, "exec", "-vvv", "--", "hostname")
+
+	require.Error(t, err)
+	assert.Contains(t, stderr, "TRAC")
+}
+
+func TestExec_UnknownFlag(t *testing.T) {
+	_, _, err := executeCommand("exec", "--bogus", "--", "hostname")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag: --bogus")
 }
 
 // --- Integration ---

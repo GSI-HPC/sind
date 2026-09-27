@@ -201,7 +201,7 @@ func TestWriteClusterConfig(t *testing.T) {
 	assert.Contains(t, m.Calls[1].Args[len(m.Calls[1].Args)-1], "sind-dev-config-helper:/etc/slurm")
 
 	// RemoveContainer cleans up
-	assert.Equal(t, []string{"rm", "-f", "sind-dev-config-helper"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", "sind-dev-config-helper"}, m.Calls[2].Args)
 }
 
 func TestWriteClusterConfig_MainStringAppend(t *testing.T) {

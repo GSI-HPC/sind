@@ -114,13 +114,13 @@ storage:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `type` | set by `--data` | `"hostPath"` bind-mounts `hostPath`; `"volume"` (or any other value) uses the Docker volume `<realm>-<cluster>-data` |
-| `hostPath` | — | Host directory for `type: hostPath`, relative to the directory `sind create cluster` runs in. Without it, `type: hostPath` falls back to the Docker volume |
-| `mountPath` | `"/data"` | Mount point inside the nodes created with the cluster |
+| `type` | set by `--data` | `"hostPath"` bind-mounts `hostPath`; `"volume"` uses the Docker volume `<realm>-<cluster>-data` and ignores `hostPath`. A `hostPath` without `type` means `"hostPath"` |
+| `hostPath` | — | Host directory, required with `type: hostPath`. A relative path is taken relative to the directory `sind create cluster` runs in and stored as an absolute path |
+| `mountPath` | `"/data"` | Absolute mount point inside the nodes |
 
 If the config sets neither `type` nor `hostPath`, the `--data` flag of `sind create cluster` decides; its default, `.`, bind-mounts the working directory (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})).
 
-`mountPath` only applies to the nodes created with the cluster: workers added with `sind create worker` mount the data at `/data`, `sind get cluster` reports it at `/data`, and `sind enter` and `sind exec` start in `/data`.
+Workers added with `sind create worker` mount the data at the same place, `sind get cluster` reports it there, and `sind enter` and `sind exec` start in it.
 
 ## Slurm section
 
@@ -180,4 +180,5 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - `count` must not be negative; `0` means the default, 1
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
+- `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute
 - Unknown keys are rejected

@@ -330,9 +330,9 @@ func TestCleanupMesh(t *testing.T) {
 
 	// Verify order: keygen, SSH, DNS, network, volume.
 	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"rm", "-f", "sind-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"rm", "-f", string(SSHContainerName)}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", string(DNSContainerName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", "sind-ssh-keygen"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", string(SSHContainerName)}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", string(DNSContainerName)}, m.Calls[2].Args)
 	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
 	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[4].Args)
 }
@@ -1222,9 +1222,9 @@ func TestCustomRealm_CleanupMesh(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"rm", "-f", "myrealm-ssh"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", "myrealm-dns"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", "myrealm-ssh-keygen"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", "myrealm-ssh"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"rm", "-f", "-v", "myrealm-dns"}, m.Calls[2].Args)
 	assert.Equal(t, []string{"network", "rm", "myrealm-mesh"}, m.Calls[3].Args)
 	assert.Equal(t, []string{"volume", "rm", "myrealm-ssh-config"}, m.Calls[4].Args)
 }

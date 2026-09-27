@@ -90,7 +90,7 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:32.608 INFO slurm services enabled
 ```
 
-`-v` is a global flag and may come before or after the subcommand (`sind -v create cluster`, `sind create cluster -v`). `sind ssh` and `sind exec` pass their arguments through, so for them it must come first: `sind -v ssh worker-0` logs sind's steps, while `sind ssh -v worker-0` makes SSH verbose. The same holds for `--realm`.
+`-v` is a global flag and may come before or after the subcommand (`sind -v create cluster`, `sind create cluster -v`). `sind ssh` passes its arguments through to SSH, so for it `-v` must come first: `sind -v ssh worker-0` logs sind's steps, while `sind ssh -v worker-0` makes SSH verbose. The same holds for `--realm`. `sind exec` takes both anywhere before its `--`.
 
 ## JSON output
 

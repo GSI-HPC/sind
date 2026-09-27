@@ -55,6 +55,18 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
+	// Check capabilities and devices as the config's are checked, before
+	// any container exists.
+	if err := config.CheckCapabilities("--cap-add", opts.CapAdd); err != nil {
+		return nil, err
+	}
+	if err := config.CheckCapabilities("--cap-drop", opts.CapDrop); err != nil {
+		return nil, err
+	}
+	if err := config.CheckDevices(opts.Devices); err != nil {
+		return nil, err
+	}
+
 	// List cluster containers once for validation + index + image resolution.
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
@@ -93,8 +105,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return nil, err
 	}
 
-	// Inherit data host path from existing cluster containers.
+	// Inherit the data mount from existing cluster containers.
 	dataHostPath := controller.Labels[LabelDataHostPath]
+	dataMountPath := DataMountPath(controller.Labels)
 
 	// Resolve image: use opts or fall back to controller's image.
 	image := opts.Image
@@ -135,6 +148,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			SlurmVersion:    slurmVersion,
 			DNSIP:           dnsIP,
 			DataHostPath:    dataHostPath,
+			DataMountPath:   dataMountPath,
 			Managed:         !opts.Unmanaged,
 			ContainerNumber: startIdx + i + 1,
 			Pull:            opts.Pull,

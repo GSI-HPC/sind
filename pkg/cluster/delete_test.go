@@ -33,7 +33,7 @@ func TestDeleteContainers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 2)
 	// Order is nondeterministic (parallel removal).
-	names := []string{m.Calls[0].Args[2], m.Calls[1].Args[2]}
+	names := []string{m.Calls[0].Args[3], m.Calls[1].Args[3]}
 	assert.ElementsMatch(t, []string{"sind-dev-controller", "sind-dev-worker-0"}, names)
 }
 

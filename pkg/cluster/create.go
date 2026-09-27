@@ -273,7 +273,7 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 		}
 		return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull)
 	})
-	if cfg.Storage.DataStorage.HostPath == "" {
+	if !cfg.Storage.DataStorage.UsesHostPath() {
 		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeData) })
 	}
 	if cfg.HasBackupController() {

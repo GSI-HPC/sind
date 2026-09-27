@@ -237,6 +237,69 @@ storage:
 	}
 }
 
+func TestDataStorage_UsesHostPath(t *testing.T) {
+	tests := []struct {
+		name string
+		ds   DataStorage
+		want bool
+	}{
+		{"empty", DataStorage{}, false},
+		{"volume", DataStorage{Type: StorageVolume}, false},
+		{"volume ignores hostPath", DataStorage{Type: StorageVolume, HostPath: "/data"}, false},
+		{"hostPath", DataStorage{Type: StorageHostPath, HostPath: "/data"}, true},
+		{"hostPath without type", DataStorage{HostPath: "/data"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.ds.UsesHostPath())
+		})
+	}
+}
+
+func TestValidate_DataStorage(t *testing.T) {
+	tests := []struct {
+		name    string
+		ds      DataStorage
+		wantErr string
+	}{
+		{name: "empty", ds: DataStorage{}},
+		{name: "volume", ds: DataStorage{Type: StorageVolume, MountPath: "/scratch"}},
+		{name: "hostPath", ds: DataStorage{Type: StorageHostPath, HostPath: "./data"}},
+		{name: "hostPath without type", ds: DataStorage{HostPath: "/srv/data"}},
+		{name: "unknown type", ds: DataStorage{Type: "bind"}, wantErr: `storage.dataStorage.type must be "volume" or "hostPath", got "bind"`},
+		{name: "hostPath type without path", ds: DataStorage{Type: StorageHostPath}, wantErr: "storage.dataStorage.hostPath is required"},
+		{name: "relative mountPath", ds: DataStorage{MountPath: "data"}, wantErr: "storage.dataStorage.mountPath must be absolute"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Cluster{Kind: "Cluster", Name: DefaultClusterName, Storage: Storage{DataStorage: tt.ds}}
+			cfg.ApplyDefaults()
+			err := cfg.Validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestCheckCapabilities(t *testing.T) {
+	require.NoError(t, CheckCapabilities("capAdd", []string{"SYS_ADMIN", "ALL"}))
+	require.NoError(t, CheckCapabilities("capAdd", nil))
+	err := CheckCapabilities("--cap-add", []string{"SYS_ADMIN", "BOGUS"})
+	require.Error(t, err)
+	assert.Equal(t, `unknown capability "BOGUS" in --cap-add`, err.Error())
+}
+
+func TestCheckDevices(t *testing.T) {
+	require.NoError(t, CheckDevices([]string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}))
+	err := CheckDevices([]string{"/dev/fuse", "fuse:/dev/fuse"})
+	require.Error(t, err)
+	assert.Equal(t, `device path must be absolute, got "fuse:/dev/fuse"`, err.Error())
+}
+
 func TestApplyDefaults_MinimalConfig(t *testing.T) {
 	cfg := &Cluster{Kind: "Cluster", Name: "default"}
 	cfg.ApplyDefaults()
