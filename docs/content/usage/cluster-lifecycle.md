@@ -54,7 +54,9 @@ EOF
 4. All node containers start in parallel
 5. sind waits for each node to become ready (systemd, sshd, Slurm daemons)
 
-If any node fails to become ready within the timeout, the command fails. The partial cluster is not cleaned up automatically — use `sind delete cluster` to remove it.
+If any node fails to become ready within the timeout, the command fails and sind removes the resources it created, including a mesh that this invocation set up. If that cleanup fails too, use `sind delete cluster` to remove what is left.
+
+Ctrl-C (SIGINT) or SIGTERM, as sent by `timeout` or `docker stop`, stops the creation and runs the same cleanup; sind then exits with status 130. A second signal ends sind at once, without waiting for the cleanup to finish.
 
 ### Preflight checks
 

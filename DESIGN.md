@@ -214,6 +214,11 @@ Rules:
 - Unicode checkmarks (✓/✗) only in `get cluster` and `doctor` output
 - All `get` subcommands accept `--output|-o {human,json}`; default is `human`
 
+Exit status and signals:
+- `0` on success, `1` on failure, `130` when SIGINT or SIGTERM interrupted the command
+- The first SIGINT or SIGTERM cancels the command's context; deferred cleanup (e.g. the rollback of a failed `create cluster`) still runs under `context.WithoutCancel`
+- The signal handler is removed before the context is cancelled, so a second signal gets the default action and ends sind at once, even during a hung cleanup
+
 ### Logging Conventions
 
 Logging uses `pkg/log` with context-based injection. Silent by default. All log lines include millisecond timestamps (`HH:MM:SS.mmm`) for timing analysis.
