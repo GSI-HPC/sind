@@ -45,7 +45,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 
 **Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
 1. Create cluster network
-2. Create config volume → write Slurm configuration
+2. Create config volume → write Slurm configuration (managed clusters only; see Unmanaged Cluster)
 3. Create munge volume → generate and write munge key
 4. Create data volume (if needed)
 
@@ -80,7 +80,7 @@ If any node fails to become ready within the timeout, `sind create cluster` fail
 
 **Phase 4: Mesh Registration and Slurm** (concurrent)
 
-After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts) and Slurm enablement concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution.
+After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts) and Slurm enablement concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
 
 ### Design Goals
 
@@ -371,7 +371,7 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 
 `SERVICES` lists munge and sshd for every node, plus slurmctld or slurmd where sind manages Slurm. Unmanaged nodes (unmanaged workers, and every node of an unmanaged cluster) list only munge and sshd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
-Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Workers and submitters leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither.
+Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Workers and submitters leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
 
 ```
 NODES
@@ -433,7 +433,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--cpus N` | cluster default (1) | CPU limit per node |
 | `--memory SIZE` | cluster default (512m) | Memory limit |
 | `--tmp-size SIZE` | 256m | /tmp tmpfs size |
-| `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf |
+| `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | false | Pull images before creating containers |
 | `--cap-add CAP` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
 | `--cap-drop CAP` | none | Drop Linux capability (repeatable) |
@@ -459,9 +459,9 @@ By default (without `--unmanaged`), sind:
 4. Reconfigures slurmctld (`scontrol reconfigure`)
 5. Starts slurmd on the new node(s)
 
-Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration.
+Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration. On an unmanaged cluster (see Unmanaged Cluster) every new worker is unmanaged, with or without `--unmanaged`.
 
-**delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container.
+**delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. On an unmanaged cluster it never edits the Slurm configuration or runs `scontrol`.
 
 ### Power Control
 
@@ -739,7 +739,7 @@ Validation rules:
 | `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
 | `securityOpt` | global + per-node | none | Extra security options |
 | `count` | worker only | `1` | Number of worker nodes |
-| `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+| `managed` | controller + worker | `true` | Worker: start slurmd and add to slurm.conf. Controller: `false` makes the whole cluster unmanaged (see Unmanaged Cluster) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` |
 
 Per-node scalar values override the `defaults` section. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
@@ -751,6 +751,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
 - `count` - only valid for worker role
+- `managed` - only valid for controller and worker roles; with `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 
 ### Backup Controller
@@ -765,6 +766,28 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `sind create worker` and `sind delete worker` edit `sind-nodes.conf` and run `scontrol reconfigure` through the primary, or through the backup when the primary container is gone or stopped.
 
 Failover is triggered with `scontrol takeover` (graceful; the primary's `slurmctld` exits and is restarted with `systemctl start slurmctld` to hand control back) or by an outage of the primary, e.g. `sind power cut controller`, `sind power shutdown controller` or `sind power freeze controller`.
+
+### Unmanaged Cluster
+
+`managed: false` on the controller spec makes the whole cluster unmanaged: sind builds the nodes but leaves Slurm to the user, e.g. to test Chef or Ansible code that provisions Slurm, or to run `slurmctld -Dvvvvvv` by hand.
+
+```yaml
+nodes:
+  - role: controller
+    managed: false
+    backupController: true               # optional: controller-backup and the state volume
+  - role: worker
+    count: 2
+```
+
+- sind creates the network, the volumes (config, munge, data, and state with `backupController`), the munge key and every container, `controller-backup` included, with the usual mounts: `/etc/slurm` rw on the controllers and ro elsewhere, like an NFS share, and `/etc/munge` ro.
+- It writes nothing to `/etc/slurm`, does not discover the Slurm version (`sind.slurm.version` is set empty, overriding the image's label of that name; `SLURM` shows `-`), and enables no Slurm daemon. Nodes are ready once container, systemd, sshd and munge are.
+- Every node is labelled `sind.managed=false`. Workers default to unmanaged; a worker with `managed: true` is rejected, and so is any `slurm` section.
+- `sind create worker` adds unmanaged workers with or without `--unmanaged`. `sind delete worker` never edits the Slurm configuration or runs `scontrol`, whatever files `/etc/slurm` holds.
+- `sind get cluster` and `sind get node` list only munge and sshd, report `"managed": false`, and show no HA status. Without a submitter, `sind enter` and `sind exec` target `controller` if it runs, otherwise `controller-backup`.
+- With `backupController`, both controllers mount the state volume at `/var/spool/slurmctld`. For sind's names to match the user's pair, point `StateSaveLocation` there and list `SlurmctldHost=controller` before `SlurmctldHost=controller-backup`.
+
+The runtime command `sind create controller --unmanaged` is not provided: the mode is fixed at cluster creation.
 
 ## Docker Resources
 
@@ -1040,6 +1063,8 @@ Interactive sessions are routed based on cluster configuration:
 | `sind enter [cluster]` | submitter (if exists) → controller in control (falls back to `controller`) |
 | `sind exec [cluster] -- <cmd>` | submitter (if exists) → controller in control (falls back to `controller`) |
 
+On an unmanaged cluster sind does not know which controller is in control; `enter` and `exec` then target `controller` if it runs, otherwise `controller-backup`.
+
 ### sind enter
 
 Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Equivalent to `sind ssh submitter` or `sind ssh controller`.
@@ -1093,6 +1118,8 @@ Custom images must provide:
 
 sind enables Slurm services at container start based on the node's role. Services should be installed but not enabled in the image.
 
+The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an unmanaged cluster, so its image may leave Slurm for the provisioning under test to install.
+
 Example Dockerfiles are provided in the `images/` directory.
 
 ## Generated Configuration
@@ -1103,7 +1130,7 @@ During `sind create cluster`, before starting any containers, sind generates a r
 
 ### Slurm Configuration
 
-sind auto-generates a minimal Slurm configuration based on cluster topology and writes it to the `sind-<cluster>-config` volume.
+sind auto-generates a minimal Slurm configuration based on cluster topology and writes it to the `sind-<cluster>-config` volume. For an unmanaged cluster it writes nothing: the volume stays empty for the user's own configuration (see Unmanaged Cluster).
 
 #### Multi-file Configuration
 
@@ -1162,6 +1189,8 @@ sind does not manage Slurm versions directly—the version is implicit in the ch
 1. Generate version-appropriate configuration (slurm.conf)
 2. Display version information in CLI output
 3. Store version metadata on containers and volumes
+
+sind skips the discovery for unmanaged clusters: the Slurm the user provisions may differ from the one in the image.
 
 ### Discovery Method
 

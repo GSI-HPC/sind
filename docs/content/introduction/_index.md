@@ -26,7 +26,7 @@ Each cluster consists of individual containers for controller, submitter, and wo
 
 ### System containers
 
-Unlike typical Docker containers that run a single application process, sind nodes are full system containers running systemd as init — closely emulating bare-metal machines. Services like munge, sshd, and slurmctld start and interact exactly as they would on real nodes, with proper service dependencies, process supervision, and signal handling. This means you can apply the same configuration management tools you use on bare metal — Ansible, Chef, Puppet, Salt — directly to sind nodes.
+Unlike typical Docker containers that run a single application process, sind nodes are full system containers running systemd as init — closely emulating bare-metal machines. Services like munge, sshd, and slurmctld start and interact exactly as they would on real nodes, with proper service dependencies, process supervision, and signal handling. This means you can apply the same configuration management tools you use on bare metal — Ansible, Chef, Puppet, Salt — directly to sind nodes. An [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}) leaves Slurm itself to them, for end-to-end tests of your Slurm provisioning.
 
 ### Designed for CI/CD
 

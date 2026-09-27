@@ -76,6 +76,8 @@ Custom images must provide the following:
 
 sind enables Slurm services at container start based on the node's role. Services must be installed but **not** enabled in the image.
 
+The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), so its image may leave Slurm for the provisioning under test to install.
+
 ### Container settings
 
 The image should use `SIGRTMIN+3` as the stop signal (systemd's graceful shutdown signal) and declare the shared volumes:

@@ -97,6 +97,8 @@ sind create cluster --data volume
 | `sind enter [cluster]` | Submitter if exists, otherwise the controller in control |
 | `sind exec [cluster]` | Submitter if exists, otherwise the controller in control |
 
+On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), sind does not know which controller is in control: without a submitter, `enter` and `exec` target `controller` if it runs, otherwise `controller-backup`.
+
 ## User SSH client integration
 
 sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`):

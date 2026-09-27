@@ -8,7 +8,7 @@ toc: true
 
 ## Generated files
 
-sind generates a multi-file Slurm configuration and writes it to the `sind-<cluster>-config` volume:
+sind generates a multi-file Slurm configuration and writes it to the `sind-<cluster>-config` volume. For an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}) it writes nothing: the volume stays empty for your own configuration.
 
 ```
 /etc/slurm/
@@ -98,6 +98,8 @@ This happens once per unique image. The version is stored as a label on cluster 
 
 - Generating version-appropriate configuration
 - Displaying version information in CLI output
+
+sind skips the discovery for unmanaged clusters, where the Slurm you provision may differ from the one in the image. Their `SLURM` column shows `-`.
 
 ### Mixed versions
 

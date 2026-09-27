@@ -43,6 +43,8 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 |
 | tmpfs | `/run/lock` | — | — | — |
 
+Unmanaged clusters use the same mounts; their config volume starts empty.
+
 SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories.
 
 ```
