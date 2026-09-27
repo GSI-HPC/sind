@@ -223,14 +223,30 @@ func NextComputeIndex(ctx context.Context, client *docker.Client, realm, cluster
 
 // --- Unexported helpers ---
 
-// findController returns the controller's container entry from the list.
-// Returns false if no controller exists for the given cluster.
+// findController returns the controller container sind uses to edit the
+// shared Slurm configuration and run scontrol: the primary controller, or
+// the backup when the primary is gone or stopped and the backup runs (e.g.
+// after a failover). Both mount the same config volume, and scontrol always
+// reaches the controller in control. Returns false if the cluster has
+// neither.
 func findController(containers []docker.ContainerListEntry, realm, clusterName string) (docker.ContainerListEntry, bool) {
-	controllerName := ContainerName(realm, clusterName, string(config.RoleController))
-	for _, c := range containers {
-		if c.Name == controllerName {
-			return c, true
+	primaryName := ContainerName(realm, clusterName, string(config.RoleController))
+	backupName := ContainerName(realm, clusterName, ControllerBackupShortName)
+	var primary, backup *docker.ContainerListEntry
+	for i := range containers {
+		switch containers[i].Name {
+		case primaryName:
+			primary = &containers[i]
+		case backupName:
+			backup = &containers[i]
 		}
+	}
+	backupRuns := backup != nil && backup.State == docker.StateRunning
+	switch {
+	case primary != nil && (primary.State == docker.StateRunning || !backupRuns):
+		return *primary, true
+	case backup != nil:
+		return *backup, true
 	}
 	return docker.ContainerListEntry{}, false
 }

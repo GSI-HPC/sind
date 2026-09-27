@@ -30,7 +30,9 @@ func BuildSSHArgs(sshContainer docker.ContainerName, node, cluster, realm string
 }
 
 // EnterTarget determines the target node for an interactive shell.
-// Returns "submitter" if present in the cluster, otherwise "controller".
+// Returns "submitter" if present in the cluster, otherwise the controller:
+// in a primary/backup pair the one in control, falling back to "controller"
+// when that cannot be determined.
 func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName string) (string, error) {
 	entries, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
@@ -44,12 +46,26 @@ func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 			return string(config.RoleSubmitter), nil
 		}
 	}
+	controller, ok := findController(entries, realm, clusterName)
+	if !ok {
+		return "", fmt.Errorf("no submitter or controller found in cluster %q", clusterName)
+	}
+	primary := ContainerName(realm, clusterName, string(config.RoleController))
+	if controller.Name != primary {
+		// Only the backup runs.
+		return ControllerBackupShortName, nil
+	}
+	// Both controllers run: the heartbeat tells whether the backup has
+	// taken over (e.g. after scontrol takeover, which leaves the primary
+	// container running without slurmctld).
 	for _, e := range entries {
-		if config.Role(e.Labels[LabelRole]) == config.RoleController {
-			return string(config.RoleController), nil
+		if e.Name == ContainerName(realm, clusterName, ControllerBackupShortName) && e.State == docker.StateRunning {
+			if hb, ok := readHeartbeat(ctx, client, controller.Name); ok && hb.inControl(1, true) {
+				return ControllerBackupShortName, nil
+			}
 		}
 	}
-	return "", fmt.Errorf("no submitter or controller found in cluster %q", clusterName)
+	return string(config.RoleController), nil
 }
 
 // BuildContainerExecArgs builds docker CLI arguments for running a command
