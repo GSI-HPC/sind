@@ -218,3 +218,37 @@ func TestMCPServer_VersionAndTools(t *testing.T) {
 	cancel()
 	<-served
 }
+
+func TestRefuseFlagArgs(t *testing.T) {
+	var called ophis.ToolInput
+	run := func(_ context.Context, _ *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		called = in
+		return nil, ophis.ToolOutput{}, nil
+	}
+	call := func(mw ophis.MiddlewareFunc, tool string, args ...string) error {
+		called = ophis.ToolInput{}
+		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tool}}
+		_, _, err := mw(t.Context(), req, ophis.ToolInput{Args: args}, run)
+		return err
+	}
+
+	plain := refuseFlagArgs(nil)
+	require.NoError(t, call(plain, "sind_get_node", "worker-0.dev"))
+	assert.Equal(t, []string{"worker-0.dev"}, called.Args)
+	for _, args := range [][]string{{"-v"}, {"worker-0", "--follow"}, {"--", "-x"}} {
+		err := call(plain, "sind_logs", args...)
+		require.Error(t, err, args)
+		assert.Contains(t, err.Error(), "is a flag")
+	}
+
+	// exec's command after "--" may hold flags; its own arguments may not.
+	require.NoError(t, call(plain, "sind_exec", "dev", "--", "ls", "-la"))
+	require.Error(t, call(plain, "sind_exec", "-v", "dev", "--", "ls"))
+	require.Error(t, call(plain, "sind_logs", "controller", "--", "-f"))
+
+	// A -o in the arguments cannot override the forced JSON output.
+	withJSON := refuseFlagArgs(forceJSONOutput)
+	require.Error(t, call(withJSON, "sind_get_nodes", "-o", "human"))
+	require.NoError(t, call(withJSON, "sind_get_nodes", "dev"))
+	assert.Equal(t, map[string]any{"output": "json"}, called.Flags)
+}

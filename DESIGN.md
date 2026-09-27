@@ -551,6 +551,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `create cluster`, `create worker`, `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `delete`, `exec`, and the other `power` actions). A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).
+- A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
 
 ## Node Arguments
 

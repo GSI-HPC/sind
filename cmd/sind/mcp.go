@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"strconv"
 	"strings"
@@ -106,12 +107,13 @@ func mcpConfig() *ophis.Config {
 				},
 				LocalFlagSelector:     isMCPFlagNotOutput,
 				InheritedFlagSelector: isMCPFlagNotOutput,
-				Middleware:            forceJSONOutput,
+				Middleware:            refuseFlagArgs(forceJSONOutput),
 			},
 			{
 				CmdSelector:           isMCPTool,
 				LocalFlagSelector:     isMCPFlag,
 				InheritedFlagSelector: isMCPFlag,
+				Middleware:            refuseFlagArgs(nil),
 			},
 		},
 	}
@@ -151,6 +153,30 @@ func forceJSONOutput(ctx context.Context, req *mcp.CallToolRequest, in ophis.Too
 	flags["output"] = "json"
 	in.Flags = flags
 	return next(ctx, req, in)
+}
+
+// refuseFlagArgs returns a middleware that refuses a tool call whose
+// positional arguments hold a flag, and otherwise calls next, or the tool
+// itself when next is nil. ophis puts the arguments after the flags on the
+// command line, so a flag among them would get past the input schema: -v,
+// --follow, or a -o that overrides the -o json forceJSONOutput sets. exec
+// passes everything after its own "--" to the node, so only the arguments
+// before it are checked.
+func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput, run ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		for _, arg := range in.Args {
+			if arg == "--" && req.Params.Name == "sind_exec" {
+				break
+			}
+			if strings.HasPrefix(arg, "-") {
+				return nil, ophis.ToolOutput{}, fmt.Errorf("argument %q is a flag; pass flags in \"flags\"", arg)
+			}
+		}
+		if next == nil {
+			return run(ctx, req, in)
+		}
+		return next(ctx, req, in, run)
+	}
 }
 
 // commandPath returns the path of cmd below the root, e.g. "get munge-key".

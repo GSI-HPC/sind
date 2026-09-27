@@ -52,7 +52,7 @@ Every sind command is exposed as an MCP tool, except:
 - `sind enter` and `sind ssh`, which need an interactive terminal
 - `sind get ssh-private-key` and `sind get munge-key`, which print secrets
 
-The tools take the same arguments and flags as the commands, except `-v` and `sind logs --follow`, which a tool call cannot use.
+The tools take the same arguments and flags as the commands, except `-v` and `sind logs --follow`, which a tool call cannot use. Flags go in the call's `flags` object; a call that puts a flag in `args` is refused, except for the command after `--` in `sind_exec`.
 
 Each tool tells the client what it does, so that the client can decide when to ask before calling it: the `get` tools, `sind_logs`, `sind_doctor` and `sind_version` are marked read-only; `sind_create_*`, `sind_power_on` and `sind_power_unfreeze` only add or restore; `sind_delete_*`, `sind_exec` and the other `sind_power_*` tools are marked destructive.
 
