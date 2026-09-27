@@ -3,8 +3,11 @@
 package main
 
 import (
+	"context"
+	"maps"
 	"strings"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -28,11 +31,23 @@ var mcpExcluded = map[string]bool{
 // mcpConfig returns the ophis configuration of sind's MCP server.
 func mcpConfig() *ophis.Config {
 	return &ophis.Config{
-		Selectors: []ophis.Selector{{
-			CmdSelector:           isMCPTool,
-			LocalFlagSelector:     isMCPFlag,
-			InheritedFlagSelector: isMCPFlag,
-		}},
+		Selectors: []ophis.Selector{
+			{
+				// Commands with -o always return JSON, which an agent
+				// reads more reliably than a table.
+				CmdSelector: func(cmd *cobra.Command) bool {
+					return isMCPTool(cmd) && cmd.Flag("output") != nil
+				},
+				LocalFlagSelector:     isMCPFlagNotOutput,
+				InheritedFlagSelector: isMCPFlagNotOutput,
+				Middleware:            forceJSONOutput,
+			},
+			{
+				CmdSelector:           isMCPTool,
+				LocalFlagSelector:     isMCPFlag,
+				InheritedFlagSelector: isMCPFlag,
+			},
+		},
 	}
 }
 
@@ -56,6 +71,20 @@ var mcpExcludedFlags = map[string]bool{
 // isMCPFlag reports whether a flag is offered in a tool's input schema.
 func isMCPFlag(f *pflag.Flag) bool {
 	return !mcpExcludedFlags[f.Name]
+}
+
+// isMCPFlagNotOutput is isMCPFlag for a tool whose -o the server sets.
+func isMCPFlagNotOutput(f *pflag.Flag) bool {
+	return isMCPFlag(f) && f.Name != "output"
+}
+
+// forceJSONOutput runs a tool with -o json, whatever flags it was given.
+func forceJSONOutput(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput, next ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+	flags := make(map[string]any, len(in.Flags)+1)
+	maps.Copy(flags, in.Flags)
+	flags["output"] = "json"
+	in.Flags = flags
+	return next(ctx, req, in)
 }
 
 // commandPath returns the path of cmd below the root, e.g. "get munge-key".

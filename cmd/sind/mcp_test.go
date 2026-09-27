@@ -3,12 +3,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/njayp/ophis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -112,4 +115,35 @@ func TestMCPTools_Flags(t *testing.T) {
 		assert.Contains(t, flags, "realm", name)
 	}
 	assert.Contains(t, tools["sind_create_cluster"].InputSchema.Properties.Flags.Properties, "config")
+}
+
+func TestMCPTools_GetHasNoOutputFlag(t *testing.T) {
+	tools := exportMCPTools(t)
+	var get int
+	for name, tool := range tools {
+		if strings.HasPrefix(name, "sind_get_") {
+			get++
+			assert.NotContains(t, tool.InputSchema.Properties.Flags.Properties, "output", name)
+		}
+	}
+	assert.Equal(t, 12, get)
+}
+
+func TestForceJSONOutput(t *testing.T) {
+	in := ophis.ToolInput{Flags: map[string]any{"output": "human", "realm": "ci-42"}, Args: []string{"dev"}}
+	var got ophis.ToolInput
+	next := func(_ context.Context, _ *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		got = in
+		return nil, ophis.ToolOutput{}, nil
+	}
+
+	_, _, err := forceJSONOutput(t.Context(), &mcp.CallToolRequest{}, in, next)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"output": "json", "realm": "ci-42"}, got.Flags)
+	assert.Equal(t, []string{"dev"}, got.Args)
+	assert.Equal(t, "human", in.Flags["output"], "the caller's map is not modified")
+
+	_, _, err = forceJSONOutput(t.Context(), &mcp.CallToolRequest{}, ophis.ToolInput{}, next)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"output": "json"}, got.Flags)
 }

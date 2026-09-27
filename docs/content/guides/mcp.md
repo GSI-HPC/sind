@@ -54,6 +54,8 @@ Every sind command is exposed as an MCP tool, except:
 
 The tools take the same arguments and flags as the commands, except `-v` and `sind logs --follow`, which a tool call cannot use.
 
+The `sind_get_*` tools always return JSON: the server runs them with `-o json`, so they take no `-o` flag.
+
 To see the full list:
 
 ```bash
