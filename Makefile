@@ -25,7 +25,7 @@ FIREJAIL_TEST := firejail --quiet --noprofile \
 	--blacklist=/bin/docker --blacklist=/usr/bin/docker \
 	--blacklist=/bin/ssh --blacklist=/usr/bin/ssh
 
-.PHONY: build install lint lint-docs test test-integration coverage image clean help
+.PHONY: build install lint lint-docs test test-integration coverage check-coverage image clean help
 
 build: ## Build the sind binary
 	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -trimpath -ldflags='$(LDFLAGS)' -o $(BINARY) $(CMD)
