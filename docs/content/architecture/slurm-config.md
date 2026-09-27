@@ -20,7 +20,9 @@ sind generates a multi-file Slurm configuration and writes it to the `<realm>-<c
 ├── slurm.conf.d/           # main config fragments (if slurm.main is a map)
 ├── cgroup.conf.d/          # cgroup fragments (if slurm.cgroup is a map)
 ├── gres.conf               # generic resources (if slurm.gres is set)
-└── topology.conf           # network topology (if slurm.topology is set)
+├── gres.conf.d/            # gres fragments (if slurm.gres is a map)
+├── topology.conf           # network topology (if slurm.topology is set)
+└── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ```
 
 ## slurm.conf
@@ -87,23 +89,16 @@ See [Cluster Configuration]({{< relref "/configuration/cluster-config" >}}) for 
 
 ## Version discovery
 
-sind discovers the Slurm version before creating any cluster resources by running an ephemeral container:
+While it creates the cluster network and volumes, sind discovers the Slurm version of the controller's image by running an ephemeral container:
 
 ```bash
-docker run --rm <image> scontrol --version
-# Output: "slurm 25.11.8"
+docker run --rm <controller image> slurmctld -V
+# Output: "slurm 26.05.4"
 ```
 
-This happens once per unique image. The version is stored as a label on cluster resources (`sind.slurm.version`) and used for:
-
-- Generating version-appropriate configuration
-- Displaying version information in CLI output
+The version is stored as the `sind.slurm.version` label on each node container and shown in the `SLURM` column of `sind get clusters` and `sind get cluster`. It does not change the generated configuration. Workers added with `sind create worker` copy the controller's label, and nodes with a different `image` carry the controller's version too: sind does not compare versions across images.
 
 sind skips the discovery for unmanaged clusters, where the Slurm you provision may differ from the one in the image. Their `SLURM` column shows `-`.
-
-### Mixed versions
-
-When different images report different Slurm versions, sind logs a warning but continues. The controller image's version is used for configuration generation.
 
 ## Post-creation customization
 

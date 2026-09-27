@@ -1194,7 +1194,9 @@ sind generates a multi-file configuration structure:
 ├── slurm.conf.d/           # main config fragments (if slurm.main is a map)
 ├── cgroup.conf.d/          # cgroup fragments (if slurm.cgroup is a map)
 ├── gres.conf               # generic resources (if slurm.gres is set)
-└── topology.conf           # network topology (if slurm.topology is set)
+├── gres.conf.d/            # gres fragments (if slurm.gres is a map)
+├── topology.conf           # network topology (if slurm.topology is set)
+└── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ```
 
 The main `slurm.conf` always contains:
@@ -1232,38 +1234,26 @@ Users may:
 
 ## Slurm Version Discovery
 
-sind does not manage Slurm versions directly—the version is implicit in the chosen container images. However, sind discovers the Slurm version before cluster creation to:
-
-1. Generate version-appropriate configuration (slurm.conf)
-2. Display version information in CLI output
-3. Store version metadata on containers and volumes
+sind does not manage Slurm versions directly—the version is implicit in the chosen container images. sind discovers the Slurm version of the controller's image to show it in CLI output (the `SLURM` column, `slurm_version` in JSON) and to label the node containers with it. The generated configuration does not depend on the version.
 
 sind skips the discovery for unmanaged clusters: the Slurm the user provisions may differ from the one in the image.
 
 ### Discovery Method
 
-Before creating any cluster resources, sind runs an ephemeral container to discover the Slurm version:
+While it creates the cluster network and volumes, sind runs an ephemeral container of the controller's image:
 
 ```bash
-docker run --rm <image> scontrol --version
-# Output: "slurm 25.11.0"
+docker run --rm <controller image> slurmctld -V
+# Output: "slurm 26.05.4"
 ```
 
-This happens once per unique image in the cluster configuration. The discovered version is then stored as labels on cluster resources:
+The discovered version is stored as a label on each node container:
 
 ```
---label sind.slurm.version=25.11.0
+--label sind.slurm.version=26.05.4
 ```
 
-### Version Consistency
-
-When the cluster configuration specifies multiple images (e.g., different images per role), sind discovers the version from each unique image. If images report different Slurm versions, sind logs a warning but continues with cluster creation. The controller image's version is used for configuration generation.
-
-Mismatched Slurm versions can cause subtle runtime issues, but users may have legitimate reasons for mixed versions (e.g., testing rolling upgrades).
-
-### Config Adaptation
-
-sind maintains awareness of version-specific configuration changes and generates compatible slurm.conf. This includes handling deprecated parameters and new required parameters across Slurm versions.
+Workers added with `sind create worker` copy the controller's label. Nodes whose `image` differs from the controller's carry the controller's version too: sind does not discover versions per image or compare them.
 
 ## DNS Naming Convention
 
