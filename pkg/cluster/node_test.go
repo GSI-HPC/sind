@@ -502,6 +502,53 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 	assert.True(t, configs[3].Managed, "worker-2 managed")
 }
 
+func TestNodeRunConfigs_BackupController(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, BackupController: true, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+				CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+
+	require.Len(t, configs, 3)
+	primary, backup := configs[0], configs[1]
+	assert.Equal(t, "controller", primary.ShortName)
+	assert.Equal(t, 1, primary.ContainerNumber)
+	assert.True(t, primary.SharedState)
+	assert.Equal(t, "controller-backup", backup.ShortName)
+	assert.Equal(t, 2, backup.ContainerNumber)
+	assert.Equal(t, config.RoleController, backup.Role)
+
+	// Apart from name and container number the two controllers are
+	// identical: resources, volumes, caps, devices, security options.
+	backup.ShortName = primary.ShortName
+	backup.ContainerNumber = primary.ContainerNumber
+	assert.Equal(t, primary, backup)
+
+	assert.Equal(t, "worker-0", configs[2].ShortName)
+	assert.False(t, configs[2].SharedState)
+}
+
+func TestNodeRunConfigs_NoBackupController(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleWorker, Count: 1},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+
+	require.Len(t, configs, 2)
+	assert.Equal(t, "controller", configs[0].ShortName)
+	assert.False(t, configs[0].SharedState)
+}
+
 func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",

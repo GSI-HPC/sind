@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -296,6 +297,80 @@ func TestCreate_FullCluster(t *testing.T) {
 	assert.Equal(t, config.RoleWorker, cluster.Nodes[1].Role)
 	assert.Equal(t, StateRunning, cluster.Nodes[0].State)
 	assert.Equal(t, StateRunning, cluster.Nodes[1].State)
+}
+
+func TestCreate_BackupController(t *testing.T) {
+	exitErr := notFoundErr(t)
+
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
+		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"}, true
+		}
+		return mock.Result{}, false
+	})
+	m.OnStart = pipes.OnStart
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	cfg := createCfg()
+	cfg.Nodes[0].BackupController = true
+	cluster, err := Create(ctx, client, meshMgr, cfg, 1*time.Millisecond)
+
+	require.NoError(t, err)
+	require.Len(t, cluster.Nodes, 3)
+	assert.Equal(t, "controller-backup", cluster.Nodes[1].Name)
+	assert.Equal(t, config.RoleController, cluster.Nodes[1].Role)
+
+	// slurmctld is enabled on both controllers; each container mounts the
+	// shared state volume.
+	enabled := map[string]bool{}
+	stateMounts := map[string]bool{}
+	for _, c := range m.Calls {
+		a := c.Args
+		if a[0] == "exec" && len(a) > 5 && a[2] == "systemctl" && a[3] == "enable" && a[5] == "slurmctld" {
+			enabled[a[1]] = true
+		}
+		if a[0] == "create" && slices.Contains(a, "sind-dev-state:/var/spool/slurmctld:rw") {
+			stateMounts[testutil.ArgValues(a, "--name")[0]] = true
+		}
+	}
+	assert.Equal(t, map[string]bool{"sind-dev-controller": true, "sind-dev-controller-backup": true}, enabled)
+	assert.Equal(t, map[string]bool{"sind-dev-controller": true, "sind-dev-controller-backup": true}, stateMounts)
+}
+
+func TestCreate_BackupControllerNotReady(t *testing.T) {
+	exitErr := notFoundErr(t)
+
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
+		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is DOWN\n"}, true
+		}
+		return mock.Result{}, false
+	})
+	m.OnStart = pipes.OnStart
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+
+	cfg := createCfg()
+	cfg.Nodes[0].BackupController = true
+	_, err := Create(ctx, client, meshMgr, cfg, 1*time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "controller-backup is DOWN")
 }
 
 func TestCreate_PreflightFails(t *testing.T) {

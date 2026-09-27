@@ -217,7 +217,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 	for _, n := range cfg.Nodes {
 		switch n.Role {
 		case config.RoleController, config.RoleSubmitter:
-			configs = append(configs, RunConfig{
+			base := RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
 				ShortName:       string(n.Role),
@@ -236,7 +236,18 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				CapDrop:         n.CapDrop,
 				Devices:         n.Devices,
 				SecurityOpt:     n.SecurityOpt,
-			})
+			}
+			if n.Role != config.RoleController || !n.BackupController {
+				configs = append(configs, base)
+				continue
+			}
+			// Primary/backup pair: identical containers sharing the
+			// slurmctld state volume.
+			base.SharedState = true
+			backup := base
+			backup.ShortName = ControllerBackupShortName
+			backup.ContainerNumber = 2
+			configs = append(configs, base, backup)
 		case config.RoleWorker:
 			count := n.Count
 			if count <= 0 {
