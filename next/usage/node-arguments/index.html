@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-03-27T11:26:56+01:00"
+      content="2026-09-27T18:24:06+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/node-arguments/",
       "headline": "Node Arguments",
       "description": "DNS-style node naming and nodeset expansion",
-      "wordCount": "133",
+      "wordCount": "165",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-03-27T11:26:56.00Z",
+      "dateModified": "2026-09-27T18:24:06.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2224,6 +2224,7 @@
 	</tbody>
 </table> </div>
 <p>Zero-padding is preserved: <code>worker-[00-03]</code> produces <code>worker-00</code> through <code>worker-03</code>.</p>
+<p>A pattern may expand to at most 1,048,576 (2^20) names, and no expanded name may begin with <code>-</code>. sind rejects a pattern that breaks either rule before it acts on any node.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="multiple-nodes"
     >

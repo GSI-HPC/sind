@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T17:00:43+00:00"
+      content="2026-09-27T18:43:40+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
       "headline": "Cluster Configuration",
       "description": "YAML configuration schema reference",
-      "wordCount": "521",
+      "wordCount": "600",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T17:00:43.00Z",
+      "dateModified": "2026-09-27T18:43:40.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2264,13 +2264,13 @@
 					<td><code>name</code></td>
 					<td>no</td>
 					<td><code>&quot;default&quot;</code></td>
-					<td>Cluster name, used in resource naming</td>
+					<td>Cluster name, used in resource naming; must be a valid name (see below)</td>
 			</tr>
 			<tr>
 					<td><code>realm</code></td>
 					<td>no</td>
 					<td><code>&quot;sind&quot;</code></td>
-					<td>Realm namespace for resource isolation</td>
+					<td>Realm namespace for resource isolation; must be a valid name (see below)</td>
 			</tr>
 			<tr>
 					<td><code>defaults</code></td>
@@ -2298,6 +2298,7 @@
 			</tr>
 	</tbody>
 </table> </div>
+<p>Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and <code>-</code>, 1 to 63 characters, not beginning or ending with <code>-</code>. Names such as <code>Dev</code>, <code>my_cluster</code>, <code>dev.test</code> or <code>../x</code> are rejected. The same rule applies to cluster names given on the command line and to <code>--realm</code> and <code>SIND_REALM</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="defaults-section"
     >

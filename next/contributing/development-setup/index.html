@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-09-26T20:42:26+00:00"
+      content="2026-09-27T18:22:36+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/contributing/development-setup/",
       "headline": "Development Setup",
       "description": "Clone, build, and run sind locally",
-      "wordCount": "213",
+      "wordCount": "237",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-26T20:42:26.00Z",
+      "dateModified": "2026-09-27T18:22:36.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2263,7 +2263,8 @@
 </table> </div>
 <p>The build version defaults to <code>git describe --tags --always --dirty</code> and can be overridden:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make build <span class="nv">VERSION</span><span class="o">=</span>v1.0.0
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+</span></span></code></pre></div><p>A binary built without a version reports <code>dev</code>, except one installed with <code>go install github.com/GSI-HPC/sind/cmd/sind@&lt;version&gt;</code>, which reports the module version the Go toolchain recorded.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="dependencies"
     >
         Dependencies

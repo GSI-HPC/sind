@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-04-22T15:40:21+02:00"
+      content="2026-09-27T18:43:40+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/contributing/architecture-guide/",
       "headline": "Architecture Guide",
       "description": "Package structure and how to add new features",
-      "wordCount": "794",
+      "wordCount": "857",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-22T15:40:21.00Z",
+      "dateModified": "2026-09-27T18:43:40.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2193,13 +2193,18 @@ internal/mock/     Test doubles for cmdexec.Executor
   ├── recorder.go  mock.RecordingExecutor for integration tests
   └── recording.go Recorded call types
 
+internal/hostname/ DNS label check behind config.CheckName (cluster and realm names)
+
+internal/termtext/ Escaping of untrusted text for the terminal (final error line)
+
 internal/testutil/ Shared test helpers
-  ├── testutil.go  ExitCode1, Ptr[T], realm helpers
+  ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Ptr[T], realm helpers
   ├── client.go    NewClient (unit test client factory)
   └── client_integration.go NewClient (integration test variant)
 
 pkg/cmdexec/       Command executor abstraction
   ├── exec.go      Executor interface, OSExecutor
+  ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)
 
 pkg/docker/        Docker CLI wrapper
@@ -2261,7 +2266,7 @@ pkg/ssh/           SSH key generation and injection
                        → pkg/slurm   → pkg/docker
                        → pkg/ssh     → pkg/docker
                        → pkg/nodeset
-</code></pre><p>The <code>pkg/cmdexec</code> package provides the executor abstraction at the bottom of the stack. <code>pkg/docker</code> wraps Docker CLI commands and <code>pkg/mesh</code> uses a separate executor for system commands (resolvectl, systemctl). The <code>pkg/cluster</code> package orchestrates everything. <code>pkg/doctor</code> runs host prerequisite checks directly from <code>cmd/sind</code> (no cluster orchestration). <code>pkg/monitor</code> streams Docker and systemd events for event-driven readiness. <code>pkg/retry</code> is a leaf helper used wherever dockerd async cleanup requires retry. The <code>internal/mock</code> and <code>internal/testutil</code> packages are test-only and not part of the production dependency graph.</p>
+</code></pre><p>The <code>pkg/cmdexec</code> package provides the executor abstraction at the bottom of the stack. <code>pkg/docker</code> wraps Docker CLI commands and <code>pkg/mesh</code> uses a separate executor for system commands (resolvectl, systemctl). The <code>pkg/cluster</code> package orchestrates everything. <code>pkg/doctor</code> runs host prerequisite checks directly from <code>cmd/sind</code> (no cluster orchestration). <code>pkg/monitor</code> streams Docker and systemd events for event-driven readiness. <code>pkg/retry</code> is a leaf helper used wherever dockerd async cleanup requires retry. The <code>internal/mock</code> and <code>internal/testutil</code> packages are test-only and not part of the production dependency graph. <code>internal/termtext</code> is a leaf used only by <code>cmd/sind</code> to escape the final error line; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="adding-a-new-cli-command"
     >

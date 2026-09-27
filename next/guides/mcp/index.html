@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T19:33:47+02:00"
+      content="2026-09-27T19:02:27+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/guides/mcp/",
       "headline": "MCP Integration",
       "description": "Using sind with AI assistants via the Model Context Protocol",
-      "wordCount": "221",
+      "wordCount": "486",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T19:33:47.00Z",
+      "dateModified": "2026-09-27T19:02:27.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2170,7 +2170,7 @@
     <p>sind includes a built-in <a
   class="gdoc-markdown__link"
   href="https://modelcontextprotocol.io/"
->Model Context Protocol</a> (MCP) server that exposes all CLI commands as tools for AI assistants. This lets tools like Claude, VS Code Copilot, or Cursor create clusters, check status, manage workers, and control node power states through natural language.</p>
+>Model Context Protocol</a> (MCP) server that exposes its CLI commands as tools for AI assistants. This lets tools like Claude, VS Code Copilot, or Cursor create clusters, check status, manage workers, and control node power states through natural language.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="quick-setup"
     >
@@ -2220,7 +2220,16 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>All sind commands are automatically exposed as MCP tools. To see the full list:</p>
+<p>Every sind command is exposed as an MCP tool, except:</p>
+<ul>
+<li>command groups such as <code>sind get</code>, which only print help</li>
+<li><code>sind enter</code> and <code>sind ssh</code>, which need an interactive terminal</li>
+<li><code>sind get ssh-private-key</code> and <code>sind get munge-key</code>, which print secrets</li>
+</ul>
+<p>The tools take the same arguments and flags as the commands, except <code>-v</code> and <code>sind logs --follow</code>, which a tool call cannot use. Flags go in the call&rsquo;s <code>flags</code> object; a call that puts a flag in <code>args</code> is refused, except for the command after <code>--</code> in <code>sind_exec</code>.</p>
+<p>Each tool tells the client what it does, so that the client can decide when to ask before calling it: the <code>get</code> tools, <code>sind_logs</code>, <code>sind_doctor</code> and <code>sind_version</code> are marked read-only; <code>sind_create_*</code>, <code>sind_power_on</code> and <code>sind_power_unfreeze</code> only add or restore; <code>sind_delete_*</code>, <code>sind_exec</code> and the other <code>sind_power_*</code> tools are marked destructive.</p>
+<p>The <code>sind_get_*</code> tools always return JSON: the server runs them with <code>-o json</code>, so they take no <code>-o</code> flag.</p>
+<p>To see the full list:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp tools
 </span></span></code></pre></div><p>This exports the tool definitions to <code>mcp-tools.json</code>. The tools follow the naming convention <code>sind_&lt;command&gt;_&lt;subcommand&gt;</code>, for example:</p>
 <div class="table-wrap"> <table>
@@ -2268,8 +2277,8 @@
 					<td>Reboot a node</td>
 			</tr>
 			<tr>
-					<td><code>sind_ssh</code></td>
-					<td>SSH into a node</td>
+					<td><code>sind_exec</code></td>
+					<td>Run a command on submitter or controller</td>
 			</tr>
 	</tbody>
 </table> </div>
@@ -2282,9 +2291,20 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>For remote or multi-client setups, sind can serve MCP over HTTP:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp stream --host localhost --port <span class="m">8080</span>
-</span></span></code></pre></div>
+<p>For multi-client setups, sind can serve MCP over HTTP:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp stream --port <span class="m">8080</span>
+</span></span></code></pre></div><p>The stream listens on <code>127.0.0.1</code> unless <code>--host</code> names another address. It has no authentication, and its tools create and delete containers, so only pass <code>--host 0.0.0.0</code> (all interfaces) on a network you trust, or put an authenticating proxy in front of it.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="security"
+    >
+        Security
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/mcp/#security" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Security" aria-label="Anchor to: Security" href="#security">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>The MCP server is not a sandbox. Its tools run sind with your Docker access: <code>sind_exec</code> runs any command inside a cluster, and <code>sind_create_cluster</code> can bind-mount a host directory with <code>--data</code>. Leaving out <code>sind get ssh-private-key</code> and <code>sind get munge-key</code> keeps those secrets out of routine tool output, but an agent that may call <code>sind_exec</code> can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.</p>
+
   </article>
 
 

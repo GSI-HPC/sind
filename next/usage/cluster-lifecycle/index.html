@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T16:54:49+00:00"
+      content="2026-09-27T18:33:16+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/cluster-lifecycle/",
       "headline": "Cluster Lifecycle",
       "description": "Creating, listing, and deleting clusters",
-      "wordCount": "408",
+      "wordCount": "460",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T16:54:49.00Z",
+      "dateModified": "2026-09-27T18:33:16.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2246,7 +2246,8 @@
 <li>All node containers start in parallel</li>
 <li>sind waits for each node to become ready (systemd, sshd, Slurm daemons)</li>
 </ol>
-<p>If any node fails to become ready within the timeout, the command fails. The partial cluster is not cleaned up automatically — use <code>sind delete cluster</code> to remove it.</p>
+<p>If any node fails to become ready within the timeout, the command fails and sind removes the resources it created, including a mesh that this invocation set up. If that cleanup fails too, use <code>sind delete cluster</code> to remove what is left.</p>
+<p>Ctrl-C (SIGINT) or SIGTERM, as sent by <code>timeout</code> or <code>docker stop</code>, stops the creation and runs the same cleanup; sind then exits with status 130. A second signal ends sind at once, without waiting for the cleanup to finish.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="preflight-checks"
     >

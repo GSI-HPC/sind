@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-04-06T00:41:05+02:00"
+      content="2026-09-27T18:30:35+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/contributing/testing/",
       "headline": "Testing",
       "description": "Test infrastructure, mocking patterns, and integration tests",
-      "wordCount": "327",
+      "wordCount": "396",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-06T00:41:05.00Z",
+      "dateModified": "2026-09-27T18:30:35.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2264,9 +2264,12 @@ mode_integration_test.go  // build tag: integration
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>For methods like <code>ContainerExists()</code> that check exit codes, a plain <code>fmt.Errorf</code> won&rsquo;t work. You need a real <code>*exec.ExitError</code> with exit code 1:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">exec</span><span class="p">.</span><span class="nx">ExitError</span><span class="p">{</span><span class="nx">ProcessState</span><span class="p">:</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">)})</span><span class="w">
-</span></span></span></code></pre></div><p>The <code>testutil.ExitCode1(t)</code> helper (from <code>internal/testutil</code>) runs <code>sh -c &quot;exit 1&quot;</code> to obtain a real <code>*os.ProcessState</code>.</p>
+<p>The real executor returns a failed command as a <code>*cmdexec.ExitError</code> that carries the exit code and what the command wrote to stderr. The mock returns a queued <code>*exec.ExitError</code> in the same shape, wrapped with the result&rsquo;s stderr.</p>
+<p>Docker exits 1 for many failures, so <code>docker.IsNotFound</code> and <code>docker.IsVolumeInUse</code> read docker&rsquo;s message, not only the exit code. Queue a real <code>*exec.ExitError</code> with exit code 1 together with the stderr docker prints:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">NoSuchContainer</span><span class="p">(</span><span class="s">&#34;sind-dev-controller&#34;</span><span class="p">),</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">NoSuchNetwork</span><span class="p">(</span><span class="s">&#34;sind-dev-net&#34;</span><span class="p">),</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">m</span><span class="p">.</span><span class="nf">AddResult</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">NoSuchVolume</span><span class="p">(</span><span class="s">&#34;sind-dev-config&#34;</span><span class="p">),</span><span class="w"> </span><span class="nx">testutil</span><span class="p">.</span><span class="nf">ExitCode1</span><span class="p">(</span><span class="nx">t</span><span class="p">))</span><span class="w">
+</span></span></span></code></pre></div><p><code>testutil.ExitCode1(t)</code> (from <code>internal/testutil</code>) runs <code>sh -c &quot;exit 1&quot;</code> to obtain a real <code>*exec.ExitError</code>. An exit code 1 with any other stderr, such as <code>volume is in use</code>, is not a missing resource.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="recording-executor"
     >
