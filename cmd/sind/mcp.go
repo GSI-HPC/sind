@@ -163,6 +163,10 @@ func commandPath(cmd *cobra.Command) string {
 func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 	cmd := ophis.Command(cfg)
 	for _, sub := range cmd.Commands() {
+		switch sub.Name() {
+		case "start", "stream":
+			withServerVersion(sub)
+		}
 		if sub.Name() != "stream" {
 			continue
 		}
@@ -173,4 +177,16 @@ func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 		host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
 	}
 	return cmd
+}
+
+// withServerVersion makes a server command report sind's version to MCP
+// clients. ophis takes the server version from the root command's Version,
+// which is set only while the server runs: set on the root for good, it
+// would give every sind command a --version flag.
+func withServerVersion(cmd *cobra.Command) {
+	run := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		cmd.Root().Version = strings.TrimPrefix(resolveVersion(), "v")
+		return run(cmd, args)
+	}
 }

@@ -176,3 +176,45 @@ func TestMCPEffects_NameTools(t *testing.T) {
 		assert.True(t, isMCPTool(cmd), "%s is not an MCP tool", path)
 	}
 }
+
+// TestMCPServer_VersionAndTools runs `sind mcp start` over an in-memory
+// transport and checks what a client sees: sind's version and the tools
+// with their hints.
+func TestMCPServer_VersionAndTools(t *testing.T) {
+	setVersion(t, "v1.2.3", "")
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	cfg := mcpConfig()
+	cfg.Transport = serverTransport
+
+	root := NewRootCommand()
+	old, _, err := root.Find([]string{"mcp"})
+	require.NoError(t, err)
+	root.RemoveCommand(old)
+	root.AddCommand(newMCPCommand(cfg))
+	root.SetArgs([]string{"mcp", "start"})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	served := make(chan error, 1)
+	go func() { served <- root.ExecuteContext(ctx) }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+
+	info := session.InitializeResult().ServerInfo
+	assert.Equal(t, "sind", info.Name)
+	assert.Equal(t, "1.2.3", info.Version)
+	assert.Empty(t, root.Flags().Lookup("version"), "the root has no --version flag")
+
+	tools, err := session.ListTools(ctx, nil)
+	require.NoError(t, err)
+	assert.Len(t, tools.Tools, 27)
+	for _, tool := range tools.Tools {
+		require.NotNil(t, tool.Annotations, tool.Name)
+	}
+
+	require.NoError(t, session.Close())
+	cancel()
+	<-served
+}
