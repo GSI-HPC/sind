@@ -8,9 +8,9 @@
 # based on the node's configured role:
 #
 #   controller — munge, sshd, slurmctld
-#   db         — munge, sshd, mariadb, slurmdbd
-#   compute    — munge, sshd, slurmd
+#   worker     — munge, sshd, slurmd
 #   submitter  — munge, sshd
+#   db         — munge, sshd, mariadb, slurmdbd (planned, see DESIGN.md)
 #
 # The image uses systemd as PID 1 and requires Docker Engine 28+ with
 # writable cgroups (no --privileged needed):

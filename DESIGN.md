@@ -1131,7 +1131,7 @@ The generic image:
 - Published for linux/amd64 and linux/arm64
 - Based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
-- Contains all Slurm daemons (slurmctld, slurmd) and a full MPI stack
+- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - sind enables the appropriate services based on node role
 
@@ -1160,7 +1160,7 @@ sind enables Slurm services at container start based on the node's role. Service
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an unmanaged cluster, so its image may leave Slurm for the provisioning under test to install.
 
-Example Dockerfiles are provided in the `images/` directory.
+The repository's `Dockerfile`, which builds the official images, serves as the reference.
 
 ## Generated Configuration
 
