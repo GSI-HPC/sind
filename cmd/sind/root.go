@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
 )
 
@@ -49,7 +48,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newLogsCommand())
 	cmd.AddCommand(newDoctorCommand())
 	cmd.AddCommand(newVersionCommand())
-	cmd.AddCommand(ophis.Command(nil))
+	cmd.AddCommand(newMCPCommand(nil))
 
 	builtins(cmd)
 	requireKnownSubcommand(cmd)
