@@ -69,9 +69,9 @@ sind get clusters
 ```
 
 ```
-NAME      NODES (S/C/W)   SLURM    STATUS
-default   4 (1/1/2)       25.11    running
-dev       3 (0/1/2)       25.11    running
+NAME      NODES (S/C/W)   SLURM     STATUS
+default   4 (1/1/2)       26.05.4   running
+dev       3 (0/1/2)       25.11.8   running
 ```
 
 The `NODES` column shows the total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker. `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters.

@@ -46,8 +46,10 @@ bump needs no Go code changes, only the files below.
      `ADD --checksum=sha256:` line, and the variable default in `docker-bake.hcl`.
    - every other occurrence of the old version: `grep -rn '<old>' --exclude-dir=.git .`
      For Slurm these are `DESIGN.md`, `docs/content/architecture/{docker-resources,slurm-config}.md`,
-     `docs/content/usage/diagnostics.md`, `pkg/slurm/version_test.go` and
-     `pkg/cluster/status_test.go`.
+     `docs/content/usage/{cluster-lifecycle,diagnostics}.md`,
+     `docs/content/getting-started/quickstart.md` (the newest release line),
+     `pkg/slurm/version_test.go`, `pkg/cluster/status_test.go` and
+     `cmd/sind/get_test.go`.
    - `docker buildx bake --print` shows the resulting targets, build args and tags.
 4. **Check:** `go mod download && make test` and `make lint-docs`.
 5. **Commit:** `build(image): bump slurm to X.Y.Z` with bullets for the version, the
