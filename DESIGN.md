@@ -662,9 +662,9 @@ defaults:
 
 storage:
   dataStorage:
-    type: volume                         # volume | hostPath
-    hostPath: ./data                     # only if type=hostPath
-    mountPath: /data                     # default: /data
+    type: hostPath                       # hostPath | volume (default: from --data)
+    hostPath: ./data                     # only for type=hostPath
+    mountPath: /data                     # default: /data (nodes created with the cluster)
 
 slurm:
   main: |                                # appended to slurm.conf
@@ -784,10 +784,13 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `role: controller` - exactly one (auto-created if nodes omitted)
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
-- `count` - only valid for worker role
+- `count` - only valid for worker role; must not be negative, and `0` means the default, 1
 - `managed` - only valid for controller and worker roles; with `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
+- `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
+- `devices` - absolute paths
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
+- unknown keys are rejected
 
 ### Cluster and Realm Names
 
@@ -906,7 +909,10 @@ The `--data` flag controls the mount source:
 When a YAML config specifies `storage.dataStorage`, the config takes precedence over `--data`.
 
 The resolved host path is stored on each container as the `sind.data.hostpath` label so that
-dynamically added workers (`sind create worker`) inherit the same mount.
+dynamically added workers (`sind create worker`) inherit the same mount. `storage.dataStorage.mountPath`
+is not recorded: added workers mount the data at `/data`, `sind get cluster` reports `/data`, and
+`enter` and `exec` start in `/data`. A relative `hostPath` from the config is passed to Docker as
+given, so it is relative to the directory `sind create cluster` runs in.
 
 ### Container Labels
 
@@ -1164,7 +1170,7 @@ Custom images must provide:
 | worker | slurmd (installed, not enabled) |
 | submitter | Slurm client tools only |
 
-sind enables Slurm services at container start based on the node's role. Services should be installed but not enabled in the image.
+sind enables Slurm services based on the node's role once every node is ready (`systemctl enable --now`). Services should be installed but not enabled in the image.
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an unmanaged cluster, so its image may leave Slurm for the provisioning under test to install.
 

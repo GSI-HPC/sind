@@ -39,7 +39,7 @@ Every official image:
 - OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1)
 
-sind enables the appropriate Slurm services based on node role at container start.
+sind enables the appropriate Slurm services based on node role once every node is ready.
 
 ### Building locally
 
@@ -74,7 +74,7 @@ Custom images must provide the following:
 | worker | slurmd installed, **not enabled** |
 | submitter | Slurm client tools only |
 
-sind enables Slurm services at container start based on the node's role. Services must be installed but **not** enabled in the image.
+sind enables Slurm services based on the node's role (`systemctl enable --now`) once every node is ready. Services must be installed but **not** enabled in the image.
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), so its image may leave Slurm for the provisioning under test to install.
 
