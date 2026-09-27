@@ -113,7 +113,7 @@ func runGetClusters(cmd *cobra.Command) error {
 		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d)\t%s\t%s\n",
 			c.Name,
 			c.NodeCount, c.Submitters, c.Controllers, c.Workers,
-			c.SlurmVersion,
+			formatSlurmVersion(c.SlurmVersion),
 			c.State,
 		)
 	}
@@ -508,7 +508,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	// Header table
 	w := newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "CLUSTER\tSLURM\tSTATUS (R/S/P/T)")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", status.Name, status.SlurmVersion, formatState(status))
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", status.Name, formatSlurmVersion(status.SlurmVersion), formatState(status))
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -601,6 +601,15 @@ func formatState(status *cluster.Status) string {
 	}
 	total := running + stopped + paused
 	return fmt.Sprintf("%s (%d/%d/%d/%d)", status.State, running, stopped, paused, total)
+}
+
+// formatSlurmVersion renders a cluster's Slurm version, "-" when sind does
+// not know it (unmanaged clusters).
+func formatSlurmVersion(version string) string {
+	if version == "" {
+		return "-"
+	}
+	return version
 }
 
 func checkmark(ok bool) string {

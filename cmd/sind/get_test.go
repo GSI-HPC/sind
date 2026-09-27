@@ -92,6 +92,22 @@ func TestGetClusters_Output(t *testing.T) {
 	assert.Contains(t, stdout, "running")
 }
 
+func TestGetClusters_UnknownSlurmVersion(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=controller,sind.managed=false",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "clusters")
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, []string{"dev", "1", "(0/1/0)", "-", "running"}, strings.Fields(lines[1]))
+}
+
 func TestGetNodes_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"get", "nodes"})
@@ -914,6 +930,13 @@ func TestGetCluster_ControllerPair(t *testing.T) {
 	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][2], "workers leave the HA column empty")
 }
 
+func TestGetCluster_UnknownSlurmVersion(t *testing.T) {
+	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev")
+	require.NoError(t, err)
+	lines := strings.Split(stdout, "\n")
+	assert.Equal(t, []string{"dev", "-", "running", "(3/0/0/3)"}, strings.Fields(lines[1]))
+}
+
 func TestGetCluster_ControllerPairJSON(t *testing.T) {
 	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev", "-o", "json")
 	require.NoError(t, err)
@@ -937,6 +960,11 @@ func TestGetNode_ControllerPair(t *testing.T) {
 	var got cluster.NodeDetail
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	assert.Equal(t, &cluster.HAStatus{Position: "backup", InControl: true}, got.HA)
+}
+
+func TestFormatSlurmVersion(t *testing.T) {
+	assert.Equal(t, "25.11.8", formatSlurmVersion("25.11.8"))
+	assert.Equal(t, "-", formatSlurmVersion(""))
 }
 
 func TestFormatHA(t *testing.T) {

@@ -316,7 +316,7 @@ default   4 (1/1/2)       25.11   running
 dev       3 (0/1/2)       25.11   running
 ```
 
-NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker.
+NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
 
 ```
 $ sind get nodes dev

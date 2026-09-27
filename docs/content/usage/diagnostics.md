@@ -136,7 +136,7 @@ worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd 
 worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
-The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
+`SLURM` shows `-` when sind does not know the version, as for unmanaged clusters. The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
 
 | Status    | Meaning                                               |
 |-----------|-------------------------------------------------------|
