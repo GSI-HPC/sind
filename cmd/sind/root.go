@@ -52,6 +52,7 @@ func NewRootCommand() *cobra.Command {
 
 	builtins(cmd)
 	requireKnownSubcommand(cmd)
+	annotateMCPTools(cmd)
 
 	return cmd
 }

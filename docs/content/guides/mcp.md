@@ -54,6 +54,8 @@ Every sind command is exposed as an MCP tool, except:
 
 The tools take the same arguments and flags as the commands, except `-v` and `sind logs --follow`, which a tool call cannot use.
 
+Each tool tells the client what it does, so that the client can decide when to ask before calling it: the `get` tools, `sind_logs`, `sind_doctor` and `sind_version` are marked read-only; `sind_create_*`, `sind_power_on` and `sind_power_unfreeze` only add or restore; `sind_delete_*`, `sind_exec` and the other `sind_power_*` tools are marked destructive.
+
 The `sind_get_*` tools always return JSON: the server runs them with `-o json`, so they take no `-o` flag.
 
 To see the full list:

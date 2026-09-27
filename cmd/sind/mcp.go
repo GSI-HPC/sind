@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"maps"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,6 +27,71 @@ var mcpExcluded = map[string]bool{
 	"ssh":                 true, // interactive shell or remote command without a terminal
 	"get ssh-private-key": true, // the mesh's SSH private key
 	"get munge-key":       true, // the cluster's munge key
+}
+
+// mcpEffect is what an MCP tool does to its environment, which sets the
+// readOnlyHint and destructiveHint annotations clients use to decide
+// whether to ask before a call.
+type mcpEffect int
+
+const (
+	// readOnly tools only report state.
+	readOnly mcpEffect = iota
+	// additive tools create resources and destroy none.
+	additive
+	// destructive tools remove resources, stop nodes or run arbitrary
+	// commands.
+	destructive
+)
+
+// mcpEffects classifies every MCP tool, by command path below the root.
+var mcpEffects = map[string]mcpEffect{
+	"doctor":              readOnly,
+	"version":             readOnly,
+	"logs":                readOnly,
+	"get cluster":         readOnly,
+	"get clusters":        readOnly,
+	"get dns":             readOnly,
+	"get mesh":            readOnly,
+	"get networks":        readOnly,
+	"get node":            readOnly,
+	"get nodes":           readOnly,
+	"get realms":          readOnly,
+	"get ssh-config":      readOnly,
+	"get ssh-known-hosts": readOnly,
+	"get ssh-public-key":  readOnly,
+	"get volumes":         readOnly,
+	"create cluster":      additive,
+	"create worker":       additive,
+	"power on":            additive,
+	"power unfreeze":      additive,
+	"delete cluster":      destructive,
+	"delete worker":       destructive,
+	"exec":                destructive,
+	"power cut":           destructive,
+	"power cycle":         destructive,
+	"power freeze":        destructive,
+	"power reboot":        destructive,
+	"power shutdown":      destructive,
+}
+
+// annotateMCPTools sets the MCP hint annotations of every command that
+// mcpEffects classifies.
+func annotateMCPTools(cmd *cobra.Command) {
+	for _, sub := range cmd.Commands() {
+		annotateMCPTools(sub)
+	}
+	effect, ok := mcpEffects[commandPath(cmd)]
+	if !ok {
+		return
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[ophis.AnnotationReadOnly] = strconv.FormatBool(effect == readOnly)
+	if effect != readOnly {
+		cmd.Annotations[ophis.AnnotationDestructive] = strconv.FormatBool(effect == destructive)
+	}
 }
 
 // mcpConfig returns the ophis configuration of sind's MCP server.

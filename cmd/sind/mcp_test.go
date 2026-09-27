@@ -147,3 +147,32 @@ func TestForceJSONOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"output": "json"}, got.Flags)
 }
+
+// TestMCPTools_Hints checks that every tool says whether it is read-only
+// and, if not, whether it is destructive. A new command has to be added to
+// mcpEffects.
+func TestMCPTools_Hints(t *testing.T) {
+	tools := exportMCPTools(t)
+	for name, tool := range tools {
+		// go-sdk leaves readOnlyHint out when it is false, but always
+		// writes destructiveHint when it is set.
+		readOnly := tool.Annotations["readOnlyHint"] == true
+		_, hasDestructive := tool.Annotations["destructiveHint"]
+		assert.True(t, readOnly != hasDestructive,
+			"%s must be read-only or say whether it is destructive; add it to mcpEffects", name)
+	}
+	assert.Equal(t, true, tools["sind_get_nodes"].Annotations["readOnlyHint"])
+	assert.Equal(t, false, tools["sind_create_cluster"].Annotations["destructiveHint"])
+	assert.Equal(t, true, tools["sind_delete_cluster"].Annotations["destructiveHint"])
+	assert.Equal(t, true, tools["sind_exec"].Annotations["destructiveHint"])
+}
+
+func TestMCPEffects_NameTools(t *testing.T) {
+	root := NewRootCommand()
+	for path := range mcpEffects {
+		cmd, rest, err := root.Find(strings.Fields(path))
+		require.NoError(t, err, path)
+		assert.Empty(t, rest, path)
+		assert.True(t, isMCPTool(cmd), "%s is not an MCP tool", path)
+	}
+}
