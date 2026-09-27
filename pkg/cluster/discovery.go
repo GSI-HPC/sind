@@ -36,7 +36,8 @@ type Resources struct {
 }
 
 // ListClusterResources discovers all Docker resources belonging to the named cluster.
-// Containers are found by label filter; network and volumes are checked by name convention.
+// Containers are found by label filter; network and volumes are checked by name
+// convention and skipped when their labels name another realm or cluster.
 func ListClusterResources(ctx context.Context, client *docker.Client, realm, clusterName string) (*Resources, error) {
 	res := &Resources{
 		Network: NetworkName(realm, clusterName),
@@ -52,26 +53,37 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 	}
 	res.Containers = containers
 
-	// Check cluster network.
-	exists, err := client.NetworkExists(ctx, res.Network)
+	// Check the cluster network and volumes, which are found by name. The
+	// names can belong to another realm: realm "ci" with cluster "42-dev"
+	// and realm "ci-42" with cluster "dev" both name theirs "ci-42-dev-*".
+	labels, exists, err := client.NetworkLabels(ctx, res.Network)
 	if err != nil {
 		return nil, fmt.Errorf("checking network %s: %w", res.Network, err)
 	}
-	res.NetworkExists = exists
+	res.NetworkExists = exists && ownedBy(labels, realm, clusterName)
 
-	// Check cluster volumes.
 	for _, vtype := range AllVolumeTypes {
 		volName := VolumeName(realm, clusterName, vtype)
-		exists, err := client.VolumeExists(ctx, volName)
+		labels, exists, err := client.VolumeLabels(ctx, volName)
 		if err != nil {
 			return nil, fmt.Errorf("checking volume %s: %w", volName, err)
 		}
-		if exists {
+		if exists && ownedBy(labels, realm, clusterName) {
 			res.Volumes = append(res.Volumes, volName)
 		}
 	}
 
 	return res, nil
+}
+
+// ownedBy reports whether a network or volume named after clusterName in
+// realm belongs to that cluster: its sind.realm and sind.cluster labels name
+// them. Resources without these labels, made by sind before v0.9.0 or by
+// docker run for a volume it mounts, count as the cluster's.
+func ownedBy(labels docker.Labels, realm, clusterName string) bool {
+	r, hasRealm := labels[LabelRealm]
+	c, hasCluster := labels[LabelCluster]
+	return (!hasRealm || r == realm) && (!hasCluster || c == clusterName)
 }
 
 // DiscoverClusterNames finds cluster names from orphaned networks and volumes

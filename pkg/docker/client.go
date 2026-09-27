@@ -5,7 +5,9 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"sort"
@@ -74,6 +76,25 @@ func SortedLabelFlags(labels Labels) []string {
 // exists runs an inspect-style command and returns true if the resource exists.
 // Docker inspect commands exit with code 1 for missing resources; other errors
 // are propagated.
+// labels runs an inspect command that prints a resource's labels as JSON
+// and reports them, and whether the resource exists.
+func (c *Client) labels(ctx context.Context, args ...string) (Labels, bool, error) {
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		if IsNotFound(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	var labels Labels
+	if out := strings.TrimSpace(stdout); out != "" {
+		if err := json.Unmarshal([]byte(out), &labels); err != nil {
+			return nil, false, fmt.Errorf("parsing labels: %w", err)
+		}
+	}
+	return labels, true, nil
+}
+
 func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 	_, _, err := c.run(ctx, args...)
 	if err != nil {

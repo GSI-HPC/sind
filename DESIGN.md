@@ -803,6 +803,8 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 
 sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
 
+Resource names join realm and cluster with `-`, so realm `ci` with cluster `42-dev` and realm `ci-42` with cluster `dev` share the names `ci-42-dev-*`. The second `sind create cluster` fails its preflight check, and `sind delete cluster` only removes a network or volume whose `sind.realm` and `sind.cluster` labels, if present, name the cluster being deleted.
+
 ### Backup Controller
 
 `backupController: true` on the controller spec runs Slurm's active/passive controller pair:

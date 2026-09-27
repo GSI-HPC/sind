@@ -14,6 +14,12 @@ func (c *Client) VolumeExists(ctx context.Context, name VolumeName) (bool, error
 	return c.exists(ctx, "volume", "inspect", string(name))
 }
 
+// VolumeLabels returns the labels of the given volume, and whether it
+// exists.
+func (c *Client) VolumeLabels(ctx context.Context, name VolumeName) (Labels, bool, error) {
+	return c.labels(ctx, "volume", "inspect", string(name), "--format", "{{json .Labels}}")
+}
+
 // CreateVolume creates a Docker volume.
 // Labels are applied as --label flags when non-nil.
 func (c *Client) CreateVolume(ctx context.Context, name VolumeName, labels Labels) error {

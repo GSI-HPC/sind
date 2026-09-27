@@ -12,6 +12,8 @@ A **realm** is a namespace that isolates all sind resources — mesh network, DN
 
 The default realm is `sind`, which produces resource names like `sind-mesh`, `sind-dns`, `sind-default-net`, etc.
 
+Because names join realm and cluster with `-`, realm `ci` with cluster `42-dev` and realm `ci-42` with cluster `dev` would share the resource names `ci-42-dev-*`. sind refuses to create the second of them, and deleting one leaves the other's network and volumes alone.
+
 ## When to use realms
 
 - **Parallel CI jobs** — each job uses a unique realm to avoid resource conflicts

@@ -93,6 +93,19 @@ func TestIsVolumeInUse(t *testing.T) {
 	}
 }
 
+func TestVolumeLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"sind.cluster":"dev","sind.realm":"sind"}`+"\n", "", nil)
+	c := NewClient(&m)
+
+	labels, exists, err := c.VolumeLabels(t.Context(), testVolumeName)
+
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, Labels{"sind.cluster": "dev", "sind.realm": "sind"}, labels)
+	assert.Equal(t, []string{"volume", "inspect", string(testVolumeName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
+}
+
 func TestVolumeExists_True(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil)
