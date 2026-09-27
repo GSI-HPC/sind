@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -206,6 +207,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 			IP:        health.IP,
 			Status:    health.State,
 			Services:  health.Services,
+			HA:        health.HA,
 		})
 	}
 
@@ -213,8 +215,13 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	fqdn := cluster.DNSName(shortName, clusterName, realm)
 
 	w := newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, role, fqdn, health.IP, health.State)
+	if health.HA != nil {
+		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tHA\tFQDN\tIP\tSTATUS")
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", containerName, role, formatHA(health.HA), fqdn, health.IP, health.State)
+	} else {
+		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, role, fqdn, health.IP, health.State)
+	}
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -543,9 +550,19 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "NODES")
 	w = newTabWriter(out)
-	_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tSTATUS\tSERVICES")
+	withHA := slices.ContainsFunc(status.Nodes, func(n *cluster.NodeStatus) bool { return n.Health.HA != nil })
+	if withHA {
+		_, _ = fmt.Fprintln(w, "NAME\tROLE\tHA\tIP\tSTATUS\tSERVICES")
+	} else {
+		_, _ = fmt.Fprintln(w, "NAME\tROLE\tIP\tSTATUS\tSERVICES")
+	}
 	for _, n := range status.Nodes {
 		h := n.Health
+		if withHA {
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+				n.Name, n.Role, formatHA(h.HA), h.IP, h.State, formatServices(h.Services))
+			continue
+		}
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			n.Name,
 			n.Role,
@@ -555,6 +572,18 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 		)
 	}
 	return w.Flush()
+}
+
+// formatHA renders a controller's pair position, marking the controller in
+// control with "*". Nodes outside the pair render empty.
+func formatHA(ha *cluster.HAStatus) string {
+	if ha == nil {
+		return ""
+	}
+	if ha.InControl {
+		return ha.Position + "*"
+	}
+	return ha.Position
 }
 
 func formatState(status *cluster.Status) string {

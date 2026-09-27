@@ -103,6 +103,7 @@ type NodeDetail struct {
 	IP        string                `json:"ip"`
 	Status    docker.ContainerState `json:"status"`
 	Services  ServiceHealth         `json:"services"`
+	HA        *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
 // GetAllNodes lists all nodes across all clusters in the realm.

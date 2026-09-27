@@ -25,7 +25,8 @@ func TestListClusterResources(t *testing.T) {
 	), "", nil)
 	// NetworkExists: sind-dev-net exists
 	m.AddResult("", "", nil)
-	// VolumeExists: config, munge, data
+	// VolumeExists: config, munge, data, state
+	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
@@ -45,14 +46,14 @@ func TestListClusterResources(t *testing.T) {
 	assert.True(t, res.NetworkExists)
 
 	// Volumes
-	assert.Equal(t, []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}, res.Volumes)
+	assert.Equal(t, []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state"}, res.Volumes)
 }
 
 func TestListClusterResources_NoResources(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil) // ListContainers: empty
 	addNotFound(t, &m, 1)    // NetworkExists: not found
-	addNotFound(t, &m, 3)    // VolumeExists: config, munge, data
+	addNotFound(t, &m, 4)    // VolumeExists: config, munge, data, state
 	c := docker.NewClient(&m)
 
 	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "nonexistent")
@@ -70,6 +71,7 @@ func TestListClusterResources_PartialVolumes(t *testing.T) {
 	m.AddResult("", "", nil) // VolumeExists: config exists
 	addNotFound(t, &m, 1)    // VolumeExists: munge missing
 	m.AddResult("", "", nil) // VolumeExists: data exists
+	addNotFound(t, &m, 1)    // VolumeExists: state missing
 	c := docker.NewClient(&m)
 
 	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -118,13 +120,13 @@ func TestListClusterResources_VolumeCheckError(t *testing.T) {
 func TestListClusterResources_LabelFilter(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil) // ListContainers: empty
-	addNotFound(t, &m, 4)    // network + 3 volumes
+	addNotFound(t, &m, 5)    // network + 4 volumes
 	c := docker.NewClient(&m)
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "myCluster")
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 5)
+	require.Len(t, m.Calls, 6)
 	// First call is docker ps; filter by both realm and cluster so parallel
 	// realms with identically-named clusters are isolated.
 	args := m.Calls[0].Args

@@ -42,6 +42,15 @@ func TestNodeShortNames(t *testing.T) {
 			want: []string{"controller", "submitter", "worker-0", "worker-1"},
 		},
 		{
+			name: "with backup controller",
+			nodes: []config.Node{
+				{Role: config.RoleController, BackupController: true},
+				{Role: config.RoleSubmitter},
+				{Role: config.RoleWorker, Count: 1},
+			},
+			want: []string{"controller", "controller-backup", "submitter", "worker-0"},
+		},
+		{
 			name: "multiple worker groups with sequential indexing",
 			nodes: []config.Node{
 				{Role: config.RoleController},
@@ -120,6 +129,32 @@ func TestPreflightCheck_NoConflicts(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 5) // network + 3 volumes + 1 filtered ps
+}
+
+func TestPreflightCheck_BackupControllerStateVolume(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-state": true})
+	c := docker.NewClient(&m)
+
+	cfg := minimalConfig()
+	cfg.Nodes[0].BackupController = true
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "volume sind-dev-state")
+}
+
+func TestPreflightCheck_ConflictingBackupController(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = preflightOnCall(t, nil, "sind-dev-controller-backup")
+	c := docker.NewClient(&m)
+
+	cfg := minimalConfig()
+	cfg.Nodes[0].BackupController = true
+	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "container sind-dev-controller-backup")
 }
 
 func TestPreflightCheck_ConflictingNetwork(t *testing.T) {

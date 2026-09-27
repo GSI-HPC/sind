@@ -251,13 +251,47 @@ func MungeReady(ctx context.Context, client *docker.Client, name docker.Containe
 	return nil
 }
 
-// SlurmctldReady verifies that slurmctld is responding to RPC requests.
+// SlurmctldReady verifies that the slurmctld on the given controller node is
+// responding to RPC requests.
+//
+// scontrol ping exits zero as soon as any configured controller answers, so
+// with a backup controller the exit code alone cannot tell which one is up.
+// The per-controller lines ("Slurmctld(primary) at controller is UP") are
+// matched against the container: sind names containers
+// <realm>-<cluster>-<hostname>, so the line whose host is the container
+// name's suffix belongs to this node. When no line matches (e.g. a
+// user-supplied slurm.conf with other hostnames) the exit code decides.
 func SlurmctldReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	_, err := client.Exec(ctx, name, "scontrol", "ping")
+	stdout, err := client.Exec(ctx, name, "scontrol", "ping")
 	if err != nil {
 		return fmt.Errorf("slurmctld not ready: %w", err)
 	}
+	for host, up := range ParseSlurmctldPing(stdout) {
+		if !strings.HasSuffix(string(name), "-"+host) {
+			continue
+		}
+		if !up {
+			return fmt.Errorf("slurmctld not ready: %s is DOWN", host)
+		}
+		return nil
+	}
 	return nil
+}
+
+// ParseSlurmctldPing parses scontrol ping output into a map from controller
+// hostname to whether it answered. Lines not in the
+// "Slurmctld(<mode>) at <host> is <UP|DOWN>" format are ignored.
+func ParseSlurmctldPing(stdout string) map[string]bool {
+	result := make(map[string]bool)
+	for line := range strings.Lines(stdout) {
+		fields := strings.Fields(line)
+		if len(fields) != 5 || !strings.HasPrefix(fields[0], "Slurmctld(") ||
+			fields[1] != "at" || fields[3] != "is" {
+			continue
+		}
+		result[fields[2]] = fields[4] == "UP"
+	}
+	return result
 }
 
 // SlurmdReady verifies that the slurmd service is active.

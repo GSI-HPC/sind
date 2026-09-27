@@ -175,6 +175,58 @@ func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 	assert.Equal(t, "controller", target)
 }
 
+func TestEnter_TargetSelection_ControllerPair(t *testing.T) {
+	tests := []struct {
+		name          string
+		primaryState  string
+		backupState   string
+		heartbeat     mock.Result
+		want          string
+		wantHeartbeat bool
+	}{
+		{name: "primary in control", primaryState: "running", backupState: "running",
+			heartbeat: mock.Result{Stdout: heartbeatOutput(1000, 995, 0)}, want: "controller", wantHeartbeat: true},
+		{name: "backup in control after takeover", primaryState: "running", backupState: "running",
+			heartbeat: mock.Result{Stdout: heartbeatOutput(1000, 995, 1)}, want: "controller-backup", wantHeartbeat: true},
+		{name: "stale backup heartbeat", primaryState: "running", backupState: "running",
+			heartbeat: mock.Result{Stdout: heartbeatOutput(1000, 800, 1)}, want: "controller", wantHeartbeat: true},
+		{name: "heartbeat unreadable", primaryState: "running", backupState: "running",
+			heartbeat: mock.Result{Err: fmt.Errorf("exit status 1")}, want: "controller", wantHeartbeat: true},
+		{name: "only backup runs", primaryState: "exited", backupState: "running", want: "controller-backup"},
+		{name: "backup stopped", primaryState: "running", backupState: "exited", want: "controller"},
+		{name: "both stopped falls back to controller", primaryState: "exited", backupState: "exited", want: "controller"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			var readHB bool
+			m.OnCall = func(args []string, _ string) mock.Result {
+				if args[0] == "ps" {
+					return mock.Result{Stdout: testutil.NDJSON(
+						testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: tt.primaryState, Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=controller"},
+						testutil.PsEntry{ID: "c2", Names: "sind-dev-controller-backup", State: tt.backupState, Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=controller"},
+						testutil.PsEntry{ID: "c3", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=worker"},
+					)}
+				}
+				if isHeartbeatRead(args) {
+					readHB = true
+					return tt.heartbeat
+				}
+				return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+			}
+
+			target, err := EnterTarget(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, target)
+			assert.Equal(t, tt.wantHeartbeat, readHB)
+		})
+	}
+}
+
 func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

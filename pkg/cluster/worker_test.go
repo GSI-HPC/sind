@@ -1696,3 +1696,32 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 	assert.True(t, created, "worker-1 should be created during add")
 	assert.True(t, removed, "worker-1 should be removed during remove")
 }
+
+// --- findController ---
+
+func TestFindController(t *testing.T) {
+	entry := func(short string, state docker.ContainerState) docker.ContainerListEntry {
+		return docker.ContainerListEntry{Name: ContainerName(mesh.DefaultRealm, "dev", short), State: state}
+	}
+	worker := entry("worker-0", docker.StateRunning)
+	tests := []struct {
+		name       string
+		containers []docker.ContainerListEntry
+		want       string
+	}{
+		{name: "single controller", containers: []docker.ContainerListEntry{entry("controller", docker.StateRunning), worker}, want: "sind-dev-controller"},
+		{name: "stopped single controller", containers: []docker.ContainerListEntry{entry("controller", docker.StateExited), worker}, want: "sind-dev-controller"},
+		{name: "pair prefers primary", containers: []docker.ContainerListEntry{entry("controller-backup", docker.StateRunning), entry("controller", docker.StateRunning)}, want: "sind-dev-controller"},
+		{name: "primary stopped after failover", containers: []docker.ContainerListEntry{entry("controller", docker.StateExited), entry("controller-backup", docker.StateRunning)}, want: "sind-dev-controller-backup"},
+		{name: "primary gone", containers: []docker.ContainerListEntry{entry("controller-backup", docker.StateRunning), worker}, want: "sind-dev-controller-backup"},
+		{name: "both stopped", containers: []docker.ContainerListEntry{entry("controller", docker.StateExited), entry("controller-backup", docker.StateExited)}, want: "sind-dev-controller"},
+		{name: "no controller", containers: []docker.ContainerListEntry{worker}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := findController(tt.containers, mesh.DefaultRealm, "dev")
+			assert.Equal(t, tt.want != "", ok)
+			assert.Equal(t, docker.ContainerName(tt.want), got.Name)
+		})
+	}
+}

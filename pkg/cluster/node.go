@@ -11,7 +11,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -66,6 +65,7 @@ type RunConfig struct {
 	DataHostPath    string      // host path for data volume (empty = use docker volume)
 	DataMountPath   string      // mount point for data (default: /data)
 	Managed         bool        // start slurmd and add to slurm.conf (worker only)
+	SharedState     bool        // mount the shared slurmctld state volume (controllers of a backup pair)
 	ContainerNumber int         // 1-based compose container instance number
 	Pull            bool        // force fresh image pull (--pull always)
 	CapAdd          []string    // extra Linux capabilities (e.g. "SYS_ADMIN")
@@ -112,6 +112,13 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw")
 	} else {
 		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeData))+":"+dataMountPath+":rw")
+	}
+
+	// Shared slurmctld state for a primary/backup controller pair. An empty
+	// named volume is seeded from the image's directory, so it starts out
+	// owned by the slurm user.
+	if cfg.SharedState {
+		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeState))+":"+slurm.StateSaveLocation+":rw")
 	}
 
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
@@ -210,7 +217,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 	for _, n := range cfg.Nodes {
 		switch n.Role {
 		case config.RoleController, config.RoleSubmitter:
-			configs = append(configs, RunConfig{
+			base := RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
 				ShortName:       string(n.Role),
@@ -229,7 +236,18 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				CapDrop:         n.CapDrop,
 				Devices:         n.Devices,
 				SecurityOpt:     n.SecurityOpt,
-			})
+			}
+			if n.Role != config.RoleController || !n.BackupController {
+				configs = append(configs, base)
+				continue
+			}
+			// Primary/backup pair: identical containers sharing the
+			// slurmctld state volume.
+			base.SharedState = true
+			backup := base
+			backup.ShortName = ControllerBackupShortName
+			backup.ContainerNumber = 2
+			configs = append(configs, base, backup)
 		case config.RoleWorker:
 			count := n.Count
 			if count <= 0 {
@@ -272,28 +290,6 @@ func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mes
 		_, err := CreateNode(ctx, client, meshMgr, cfg)
 		if err != nil {
 			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
-		}
-	}
-	return nil
-}
-
-// EnableSlurmServices enables the role-appropriate Slurm daemon on each node.
-// Controller nodes get slurmctld; managed worker nodes get slurmd.
-// Submitter and unmanaged worker nodes are skipped.
-func EnableSlurmServices(ctx context.Context, client *docker.Client, configs []RunConfig) error {
-	for _, cfg := range configs {
-		if cfg.Role == config.RoleWorker && !cfg.Managed {
-			continue
-		}
-		service, ok := probe.ServiceForRole(cfg.Role)
-		if !ok {
-			continue
-		}
-
-		containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
-		_, err := client.Exec(ctx, containerName, "systemctl", "enable", "--now", string(service))
-		if err != nil {
-			return fmt.Errorf("enabling %s on %s: %w", service, cfg.ShortName, err)
 		}
 	}
 	return nil

@@ -105,6 +105,7 @@ nodes:
     cpus: 2
     memory: 4g
     tmpSize: 2g
+    backupController: true
   - role: submitter
   - role: worker
     count: 3
@@ -123,6 +124,7 @@ nodes:
 	assert.Equal(t, 2, cfg.Nodes[0].CPUs)
 	assert.Equal(t, "4g", cfg.Nodes[0].Memory)
 	assert.Equal(t, "2g", cfg.Nodes[0].TmpSize)
+	assert.True(t, cfg.Nodes[0].BackupController)
 
 	// submitter
 	assert.Equal(t, RoleSubmitter, cfg.Nodes[1].Role)
@@ -335,6 +337,13 @@ func TestValidate_Valid(t *testing.T) {
 				{Role: RoleWorker},
 			},
 		},
+		{
+			name: "controller with backupController",
+			nodes: []Node{
+				{Role: RoleController, BackupController: true},
+				{Role: RoleWorker},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -464,6 +473,23 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: RoleWorker, Count: -1},
 			},
 			wantErr: "count must not be negative",
+		},
+		{
+			name: "backupController on worker",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleWorker, BackupController: true},
+			},
+			wantErr: "backupController is only valid for controller",
+		},
+		{
+			name: "backupController on submitter",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleSubmitter, BackupController: true},
+				{Role: RoleWorker},
+			},
+			wantErr: "backupController is only valid for controller",
 		},
 	}
 
@@ -838,6 +864,61 @@ func TestValidate_SlurmSections(t *testing.T) {
 		}}
 		require.NoError(t, cfg.Validate())
 	})
+}
+
+func TestValidate_BackupControllerSlurmMain(t *testing.T) {
+	base := func(main Section) *Cluster {
+		return &Cluster{
+			Kind: "Cluster",
+			Name: "default",
+			Nodes: []Node{
+				{Role: RoleController, BackupController: true},
+				{Role: RoleWorker},
+			},
+			Slurm: Slurm{Main: main},
+		}
+	}
+
+	for _, key := range []string{"SlurmctldHost", "ControlMachine", "BackupController", "BackupAddr", "StateSaveLocation"} {
+		t.Run("rejects "+key, func(t *testing.T) {
+			err := base(Section{Content: key + "=x\n"}).Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "must not set "+key)
+		})
+	}
+
+	t.Run("rejects key in fragment", func(t *testing.T) {
+		err := base(Section{Fragments: map[string]string{"ha": "  slurmctldhost=x\n"}}).Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must not set SlurmctldHost")
+	})
+
+	t.Run("allows SlurmctldTimeout", func(t *testing.T) {
+		require.NoError(t, base(Section{Content: "SlurmctldTimeout=60\n"}).Validate())
+	})
+
+	t.Run("allows keys without backup controller", func(t *testing.T) {
+		cfg := base(Section{Content: "StateSaveLocation=/data/state\n"})
+		cfg.Nodes[0].BackupController = false
+		require.NoError(t, cfg.Validate())
+	})
+}
+
+func TestSection_SetsParameter(t *testing.T) {
+	s := Section{Content: "# SlurmctldTimeout=1\nSchedulerType=sched/backfill # SlurmctldTimeout=2\n"}
+	assert.False(t, s.SetsParameter("SlurmctldTimeout"))
+	assert.True(t, s.SetsParameter("schedulertype"))
+	assert.False(t, Section{}.SetsParameter("SlurmctldTimeout"))
+
+	frag := Section{Fragments: map[string]string{"a": "X=1\n", "b": "SlurmctldTimeout=60\n"}}
+	assert.True(t, frag.SetsParameter("SlurmctldTimeout"))
+}
+
+func TestCluster_HasBackupController(t *testing.T) {
+	c := &Cluster{Nodes: []Node{{Role: RoleController}, {Role: RoleWorker}}}
+	assert.False(t, c.HasBackupController())
+	c.Nodes[0].BackupController = true
+	assert.True(t, c.HasBackupController())
 }
 
 // --- Security fields: capAdd, capDrop, devices, securityOpt ---

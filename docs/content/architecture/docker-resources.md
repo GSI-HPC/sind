@@ -12,11 +12,13 @@ toc: true
 |------|-------------|------------------------|
 | Network | `<realm>-<cluster>-net` | `sind-dev-net` |
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
+| Backup controller | `<realm>-<cluster>-controller-backup` | `sind-dev-controller-backup` |
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
 | Munge volume | `<realm>-<cluster>-munge` | `sind-dev-munge` |
 | Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
+| State volume (backup controller only) | `<realm>-<cluster>-state` | `sind-dev-state` |
 
 The default realm is `sind` and the default cluster name is `default`, resulting in prefixes like `sind-default-*`. See [Realms](../../configuration/realms/) for custom realm naming.
 
@@ -36,6 +38,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | `sind-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
 | `sind-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
 | `sind-<cluster>-data` | `/data` | rw | rw | rw |
+| `sind-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
 | tmpfs | `/tmp` | configurable | configurable | configurable |
 | tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 |
 | tmpfs | `/run/lock` | — | — | — |
@@ -47,6 +50,7 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 -v sind-dev-config:/etc/slurm:ro      # all others
 -v sind-dev-munge:/etc/munge:ro       # all nodes
 -v sind-dev-data:/data:rw             # all nodes
+-v sind-dev-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 --tmpfs /tmp:rw,nosuid,nodev,size=256m  # configurable size
 ```
 

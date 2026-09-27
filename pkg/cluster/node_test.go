@@ -206,6 +206,14 @@ func TestBuildRunArgs_Mounts(t *testing.T) {
 	}
 }
 
+func TestBuildRunArgs_Mounts_SharedState(t *testing.T) {
+	cfg := defaultRunConfig()
+	assert.NotContains(t, testutil.ArgValues(BuildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
+
+	cfg.SharedState = true
+	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "-v"), "sind-dev-state:/var/spool/slurmctld:rw")
+}
+
 func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.DataHostPath = "/home/user/data"
@@ -494,6 +502,53 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 	assert.True(t, configs[3].Managed, "worker-2 managed")
 }
 
+func TestNodeRunConfigs_BackupController(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, BackupController: true, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
+				CapAdd: []string{"SYS_ADMIN"}, Devices: []string{"/dev/fuse"}},
+			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+
+	require.Len(t, configs, 3)
+	primary, backup := configs[0], configs[1]
+	assert.Equal(t, "controller", primary.ShortName)
+	assert.Equal(t, 1, primary.ContainerNumber)
+	assert.True(t, primary.SharedState)
+	assert.Equal(t, "controller-backup", backup.ShortName)
+	assert.Equal(t, 2, backup.ContainerNumber)
+	assert.Equal(t, config.RoleController, backup.Role)
+
+	// Apart from name and container number the two controllers are
+	// identical: resources, volumes, caps, devices, security options.
+	backup.ShortName = primary.ShortName
+	backup.ContainerNumber = primary.ContainerNumber
+	assert.Equal(t, primary, backup)
+
+	assert.Equal(t, "worker-0", configs[2].ShortName)
+	assert.False(t, configs[2].SharedState)
+}
+
+func TestNodeRunConfigs_NoBackupController(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleWorker, Count: 1},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+
+	require.Len(t, configs, 2)
+	assert.Equal(t, "controller", configs[0].ShortName)
+	assert.False(t, configs[0].SharedState)
+}
+
 func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
@@ -621,82 +676,6 @@ func TestCreateClusterNodes_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls)
-}
-
-// --- EnableSlurmServices ---
-
-func TestEnableSlurmServices(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil) // slurmctld on controller
-	m.AddResult("", "", nil) // slurmd on worker-0
-	c := docker.NewClient(&m)
-
-	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},
-	}
-
-	err := EnableSlurmServices(t.Context(), c, configs)
-
-	require.NoError(t, err)
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"exec", "sind-dev-controller", "systemctl", "enable", "--now", "slurmctld"},
-		m.Calls[0].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "systemctl", "enable", "--now", "slurmd"},
-		m.Calls[1].Args)
-}
-
-func TestEnableSlurmServices_SkipsSubmitter(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil) // slurmctld on controller
-	c := docker.NewClient(&m)
-
-	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "submitter", Role: config.RoleSubmitter},
-	}
-
-	err := EnableSlurmServices(t.Context(), c, configs)
-
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 1) // only controller
-}
-
-func TestEnableSlurmServices_SkipsUnmanaged(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil) // slurmctld on controller
-	c := docker.NewClient(&m)
-
-	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: false},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-1", Role: config.RoleWorker, Managed: true},
-	}
-
-	// Need result for worker-1 slurmd
-	m.AddResult("", "", nil)
-
-	err := EnableSlurmServices(t.Context(), c, configs)
-
-	require.NoError(t, err)
-	require.Len(t, m.Calls, 2)
-	// Controller + worker-1 only; worker-0 skipped
-	assert.Contains(t, m.Calls[1].Args, "sind-dev-worker-1")
-}
-
-func TestEnableSlurmServices_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("systemctl failed"))
-	c := docker.NewClient(&m)
-
-	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController},
-	}
-
-	err := EnableSlurmServices(t.Context(), c, configs)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enabling slurmctld on controller")
 }
 
 // --- Security fields in BuildRunArgs ---

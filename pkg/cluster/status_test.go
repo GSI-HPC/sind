@@ -447,6 +447,26 @@ func TestGetMountPoints_AllVolumes(t *testing.T) {
 	assert.Equal(t, []string{"volume", "inspect", "sind-dev-data"}, m.Calls[2].Args)
 }
 
+func TestGetMountPoints_BackupControllerState(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // config
+	m.AddResult("[{}]\n", "", nil) // munge
+	m.AddResult("[{}]\n", "", nil) // data
+	m.AddResult("[{}]\n", "", nil) // state
+	c := docker.NewClient(&m)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller"}},
+		{Name: "sind-dev-controller-backup", Labels: docker.Labels{"sind.role": "controller"}},
+	}
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
+
+	require.NoError(t, err)
+	require.Len(t, mounts, 4)
+	assert.Equal(t, MountPoint{Path: "/var/spool/slurmctld", Source: "sind-dev-state", Type: config.StorageVolume, OK: true}, mounts[3])
+	assert.Equal(t, []string{"volume", "inspect", "sind-dev-state"}, m.Calls[3].Args)
+}
+
 func TestGetMountPoints_HostPath(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil) // config

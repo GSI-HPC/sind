@@ -214,6 +214,50 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmctld not ready")
 }
 
+func TestSlurmctldReady_BackupController(t *testing.T) {
+	pingOut := "Slurmctld(primary) at controller is DOWN\nSlurmctld(backup) at controller-backup is UP\n"
+	tests := []struct {
+		name      string
+		container docker.ContainerName
+		wantErr   string
+	}{
+		{name: "primary down", container: "sind-dev-controller", wantErr: "controller is DOWN"},
+		{name: "backup up", container: "sind-dev-controller-backup"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(pingOut, "", nil)
+			c := docker.NewClient(&m)
+
+			err := SlurmctldReady(t.Context(), c, tt.container)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestSlurmctldReady_NoMatchingLine(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("Slurmctld(primary) at ctl0 is UP\n", "", nil)
+	c := docker.NewClient(&m)
+
+	require.NoError(t, SlurmctldReady(t.Context(), c, testContainer))
+}
+
+func TestParseSlurmctldPing(t *testing.T) {
+	out := "Slurmctld(primary) at controller is UP\n" +
+		"Slurmctld(backup) at controller-backup is DOWN\n" +
+		"*****************************************\n" +
+		"** RESTORE SLURMCTLD DAEMON TO SERVICE **\n"
+	assert.Equal(t, map[string]bool{"controller": true, "controller-backup": false}, ParseSlurmctldPing(out))
+	assert.Empty(t, ParseSlurmctldPing(""))
+}
+
 func TestMungeReady(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("active\n", "", nil)

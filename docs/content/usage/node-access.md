@@ -94,8 +94,8 @@ sind create cluster --data volume
 | Command | Target node |
 |---------|-------------|
 | `sind ssh <node>` | Explicit node |
-| `sind enter [cluster]` | Submitter if exists, otherwise controller |
-| `sind exec [cluster]` | Submitter if exists, otherwise controller |
+| `sind enter [cluster]` | Submitter if exists, otherwise the controller in control |
+| `sind exec [cluster]` | Submitter if exists, otherwise the controller in control |
 
 ## User SSH client integration
 

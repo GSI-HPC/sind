@@ -14,8 +14,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// NodeShortNames returns the short hostname for each node defined in the config.
-// Worker nodes are indexed sequentially across all worker groups, matching
+// NodeShortNames returns the short hostname for each node defined in the config,
+// including the backup controller when enabled. Worker nodes are indexed sequentially across all worker groups, matching
 // the indexing used in slurm.GenerateNodesConf.
 func NodeShortNames(nodes []config.Node) []string {
 	var names []string
@@ -24,6 +24,9 @@ func NodeShortNames(nodes []config.Node) []string {
 		switch n.Role {
 		case config.RoleController, config.RoleSubmitter:
 			names = append(names, string(n.Role))
+			if n.Role == config.RoleController && n.BackupController {
+				names = append(names, ControllerBackupShortName)
+			}
 		case config.RoleWorker:
 			count := n.Count
 			if count <= 0 {
@@ -74,8 +77,11 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		})
 	})
 
-	// Check cluster volumes.
+	// Check the volumes this cluster will create.
 	for _, vtype := range AllVolumeTypes {
+		if vtype == VolumeState && !cfg.HasBackupController() {
+			continue
+		}
 		volName := VolumeName(realm, cfg.Name, vtype)
 		g.Go(func() error {
 			return check(gctx, "volume", string(volName), func(ctx context.Context) (bool, error) {

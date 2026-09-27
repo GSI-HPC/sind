@@ -239,7 +239,7 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // createResources creates cluster network, volumes, config, and munge key.
 //
 //	┌─────────┐  ┌─────────┐
-//	network ║ (config vol → write config) ║ (munge vol → write munge key) ║ data vol
+//	network ║ (config vol → write config) ║ (munge vol → write munge key) ║ data vol ║ state vol (backup pair only)
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
@@ -260,6 +260,9 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 	})
 	if cfg.Storage.DataStorage.HostPath == "" {
 		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeData) })
+	}
+	if cfg.HasBackupController() {
+		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeState) })
 	}
 	return g.Wait()
 }

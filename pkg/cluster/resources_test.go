@@ -64,8 +64,9 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	err := CreateClusterNetwork(ctx, c, mesh.DefaultRealm, clusterName)
 	require.NoError(t, err)
 
-	// Create volumes.
-	for _, vtype := range []VolumeType{VolumeConfig, VolumeMunge, VolumeData} {
+	// Create the volumes of a single-controller cluster (no state volume).
+	volumes := []VolumeType{VolumeConfig, VolumeMunge, VolumeData}
+	for _, vtype := range volumes {
 		err = CreateClusterVolume(ctx, c, mesh.DefaultRealm, clusterName, vtype)
 		require.NoError(t, err)
 	}
@@ -94,7 +95,7 @@ func TestClusterResourceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists, "cluster network")
 
-	for _, vtype := range AllVolumeTypes {
+	for _, vtype := range volumes {
 		exists, err = c.VolumeExists(ctx, VolumeName(mesh.DefaultRealm, clusterName, vtype))
 		require.NoError(t, err)
 		assert.True(t, exists, vtype+" volume")

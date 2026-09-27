@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -38,17 +40,18 @@ const (
 
 // Node represents a single node or node group in the cluster configuration.
 type Node struct {
-	Role        Role     `json:"role"`
-	Count       int      `json:"count,omitempty"`
-	Image       string   `json:"image,omitempty"`
-	CPUs        int      `json:"cpus,omitempty"`
-	Memory      string   `json:"memory,omitempty"`
-	TmpSize     string   `json:"tmpSize,omitempty"`
-	Managed     *bool    `json:"managed,omitempty"`
-	CapAdd      []string `json:"capAdd,omitempty"`
-	CapDrop     []string `json:"capDrop,omitempty"`
-	Devices     []string `json:"devices,omitempty"`
-	SecurityOpt []string `json:"securityOpt,omitempty"`
+	Role             Role     `json:"role"`
+	Count            int      `json:"count,omitempty"`
+	Image            string   `json:"image,omitempty"`
+	CPUs             int      `json:"cpus,omitempty"`
+	Memory           string   `json:"memory,omitempty"`
+	TmpSize          string   `json:"tmpSize,omitempty"`
+	Managed          *bool    `json:"managed,omitempty"`
+	BackupController bool     `json:"backupController,omitempty"`
+	CapAdd           []string `json:"capAdd,omitempty"`
+	CapDrop          []string `json:"capDrop,omitempty"`
+	Devices          []string `json:"devices,omitempty"`
+	SecurityOpt      []string `json:"securityOpt,omitempty"`
 }
 
 // UnmarshalJSON supports three YAML forms:
@@ -147,6 +150,23 @@ func (s Section) FragmentNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// SetsParameter reports whether any line of the section (string form or
+// any fragment) assigns the given slurm.conf-style parameter. Keys are
+// matched case-insensitively, as Slurm does; comments are ignored.
+func (s Section) SetsParameter(key string) bool {
+	prefix := strings.ToLower(key) + "="
+	contents := slices.AppendSeq([]string{s.Content}, maps.Values(s.Fragments))
+	for _, content := range contents {
+		for line := range strings.Lines(content) {
+			line, _, _ = strings.Cut(line, "#")
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), prefix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // UnmarshalJSON supports two YAML/JSON forms:
@@ -305,6 +325,9 @@ func (c *Cluster) Validate() error {
 		if n.Managed != nil && n.Role != RoleWorker {
 			return fmt.Errorf("managed is only valid for worker nodes, not %q", n.Role)
 		}
+		if n.BackupController && n.Role != RoleController {
+			return fmt.Errorf("backupController is only valid for controller nodes, not %q", n.Role)
+		}
 	}
 
 	if controllers != 1 {
@@ -336,6 +359,14 @@ func (c *Cluster) Validate() error {
 		}
 	}
 
+	if c.HasBackupController() {
+		for _, key := range backupControllerManagedKeys {
+			if c.Slurm.Main.SetsParameter(key) {
+				return fmt.Errorf("slurm main must not set %s when backupController is enabled: sind generates the controller configuration", key)
+			}
+		}
+	}
+
 	sections := []struct {
 		name    string
 		section Section
@@ -353,6 +384,25 @@ func (c *Cluster) Validate() error {
 	}
 
 	return nil
+}
+
+// backupControllerManagedKeys are slurm.conf parameters sind generates for a
+// primary/backup controller pair; user overrides would break the pair.
+// ControlMachine, BackupController and BackupAddr are the deprecated
+// spellings of SlurmctldHost.
+var backupControllerManagedKeys = []string{
+	"SlurmctldHost", "ControlMachine", "BackupController", "BackupAddr", "StateSaveLocation",
+}
+
+// HasBackupController reports whether the controller node spec enables the
+// backup controller.
+func (c *Cluster) HasBackupController() bool {
+	for _, n := range c.Nodes {
+		if n.Role == RoleController && n.BackupController {
+			return true
+		}
+	}
+	return false
 }
 
 // validateSection checks that a Slurm config section is valid.

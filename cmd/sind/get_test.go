@@ -741,6 +741,9 @@ func TestGetNode_Output(t *testing.T) {
 
 	m := &mock.Executor{
 		OnCall: func(args []string, _ string) mock.Result {
+			if len(args) >= 2 && args[0] == "inspect" && args[1] == "sind-dev-controller-backup" {
+				return mock.Result{Stderr: "Error: No such object: sind-dev-controller-backup\n", Err: testutil.ExitCode1(t)}
+			}
 			if len(args) >= 2 && args[0] == "inspect" {
 				return mock.Result{Stdout: inspectWithLabels}
 			}
@@ -773,6 +776,7 @@ func TestGetNode_Output(t *testing.T) {
 	assert.Contains(t, stdout, "sshd")
 	assert.Contains(t, stdout, "slurmctld")
 	assert.Contains(t, stdout, "\u2713")
+	assert.NotContains(t, stdout, "HA")
 }
 
 func TestGetNode_JSON(t *testing.T) {
@@ -780,6 +784,9 @@ func TestGetNode_JSON(t *testing.T) {
 
 	m := &mock.Executor{
 		OnCall: func(args []string, _ string) mock.Result {
+			if len(args) >= 2 && args[0] == "inspect" && args[1] == "sind-dev-controller-backup" {
+				return mock.Result{Stderr: "Error: No such object: sind-dev-controller-backup\n", Err: testutil.ExitCode1(t)}
+			}
 			if len(args) >= 2 && args[0] == "inspect" {
 				return mock.Result{Stdout: inspectWithLabels}
 			}
@@ -811,6 +818,106 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.True(t, got.Services["munge"])
 	assert.True(t, got.Services["sshd"])
 	assert.True(t, got.Services["slurmctld"])
+	assert.Nil(t, got.HA)
+	assert.NotContains(t, stdout, `"ha"`)
+}
+
+// pairOnCall serves get cluster / get node for a cluster with a controller
+// pair where the backup is in control (heartbeat written by index 1).
+func pairOnCall(t *testing.T) func([]string, string) mock.Result {
+	t.Helper()
+	inspectEntry := func(name, role string) string {
+		return fmt.Sprintf(`{"Id":"id","Name":"/%s","State":{"Status":"running"},"Config":{"Labels":{"sind.role":%q,"sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}`, name, role)
+	}
+	return func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "ps":
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+				testutil.PsEntry{ID: "b", Names: "sind-dev-controller-backup", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+				testutil.PsEntry{ID: "c", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+			)}
+		case args[0] == "inspect":
+			entries := make([]string, 0, len(args)-1)
+			for _, name := range args[1:] {
+				role := "controller"
+				if strings.Contains(name, "worker") {
+					role = "worker"
+				}
+				entries = append(entries, inspectEntry(name, role))
+			}
+			return mock.Result{Stdout: "[" + strings.Join(entries, ",") + "]"}
+		case args[0] == "exec" && args[2] == "sh" && strings.Contains(strings.Join(args, " "), "heartbeat"):
+			// Written 5s ago by SlurmctldHost index 1 (the backup).
+			return mock.Result{Stdout: "1000\n 0 0 0 0 0 0 3 227\n 0 0 0 0 0 0 0 1\n"}
+		case args[0] == "exec" && args[2] == "systemctl":
+			var b strings.Builder
+			for range args[4:] {
+				b.WriteString("active\n")
+			}
+			return mock.Result{Stdout: b.String()}
+		case args[0] == "exec" && args[2] == "scontrol":
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"}
+		case args[0] == "network" || args[0] == "volume":
+			return mock.Result{Stdout: "[{}]\n"}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
+	}
+}
+
+func TestGetCluster_ControllerPair(t *testing.T) {
+	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev")
+	require.NoError(t, err)
+
+	assert.Contains(t, stdout, "/var/spool/slurmctld")
+	lines := strings.Split(stdout, "\n")
+	var header string
+	rows := map[string][]string{}
+	for i, l := range lines {
+		if l == "NODES" {
+			header = lines[i+1]
+			for _, r := range lines[i+2:] {
+				if f := strings.Fields(r); len(f) > 0 {
+					rows[f[0]] = f
+				}
+			}
+		}
+	}
+	assert.Equal(t, []string{"NAME", "ROLE", "HA", "IP", "STATUS", "SERVICES"}, strings.Fields(header))
+	assert.Equal(t, "primary", rows["controller.dev"][2])
+	assert.Equal(t, "backup*", rows["controller-backup.dev"][2])
+	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][2], "workers leave the HA column empty")
+}
+
+func TestGetCluster_ControllerPairJSON(t *testing.T) {
+	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "cluster", "dev", "-o", "json")
+	require.NoError(t, err)
+
+	var got cluster.Status
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.Len(t, got.Nodes, 3)
+	assert.Equal(t, &cluster.HAStatus{Position: "primary"}, got.Nodes[0].Health.HA)
+	assert.Equal(t, &cluster.HAStatus{Position: "backup", InControl: true}, got.Nodes[1].Health.HA)
+	assert.Nil(t, got.Nodes[2].Health.HA)
+}
+
+func TestGetNode_ControllerPair(t *testing.T) {
+	stdout, _, err := executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "node", "controller-backup.dev")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"CONTAINER", "ROLE", "HA", "FQDN", "IP", "STATUS"}, strings.Fields(strings.Split(stdout, "\n")[0]))
+	assert.Contains(t, stdout, "backup*")
+
+	stdout, _, err = executeWithMock(&mock.Executor{OnCall: pairOnCall(t)}, "get", "node", "controller-backup.dev", "-o", "json")
+	require.NoError(t, err)
+	var got cluster.NodeDetail
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, &cluster.HAStatus{Position: "backup", InControl: true}, got.HA)
+}
+
+func TestFormatHA(t *testing.T) {
+	assert.Equal(t, "", formatHA(nil))
+	assert.Equal(t, "primary", formatHA(&cluster.HAStatus{Position: "primary"}))
+	assert.Equal(t, "backup*", formatHA(&cluster.HAStatus{Position: "backup", InControl: true}))
 }
 
 // --- Integration ---
