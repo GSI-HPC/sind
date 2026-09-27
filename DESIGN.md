@@ -72,7 +72,7 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
-| slurmctld ready | `scontrol ping` succeeds (controller only) |
+| slurmctld ready | `scontrol ping` reports this controller UP (controllers only; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (worker only) |
 
 If any node fails to become ready within the timeout, `sind create cluster` fails and reports which nodes/checks failed. Partial clusters are not automatically cleaned up—use `sind delete cluster` to remove.
@@ -368,6 +368,16 @@ worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd 
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
+Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Workers and submitters leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither.
+
+```
+NODES
+NAME                    ROLE        HA         IP            STATUS    SERVICES
+controller.dev          controller  primary    172.19.0.2    running   munge ✓ slurmctld ✗ sshd ✓
+controller-backup.dev   controller  backup*    172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
+```
+
 `sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (defaults to cluster "default"). Passing a full DNS FQDN ending in `.sind` is rejected — use the bare short name or the `NODE.CLUSTER` form:
 
 ```
@@ -631,6 +641,7 @@ nodes:
     tmpSize: 512m                        # override default
     cpus: 1
     memory: 1g
+    backupController: true               # add controller-backup (active/passive pair)
 
   - role: submitter                      # optional, at most one
 
@@ -726,6 +737,7 @@ Validation rules:
 | `securityOpt` | global + per-node | none | Extra security options |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+| `backupController` | controller only | `false` | Add a backup controller, `controller-backup` |
 
 Per-node scalar values override the `defaults` section. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
 
@@ -736,6 +748,20 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
 - `count` - only valid for worker role
+- `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
+
+### Backup Controller
+
+`backupController: true` on the controller spec runs Slurm's active/passive controller pair:
+
+- A second controller container, `controller-backup` (compose container number 2), gets the same image, resources, volumes, capabilities, devices and security options as `controller`.
+- `slurm.conf` lists `SlurmctldHost=controller` followed by `SlurmctldHost=controller-backup`, and `SlurmctldTimeout=20` unless `slurm.main` sets it.
+- `StateSaveLocation` (`/var/spool/slurmctld`) is the shared volume `<realm>-<cluster>-state`, mounted on both controllers; it only exists for clusters with a backup.
+- `slurmctld` is enabled on both controllers in parallel. The backup starts in backup mode because of its `SlurmctldHost` position, and takes over when the primary does not respond for `SlurmctldTimeout` seconds. A starting primary reclaims control from the backup. `sind create cluster` fails unless both controllers answer `scontrol ping` for their own host.
+- The controller in control is the one that wrote the `heartbeat` file in `StateSaveLocation` (its `SlurmctldHost` index and a timestamp) within the last 60 seconds and whose `slurmctld` answers. `sind get cluster`, `sind get node`, `sind enter` and `sind exec` use this.
+- `sind create worker` and `sind delete worker` edit `sind-nodes.conf` and run `scontrol reconfigure` through the primary, or through the backup when the primary container is gone or stopped.
+
+Failover is triggered with `scontrol takeover` (graceful; the primary's `slurmctld` exits and is restarted with `systemctl start slurmctld` to hand control back) or by an outage of the primary, e.g. `sind power cut controller`, `sind power shutdown controller` or `sind power freeze controller`.
 
 ## Docker Resources
 
@@ -745,11 +771,13 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 |------|--------------|------------------------|
 | Network | `<realm>-<cluster>-net` | `sind-dev-net` |
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
+| Backup controller | `<realm>-<cluster>-controller-backup` | `sind-dev-controller-backup` |
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
 | Munge volume | `<realm>-<cluster>-munge` | `sind-dev-munge` |
 | Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
+| State volume (backup controller only) | `<realm>-<cluster>-state` | `sind-dev-state` |
 
 ### Global Resources (Mesh)
 
@@ -771,6 +799,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | `sind-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
 | `sind-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
 | `sind-<cluster>-data` | `/data` | rw | rw | rw |
+| `sind-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
 | tmpfs | `/tmp` | per-node | per-node | per-node |
 
 ### Mount Options
@@ -783,6 +812,7 @@ Container mount flags:
 -v sind-<cluster>-config:/etc/slurm:ro     # all others
 -v sind-<cluster>-munge:/etc/munge:ro      # all nodes
 -v sind-<cluster>-data:/data:rw            # all nodes
+-v sind-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 --tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
 --tmpfs /run:exec,mode=755                 # systemd runtime
 --tmpfs /run/lock                          # systemd lock files
@@ -1003,12 +1033,12 @@ Interactive sessions are routed based on cluster configuration:
 | Command | Target Node |
 |---------|-------------|
 | `sind ssh <node>` | explicit node |
-| `sind enter [cluster]` | submitter (if exists) → controller |
-| `sind exec [cluster] -- <cmd>` | submitter (if exists) → controller |
+| `sind enter [cluster]` | submitter (if exists) → controller in control (falls back to `controller`) |
+| `sind exec [cluster] -- <cmd>` | submitter (if exists) → controller in control (falls back to `controller`) |
 
 ### sind enter
 
-Opens an interactive shell on the submitter (or controller if no submitter configured). Equivalent to `sind ssh submitter` or `sind ssh controller`.
+Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Equivalent to `sind ssh submitter` or `sind ssh controller`.
 
 ### sind exec
 

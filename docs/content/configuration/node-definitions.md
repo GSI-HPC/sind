@@ -24,6 +24,7 @@ toc: true
 | `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp` |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | worker only | `true` | Start slurmd and add to slurm.conf |
+| `backupController` | controller only | `false` | Add a backup controller, `controller-backup` (see below) |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
 | `capDrop` | global + per-node | none | Dropped Linux capabilities |
 | `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
@@ -79,6 +80,25 @@ Unmanaged workers can also be created dynamically:
 ```bash
 sind create worker --count 2 --unmanaged
 ```
+
+## Backup controller
+
+`backupController: true` on the controller node adds a second controller, `controller-backup`, and configures Slurm's active/passive controller pair:
+
+```yaml
+nodes:
+  - role: controller
+    backupController: true
+  - role: worker
+    count: 2
+```
+
+- `controller-backup` uses the same image, resources, volumes, capabilities, devices and security options as `controller`.
+- `slurm.conf` lists both hosts (`SlurmctldHost=controller`, then `SlurmctldHost=controller-backup`) and sets `SlurmctldTimeout=20` unless the `main` section sets it.
+- Both controllers mount the shared state volume `<realm>-<cluster>-state` at `/var/spool/slurmctld` (`StateSaveLocation`).
+- `slurmctld` runs on both. The backup takes over when the primary stops responding for `SlurmctldTimeout` seconds, and hands control back when the primary's `slurmctld` starts again.
+
+`SlurmctldHost` and `StateSaveLocation` cannot be set in `slurm.main` when the backup is enabled. See [Controller Failover]({{< relref "/guides/controller-failover" >}}) for checking which controller is in control and triggering a failover.
 
 ## Capabilities and devices
 
