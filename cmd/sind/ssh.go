@@ -31,6 +31,13 @@ func newSSHCommand() *cobra.Command {
 }
 
 func runSSH(cmd *cobra.Command, args []string) error {
+	// ssh passes its arguments through to SSH, so cobra never sees -h or
+	// --help. OpenSSH has neither option, so a leading one asks for sind's
+	// help.
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+		return cmd.Help()
+	}
+
 	sshOptions, node, command, err := parseSSHArgs(args)
 	if err != nil {
 		return err
@@ -93,8 +100,10 @@ func runEnter(cmd *cobra.Command, clusterName string) error {
 
 func newExecCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:                "exec [CLUSTER] -- COMMAND [ARGS...]",
-		Short:              "Run a command on submitter or controller",
+		Use:   "exec [CLUSTER] -- COMMAND [ARGS...]",
+		Short: "Run a command on submitter or controller",
+		// runExec parses the flags itself: with cobra parsing them, shell
+		// completion could not tell whether the -- was typed yet.
 		DisableFlagParsing: true,
 		ValidArgsFunction:  completeExecClusterArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -106,7 +115,20 @@ func newExecCommand() *cobra.Command {
 }
 
 func runExec(cmd *cobra.Command, args []string) error {
-	clusterName, command, err := parseExecArgs(args)
+	// Parse exec's own flags, which end at the --, so that --realm, -v and
+	// --help also work after "exec", as in the "exec --realm R CLUSTER --
+	// COMMAND" the MCP server runs.
+	flags := cmd.Flags()
+	flags.AddFlagSet(cmd.InheritedFlags()) // --realm and -v
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if help, _ := flags.GetBool("help"); help {
+		return cmd.Help()
+	}
+	applyVerbosity(cmd)
+
+	clusterName, command, err := parseExecArgs(flags.Args(), flags.ArgsLenAtDash())
 	if err != nil {
 		return err
 	}
@@ -175,21 +197,15 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 }
 
 // parseExecArgs separates cluster name and command from exec args.
-// Format: [CLUSTER] -- COMMAND [ARGS...]
-func parseExecArgs(args []string) (clusterName string, command []string, err error) {
-	dashIdx := -1
-	for i, a := range args {
-		if a == "--" {
-			dashIdx = i
-			break
-		}
-	}
-
+// Format: [CLUSTER] -- COMMAND [ARGS...]. cobra removes the -- from args;
+// dashIdx is the number of arguments before it (cmd.ArgsLenAtDash), -1
+// when there was none.
+func parseExecArgs(args []string, dashIdx int) (clusterName string, command []string, err error) {
 	if dashIdx < 0 {
 		return "", nil, fmt.Errorf("-- separator and command required")
 	}
 
-	command = args[dashIdx+1:]
+	command = args[dashIdx:]
 	if len(command) == 0 {
 		return "", nil, fmt.Errorf("command required after --")
 	}

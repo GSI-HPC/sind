@@ -198,7 +198,7 @@ Rules:
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
 - **One persistent root flag**: `--realm` (inherited by every subcommand)
 - **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
-- `ssh` and `exec` disable flag parsing to pass their arguments through, so `--realm` and `-v` must precede them (`sind -v ssh worker-0`)
+- `ssh` passes its arguments through to SSH, so `--realm` and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's. `exec` parses its own flags up to its `--`
 
 ### Output Conventions
 
