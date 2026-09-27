@@ -71,13 +71,17 @@ assert.Contains(t, m.Calls[0].Args, "--name")
 
 ## Simulating missing resources
 
-For methods like `ContainerExists()` that check exit codes, a plain `fmt.Errorf` won't work. You need a real `*exec.ExitError` with exit code 1:
+The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr.
+
+Docker exits 1 for many failures, so `docker.IsNotFound` and `docker.IsVolumeInUse` read docker's message, not only the exit code. Queue a real `*exec.ExitError` with exit code 1 together with the stderr docker prints:
 
 ```go
-m.AddResult("", "", &exec.ExitError{ProcessState: testutil.ExitCode1(t)})
+m.AddResult("", testutil.NoSuchContainer("sind-dev-controller"), testutil.ExitCode1(t))
+m.AddResult("", testutil.NoSuchNetwork("sind-dev-net"), testutil.ExitCode1(t))
+m.AddResult("", testutil.NoSuchVolume("sind-dev-config"), testutil.ExitCode1(t))
 ```
 
-The `testutil.ExitCode1(t)` helper (from `internal/testutil`) runs `sh -c "exit 1"` to obtain a real `*os.ProcessState`.
+`testutil.ExitCode1(t)` (from `internal/testutil`) runs `sh -c "exit 1"` to obtain a real `*exec.ExitError`. An exit code 1 with any other stderr, such as `volume is in use`, is not a missing resource.
 
 ## Recording executor
 

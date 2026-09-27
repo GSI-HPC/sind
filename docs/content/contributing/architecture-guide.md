@@ -27,12 +27,13 @@ internal/mock/     Test doubles for cmdexec.Executor
   └── recording.go Recorded call types
 
 internal/testutil/ Shared test helpers
-  ├── testutil.go  ExitCode1, Ptr[T], realm helpers
+  ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Ptr[T], realm helpers
   ├── client.go    NewClient (unit test client factory)
   └── client_integration.go NewClient (integration test variant)
 
 pkg/cmdexec/       Command executor abstraction
   ├── exec.go      Executor interface, OSExecutor
+  ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)
 
 pkg/docker/        Docker CLI wrapper

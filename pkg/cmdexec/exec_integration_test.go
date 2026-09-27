@@ -48,6 +48,18 @@ func TestOSExecutor_ExitErrorPreservesOutput(t *testing.T) {
 	assert.Equal(t, "err\n", stderr)
 }
 
+func TestOSExecutor_ExitErrorCarriesStderr(t *testing.T) {
+	var e cmdexec.OSExecutor
+	_, stderr, err := e.Run(t.Context(), "sh", "-c", "echo 'Error: No such container: x' >&2; exit 1")
+	require.Error(t, err)
+	assert.Equal(t, "Error: No such container: x\n", stderr)
+	var exitErr *cmdexec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 1, exitErr.ExitCode())
+	assert.Equal(t, stderr, exitErr.Stderr)
+	assert.Equal(t, "exit status 1: Error: No such container: x", err.Error())
+}
+
 func TestOSExecutor_CommandNotFound(t *testing.T) {
 	var e cmdexec.OSExecutor
 	_, _, err := e.Run(t.Context(), "nonexistent-command-xyz")

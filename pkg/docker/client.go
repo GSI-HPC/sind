@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -86,10 +86,39 @@ func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 }
 
 // IsNotFound reports whether err is a docker CLI "resource not found" error
-// (inspect exit code 1) rather than a genuine failure. Callers that want the
-// info from a single inspect call can use this to distinguish missing
-// resources without issuing a second existence probe.
+// rather than a genuine failure. Callers that want the info from a single
+// inspect or rm call can use this to distinguish missing resources without
+// issuing a second existence probe.
+//
+// Docker exits 1 for many failures, so the exit code alone is not enough: a
+// volume that is still in use exits 1 too, and so does the CLI when it
+// cannot reach the daemon ("... connect: no such file or directory"). The
+// error has to be an *cmdexec.ExitError whose stderr names a missing
+// resource in one of the forms the docker CLI and daemon use:
+// "No such container: x", "No such image: x", "error: no such object: x",
+// "get x: no such volume", "No such network: x" or "network x not found".
 func IsNotFound(err error) bool {
-	var exitErr *exec.ExitError
-	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	if !ok || exitErr.ExitCode() != 1 {
+		return false
+	}
+	msg := strings.ToLower(exitErr.Stderr)
+	for _, form := range notFoundForms {
+		if strings.Contains(msg, form) {
+			return true
+		}
+	}
+	return networkNotFound.MatchString(msg)
 }
+
+// notFoundForms are docker's messages for a missing resource, lowercased.
+var notFoundForms = []string{
+	"no such container",
+	"no such image",
+	"no such object",
+	"no such volume",
+	"no such network",
+}
+
+// networkNotFound matches the daemon's message for a missing network.
+var networkNotFound = regexp.MustCompile(`\bnetwork \S+ not found\b`)

@@ -25,20 +25,20 @@ func TestContainerStateLifecycle(t *testing.T) {
 	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)                                        // create
-		rec.AddResult("[{}]\n", "", nil)                                          // exists → true
-		rec.AddResult(n+"\n", "", nil)                                            // start
-		rec.AddResult(inspectRunning(n), "", nil)                                 // inspect → running
-		rec.AddResult(n+"\n", "", nil)                                            // stop
-		rec.AddResult(inspectExited(n), "", nil)                                  // inspect → exited
-		rec.AddResult(n+"\n", "", nil)                                            // start again
-		rec.AddResult(n+"\n", "", nil)                                            // pause
-		rec.AddResult(inspectPaused(n), "", nil)                                  // inspect → paused
-		rec.AddResult(n+"\n", "", nil)                                            // unpause
-		rec.AddResult(inspectRunning(n), "", nil)                                 // inspect → running
-		rec.AddResult(n+"\n", "", nil)                                            // kill
-		rec.AddResult(n+"\n", "", nil)                                            // remove
-		rec.AddResult("", "Error\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists → false
+		rec.AddResult("abc123\n", "", nil)                                                                                       // create
+		rec.AddResult("[{}]\n", "", nil)                                                                                         // exists → true
+		rec.AddResult(n+"\n", "", nil)                                                                                           // start
+		rec.AddResult(inspectRunning(n), "", nil)                                                                                // inspect → running
+		rec.AddResult(n+"\n", "", nil)                                                                                           // stop
+		rec.AddResult(inspectExited(n), "", nil)                                                                                 // inspect → exited
+		rec.AddResult(n+"\n", "", nil)                                                                                           // start again
+		rec.AddResult(n+"\n", "", nil)                                                                                           // pause
+		rec.AddResult(inspectPaused(n), "", nil)                                                                                 // inspect → paused
+		rec.AddResult(n+"\n", "", nil)                                                                                           // unpause
+		rec.AddResult(inspectRunning(n), "", nil)                                                                                // inspect → running
+		rec.AddResult(n+"\n", "", nil)                                                                                           // kill
+		rec.AddResult(n+"\n", "", nil)                                                                                           // remove
+		rec.AddResult("", "Error response from daemon: No such container: "+n+"\n", &exec.ExitError{ProcessState: exitCode1(t)}) // exists → false
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()

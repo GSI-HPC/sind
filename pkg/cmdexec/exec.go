@@ -14,7 +14,8 @@ import (
 type Executor interface {
 	// Run executes the named command with the given arguments and returns
 	// the captured stdout and stderr. If the command exits with a non-zero
-	// status, the returned error wraps an *exec.ExitError.
+	// status, the returned error is an *ExitError that carries stderr and
+	// wraps the *exec.ExitError.
 	Run(ctx context.Context, name string, args ...string) (stdout string, stderr string, err error)
 
 	// RunWithStdin is like Run but pipes the given reader to the command's stdin.
@@ -36,7 +37,7 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 	err := cmd.Run()
-	return outBuf.String(), errBuf.String(), err
+	return outBuf.String(), errBuf.String(), WrapExitError(err, errBuf.String())
 }
 
 // Run implements Executor.

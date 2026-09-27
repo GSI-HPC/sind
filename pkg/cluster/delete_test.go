@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -147,14 +148,51 @@ func TestDeleteVolumes_Error(t *testing.T) {
 // TestDeleteVolumes_AlreadyGone covers volumes that were manually removed.
 func TestDeleteVolumes_AlreadyGone(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil)                                          // config OK
-	m.AddResult("", "Error: No such volume\n", testutil.ExitCode1(t)) // munge already gone
-	m.AddResult("", "", nil)                                          // data OK
+	m.AddResult("", "", nil)                                                        // config OK
+	m.AddResult("", testutil.NoSuchVolume("sind-dev-munge"), testutil.ExitCode1(t)) // munge already gone
+	m.AddResult("", "", nil)                                                        // data OK
 	c := docker.NewClient(&m)
 
 	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
 	err := DeleteVolumes(t.Context(), c, volumes)
 	require.NoError(t, err)
+}
+
+// volumeInUse is what docker writes to stderr, with exit code 1, when a
+// volume is still mounted by a container.
+const volumeInUse = "Error response from daemon: remove sind-dev-munge: volume is in use - [0123456789ab]\n"
+
+// TestDeleteVolumes_InUseRetried checks that a volume still held by a
+// container that is going away is retried until the removal succeeds.
+func TestDeleteVolumes_InUseRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var m mock.Executor
+		m.AddResult("", volumeInUse, testutil.ExitCode1(t)) // munge still in use
+		m.AddResult("", "", nil)                            // munge removed on retry
+		c := docker.NewClient(&m)
+
+		err := DeleteVolumes(t.Context(), c, []docker.VolumeName{"sind-dev-munge"})
+		require.NoError(t, err)
+		assert.Len(t, m.Calls, 2)
+	})
+}
+
+// TestDeleteVolumes_StillInUse checks that a volume that stays in use is
+// reported, not mistaken for one that is already gone and leaked. docker
+// exits 1 for both, so only its stderr tells them apart.
+func TestDeleteVolumes_StillInUse(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var m mock.Executor
+		for range 6 {
+			m.AddResult("", volumeInUse, testutil.ExitCode1(t))
+		}
+		c := docker.NewClient(&m)
+
+		err := DeleteVolumes(t.Context(), c, []docker.VolumeName{"sind-dev-munge"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "removing volume sind-dev-munge: exit status 1: Error response from daemon: remove sind-dev-munge: volume is in use")
+		assert.Len(t, m.Calls, 6)
+	})
 }
 
 func TestDeleteVolumes_Empty(t *testing.T) {
@@ -689,7 +727,7 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 				// Mesh containers exist during cleanup
 				return mock.Result{}
 			}
-			return mock.Result{Stderr: "Error\n", Err: exitErr}
+			return mock.Result{Stderr: testutil.NoSuchContainer(args[2]), Err: exitErr}
 		}
 
 		t.Logf("unhandled mock call: %v", args)

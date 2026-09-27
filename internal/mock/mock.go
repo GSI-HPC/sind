@@ -25,7 +25,9 @@ type Call struct {
 	Stdin string // captured stdin content (empty if no stdin)
 }
 
-// Result holds the return values for a single Executor call.
+// Result holds the return values for a single Executor call. An Err that is
+// a bare *exec.ExitError is returned as a *cmdexec.ExitError carrying
+// Stderr, the shape the real executor returns.
 type Result struct {
 	Stdout string
 	Stderr string
@@ -74,7 +76,7 @@ func (m *Executor) record(name string, args []string, stdin string) (string, str
 
 	if m.OnCall != nil {
 		r := m.OnCall(args, stdin)
-		return r.Stdout, r.Stderr, r.Err
+		return r.Stdout, r.Stderr, cmdexec.WrapExitError(r.Err, r.Stderr)
 	}
 
 	if m.idx >= len(m.results) {
@@ -82,7 +84,7 @@ func (m *Executor) record(name string, args []string, stdin string) (string, str
 	}
 	r := m.results[m.idx]
 	m.idx++
-	return r.Stdout, r.Stderr, r.Err
+	return r.Stdout, r.Stderr, cmdexec.WrapExitError(r.Err, r.Stderr)
 }
 
 // Run implements cmdexec.Executor.
