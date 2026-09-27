@@ -11,7 +11,7 @@ import (
 )
 
 func TestGenerateSlurmConf(t *testing.T) {
-	conf := GenerateSlurmConf("dev", config.Section{})
+	conf := GenerateSlurmConf("dev", config.Section{}, false)
 
 	assert.Contains(t, conf, "ClusterName=dev")
 	assert.Contains(t, conf, "SlurmctldHost=controller")
@@ -24,14 +24,14 @@ func TestGenerateSlurmConf(t *testing.T) {
 }
 
 func TestGenerateSlurmConf_DefaultCluster(t *testing.T) {
-	conf := GenerateSlurmConf("default", config.Section{})
+	conf := GenerateSlurmConf("default", config.Section{}, false)
 
 	assert.Contains(t, conf, "ClusterName=default")
 	assert.Contains(t, conf, "SlurmctldHost=controller")
 }
 
 func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
-	conf := GenerateSlurmConf("test", config.Section{})
+	conf := GenerateSlurmConf("test", config.Section{}, false)
 	for _, line := range strings.Split(conf, "\n") {
 		assert.Equal(t, strings.TrimRight(line, " \t"), line,
 			"line has trailing whitespace: %q", line)
@@ -40,7 +40,7 @@ func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
 
 func TestGenerateSlurmConf_MainStringAppend(t *testing.T) {
 	main := config.Section{Content: "SchedulerType=sched/backfill\n"}
-	conf := GenerateSlurmConf("dev", main)
+	conf := GenerateSlurmConf("dev", main, false)
 
 	assert.Contains(t, conf, "SchedulerType=sched/backfill\n")
 	// Appended after the base config
@@ -52,11 +52,36 @@ func TestGenerateSlurmConf_MainMapIncludes(t *testing.T) {
 		"resources":  "SelectType=select/cons_tres\n",
 		"scheduling": "SchedulerType=sched/backfill\n",
 	}}
-	conf := GenerateSlurmConf("dev", main)
+	conf := GenerateSlurmConf("dev", main, false)
 
 	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/resources.conf\n")
 	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/scheduling.conf\n")
 	assert.NotContains(t, conf, "*")
+}
+
+func TestGenerateSlurmConf_SingleController(t *testing.T) {
+	conf := GenerateSlurmConf("dev", config.Section{}, false)
+
+	assert.Equal(t, 1, strings.Count(conf, "SlurmctldHost="))
+	assert.NotContains(t, conf, "SlurmctldTimeout")
+}
+
+func TestGenerateSlurmConf_BackupController(t *testing.T) {
+	conf := GenerateSlurmConf("dev", config.Section{}, true)
+
+	assert.Contains(t, conf, "SlurmctldHost=controller\nSlurmctldHost=controller-backup\n")
+	assert.Contains(t, conf, "SlurmctldTimeout=20\n")
+	assert.Contains(t, conf, "StateSaveLocation=/var/spool/slurmctld\n")
+}
+
+func TestGenerateSlurmConf_BackupControllerTimeoutOverride(t *testing.T) {
+	for _, main := range []config.Section{
+		{Content: "SlurmctldTimeout=60\n"},
+		{Fragments: map[string]string{"ha": "slurmctldtimeout=60\n"}},
+	} {
+		conf := GenerateSlurmConf("dev", main, true)
+		assert.NotContains(t, conf, "SlurmctldTimeout=20")
+	}
 }
 
 func TestGenerateCgroupConf(t *testing.T) {

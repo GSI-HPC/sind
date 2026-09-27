@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -148,6 +150,23 @@ func (s Section) FragmentNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// SetsParameter reports whether any line of the section (string form or
+// any fragment) assigns the given slurm.conf-style parameter. Keys are
+// matched case-insensitively, as Slurm does; comments are ignored.
+func (s Section) SetsParameter(key string) bool {
+	prefix := strings.ToLower(key) + "="
+	contents := slices.AppendSeq([]string{s.Content}, maps.Values(s.Fragments))
+	for _, content := range contents {
+		for line := range strings.Lines(content) {
+			line, _, _ = strings.Cut(line, "#")
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), prefix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // UnmarshalJSON supports two YAML/JSON forms:
@@ -340,6 +359,14 @@ func (c *Cluster) Validate() error {
 		}
 	}
 
+	if c.HasBackupController() {
+		for _, key := range backupControllerManagedKeys {
+			if c.Slurm.Main.SetsParameter(key) {
+				return fmt.Errorf("slurm main must not set %s when backupController is enabled: sind generates the controller configuration", key)
+			}
+		}
+	}
+
 	sections := []struct {
 		name    string
 		section Section
@@ -357,6 +384,25 @@ func (c *Cluster) Validate() error {
 	}
 
 	return nil
+}
+
+// backupControllerManagedKeys are slurm.conf parameters sind generates for a
+// primary/backup controller pair; user overrides would break the pair.
+// ControlMachine, BackupController and BackupAddr are the deprecated
+// spellings of SlurmctldHost.
+var backupControllerManagedKeys = []string{
+	"SlurmctldHost", "ControlMachine", "BackupController", "BackupAddr", "StateSaveLocation",
+}
+
+// HasBackupController reports whether the controller node spec enables the
+// backup controller.
+func (c *Cluster) HasBackupController() bool {
+	for _, n := range c.Nodes {
+		if n.Role == RoleController && n.BackupController {
+			return true
+		}
+	}
+	return false
 }
 
 // validateSection checks that a Slurm config section is valid.

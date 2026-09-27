@@ -866,6 +866,61 @@ func TestValidate_SlurmSections(t *testing.T) {
 	})
 }
 
+func TestValidate_BackupControllerSlurmMain(t *testing.T) {
+	base := func(main Section) *Cluster {
+		return &Cluster{
+			Kind: "Cluster",
+			Name: "default",
+			Nodes: []Node{
+				{Role: RoleController, BackupController: true},
+				{Role: RoleWorker},
+			},
+			Slurm: Slurm{Main: main},
+		}
+	}
+
+	for _, key := range []string{"SlurmctldHost", "ControlMachine", "BackupController", "BackupAddr", "StateSaveLocation"} {
+		t.Run("rejects "+key, func(t *testing.T) {
+			err := base(Section{Content: key + "=x\n"}).Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "must not set "+key)
+		})
+	}
+
+	t.Run("rejects key in fragment", func(t *testing.T) {
+		err := base(Section{Fragments: map[string]string{"ha": "  slurmctldhost=x\n"}}).Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must not set SlurmctldHost")
+	})
+
+	t.Run("allows SlurmctldTimeout", func(t *testing.T) {
+		require.NoError(t, base(Section{Content: "SlurmctldTimeout=60\n"}).Validate())
+	})
+
+	t.Run("allows keys without backup controller", func(t *testing.T) {
+		cfg := base(Section{Content: "StateSaveLocation=/data/state\n"})
+		cfg.Nodes[0].BackupController = false
+		require.NoError(t, cfg.Validate())
+	})
+}
+
+func TestSection_SetsParameter(t *testing.T) {
+	s := Section{Content: "# SlurmctldTimeout=1\nSchedulerType=sched/backfill # SlurmctldTimeout=2\n"}
+	assert.False(t, s.SetsParameter("SlurmctldTimeout"))
+	assert.True(t, s.SetsParameter("schedulertype"))
+	assert.False(t, Section{}.SetsParameter("SlurmctldTimeout"))
+
+	frag := Section{Fragments: map[string]string{"a": "X=1\n", "b": "SlurmctldTimeout=60\n"}}
+	assert.True(t, frag.SetsParameter("SlurmctldTimeout"))
+}
+
+func TestCluster_HasBackupController(t *testing.T) {
+	c := &Cluster{Nodes: []Node{{Role: RoleController}, {Role: RoleWorker}}}
+	assert.False(t, c.HasBackupController())
+	c.Nodes[0].BackupController = true
+	assert.True(t, c.HasBackupController())
+}
+
 // --- Security fields: capAdd, capDrop, devices, securityOpt ---
 
 func TestParse_SecurityFields(t *testing.T) {
