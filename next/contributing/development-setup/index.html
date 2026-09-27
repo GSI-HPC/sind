@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T18:22:36+00:00"
+      content="2026-09-27T22:09:18+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/contributing/development-setup/",
       "headline": "Development Setup",
       "description": "Clone, build, and run sind locally",
-      "wordCount": "237",
+      "wordCount": "288",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T18:22:36.00Z",
+      "dateModified": "2026-09-27T22:09:18.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2180,6 +2180,7 @@
 <li><strong>Go 1.26+</strong></li>
 <li><strong>Docker Engine 28.0+</strong></li>
 <li><strong>Linux host</strong> with cgroupv2 and <code>nsdelegate</code> mount option</li>
+<li><strong>firejail</strong>, which sandboxes <code>make test</code></li>
 </ul>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="clone-and-build"
@@ -2193,7 +2194,7 @@
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">git clone https://github.com/GSI-HPC/sind.git
 </span></span><span class="line"><span class="cl"><span class="nb">cd</span> sind
 </span></span><span class="line"><span class="cl">make build
-</span></span></code></pre></div><p>The binary is built at <code>./sind</code>.</p>
+</span></span></code></pre></div><p>The binary is built at <code>./sind-&lt;os&gt;-&lt;arch&gt;</code>, e.g. <code>./sind-linux-amd64</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="run"
     >
@@ -2203,8 +2204,8 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">./sind version
-</span></span><span class="line"><span class="cl">./sind create cluster
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">./sind-linux-amd64 version
+</span></span><span class="line"><span class="cl">./sind-linux-amd64 create cluster
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="make-targets"
     >
@@ -2228,8 +2229,12 @@
 					<td>Build the sind binary</td>
 			</tr>
 			<tr>
+					<td><code>make install</code></td>
+					<td>Install sind to <code>GOPATH/bin</code></td>
+			</tr>
+			<tr>
 					<td><code>make test</code></td>
-					<td>Run unit tests with race detector</td>
+					<td>Run unit tests with race detector, sandboxed with firejail</td>
 			</tr>
 			<tr>
 					<td><code>make test-integration</code></td>
@@ -2238,6 +2243,13 @@
 			<tr>
 					<td><code>make coverage</code></td>
 					<td>Generate HTML coverage report</td>
+			</tr>
+			<tr>
+					<td><code>make check-coverage</code></td>
+					<td>Check the coverage thresholds in <code>.testcoverage.yml</code> (requires <a
+  class="gdoc-markdown__link"
+  href="https://github.com/vladopajic/go-test-coverage"
+>go-test-coverage</a>)</td>
 			</tr>
 			<tr>
 					<td><code>make lint</code></td>
@@ -2303,6 +2315,10 @@
 					<td>MCP server framework</td>
 			</tr>
 			<tr>
+					<td><code>github.com/modelcontextprotocol/go-sdk</code></td>
+					<td>MCP request and result types for the ophis tool middleware</td>
+			</tr>
+			<tr>
 					<td><code>github.com/spf13/afero</code></td>
 					<td>Filesystem abstraction for testability</td>
 			</tr>
@@ -2329,8 +2345,9 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Unit tests (no Docker required):</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make <span class="nb">test</span>
+<p>Unit tests (no Docker required). firejail breaks DNS inside the sandbox, so download the modules first:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">go mod download
+</span></span><span class="line"><span class="cl">make <span class="nb">test</span>
 </span></span></code></pre></div><p>Integration tests (requires Docker):</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">make test-integration
 </span></span></code></pre></div><p>See <a

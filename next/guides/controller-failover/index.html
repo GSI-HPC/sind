@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T17:00:43+00:00"
+      content="2026-09-27T22:14:08+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/guides/controller-failover/",
       "headline": "Controller Failover",
       "description": "Run a primary\/backup slurmctld pair and trigger graceful or outage failovers",
-      "wordCount": "616",
+      "wordCount": "621",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T17:00:43.00Z",
+      "dateModified": "2026-09-27T22:14:08.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2213,10 +2213,10 @@ NAME                    ROLE        HA         IP            STATUS    SERVICES
 controller.dev          controller  primary*   172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
 controller-backup.dev   controller  backup     172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓
 worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
-</code></pre><p>With <code>-o json</code>, each controller carries <code>&quot;ha&quot;: {&quot;position&quot;: &quot;primary&quot;, &quot;in_control&quot;: true}</code>. <code>sind get node controller-backup.dev</code> shows the same information for one node.</p>
+</code></pre><p>With <code>-o json</code>, each controller&rsquo;s <code>health</code> carries <code>&quot;ha&quot;: {&quot;position&quot;: &quot;primary&quot;, &quot;in_control&quot;: true}</code>. <code>sind get node controller-backup.dev</code> shows the same information for one node.</p>
 <p>sind reads this from the heartbeat file the controller in control writes to <code>StateSaveLocation</code>. A controller counts as in control when it wrote the heartbeat within the last 60 seconds and its own <code>slurmctld</code> answers <code>scontrol ping</code>.</p>
 <p>From inside the cluster, <code>scontrol ping</code> reports whether each <code>slurmctld</code> is up:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- scontrol ping
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- scontrol ping
 </span></span></code></pre></div><pre tabindex="0"><code>Slurmctld(primary) at controller is UP
 Slurmctld(backup) at controller-backup is UP
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
@@ -2229,10 +2229,10 @@ Slurmctld(backup) at controller-backup is UP
     </a>
 </div>
 <p>Ask the backup to take over:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- scontrol takeover
-</span></span></code></pre></div><p>The backup takes control and the primary&rsquo;s <code>slurmctld</code> stops. Running and pending jobs are kept because both controllers share the saved state. <code>sind get cluster</code> then shows <code>backup*</code> and <code>slurmctld ✗</code> on <code>controller</code>.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- scontrol takeover
+</span></span></code></pre></div><p>The backup takes control and the primary&rsquo;s <code>slurmctld</code> stops. Running and pending jobs are kept because both controllers share the saved state. <code>sind get cluster dev</code> then shows <code>backup*</code> and <code>slurmctld ✗</code> on <code>controller</code>.</p>
 <p>Hand control back by starting the primary&rsquo;s <code>slurmctld</code> again. On start, the primary tells the backup to return to backup mode and takes over:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh controller -- systemctl start slurmctld
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh controller.dev -- systemctl start slurmctld
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="failover-by-outage"
     >
@@ -2257,30 +2257,30 @@ Slurmctld(backup) at controller-backup is UP
 	<tbody>
 			<tr>
 					<td>Host crash</td>
-					<td><code>sind power cut controller</code></td>
-					<td><code>sind power on controller</code></td>
+					<td><code>sind power cut controller.dev</code></td>
+					<td><code>sind power on controller.dev</code></td>
 			</tr>
 			<tr>
 					<td>Clean host shutdown</td>
-					<td><code>sind power shutdown controller</code></td>
-					<td><code>sind power on controller</code></td>
+					<td><code>sind power shutdown controller.dev</code></td>
+					<td><code>sind power on controller.dev</code></td>
 			</tr>
 			<tr>
 					<td>Hung controller</td>
-					<td><code>sind power freeze controller</code></td>
-					<td><code>sind power unfreeze controller</code>, then <code>sind ssh controller -- systemctl restart slurmctld</code></td>
+					<td><code>sind power freeze controller.dev</code></td>
+					<td><code>sind power unfreeze controller.dev</code>, then <code>sind ssh controller.dev -- systemctl restart slurmctld</code></td>
 			</tr>
 			<tr>
 					<td>Daemon crash</td>
-					<td><code>sind ssh controller -- systemctl kill -s KILL slurmctld</code></td>
-					<td><code>sind ssh controller -- systemctl start slurmctld</code></td>
+					<td><code>sind ssh controller.dev -- systemctl kill -s KILL slurmctld</code></td>
+					<td><code>sind ssh controller.dev -- systemctl start slurmctld</code></td>
 			</tr>
 	</tbody>
 </table> </div>
 <p>When the primary&rsquo;s container starts again, systemd starts its <code>slurmctld</code>, which reclaims control from the backup. A frozen primary resumes without knowing that the backup took over, so restart its <code>slurmctld</code> after unfreezing it to hand control back cleanly.</p>
 <p>Watch the takeover and the logs of either controller:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">watch sind get cluster
-</span></span><span class="line"><span class="cl">sind logs controller-backup slurmctld --follow
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">watch sind get cluster dev
+</span></span><span class="line"><span class="cl">sind logs controller-backup.dev slurmctld --follow
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="while-the-backup-is-in-control"
     >
@@ -2293,7 +2293,7 @@ Slurmctld(backup) at controller-backup is UP
 <ul>
 <li><code>sind enter</code> and <code>sind exec</code> run on the controller in control when the cluster has no submitter.</li>
 <li><code>sind create worker</code> and <code>sind delete worker</code> update <code>sind-nodes.conf</code> and reconfigure Slurm through a running controller, so they keep working while the primary is down.</li>
-<li><code>sind ssh controller</code> and <code>sind logs controller</code> still address the primary container by name.</li>
+<li><code>sind ssh controller.dev</code> and <code>sind logs controller.dev</code> still address the primary container by name.</li>
 </ul>
 <p>To run a pair whose Slurm configuration you provision yourself, see <a
   class="gdoc-markdown__link"

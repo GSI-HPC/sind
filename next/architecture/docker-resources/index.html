@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T17:00:43+00:00"
+      content="2026-09-27T22:18:18+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/docker-resources/",
       "headline": "Docker Resources",
       "description": "Resource naming conventions, volumes, and labels",
-      "wordCount": "289",
+      "wordCount": "437",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T17:00:43.00Z",
+      "dateModified": "2026-09-27T22:18:18.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2251,6 +2251,7 @@
 					<th>Type</th>
 					<th>Name pattern</th>
 					<th>Example</th>
+					<th>Image</th>
 			</tr>
 	</thead>
 	<tbody>
@@ -2258,24 +2259,29 @@
 					<td>Mesh network</td>
 					<td><code>&lt;realm&gt;-mesh</code></td>
 					<td><code>sind-mesh</code></td>
+					<td>—</td>
 			</tr>
 			<tr>
 					<td>DNS container</td>
 					<td><code>&lt;realm&gt;-dns</code></td>
 					<td><code>sind-dns</code></td>
+					<td><code>coredns/coredns:latest</code></td>
 			</tr>
 			<tr>
 					<td>SSH container</td>
 					<td><code>&lt;realm&gt;-ssh</code></td>
 					<td><code>sind-ssh</code></td>
+					<td><code>ghcr.io/gsi-hpc/sind-node:latest</code> (runs <code>sleep infinity</code>)</td>
 			</tr>
 			<tr>
 					<td>SSH volume</td>
 					<td><code>&lt;realm&gt;-ssh-config</code></td>
 					<td><code>sind-ssh-config</code></td>
+					<td>written once by a <code>busybox:latest</code> helper, <code>&lt;realm&gt;-ssh-keygen</code></td>
 			</tr>
 	</tbody>
 </table> </div>
+<p>The mesh images do not follow <code>defaults.image</code>: the SSH relay always runs <code>sind-node:latest</code>, and CoreDNS and BusyBox come from Docker Hub. <code>--pull</code> pulls them too.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="volume-mounts"
     >
@@ -2297,28 +2303,28 @@
 	</thead>
 	<tbody>
 			<tr>
-					<td><code>sind-&lt;cluster&gt;-config</code></td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-config</code></td>
 					<td><code>/etc/slurm</code></td>
 					<td>rw</td>
 					<td>ro</td>
 					<td>ro</td>
 			</tr>
 			<tr>
-					<td><code>sind-&lt;cluster&gt;-munge</code></td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-munge</code></td>
 					<td><code>/etc/munge</code></td>
 					<td>ro</td>
 					<td>ro</td>
 					<td>ro</td>
 			</tr>
 			<tr>
-					<td><code>sind-&lt;cluster&gt;-data</code></td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-data</code></td>
 					<td><code>/data</code></td>
 					<td>rw</td>
 					<td>rw</td>
 					<td>rw</td>
 			</tr>
 			<tr>
-					<td><code>sind-&lt;cluster&gt;-state</code></td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-state</code></td>
 					<td><code>/var/spool/slurmctld</code></td>
 					<td>rw (backup controller pairs only)</td>
 					<td>—</td>
@@ -2364,7 +2370,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>When <code>dataStorage.type: hostPath</code> is specified, the data volume is replaced with a bind mount:</p>
+<p>With <code>dataStorage.type: hostPath</code>, or by default through <code>sind create cluster --data .</code> when the config sets no <code>dataStorage</code>, the data volume is replaced with a bind mount:</p>
 <pre tabindex="0"><code>-v /path/on/host:/data:rw
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="container-labels"
@@ -2417,6 +2423,8 @@
 			</tr>
 	</tbody>
 </table> </div>
+<p>A cluster&rsquo;s network and volumes carry <code>sind.realm</code> and <code>sind.cluster</code>; the mesh network and the SSH volume carry <code>sind.realm</code> only. <code>sind get networks</code>, <code>sind get volumes</code> and <code>sind delete cluster --all</code> find resources by these labels.</p>
+<p>Every container, network and volume also carries Docker Compose labels, so Compose-aware tools group them: the project is <code>&lt;realm&gt;-&lt;cluster&gt;</code> (<code>&lt;realm&gt;-mesh</code> for the mesh), the service is the node&rsquo;s role (<code>dns</code> or <code>ssh</code> in the mesh), the container number is 1, or N+1 for <code>worker-N</code> and 2 for <code>controller-backup</code>, and networks and volumes name themselves <code>net</code>, <code>mesh</code>, the volume type or <code>ssh-config</code>.</p>
 
   </article>
 

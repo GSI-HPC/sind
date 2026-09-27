@@ -45,7 +45,7 @@
 <meta property="article:section" content="Container Images" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T17:00:43+00:00"
+      content="2026-09-27T22:20:05+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/container-images/building-images/",
       "headline": "Building Images",
       "description": "Official images and custom image requirements",
-      "wordCount": "710",
+      "wordCount": "736",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T17:00:43.00Z",
+      "dateModified": "2026-09-27T22:20:05.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2212,12 +2212,12 @@
 <ul>
 <li>Is based on Rocky Linux 10</li>
 <li>Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source</li>
-<li>Contains all Slurm daemons (slurmctld, slurmd, munge, sshd) and a full MPI stack</li>
+<li>Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack</li>
 <li>Slurm is built with PMIx support (<code>--with-pmix</code>) for native PMIx job launch</li>
 <li>OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent</li>
 <li>Uses systemd as init (PID 1)</li>
 </ul>
-<p>sind enables the appropriate Slurm services based on node role at container start.</p>
+<p>sind enables the appropriate Slurm services based on node role once every node is ready.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="building-locally"
     >
@@ -2292,7 +2292,7 @@
 			</tr>
 	</tbody>
 </table> </div>
-<p>sind enables Slurm services at container start based on the node&rsquo;s role. Services must be installed but <strong>not</strong> enabled in the image.</p>
+<p>sind enables Slurm services based on the node&rsquo;s role (<code>systemctl enable --now</code>) once every node is ready. Services must be installed but <strong>not</strong> enabled in the image.</p>
 <p>The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an <a
   class="gdoc-markdown__link"
   href="/sind/next/guides/unmanaged-cluster/"
@@ -2361,11 +2361,10 @@
 <p>For a clean container environment, mask unnecessary systemd units:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-dockerfile" data-lang="dockerfile"><span class="line"><span class="cl"><span class="k">RUN</span> systemctl mask <span class="se">\
 </span></span></span><span class="line"><span class="cl">    dev-hugepages.mount <span class="se">\
-</span></span></span><span class="line"><span class="cl">    sys-fs-fuse-connections.mount <span class="se">\
-</span></span></span><span class="line"><span class="cl">    systemd-logind.service <span class="se">\
 </span></span></span><span class="line"><span class="cl">    getty.target <span class="se">\
 </span></span></span><span class="line"><span class="cl">    console-getty.service<span class="err">
-</span></span></span></code></pre></div>
+</span></span></span></code></pre></div><p>Leave <code>sys-fs-fuse-connections.mount</code> unmasked: FUSE inside a node (<code>capAdd: [SYS_ADMIN]</code> and the <code>/dev/fuse</code> device) needs it, and without <code>/dev/fuse</code> it does nothing.</p>
+
   </article>
 
 

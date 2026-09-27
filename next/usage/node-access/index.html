@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T18:40:19+00:00"
+      content="2026-09-27T22:17:00+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/node-access/",
       "headline": "Node Access",
       "description": "SSH, interactive shells, and command execution",
-      "wordCount": "544",
+      "wordCount": "628",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T18:40:19.00Z",
+      "dateModified": "2026-09-27T22:17:00.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2192,8 +2192,9 @@
 </span></span><span class="line"><span class="cl"><span class="c1"># Port forwarding</span>
 </span></span><span class="line"><span class="cl">sind ssh -L 8080:localhost:80 controller
 </span></span></code></pre></div><p>Internally, <code>sind ssh</code> executes SSH via the mesh SSH container:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">docker <span class="nb">exec</span> -it sind-ssh ssh &lt;node&gt;.&lt;realm&gt;.sind
-</span></span></code></pre></div><p>Shell completion is available for both <code>sind ssh</code> and <code>sind exec</code> — press Tab to complete node and cluster names.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">docker <span class="nb">exec</span> -i -t sind-ssh ssh <span class="o">[</span>SSH_OPTIONS<span class="o">]</span> &lt;node&gt;.&lt;cluster&gt;.&lt;realm&gt;.sind <span class="o">[</span>COMMAND...<span class="o">]</span>
+</span></span></code></pre></div><p>The relay container is <code>&lt;realm&gt;-ssh</code>, and <code>-t</code> is only passed when stdin is a terminal.</p>
+<p>Shell completion is available for both <code>sind ssh</code> and <code>sind exec</code> — press Tab to complete node and cluster names. Load it with <code>source &lt;(sind completion bash)</code>, or the <code>zsh</code>, <code>fish</code> or <code>powershell</code> variant; <code>sind completion &lt;shell&gt; --help</code> shows how to install it permanently.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="enter"
     >
@@ -2333,16 +2334,20 @@
 					<td><code>known_hosts</code></td>
 					<td>Host keys</td>
 			</tr>
+			<tr>
+					<td><code>lock</code></td>
+					<td>Advisory lock that serializes creating and deleting clusters and workers in the realm</td>
+			</tr>
 	</tbody>
 </table> </div>
-<p>These files are updated on every create/delete operation and removed when the last cluster in a realm is deleted.</p>
+<p>The SSH files are updated on every create/delete operation and removed when the last cluster in a realm is deleted; the directory stays, as it holds the <code>lock</code> file.</p>
 <p>To find the path for your current realm:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get ssh-config
 </span></span></code></pre></div><p>Add to the <strong>top</strong> of your <code>~/.ssh/config</code> (before any <code>Host</code> or <code>Match</code> blocks) for a single realm:</p>
 <pre tabindex="0"><code>Include ~/.local/state/sind/sind/ssh_config
 </code></pre><p>Or include all realms at once using a wildcard:</p>
 <pre tabindex="0"><code>Include ~/.local/state/sind/*/ssh_config
-</code></pre><p>The generated SSH config includes <code>CanonicalizeHostname</code> directives that expand short names automatically:</p>
+</code></pre><p>For the default realm <code>sind</code>, the generated SSH config includes <code>CanonicalizeHostname</code> directives that expand short names automatically. Other realms get no such directives; use full names such as <code>controller.dev.ci.sind</code> there.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">ssh controller                        <span class="c1"># → controller.default.sind.sind</span>
 </span></span><span class="line"><span class="cl">ssh controller.dev                    <span class="c1"># → controller.dev.sind.sind</span>
 </span></span><span class="line"><span class="cl">ssh controller.default.sind.sind      <span class="c1"># full FQDN</span>

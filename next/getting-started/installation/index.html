@@ -45,7 +45,7 @@
 <meta property="article:section" content="Getting Started" />
     <meta
       property="article:modified_time"
-      content="2026-09-26T20:42:26+00:00"
+      content="2026-09-27T22:18:18+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/getting-started/installation/",
       "headline": "Installation",
       "description": "Prerequisites and installation instructions",
-      "wordCount": "296",
+      "wordCount": "339",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-26T20:42:26.00Z",
+      "dateModified": "2026-09-27T22:18:18.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2270,7 +2270,8 @@ after creating it.</p>
 >Official images</a> for the available tags.</p>
 <p>Docker pulls the image automatically when creating your first cluster. Subsequent creates reuse the cached image — use <code>--pull</code> to force a fresh pull:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster --pull
-</span></span></code></pre></div><p>See <a
+</span></span></code></pre></div><p>Besides the node image, each realm&rsquo;s mesh runs <code>coredns/coredns:latest</code> (DNS) and <code>busybox:latest</code> (a helper that writes the SSH keys) from Docker Hub, and its SSH relay runs <code>ghcr.io/gsi-hpc/sind-node:latest</code> whatever <code>defaults.image</code> says. Hosts that cannot reach Docker Hub or ghcr.io need these images preloaded.</p>
+<p>See <a
   class="gdoc-markdown__link"
   href="../../container-images/building-images/"
 >Container Images</a> for details on building custom images.</p>

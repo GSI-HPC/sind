@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T17:00:43+00:00"
+      content="2026-09-27T22:15:52+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1115",
+      "wordCount": "1248",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T17:00:43.00Z",
+      "dateModified": "2026-09-27T22:15:52.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2207,7 +2207,7 @@
 			</tr>
 	</tbody>
 </table> </div>
-<p>When a required check fails, <code>sind doctor</code> exits with a non-zero status and prints remediation steps. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
+<p>When a required check fails, <code>sind doctor</code> exits with a non-zero status; for a missing <code>nsdelegate</code> it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
   class="gdoc-markdown__link"
   href="../../architecture/networking/#polkit-policy"
 >Polkit policy</a> for details.</p>
@@ -2259,7 +2259,7 @@ sudo systemctl daemon-reload
 			<tr>
 					<td><code>-vv</code></td>
 					<td>debug</td>
-					<td>Individual operations: &ldquo;waiting for node&rdquo;, &ldquo;enabling slurmd&rdquo;, &ldquo;creating network&rdquo;</td>
+					<td>Individual operations: &ldquo;waiting for node&rdquo;, &ldquo;starting readiness probes&rdquo;, &ldquo;enabling slurm service&rdquo;</td>
 			</tr>
 			<tr>
 					<td><code>-vvv</code></td>
@@ -2288,7 +2288,7 @@ sudo systemctl daemon-reload
 00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld
 00:13:32.363 DEBU enabling slurm service node=worker-0 service=slurmd
 00:13:32.608 INFO slurm services enabled
-</code></pre><p>The <code>-v</code> flag belongs to the root command and must appear before the subcommand (e.g., <code>sind -v create cluster</code>).</p>
+</code></pre><p><code>-v</code> is a global flag and may come before or after the subcommand (<code>sind -v create cluster</code>, <code>sind create cluster -v</code>). <code>sind ssh</code> and <code>sind exec</code> pass their arguments through, so for them it must come first: <code>sind -v ssh worker-0</code> logs sind&rsquo;s steps, while <code>sind ssh -v worker-0</code> makes SSH verbose. The same holds for <code>--realm</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="json-output"
     >
@@ -2333,9 +2333,9 @@ MOUNT        SOURCE               TYPE       STATUS
 
 NODES
 NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.18.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev      worker      172.18.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd ✓
+controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 </code></pre><p><code>SLURM</code> shows <code>-</code> when sind does not know the version, as for unmanaged clusters. The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
 <div class="table-wrap"> <table>
 	<thead>
@@ -2365,6 +2365,10 @@ worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd 
 					<td><code>empty</code></td>
 					<td>No nodes exist</td>
 			</tr>
+			<tr>
+					<td><code>unknown</code></td>
+					<td>All containers are in a state sind does not map, e.g. <code>restarting</code></td>
+			</tr>
 	</tbody>
 </table> </div>
 <p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
@@ -2379,6 +2383,26 @@ worker-1.dev      worker      172.18.0.4    running   munge ✓ slurmd ✗ sshd 
 <blockquote>
 <p><strong>Tip:</strong> Run <code>watch sind get cluster</code> for a simple live dashboard that refreshes every two seconds.</p>
 </blockquote>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="node-status"
+    >
+        Node status
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#node-status" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Node status" aria-label="Anchor to: Node status" href="#node-status">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get node NODE<span class="o">[</span>.CLUSTER<span class="o">]</span>
+</span></span></code></pre></div><p>Shows the health of a single node. <code>NODE</code> is a short name, optionally followed by its cluster (<code>worker-0.dev</code>); the cluster defaults to <code>default</code>. A full DNS name ending in <code>.sind</code> is rejected.</p>
+<pre tabindex="0"><code>CONTAINER             ROLE         FQDN                       IP           STATUS
+sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
+
+SERVICES
+NAME        STATUS
+munge       ✓
+slurmctld   ✓
+sshd        ✓
+</code></pre><p>Controllers of a backup pair get the same <code>HA</code> column as in <code>sind get cluster</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="logs"
     >
@@ -2423,8 +2447,8 @@ sind-default-worker-1    default   worker       worker-1.default.sind.sind      
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get networks
 </span></span></code></pre></div><pre tabindex="0"><code>NAME              DRIVER   SUBNET           GATEWAY
-sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 sind-default-net  bridge   172.19.0.0/16    172.19.0.1
+sind-mesh         bridge   172.18.0.0/16    172.18.0.1
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-realms"
     >
@@ -2436,8 +2460,8 @@ sind-default-net  bridge   172.19.0.0/16    172.19.0.1
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get realms
 </span></span></code></pre></div><pre tabindex="0"><code>NAME   CLUSTERS
-sind   2
 ci     1
+sind   2
 </code></pre><p>Lists all active realms discovered from Docker container labels. Useful when working with multiple realms to see what&rsquo;s running.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-volumes"
@@ -2451,8 +2475,8 @@ ci     1
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get volumes
 </span></span></code></pre></div><pre tabindex="0"><code>NAME                  DRIVER
 sind-default-config   local
-sind-default-munge    local
 sind-default-data     local
+sind-default-munge    local
 sind-ssh-config       local
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="dns-records"

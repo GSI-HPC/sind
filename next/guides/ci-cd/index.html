@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-04-09T16:23:27+02:00"
+      content="2026-09-27T22:09:59+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/guides/ci-cd/",
       "headline": "CI/CD",
       "description": "Using sind in GitHub Actions and other CI systems",
-      "wordCount": "113",
+      "wordCount": "125",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-09T16:23:27.00Z",
+      "dateModified": "2026-09-27T22:09:59.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2179,7 +2179,7 @@
 <p>The <a
   class="gdoc-markdown__link"
   href="https://github.com/GSI-HPC/sind-action"
->sind-action</a> GitHub Action installs sind and creates clusters in your workflow. sind runs rootless on standard <code>ubuntu-latest</code> runners — no privileged containers or custom runner images required.</p>
+>sind-action</a> GitHub Action installs sind and creates clusters in your workflow. sind runs rootless on standard GitHub-hosted Ubuntu runners, x64 (<code>ubuntu-latest</code>) and ARM64 (<code>ubuntu-24.04-arm</code>) — no privileged containers or custom runner images required.</p>
 <p>See the <a
   class="gdoc-markdown__link"
   href="https://github.com/GSI-HPC/sind-action#readme"
@@ -2202,7 +2202,8 @@
 </span></span><span class="line"><span class="cl">chmod +x sind
 </span></span><span class="line"><span class="cl">./sind doctor
 </span></span><span class="line"><span class="cl">./sind create cluster --config cluster.yml
-</span></span></code></pre></div><p>sind requires Docker Engine 28.0+ and a Linux host with cgroupv2 and <code>nsdelegate</code>. Most modern CI runners meet these requirements out of the box.</p>
+</span></span></code></pre></div><p>On 64-bit ARM, download <code>sind-linux-arm64</code> instead.</p>
+<p>sind requires Docker Engine 28.0+ and a Linux host with cgroupv2 and <code>nsdelegate</code>. Most modern CI runners meet these requirements out of the box.</p>
 
   </article>
 

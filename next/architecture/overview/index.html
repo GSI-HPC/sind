@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-04-10T19:33:47+02:00"
+      content="2026-09-27T22:19:08+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/overview/",
       "headline": "Design Overview",
       "description": "Operational model and design philosophy",
-      "wordCount": "495",
+      "wordCount": "613",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-10T19:33:47.00Z",
+      "dateModified": "2026-09-27T22:19:08.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2211,7 +2211,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Mutating operations acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations are unaffected. Different realms operate independently — see <a
+<p>Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations and <code>power</code> commands do not take it. Different realms operate independently — see <a
   class="gdoc-markdown__link"
   href="/sind/next/configuration/realms/"
 >Realms</a>.</p>
@@ -2224,18 +2224,21 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<pre tabindex="0"><code>PreflightCheck
-      │
-resolveInfra        DNS IP │ SSH key │ Slurm version
-      │
-createResources     network ║ (config vol → write) ║ (munge vol → write)
-      │
-setupNodes          (create + wait + SSH + hostkey) per node
-      │
-registerMesh ║ enableSlurm
-      │
-  *Cluster
-</code></pre><p>Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.</p>
+<pre tabindex="0"><code>┌ PreflightCheck → createResources → connect SSH relay ┐
+┤                                                      ├→ setupNodes
+└ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┘
+                           │
+                 registerMesh ║ enableSlurm
+                           │
+                       *Cluster
+</code></pre><ul>
+<li><code>createResources</code> creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key, the data volume (unless the data is a host path) and, for a backup controller pair, the state volume, all in parallel.</li>
+<li><code>resolveInfra</code> looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller&rsquo;s image, while the resources are created.</li>
+<li><code>setupNodes</code> creates, waits for, and sets up SSH and host keys on every node.</li>
+<li><code>enableSlurm</code> starts slurmctld and slurmd on managed clusters only.</li>
+<li>If any step fails, <code>sind create cluster</code> removes what it created.</li>
+</ul>
+<p>Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.</p>
 <p>Mesh registration (batch DNS + known_hosts) and Slurm enablement run concurrently after all nodes are ready.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="readiness-probes"
@@ -2278,11 +2281,11 @@ registerMesh ║ enableSlurm
 			</tr>
 			<tr>
 					<td>slurmctld ready</td>
-					<td><code>scontrol ping</code> succeeds (controller only)</td>
+					<td><code>scontrol ping</code> reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host)</td>
 			</tr>
 			<tr>
 					<td>slurmd ready</td>
-					<td>slurmd service active (worker only)</td>
+					<td>slurmd service active (managed workers only)</td>
 			</tr>
 	</tbody>
 </table> </div>
