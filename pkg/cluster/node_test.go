@@ -16,12 +16,13 @@ import (
 )
 
 func TestNodeLabels(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, "25.11.0", "", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
 
 	assert.Equal(t, docker.Labels{
 		"sind.realm":                              mesh.DefaultRealm,
 		"sind.cluster":                            "dev",
 		"sind.role":                               "controller",
+		"sind.managed":                            "true",
 		"sind.slurm.version":                      "25.11.0",
 		"com.docker.compose.project":              "sind-dev",
 		"com.docker.compose.service":              "controller",
@@ -33,34 +34,41 @@ func TestNodeLabels(t *testing.T) {
 }
 
 func TestNodeLabels_NoSlurmVersion(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleWorker, "", "", 3)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleWorker, false, "", "", 3)
 
 	assert.Equal(t, docker.Labels{
 		"sind.realm":                              mesh.DefaultRealm,
 		"sind.cluster":                            "dev",
 		"sind.role":                               "worker",
+		"sind.managed":                            "false",
+		"sind.slurm.version":                      "",
 		"com.docker.compose.project":              "sind-dev",
 		"com.docker.compose.service":              "worker",
 		"com.docker.compose.container-number":     "3",
 		"com.docker.compose.oneoff":               "False",
 		"com.docker.compose.config-hash":          "",
 		"com.docker.compose.project.config_files": "",
-	}, labels)
-	_, ok := labels[LabelSlurmVersion]
-	assert.False(t, ok, "slurm version label absent")
+	}, labels, "empty slurm version label overrides the image's")
 }
 
 func TestNodeLabels_WithDataHostPath(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, "25.11.0", "/home/user/project", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "/home/user/project", 1)
 
 	assert.Equal(t, "/home/user/project", labels[LabelDataHostPath])
 }
 
 func TestNodeLabels_NoDataHostPath(t *testing.T) {
-	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, "25.11.0", "", 1)
+	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
 
 	_, ok := labels[LabelDataHostPath]
 	assert.False(t, ok, "data host path label absent when empty")
+}
+
+func TestIsManaged(t *testing.T) {
+	assert.True(t, IsManaged(docker.Labels{LabelManaged: "true"}))
+	assert.False(t, IsManaged(docker.Labels{LabelManaged: "false"}))
+	assert.True(t, IsManaged(docker.Labels{LabelRole: "worker"}), "created before the label existed")
+	assert.True(t, IsManaged(nil))
 }
 
 func defaultRunConfig() RunConfig {
@@ -75,6 +83,7 @@ func defaultRunConfig() RunConfig {
 		TmpSize:         "1g",
 		SlurmVersion:    "25.11.0",
 		DNSIP:           "172.18.0.2",
+		Managed:         true,
 		ContainerNumber: 1,
 	}
 }
@@ -101,6 +110,7 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	assert.Contains(t, labels, "sind.realm="+mesh.DefaultRealm)
 	assert.Contains(t, labels, "sind.cluster=dev")
 	assert.Contains(t, labels, "sind.role=controller")
+	assert.Contains(t, labels, "sind.managed=true")
 	assert.Contains(t, labels, "sind.slurm.version=25.11.0")
 	assert.Contains(t, labels, "com.docker.compose.project=sind-dev")
 	assert.Contains(t, labels, "com.docker.compose.service=controller")
@@ -114,6 +124,7 @@ func TestBuildRunArgs_ComputeNode(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.ShortName = "worker-0"
 	cfg.Role = "worker"
+	cfg.Managed = false
 	args := BuildRunArgs(cfg)
 
 	name, _ := testutil.ArgValue(args, "--name")
@@ -124,6 +135,7 @@ func TestBuildRunArgs_ComputeNode(t *testing.T) {
 
 	labels := testutil.ArgValues(args, "--label")
 	assert.Contains(t, labels, "sind.role=worker")
+	assert.Contains(t, labels, "sind.managed=false")
 }
 
 func TestBuildRunArgs_NoSlurmVersion(t *testing.T) {
@@ -131,12 +143,11 @@ func TestBuildRunArgs_NoSlurmVersion(t *testing.T) {
 	cfg.SlurmVersion = ""
 	args := BuildRunArgs(cfg)
 
+	// An empty label overrides the one the sind-node image carries.
 	labels := testutil.ArgValues(args, "--label")
 	assert.Contains(t, labels, "sind.cluster=dev")
 	assert.Contains(t, labels, "sind.role=controller")
-	for _, l := range labels {
-		assert.NotContains(t, l, "sind.slurm.version")
-	}
+	assert.Contains(t, labels, "sind.slurm.version=")
 }
 
 func TestBuildRunArgs_Network(t *testing.T) {
@@ -417,6 +428,7 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
 	assert.Equal(t, config.RoleController, configs[0].Role)
+	assert.True(t, configs[0].Managed, "controller defaults to managed")
 	assert.Equal(t, "worker-0", configs[1].ShortName)
 	assert.Equal(t, config.RoleWorker, configs[1].Role)
 	assert.True(t, configs[1].Managed, "worker defaults to managed")
@@ -465,6 +477,7 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 	require.Len(t, configs, 3)
 	assert.Equal(t, "controller", configs[0].ShortName)
 	assert.Equal(t, "submitter", configs[1].ShortName)
+	assert.True(t, configs[1].Managed, "submitter of a managed cluster")
 	assert.Equal(t, "worker-0", configs[2].ShortName)
 }
 
@@ -500,6 +513,27 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 	assert.False(t, configs[1].Managed, "worker-0 unmanaged")
 	assert.False(t, configs[2].Managed, "worker-1 unmanaged")
 	assert.True(t, configs[3].Managed, "worker-2 managed")
+}
+
+func TestNodeRunConfigs_UnmanagedController(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Managed: testutil.Ptr(false), BackupController: true},
+			{Role: config.RoleSubmitter},
+			{Role: config.RoleWorker, Count: 2},
+			{Role: config.RoleWorker, Managed: testutil.Ptr(false)},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+
+	require.Len(t, configs, 6)
+	for _, c := range configs {
+		assert.False(t, c.Managed, "%s unmanaged", c.ShortName)
+	}
+	assert.Equal(t, "controller-backup", configs[1].ShortName)
+	assert.True(t, configs[1].SharedState, "backup still shares the state volume")
 }
 
 func TestNodeRunConfigs_BackupController(t *testing.T) {

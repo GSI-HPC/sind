@@ -22,6 +22,7 @@ const (
 	LabelRealm        = "sind.realm"
 	LabelCluster      = "sind.cluster"
 	LabelRole         = "sind.role"
+	LabelManaged      = "sind.managed"
 	LabelSlurmVersion = "sind.slurm.version"
 	LabelDataHostPath = "sind.data.hostpath"
 )
@@ -32,21 +33,31 @@ func ComposeProject(realm, clusterName string) string {
 }
 
 // NodeLabels returns the standard labels for a node container.
+// managed records whether sind manages Slurm on the node (see IsManaged).
 // containerNumber is the 1-based instance number for compose compatibility.
-// The slurm version label is omitted when slurmVersion is empty.
+// The slurm version label is always set, empty when sind does not know the
+// version (unmanaged clusters): the sind-node image carries a label of the
+// same name, which would otherwise show through on the container.
 // The data host path label is omitted when dataHostPath is empty (Docker volume mode).
-func NodeLabels(realm, clusterName string, role config.Role, slurmVersion, dataHostPath string, containerNumber int) docker.Labels {
+func NodeLabels(realm, clusterName string, role config.Role, managed bool, slurmVersion, dataHostPath string, containerNumber int) docker.Labels {
 	labels := docker.ComposeLabels(ComposeProject(realm, clusterName), string(role), containerNumber)
 	labels[LabelRealm] = realm
 	labels[LabelCluster] = clusterName
 	labels[LabelRole] = string(role)
-	if slurmVersion != "" {
-		labels[LabelSlurmVersion] = slurmVersion
-	}
+	labels[LabelManaged] = strconv.FormatBool(managed)
+	labels[LabelSlurmVersion] = slurmVersion
 	if dataHostPath != "" {
 		labels[LabelDataHostPath] = dataHostPath
 	}
 	return labels
+}
+
+// IsManaged reports whether a node container's labels mark it as managed by
+// sind: its Slurm configuration is sind's and sind runs its Slurm daemon.
+// On a controller it tells whether the whole cluster is managed. Containers
+// created before sind recorded LabelManaged count as managed.
+func IsManaged(labels docker.Labels) bool {
+	return labels[LabelManaged] != "false"
 }
 
 // RunConfig holds the parameters needed to build docker run arguments
@@ -64,7 +75,7 @@ type RunConfig struct {
 	DNSIP           string      // mesh DNS container IP (optional)
 	DataHostPath    string      // host path for data volume (empty = use docker volume)
 	DataMountPath   string      // mount point for data (default: /data)
-	Managed         bool        // start slurmd and add to slurm.conf (worker only)
+	Managed         bool        // sind manages Slurm on the node: its configuration and daemon (see IsManaged)
 	SharedState     bool        // mount the shared slurmctld state volume (controllers of a backup pair)
 	ContainerNumber int         // 1-based compose container instance number
 	Pull            bool        // force fresh image pull (--pull always)
@@ -156,7 +167,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	}
 
 	// Labels
-	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
+	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.Managed, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
@@ -200,10 +211,13 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 }
 
 // NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
-// Worker nodes are indexed sequentially across all worker groups.
+// Worker nodes are indexed sequentially across all worker groups. In an
+// unmanaged cluster every node is unmanaged; otherwise only workers with
+// managed: false are.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []RunConfig {
 	var configs []RunConfig
 	workerIdx := 0
+	clusterManaged := cfg.Managed()
 
 	dataHostPath := ""
 	dataMountPath := ""
@@ -230,6 +244,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				DNSIP:           dnsIP,
 				DataHostPath:    dataHostPath,
 				DataMountPath:   dataMountPath,
+				Managed:         clusterManaged,
 				ContainerNumber: 1,
 				Pull:            cfg.Pull,
 				CapAdd:          n.CapAdd,
@@ -253,7 +268,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 			if count <= 0 {
 				count = 1
 			}
-			isManaged := n.Managed == nil || *n.Managed
+			isManaged := clusterManaged && (n.Managed == nil || *n.Managed)
 			for i := 0; i < count; i++ {
 				configs = append(configs, RunConfig{
 					Realm:           realm,

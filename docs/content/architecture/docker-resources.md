@@ -71,5 +71,6 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
+| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
