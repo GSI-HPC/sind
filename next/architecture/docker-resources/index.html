@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:18:18+00:00"
+      content="2026-09-27T22:40:34+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/docker-resources/",
       "headline": "Docker Resources",
       "description": "Resource naming conventions, volumes, and labels",
-      "wordCount": "437",
+      "wordCount": "447",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:18:18.00Z",
+      "dateModified": "2026-09-27T22:40:34.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2420,6 +2420,11 @@
 					<td><code>sind.data.hostpath</code></td>
 					<td><code>/home/user/project</code></td>
 					<td>Resolved data mount host path</td>
+			</tr>
+			<tr>
+					<td><code>sind.data.mountpath</code></td>
+					<td><code>/shared</code></td>
+					<td>Data mount point, when <code>storage.dataStorage.mountPath</code> is not <code>/data</code></td>
 			</tr>
 	</tbody>
 </table> </div>

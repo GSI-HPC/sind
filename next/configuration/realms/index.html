@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:17:00+00:00"
+      content="2026-09-27T22:42:55+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/realms/",
       "headline": "Realms",
       "description": "Isolated mesh namespaces for parallel environments",
-      "wordCount": "331",
+      "wordCount": "374",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:17:00.00Z",
+      "dateModified": "2026-09-27T22:42:55.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2178,6 +2178,7 @@
 </div>
 <p>A <strong>realm</strong> is a namespace that isolates all sind resources — mesh network, DNS, SSH, and cluster resources. Different realms have completely separate infrastructure and cannot see each other.</p>
 <p>The default realm is <code>sind</code>, which produces resource names like <code>sind-mesh</code>, <code>sind-dns</code>, <code>sind-default-net</code>, etc.</p>
+<p>Because names join realm and cluster with <code>-</code>, realm <code>ci</code> with cluster <code>42-dev</code> and realm <code>ci-42</code> with cluster <code>dev</code> would share the resource names <code>ci-42-dev-*</code>. sind refuses to create the second of them, and deleting one leaves the other&rsquo;s network and volumes alone.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="when-to-use-realms"
     >

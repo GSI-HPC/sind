@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:17:00+00:00"
+      content="2026-09-27T22:40:34+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/node-access/",
       "headline": "Node Access",
       "description": "SSH, interactive shells, and command execution",
-      "wordCount": "628",
+      "wordCount": "643",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:17:00.00Z",
+      "dateModified": "2026-09-27T22:40:34.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2205,7 +2205,7 @@
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter <span class="o">[</span>CLUSTER<span class="o">]</span>
-</span></span></code></pre></div><p>Opens an interactive shell on the cluster&rsquo;s submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is <code>/data</code>.</p>
+</span></span></code></pre></div><p>Opens an interactive shell on the cluster&rsquo;s submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is the data mount, <code>/data</code> unless the cluster config sets another <code>mountPath</code>.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter          <span class="c1"># default cluster</span>
 </span></span><span class="line"><span class="cl">sind enter dev      <span class="c1"># dev cluster</span>
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
@@ -2218,7 +2218,7 @@
     </a>
 </div>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> <span class="o">[</span>CLUSTER<span class="o">]</span> -- COMMAND <span class="o">[</span>ARGS...<span class="o">]</span>
-</span></span></code></pre></div><p>Runs a one-shot command on the submitter (or controller). The <code>--</code> separator is required. The working directory inside the container is <code>/data</code>.</p>
+</span></span></code></pre></div><p>Runs a one-shot command on the submitter (or controller). The <code>--</code> separator is required. The working directory inside the container is the data mount, as for <code>enter</code>.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sinfo
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> -- srun hostname
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- sbatch job.sh

@@ -21,13 +21,13 @@
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/cluster-config/</loc>
-    <lastmod>2026-09-27T22:20:05+00:00</lastmod>
+    <lastmod>2026-09-27T22:40:34+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/node-definitions/</loc>
     <lastmod>2026-09-27T17:00:43+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/realms/</loc>
-    <lastmod>2026-09-27T22:17:00+00:00</lastmod>
+    <lastmod>2026-09-27T22:42:55+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/</loc>
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
@@ -36,16 +36,16 @@
     <lastmod>2026-09-27T22:08:20+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-access/</loc>
-    <lastmod>2026-09-27T22:17:00+00:00</lastmod>
+    <lastmod>2026-09-27T22:40:34+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/worker-management/</loc>
-    <lastmod>2026-09-27T22:15:52+00:00</lastmod>
+    <lastmod>2026-09-27T22:44:37+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/power-control/</loc>
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/diagnostics/</loc>
-    <lastmod>2026-09-27T22:15:52+00:00</lastmod>
+    <lastmod>2026-09-27T22:35:22+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/</loc>
     <lastmod>2026-04-09T16:23:27+02:00</lastmod>
@@ -78,7 +78,7 @@
     <lastmod>2026-09-27T22:18:18+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/docker-resources/</loc>
-    <lastmod>2026-09-27T22:18:18+00:00</lastmod>
+    <lastmod>2026-09-27T22:40:34+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/slurm-config/</loc>
     <lastmod>2026-09-27T22:19:08+00:00</lastmod>

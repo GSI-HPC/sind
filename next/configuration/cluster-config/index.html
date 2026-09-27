@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:20:05+00:00"
+      content="2026-09-27T22:40:34+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
       "headline": "Cluster Configuration",
       "description": "YAML configuration schema reference",
-      "wordCount": "698",
+      "wordCount": "708",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:20:05.00Z",
+      "dateModified": "2026-09-27T22:40:34.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2387,17 +2387,17 @@
 			<tr>
 					<td><code>type</code></td>
 					<td>set by <code>--data</code></td>
-					<td><code>&quot;hostPath&quot;</code> bind-mounts <code>hostPath</code>; <code>&quot;volume&quot;</code> (or any other value) uses the Docker volume <code>&lt;realm&gt;-&lt;cluster&gt;-data</code></td>
+					<td><code>&quot;hostPath&quot;</code> bind-mounts <code>hostPath</code>; <code>&quot;volume&quot;</code> uses the Docker volume <code>&lt;realm&gt;-&lt;cluster&gt;-data</code> and ignores <code>hostPath</code>. A <code>hostPath</code> without <code>type</code> means <code>&quot;hostPath&quot;</code></td>
 			</tr>
 			<tr>
 					<td><code>hostPath</code></td>
 					<td>—</td>
-					<td>Host directory for <code>type: hostPath</code>, relative to the directory <code>sind create cluster</code> runs in. Without it, <code>type: hostPath</code> falls back to the Docker volume</td>
+					<td>Host directory, required with <code>type: hostPath</code>. A relative path is taken relative to the directory <code>sind create cluster</code> runs in and stored as an absolute path</td>
 			</tr>
 			<tr>
 					<td><code>mountPath</code></td>
 					<td><code>&quot;/data&quot;</code></td>
-					<td>Mount point inside the nodes created with the cluster</td>
+					<td>Absolute mount point inside the nodes</td>
 			</tr>
 	</tbody>
 </table> </div>
@@ -2405,7 +2405,7 @@
   class="gdoc-markdown__link"
   href="/sind/next/usage/node-access/#data-mount"
 >Data mount</a>).</p>
-<p><code>mountPath</code> only applies to the nodes created with the cluster: workers added with <code>sind create worker</code> mount the data at <code>/data</code>, <code>sind get cluster</code> reports it at <code>/data</code>, and <code>sind enter</code> and <code>sind exec</code> start in <code>/data</code>.</p>
+<p>Workers added with <code>sind create worker</code> mount the data at the same place, <code>sind get cluster</code> reports it there, and <code>sind enter</code> and <code>sind exec</code> start in it.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurm-section"
     >
@@ -2499,6 +2499,7 @@
 <li><code>count</code> must not be negative; <code>0</code> means the default, 1</li>
 <li><code>capAdd</code>/<code>capDrop</code> values must be recognized Linux capability names (e.g. <code>SYS_ADMIN</code>, <code>NET_ADMIN</code>, <code>ALL</code>)</li>
 <li><code>devices</code> paths must be absolute (start with <code>/</code>)</li>
+<li><code>storage.dataStorage.type</code> must be <code>volume</code> or <code>hostPath</code>; <code>hostPath</code> requires a <code>hostPath</code>, and <code>mountPath</code> must be absolute</li>
 <li>Unknown keys are rejected</li>
 </ul>
 
