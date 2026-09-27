@@ -48,7 +48,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newLogsCommand())
 	cmd.AddCommand(newDoctorCommand())
 	cmd.AddCommand(newVersionCommand())
-	cmd.AddCommand(newMCPCommand(nil))
+	cmd.AddCommand(newMCPCommand(mcpConfig()))
 
 	builtins(cmd)
 	requireKnownSubcommand(cmd)

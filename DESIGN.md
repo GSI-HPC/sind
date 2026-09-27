@@ -545,6 +545,7 @@ sind mcp {claude,vscode,cursor} {enable,disable}  # register sind with an editor
 The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
 
 - `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces.
+- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help.
 
 ## Node Arguments
 
