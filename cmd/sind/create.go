@@ -57,7 +57,7 @@ func newCreateClusterCommand() *cobra.Command {
 }
 
 func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
-	cfg, err := loadConfig(configFile)
+	cfg, err := loadConfig(cmd.InOrStdin(), configFile)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,11 @@ func applyDataFlag(cfg *config.Cluster, value string) error {
 	return nil
 }
 
-func loadConfig(path string) (*config.Cluster, error) {
+// loadConfig reads the cluster configuration from path, from stdin when it
+// holds data, or else returns the default configuration. stdin is the
+// command's input (cmd.InOrStdin()), so that tests can set it with
+// cmd.SetIn instead of replacing the process-wide os.Stdin.
+func loadConfig(stdin io.Reader, path string) (*config.Cluster, error) {
 	if path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -148,8 +152,8 @@ func loadConfig(path string) (*config.Cluster, error) {
 		return config.Parse(data)
 	}
 
-	if stdinHasData() {
-		data, err := io.ReadAll(os.Stdin)
+	if stdinHasData(stdin) {
+		data, err := io.ReadAll(stdin)
 		if err != nil {
 			return nil, fmt.Errorf("reading config from stdin: %w", err)
 		}
@@ -159,9 +163,14 @@ func loadConfig(path string) (*config.Cluster, error) {
 	return config.Parse([]byte("kind: Cluster\n"))
 }
 
-// stdinHasData reports whether stdin is a pipe or file (not a terminal).
-func stdinHasData() bool {
-	fi, err := os.Stdin.Stat()
+// stdinHasData reports whether stdin is a pipe or file (not a terminal). A
+// reader that is not a file, as set with cmd.SetIn, always has data.
+func stdinHasData(stdin io.Reader) bool {
+	f, ok := stdin.(*os.File)
+	if !ok {
+		return true
+	}
+	fi, err := f.Stat()
 	if err != nil {
 		return false
 	}

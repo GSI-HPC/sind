@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,4 +213,10 @@ func TestSSHAccess(t *testing.T) {
 	// --- delete cluster ---
 	_, _, err = executeWithRealmCtx(ctx, realm, "delete", "cluster", cluster)
 	require.NoError(t, err)
+}
+
+func TestStdinIsTTY_NotATerminal(t *testing.T) {
+	// A reader set with cmd.SetIn, and a file that is not a terminal.
+	assert.False(t, stdinIsTTY(strings.NewReader("")))
+	assert.False(t, stdinIsTTY(noStdin(t)))
 }

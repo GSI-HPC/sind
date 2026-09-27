@@ -9,8 +9,10 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,12 +57,21 @@ func executeWithRealmStdin(ctx context.Context, realm string, stdin string, args
 // executeWithDockerCtx runs a CLI command backed by a real Docker client
 // with the given context (e.g. for deadline control on long-running commands).
 func executeWithDockerCtx(ctx context.Context, args ...string) (string, string, error) {
+	return executeWithDockerIn(ctx, nil, args...)
+}
+
+// executeWithDockerIn is executeWithDockerCtx with stdin as the command's
+// input; nil leaves it at os.Stdin.
+func executeWithDockerIn(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
 	cmd := NewRootCommand()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.SetArgs(args)
+	if stdin != nil {
+		cmd.SetIn(stdin)
+	}
 
 	client := docker.NewClient(&cmdexec.OSExecutor{})
 	ctx = withClient(ctx, client)
@@ -70,21 +81,11 @@ func executeWithDockerCtx(ctx context.Context, args ...string) (string, string, 
 	return stdout.String(), stderr.String(), err
 }
 
-// executeWithStdin runs a CLI command with the given string piped to stdin.
-// This temporarily replaces os.Stdin so that loadConfig can detect piped data.
+// executeWithStdin runs a CLI command with the given string as its input.
+// The input is set on the command, not by replacing os.Stdin, which other
+// tests running in parallel read.
 func executeWithStdin(ctx context.Context, stdin string, args ...string) (string, string, error) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		return "", "", err
-	}
-	_, _ = w.WriteString(stdin)
-	w.Close()
-
-	origStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
-
-	return executeWithDockerCtx(ctx, args...)
+	return executeWithDockerIn(ctx, strings.NewReader(stdin), args...)
 }
 
 // realClient returns a docker.Client backed by a real executor.

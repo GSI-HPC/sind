@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,8 +17,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// noStdin returns an input without data: /dev/null is a character device,
+// like a terminal.
+func noStdin(t *testing.T) *os.File {
+	t.Helper()
+	f, err := os.Open(os.DevNull)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.Close() })
+	return f
+}
+
+func TestLoadConfig_FromReader(t *testing.T) {
+	// A reader set with cmd.SetIn is read as piped input.
+	cfg, err := loadConfig(strings.NewReader("kind: Cluster\nname: from-reader\n"), "")
+	require.NoError(t, err)
+	assert.Equal(t, "from-reader", cfg.Name)
+}
+
+func TestLoadConfig_FromCommandInput(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetIn(strings.NewReader("kind: Cluster\nname: from-cmd\n"))
+	cfg, err := loadConfig(cmd.InOrStdin(), "")
+	require.NoError(t, err)
+	assert.Equal(t, "from-cmd", cfg.Name)
+}
+
+func TestStdinHasData_ClosedFile(t *testing.T) {
+	f, err := os.Open(os.DevNull)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	assert.False(t, stdinHasData(f))
+}
+
 func TestLoadConfig_Default(t *testing.T) {
-	cfg, err := loadConfig("")
+	cfg, err := loadConfig(noStdin(t), "")
 	require.NoError(t, err)
 	assert.Equal(t, "Cluster", cfg.Kind)
 	assert.Equal(t, "default", cfg.Name)
@@ -29,13 +62,13 @@ func TestLoadConfig_FromFile(t *testing.T) {
 	data := []byte("kind: Cluster\nname: test\n")
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	cfg, err := loadConfig(path)
+	cfg, err := loadConfig(noStdin(t), path)
 	require.NoError(t, err)
 	assert.Equal(t, "test", cfg.Name)
 }
 
 func TestLoadConfig_FileNotFound(t *testing.T) {
-	_, err := loadConfig("/nonexistent/config.yaml")
+	_, err := loadConfig(noStdin(t), "/nonexistent/config.yaml")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading config")
 }
@@ -45,23 +78,19 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("not: valid: yaml: ["), 0o644))
 
-	_, err := loadConfig(path)
+	_, err := loadConfig(noStdin(t), path)
 	assert.Error(t, err)
 }
 
 func TestLoadConfig_FromStdin(t *testing.T) {
-	// Replace os.Stdin with a pipe containing YAML config.
+	// A pipe containing YAML config, as `sind create cluster < file` gets.
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	_, err = w.WriteString("kind: Cluster\nname: from-stdin\n")
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	origStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
-
-	cfg, err := loadConfig("")
+	cfg, err := loadConfig(r, "")
 	require.NoError(t, err)
 	assert.Equal(t, "from-stdin", cfg.Name)
 }
@@ -73,11 +102,7 @@ func TestLoadConfig_StdinInvalidYAML(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	origStdin := os.Stdin
-	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
-
-	_, err = loadConfig("")
+	_, err = loadConfig(r, "")
 	assert.Error(t, err)
 }
 
@@ -95,7 +120,7 @@ func TestCreateCluster_CommandExists(t *testing.T) {
 }
 
 func TestApplyDataFlag_HostPath(t *testing.T) {
-	cfg, err := loadConfig("")
+	cfg, err := loadConfig(noStdin(t), "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "/tmp/my-project"))
@@ -105,7 +130,7 @@ func TestApplyDataFlag_HostPath(t *testing.T) {
 }
 
 func TestApplyDataFlag_RelativePath(t *testing.T) {
-	cfg, err := loadConfig("")
+	cfg, err := loadConfig(noStdin(t), "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "."))
@@ -115,7 +140,7 @@ func TestApplyDataFlag_RelativePath(t *testing.T) {
 }
 
 func TestApplyDataFlag_Volume(t *testing.T) {
-	cfg, err := loadConfig("")
+	cfg, err := loadConfig(noStdin(t), "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "volume"))
@@ -135,7 +160,7 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 	data := []byte("kind: Cluster\nname: from-file\n")
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	cfg, err := loadConfig(path)
+	cfg, err := loadConfig(noStdin(t), path)
 	require.NoError(t, err)
 	assert.Equal(t, "from-file", cfg.Name)
 }
