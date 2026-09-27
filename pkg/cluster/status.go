@@ -76,7 +76,7 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 
 	// One fused readiness exec per node (plus scontrol ping for
 	// controllers) instead of three or four serial docker execs.
-	snap, err := probe.Snapshot(ctx, client, info.Name, role)
+	snap, err := probe.Snapshot(ctx, client, info.Name, services)
 	if err != nil {
 		sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
 		for _, svc := range services {

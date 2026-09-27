@@ -660,12 +660,18 @@ func TestUntilReadyWithEvents_TerminalError(t *testing.T) {
 	assert.Len(t, m.Calls, 1)
 }
 
+// Services status queries check on managed workers and controllers.
+var (
+	workerServices     = []Service{ServiceMunge, ServiceSSHD, ServiceSlurmd}
+	controllerServices = []Service{ServiceMunge, ServiceSSHD, ServiceSlurmctld}
+)
+
 func TestSnapshot_WorkerAllActive(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("active\nactive\nactive\n", "", nil)
 	c := docker.NewClient(&m)
 
-	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	snap, err := Snapshot(t.Context(), c, testContainer, workerServices)
 	require.NoError(t, err)
 	assert.True(t, snap[ServiceMunge])
 	assert.True(t, snap[ServiceSSHD])
@@ -687,19 +693,19 @@ func TestSnapshot_WorkerOneInactive(t *testing.T) {
 	m.AddResult("active\nactive\nfailed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
 	c := docker.NewClient(&m)
 
-	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	snap, err := Snapshot(t.Context(), c, testContainer, workerServices)
 	require.NoError(t, err)
 	assert.True(t, snap[ServiceMunge])
 	assert.True(t, snap[ServiceSSHD])
 	assert.False(t, snap[ServiceSlurmd])
 }
 
-func TestSnapshot_Submitter(t *testing.T) {
+func TestSnapshot_MungeAndSSHD(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("active\nactive\n", "", nil)
 	c := docker.NewClient(&m)
 
-	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleSubmitter)
+	snap, err := Snapshot(t.Context(), c, testContainer, []Service{ServiceMunge, ServiceSSHD})
 	require.NoError(t, err)
 	assert.True(t, snap[ServiceMunge])
 	assert.True(t, snap[ServiceSSHD])
@@ -718,7 +724,7 @@ func TestSnapshot_ControllerWithScontrolPing(t *testing.T) {
 	m.AddResult("Slurmctld(primary) is UP\n", "", nil) // scontrol ping
 	c := docker.NewClient(&m)
 
-	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleController)
+	snap, err := Snapshot(t.Context(), c, testContainer, controllerServices)
 	require.NoError(t, err)
 	assert.True(t, snap[ServiceMunge])
 	assert.True(t, snap[ServiceSSHD])
@@ -743,11 +749,34 @@ func TestSnapshot_ControllerScontrolFails(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("scontrol: connection refused"))
 	c := docker.NewClient(&m)
 
-	snap, err := Snapshot(t.Context(), c, testContainer, config.RoleController)
+	snap, err := Snapshot(t.Context(), c, testContainer, controllerServices)
 	require.NoError(t, err)
 	assert.True(t, snap[ServiceMunge])
 	assert.True(t, snap[ServiceSSHD])
 	assert.False(t, snap[ServiceSlurmctld])
+}
+
+func TestSnapshot_SlurmctldOnly(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("Slurmctld(primary) at controller is UP\n", "", nil)
+	c := docker.NewClient(&m)
+
+	snap, err := Snapshot(t.Context(), c, testContainer, []Service{ServiceSlurmctld})
+	require.NoError(t, err)
+	assert.Equal(t, map[Service]bool{ServiceSlurmctld: true}, snap)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "scontrol", "ping"}, m.Calls[0].Args)
+}
+
+func TestSnapshot_NoServices(t *testing.T) {
+	var m mock.Executor
+	c := docker.NewClient(&m)
+
+	snap, err := Snapshot(t.Context(), c, testContainer, nil)
+	require.NoError(t, err)
+	assert.Empty(t, snap)
+	assert.Empty(t, m.Calls)
 }
 
 func TestSnapshot_ExecDaemonError(t *testing.T) {
@@ -755,7 +784,7 @@ func TestSnapshot_ExecDaemonError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	_, err := Snapshot(t.Context(), c, testContainer, workerServices)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "systemctl is-active")
 }
@@ -766,7 +795,7 @@ func TestSnapshot_MalformedOutput(t *testing.T) {
 	m.AddResult("active\nactive\n", "", nil)
 	c := docker.NewClient(&m)
 
-	_, err := Snapshot(t.Context(), c, testContainer, config.RoleWorker)
+	_, err := Snapshot(t.Context(), c, testContainer, workerServices)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "got 2 lines")
 }

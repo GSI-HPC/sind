@@ -303,48 +303,51 @@ func SlurmdReady(ctx context.Context, client *docker.Client, name docker.Contain
 	return nil
 }
 
-// Snapshot returns a one-shot readiness snapshot of a running node, fusing
-// the systemd-based checks (munge, sshd, and on workers slurmd) into a single
-// docker exec. Controllers additionally run scontrol ping because
-// "slurmctld is active" is weaker than "slurmctld answers RPCs" — the unit
-// can be active during startup while RPCs still fail.
+// Snapshot returns a one-shot readiness snapshot of the given services on a
+// running node, fusing the systemd-based checks (munge, sshd, slurmd) into a
+// single docker exec. slurmctld is checked with scontrol ping instead,
+// because "slurmctld is active" is weaker than "slurmctld answers RPCs" — the
+// unit can be active during startup while RPCs still fail.
 //
 // Snapshot is intended for status-query call sites such as cluster.GetStatus.
 // Unlike the individual *Ready probes, it does not surface per-probe errors;
 // a failing check simply maps to false. Callers that need retry granularity
-// (e.g. cluster-create readiness polling) should keep using NodeProbes and
-// UntilReady.
+// (e.g. cluster-create readiness polling) should keep using the individual
+// probes and UntilReady.
 //
 // The container must be running. Non-exit errors (daemon unreachable, etc.)
 // are propagated; a non-zero exit from systemctl (at least one unit
 // inactive) is expected and parsed normally.
-func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerName, role config.Role) (map[Service]bool, error) {
-	// Build the systemctl unit list for this role. sshd and munge are
-	// universal; slurmd is added for workers only.
-	units := []Service{ServiceMunge, ServiceSSHD}
-	if role == config.RoleWorker {
-		units = append(units, ServiceSlurmd)
+func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerName, services []Service) (map[Service]bool, error) {
+	var units []Service
+	var slurmctld bool
+	for _, svc := range services {
+		if svc == ServiceSlurmctld {
+			slurmctld = true
+			continue
+		}
+		units = append(units, svc)
 	}
 
-	args := append([]string{"systemctl", "is-active"}, serviceStrings(units)...)
-	stdout, err := client.ExecAllowNonZero(ctx, name, args...)
-	if err != nil {
-		return nil, fmt.Errorf("systemctl is-active: %w", err)
+	result := make(map[Service]bool, len(services))
+	if len(units) > 0 {
+		args := append([]string{"systemctl", "is-active"}, serviceStrings(units)...)
+		stdout, err := client.ExecAllowNonZero(ctx, name, args...)
+		if err != nil {
+			return nil, fmt.Errorf("systemctl is-active: %w", err)
+		}
+
+		lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+		if len(lines) != len(units) {
+			return nil, fmt.Errorf("systemctl is-active: got %d lines, want %d (stdout=%q)",
+				len(lines), len(units), stdout)
+		}
+		for i, u := range units {
+			result[u] = strings.TrimSpace(lines[i]) == "active"
+		}
 	}
 
-	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
-	if len(lines) != len(units) {
-		return nil, fmt.Errorf("systemctl is-active: got %d lines, want %d (stdout=%q)",
-			len(lines), len(units), stdout)
-	}
-
-	result := make(map[Service]bool, len(units)+1)
-	for i, u := range units {
-		result[u] = strings.TrimSpace(lines[i]) == "active"
-	}
-
-	// Controllers need an additional RPC-level check for slurmctld.
-	if role == config.RoleController {
+	if slurmctld {
 		result[ServiceSlurmctld] = SlurmctldReady(ctx, client, name) == nil
 	}
 
