@@ -8,7 +8,7 @@ toc: true
 
 ## Generated files
 
-sind generates a multi-file Slurm configuration and writes it to the `sind-<cluster>-config` volume. For an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}) it writes nothing: the volume stays empty for your own configuration.
+sind generates a multi-file Slurm configuration and writes it to the `<realm>-<cluster>-config` volume. For an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}) it writes nothing: the volume stays empty for your own configuration.
 
 ```
 /etc/slurm/

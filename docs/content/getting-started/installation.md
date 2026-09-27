@@ -86,4 +86,6 @@ Docker pulls the image automatically when creating your first cluster. Subsequen
 sind create cluster --pull
 ```
 
+Besides the node image, each realm's mesh runs `coredns/coredns:latest` (DNS) and `busybox:latest` (a helper that writes the SSH keys) from Docker Hub, and its SSH relay runs `ghcr.io/gsi-hpc/sind-node:latest` whatever `defaults.image` says. Hosts that cannot reach Docker Hub or ghcr.io need these images preloaded.
+
 See [Container Images](../../container-images/building-images/) for details on building custom images.

@@ -852,12 +852,14 @@ The runtime command `sind create controller --unmanaged` is not provided: the mo
 
 ### Global Resources (Mesh)
 
-| Type | Name Pattern | Example |
-|------|-------------|---------|
-| Mesh network | `<realm>-mesh` | `sind-mesh` |
-| DNS container | `<realm>-dns` | `sind-dns` |
-| SSH container | `<realm>-ssh` | `sind-ssh` |
-| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` |
+| Type | Name Pattern | Example | Image |
+|------|-------------|---------|-------|
+| Mesh network | `<realm>-mesh` | `sind-mesh` | — |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:latest` |
+| SSH container | `<realm>-ssh` | `sind-ssh` | `ghcr.io/gsi-hpc/sind-node:latest` (runs `sleep infinity`) |
+| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | written by a `busybox:latest` helper, `<realm>-ssh-keygen` |
+
+The mesh images do not follow `defaults.image`; `--pull` pulls them too.
 
 ### Defaults
 
@@ -867,10 +869,10 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 
 | Volume | Mount Point | Controller | Worker | Submitter |
 |--------|-------------|------------|---------|-----------|
-| `sind-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
-| `sind-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
-| `sind-<cluster>-data` | `/data` | rw | rw | rw |
-| `sind-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
+| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
+| `<realm>-<cluster>-data` | `/data` | rw | rw | rw |
+| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
 | tmpfs | `/tmp` | per-node | per-node | per-node |
 
 ### Mount Options
@@ -879,11 +881,11 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 
 Container mount flags:
 ```
--v sind-<cluster>-config:/etc/slurm:rw     # controller
--v sind-<cluster>-config:/etc/slurm:ro     # all others
--v sind-<cluster>-munge:/etc/munge:ro      # all nodes
--v sind-<cluster>-data:/data:rw            # all nodes
--v sind-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
+-v <realm>-<cluster>-config:/etc/slurm:rw     # controller
+-v <realm>-<cluster>-config:/etc/slurm:ro     # all others
+-v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes
+-v <realm>-<cluster>-data:/data:rw            # all nodes
+-v <realm>-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 --tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
 --tmpfs /run:exec,mode=755                 # systemd runtime
 --tmpfs /run/lock                          # systemd lock files
@@ -899,7 +901,7 @@ By default, `sind create cluster` bind-mounts the current working directory as `
 The `--data` flag controls the mount source:
 - `--data .` (default) — bind-mount the current working directory
 - `--data /path` — bind-mount a specific host directory
-- `--data volume` — use a Docker-managed volume (`sind-<cluster>-data`)
+- `--data volume` — use a Docker-managed volume (`<realm>-<cluster>-data`)
 
 When a YAML config specifies `storage.dataStorage`, the config takes precedence over `--data`.
 
@@ -931,7 +933,7 @@ with the working directory set to `/data`. This means commands operate on the sh
 ### Cluster Network
 
 Each cluster has an isolated Docker bridge network:
-- Name: `sind-<cluster>-net`
+- Name: `<realm>-<cluster>-net`
 - Nodes can reach each other by container hostname
 
 ### Mesh Network
@@ -955,7 +957,7 @@ The `sind-dns` container (CoreDNS) provides name resolution across meshed cluste
 
 Records follow the pattern:
 ```
-<role>.<cluster>.<realm>.sind → container IP
+<node>.<cluster>.<realm>.sind → container IP
 ```
 
 Nodes are configured with:
@@ -968,7 +970,7 @@ The DNS container is lightweight and does not run systemd/sshd.
 
 ### SSH
 
-The `sind-ssh` container provides SSH access to all cluster nodes. It is a lightweight container (no systemd) that runs on the mesh network.
+The `sind-ssh` container provides SSH access to all cluster nodes. It runs the `sind-node:latest` image with `sleep infinity` instead of systemd, on the mesh network, and joins each cluster network.
 
 #### Global SSH Resources
 
@@ -1172,11 +1174,11 @@ The repository's `Dockerfile`, which builds the official images, serves as the r
 
 ### Munge
 
-During `sind create cluster`, before starting any containers, sind generates a random munge key and writes it to the `sind-<cluster>-munge` volume. This ensures all nodes share the same key from first boot.
+During `sind create cluster`, before starting any containers, sind generates a random munge key and writes it to the `<realm>-<cluster>-munge` volume. This ensures all nodes share the same key from first boot.
 
 ### Slurm Configuration
 
-sind auto-generates a minimal Slurm configuration based on cluster topology and writes it to the `sind-<cluster>-config` volume. For an unmanaged cluster it writes nothing: the volume stays empty for the user's own configuration (see Unmanaged Cluster).
+sind auto-generates a minimal Slurm configuration based on cluster topology and writes it to the `<realm>-<cluster>-config` volume. For an unmanaged cluster it writes nothing: the volume stays empty for the user's own configuration (see Unmanaged Cluster).
 
 #### Multi-file Configuration
 
