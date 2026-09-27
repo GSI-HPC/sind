@@ -74,8 +74,8 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
 | munge ready | munge service active |
-| slurmctld ready | `scontrol ping` reports this controller UP (controllers only; each controller of a backup pair is checked for its own host) |
-| slurmd ready | slurmd service active (worker only) |
+| slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
+| slurmd ready | slurmd service active (managed workers only) |
 
 If any node fails to become ready within the timeout, `sind create cluster` fails, reports which nodes/checks failed and removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
 
