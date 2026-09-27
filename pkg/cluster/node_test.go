@@ -266,6 +266,29 @@ func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
 	assert.Contains(t, volumes, "sind-dev-data:/shared:rw")
 }
 
+func TestBuildRunArgs_DataMountPathLabel(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataMountPath = "/shared"
+
+	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/shared")
+}
+
+func TestBuildRunArgs_NoDataMountPathLabelForDefault(t *testing.T) {
+	for _, mountPath := range []string{"", DefaultDataMountPath} {
+		cfg := defaultRunConfig()
+		cfg.DataMountPath = mountPath
+
+		for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
+			assert.NotContains(t, l, LabelDataMountPath)
+		}
+	}
+}
+
+func TestDataMountPath(t *testing.T) {
+	assert.Equal(t, DefaultDataMountPath, DataMountPath(nil))
+	assert.Equal(t, "/shared", DataMountPath(docker.Labels{LabelDataMountPath: "/shared"}))
+}
+
 func TestBuildRunArgs_Resources(t *testing.T) {
 	cfg := defaultRunConfig()
 	cfg.CPUs = 4

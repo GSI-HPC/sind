@@ -25,7 +25,19 @@ const (
 	LabelManaged      = "sind.managed"
 	LabelSlurmVersion = "sind.slurm.version"
 	LabelDataHostPath = "sind.data.hostpath"
+	// LabelDataMountPath records a data mount point other than
+	// DefaultDataMountPath (storage.dataStorage.mountPath).
+	LabelDataMountPath = "sind.data.mountpath"
 )
+
+// DataMountPath returns where a node container mounts the cluster's data:
+// its LabelDataMountPath, or DefaultDataMountPath.
+func DataMountPath(labels docker.Labels) string {
+	if p := labels[LabelDataMountPath]; p != "" {
+		return p
+	}
+	return DefaultDataMountPath
+}
 
 // ComposeProject returns the Docker Compose project name for a cluster.
 func ComposeProject(realm, clusterName string) string {
@@ -168,6 +180,9 @@ func BuildRunArgs(cfg RunConfig) []string {
 
 	// Labels
 	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.Managed, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
+	if dataMountPath != DefaultDataMountPath {
+		labels[LabelDataMountPath] = dataMountPath
+	}
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)

@@ -161,13 +161,21 @@ type MountPoint struct {
 // GetMountPoints returns the mount points for a cluster, checking volume
 // existence for Docker volumes. The data mount source is determined from
 // the sind.data.hostpath label on cluster containers: when present it is
-// a host-path bind mount, otherwise it is a Docker volume.
+// a host-path bind mount, otherwise it is a Docker volume. Its mount point
+// is the sind.data.mountpath label, or /data.
 func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []docker.ContainerListEntry) ([]MountPoint, error) {
-	// Determine data mount source from container labels.
+	// Determine data mount source and mount point from container labels.
 	dataHostPath := ""
 	for _, c := range containers {
 		if hp := c.Labels[LabelDataHostPath]; hp != "" {
 			dataHostPath = hp
+			break
+		}
+	}
+	dataMountPath := DefaultDataMountPath
+	for _, c := range containers {
+		if c.Labels[LabelDataMountPath] != "" {
+			dataMountPath = DataMountPath(c.Labels)
 			break
 		}
 	}
@@ -179,9 +187,9 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 	}
 
 	if dataHostPath != "" {
-		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: dataHostPath, Type: config.StorageHostPath, OK: true})
+		mounts = append(mounts, MountPoint{Path: dataMountPath, Source: dataHostPath, Type: config.StorageHostPath, OK: true})
 	} else {
-		mounts = append(mounts, MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume})
+		mounts = append(mounts, MountPoint{Path: dataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume})
 	}
 
 	// Primary/backup controller pairs share the slurmctld state volume.

@@ -86,14 +86,14 @@ func runEnter(cmd *cobra.Command, clusterName string) error {
 		return err
 	}
 
-	target, err := cluster.EnterTarget(ctx, client, realm, clusterName)
+	target, workDir, err := cluster.EnterTarget(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
 
 	containerName := cluster.ContainerName(realm, clusterName, target)
 	isTTY := stdinIsTTY(cmd.InOrStdin())
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, isTTY, nil)
+	dockerArgs := cluster.BuildContainerExecArgs(containerName, workDir, isTTY, nil)
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -140,13 +140,13 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	target, err := cluster.EnterTarget(ctx, client, realm, clusterName)
+	target, workDir, err := cluster.EnterTarget(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
 
 	containerName := cluster.ContainerName(realm, clusterName, target)
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, false, command)
+	dockerArgs := cluster.BuildContainerExecArgs(containerName, workDir, false, command)
 
 	return dockerExec(cmd, dockerArgs)
 }

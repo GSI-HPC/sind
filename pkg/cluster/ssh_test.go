@@ -94,7 +94,7 @@ func TestSSH_PassthroughOptions_Multiple(t *testing.T) {
 // --- BuildContainerExecArgs ---
 
 func TestContainerExec_InteractiveShell(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", true, nil)
+	args := BuildContainerExecArgs("sind-dev-controller", DefaultDataMountPath, true, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", "-w", "/data", "sind-dev-controller",
@@ -103,7 +103,7 @@ func TestContainerExec_InteractiveShell(t *testing.T) {
 }
 
 func TestContainerExec_NonInteractiveShell(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", false, nil)
+	args := BuildContainerExecArgs("sind-dev-controller", DefaultDataMountPath, false, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-w", "/data", "sind-dev-controller",
@@ -112,7 +112,7 @@ func TestContainerExec_NonInteractiveShell(t *testing.T) {
 }
 
 func TestContainerExec_WithCommand(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", false, []string{"sinfo"})
+	args := BuildContainerExecArgs("sind-dev-controller", DefaultDataMountPath, false, []string{"sinfo"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-w", "/data", "sind-dev-controller",
@@ -121,11 +121,20 @@ func TestContainerExec_WithCommand(t *testing.T) {
 }
 
 func TestContainerExec_WithMultiWordCommand(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-worker-0", false, []string{"srun", "hostname"})
+	args := BuildContainerExecArgs("sind-dev-worker-0", DefaultDataMountPath, false, []string{"srun", "hostname"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-w", "/data", "sind-dev-worker-0",
 		"srun", "hostname",
+	}, args)
+}
+
+func TestContainerExec_CustomWorkDir(t *testing.T) {
+	args := BuildContainerExecArgs("sind-dev-controller", "/shared", false, []string{"ls"})
+
+	assert.Equal(t, []string{
+		"exec", "-i", "-w", "/shared", "sind-dev-controller",
+		"ls",
 	}, args)
 }
 
@@ -148,10 +157,38 @@ func TestEnter_TargetSelection_WithSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	target, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
+	target, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "submitter", target)
+}
+
+func TestEnter_WorkDir(t *testing.T) {
+	tests := []struct {
+		name   string
+		labels string
+		want   string
+	}{
+		{"default", "sind.cluster=dev,sind.role=submitter", "/data"},
+		{"custom mount path", "sind.cluster=dev,sind.role=submitter,sind.data.mountpath=/shared", "/shared"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(testutil.NDJSON(
+				testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+				testutil.PsEntry{ID: "c2", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+					Labels: tt.labels},
+			), "", nil)
+
+			target, workDir, err := EnterTarget(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+
+			require.NoError(t, err)
+			assert.Equal(t, "submitter", target)
+			assert.Equal(t, tt.want, workDir)
+		})
+	}
 }
 
 func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
@@ -169,7 +206,7 @@ func TestEnter_TargetSelection_NoSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	target, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
+	target, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.Equal(t, "controller", target)
@@ -218,7 +255,7 @@ func TestEnter_TargetSelection_ControllerPair(t *testing.T) {
 				return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 			}
 
-			target, err := EnterTarget(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+			target, _, err := EnterTarget(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, target)
@@ -253,7 +290,7 @@ func TestEnter_TargetSelection_UnmanagedPair(t *testing.T) {
 				return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 			}
 
-			target, err := EnterTarget(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
+			target, _, err := EnterTarget(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, target)
@@ -275,7 +312,7 @@ func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
+	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no submitter or controller")
@@ -291,7 +328,7 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	_, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
+	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no submitter or controller")
@@ -300,7 +337,7 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 func TestEnter_TargetSelection_ListError(t *testing.T) {
 	client := docker.NewClient(listErrorMock())
 
-	_, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
+	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing")

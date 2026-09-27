@@ -292,7 +292,7 @@ slurm:
 	_, err = c.Exec(ctx, worker, "scontrol", "takeover")
 	require.NoError(t, err)
 	waitInControl(t, c, realm, clusterName, ControllerBackupShortName)
-	target, err := EnterTarget(ctx, c, realm, clusterName)
+	target, _, err := EnterTarget(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.Equal(t, ControllerBackupShortName, target)
 	out, err = c.Exec(ctx, worker, "squeue", "-h", "-j", jobID, "-o", "%i")

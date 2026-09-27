@@ -93,8 +93,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return nil, err
 	}
 
-	// Inherit data host path from existing cluster containers.
+	// Inherit the data mount from existing cluster containers.
 	dataHostPath := controller.Labels[LabelDataHostPath]
+	dataMountPath := DataMountPath(controller.Labels)
 
 	// Resolve image: use opts or fall back to controller's image.
 	image := opts.Image
@@ -135,6 +136,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			SlurmVersion:    slurmVersion,
 			DNSIP:           dnsIP,
 			DataHostPath:    dataHostPath,
+			DataMountPath:   dataMountPath,
 			Managed:         !opts.Unmanaged,
 			ContainerNumber: startIdx + i + 1,
 			Pull:            opts.Pull,
