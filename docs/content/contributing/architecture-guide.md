@@ -99,7 +99,7 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                        → pkg/retry
                        → pkg/slurm   → pkg/docker
                        → pkg/ssh     → pkg/docker
-                       → pkg/nodeset
+         → pkg/nodeset
 ```
 
 The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
