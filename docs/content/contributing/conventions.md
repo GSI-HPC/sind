@@ -75,7 +75,8 @@ All Go source files include the SPDX header:
 
 ## Pull requests
 
+- Target the `next` branch; `main` only moves at release
 - One logical change per PR
 - Include tests for new functionality
-- Ensure all existing tests pass (`go test ./...`)
+- Ensure `make lint`, `make test` and `make check-coverage` pass
 - Follow the commit message conventions above

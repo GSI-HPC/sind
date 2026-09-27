@@ -11,6 +11,7 @@ toc: true
 - **Go 1.26+**
 - **Docker Engine 28.0+**
 - **Linux host** with cgroupv2 and `nsdelegate` mount option
+- **firejail**, which sandboxes `make test`
 
 ## Clone and build
 
@@ -20,13 +21,13 @@ cd sind
 make build
 ```
 
-The binary is built at `./sind`.
+The binary is built at `./sind-<os>-<arch>`, e.g. `./sind-linux-amd64`.
 
 ## Run
 
 ```bash
-./sind version
-./sind create cluster
+./sind-linux-amd64 version
+./sind-linux-amd64 create cluster
 ```
 
 ## Make targets
@@ -36,9 +37,11 @@ All common tasks are available via `make`:
 | Target | Description |
 |--------|-------------|
 | `make build` | Build the sind binary |
-| `make test` | Run unit tests with race detector |
+| `make install` | Install sind to `GOPATH/bin` |
+| `make test` | Run unit tests with race detector, sandboxed with firejail |
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
+| `make check-coverage` | Check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
 | `make lint` | Run golangci-lint |
 | `make lint-docs` | Lint documentation markdown files |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
@@ -64,6 +67,7 @@ sind uses a minimal set of dependencies:
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
+| `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
@@ -71,9 +75,10 @@ sind uses a minimal set of dependencies:
 
 ## Run tests
 
-Unit tests (no Docker required):
+Unit tests (no Docker required). firejail breaks DNS inside the sandbox, so download the modules first:
 
 ```bash
+go mod download
 make test
 ```
 

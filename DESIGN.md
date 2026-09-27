@@ -110,7 +110,9 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
+| `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
+| `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
 
 **Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
@@ -275,7 +277,7 @@ Development follows Test-Driven Development (TDD) style:
 
 - High unit test coverage for all packages
 - Integration tests for CLI commands and cluster operations
-- Tests run in CI for every commit
+- Tests run in CI for every pull request and every push to `main`
 
 ## CLI Commands
 

@@ -99,10 +99,10 @@ t.Log(rec.Dump())
 
 ## Integration test isolation
 
-Integration tests use unique realms to avoid resource conflicts when running in parallel. Each test package generates a random realm prefix:
+Integration tests use unique realms to avoid resource conflicts when running in parallel. Each test gets a random realm from `testutil.Realm`, which appends eight random hex digits to a prefix:
 
 ```go
-realm := fmt.Sprintf("test-%d-%d", os.Getpid(), rand.Int())
+realm := testutil.Realm("it-cluster") // e.g. it-cluster-3f9a0c1e
 ```
 
 This ensures tests can run concurrently without interfering with each other or with the user's sind clusters.
