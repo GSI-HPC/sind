@@ -101,7 +101,7 @@ On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), sind does
 
 ## User SSH client integration
 
-sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`):
+sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`, which is also used when `XDG_STATE_HOME` is a relative path):
 
 | File | Description |
 |------|-------------|

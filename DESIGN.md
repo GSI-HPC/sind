@@ -1015,7 +1015,7 @@ sind ssh -L 8080:localhost:80 controller     # port forwarding
 
 #### User SSH Client Integration
 
-sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`) for integration with the user's SSH client:
+sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (defaulting to `~/.local/state/sind/<realm>/`; a relative `XDG_STATE_HOME` is ignored, as the XDG Base Directory specification requires) for integration with the user's SSH client:
 
 | File | Description |
 |------|-------------|
