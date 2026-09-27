@@ -48,7 +48,7 @@ With realm `ci-42`, resources are prefixed accordingly:
 Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:
 
 ```
-~/.local/state/sind/<realm>/lock
+$XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
 ```
 
 If another operation already holds the lock, sind waits until it completes. Read-only operations (`get`, `logs`, etc.) are not affected.

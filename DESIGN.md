@@ -999,10 +999,10 @@ The `sind-ssh-config` volume contains:
 When sind creates a node, it waits for sshd to start, then collects the host key:
 
 ```bash
-docker exec <node> cat /etc/ssh/ssh_host_ed25519_key.pub
+docker exec <node> ssh-keyscan -t ed25519 localhost
 ```
 
-The key is added to `known_hosts` with the node's DNS name:
+The `localhost` field is dropped and the key is added to `known_hosts` with the node's DNS name:
 
 ```
 controller.dev.sind.sind ssh-ed25519 AAAA...
@@ -1035,7 +1035,7 @@ sind ssh [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]
 Internally:
 
 ```bash
-docker exec -it sind-ssh ssh [SSH_OPTIONS] <node>.<realm>.sind [COMMAND [ARGS...]]
+docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND [ARGS...]]  # -t only when stdin is a terminal
 ```
 
 All SSH options and arguments are passed through verbatim. Examples:
@@ -1058,8 +1058,9 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 | `ssh_config` | SSH config snippet |
 | `id_ed25519` | Private key (copy from volume) |
 | `known_hosts` | Host keys (copy from volume) |
+| `lock` | Advisory realm lock (see Realm Advisory Locking) |
 
-The generated `ssh_config` (for default realm `sind`):
+The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path):
 
 ```
 CanonicalizeHostname yes
@@ -1068,13 +1069,13 @@ CanonicalizeMaxDots 2
 
 Host *.sind.sind
     ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/%h/22; cat <&3 & cat >&3; kill $!'
-    IdentityFile ~/.local/state/sind/sind/id_ed25519
-    UserKnownHostsFile ~/.local/state/sind/sind/known_hosts
+    IdentityFile /home/user/.local/state/sind/sind/id_ed25519
+    UserKnownHostsFile /home/user/.local/state/sind/sind/known_hosts
     User root
     StrictHostKeyChecking yes
 ```
 
-The `Canonicalize*` directives enable short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. For custom realms, the `CanonicalDomains` list reflects that realm's clusters.
+The `Canonicalize*` directives enable short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. Other realms get no `Canonicalize*` directives, only their `Host *.<realm>.sind` block; use full names such as `controller.dev.ci.sind` there.
 
 To find the path for a realm, use `sind get ssh-config`. Add to the **top** of `~/.ssh/config` (before any `Host` or `Match` blocks) for a single realm:
 
@@ -1096,7 +1097,7 @@ ssh worker-0.dev.sind.sind hostname
 scp file.txt controller.dev.sind.sind:/tmp/
 ```
 
-sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, the files and realm directory are removed.
+sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file.
 
 ## Command Routing
 
@@ -1112,11 +1113,11 @@ On an unmanaged cluster sind does not know which controller is in control; `ente
 
 ### sind enter
 
-Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Equivalent to `sind ssh submitter` or `sind ssh controller`.
+Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Unlike `sind ssh`, it runs `bash -l` through `docker exec` rather than the SSH relay, in `/data` (see Enter and Exec).
 
 ### sind exec
 
-One-shot command execution. Equivalent to `sind ssh <target> -- <cmd>`.
+One-shot command execution on the same target as `sind enter`, through `docker exec` in `/data` rather than the SSH relay.
 
 ## Container Images
 

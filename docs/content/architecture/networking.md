@@ -156,7 +156,7 @@ docker exec <node> sh -c 'cat >> /root/.ssh/authorized_keys' < pubkey
 Host keys are then collected:
 
 ```bash
-docker exec <node> cat /etc/ssh/ssh_host_ed25519_key.pub
+docker exec <node> ssh-keyscan -t ed25519 localhost
 ```
 
 And stored in `known_hosts` with the node's DNS name:

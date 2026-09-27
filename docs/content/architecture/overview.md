@@ -32,7 +32,7 @@ Containers require specific security options for systemd:
 
 ## Concurrency
 
-Mutating operations acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations are unaffected. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}).
+Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations and `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}).
 
 ## Creation flow
 
