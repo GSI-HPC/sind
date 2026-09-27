@@ -78,6 +78,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
+| `sind.data.mountpath` | `/shared` | Data mount point, when `storage.dataStorage.mountPath` is not `/data` |
 
 A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network and the SSH volume carry `sind.realm` only. `sind get networks`, `sind get volumes` and `sind delete cluster --all` find resources by these labels.
 

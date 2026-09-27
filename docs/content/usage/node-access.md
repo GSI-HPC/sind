@@ -46,7 +46,7 @@ Shell completion is available for both `sind ssh` and `sind exec` — press Tab 
 sind enter [CLUSTER]
 ```
 
-Opens an interactive shell on the cluster's submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is `/data`.
+Opens an interactive shell on the cluster's submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is the data mount, `/data` unless the cluster config sets another `mountPath`.
 
 ```bash
 sind enter          # default cluster
@@ -59,7 +59,7 @@ sind enter dev      # dev cluster
 sind exec [CLUSTER] -- COMMAND [ARGS...]
 ```
 
-Runs a one-shot command on the submitter (or controller). The `--` separator is required. The working directory inside the container is `/data`.
+Runs a one-shot command on the submitter (or controller). The `--` separator is required. The working directory inside the container is the data mount, as for `enter`.
 
 ```bash
 sind exec -- sinfo

@@ -664,7 +664,7 @@ storage:
   dataStorage:
     type: hostPath                       # hostPath | volume (default: from --data)
     hostPath: ./data                     # only for type=hostPath
-    mountPath: /data                     # default: /data (nodes created with the cluster)
+    mountPath: /data                     # default: /data
 
 slurm:
   main: |                                # appended to slurm.conf
@@ -789,6 +789,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
 - `devices` - absolute paths
+- `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
 
@@ -908,11 +909,14 @@ The `--data` flag controls the mount source:
 
 When a YAML config specifies `storage.dataStorage`, the config takes precedence over `--data`.
 
-The resolved host path is stored on each container as the `sind.data.hostpath` label so that
-dynamically added workers (`sind create worker`) inherit the same mount. `storage.dataStorage.mountPath`
-is not recorded: added workers mount the data at `/data`, `sind get cluster` reports `/data`, and
-`enter` and `exec` start in `/data`. A relative `hostPath` from the config is passed to Docker as
-given, so it is relative to the directory `sind create cluster` runs in.
+The resolved host path is stored on each container as the `sind.data.hostpath` label, and a
+`storage.dataStorage.mountPath` other than `/data` as the `sind.data.mountpath` label, so that
+dynamically added workers (`sind create worker`) inherit the same mount, and `sind get cluster`,
+`enter` and `exec` use the same mount point. A relative `hostPath` from the config is resolved
+against the directory `sind create cluster` runs in.
+
+In the config, `type: hostPath` bind-mounts `hostPath` and `type: volume` uses the data volume and
+ignores `hostPath`; a `hostPath` without `type` means `hostPath`.
 
 ### Container Labels
 
@@ -926,11 +930,12 @@ sind applies labels to containers for filtering and metadata:
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
+| `sind.data.mountpath` | `/shared` | Data mount point, when not `/data` |
 
 ### Enter and Exec
 
 `sind enter` and `sind exec` run commands directly inside the target container via `docker exec`
-with the working directory set to `/data`. This means commands operate on the shared data mount.
+with the working directory set to the data mount point (`/data` by default). This means commands operate on the shared data mount.
 
 `sind ssh` continues to use the SSH relay container for full SSH access (port forwarding, etc.).
 
