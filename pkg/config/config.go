@@ -322,8 +322,8 @@ func (c *Cluster) Validate() error {
 		if n.Count > 0 && n.Role != RoleWorker {
 			return fmt.Errorf("count is only valid for worker nodes, not %q", n.Role)
 		}
-		if n.Managed != nil && n.Role != RoleWorker {
-			return fmt.Errorf("managed is only valid for worker nodes, not %q", n.Role)
+		if n.Managed != nil && n.Role != RoleWorker && n.Role != RoleController {
+			return fmt.Errorf("managed is only valid for controller and worker nodes, not %q", n.Role)
 		}
 		if n.BackupController && n.Role != RoleController {
 			return fmt.Errorf("backupController is only valid for controller nodes, not %q", n.Role)
@@ -359,14 +359,6 @@ func (c *Cluster) Validate() error {
 		}
 	}
 
-	if c.HasBackupController() {
-		for _, key := range backupControllerManagedKeys {
-			if c.Slurm.Main.SetsParameter(key) {
-				return fmt.Errorf("slurm main must not set %s when backupController is enabled: sind generates the controller configuration", key)
-			}
-		}
-	}
-
 	sections := []struct {
 		name    string
 		section Section
@@ -377,6 +369,28 @@ func (c *Cluster) Validate() error {
 		{"topology", c.Slurm.Topology},
 		{"plugstack", c.Slurm.Plugstack},
 	}
+
+	if !c.Managed() {
+		for _, n := range c.Nodes {
+			if n.Role == RoleWorker && n.Managed != nil && *n.Managed {
+				return fmt.Errorf("worker managed: true requires a managed controller")
+			}
+		}
+		for _, s := range sections {
+			if !s.section.IsEmpty() {
+				return fmt.Errorf("slurm %s requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", s.name)
+			}
+		}
+	}
+
+	if c.HasBackupController() {
+		for _, key := range backupControllerManagedKeys {
+			if c.Slurm.Main.SetsParameter(key) {
+				return fmt.Errorf("slurm main must not set %s when backupController is enabled: sind generates the controller configuration", key)
+			}
+		}
+	}
+
 	for _, s := range sections {
 		if err := validateSection(s.name, s.section); err != nil {
 			return err
@@ -403,6 +417,19 @@ func (c *Cluster) HasBackupController() bool {
 		}
 	}
 	return false
+}
+
+// Managed reports whether sind manages the cluster's Slurm configuration and
+// daemons. managed: false on the controller node spec makes the whole
+// cluster unmanaged: sind writes no Slurm configuration and starts no Slurm
+// daemons on any node.
+func (c *Cluster) Managed() bool {
+	for _, n := range c.Nodes {
+		if n.Role == RoleController && n.Managed != nil {
+			return *n.Managed
+		}
+	}
+	return true
 }
 
 // validateSection checks that a Slurm config section is valid.
