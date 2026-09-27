@@ -2,6 +2,11 @@
 
 package config
 
+import (
+	"fmt"
+	"strings"
+)
+
 // validCapabilities lists all Linux capabilities recognized by Docker.
 // Names follow Docker convention (without the CAP_ prefix).
 // See capabilities(7) and https://docs.docker.com/reference/cli/docker/container/run/#privileged
@@ -54,4 +59,27 @@ var validCapabilities = map[string]struct{}{
 func isValidCapability(name string) bool {
 	_, ok := validCapabilities[name]
 	return ok
+}
+
+// CheckCapabilities reports the first name in caps that is not a recognized
+// Linux capability; field names the setting in the error, e.g. "capAdd".
+func CheckCapabilities(field string, caps []string) error {
+	for _, c := range caps {
+		if !isValidCapability(c) {
+			return fmt.Errorf("unknown capability %q in %s", c, field)
+		}
+	}
+	return nil
+}
+
+// CheckDevices reports the first device whose host path is not absolute.
+// A device is HOST_PATH[:CONTAINER_PATH[:PERMISSIONS]].
+func CheckDevices(devices []string) error {
+	for _, dev := range devices {
+		hostDev := strings.SplitN(dev, ":", 2)[0]
+		if !strings.HasPrefix(hostDev, "/") {
+			return fmt.Errorf("device path must be absolute, got %q", dev)
+		}
+	}
+	return nil
 }

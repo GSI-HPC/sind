@@ -55,6 +55,18 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
+	// Check capabilities and devices as the config's are checked, before
+	// any container exists.
+	if err := config.CheckCapabilities("--cap-add", opts.CapAdd); err != nil {
+		return nil, err
+	}
+	if err := config.CheckCapabilities("--cap-drop", opts.CapDrop); err != nil {
+		return nil, err
+	}
+	if err := config.CheckDevices(opts.Devices); err != nil {
+		return nil, err
+	}
+
 	// List cluster containers once for validation + index + image resolution.
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,

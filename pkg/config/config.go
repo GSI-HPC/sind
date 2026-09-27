@@ -377,21 +377,14 @@ func (c *Cluster) Validate() error {
 	}
 
 	for _, n := range c.Nodes {
-		for _, cap := range n.CapAdd {
-			if !isValidCapability(cap) {
-				return fmt.Errorf("unknown capability %q in capAdd", cap)
-			}
+		if err := CheckCapabilities("capAdd", n.CapAdd); err != nil {
+			return err
 		}
-		for _, cap := range n.CapDrop {
-			if !isValidCapability(cap) {
-				return fmt.Errorf("unknown capability %q in capDrop", cap)
-			}
+		if err := CheckCapabilities("capDrop", n.CapDrop); err != nil {
+			return err
 		}
-		for _, dev := range n.Devices {
-			hostDev := strings.SplitN(dev, ":", 2)[0]
-			if !strings.HasPrefix(hostDev, "/") {
-				return fmt.Errorf("device path must be absolute, got %q", dev)
-			}
+		if err := CheckDevices(n.Devices); err != nil {
+			return err
 		}
 	}
 

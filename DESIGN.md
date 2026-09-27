@@ -452,6 +452,8 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--device PATH` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
 | `--security-opt OPT` | none | Security option (repeatable) |
 
+`--cap-add`, `--cap-drop` and `--device` are checked like the config's `capAdd`, `capDrop` and `devices`, before any container is created.
+
 Examples:
 
 ```bash

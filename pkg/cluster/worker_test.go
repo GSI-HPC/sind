@@ -609,6 +609,31 @@ func TestWorkerAdd_InheritsDataMount(t *testing.T) {
 	assert.True(t, created)
 }
 
+func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    WorkerAddOptions
+		wantErr string
+	}{
+		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
+		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device path must be absolute, got "dev/fuse"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			client := docker.NewClient(&m)
+			tt.opts.ClusterName = "dev"
+
+			_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), tt.opts, time.Millisecond)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Empty(t, m.Calls, "docker must not be called")
+		})
+	}
+}
+
 func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

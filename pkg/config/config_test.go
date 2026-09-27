@@ -285,6 +285,21 @@ func TestValidate_DataStorage(t *testing.T) {
 	}
 }
 
+func TestCheckCapabilities(t *testing.T) {
+	require.NoError(t, CheckCapabilities("capAdd", []string{"SYS_ADMIN", "ALL"}))
+	require.NoError(t, CheckCapabilities("capAdd", nil))
+	err := CheckCapabilities("--cap-add", []string{"SYS_ADMIN", "BOGUS"})
+	require.Error(t, err)
+	assert.Equal(t, `unknown capability "BOGUS" in --cap-add`, err.Error())
+}
+
+func TestCheckDevices(t *testing.T) {
+	require.NoError(t, CheckDevices([]string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}))
+	err := CheckDevices([]string{"/dev/fuse", "fuse:/dev/fuse"})
+	require.Error(t, err)
+	assert.Equal(t, `device path must be absolute, got "fuse:/dev/fuse"`, err.Error())
+}
+
 func TestApplyDefaults_MinimalConfig(t *testing.T) {
 	cfg := &Cluster{Kind: "Cluster", Name: "default"}
 	cfg.ApplyDefaults()
