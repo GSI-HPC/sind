@@ -1,0 +1,164 @@
+# One-off verification of storage.cvmfs (#38) against real Docker and CVMFS.
+# Not meant to be merged.
+name: Verify storage.cvmfs
+
+on:
+  push:
+    branches: [claude/verify-cvmfs-38]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-cvmfs:
+    name: Host /cvmfs with autofs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build sind
+        run: |
+          go build -o "$RUNNER_TEMP/bin/sind" ./cmd/sind
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: sind doctor
+        run: sind doctor
+
+      - name: Install CVMFS with autofs on the host
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/cvmfs-release.deb" https://cvmrepo.s3.cern.ch/cvmrepo/apt/cvmfs-release-latest_all.deb
+          sudo dpkg -i "$RUNNER_TEMP/cvmfs-release.deb"
+          sudo apt-get update -q
+          sudo apt-get install -y -q cvmfs autofs
+          sudo tee /etc/cvmfs/default.local <<'CFG'
+          CVMFS_CLIENT_PROFILE=single
+          CVMFS_HTTP_PROXY=DIRECT
+          CVMFS_REPOSITORIES=cvmfs-config.cern.ch,sft.cern.ch,grid.cern.ch
+          CFG
+          sudo cvmfs_config setup
+          cvmfs2 --version || true
+
+      - name: Host /cvmfs before the cluster (autofs only, nothing mounted)
+        run: |
+          findmnt -o TARGET,FSTYPE,PROPAGATION /cvmfs
+          findmnt -R -o TARGET,FSTYPE,PROPAGATION /cvmfs
+
+      - name: Write cluster config
+        run: |
+          cat > cvmfs.yml <<'CFG'
+          kind: Cluster
+          name: cvmfs
+          storage:
+            cvmfs: true
+          nodes:
+            - controller
+            - submitter
+            - worker: 1
+          CFG
+
+      - name: Create cluster
+        run: sind -v create cluster --config cvmfs.yml --data volume
+
+      - name: Mounts, labels and status
+        run: |
+          sind get cluster cvmfs
+          sind get cluster cvmfs -o json | jq -c '.mounts[]'
+          for n in controller submitter worker-0; do
+            echo "--- sind-cvmfs-$n: label sind.cvmfs=$(docker inspect -f '{{index .Config.Labels "sind.cvmfs"}}' "sind-cvmfs-$n")"
+            docker inspect -f '{{json .Mounts}}' "sind-cvmfs-$n" | jq -c '.[] | select(.Destination == "/cvmfs")'
+          done
+          [[ "$(sind get cluster cvmfs -o json | jq -r '.mounts[] | select(.path == "/cvmfs") | "\(.source) \(.type) \(.ok)"')" == "/cvmfs hostPath true" ]]
+          [[ "$(docker inspect -f '{{index .Config.Labels "sind.cvmfs"}}' sind-cvmfs-worker-0)" == hostPath ]]
+          [[ "$(docker inspect -f '{{json .Mounts}}' sind-cvmfs-worker-0 | jq -r '.[] | select(.Destination == "/cvmfs") | "\(.Type) \(.RW) \(.Propagation)"')" == "bind false rslave" ]]
+
+      - name: First access from inside a node triggers the host's autofs
+        run: |
+          sind exec cvmfs -- ls /cvmfs/sft.cern.ch
+          echo "--- host after the access:"
+          findmnt -R -o TARGET,FSTYPE,PROPAGATION /cvmfs
+          findmnt -n /cvmfs/sft.cern.ch
+
+      - name: Another repository, first accessed from a worker
+        run: |
+          docker exec sind-cvmfs-worker-0 ls /cvmfs/grid.cern.ch
+          docker exec sind-cvmfs-worker-0 findmnt -R -o TARGET,FSTYPE,PROPAGATION /cvmfs
+
+      - name: A Slurm job reads CVMFS
+        run: sind exec cvmfs -- srun -N1 -w worker-0 ls /cvmfs/sft.cern.ch
+
+      - name: An added worker inherits the mount
+        run: |
+          sind create worker cvmfs
+          [[ "$(docker inspect -f '{{index .Config.Labels "sind.cvmfs"}}' sind-cvmfs-worker-1)" == hostPath ]]
+          docker exec sind-cvmfs-worker-1 ls /cvmfs/sft.cern.ch
+          sind exec cvmfs -- srun -N1 -w worker-1 ls /cvmfs/grid.cern.ch
+
+      - name: Delete the cluster
+        run: |
+          sind delete cluster cvmfs
+          ls /cvmfs/sft.cern.ch
+
+      - name: A private host /cvmfs fails before any node exists
+        run: |
+          sudo mount --make-private /cvmfs
+          findmnt -o TARGET,FSTYPE,PROPAGATION /cvmfs
+          if sind create cluster --config cvmfs.yml --data volume > create.log 2>&1; then
+            cat create.log
+            echo "::error::create succeeded with a private /cvmfs"
+            exit 1
+          fi
+          cat create.log
+          grep -q "install CVMFS on the Docker host" create.log
+          docker ps -a
+          [[ -z "$(docker ps -aq --filter label=sind.cluster=cvmfs)" ]]
+          [[ -z "$(docker network ls -q --filter label=sind.cluster=cvmfs)" ]]
+          [[ -z "$(docker volume ls -q --filter label=sind.cluster=cvmfs)" ]]
+
+      - name: Cleanup
+        if: always()
+        run: sind delete cluster --all || true
+
+  no-cvmfs:
+    name: No CVMFS on the host
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build sind
+        run: |
+          go build -o "$RUNNER_TEMP/bin/sind" ./cmd/sind
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Create fails with a hint and leaves nothing behind
+        run: |
+          test ! -e /cvmfs
+          docker plugin ls
+          printf 'kind: Cluster\nname: cvmfs\nstorage:\n  cvmfs: true\n' > cvmfs.yml
+          if sind create cluster --config cvmfs.yml --data volume > create.log 2>&1; then
+            cat create.log
+            echo "::error::create succeeded without CVMFS"
+            exit 1
+          fi
+          cat create.log
+          grep -q "install CVMFS on the Docker host" create.log
+          docker ps -a
+          docker network ls
+          docker volume ls
+          [[ -z "$(docker ps -aq)" ]]
+          [[ -z "$(docker network ls -q --filter label=sind.realm)" ]]
+          [[ -z "$(docker volume ls -q --filter label=sind.realm)" ]]
+
+      - name: Cleanup
+        if: always()
+        run: sind delete cluster --all || true
