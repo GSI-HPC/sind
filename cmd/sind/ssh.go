@@ -3,7 +3,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -48,7 +48,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(target) != 1 {
-		return fmt.Errorf("ssh requires exactly one node, got %d", len(target))
+		return usagef("ssh requires exactly one node, got %d", len(target))
 	}
 
 	isTTY := stdinIsTTY(cmd.InOrStdin())
@@ -165,7 +165,7 @@ func stdinIsTTY(stdin io.Reader) bool {
 // Format: [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]
 func parseSSHArgs(args []string) (sshOptions []string, node string, command []string, err error) {
 	if len(args) == 0 {
-		return nil, "", nil, fmt.Errorf("node argument required")
+		return nil, "", nil, usagef("node argument required")
 	}
 
 	// Find the -- separator
@@ -187,7 +187,7 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 
 	// Last non-option arg before -- is the node
 	if len(preArgs) == 0 {
-		return nil, "", nil, fmt.Errorf("node argument required")
+		return nil, "", nil, usagef("node argument required")
 	}
 
 	node = preArgs[len(preArgs)-1]
@@ -202,23 +202,23 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 // when there was none.
 func parseExecArgs(args []string, dashIdx int) (clusterName string, command []string, err error) {
 	if dashIdx < 0 {
-		return "", nil, fmt.Errorf("-- separator and command required")
+		return "", nil, usagef("-- separator and command required")
 	}
 
 	command = args[dashIdx:]
 	if len(command) == 0 {
-		return "", nil, fmt.Errorf("command required after --")
+		return "", nil, usagef("command required after --")
 	}
 
 	if dashIdx > 1 {
-		return "", nil, fmt.Errorf("expected at most one argument before --, got %d", dashIdx)
+		return "", nil, usagef("expected at most one argument before --, got %d", dashIdx)
 	}
 
 	clusterName = "default"
 	if dashIdx == 1 {
 		clusterName = args[0]
 		if err := config.CheckName("cluster", clusterName); err != nil {
-			return "", nil, err
+			return "", nil, usage(err)
 		}
 	}
 
@@ -285,11 +285,18 @@ func completeExecClusterArg(cmd *cobra.Command, args []string, toComplete string
 	return completeClusterNames(cmd, nil, toComplete)
 }
 
-// dockerExec runs a docker command with stdin/stdout/stderr from the cobra command.
+// dockerExec runs a docker command with stdin/stdout/stderr from the cobra
+// command. When docker exits non-zero, the error is a *childExitError, so
+// that sind exits with docker's status, which docker exec takes from the
+// command it ran.
 func dockerExec(cmd *cobra.Command, args []string) error {
 	dockerCmd := exec.CommandContext(cmd.Context(), "docker", args...)
 	dockerCmd.Stdin = cmd.InOrStdin()
 	dockerCmd.Stdout = cmd.OutOrStdout()
 	dockerCmd.Stderr = cmd.ErrOrStderr()
-	return dockerCmd.Run()
+	err := dockerCmd.Run()
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		return newChildExitError(exitErr)
+	}
+	return err
 }

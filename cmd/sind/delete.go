@@ -3,8 +3,6 @@
 package main
 
 import (
-	"errors"
-
 	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -34,7 +32,7 @@ func newDeleteClusterCommand() *cobra.Command {
 			all, _ := cmd.Flags().GetBool("all")
 			if all {
 				if len(args) > 0 {
-					return errors.New("--all does not accept arguments")
+					return usagef("--all does not accept arguments")
 				}
 				return runDeleteClustersAll(cmd)
 			}

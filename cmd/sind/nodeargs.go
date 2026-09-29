@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -34,7 +33,7 @@ type nodeTarget struct {
 func parseNodeArgs(args string) ([]nodeTarget, error) {
 	expanded, err := nodeset.Expand(args)
 	if err != nil {
-		return nil, fmt.Errorf("expanding nodes: %w", err)
+		return nil, usagef("expanding nodes: %w", err)
 	}
 
 	targets := make([]nodeTarget, 0, len(expanded))
@@ -45,10 +44,10 @@ func parseNodeArgs(args string) ([]nodeTarget, error) {
 			t.Cluster = name[i+1:]
 		}
 		if t.ShortName == "" || t.Cluster == "" {
-			return nil, fmt.Errorf("invalid node name %q", name)
+			return nil, usagef("invalid node name %q", name)
 		}
 		if err := config.CheckName("cluster", t.Cluster); err != nil {
-			return nil, fmt.Errorf("invalid node name %q: %w", name, err)
+			return nil, usagef("invalid node name %q: %w", name, err)
 		}
 		targets = append(targets, t)
 	}

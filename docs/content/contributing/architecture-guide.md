@@ -107,7 +107,7 @@ The `pkg/cmdexec` package provides the executor abstraction at the bottom of the
 ## Adding a new CLI command
 
 1. **Create the command file** in `cmd/sind/` (e.g., `mycommand.go`)
-2. **Define the cobra command** with `Use`, `Short`, `Args`, and `RunE`
+2. **Define the cobra command** with `Use`, `Short`, `Args`, and `RunE`. An `Args` check that fails exits 2, a usage error; `RunE` returns `usage(err)` or `usagef(...)` for an argument or flag value it rejects, so that it exits 2 too
 3. **Wire it up** in `root.go` via `cmd.AddCommand(newMyCommand())`
 4. **Use context helpers** to get the Docker client and mesh manager:
 

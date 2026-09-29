@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/signal"
@@ -12,11 +13,6 @@ import (
 	"github.com/GSI-HPC/sind/internal/termtext"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
-
-// exitInterrupted is the exit status of a command that SIGINT or SIGTERM
-// stopped: 128 + SIGINT, as a shell reports an interrupt. SIGTERM exits
-// with it too, so that callers check one status for "interrupted".
-const exitInterrupted = 130
 
 func main() {
 	ctx, stop := interruptContext()
@@ -53,6 +49,10 @@ func interruptContext() (context.Context, context.CancelFunc) {
 // whatever its error says: a docker call killed by the cancellation reports
 // only "signal: killed".
 //
+// A program that ssh, exec, enter or logs ran on the user's terminal and
+// that exited non-zero gives its own status and adds no error line: it has
+// written its own diagnostics.
+//
 // The error is written to stderr escaped: it can quote what docker or a
 // container wrote, and the logger quotes attribute values but not the
 // message, so a control sequence in it would otherwise reach the terminal.
@@ -68,7 +68,13 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 
 	err := cmd.Execute()
 	if err == nil {
-		return 0
+		return exitOK
+	}
+	if child, ok := errors.AsType[*childExitError](err); ok {
+		if ctx.Err() != nil {
+			return exitInterrupted
+		}
+		return child.code
 	}
 	msg := termtext.EscapeText(err.Error())
 	log := sindlog.From(cmd.Context())
@@ -77,5 +83,8 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		return exitInterrupted
 	}
 	log.ErrorContext(cmd.Context(), msg)
-	return 1
+	if isUsageError(err) {
+		return exitUsage
+	}
+	return exitFailure
 }

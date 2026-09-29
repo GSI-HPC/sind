@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -29,13 +30,23 @@ import (
 // Started under the name "docker", the test binary is a fake docker instead:
 // it records that it started in the file fakeDockerEnv names and then
 // hangs, like a docker call still running when the user presses Ctrl-C, or
-// fails at once when fakeDockerEnv is empty.
+// fails at once when fakeDockerEnv is empty. fakeDockerExitEnv makes it end
+// at once instead, with the exit status it names or killed by the signal
+// it names (fakeDockerSignals), like a docker exec whose command failed.
 //
 // Adapted from GSI-HPC/clusterctl cmd/clusterctl/signal_test.go.
 const (
-	childEnv      = "SIND_TEST_PROCESS"
-	fakeDockerEnv = "SIND_TEST_DOCKER_STARTED"
+	childEnv          = "SIND_TEST_PROCESS"
+	fakeDockerEnv     = "SIND_TEST_DOCKER_STARTED"
+	fakeDockerExitEnv = "SIND_TEST_DOCKER_EXIT"
 )
+
+// fakeDockerSignals are the signals fakeDockerExitEnv can name.
+var fakeDockerSignals = map[string]syscall.Signal{
+	"SIGINT":  syscall.SIGINT,
+	"SIGKILL": syscall.SIGKILL,
+	"SIGTERM": syscall.SIGTERM,
+}
 
 // TestMain runs the tests without the caller's sind settings: an exported
 // SIND_REALM, as sind-action sets it in CI, would move every command into
@@ -66,6 +77,15 @@ func TestMain(m *testing.M) {
 }
 
 func fakeDocker() {
+	if exit := os.Getenv(fakeDockerExitEnv); exit != "" {
+		if sig, ok := fakeDockerSignals[exit]; ok {
+			_ = syscall.Kill(os.Getpid(), sig)
+			time.Sleep(time.Minute)
+		}
+		code, _ := strconv.Atoi(exit)
+		fmt.Fprintf(os.Stderr, "fake docker exits %d\n", code)
+		os.Exit(code)
+	}
 	started := os.Getenv(fakeDockerEnv)
 	if started == "" {
 		fmt.Fprintln(os.Stderr, "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?")

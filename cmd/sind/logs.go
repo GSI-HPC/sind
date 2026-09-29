@@ -3,8 +3,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/cobra"
 )
@@ -36,7 +34,7 @@ func runLogs(cmd *cobra.Command, args []string, follow bool) error {
 		return err
 	}
 	if len(targets) != 1 {
-		return fmt.Errorf("logs requires exactly one node, got %d", len(targets))
+		return usagef("logs requires exactly one node, got %d", len(targets))
 	}
 
 	node := targets[0]
