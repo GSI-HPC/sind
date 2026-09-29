@@ -26,7 +26,7 @@ Checks system prerequisites and reports pass/fail for each:
 | cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
@@ -43,6 +43,30 @@ sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d
 echo -e '[Mount]\nOptions=nsdelegate' \
   | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf
 sudo systemctl daemon-reload
+```
+
+### Machine-readable output
+
+`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name`, a `status` (`ok`, `failed`, or `warning` when the advisory DNS policy check does not pass) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
+
+```bash
+sind doctor -o json
+```
+
+```json
+[
+  {
+    "name": "Docker Engine",
+    "status": "ok",
+    "detail": "28.1.1 (>= 28.0)"
+  },
+  {
+    "name": "cgroupv2",
+    "status": "failed",
+    "detail": "nsdelegate not found",
+    "remediation": "Enable nsdelegate temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n..."
+  }
+]
 ```
 
 ## Verbose logging
@@ -94,7 +118,7 @@ Example output at `-vv` (colorized on interactive terminals):
 
 ## JSON output
 
-Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is `human` (tabular text); `json` emits a machine-readable document for scripting and automation.
+Every `sind get` subcommand accepts a persistent `--output|-o {human,json}` flag. The default is `human` (tabular text); `json` emits a machine-readable document for scripting and automation. `sind doctor` takes the same flag (see [Machine-readable output](#machine-readable-output)).
 
 ```bash
 sind get clusters -o json

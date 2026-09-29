@@ -121,7 +121,7 @@ func TestMCPTools_Flags(t *testing.T) {
 	assert.Contains(t, tools["sind_create_cluster"].InputSchema.Properties.Flags.Properties, "config")
 }
 
-func TestMCPTools_GetHasNoOutputFlag(t *testing.T) {
+func TestMCPTools_NoOutputFlag(t *testing.T) {
 	tools := exportMCPTools(t)
 	var get int
 	for name, tool := range tools {
@@ -131,6 +131,7 @@ func TestMCPTools_GetHasNoOutputFlag(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 12, get)
+	assert.NotContains(t, tools["sind_doctor"].InputSchema.Properties.Flags.Properties, "output")
 }
 
 func TestForceJSONOutput(t *testing.T) {
