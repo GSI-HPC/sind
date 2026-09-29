@@ -84,7 +84,7 @@ func resolveRealm(cmd *cobra.Command, configRealm string) (string, error) {
 	if cmd.Root().Flags().Changed("realm") {
 		r, _ := cmd.Root().Flags().GetString("realm")
 		if err := config.CheckName("realm", r); err != nil {
-			return "", fmt.Errorf("--realm: %w", err)
+			return "", usagef("--realm: %w", err)
 		}
 		return r, nil
 	}

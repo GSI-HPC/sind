@@ -173,7 +173,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 - Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
-- Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits non-zero); `NewRootCommand` applies this to every group, including ones added later
+- Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2); `NewRootCommand` applies this to every group, including ones added later
 - cobra's built-in `help` and `completion` commands follow the same rule: `sind completion fish-typo` fails like any group, and `sind help TOPIC` fails unless TOPIC names a command in full (`sind help bogus`, `sind help get bogus`)
 
 ### Argument Conventions
@@ -222,7 +222,8 @@ Rules:
 - All `get` subcommands and `doctor` accept `--output|-o {human,json}`; default is `human`
 
 Exit status and signals:
-- `0` on success, `1` on failure, `130` when SIGINT or SIGTERM interrupted the command
+- `0` on success, `1` on failure, `2` for a usage error, `130` when SIGINT or SIGTERM interrupted the command (`cmd/sind/exitcode.go`). Scripts branch on them, so a status may be added but never renumbered
+- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`
 - The first SIGINT or SIGTERM cancels the command's context; deferred cleanup (e.g. the rollback of a failed `create cluster`) still runs under `context.WithoutCancel`
 - The signal handler is removed before the context is cancelled, so a second signal gets the default action and ends sind at once, even during a hung cleanup
 
@@ -264,7 +265,7 @@ When introducing a new command:
 4. **Completion**: add `ValidArgsFunction` for cluster/node args
 5. **Output**: table for lists, confirmation for mutations, silence for passthrough
 6. **Logging**: info for phases, debug for operations, trace for raw commands
-7. **Errors**: wrap with `fmt.Errorf("context: %w", err)`, no error prefixes
+7. **Errors**: wrap with `fmt.Errorf("context: %w", err)`, no error prefixes; an argument or flag value that is not valid returns `usage(err)` or `usagef(...)`, so that it exits 2 (`Args` checks are wrapped already)
 8. **Tests**: unit test with mock executor, integration test in lifecycle test
 9. **MCP**: classify the command in `mcpEffects`, or list it in `mcpExcluded` (`cmd/sind/mcp.go`)
 10. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
@@ -562,6 +563,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).
 - A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
+- A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`.
 
 ## Node Arguments
 

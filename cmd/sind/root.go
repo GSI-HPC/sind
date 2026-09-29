@@ -50,6 +50,7 @@ func NewRootCommand() *cobra.Command {
 
 	builtins(cmd)
 	requireKnownSubcommand(cmd)
+	usageArgs(cmd)
 	annotateMCPTools(cmd)
 
 	return cmd
@@ -98,9 +99,10 @@ func helpTopic(cmd *cobra.Command, args []string) error {
 
 // requireKnownSubcommand makes every command group (a command with
 // subcommands but no run function) print its help when invoked bare and
-// fail on any other argument. Cobra's default for such groups is to print
-// help and exit 0 even for a mistyped or removed subcommand, so a script
-// calling e.g. `sind status` would silently succeed.
+// fail on any other argument, with exitUsage. Cobra's default for such
+// groups is to print help and exit 0 even for a mistyped or removed
+// subcommand, so a script calling e.g. `sind status` would silently
+// succeed.
 func requireKnownSubcommand(cmd *cobra.Command) {
 	for _, sub := range cmd.Commands() {
 		requireKnownSubcommand(sub)

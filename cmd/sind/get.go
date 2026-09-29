@@ -174,7 +174,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 		return err
 	}
 	if strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
-		return fmt.Errorf("use NODE[.CLUSTER], not the FQDN %q", arg)
+		return usagef("use NODE[.CLUSTER], not the FQDN %q", arg)
 	}
 	// Parse shortName.cluster on the first dot (neither node short names
 	// nor cluster names contain dots).
@@ -184,7 +184,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 		clusterName = arg[i+1:]
 	}
 	if err := config.CheckName("cluster", clusterName); err != nil {
-		return fmt.Errorf("invalid node name %q: %w", arg, err)
+		return usagef("invalid node name %q: %w", arg, err)
 	}
 
 	client := clientFrom(cmd.Context())

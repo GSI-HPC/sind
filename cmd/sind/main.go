@@ -13,11 +13,6 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
-// exitInterrupted is the exit status of a command that SIGINT or SIGTERM
-// stopped: 128 + SIGINT, as a shell reports an interrupt. SIGTERM exits
-// with it too, so that callers check one status for "interrupted".
-const exitInterrupted = 130
-
 func main() {
 	ctx, stop := interruptContext()
 	code := run(ctx, os.Args[1:], os.Stderr)
@@ -68,7 +63,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 
 	err := cmd.Execute()
 	if err == nil {
-		return 0
+		return exitOK
 	}
 	msg := termtext.EscapeText(err.Error())
 	log := sindlog.From(cmd.Context())
@@ -77,5 +72,8 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		return exitInterrupted
 	}
 	log.ErrorContext(cmd.Context(), msg)
-	return 1
+	if isUsageError(err) {
+		return exitUsage
+	}
+	return exitFailure
 }

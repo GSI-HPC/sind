@@ -4,7 +4,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -39,7 +38,7 @@ func validateOutputFlag(cmd *cobra.Command) error {
 	case outputHuman, outputJSON:
 		return nil
 	default:
-		return fmt.Errorf("invalid --output value %q: must be %q or %q", outputFlag(cmd), outputHuman, outputJSON)
+		return usagef("invalid --output value %q: must be %q or %q", outputFlag(cmd), outputHuman, outputJSON)
 	}
 }
 

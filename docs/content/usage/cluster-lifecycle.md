@@ -56,7 +56,7 @@ EOF
 
 If any node fails to become ready within the timeout, the command fails and sind removes the resources it created, including a mesh that this invocation set up. If that cleanup fails too, use `sind delete cluster` to remove what is left.
 
-Ctrl-C (SIGINT) or SIGTERM, as sent by `timeout` or `docker stop`, stops the creation and runs the same cleanup; sind then exits with status 130. A second signal ends sind at once, without waiting for the cleanup to finish.
+Ctrl-C (SIGINT) or SIGTERM, as sent by `timeout` or `docker stop`, stops the creation and runs the same cleanup; sind then exits with status 130 (see [Exit Status]({{< relref "/usage/exit-status" >}})). A second signal ends sind at once, without waiting for the cleanup to finish.
 
 ### Preflight checks
 
