@@ -609,6 +609,43 @@ func TestWorkerAdd_InheritsDataMount(t *testing.T) {
 	assert.True(t, created)
 }
 
+func TestWorkerAdd_InheritsCVMFS(t *testing.T) {
+	// New workers mount CVMFS the way the cluster's nodes do, without
+	// detecting the backend again.
+	base := workerAddOnCall(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if len(args) > 0 && args[0] == "ps" {
+			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{
+				ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+				Labels: "sind.cluster=dev,sind.role=controller,sind.cvmfs=volume",
+			})}
+		}
+		if len(args) > 0 && args[0] == "plugin" {
+			assert.Fail(t, "unexpected cvmfs detection", "%v", args)
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+	mgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	require.NoError(t, err)
+
+	var created bool
+	for _, call := range m.Calls {
+		if call.Args[0] == "create" {
+			created = true
+			assert.Equal(t, []string{"type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"}, testutil.ArgValues(call.Args, "--mount"))
+			assert.Contains(t, testutil.ArgValues(call.Args, "--label"), LabelCVMFS+"=volume")
+		}
+	}
+	assert.True(t, created)
+}
+
 func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
 	tests := []struct {
 		name    string

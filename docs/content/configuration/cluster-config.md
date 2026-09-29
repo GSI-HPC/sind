@@ -110,7 +110,10 @@ storage:
     type: hostPath     # "hostPath" or "volume"
     hostPath: ./data   # host directory for type: hostPath
     mountPath: /data   # default: /data
+  cvmfs: true          # mount CVMFS read-only at /cvmfs (default: false)
 ```
+
+### Data storage
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -121,6 +124,10 @@ storage:
 If the config sets neither `type` nor `hostPath`, the `--data` flag of `sind create cluster` decides; its default, `.`, bind-mounts the working directory (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})).
 
 Workers added with `sind create worker` mount the data at the same place, `sind get cluster` reports it there, and `sind enter` and `sind exec` start in it.
+
+### CVMFS
+
+`cvmfs: true` mounts CVMFS read-only at `/cvmfs` on every node, including workers added later with `sind create worker`. Repositories mount on demand when first accessed. The mount comes from the `cvmfs` Docker volume plugin if one is installed and enabled, otherwise from the Docker host's `/cvmfs`; `sind create cluster` fails if neither is available. See [Using CVMFS]({{< relref "/guides/cvmfs" >}}) for the requirements of each.
 
 ## Slurm section
 

@@ -41,6 +41,7 @@ The mesh images do not follow `defaults.image`: the SSH relay always runs `sind-
 | `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
 | `<realm>-<cluster>-data` | `/data` | rw | rw | rw |
 | `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
+| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro (`storage.cvmfs` only) |
 | tmpfs | `/tmp` | configurable | configurable | configurable |
 | tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 |
 | tmpfs | `/run/lock` | — | — | — |
@@ -66,6 +67,17 @@ With `dataStorage.type: hostPath`, or by default through `sind create cluster --
 -v /path/on/host:/data:rw
 ```
 
+### CVMFS
+
+With `storage.cvmfs: true`, every node mounts CVMFS read-only at `/cvmfs`, from the `cvmfs` Docker volume plugin when it is installed and enabled, otherwise from the Docker host's `/cvmfs` as a slave mount, so repositories the host's autofs mounts on demand appear in the nodes:
+
+```
+--mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly     # volume plugin
+--mount type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave  # host /cvmfs
+```
+
+All clusters share the plugin's `cvmfs` volume; sind does not create or remove it. See [Using CVMFS]({{< relref "/guides/cvmfs" >}}).
+
 ## Container labels
 
 sind applies labels to containers for filtering and metadata:
@@ -79,6 +91,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
 | `sind.data.mountpath` | `/shared` | Data mount point, when `storage.dataStorage.mountPath` is not `/data` |
+| `sind.cvmfs` | `hostPath` | How the node mounts CVMFS, with `storage.cvmfs`: `volume` (plugin) or `hostPath` (host `/cvmfs`) |
 
 A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network and the SSH volume carry `sind.realm` only. `sind get networks`, `sind get volumes` and `sind delete cluster --all` find resources by these labels.
 

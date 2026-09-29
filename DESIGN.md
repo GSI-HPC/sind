@@ -385,6 +385,8 @@ worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd 
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
+With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
+
 `SERVICES` lists munge and sshd for every node, plus slurmctld or slurmd where sind manages Slurm. Unmanaged nodes (unmanaged workers, and every node of an unmanaged cluster) list only munge and sshd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
 Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Workers and submitters leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
@@ -674,6 +676,7 @@ storage:
     type: hostPath                       # hostPath | volume (default: from --data)
     hostPath: ./data                     # only for type=hostPath
     mountPath: /data                     # default: /data
+  cvmfs: true                            # mount CVMFS read-only at /cvmfs (default: false)
 
 slurm:
   main: |                                # appended to slurm.conf
@@ -888,6 +891,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
 | `<realm>-<cluster>-data` | `/data` | rw | rw | rw |
 | `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
+| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro (`storage.cvmfs` only) |
 | tmpfs | `/tmp` | per-node | per-node | per-node |
 
 ### Mount Options
@@ -901,6 +905,8 @@ Container mount flags:
 -v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes
 -v <realm>-<cluster>-data:/data:rw            # all nodes
 -v <realm>-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
+--mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly     # storage.cvmfs: plugin
+--mount type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave  # storage.cvmfs: host
 --tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
 --tmpfs /run:exec,mode=755                 # systemd runtime
 --tmpfs /run/lock                          # systemd lock files
@@ -929,6 +935,42 @@ against the directory `sind create cluster` runs in.
 In the config, `type: hostPath` bind-mounts `hostPath` and `type: volume` uses the data volume and
 ignores `hostPath`; a `hostPath` without `type` means `hostPath`.
 
+### CVMFS Mount
+
+`storage.cvmfs: true` mounts CVMFS read-only at `/cvmfs` on every node. Repositories mount on
+demand when first accessed, as on a bare-metal client with autofs. Neither backend needs extra
+container privileges. `sind create cluster` picks the backend once, in parallel with the other
+preparation, and logs it:
+
+1. **Volume plugin**, when an enabled Docker volume plugin named `cvmfs` (`cvmfs:latest` in
+   `docker plugin ls`) is installed:
+   ```
+   --mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly
+   ```
+   The plugin runs its own CVMFS client. All clusters share the `cvmfs` volume, so sind never
+   removes it.
+2. **Host bind mount** otherwise, a slave of the Docker host's `/cvmfs`:
+   ```
+   --mount type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave
+   ```
+   A lookup inside a container reaches the host's autofs, and the repository it mounts
+   propagates into the containers, as do autofs idle unmounts. Docker accepts `rslave` only when
+   the host's `/cvmfs` is on a `shared` or `slave` mount (`findmnt -o TARGET,PROPAGATION /cvmfs`),
+   the default on systemd hosts.
+
+For the host bind mount, sind first runs `true` in a throwaway container of the controller image
+with that mount. With neither backend available (no plugin, and a Docker host without `/cvmfs` or
+with a `private` one), `sind create cluster` fails before creating any node, with Docker's error
+and a hint to install CVMFS on the Docker host or the `cvmfs` volume plugin.
+
+The backend is stored on each container as the `sind.cvmfs` label, so `sind create worker` mounts
+CVMFS the same way without detecting it again, and `sind get cluster` lists `/cvmfs` under
+`MOUNTS`.
+
+Running the CVMFS client inside the nodes, e.g. to test the configuration management that
+provisions it, is a different use case: it needs `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]`
+on those nodes instead (see Node Parameters).
+
 ### Container Labels
 
 sind applies labels to containers for filtering and metadata:
@@ -942,6 +984,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
 | `sind.data.mountpath` | `/shared` | Data mount point, when not `/data` |
+| `sind.cvmfs` | `hostPath` | How the node mounts CVMFS: `volume` (plugin) or `hostPath` (host `/cvmfs`); only with `storage.cvmfs` |
 
 ### Enter and Exec
 

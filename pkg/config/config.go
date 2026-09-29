@@ -142,6 +142,9 @@ func (d DataStorage) validate() error {
 // Storage configures cluster storage options.
 type Storage struct {
 	DataStorage DataStorage `json:"dataStorage,omitempty"`
+	// CVMFS mounts CVMFS read-only at /cvmfs on every node, from the cvmfs
+	// Docker volume plugin or from the Docker host's /cvmfs.
+	CVMFS bool `json:"cvmfs,omitempty"`
 }
 
 // Section represents a Slurm config file section that can be either:
