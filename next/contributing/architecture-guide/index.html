@@ -45,7 +45,7 @@
 <meta property="article:section" content="Contributing" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:20:26+00:00"
+      content="2026-09-29T22:39:51+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/contributing/architecture-guide/",
       "headline": "Architecture Guide",
       "description": "Package structure and how to add new features",
-      "wordCount": "967",
+      "wordCount": "996",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:20:26.00Z",
+      "dateModified": "2026-09-29T22:39:51.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -972,6 +972,50 @@
                     class="gdoc-nav__entry"
                   >
                     Node Arguments
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/usage/exit-status/"
+                    class="gdoc-nav__entry"
+                  >
+                    Exit Status
                   </a>
                 </span>
               
@@ -2286,7 +2330,7 @@ pkg/ssh/           SSH key injection, host key collection, ssh_config export
 <p><strong>Create the command file</strong> in <code>cmd/sind/</code> (e.g., <code>mycommand.go</code>)</p>
 </li>
 <li>
-<p><strong>Define the cobra command</strong> with <code>Use</code>, <code>Short</code>, <code>Args</code>, and <code>RunE</code></p>
+<p><strong>Define the cobra command</strong> with <code>Use</code>, <code>Short</code>, <code>Args</code>, and <code>RunE</code>. An <code>Args</code> check that fails exits 2, a usage error; <code>RunE</code> returns <code>usage(err)</code> or <code>usagef(...)</code> for an argument or flag value it rejects, so that it exits 2 too</p>
 </li>
 <li>
 <p><strong>Wire it up</strong> in <code>root.go</code> via <code>cmd.AddCommand(newMyCommand())</code></p>
@@ -2728,6 +2772,39 @@ pkg/ssh/           SSH key injection, host key collection, ssh_config export
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

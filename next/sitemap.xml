@@ -33,10 +33,10 @@
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/cluster-lifecycle/</loc>
-    <lastmod>2026-09-27T22:08:20+00:00</lastmod>
+    <lastmod>2026-09-29T22:39:51+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-access/</loc>
-    <lastmod>2026-09-27T22:40:34+00:00</lastmod>
+    <lastmod>2026-09-29T22:40:16+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/worker-management/</loc>
     <lastmod>2026-09-27T22:44:37+00:00</lastmod>
@@ -54,7 +54,7 @@
     <lastmod>2026-04-09T16:23:27+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/mcp/</loc>
-    <lastmod>2026-09-29T21:35:42+00:00</lastmod>
+    <lastmod>2026-09-29T22:40:16+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/ci-cd/</loc>
     <lastmod>2026-09-27T22:09:59+00:00</lastmod>
@@ -67,6 +67,9 @@
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-arguments/</loc>
     <lastmod>2026-09-27T18:24:06+00:00</lastmod>
+  </url><url>
+    <loc>https://gsi-hpc.github.io/sind/next/usage/exit-status/</loc>
+    <lastmod>2026-09-29T22:40:16+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/</loc>
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
@@ -102,7 +105,7 @@
     <lastmod>2026-09-27T22:09:18+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/contributing/architecture-guide/</loc>
-    <lastmod>2026-09-27T22:20:26+00:00</lastmod>
+    <lastmod>2026-09-29T22:39:51+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/contributing/conventions/</loc>
     <lastmod>2026-09-27T22:09:18+00:00</lastmod>

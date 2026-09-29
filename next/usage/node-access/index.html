@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:40:34+00:00"
+      content="2026-09-29T22:40:16+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/node-access/",
       "headline": "Node Access",
       "description": "SSH, interactive shells, and command execution",
-      "wordCount": "643",
+      "wordCount": "728",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:40:34.00Z",
+      "dateModified": "2026-09-29T22:40:16.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -972,6 +972,50 @@
                     class="gdoc-nav__entry"
                   >
                     Node Arguments
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/usage/exit-status/"
+                    class="gdoc-nav__entry"
+                  >
+                    Exit Status
                   </a>
                 </span>
               
@@ -2223,6 +2267,22 @@
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> -- srun hostname
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- sbatch job.sh
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="exit-status"
+    >
+        Exit status
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-access/#exit-status" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Exit status" aria-label="Anchor to: Exit status" href="#exit-status">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>sind ssh</code>, <code>sind enter</code> and <code>sind exec</code> exit with the status of what they run: the remote command, the shell, or the command. They print no error of their own when it fails, since it has written its own.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sh -c <span class="s1">&#39;exit 3&#39;</span><span class="p">;</span> <span class="nb">echo</span> <span class="nv">$?</span>   <span class="c1"># 3</span>
+</span></span><span class="line"><span class="cl">sind ssh worker-0 -- false<span class="p">;</span> <span class="nb">echo</span> <span class="nv">$?</span>    <span class="c1"># 1</span>
+</span></span></code></pre></div><p><code>ssh</code> exits <code>255</code> when it cannot connect. A command line that sind rejects, such as <code>sind exec</code> without <code>--</code>, exits <code>2</code>. See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/usage/exit-status/"
+>Exit Status</a>.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="data-mount"
     >
         Data mount
@@ -2792,6 +2852,39 @@
             
             
           
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         

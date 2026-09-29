@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-09-29T21:35:42+00:00"
+      content="2026-09-29T22:40:16+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/guides/mcp/",
       "headline": "MCP Integration",
       "description": "Using sind with AI assistants via the Model Context Protocol",
-      "wordCount": "561",
+      "wordCount": "597",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-29T21:35:42.00Z",
+      "dateModified": "2026-09-29T22:40:16.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -972,6 +972,50 @@
                     class="gdoc-nav__entry"
                   >
                     Node Arguments
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/usage/exit-status/"
+                    class="gdoc-nav__entry"
+                  >
+                    Exit Status
                   </a>
                 </span>
               
@@ -2231,6 +2275,10 @@
 <p>The tools take the same arguments and flags as the commands, except <code>-v</code> and <code>sind logs --follow</code>, which a tool call cannot use. Flags go in the call&rsquo;s <code>flags</code> object; a call that puts a flag in <code>args</code> is refused, except for the command after <code>--</code> in <code>sind_exec</code>.</p>
 <p>Each tool tells the client what it does, so that the client can decide when to ask before calling it: the <code>get</code> tools, <code>sind_logs</code>, <code>sind_doctor</code> and <code>sind_version</code> are marked read-only; <code>sind_create_*</code>, <code>sind_power_on</code> and <code>sind_power_unfreeze</code> only add or restore; <code>sind_delete_*</code>, <code>sind_exec</code> and the other <code>sind_power_*</code> tools are marked destructive.</p>
 <p>The <code>sind_get_*</code> tools and <code>sind_doctor</code> always return JSON: the server runs them with <code>-o json</code>, so they take no <code>-o</code> flag.</p>
+<p>Each tool call returns the command&rsquo;s stdout, stderr and exit status (<code>exitCode</code>). A call whose arguments or flags sind rejects exits <code>2</code>, and <code>sind_exec</code> returns the exit status of the command it ran; see <a
+  class="gdoc-markdown__link"
+  href="/sind/next/usage/exit-status/"
+>Exit Status</a>.</p>
 <p>To see the full list:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind mcp tools
 </span></span></code></pre></div><p>This exports the tool definitions to <code>mcp-tools.json</code>. The tools follow the naming convention <code>sind_&lt;command&gt;_&lt;subcommand&gt;</code>, for example:</p>
@@ -2643,6 +2691,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

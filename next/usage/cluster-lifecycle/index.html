@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:08:20+00:00"
+      content="2026-09-29T22:39:51+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/cluster-lifecycle/",
       "headline": "Cluster Lifecycle",
       "description": "Creating, listing, and deleting clusters",
-      "wordCount": "460",
+      "wordCount": "463",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:08:20.00Z",
+      "dateModified": "2026-09-29T22:39:51.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -972,6 +972,50 @@
                     class="gdoc-nav__entry"
                   >
                     Node Arguments
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/usage/exit-status/"
+                    class="gdoc-nav__entry"
+                  >
+                    Exit Status
                   </a>
                 </span>
               
@@ -2247,7 +2291,10 @@
 <li>sind waits for each node to become ready (systemd, sshd, Slurm daemons)</li>
 </ol>
 <p>If any node fails to become ready within the timeout, the command fails and sind removes the resources it created, including a mesh that this invocation set up. If that cleanup fails too, use <code>sind delete cluster</code> to remove what is left.</p>
-<p>Ctrl-C (SIGINT) or SIGTERM, as sent by <code>timeout</code> or <code>docker stop</code>, stops the creation and runs the same cleanup; sind then exits with status 130. A second signal ends sind at once, without waiting for the cleanup to finish.</p>
+<p>Ctrl-C (SIGINT) or SIGTERM, as sent by <code>timeout</code> or <code>docker stop</code>, stops the creation and runs the same cleanup; sind then exits with status 130 (see <a
+  class="gdoc-markdown__link"
+  href="/sind/next/usage/exit-status/"
+>Exit Status</a>). A second signal ends sind at once, without waiting for the cleanup to finish.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="preflight-checks"
     >
@@ -2691,6 +2738,39 @@ dev       3 (0/1/2)       25.11.8   running
             
             
           
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         
