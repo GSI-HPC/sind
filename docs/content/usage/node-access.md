@@ -67,6 +67,17 @@ sind exec -- srun hostname
 sind exec dev -- sbatch job.sh
 ```
 
+## Exit status
+
+`sind ssh`, `sind enter` and `sind exec` exit with the status of what they run: the remote command, the shell, or the command. They print no error of their own when it fails, since it has written its own.
+
+```bash
+sind exec -- sh -c 'exit 3'; echo $?   # 3
+sind ssh worker-0 -- false; echo $?    # 1
+```
+
+`ssh` exits `255` when it cannot connect. A command line that sind rejects, such as `sind exec` without `--`, exits `2`. See [Exit Status]({{< relref "/usage/exit-status" >}}).
+
 ## Data mount
 
 By default, `sind create cluster` bind-mounts the current working directory into all containers at `/data`. Both `sind enter` and `sind exec` set `/data` as the working directory, so files from the host are immediately accessible.

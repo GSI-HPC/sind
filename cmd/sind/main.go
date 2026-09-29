@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/signal"
@@ -48,6 +49,10 @@ func interruptContext() (context.Context, context.CancelFunc) {
 // whatever its error says: a docker call killed by the cancellation reports
 // only "signal: killed".
 //
+// A program that ssh, exec, enter or logs ran on the user's terminal and
+// that exited non-zero gives its own status and adds no error line: it has
+// written its own diagnostics.
+//
 // The error is written to stderr escaped: it can quote what docker or a
 // container wrote, and the logger quotes attribute values but not the
 // message, so a control sequence in it would otherwise reach the terminal.
@@ -64,6 +69,12 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	err := cmd.Execute()
 	if err == nil {
 		return exitOK
+	}
+	if child, ok := errors.AsType[*childExitError](err); ok {
+		if ctx.Err() != nil {
+			return exitInterrupted
+		}
+		return child.code
 	}
 	msg := termtext.EscapeText(err.Error())
 	log := sindlog.From(cmd.Context())

@@ -61,7 +61,7 @@ Each tool tells the client what it does, so that the client can decide when to a
 
 The `sind_get_*` tools and `sind_doctor` always return JSON: the server runs them with `-o json`, so they take no `-o` flag.
 
-Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`; see [Exit Status]({{< relref "/usage/exit-status" >}}).
+Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`, and `sind_exec` returns the exit status of the command it ran; see [Exit Status]({{< relref "/usage/exit-status" >}}).
 
 To see the full list:
 

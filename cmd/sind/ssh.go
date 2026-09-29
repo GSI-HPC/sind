@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -284,11 +285,18 @@ func completeExecClusterArg(cmd *cobra.Command, args []string, toComplete string
 	return completeClusterNames(cmd, nil, toComplete)
 }
 
-// dockerExec runs a docker command with stdin/stdout/stderr from the cobra command.
+// dockerExec runs a docker command with stdin/stdout/stderr from the cobra
+// command. When docker exits non-zero, the error is a *childExitError, so
+// that sind exits with docker's status, which docker exec takes from the
+// command it ran.
 func dockerExec(cmd *cobra.Command, args []string) error {
 	dockerCmd := exec.CommandContext(cmd.Context(), "docker", args...)
 	dockerCmd.Stdin = cmd.InOrStdin()
 	dockerCmd.Stdout = cmd.OutOrStdout()
 	dockerCmd.Stderr = cmd.ErrOrStderr()
-	return dockerCmd.Run()
+	err := dockerCmd.Run()
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		return newChildExitError(exitErr)
+	}
+	return err
 }

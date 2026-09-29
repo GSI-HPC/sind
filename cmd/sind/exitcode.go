@@ -5,13 +5,16 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os/exec"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 // The exit statuses of sind. Scripts branch on them, so they may be added
-// to but never renumbered.
+// to but never renumbered. ssh, exec, enter and logs exit with the status
+// of the program they run instead (childExitError).
 const (
 	exitOK = 0
 	// exitFailure is the exit status of a command that ran and failed.
@@ -84,3 +87,32 @@ func isUsageError(err error) bool {
 		errors.As(err, &invalidValue) ||
 		errors.As(err, &invalidSyntax)
 }
+
+// childExitError is the error of a program that sind ran on the user's
+// terminal, docker exec or docker logs, that exited non-zero. The program
+// has written its own diagnostics, so sind exits with its status and adds
+// no error line.
+type childExitError struct {
+	err  *exec.ExitError
+	code int
+}
+
+// newChildExitError returns the error of a program that exited non-zero.
+// One killed by signal N exits 128+N, as a shell reports it, except that
+// SIGINT and SIGTERM exit exitInterrupted: they reach docker when they are
+// sent to sind's process group, and sind reports them as an interrupt
+// whichever process ends first.
+func newChildExitError(err *exec.ExitError) *childExitError {
+	code := err.ExitCode()
+	if ws, ok := err.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+		code = 128 + int(ws.Signal())
+		if ws.Signal() == syscall.SIGINT || ws.Signal() == syscall.SIGTERM {
+			code = exitInterrupted
+		}
+	}
+	return &childExitError{err: err, code: code}
+}
+
+func (e *childExitError) Error() string { return e.err.Error() }
+
+func (e *childExitError) Unwrap() error { return e.err }

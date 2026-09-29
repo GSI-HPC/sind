@@ -15,6 +15,8 @@ Scripts branch on sind's exit status, so it is part of the command line contract
 | `2` | sind rejected the command line before acting on it | An unknown command or flag, a flag value or argument that is not valid, the wrong number of arguments |
 | `130` | SIGINT or SIGTERM interrupted the command | Ctrl-C, `timeout`, `docker stop` |
 
+`sind ssh`, `sind exec`, `sind enter` and `sind logs` exit with the status of the program they run instead, see [below](#commands-that-run-a-program).
+
 ## Usage errors
 
 Status `2` means that the command line has to change before the command can succeed; running it again will not help.
@@ -36,10 +38,24 @@ This covers:
 
 `SIND_REALM` and the config file are not part of the command line: an invalid one exits `1`.
 
+## Commands that run a program
+
+`sind ssh`, `sind exec`, `sind enter` and `sind logs` hand the terminal to a program, `docker exec` running `ssh`, the command or a shell, or `docker logs`, and exit with its status. They add no error line of their own, since the program has written its own diagnostics.
+
+```console
+$ sind exec -- sh -c 'exit 42'
+$ echo $?
+42
+```
+
+- The status is the command's, as `docker exec` reports it, and for `sind ssh` the remote command's, as `ssh` reports it. `ssh` exits `255` when it cannot connect. Docker's own errors, such as a container that is not running, give docker's status and message.
+- A failure before the program starts is sind's: `sind exec` in a cluster without a submitter or controller exits `1`, and a usage error exits `2`.
+- A `docker` process killed by signal N exits 128 + N, as a shell reports it. Killed by SIGINT or SIGTERM, it exits `130`, like an interrupted sind: these signals reach `docker` when they are sent to sind's process group, as by Ctrl-C.
+
 ## Interrupts
 
-The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A second signal ends sind at once, without waiting for the cleanup to finish.
+The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish.
 
 ## MCP tools
 
-A tool call of the [MCP server]({{< relref "/guides/mcp" >}}) returns the command's exit status as `exitCode`, next to its stdout and stderr: a tool call whose arguments sind rejects reads `2`.
+A tool call of the [MCP server]({{< relref "/guides/mcp" >}}) returns the command's exit status as `exitCode`, next to its stdout and stderr: a tool call whose arguments sind rejects reads `2`, and `sind_exec` returns the status of the command it ran.

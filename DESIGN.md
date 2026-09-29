@@ -214,7 +214,7 @@ Rules:
 
 Rules:
 - Mutations are silent — `exit 0` is the confirmation; use `-v` for progress
-- Errors are always visible (slog error level is always enabled, even without `-v`)
+- Errors are always visible (slog error level is always enabled, even without `-v`), except that `ssh`, `exec`, `enter` and `logs` add none when the program they run fails: it writes its own
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
@@ -224,6 +224,8 @@ Rules:
 Exit status and signals:
 - `0` on success, `1` on failure, `2` for a usage error, `130` when SIGINT or SIGTERM interrupted the command (`cmd/sind/exitcode.go`). Scripts branch on them, so a status may be added but never renumbered
 - A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`
+- `ssh`, `exec`, `enter` and `logs` exit with the status of the docker command they run, which `docker exec` takes from the command it ran (for `ssh`, from `ssh` and the remote command), and print no error line. A docker killed by signal N exits 128 + N, as a shell reports it, except SIGINT and SIGTERM, which exit `130` like an interrupted sind: they reach docker when sent to sind's process group, and the status must not depend on which process ends first
+- SIGTERM exits `130`, not `143`, so that callers check one status for "interrupted", as in clusterctl
 - The first SIGINT or SIGTERM cancels the command's context; deferred cleanup (e.g. the rollback of a failed `create cluster`) still runs under `context.WithoutCancel`
 - The signal handler is removed before the context is cancelled, so a second signal gets the default action and ends sind at once, even during a hung cleanup
 
@@ -563,7 +565,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).
 - A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
-- A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`.
+- A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`, and `sind_exec` returns the status of the command it ran.
 
 ## Node Arguments
 
