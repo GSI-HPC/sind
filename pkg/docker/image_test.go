@@ -79,6 +79,18 @@ func TestRunEphemeral_Pull(t *testing.T) {
 	assert.Equal(t, []string{"run", "--rm", "--pull", "always", testImage, "scontrol", "--version"}, m.Calls[0].Args)
 }
 
+func TestRunEphemeralWith(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	_, err := c.RunEphemeralWith(t.Context(), []string{"--mount", "type=bind,source=/x,target=/x"}, testImage, true, "true")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"run", "--rm", "--pull", "always", "--mount", "type=bind,source=/x,target=/x", testImage, "true"}, m.Calls[0].Args)
+}
+
 func TestRunEphemeral_Error(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Unable to find image\n", fmt.Errorf("exit status 125"))
