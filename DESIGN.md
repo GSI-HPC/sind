@@ -206,6 +206,7 @@ Rules:
 |-------------|--------|--------|
 | List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
 | Single value (`get munge-key`) | raw value, one line | stdout |
+| Checks (`doctor`) | one ✓/✗ line per check, fix instructions below a check that did not pass | stdout |
 | Mutations (`create`, `delete`, `power`) | silent on success | — |
 | Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
@@ -218,7 +219,7 @@ Rules:
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗) only in `get cluster`, `get node` and `doctor` output
-- All `get` subcommands accept `--output|-o {human,json}`; default is `human`
+- All `get` subcommands and `doctor` accept `--output|-o {human,json}`; default is `human`
 
 Exit status and signals:
 - `0` on success, `1` on failure, `130` when SIGINT or SIGTERM interrupted the command
@@ -412,10 +413,12 @@ sshd        ✓
 `sind doctor` validates host prerequisites for running sind:
 
 ```bash
-sind doctor                              # check Docker version, cgroupv2, DNS policy
+sind doctor [-o json]                    # check Docker version, cgroupv2, DNS policy
 ```
 
-Checks the Docker Engine version, that cgroupv2 is mounted with `nsdelegate`, and that polkit allows host DNS resolution via systemd-resolved. Exits non-zero if any required prerequisite fails.
+Checks the Docker Engine version, that cgroupv2 is mounted with `nsdelegate`, and that polkit allows host DNS resolution via systemd-resolved. The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr.
+
+`-o json` prints the checks as a JSON array in clusterctl's check model: each entry has `name` (`Docker Engine`, `cgroupv2`, `DNS policy`), `status` (`ok`, `failed`, or `warning` for the advisory DNS policy check), `detail`, and, for a check that did not pass and has a fix, `remediation` with the commands.
 
 ### Node Access
 
@@ -519,7 +522,7 @@ sind logs worker-0 slurmd --follow    # follow slurmd logs
 
 ```bash
 sind version [--json]                  # print version information
-sind doctor                            # check host prerequisites
+sind doctor [-o json]                  # check host prerequisites
 sind get realms                        # list active realms
 sind get munge-key [CLUSTER]           # output munge key (base64)
 sind get ssh-config                    # show SSH config path for Include
@@ -556,7 +559,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces. Stopped by SIGINT or SIGTERM, it shuts down and exits 0.
 - Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `create cluster`, `create worker`, `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `delete`, `exec`, and the other `power` actions). A new command has to be classified there; a unit test fails otherwise.
-- Tools for commands with `-o` (every `get` subcommand) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
+- Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).
 - A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
 
