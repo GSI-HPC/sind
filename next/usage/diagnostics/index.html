@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<meta name="generator" content="Hugo 0.166.0">
+<meta name="generator" content="Hugo 0.167.0">
 
 
   <meta name="description" content="Cluster health, logs, and resource inspection" />
@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:35:22+00:00"
+      content="2026-09-29T21:35:42+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1255",
+      "wordCount": "1386",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:35:22.00Z",
+      "dateModified": "2026-09-29T21:35:42.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2207,7 +2207,7 @@
 			</tr>
 	</tbody>
 </table> </div>
-<p>When a required check fails, <code>sind doctor</code> exits with a non-zero status; for a missing <code>nsdelegate</code> it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
+<p>The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, <code>sind doctor</code> exits with a non-zero status; for a missing <code>nsdelegate</code> it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
   class="gdoc-markdown__link"
   href="../../architecture/networking/#polkit-policy"
 >Polkit policy</a> for details.</p>
@@ -2225,6 +2225,30 @@ echo -e &#39;[Mount]\nOptions=nsdelegate&#39; \
   | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf
 sudo systemctl daemon-reload
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="machine-readable-output"
+    >
+        Machine-readable output
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#machine-readable-output" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Machine-readable output" aria-label="Anchor to: Machine-readable output" href="#machine-readable-output">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>sind doctor -o json</code> prints the checks as a JSON array for scripts. Each check has a <code>name</code>, a <code>status</code> (<code>ok</code>, <code>failed</code>, or <code>warning</code> when the advisory DNS policy check does not pass) and a <code>detail</code>; a check that did not pass and has a fix adds the commands as <code>remediation</code>. The exit status is the same as with the default output.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind doctor -o json
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-json" data-lang="json"><span class="line"><span class="cl"><span class="p">[</span>
+</span></span><span class="line"><span class="cl">  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;name&#34;</span><span class="p">:</span> <span class="s2">&#34;Docker Engine&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;status&#34;</span><span class="p">:</span> <span class="s2">&#34;ok&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;detail&#34;</span><span class="p">:</span> <span class="s2">&#34;28.1.1 (&gt;= 28.0)&#34;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">},</span>
+</span></span><span class="line"><span class="cl">  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;name&#34;</span><span class="p">:</span> <span class="s2">&#34;cgroupv2&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;status&#34;</span><span class="p">:</span> <span class="s2">&#34;failed&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;detail&#34;</span><span class="p">:</span> <span class="s2">&#34;nsdelegate not found&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="nt">&#34;remediation&#34;</span><span class="p">:</span> <span class="s2">&#34;Enable nsdelegate temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n...&#34;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">]</span>
+</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="verbose-logging"
     >
         Verbose logging
@@ -2298,7 +2322,10 @@ sudo systemctl daemon-reload
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Every <code>sind get</code> subcommand accepts a persistent <code>--output|-o {human,json}</code> flag. The default is <code>human</code> (tabular text); <code>json</code> emits a machine-readable document for scripting and automation.</p>
+<p>Every <code>sind get</code> subcommand accepts a persistent <code>--output|-o {human,json}</code> flag. The default is <code>human</code> (tabular text); <code>json</code> emits a machine-readable document for scripting and automation. <code>sind doctor</code> takes the same flag (see <a
+  class="gdoc-markdown__link"
+  href="#machine-readable-output"
+>Machine-readable output</a>).</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get clusters -o json
 </span></span><span class="line"><span class="cl">sind get nodes -o json
 </span></span><span class="line"><span class="cl">sind get cluster dev --output json
