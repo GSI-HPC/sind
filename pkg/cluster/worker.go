@@ -105,9 +105,10 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return nil, err
 	}
 
-	// Inherit the data mount from existing cluster containers.
+	// Inherit the data and CVMFS mounts from existing cluster containers.
 	dataHostPath := controller.Labels[LabelDataHostPath]
 	dataMountPath := DataMountPath(controller.Labels)
+	cvmfs := config.StorageType(controller.Labels[LabelCVMFS])
 
 	// Resolve image: use opts or fall back to controller's image.
 	image := opts.Image
@@ -156,6 +157,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			CapDrop:         opts.CapDrop,
 			Devices:         opts.Devices,
 			SecurityOpt:     opts.SecurityOpt,
+			CVMFS:           cvmfs,
 		}
 	}
 

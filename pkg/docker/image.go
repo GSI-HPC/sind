@@ -20,10 +20,17 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 // The container is removed after the command completes (docker run --rm).
 // When pull is true, --pull always is added to force a fresh image pull.
 func (c *Client) RunEphemeral(ctx context.Context, image string, pull bool, command ...string) (string, error) {
+	return c.RunEphemeralWith(ctx, nil, image, pull, command...)
+}
+
+// RunEphemeralWith is RunEphemeral with extra docker run flags, such as
+// mounts, placed before the image.
+func (c *Client) RunEphemeralWith(ctx context.Context, flags []string, image string, pull bool, command ...string) (string, error) {
 	args := []string{"run", "--rm"}
 	if pull {
 		args = append(args, "--pull", "always")
 	}
+	args = append(args, flags...)
 	args = append(args, image)
 	args = append(args, command...)
 	stdout, _, err := c.run(ctx, args...)

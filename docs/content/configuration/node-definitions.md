@@ -122,7 +122,7 @@ See [Unmanaged Cluster]({{< relref "/guides/unmanaged-cluster" >}}) for provisio
 
 ## Capabilities and devices
 
-sind's default security posture avoids extra capabilities and device access. When specific use cases require them (e.g. testing CVMFS provisioning or FUSE-based filesystems), you can grant targeted privileges per node.
+sind's default security posture avoids extra capabilities and device access. When specific use cases require them (e.g. testing [CVMFS provisioning]({{< relref "/guides/cvmfs#provision-cvmfs-inside-the-nodes" >}}) or FUSE-based filesystems), you can grant targeted privileges per node.
 
 ```yaml
 nodes:

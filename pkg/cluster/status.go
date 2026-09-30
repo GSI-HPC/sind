@@ -162,7 +162,8 @@ type MountPoint struct {
 // existence for Docker volumes. The data mount source is determined from
 // the sind.data.hostpath label on cluster containers: when present it is
 // a host-path bind mount, otherwise it is a Docker volume. Its mount point
-// is the sind.data.mountpath label, or /data.
+// is the sind.data.mountpath label, or /data. The sind.cvmfs label adds
+// /cvmfs from the cvmfs plugin volume or the host's /cvmfs.
 func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []docker.ContainerListEntry) ([]MountPoint, error) {
 	// Determine data mount source and mount point from container labels.
 	dataHostPath := ""
@@ -211,6 +212,22 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 			return nil, fmt.Errorf("checking volume %s: %w", mounts[i].Source, err)
 		}
 		mounts[i].OK = exists
+	}
+
+	// CVMFS, when the nodes mount it (storage.cvmfs). The plugin volume
+	// counts as missing when docker cannot look it up, e.g. while the
+	// plugin is disabled, instead of failing the whole status.
+	for _, c := range containers {
+		backend := config.StorageType(c.Labels[LabelCVMFS])
+		if backend == "" {
+			continue
+		}
+		m := MountPoint{Path: CVMFSPath, Source: cvmfsSource(backend), Type: backend, OK: true}
+		if backend == config.StorageVolume {
+			m.OK, _ = client.VolumeExists(ctx, CVMFSVolume)
+		}
+		mounts = append(mounts, m)
+		break
 	}
 
 	return mounts, nil

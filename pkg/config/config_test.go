@@ -237,6 +237,19 @@ storage:
 	}
 }
 
+func TestParse_StorageCVMFS(t *testing.T) {
+	cfg, err := Parse([]byte("kind: Cluster\nstorage:\n  cvmfs: true\n"))
+	require.NoError(t, err)
+	assert.True(t, cfg.Storage.CVMFS)
+
+	cfg, err = Parse([]byte("kind: Cluster\n"))
+	require.NoError(t, err)
+	assert.False(t, cfg.Storage.CVMFS)
+
+	_, err = Parse([]byte("kind: Cluster\nstorage:\n  cvmfs:\n    - sft.cern.ch\n"))
+	assert.Error(t, err)
+}
+
 func TestDataStorage_UsesHostPath(t *testing.T) {
 	tests := []struct {
 		name string

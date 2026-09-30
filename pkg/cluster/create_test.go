@@ -418,6 +418,111 @@ func TestCreate_BackupControllerNotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "controller-backup is DOWN")
 }
 
+func TestCreate_CVMFS(t *testing.T) {
+	tests := []struct {
+		name      string
+		plugins   string
+		wantMount string
+		wantLabel string
+		wantProbe bool
+	}{
+		{"volume plugin", "cvmfs:latest\n", "type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly", "sind.cvmfs=volume", false},
+		{"host bind mount", "", "type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave", "sind.cvmfs=hostPath", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipes := &mock.Pipes{}
+			defer pipes.CloseAll()
+
+			var m mock.Executor
+			m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+				if args[0] == "plugin" {
+					return mock.Result{Stdout: tt.plugins}, true
+				}
+				return mock.Result{}, false
+			})
+			m.OnStart = pipes.OnStart
+
+			client := docker.NewClient(&m)
+			meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+
+			cfg := createCfg()
+			cfg.Storage.CVMFS = true
+			_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+			require.NoError(t, err)
+
+			var probed bool
+			mounted := map[string]bool{}
+			for _, c := range m.Calls {
+				a := c.Args
+				if a[0] == "run" && slices.Contains(a, "--entrypoint") {
+					probed = true
+				}
+				if a[0] == "create" && slices.Contains(a, "--hostname") {
+					assert.Equal(t, []string{tt.wantMount}, testutil.ArgValues(a, "--mount"))
+					assert.Contains(t, testutil.ArgValues(a, "--label"), tt.wantLabel)
+					mounted[testutil.ArgValues(a, "--name")[0]] = true
+				}
+			}
+			assert.Equal(t, tt.wantProbe, probed)
+			assert.Equal(t, map[string]bool{"sind-dev-controller": true, "sind-dev-worker-0": true}, mounted)
+		})
+	}
+}
+
+func TestCreate_CVMFSUnavailable(t *testing.T) {
+	// Neither the plugin nor the host's /cvmfs: creation fails and cleans
+	// up whatever the other preparation branches created.
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if args[0] == "plugin" {
+			return mock.Result{}, true
+		}
+		if args[0] == "run" && slices.Contains(args, "--entrypoint") {
+			return mock.Result{Stderr: "bind source path does not exist: /cvmfs", Err: fmt.Errorf("exit status 125")}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	cfg := createCfg()
+	cfg.Storage.CVMFS = true
+	cluster, err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "storage.cvmfs")
+	assert.Nil(t, cluster)
+	for _, c := range m.Calls {
+		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
+	}
+}
+
+func TestCreate_NoCVMFS(t *testing.T) {
+	// Without storage.cvmfs, sind neither looks for the plugin nor probes
+	// the host.
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnStart = pipes.OnStart
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+	require.NoError(t, err)
+	for _, c := range m.Calls {
+		assert.NotEqual(t, "plugin", c.Args[0])
+		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "--entrypoint"), "no probe: %v", c.Args)
+		assert.Empty(t, testutil.ArgValues(c.Args, "--mount"))
+	}
+}
+
 func TestCreate_PreflightFails(t *testing.T) {
 	// Network already exists → preflight returns conflict error.
 	// resolveInfra runs in parallel, so its happy-path responses are supplied

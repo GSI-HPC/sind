@@ -284,6 +284,35 @@ func TestBuildRunArgs_NoDataMountPathLabelForDefault(t *testing.T) {
 	}
 }
 
+func TestBuildRunArgs_CVMFS(t *testing.T) {
+	tests := []struct {
+		backend   config.StorageType
+		wantMount string
+	}{
+		{config.StorageVolume, "type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"},
+		{config.StorageHostPath, "type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave"},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.backend), func(t *testing.T) {
+			cfg := defaultRunConfig()
+			cfg.CVMFS = tt.backend
+			args := BuildRunArgs(cfg)
+
+			assert.Equal(t, []string{tt.wantMount}, testutil.ArgValues(args, "--mount"))
+			assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"="+string(tt.backend))
+		})
+	}
+}
+
+func TestBuildRunArgs_NoCVMFS(t *testing.T) {
+	args := BuildRunArgs(defaultRunConfig())
+
+	assert.Empty(t, testutil.ArgValues(args, "--mount"))
+	for _, l := range testutil.ArgValues(args, "--label") {
+		assert.NotContains(t, l, LabelCVMFS)
+	}
+}
+
 func TestDataMountPath(t *testing.T) {
 	assert.Equal(t, DefaultDataMountPath, DataMountPath(nil))
 	assert.Equal(t, "/shared", DataMountPath(docker.Labels{LabelDataMountPath: "/shared"}))
@@ -446,7 +475,7 @@ func TestNodeRunConfigs_Minimal(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -474,7 +503,7 @@ func TestNodeRunConfigs_MultiComputeGroups(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 4)
 	assert.Equal(t, "worker-0", configs[1].ShortName)
@@ -495,7 +524,7 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 3)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -513,7 +542,7 @@ func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "worker-0", configs[1].ShortName)
@@ -530,7 +559,7 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 4)
 	assert.False(t, configs[1].Managed, "worker-0 unmanaged")
@@ -549,7 +578,7 @@ func TestNodeRunConfigs_UnmanagedController(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 6)
 	for _, c := range configs {
@@ -569,7 +598,7 @@ func TestNodeRunConfigs_BackupController(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	require.Len(t, configs, 3)
 	primary, backup := configs[0], configs[1]
@@ -590,6 +619,26 @@ func TestNodeRunConfigs_BackupController(t *testing.T) {
 	assert.False(t, configs[2].SharedState)
 }
 
+func TestNodeRunConfigs_CVMFS(t *testing.T) {
+	// Every node mounts CVMFS: controllers of a backup pair, submitter and
+	// all workers.
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, BackupController: true},
+			{Role: config.RoleSubmitter},
+			{Role: config.RoleWorker, Count: 2},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", config.StorageHostPath)
+
+	require.Len(t, configs, 5)
+	for _, c := range configs {
+		assert.Equal(t, config.StorageHostPath, c.CVMFS, c.ShortName)
+	}
+}
+
 func TestNodeRunConfigs_NoBackupController(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
@@ -599,7 +648,7 @@ func TestNodeRunConfigs_NoBackupController(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 2)
 	assert.Equal(t, "controller", configs[0].ShortName)
@@ -621,7 +670,7 @@ func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 1)
 	assert.Equal(t, "/data/shared", configs[0].DataHostPath)
@@ -636,7 +685,7 @@ func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath)
@@ -656,7 +705,7 @@ func TestNodeRunConfigs_VolumeStorageCustomMount(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 	require.Len(t, configs, 1)
 	assert.Empty(t, configs[0].DataHostPath, "volume type uses docker volume, not host path")
@@ -682,7 +731,7 @@ func TestNodeRunConfigs_StorageTypeDecidesTheMount(t *testing.T) {
 				},
 			}
 
-			configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "")
+			configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
 
 			require.Len(t, configs, 1)
 			assert.Equal(t, tt.wantHostPath, configs[0].DataHostPath)
@@ -693,7 +742,7 @@ func TestNodeRunConfigs_StorageTypeDecidesTheMount(t *testing.T) {
 func TestNodeRunConfigs_EmptyNodes(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev"}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	assert.Empty(t, configs)
 }
@@ -836,7 +885,7 @@ func TestNodeRunConfigs_SecurityFields(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	require.Len(t, configs, 3)
 

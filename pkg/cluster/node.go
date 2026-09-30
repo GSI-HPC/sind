@@ -28,6 +28,9 @@ const (
 	// LabelDataMountPath records a data mount point other than
 	// DefaultDataMountPath (storage.dataStorage.mountPath).
 	LabelDataMountPath = "sind.data.mountpath"
+	// LabelCVMFS records how the node mounts CVMFS (storage.cvmfs): "volume"
+	// for the cvmfs volume plugin, "hostPath" for the Docker host's /cvmfs.
+	LabelCVMFS = "sind.cvmfs"
 )
 
 // DataMountPath returns where a node container mounts the cluster's data:
@@ -95,6 +98,11 @@ type RunConfig struct {
 	CapDrop         []string    // dropped Linux capabilities
 	Devices         []string    // host devices to expose (e.g. "/dev/fuse")
 	SecurityOpt     []string    // extra security options
+
+	// CVMFS is how the node mounts /cvmfs: config.StorageVolume for the
+	// plugin volume, config.StorageHostPath for the host's /cvmfs, or empty
+	// for none (see DetectCVMFS).
+	CVMFS config.StorageType
 }
 
 // BuildRunArgs returns the docker arguments for creating a node container.
@@ -144,6 +152,9 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeState))+":"+slurm.StateSaveLocation+":rw")
 	}
 
+	// CVMFS, read-only at /cvmfs (storage.cvmfs)
+	args = append(args, cvmfsMountArgs(cfg.CVMFS)...)
+
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
 	args = append(args,
 		"--tmpfs", "/tmp:rw,nosuid,nodev,size="+cfg.TmpSize,
@@ -182,6 +193,9 @@ func BuildRunArgs(cfg RunConfig) []string {
 	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.Managed, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
 	if dataMountPath != DefaultDataMountPath {
 		labels[LabelDataMountPath] = dataMountPath
+	}
+	if cfg.CVMFS != "" {
+		labels[LabelCVMFS] = string(cfg.CVMFS)
 	}
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
@@ -228,8 +242,9 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
 // Worker nodes are indexed sequentially across all worker groups. In an
 // unmanaged cluster every node is unmanaged; otherwise only workers with
-// managed: false are.
-func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []RunConfig {
+// managed: false are. cvmfs is the backend every node mounts CVMFS with
+// (see DetectCVMFS), empty for none.
+func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
 	workerIdx := 0
 	clusterManaged := cfg.Managed()
@@ -266,6 +281,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 				CapDrop:         n.CapDrop,
 				Devices:         n.Devices,
 				SecurityOpt:     n.SecurityOpt,
+				CVMFS:           cvmfs,
 			}
 			if n.Role != config.RoleController || !n.BackupController {
 				configs = append(configs, base)
@@ -305,6 +321,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string) []Ru
 					CapDrop:         n.CapDrop,
 					Devices:         n.Devices,
 					SecurityOpt:     n.SecurityOpt,
+					CVMFS:           cvmfs,
 				})
 				workerIdx++
 			}

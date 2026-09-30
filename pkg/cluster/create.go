@@ -64,8 +64,8 @@ type nodeResult struct {
 // readinessInterval controls the polling interval for readiness probes.
 //
 //	┌ PreflightCheck → createResources → ConnectNetwork ┐
-//	┤                                                   ├→ setupNodes
-//	└ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┘
+//	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
+//	└ DetectCVMFS (storage.cvmfs only) ─────────────────┘
 //	                        │
 //	              registerMesh ║ enableSlurm
 //	                        │
@@ -141,11 +141,25 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return nil
 	})
 
+	// Branch C (storage.cvmfs only): pick how the nodes mount CVMFS.
+	var cvmfs config.StorageType
+	if cfg.Storage.CVMFS {
+		prepGroup.Go(func() error {
+			backend, err := DetectCVMFS(prepCtx, client, controllerImage(cfg))
+			if err != nil {
+				return err
+			}
+			cvmfs = backend
+			log.InfoContext(prepCtx, "mounting cvmfs", "type", backend, "source", cvmfsSource(backend))
+			return nil
+		})
+	}
+
 	if err := prepGroup.Wait(); err != nil {
 		return nil, err
 	}
 
-	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion)
+	nodeConfigs := NodeRunConfigs(cfg, realm, dnsIP, slurmVersion, cvmfs)
 	logExtraPrivileges(ctx, nodeConfigs)
 
 	// Start event watcher before creating nodes so it captures all

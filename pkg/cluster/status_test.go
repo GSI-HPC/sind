@@ -536,6 +536,60 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 	require.Len(t, m.Calls, 2)
 }
 
+func TestGetMountPoints_CVMFSHostPath(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[{}]\n", "", nil) // config
+	m.AddResult("[{}]\n", "", nil) // munge
+	m.AddResult("[{}]\n", "", nil) // data
+	// no check for the host's /cvmfs
+	c := docker.NewClient(&m)
+
+	containers := []docker.ContainerListEntry{
+		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller", "sind.cvmfs": "hostPath"}},
+		{Name: "sind-dev-worker-0", Labels: docker.Labels{"sind.role": "worker", "sind.cvmfs": "hostPath"}},
+	}
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
+
+	require.NoError(t, err)
+	require.Len(t, mounts, 4)
+	assert.Equal(t, MountPoint{Path: "/cvmfs", Source: "/cvmfs", Type: config.StorageHostPath, OK: true}, mounts[3])
+	assert.Len(t, m.Calls, 3)
+}
+
+func TestGetMountPoints_CVMFSVolume(t *testing.T) {
+	tests := []struct {
+		name   string
+		result mock.Result
+		wantOK bool
+	}{
+		{"exists", mock.Result{Stdout: "[{}]\n"}, true},
+		{"missing", mock.Result{Stderr: "Error: No such volume: cvmfs\n", Err: testutil.ExitCode1(t)}, false},
+		// A lookup the daemon cannot answer, e.g. with the plugin
+		// disabled, marks the mount missing instead of failing.
+		{"lookup error", mock.Result{Stderr: "plugin \"cvmfs\" not found\n", Err: fmt.Errorf("exit status 1")}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("[{}]\n", "", nil) // config
+			m.AddResult("[{}]\n", "", nil) // munge
+			m.AddResult("[{}]\n", "", nil) // data
+			m.AddResult(tt.result.Stdout, tt.result.Stderr, tt.result.Err)
+			c := docker.NewClient(&m)
+
+			containers := []docker.ContainerListEntry{
+				{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller", "sind.cvmfs": "volume"}},
+			}
+			mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
+
+			require.NoError(t, err)
+			require.Len(t, mounts, 4)
+			assert.Equal(t, MountPoint{Path: "/cvmfs", Source: "cvmfs", Type: config.StorageVolume, OK: tt.wantOK}, mounts[3])
+			assert.Equal(t, []string{"volume", "inspect", "cvmfs"}, m.Calls[3].Args)
+		})
+	}
+}
+
 func TestGetMountPoints_CustomMountPath(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil) // config
