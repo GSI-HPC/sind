@@ -63,6 +63,9 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"exec", "a", "b", "--", "true"}, "expected at most one argument before --, got 2"},
 		{[]string{"exec", "Not_A_Name", "--", "true"}, `invalid cluster name "Not_A_Name"`},
 		{[]string{"enter", "a", "b"}, "accepts at most 1 arg(s), received 2"},
+		{[]string{"enter", "--user", "1000"}, `invalid user name "1000"`},
+		{[]string{"exec", "-u", "Alice", "--", "id"}, `invalid user name "Alice"`},
+		{[]string{"ssh", "@worker-0"}, `invalid user name ""`},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			t.Parallel()

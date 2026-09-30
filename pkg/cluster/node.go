@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 
@@ -31,6 +32,10 @@ const (
 	// LabelCVMFS records how the node mounts CVMFS (storage.cvmfs): "volume"
 	// for the cvmfs volume plugin, "hostPath" for the Docker host's /cvmfs.
 	LabelCVMFS = "sind.cvmfs"
+	// LabelUsers and LabelGroups record the cluster users and groups
+	// (users, groups), as space-separated entries (see LinuxUsers.Labels).
+	LabelUsers  = "sind.users"
+	LabelGroups = "sind.groups"
 )
 
 // DataMountPath returns where a node container mounts the cluster's data:
@@ -103,7 +108,16 @@ type RunConfig struct {
 	// plugin volume, config.StorageHostPath for the host's /cvmfs, or empty
 	// for none (see DetectCVMFS).
 	CVMFS config.StorageType
+
+	// Users are the cluster users and groups. The node gets their accounts
+	// and records them in its labels, and with users it mounts the home
+	// volume at HomeMountPath.
+	Users LinuxUsers
 }
+
+// UserJobCapability is the capability workers of a cluster with users get,
+// so that slurmstepd can bind the tasks of users other than root.
+const UserJobCapability = "SYS_NICE"
 
 // BuildRunArgs returns the docker arguments for creating a node container.
 // The returned slice does not include "create" or "run -d" — the caller
@@ -152,6 +166,11 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeState))+":"+slurm.StateSaveLocation+":rw")
 	}
 
+	// Home directories of the cluster users
+	if len(cfg.Users.Users) > 0 {
+		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeHome))+":"+HomeMountPath+":rw")
+	}
+
 	// CVMFS, read-only at /cvmfs (storage.cvmfs)
 	args = append(args, cvmfsMountArgs(cfg.CVMFS)...)
 
@@ -175,6 +194,14 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--security-opt", "label=disable",
 	)
 
+	// Workers of a cluster with users may set the CPU affinity of other
+	// users' processes: slurmstepd, as root, binds each task after the task
+	// has become the job's user (task/affinity), which needs CAP_SYS_NICE
+	// unless the user is root. Docker drops it by default.
+	if cfg.Role == config.RoleWorker && len(cfg.Users.Users) > 0 {
+		args = append(args, "--cap-add", UserJobCapability)
+	}
+
 	// Extra capabilities and devices (opt-in)
 	for _, cap := range cfg.CapAdd {
 		args = append(args, "--cap-add", cap)
@@ -197,6 +224,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	if cfg.CVMFS != "" {
 		labels[LabelCVMFS] = string(cfg.CVMFS)
 	}
+	maps.Copy(labels, cfg.Users.Labels())
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
@@ -265,9 +293,11 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // Worker nodes are indexed sequentially across all worker groups. In an
 // unmanaged cluster every node is unmanaged; otherwise only workers and db
 // nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
-// with (see DetectCVMFS), empty for none.
+// with (see DetectCVMFS), empty for none. Every node gets the cluster users
+// and groups.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
+	users := NewLinuxUsers(cfg)
 	workerIdx := 0
 	clusterManaged := cfg.Managed()
 
@@ -308,6 +338,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				Devices:         n.Devices,
 				SecurityOpt:     n.SecurityOpt,
 				CVMFS:           cvmfs,
+				Users:           users,
 			}
 			if n.Role != config.RoleController || !n.BackupController {
 				configs = append(configs, base)
@@ -348,6 +379,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 					Devices:         n.Devices,
 					SecurityOpt:     n.SecurityOpt,
 					CVMFS:           cvmfs,
+					Users:           users,
 				})
 				workerIdx++
 			}

@@ -67,7 +67,7 @@ type nodeResult struct {
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
 //	└ DetectCVMFS (storage.cvmfs only) ─────────────────┘
 //	                        │
-//	              registerMesh ║ enableSlurm
+//	        registerMesh ║ enableSlurm ║ createHomes (users only)
 //	                        │
 //	                    *Cluster
 //
@@ -175,8 +175,8 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	log.InfoContext(ctx, "nodes ready", "count", len(nodeConfigs))
 
-	// registerMesh and enableSlurm are independent: Slurm uses short
-	// hostnames resolved by Docker embedded DNS on the cluster network.
+	// registerMesh, enableSlurm and createHomes are independent: Slurm uses
+	// short hostnames resolved by Docker embedded DNS on the cluster network.
 	// Mesh DNS records are for SSH relay and host-side resolution only.
 	var cluster *Cluster
 	g, gctx := errgroup.WithContext(ctx)
@@ -196,6 +196,12 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			}
 			log.InfoContext(gctx, "slurm services enabled")
 			return nil
+		})
+	}
+	if users := NewLinuxUsers(cfg).Users; len(users) > 0 {
+		g.Go(func() error {
+			controller := ContainerName(realm, cfg.Name, string(config.RoleController))
+			return createHomes(gctx, client, controller, users, sshPubKey)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -265,7 +271,7 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // The config volume of an unmanaged cluster stays empty.
 //
 //	┌─────────┐  ┌─────────┐
-//	network ║ (config vol → write config, managed only) ║ (munge vol → write munge key) ║ data vol ║ state vol (backup pair only)
+//	network ║ (config vol → write config, managed only) ║ (munge vol → write munge key) ║ data vol ║ state vol (backup pair only) ║ home vol (users only)
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
@@ -293,14 +299,18 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 	if cfg.HasBackupController() {
 		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeState) })
 	}
+	if len(cfg.Users) > 0 {
+		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeHome) })
+	}
 	return g.Wait()
 }
 
 // setupNodes creates each node, starts its systemd monitor, waits for base
-// readiness, injects SSH public keys, and collects host keys — all
-// concurrently per node with no barrier between creation and probing.
+// readiness, adds the cluster users and groups, injects SSH public keys, and collects
+// host keys — all concurrently per node with no barrier between creation and
+// probing.
 //
-//	per node:  create → monitor → wait(container, systemd, sshd, munge) → inspect → SSH → hostkey
+//	per node:  create → monitor → wait(container, systemd, sshd, munge) → inspect → users → SSH → hostkey
 func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) ([]nodeResult, error) {
 	log := sindlog.From(ctx)
 	baseProbes := []probe.Probe{
@@ -335,6 +345,12 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			info, err := client.InspectContainer(gctx, containerName)
 			if err != nil {
 				return fmt.Errorf("inspecting node %s: %w", nc.ShortName, err)
+			}
+
+			if !nc.Users.IsEmpty() {
+				if err := addUsers(gctx, client, containerName, nc.Users); err != nil {
+					return fmt.Errorf("node %s: %w", nc.ShortName, err)
+				}
 			}
 
 			if err := ssh.InjectPublicKey(gctx, client, containerName, sshPubKey); err != nil {

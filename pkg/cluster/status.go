@@ -162,8 +162,9 @@ type MountPoint struct {
 // existence for Docker volumes. The data mount source is determined from
 // the sind.data.hostpath label on cluster containers: when present it is
 // a host-path bind mount, otherwise it is a Docker volume. Its mount point
-// is the sind.data.mountpath label, or /data. The sind.cvmfs label adds
-// /cvmfs from the cvmfs plugin volume or the host's /cvmfs.
+// is the sind.data.mountpath label, or /data. The sind.users label adds
+// the home volume at /home, and the sind.cvmfs label /cvmfs from the cvmfs
+// plugin volume or the host's /cvmfs.
 func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []docker.ContainerListEntry) ([]MountPoint, error) {
 	// Determine data mount source and mount point from container labels.
 	dataHostPath := ""
@@ -198,6 +199,14 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 	for _, c := range containers {
 		if c.Name == backup {
 			mounts = append(mounts, MountPoint{Path: slurm.StateSaveLocation, Source: string(VolumeName(realm, clusterName, VolumeState)), Type: config.StorageVolume})
+			break
+		}
+	}
+
+	// Clusters with users mount the home volume.
+	for _, c := range containers {
+		if c.Labels[LabelUsers] != "" {
+			mounts = append(mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume})
 			break
 		}
 	}

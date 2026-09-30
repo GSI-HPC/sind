@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -192,6 +193,53 @@ func TestExec_UnknownFlag(t *testing.T) {
 	_, _, err := executeCommand("exec", "--bogus", "--", "hostname")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown flag: --bogus")
+}
+
+// dockerArgs runs sind with args, with the default cluster's submitter as
+// the target of enter and exec, and returns the arguments of the docker
+// command it ran.
+func dockerArgs(t *testing.T, args ...string) []string {
+	t.Helper()
+	fakeDockerOnPath(t, "0")
+	file := filepath.Join(t.TempDir(), "args")
+	t.Setenv(fakeDockerArgsEnv, file)
+	var stderr bytes.Buffer
+
+	code := run(submitterCtx(t.Context()), args, &stderr)
+
+	require.Equal(t, 0, code, stderr.String())
+	data, err := os.ReadFile(file)
+	require.NoError(t, err)
+	return strings.Split(string(data), "\n")
+}
+
+func TestUser_DockerArgs(t *testing.T) {
+	for name, tc := range map[string]struct{ args, want []string }{
+		"enter": {
+			[]string{"enter", "--user", "alice"},
+			[]string{"exec", "-i", "-u", "alice", "-w", "/home/alice", "sind-default-submitter", "bash", "-l"},
+		},
+		"enter as root": {
+			[]string{"enter"},
+			[]string{"exec", "-i", "-w", "/data", "sind-default-submitter", "bash", "-l"},
+		},
+		"exec": {
+			[]string{"exec", "-u", "alice", "--", "id", "-u"},
+			[]string{"exec", "-i", "-u", "alice", "-w", "/home/alice", "sind-default-submitter", "id", "-u"},
+		},
+		"exec as root": {
+			[]string{"exec", "--", "id", "-u"},
+			[]string{"exec", "-i", "-w", "/data", "sind-default-submitter", "id", "-u"},
+		},
+		"ssh": {
+			[]string{"ssh", "-v", "alice@worker-0", "--", "id"},
+			[]string{"exec", "-i", "sind-ssh", "ssh", "-v", "-l", "alice", "worker-0.default.sind.sind", "id"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, dockerArgs(t, tc.args...))
+		})
+	}
 }
 
 // --- Integration ---

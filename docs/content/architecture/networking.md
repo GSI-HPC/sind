@@ -167,4 +167,4 @@ controller.dev.sind.sind ssh-ed25519 AAAA...
 
 ### Access model
 
-sind only configures SSH access for the root user. Additional user management is left to the user.
+sind configures SSH access for root and for the cluster [users]({{< relref "/configuration/cluster-config#users-section" >}}): the realm's key is in each of their `authorized_keys`. Anything beyond that, such as sudo or keys for logins between nodes, is left to the user.

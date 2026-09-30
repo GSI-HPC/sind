@@ -46,6 +46,16 @@ storage:
     type: volume
     mountPath: /data
 
+groups:
+  - name: hpc
+    gid: 3000
+
+users:
+  - alice
+  - name: bob
+    uid: 2001
+    group: hpc
+
 slurm:
   main: |
     SelectType=select/cons_tres
@@ -85,6 +95,8 @@ nodes:
 | `defaults` | no | — | Default settings applied to all nodes |
 | `storage` | no | — | Shared storage configuration |
 | `slurm` | no | — | Slurm configuration extension |
+| `users` | no | — | Linux user accounts on every node |
+| `groups` | no | — | Linux groups for the users |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
 Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`.
@@ -132,6 +144,41 @@ Workers added with `sind create worker` mount the data at the same place, `sind 
 ### CVMFS
 
 `cvmfs: true` mounts CVMFS read-only at `/cvmfs` on every node, including workers added later with `sind create worker`. Repositories mount on demand when first accessed. The mount comes from the `cvmfs` Docker volume plugin if one is installed and enabled, otherwise from the Docker host's `/cvmfs`; `sind create cluster` fails if neither is available. See [Using CVMFS]({{< relref "/guides/cvmfs" >}}) for the requirements of each.
+
+## Users section
+
+sind configures root on every node. `users` adds Linux user accounts, e.g. to run jobs as someone other than root, and `groups` Linux groups for them:
+
+```yaml
+groups:
+  - name: hpc
+    gid: 3000      # default: lowest free gid from 1000
+users:
+  - alice          # bare name
+  - name: bob
+    uid: 2001      # default: lowest free uid from 1000
+    group: hpc     # primary group instead of a private one
+  - name: carol
+    groups: [hpc]  # supplementary groups
+```
+
+| User field | Default | Description |
+|------------|---------|-------------|
+| `name` | — | User name: a lowercase letter or `_`, then lowercase letters, digits, `_` and `-`, at most 32 characters |
+| `uid` | lowest free from `1000` | ID of the user, between 1000 and 2147483647 |
+| `group` | private group | Primary group, from `groups`. Without it, the user gets a private group of its own name with gid = uid |
+| `groups` | none | Supplementary groups, from `groups` |
+
+| Group field | Default | Description |
+|-------------|---------|-------------|
+| `name` | — | Group name, with the same rules as user names. It must not be the name of a user with a private group |
+| `gid` | lowest free from `1000` | ID of the group, between 1000 and 2147483647 |
+
+Users without `uid` get their IDs first, in list order, skipping the explicit `gid`s; then groups without `gid` get the lowest IDs no user or group has. Set the IDs explicitly to keep file ownership stable across re-creates, e.g. on a `hostPath` data directory.
+
+Every node, including workers added later with `sind create worker`, gets each group and user with the same IDs, as munge and Slurm require. Workers also get the `SYS_NICE` capability, which slurmstepd needs to bind the tasks of users other than root (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})). The home directories, `/home/<user>`, are on the Docker volume `<realm>-<cluster>-home`, which every node mounts at `/home`, so job output written there is the same on every node. The realm's SSH key may log in as each user, as it may as root. See [Node access]({{< relref "/usage/node-access#cluster-users" >}}) for running commands as a user.
+
+A user or group name that already exists in the image, such as `root`, `slurm` or `wheel`, makes `sind create cluster` fail. sind does not create Slurm accounts or associations for the users yet, not even with a [db node]({{< relref "/configuration/node-definitions#database-node" >}}).
 
 ## Slurm section
 
@@ -195,4 +242,5 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
 - `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute
+- User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647 and unique, private groups included; a user's `group` and `groups` must be declared in `groups`
 - Unknown keys are rejected

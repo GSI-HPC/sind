@@ -49,11 +49,13 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 3. Create munge volume → generate and write munge key
 4. Create data volume (if needed)
 5. Create state volume (backup controller only)
+6. Create home volume (`users` only)
 
 **Phase 3: Node Containers**
 1. Create and start each node container in parallel
 2. Start per-node systemd D-Bus monitor immediately after each container starts
 3. Wait for each node to become ready, accelerated by events
+4. Add the cluster users and groups (`users` and `groups` only; see Users)
 
 Every node container starts with a short `/bin/sh` entrypoint instead of the image's own entrypoint or command. As PID 1, it moves itself into `init.scope`, enables each controller of the container's root cgroup in its `cgroup.subtree_control`, and execs `/sbin/init`. `docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and a process there makes systemd's own attempt to enable them fail (cgroup v2's no internal processes rule). An exec of sind's that landed before systemd had enabled controllers would otherwise leave every unit without them, including `Delegate=yes` daemons such as slurmd.
 
@@ -82,9 +84,9 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 
 If any node fails to become ready within the timeout, `sind create cluster` fails, reports which nodes/checks failed and removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
 
-**Phase 4: Mesh Registration and Slurm** (concurrent)
+**Phase 4: Mesh Registration, Slurm and Home Directories** (concurrent)
 
-After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts) and Slurm enablement concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
+After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
 
 With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmctld registers the cluster with slurmdbd when it starts (see Database Node).
 
@@ -392,7 +394,7 @@ worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd 
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
-With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
+Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
 `SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, or mariadb and slurmdbd on a db node, where sind manages Slurm. Unmanaged nodes (unmanaged workers and db nodes, and every node of an unmanaged cluster) list only munge and sshd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
@@ -435,12 +437,14 @@ Checks the Docker Engine version, that cgroupv2 is mounted with `nsdelegate`, an
 ### Node Access
 
 ```bash
-sind ssh [SSH_OPTIONS] NODE [-- COMMAND]  # SSH into a specific node (passthrough)
-sind enter [CLUSTER]                      # Interactive shell on submitter/controller
-sind exec [CLUSTER] -- <cmd>              # One-shot command on submitter/controller
+sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND]  # SSH into a specific node (passthrough)
+sind enter [CLUSTER] [--user USER]               # Interactive shell on submitter/controller
+sind exec [CLUSTER] [--user USER] -- <cmd>       # One-shot command on submitter/controller
 ```
 
 NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `default`.
+
+`USER@` and `--user|-u USER` log in as a cluster user (see Users) instead of root. `sind ssh USER@NODE` is `ssh -l USER`; `enter` and `exec` run as USER in its home directory, `/home/USER`. `--user root` is the default. A USER that is not a valid user name is a usage error.
 
 `sind ssh` passes all options and arguments through to the underlying SSH command. See the SSH section for details.
 
@@ -686,6 +690,18 @@ storage:
     mountPath: /data                     # default: /data
   cvmfs: true                            # mount CVMFS read-only at /cvmfs (default: false)
 
+groups:                                  # Linux groups for the users (default: none)
+  - name: hpc
+    gid: 3000                            # default: lowest free from 1000, after the users
+
+users:                                   # Linux accounts on every node (default: none)
+  - alice                                # uid: lowest free from 1000
+  - name: bob
+    uid: 2001
+    group: hpc                           # primary group (default: private group bob)
+  - name: carol
+    groups: [hpc]                        # supplementary groups
+
 slurm:
   main: |                                # appended to slurm.conf
     SelectType=select/cons_tres
@@ -818,6 +834,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
 - `devices` - absolute paths
 - `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute
+- `users`, `groups` - a name or an object; user and group names start with a lowercase letter or `_`, hold only lowercase letters, digits, `_` and `-`, and have at most 32 characters; `uid` and `gid` are between 1000 and 2147483647; no two users share a name or `uid`, no two groups (private ones included) a name or `gid`; a user's `group` and `groups` are declared in `groups`, and `groups` repeats neither an entry nor `group`
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
 
@@ -889,6 +906,34 @@ nodes:
 
 Each cluster has its own db node; clusters do not share a slurmdbd.
 
+### Users
+
+sind configures SSH access for root on every node. `users` adds Linux user accounts, and `groups` Linux groups for them, e.g. to run Slurm jobs as someone other than root or to test permissions between users:
+
+```yaml
+groups:
+  - name: hpc
+    gid: 3000                            # default: lowest free gid from 1000
+users:
+  - alice                                # bare name, private group alice
+  - name: bob
+    uid: 2001                            # default: lowest free uid from 1000
+    group: hpc                           # primary group instead of a private one
+  - name: carol
+    groups: [hpc]                        # supplementary groups
+```
+
+- Every node gets each group and user with the same IDs (`groupadd --gid GID`, then `useradd --uid UID --gid GID --groups ... --shell /bin/bash`), so that a user has the same UID and GIDs across the cluster, as munge and Slurm require.
+- A user without `group` gets a private group of its own name with gid = uid; a user with `group` gets none. `groups` adds supplementary groups. Both name groups declared in `groups`.
+- A user without `uid` gets the lowest ID from 1000 up that no user has and no group has as an explicit `gid`, in list order. Then each group without `gid` gets the lowest ID from 1000 up that no user or group has. IDs below 1000 belong to the image's system accounts. Explicit IDs keep file ownership stable across re-creates, e.g. on a host path `/data`.
+- The home directories, `/home/<user>`, are on the cluster's home volume, `<realm>-<cluster>-home`, which every node mounts at `/home`, so a job's working directory and output under a home directory are the same on every node. sind creates them once, on `controller`, from `/etc/skel`, owned by the user's uid and primary gid, and puts the realm's SSH public key in each user's `~/.ssh/authorized_keys`: `sind ssh USER@NODE` and the exported `ssh_config` (`ssh -l USER`) work for users as for root.
+- Workers get `--cap-add SYS_NICE`: slurmstepd sets each task's CPU affinity (`task/affinity`) after the task has switched to the job's user, and root needs `CAP_SYS_NICE`, which Docker drops by default, to change the affinity of another user's process. Without it, every job of a user other than root fails with `task_g_set_affinity` ("Slurmd could not execve job").
+- `sind enter --user USER` and `sind exec --user USER` run as the user in its home directory.
+- The users and groups are stored on each container as the `sind.users` and `sind.groups` labels, so `sind create worker` adds them to new workers. The home volume only exists for clusters with users.
+- A user or group name that already exists in the image (`root`, `slurm`, `munge`, `wheel`, ...) fails `sind create cluster` with the `groupadd` or `useradd` error.
+
+Users exist on unmanaged clusters too. sind does not create Slurm accounts or associations for them yet, not even with a db node (see Database Node).
+
 ## Docker Resources
 
 ### Per-Cluster Resources
@@ -905,6 +950,7 @@ Each cluster has its own db node; clusters do not share a slurmdbd.
 | Munge volume | `<realm>-<cluster>-munge` | `sind-dev-munge` |
 | Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
 | State volume (backup controller only) | `<realm>-<cluster>-state` | `sind-dev-state` |
+| Home volume (`users` only) | `<realm>-<cluster>-home` | `sind-dev-home` |
 
 ### Global Resources (Mesh)
 
@@ -929,6 +975,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro |
 | `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw |
 | `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — |
+| `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw (`users` only) |
 | `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro (`storage.cvmfs` only) |
 | tmpfs | `/tmp` | per-node | per-node | per-node | per-node |
 
@@ -943,6 +990,7 @@ Container mount flags:
 -v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes
 -v <realm>-<cluster>-data:/data:rw            # all nodes
 -v <realm>-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
+-v <realm>-<cluster>-home:/home:rw            # all nodes, users only
 --mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly     # storage.cvmfs: plugin
 --mount type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave  # storage.cvmfs: host
 --tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
@@ -1023,11 +1071,15 @@ sind applies labels to containers for filtering and metadata:
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
 | `sind.data.mountpath` | `/shared` | Data mount point, when not `/data` |
 | `sind.cvmfs` | `hostPath` | How the node mounts CVMFS: `volume` (plugin) or `hostPath` (host `/cvmfs`); only with `storage.cvmfs` |
+| `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, space-separated `name:uid:gid` entries (gid of the primary group); only with `users` |
+| `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, space-separated `name:gid` entries with `:member+member...` for supplementary members; only with `users` or `groups` |
 
 ### Enter and Exec
 
 `sind enter` and `sind exec` run commands directly inside the target container via `docker exec`
 with the working directory set to the data mount point (`/data` by default). This means commands operate on the shared data mount.
+With `--user USER` they run as that cluster user (`docker exec -u USER`) in its home directory,
+`/home/USER`, which is shared too (see Users).
 
 `sind ssh` continues to use the SSH relay container for full SSH access (port forwarding, etc.).
 
@@ -1127,7 +1179,7 @@ This happens after container start, before host key collection.
 
 #### User Access
 
-sind only configures SSH access for the root user. Additional user management (creating users, distributing SSH keys, configuring sudo, etc.) is left to the user.
+sind configures SSH access for root and for the cluster users (see Users): the realm's key is in root's and in each user's `authorized_keys`. Anything beyond that (sudo, passwords, SSH keys for logins between nodes) is left to the user.
 
 #### sind ssh Implementation
 
@@ -1143,10 +1195,11 @@ Internally:
 docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND [ARGS...]]  # -t only when stdin is a terminal
 ```
 
-All SSH options and arguments are passed through verbatim. Examples:
+All SSH options and arguments are passed through verbatim. A `USER@` before the node becomes `-l USER` after the other SSH options. Examples:
 
 ```bash
 sind ssh worker-0                           # interactive shell
+sind ssh alice@worker-0                     # as cluster user alice
 sind ssh worker-0.dev                       # node in dev cluster
 sind ssh -v worker-0                        # verbose SSH
 sind ssh worker-0 -- hostname               # run command
@@ -1211,14 +1264,14 @@ Interactive sessions are routed based on cluster configuration:
 | Command | Target Node |
 |---------|-------------|
 | `sind ssh <node>` | explicit node |
-| `sind enter [cluster]` | submitter (if exists) → controller in control (falls back to `controller`) |
-| `sind exec [cluster] -- <cmd>` | submitter (if exists) → controller in control (falls back to `controller`) |
+| `sind enter [cluster] [--user USER]` | submitter (if exists) → controller in control (falls back to `controller`) |
+| `sind exec [cluster] [--user USER] -- <cmd>` | submitter (if exists) → controller in control (falls back to `controller`) |
 
 On an unmanaged cluster sind does not know which controller is in control; `enter` and `exec` then target `controller` if it runs, otherwise `controller-backup`.
 
 ### sind enter
 
-Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Unlike `sind ssh`, it runs `bash -l` through `docker exec` rather than the SSH relay, in `/data` (see Enter and Exec).
+Opens an interactive shell on the submitter (or, without a submitter, on the controller in control: `controller-backup` after a failover of a backup pair, otherwise `controller`). Unlike `sind ssh`, it runs `bash -l` through `docker exec` rather than the SSH relay, in `/data`, or as `--user` in its home directory (see Enter and Exec).
 
 ### sind exec
 

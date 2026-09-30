@@ -44,20 +44,21 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 ┤                                                      ├→ setupNodes
 └ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┘
                            │
-                 registerMesh ║ enableSlurm
+       registerMesh ║ enableSlurm ║ createHomes
                            │
                        *Cluster
 ```
 
-- `createResources` creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key, the data volume (unless the data is a host path) and, for a backup controller pair, the state volume, all in parallel.
+- `createResources` creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key, the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
 - `resolveInfra` looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
-- `setupNodes` creates, waits for, and sets up SSH and host keys on every node.
+- `setupNodes` creates, waits for, and sets up the cluster users and groups, SSH and host keys on every node.
 - `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd.
+- `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
 - If any step fails, `sind create cluster` removes what it created.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 
-Mesh registration (batch DNS + known_hosts) and Slurm enablement run concurrently after all nodes are ready.
+Mesh registration (batch DNS + known_hosts), Slurm enablement and the home directories run concurrently after all nodes are ready.
 
 ## Readiness probes
 

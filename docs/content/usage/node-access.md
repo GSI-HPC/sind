@@ -9,7 +9,7 @@ toc: true
 ## ssh
 
 ```bash
-sind ssh [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]
+sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]
 ```
 
 SSH into a specific node. All SSH options and arguments are passed through to the underlying SSH command.
@@ -25,6 +25,9 @@ sind ssh -t worker-0 -- top
 
 # Verbose SSH
 sind ssh -v worker-0
+
+# As a cluster user
+sind ssh alice@worker-0
 
 # Port forwarding
 sind ssh -L 8080:localhost:80 controller
@@ -43,7 +46,7 @@ Shell completion is available for both `sind ssh` and `sind exec` — press Tab 
 ## enter
 
 ```bash
-sind enter [CLUSTER]
+sind enter [CLUSTER] [--user USER]
 ```
 
 Opens an interactive shell on the cluster's submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is the data mount, `/data` unless the cluster config sets another `mountPath`.
@@ -56,7 +59,7 @@ sind enter dev      # dev cluster
 ## exec
 
 ```bash
-sind exec [CLUSTER] -- COMMAND [ARGS...]
+sind exec [CLUSTER] [--user USER] -- COMMAND [ARGS...]
 ```
 
 Runs a one-shot command on the submitter (or controller). The `--` separator is required. The working directory inside the container is the data mount, as for `enter`.
@@ -66,6 +69,19 @@ sind exec -- sinfo
 sind exec -- srun hostname
 sind exec dev -- sbatch job.sh
 ```
+
+## Cluster users
+
+A cluster with [users]({{< relref "/configuration/cluster-config#users-section" >}}) can be used as any of them instead of root:
+
+```bash
+sind enter --user alice               # shell as alice, in /home/alice
+sind exec -u alice -- sbatch job.sh   # command as alice, in /home/alice
+sind ssh alice@worker-0               # SSH as alice (ssh -l alice)
+ssh -l alice controller               # with the exported ssh_config
+```
+
+`--user`, or `-u`, runs `docker exec -u USER` in the user's home directory, `/home/USER`, which every node shares. `USER@NODE` passes `-l USER` to SSH. `--user root` is the default. A user name that is not valid exits `2`; one that the cluster does not have fails in docker.
 
 ## Exit status
 
@@ -99,7 +115,7 @@ sind create cluster --data volume
 ```
 
 {{< hint info >}}
-`sind ssh` connects via SSH and starts in the user's home directory, not `/data`. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in `/data` directly.
+`sind ssh` connects via SSH and starts in the user's home directory, not `/data`. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in `/data` directly. With `--user`, they start in the user's home directory instead.
 {{< /hint >}}
 
 ## Command routing

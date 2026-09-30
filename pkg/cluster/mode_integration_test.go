@@ -656,6 +656,128 @@ nodes:
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestClusterUsers(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-users")
+	clusterName := "it-users"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+groups:
+  - name: hpc
+    gid: 3000
+users:
+  - name: alice
+    groups: [hpc]
+  - name: bob
+    uid: 2001
+    group: hpc
+nodes:
+  - controller
+  - submitter
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+
+	controller := ContainerName(realm, clusterName, "controller")
+	submitter := ContainerName(realm, clusterName, "submitter")
+	worker := ContainerName(realm, clusterName, "worker-0")
+
+	// Every node has the users and groups, with the same IDs.
+	for _, n := range []docker.ContainerName{controller, submitter, worker} {
+		out, err := c.Exec(ctx, n, "id", "alice")
+		require.NoError(t, err, n)
+		assert.Equal(t, "uid=1000(alice) gid=1000(alice) groups=1000(alice),3000(hpc)", strings.TrimSpace(out), n)
+		out, err = c.Exec(ctx, n, "id", "bob")
+		require.NoError(t, err, n)
+		assert.Equal(t, "uid=2001(bob) gid=3000(hpc) groups=3000(hpc)", strings.TrimSpace(out), n)
+	}
+
+	// The home directories are on the shared home volume and belong to
+	// their users.
+	out, err := c.Exec(ctx, worker, "stat", "-c", "%U:%G %a %n", "/home/alice", "/home/alice/.ssh", "/home/alice/.ssh/authorized_keys")
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"alice:alice 700 /home/alice",
+		"alice:alice 700 /home/alice/.ssh",
+		"alice:alice 600 /home/alice/.ssh/authorized_keys",
+	}, strings.Split(strings.TrimSpace(out), "\n"))
+
+	// The realm's key logs in as a user through the SSH relay.
+	out, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "bob", DNSName("worker-0", clusterName, realm), "id", "-un")
+	require.NoError(t, err)
+	assert.Equal(t, "bob", strings.TrimSpace(out))
+
+	// A job runs as its user, and what it writes to its home directory on
+	// the worker shows up on every node.
+	waitNodeIdle(t, c, submitter, "worker-0")
+	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", DNSName("submitter", clusterName, realm), "srun -N1 sh -c 'id -un > from-job; id -Gn > groups-in-job'")
+	require.NoError(t, err)
+	out, err = c.Exec(ctx, controller, "stat", "-c", "%U", "/home/alice/from-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+	out, err = c.ReadFile(ctx, controller, "/home/alice/from-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+	out, err = c.ReadFile(ctx, controller, "/home/alice/groups-in-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice hpc", strings.TrimSpace(out))
+
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.Contains(t, status.Mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume, OK: true})
+
+	// Workers added later get the users, groups and the shared homes.
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	require.NoError(t, err)
+	require.Len(t, added, 1)
+	newWorker := ContainerName(realm, clusterName, added[0].Name)
+	out, err = c.Exec(ctx, newWorker, "id", "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "uid=1000(alice) gid=1000(alice) groups=1000(alice),3000(hpc)", strings.TrimSpace(out))
+	out, err = c.Exec(ctx, newWorker, "id", "bob")
+	require.NoError(t, err)
+	assert.Equal(t, "uid=2001(bob) gid=3000(hpc) groups=3000(hpc)", strings.TrimSpace(out))
+	out, err = c.ReadFile(ctx, newWorker, "/home/alice/from-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+
+	// Deleting the cluster removes the home volume.
+	require.NoError(t, Delete(ctx, c, meshMgr, clusterName))
+	exists, err := c.VolumeExists(ctx, VolumeName(realm, clusterName, VolumeHome))
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 // waitNodeIdle polls sinfo on from until the Slurm node is idle.
 func waitNodeIdle(t *testing.T, c *docker.Client, from docker.ContainerName, node string) {
 	t.Helper()
