@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:40:34+00:00"
+      content="2026-09-29T23:04:44+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
       "headline": "Cluster Configuration",
       "description": "YAML configuration schema reference",
-      "wordCount": "708",
+      "wordCount": "783",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:40:34.00Z",
+      "dateModified": "2026-09-29T23:04:44.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1301,6 +1301,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/cvmfs/"
+                    class="gdoc-nav__entry"
+                  >
+                    Using CVMFS
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2419,7 +2463,17 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">hostPath    </span><span class="w"> </span><span class="c"># &#34;hostPath&#34; or &#34;volume&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">hostPath</span><span class="p">:</span><span class="w"> </span><span class="l">./data  </span><span class="w"> </span><span class="c"># host directory for type: hostPath</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l">/data  </span><span class="w"> </span><span class="c"># default: /data</span><span class="w">
-</span></span></span></code></pre></div><div class="table-wrap"> <table>
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cvmfs</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">          </span><span class="c"># mount CVMFS read-only at /cvmfs (default: false)</span><span class="w">
+</span></span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="data-storage"
+    >
+        Data storage
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#data-storage" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Data storage" aria-label="Anchor to: Data storage" href="#data-storage">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="table-wrap"> <table>
 	<thead>
 			<tr>
 					<th>Field</th>
@@ -2450,6 +2504,19 @@
   href="/sind/next/usage/node-access/#data-mount"
 >Data mount</a>).</p>
 <p>Workers added with <code>sind create worker</code> mount the data at the same place, <code>sind get cluster</code> reports it there, and <code>sind enter</code> and <code>sind exec</code> start in it.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="cvmfs"
+    >
+        CVMFS
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#cvmfs" class="gdoc-page__anchor clip flex align-center" title="Anchor to: CVMFS" aria-label="Anchor to: CVMFS" href="#cvmfs">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>cvmfs: true</code> mounts CVMFS read-only at <code>/cvmfs</code> on every node, including workers added later with <code>sind create worker</code>. Repositories mount on demand when first accessed. The mount comes from the <code>cvmfs</code> Docker volume plugin if one is installed and enabled, otherwise from the Docker host&rsquo;s <code>/cvmfs</code>; <code>sind create cluster</code> fails if neither is available. See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/cvmfs/"
+>Using CVMFS</a> for the requirements of each.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurm-section"
     >
@@ -3163,6 +3230,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

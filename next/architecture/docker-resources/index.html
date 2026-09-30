@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:40:34+00:00"
+      content="2026-09-29T23:04:44+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/docker-resources/",
       "headline": "Docker Resources",
       "description": "Resource naming conventions, volumes, and labels",
-      "wordCount": "447",
+      "wordCount": "546",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:40:34.00Z",
+      "dateModified": "2026-09-29T23:04:44.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1301,6 +1301,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/cvmfs/"
+                    class="gdoc-nav__entry"
+                  >
+                    Using CVMFS
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2375,6 +2419,13 @@
 					<td>—</td>
 			</tr>
 			<tr>
+					<td><code>cvmfs</code> plugin volume or host <code>/cvmfs</code></td>
+					<td><code>/cvmfs</code></td>
+					<td>ro</td>
+					<td>ro</td>
+					<td>ro (<code>storage.cvmfs</code> only)</td>
+			</tr>
+			<tr>
 					<td>tmpfs</td>
 					<td><code>/tmp</code></td>
 					<td>configurable</td>
@@ -2417,6 +2468,22 @@
 <p>With <code>dataStorage.type: hostPath</code>, or by default through <code>sind create cluster --data .</code> when the config sets no <code>dataStorage</code>, the data volume is replaced with a bind mount:</p>
 <pre tabindex="0"><code>-v /path/on/host:/data:rw
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="cvmfs"
+    >
+        CVMFS
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/architecture/docker-resources/#cvmfs" class="gdoc-page__anchor clip flex align-center" title="Anchor to: CVMFS" aria-label="Anchor to: CVMFS" href="#cvmfs">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>With <code>storage.cvmfs: true</code>, every node mounts CVMFS read-only at <code>/cvmfs</code>, from the <code>cvmfs</code> Docker volume plugin when it is installed and enabled, otherwise from the Docker host&rsquo;s <code>/cvmfs</code> as a slave mount, so repositories the host&rsquo;s autofs mounts on demand appear in the nodes:</p>
+<pre tabindex="0"><code>--mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly     # volume plugin
+--mount type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave  # host /cvmfs
+</code></pre><p>All clusters share the plugin&rsquo;s <code>cvmfs</code> volume; sind does not create or remove it. See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/cvmfs/"
+>Using CVMFS</a>.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="container-labels"
     >
         Container labels
@@ -2469,6 +2536,11 @@
 					<td><code>sind.data.mountpath</code></td>
 					<td><code>/shared</code></td>
 					<td>Data mount point, when <code>storage.dataStorage.mountPath</code> is not <code>/data</code></td>
+			</tr>
+			<tr>
+					<td><code>sind.cvmfs</code></td>
+					<td><code>hostPath</code></td>
+					<td>How the node mounts CVMFS, with <code>storage.cvmfs</code>: <code>volume</code> (plugin) or <code>hostPath</code> (host <code>/cvmfs</code>)</td>
 			</tr>
 	</tbody>
 </table> </div>
@@ -3083,6 +3155,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

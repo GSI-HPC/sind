@@ -12,9 +12,9 @@
 <meta name="generator" content="Hugo 0.167.0">
 
 
-  <meta name="description" content="Cluster health, logs, and resource inspection" />
+  <meta name="description" content="Mount CVMFS repositories on the nodes, or test how your tooling provisions the CVMFS client" />
 
-    <title>Diagnostics | sind</title>
+    <title>Using CVMFS | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -35,14 +35,14 @@
     
   <meta
     property="og:title"
-    content="Diagnostics"
+    content="Using CVMFS"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="Cluster health, logs, and resource inspection" />
+  <meta property="og:description" content="Mount CVMFS repositories on the nodes, or test how your tooling provisions the CVMFS client" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/usage/diagnostics/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/cvmfs/" />
 
-<meta property="article:section" content="Usage" />
+<meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
       content="2026-09-29T23:04:44+00:00"
@@ -50,25 +50,25 @@
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Diagnostics" />
-  <meta name="twitter:description" content="Cluster health, logs, and resource inspection" />
+<meta name="twitter:title" content="Using CVMFS" />
+  <meta name="twitter:description" content="Mount CVMFS repositories on the nodes, or test how your tooling provisions the CVMFS client" />
 
 
   <script type="application/ld+json">
   {
       "@context": "http://schema.org",
       "@type": "TechArticle",
-      "articleSection": "Usage",
-      "name": "Diagnostics",
-      "url": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/",
-      "headline": "Diagnostics",
-      "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1411",
+      "articleSection": "Guides",
+      "name": "Using CVMFS",
+      "url": "https://gsi-hpc.github.io/sind/next/guides/cvmfs/",
+      "headline": "Using CVMFS",
+      "description": "Mount CVMFS repositories on the nodes, or test how your tooling provisions the CVMFS client",
+      "wordCount": "658",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/"
+          "@id": "https://gsi-hpc.github.io/sind/next/guides/cvmfs/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
@@ -152,7 +152,7 @@
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/usage/diagnostics/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/guides/cvmfs/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -925,7 +925,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/usage/diagnostics/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     Diagnostics
                   </a>
@@ -1331,7 +1331,7 @@
                 <span class="flex">
                   <a
                     href="/sind/next/guides/cvmfs/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     Using CVMFS
                   </a>
@@ -2234,7 +2234,7 @@
     
   
   
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/usage/' href='/sind/next/usage/'><span itemprop='name'>Usage</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Diagnostics</span><meta itemprop='position' content='5' /></li>
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/guides/' href='/sind/next/guides/'><span itemprop='name'>Guides</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Using CVMFS</span><meta itemprop='position' content='5' /></li>
   
 
   
@@ -2253,413 +2253,144 @@
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>Diagnostics</h1>
+    <h1>Using CVMFS</h1>
     
-    <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="doctor"
-    >
-        Doctor
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#doctor" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Doctor" aria-label="Anchor to: Doctor" href="#doctor">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind doctor
-</span></span></code></pre></div><p>Checks system prerequisites and reports pass/fail for each:</p>
-<pre tabindex="0"><code>✓ Docker Engine: 28.1.1 (&gt;= 28.0)
-✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
-✓ DNS policy: host resolution available
-</code></pre><div class="table-wrap"> <table>
-	<thead>
-			<tr>
-					<th>Check</th>
-					<th>Required</th>
-					<th>Description</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Docker Engine</td>
-					<td>yes</td>
-					<td>Docker &gt;= 28.0 reachable</td>
-			</tr>
-			<tr>
-					<td>cgroupv2</td>
-					<td>yes</td>
-					<td>cgroup2 mounted with <code>nsdelegate</code> option</td>
-			</tr>
-			<tr>
-					<td>DNS policy</td>
-					<td>no</td>
-					<td>polkit authorization for host DNS resolution via systemd-resolved</td>
-			</tr>
-	</tbody>
-</table> </div>
-<p>The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, <code>sind doctor</code> exits with a non-zero status; for a missing <code>nsdelegate</code> it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, <code>sind doctor</code> prints two polkit rule profiles (desktop and server) with copyable install commands — see <a
+    <p><a
   class="gdoc-markdown__link"
-  href="../../architecture/networking/#polkit-policy"
->Polkit policy</a> for details.</p>
-<p>Example output when <code>nsdelegate</code> is missing:</p>
-<pre tabindex="0"><code>✗ cgroupv2: nsdelegate not found
-
-Enable nsdelegate temporarily:
-
-sudo mount -o remount,nsdelegate /sys/fs/cgroup
-
-Enable nsdelegate on boot (systemd):
-
-sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d
-echo -e &#39;[Mount]\nOptions=nsdelegate&#39; \
-  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf
-sudo systemctl daemon-reload
-</code></pre><div class="flex align-center gdoc-page__anchorwrap">
-    <h3 id="machine-readable-output"
-    >
-        Machine-readable output
-    </h3>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#machine-readable-output" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Machine-readable output" aria-label="Anchor to: Machine-readable output" href="#machine-readable-output">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p><code>sind doctor -o json</code> prints the checks as a JSON array for scripts. Each check has a <code>name</code>, a <code>status</code> (<code>ok</code>, <code>failed</code>, or <code>warning</code> when the advisory DNS policy check does not pass) and a <code>detail</code>; a check that did not pass and has a fix adds the commands as <code>remediation</code>. The exit status is the same as with the default output.</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind doctor -o json
-</span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-json" data-lang="json"><span class="line"><span class="cl"><span class="p">[</span>
-</span></span><span class="line"><span class="cl">  <span class="p">{</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;name&#34;</span><span class="p">:</span> <span class="s2">&#34;Docker Engine&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;status&#34;</span><span class="p">:</span> <span class="s2">&#34;ok&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;detail&#34;</span><span class="p">:</span> <span class="s2">&#34;28.1.1 (&gt;= 28.0)&#34;</span>
-</span></span><span class="line"><span class="cl">  <span class="p">},</span>
-</span></span><span class="line"><span class="cl">  <span class="p">{</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;name&#34;</span><span class="p">:</span> <span class="s2">&#34;cgroupv2&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;status&#34;</span><span class="p">:</span> <span class="s2">&#34;failed&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;detail&#34;</span><span class="p">:</span> <span class="s2">&#34;nsdelegate not found&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">    <span class="nt">&#34;remediation&#34;</span><span class="p">:</span> <span class="s2">&#34;Enable nsdelegate temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n...&#34;</span>
-</span></span><span class="line"><span class="cl">  <span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">]</span>
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="verbose-logging"
-    >
-        Verbose logging
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#verbose-logging" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Verbose logging" aria-label="Anchor to: Verbose logging" href="#verbose-logging">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>By default, sind operates silently — only command output and errors are shown. The <code>-v</code> flag enables structured log output on stderr for debugging and troubleshooting.</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind -v  create cluster          <span class="c1"># info: phase summaries</span>
-</span></span><span class="line"><span class="cl">sind -vv create cluster          <span class="c1"># debug: individual operations</span>
-</span></span><span class="line"><span class="cl">sind -vvv create cluster         <span class="c1"># trace: docker commands, probe retries</span>
-</span></span></code></pre></div><div class="table-wrap"> <table>
-	<thead>
-			<tr>
-					<th>Flag</th>
-					<th>Level</th>
-					<th>What&rsquo;s logged</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>(none)</td>
-					<td>error</td>
-					<td>Errors only — commands are silent on success</td>
-			</tr>
-			<tr>
-					<td><code>-v</code></td>
-					<td>info</td>
-					<td>Phase transitions: &ldquo;creating cluster&rdquo;, &ldquo;nodes ready&rdquo;, &ldquo;slurm services enabled&rdquo;</td>
-			</tr>
-			<tr>
-					<td><code>-vv</code></td>
-					<td>debug</td>
-					<td>Individual operations: &ldquo;waiting for node&rdquo;, &ldquo;starting readiness probes&rdquo;, &ldquo;enabling slurm service&rdquo;</td>
-			</tr>
-			<tr>
-					<td><code>-vvv</code></td>
-					<td>trace</td>
-					<td>Docker commands, probe retry attempts with error details</td>
-			</tr>
-	</tbody>
-</table> </div>
-<p>Log output goes to stderr in structured <code>key=value</code> format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Capture logs while piping output</span>
-</span></span><span class="line"><span class="cl">sind -v get munge-key 2&gt;create.log <span class="p">|</span> base64 -d &gt; munge.key
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Watch creation progress</span>
-</span></span><span class="line"><span class="cl">sind -vv create cluster --config cluster.yaml
-</span></span></code></pre></div><p>Example output at <code>-vv</code> (colorized on interactive terminals):</p>
-<pre tabindex="0"><code>00:13:28.438 INFO ensuring mesh infrastructure realm=sind
-00:13:28.826 INFO creating cluster name=dev nodes=3
-00:13:28.921 DEBU preflight check passed
-00:13:29.382 INFO resolved infrastructure slurm=25.11.8
-00:13:30.149 DEBU cluster resources created
-00:13:30.621 DEBU waiting for node node=controller
-00:13:30.622 DEBU waiting for node node=worker-0
-00:13:30.623 DEBU starting readiness probes node=sind-dev-controller probes=container,systemd,sshd,munge
-00:13:31.252 DEBU all probes passed node=sind-dev-controller
-00:13:31.474 INFO nodes ready count=3
-00:13:32.362 DEBU enabling slurm service node=controller service=slurmctld
-00:13:32.363 DEBU enabling slurm service node=worker-0 service=slurmd
-00:13:32.608 INFO slurm services enabled
-</code></pre><p><code>-v</code> is a global flag and may come before or after the subcommand (<code>sind -v create cluster</code>, <code>sind create cluster -v</code>). <code>sind ssh</code> passes its arguments through to SSH, so for it <code>-v</code> must come first: <code>sind -v ssh worker-0</code> logs sind&rsquo;s steps, while <code>sind ssh -v worker-0</code> makes SSH verbose. The same holds for <code>--realm</code>. <code>sind exec</code> takes both anywhere before its <code>--</code>.</p>
+  href="https://cvmfs.readthedocs.io"
+>CernVM-FS</a> (CVMFS) serves software repositories read-only under <code>/cvmfs</code>. sind supports two use cases:</p>
+<ul>
+<li><strong>Consume CVMFS</strong>: jobs on the cluster read software from <code>/cvmfs</code>. With <code>storage.cvmfs: true</code>, sind mounts CVMFS from the Docker host or from a Docker volume plugin. The nodes need no extra privileges.</li>
+<li><strong>Provision CVMFS</strong>: test the configuration management (Ansible, Puppet, &hellip;) that installs and configures the CVMFS client on a node. The client runs inside the nodes, which needs <code>SYS_ADMIN</code> and <code>/dev/fuse</code>.</li>
+</ul>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="json-output"
+    <h2 id="mount-cvmfs-on-the-nodes"
     >
-        JSON output
+        Mount CVMFS on the nodes
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#json-output" class="gdoc-page__anchor clip flex align-center" title="Anchor to: JSON output" aria-label="Anchor to: JSON output" href="#json-output">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/cvmfs/#mount-cvmfs-on-the-nodes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Mount CVMFS on the nodes" aria-label="Anchor to: Mount CVMFS on the nodes" href="#mount-cvmfs-on-the-nodes">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Every <code>sind get</code> subcommand accepts a persistent <code>--output|-o {human,json}</code> flag. The default is <code>human</code> (tabular text); <code>json</code> emits a machine-readable document for scripting and automation. <code>sind doctor</code> takes the same flag (see <a
-  class="gdoc-markdown__link"
-  href="#machine-readable-output"
->Machine-readable output</a>).</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get clusters -o json
-</span></span><span class="line"><span class="cl">sind get nodes -o json
-</span></span><span class="line"><span class="cl">sind get cluster dev --output json
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="cluster-status"
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">dev</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">storage</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cvmfs</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">submitter</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">worker</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create cluster --config cluster.yaml
+</span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- ls /cvmfs/sft.cern.ch
+</span></span></code></pre></div><p>Every node mounts CVMFS read-only at <code>/cvmfs</code>, and so do workers added later with <code>sind create worker</code>. Repositories mount on demand when first accessed, as on a bare-metal client with autofs, so there is no list of repositories to configure.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="backends"
     >
-        Cluster status
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#cluster-status" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Cluster status" aria-label="Anchor to: Cluster status" href="#cluster-status">
+        Backends
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/cvmfs/#backends" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Backends" aria-label="Anchor to: Backends" href="#backends">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get cluster <span class="o">[</span>NAME<span class="o">]</span>
-</span></span></code></pre></div><p>Displays detailed health information:</p>
-<pre tabindex="0"><code>CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.8   running (3/0/0/3)
-
-NETWORKS
-NAME             DRIVER   SUBNET           GATEWAY        STATUS
-sind-mesh        bridge   172.18.0.0/16    172.18.0.1     ✓
-sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
-
-MESH SERVICES
-NAME   CONTAINER   STATUS
-dns    sind-dns    ✓
-
-MOUNTS
+<p><code>sind create cluster</code> picks one of two backends and logs its choice (with <code>-v</code>):</p>
+<div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>Backend</th>
+					<th>When</th>
+					<th>Docker mount</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Volume plugin</td>
+					<td>an enabled Docker volume plugin named <code>cvmfs</code> is installed</td>
+					<td><code>type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly</code></td>
+			</tr>
+			<tr>
+					<td>Host bind mount</td>
+					<td>otherwise</td>
+					<td><code>type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave</code></td>
+			</tr>
+	</tbody>
+</table> </div>
+<p>If neither works, <code>sind create cluster</code> fails before creating any node, with Docker&rsquo;s error and a hint to install CVMFS on the Docker host or the volume plugin.</p>
+<p><code>sind get cluster</code> lists the mount under <code>MOUNTS</code>:</p>
+<pre tabindex="0"><code>MOUNTS
 MOUNT        SOURCE               TYPE       STATUS
 /etc/slurm   sind-dev-config      volume     ✓
 /etc/munge   sind-dev-munge       volume     ✓
 /data        /home/user/project   hostPath   ✓
-
-NODES
-NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
-</code></pre><p><code>SLURM</code> shows <code>-</code> when sind does not know the version, as for unmanaged clusters. The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
-<div class="table-wrap"> <table>
-	<thead>
-			<tr>
-					<th>Status</th>
-					<th>Meaning</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td><code>running</code></td>
-					<td>All containers are running</td>
-			</tr>
-			<tr>
-					<td><code>stopped</code></td>
-					<td>All containers are stopped (exited, dead, or created)</td>
-			</tr>
-			<tr>
-					<td><code>paused</code></td>
-					<td>All containers are paused</td>
-			</tr>
-			<tr>
-					<td><code>mixed</code></td>
-					<td>Containers are in different states</td>
-			</tr>
-			<tr>
-					<td><code>empty</code></td>
-					<td>No nodes exist</td>
-			</tr>
-			<tr>
-					<td><code>unknown</code></td>
-					<td>All containers are in a state sind does not map, e.g. <code>restarting</code></td>
-			</tr>
-	</tbody>
-</table> </div>
-<p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
-<p>Nodes where sind does not manage Slurm (unmanaged workers, and every node of an <a
+/cvmfs       /cvmfs               hostPath   ✓
+</code></pre><div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="host-bind-mount"
+    >
+        Host bind mount
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/cvmfs/#host-bind-mount" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Host bind mount" aria-label="Anchor to: Host bind mount" href="#host-bind-mount">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>The Docker host needs the CVMFS client with autofs, set up as usual (<code>cvmfs_config setup</code>), so that <code>ls /cvmfs/sft.cern.ch</code> works on the host itself.</p>
+<p>sind bind-mounts the host&rsquo;s <code>/cvmfs</code> as a slave mount. A lookup inside a node reaches the host&rsquo;s autofs, and the repository it mounts appears in every node; autofs idle unmounts propagate the same way. Docker accepts the slave mount only when the host&rsquo;s <code>/cvmfs</code> is on a <code>shared</code> or <code>slave</code> mount, the default on systemd hosts. Check with:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-console" data-lang="console"><span class="line"><span class="cl"><span class="gp">$</span> findmnt -o TARGET,PROPAGATION /cvmfs
+</span></span><span class="line"><span class="cl"><span class="go">TARGET PROPAGATION
+</span></span></span><span class="line"><span class="cl"><span class="go">/cvmfs shared
+</span></span></span></code></pre></div><p>Before creating the nodes, sind tries the mount in a throwaway container of the controller image, so a host without <code>/cvmfs</code>, or with a <code>private</code> one, fails early.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="volume-plugin"
+    >
+        Volume plugin
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/cvmfs/#volume-plugin" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Volume plugin" aria-label="Anchor to: Volume plugin" href="#volume-plugin">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>A Docker volume plugin runs the CVMFS client on the host as a privileged daemon, and the nodes stay unprivileged. sind uses it when <code>docker plugin ls</code> shows an enabled volume plugin named <code>cvmfs</code>, which is the name <code>volume-driver=cvmfs</code> resolves to. Install a plugin under that name with <code>docker plugin install --alias cvmfs &lt;plugin&gt;</code>.</p>
+<p>sind mounts the plugin&rsquo;s volume <code>cvmfs</code> and leaves repository handling to the plugin. All clusters share that volume; sind does not remove it with a cluster.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="provision-cvmfs-inside-the-nodes"
+    >
+        Provision CVMFS inside the nodes
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/cvmfs/#provision-cvmfs-inside-the-nodes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Provision CVMFS inside the nodes" aria-label="Anchor to: Provision CVMFS inside the nodes" href="#provision-cvmfs-inside-the-nodes">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>To test how your tooling installs and configures CVMFS, leave <code>storage.cvmfs</code> unset and let the client run inside the nodes. Mounting a FUSE file system needs the <code>SYS_ADMIN</code> capability and the <code>/dev/fuse</code> device on those nodes:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">cvmfs</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">submitter</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">capAdd</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">SYS_ADMIN]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">devices</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">/dev/fuse]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">securityOpt</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">apparmor=unconfined] </span><span class="w"> </span><span class="c"># AppArmor hosts only (Ubuntu, Debian)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">worker</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">capAdd</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">SYS_ADMIN]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">devices</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">/dev/fuse]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">securityOpt</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">apparmor=unconfined]</span><span class="w">
+</span></span></span></code></pre></div><p>Then provision the nodes as on bare metal, for example by hand:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">dnf install -y https://cvmrepo.s3.cern.ch/cvmrepo/yum/cvmfs-release-latest.noarch.rpm
+</span></span><span class="line"><span class="cl">dnf install -y cvmfs
+</span></span><span class="line"><span class="cl">cat &gt; /etc/cvmfs/default.local <span class="s">&lt;&lt;EOF
+</span></span></span><span class="line"><span class="cl"><span class="s">CVMFS_CLIENT_PROFILE=single
+</span></span></span><span class="line"><span class="cl"><span class="s">CVMFS_HTTP_PROXY=DIRECT
+</span></span></span><span class="line"><span class="cl"><span class="s">CVMFS_REPOSITORIES=cvmfs-config.cern.ch,sft.cern.ch
+</span></span></span><span class="line"><span class="cl"><span class="s">CVMFS_NFILES=65536
+</span></span></span><span class="line"><span class="cl"><span class="s">EOF</span>
+</span></span><span class="line"><span class="cl">cvmfs_config setup
+</span></span><span class="line"><span class="cl">cvmfs_config probe
+</span></span></code></pre></div><p>autofs then mounts <code>/cvmfs/sft.cern.ch</code> on first access, and Slurm jobs on the worker can read it.</p>
+<p>Two things to know:</p>
+<ul>
+<li><strong>AppArmor hosts</strong>: under Docker&rsquo;s default AppArmor profile, nodes with <code>SYS_ADMIN</code> exit with code 255 at boot. <code>securityOpt: [apparmor=unconfined]</code> avoids that; hosts without AppArmor don&rsquo;t need it.</li>
+<li><strong>Open files</strong>: <code>cvmfs2</code> refuses to mount (&ldquo;Failed to set maximum number of open files, insufficient permissions&rdquo;) when <code>CVMFS_NFILES</code> exceeds the node&rsquo;s hard limit on open files. The default, 131072, can exceed it: on GitHub&rsquo;s <code>ubuntu-latest</code> runners the limit is 65536. Check it with <code>ulimit -Hn</code> inside a node and keep <code>CVMFS_NFILES</code> at or below it.</li>
+</ul>
+<p>See <a
   class="gdoc-markdown__link"
-  href="/sind/next/guides/unmanaged-cluster/"
->unmanaged cluster</a>) list only <code>munge</code> and <code>sshd</code>. The JSON output marks each node with <code>&quot;managed&quot;: true|false</code>, as does <code>sind get node -o json</code>.</p>
-<p>With <a
-  class="gdoc-markdown__link--code"
-  href="/sind/next/guides/cvmfs/"
-><code>storage.cvmfs</code></a>, <code>MOUNTS</code> lists <code>/cvmfs</code> too: source <code>cvmfs</code> of type <code>volume</code> from the volume plugin, or source <code>/cvmfs</code> of type <code>hostPath</code> from the Docker host.</p>
-<p>Clusters with a <a
-  class="gdoc-markdown__link"
-  href="/sind/next/guides/controller-failover/"
->backup controller</a> get an <code>HA</code> column in the <code>NODES</code> table: <code>primary</code> or <code>backup</code> for each controller, with <code>*</code> on the one in control. The shared state volume appears under <code>MOUNTS</code> as <code>/var/spool/slurmctld</code>. Unmanaged clusters show no <code>HA</code> column: sind cannot tell which of their controllers is in control.</p>
-<blockquote>
-<p><strong>Tip:</strong> Run <code>watch sind get cluster</code> for a simple live dashboard that refreshes every two seconds.</p>
-</blockquote>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="node-status"
-    >
-        Node status
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#node-status" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Node status" aria-label="Anchor to: Node status" href="#node-status">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get node NODE<span class="o">[</span>.CLUSTER<span class="o">]</span>
-</span></span></code></pre></div><p>Shows the health of a single node. <code>NODE</code> is a short name, optionally followed by its cluster (<code>worker-0.dev</code>); the cluster defaults to <code>default</code>. A full DNS name ending in <code>.sind</code> is rejected.</p>
-<pre tabindex="0"><code>CONTAINER             ROLE         FQDN                       IP           STATUS
-sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
-
-SERVICES
-NAME        STATUS
-munge       ✓
-slurmctld   ✓
-sshd        ✓
-</code></pre><p>Controllers of a backup pair get the same <code>HA</code> column as in <code>sind get cluster</code>.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="logs"
-    >
-        Logs
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#logs" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Logs" aria-label="Anchor to: Logs" href="#logs">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind logs NODE <span class="o">[</span>SERVICE<span class="o">]</span> <span class="o">[</span>--follow<span class="p">|</span>-f<span class="o">]</span>
-</span></span></code></pre></div><p>Without a <code>SERVICE</code> argument, shows container logs (stdout/stderr). With a service name, shows journalctl output for that systemd unit.</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Container logs</span>
-</span></span><span class="line"><span class="cl">sind logs controller
-</span></span><span class="line"><span class="cl">sind logs controller --follow
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Service logs</span>
-</span></span><span class="line"><span class="cl">sind logs controller slurmctld
-</span></span><span class="line"><span class="cl">sind logs worker-0 slurmd --follow
-</span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="list-nodes"
-    >
-        List nodes
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#list-nodes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: List nodes" aria-label="Anchor to: List nodes" href="#list-nodes">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get nodes <span class="o">[</span>CLUSTER<span class="o">]</span>
-</span></span></code></pre></div><p>Without a <code>CLUSTER</code> argument, lists every node in the realm with an extra <code>CLUSTER</code> column; with a cluster name, scopes to that cluster and drops the column. Rows are sorted by <code>(cluster, role, natural-name)</code> so <code>worker-2</code> precedes <code>worker-10</code>.</p>
-<pre tabindex="0"><code>CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
-sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
-sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
-sind-default-worker-1    default   worker       worker-1.default.sind.sind      172.19.0.4   running
-</code></pre><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="list-networks"
-    >
-        List networks
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#list-networks" class="gdoc-page__anchor clip flex align-center" title="Anchor to: List networks" aria-label="Anchor to: List networks" href="#list-networks">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get networks
-</span></span></code></pre></div><pre tabindex="0"><code>NAME              DRIVER   SUBNET           GATEWAY
-sind-default-net  bridge   172.19.0.0/16    172.19.0.1
-sind-mesh         bridge   172.18.0.0/16    172.18.0.1
-</code></pre><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="list-realms"
-    >
-        List realms
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#list-realms" class="gdoc-page__anchor clip flex align-center" title="Anchor to: List realms" aria-label="Anchor to: List realms" href="#list-realms">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get realms
-</span></span></code></pre></div><pre tabindex="0"><code>NAME   CLUSTERS
-ci     1
-sind   2
-</code></pre><p>Lists all active realms discovered from Docker container labels. Useful when working with multiple realms to see what&rsquo;s running.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="list-volumes"
-    >
-        List volumes
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#list-volumes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: List volumes" aria-label="Anchor to: List volumes" href="#list-volumes">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get volumes
-</span></span></code></pre></div><pre tabindex="0"><code>NAME                  DRIVER
-sind-default-config   local
-sind-default-data     local
-sind-default-munge    local
-sind-ssh-config       local
-</code></pre><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="dns-records"
-    >
-        DNS records
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#dns-records" class="gdoc-page__anchor clip flex align-center" title="Anchor to: DNS records" aria-label="Anchor to: DNS records" href="#dns-records">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get dns
-</span></span></code></pre></div><pre tabindex="0"><code>HOSTNAME                              IP
-controller.default.sind.sind         172.19.0.2
-worker-0.default.sind.sind           172.19.0.3
-</code></pre><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="munge-key"
-    >
-        Munge key
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#munge-key" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Munge key" aria-label="Anchor to: Munge key" href="#munge-key">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get munge-key <span class="o">[</span>CLUSTER<span class="o">]</span>
-</span></span></code></pre></div><p>Outputs the cluster&rsquo;s munge key encoded as base64, suitable for injection into external tooling.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="mesh-infrastructure"
-    >
-        Mesh infrastructure
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#mesh-infrastructure" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Mesh infrastructure" aria-label="Anchor to: Mesh infrastructure" href="#mesh-infrastructure">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get mesh
-</span></span></code></pre></div><p>Shows the realm&rsquo;s mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions.</p>
-<p>If no mesh has been created yet, the command returns a friendly <code>no mesh found for realm &quot;&lt;name&gt;&quot;</code> error.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="ssh-credentials"
-    >
-        SSH credentials
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#ssh-credentials" class="gdoc-page__anchor clip flex align-center" title="Anchor to: SSH credentials" aria-label="Anchor to: SSH credentials" href="#ssh-credentials">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get ssh-private-key
-</span></span><span class="line"><span class="cl">sind get ssh-public-key
-</span></span><span class="line"><span class="cl">sind get ssh-known-hosts
-</span></span></code></pre></div><p>Dump the realm&rsquo;s SSH credentials to stdout. With <code>-o json</code>, each command emits a distinct top-level field (<code>private_key</code>, <code>public_key</code>, <code>known_hosts</code>) so consumers don&rsquo;t need to special-case the same JSON key for three payload types. Together with <code>sind get ssh-config</code>, this replaces the need to extract files from Docker volumes.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="ssh-config-path"
-    >
-        SSH config path
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#ssh-config-path" class="gdoc-page__anchor clip flex align-center" title="Anchor to: SSH config path" aria-label="Anchor to: SSH config path" href="#ssh-config-path">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get ssh-config
-</span></span></code></pre></div><p>Outputs the path to the realm&rsquo;s SSH config file. See <a
-  class="gdoc-markdown__link"
-  href="../node-access/"
->Node Access</a> for how to include it in <code>~/.ssh/config</code>.</p>
+  href="/sind/next/configuration/node-definitions/#capabilities-and-devices"
+>Capabilities and devices</a> for the node fields.</p>
 
   </article>
 
@@ -3152,6 +2883,311 @@ worker-0.default.sind.sind           172.19.0.3
         
 
         
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
           
           
         
@@ -3161,6 +3197,12 @@ worker-0.default.sind.sind           172.19.0.3
         
 
         
+        
+      
+    
+
+  
+
         
       
     
@@ -3190,317 +3232,6 @@ worker-0.default.sind.sind           172.19.0.3
             
             
           
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
         
 
         
@@ -3984,11 +3715,11 @@ worker-0.default.sind.sind           172.19.0.3
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/usage/power-control/"
-      title="Power Control"
+      href="/sind/next/guides/unmanaged-cluster/"
+      title="Unmanaged Cluster"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Power Control
+      Unmanaged Cluster
     </a>
   
 </span>
@@ -3996,10 +3727,10 @@ worker-0.default.sind.sind           172.19.0.3
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/usage/node-arguments/"
-      title="Node Arguments"
+      href="/sind/next/architecture/"
+      title="Architecture"
     >
-      Node Arguments
+      Architecture
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   
