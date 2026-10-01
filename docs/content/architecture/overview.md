@@ -29,6 +29,9 @@ Containers require specific security options for systemd:
 - `--security-opt label=disable` — SELinux compatibility
 - `--tmpfs /run:exec,mode=755` — systemd runtime directory
 - `--tmpfs /run/lock` — systemd lock files
+- `--entrypoint /bin/sh` with a short script — PID 1 moves itself into `init.scope`, enables every available cgroup controller in the root cgroup's `cgroup.subtree_control`, then execs `/sbin/init`
+
+`docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and with a process there systemd can no longer enable them (cgroup v2's no internal processes rule). Enabling them before systemd starts keeps a `docker exec` of sind's from racing systemd's boot, so `Delegate=yes` daemons such as slurmd always get the memory and cpu controllers.
 
 ## Concurrency
 

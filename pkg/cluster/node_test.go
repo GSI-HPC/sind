@@ -102,8 +102,9 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	assert.True(t, ok, "--hostname flag present")
 	assert.Equal(t, "controller", hostname)
 
-	// Image is last element
-	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", args[len(args)-1])
+	// The image runs the node entrypoint, which ends by starting systemd
+	assert.Equal(t, []string{"--entrypoint", "/bin/sh", "ghcr.io/gsi-hpc/sind-node:25.11", "-c", NodeEntrypoint},
+		args[len(args)-5:])
 
 	// Labels
 	labels := testutil.ArgValues(args, "--label")
@@ -362,8 +363,8 @@ func TestBuildRunArgs_Pull(t *testing.T) {
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 
-	// Image is still the last element
-	assert.Equal(t, cfg.Image, args[len(args)-1])
+	// The image and the entrypoint's arguments still come last
+	assert.Equal(t, []string{cfg.Image, "-c", NodeEntrypoint}, args[len(args)-3:])
 }
 
 func TestBuildRunArgs_NoPull(t *testing.T) {
@@ -407,9 +408,9 @@ func TestCreateNode(t *testing.T) {
 
 	require.Len(t, m.Calls, 3)
 
-	// CreateContainer: first arg is "create", last is image
+	// CreateContainer: first arg is "create", then the image and its entrypoint arguments
 	assert.Equal(t, "create", m.Calls[0].Args[0])
-	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", m.Calls[0].Args[len(m.Calls[0].Args)-1])
+	assert.Equal(t, []string{"ghcr.io/gsi-hpc/sind-node:25.11", "-c", NodeEntrypoint}, m.Calls[0].Args[len(m.Calls[0].Args)-3:])
 
 	// ConnectNetwork
 	assert.Equal(t, []string{"network", "connect", "sind-mesh", "sind-dev-controller"}, m.Calls[1].Args)

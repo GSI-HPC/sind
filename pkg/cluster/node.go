@@ -211,11 +211,33 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "--pull", "always")
 	}
 
-	// Image (must be last for docker create/run)
-	args = append(args, cfg.Image)
+	// Entrypoint: delegate the cgroup controllers, then start systemd
+	args = append(args, "--entrypoint", "/bin/sh")
+
+	// Image, followed by the entrypoint's arguments
+	args = append(args, cfg.Image, "-c", NodeEntrypoint)
 
 	return args
 }
+
+// NodeEntrypoint is the shell script every node container starts with, as
+// PID 1, before it execs systemd. It moves itself into init.scope and enables
+// all available controllers in the root cgroup's cgroup.subtree_control.
+//
+// docker exec places its process in the container's root cgroup unless that
+// cgroup has controllers enabled; runc then falls back to init's cgroup. A
+// process in the root cgroup makes every later write to its
+// cgroup.subtree_control fail with EBUSY (cgroup v2's no internal processes
+// rule). Without this script, a docker exec of sind's that lands before
+// systemd has enabled controllers keeps systemd from ever doing so, and
+// daemons with Delegate=yes get none: slurmd then cannot use the memory or
+// cpu controller, which jobacct_gather/cgroup needs. Each controller is
+// enabled on its own, as one write of all of them fails as a whole if the
+// kernel refuses one. Failures are ignored so the node still boots.
+const NodeEntrypoint = `cg=/sys/fs/cgroup
+mkdir -p $cg/init.scope && echo $$ > $cg/init.scope/cgroup.procs
+for c in $(cat $cg/cgroup.controllers); do echo +$c > $cg/cgroup.subtree_control; done 2>/dev/null
+exec /sbin/init`
 
 // CreateNode creates a node container, connects it to the mesh network,
 // and starts it. Returns the container ID.
