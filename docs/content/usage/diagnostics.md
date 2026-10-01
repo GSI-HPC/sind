@@ -136,7 +136,7 @@ Displays detailed health information:
 
 ```
 CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.8   running (3/0/0/3)
+dev       25.11.8   running (4/0/0/4)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -156,6 +156,7 @@ MOUNT        SOURCE               TYPE       STATUS
 NODES
 NAME              ROLE        IP            STATUS    SERVICES
 controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
 worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
@@ -173,7 +174,7 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
-Nodes where sind does not manage Slurm (unmanaged workers, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
+Nodes where sind does not manage Slurm (unmanaged workers and db nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
 
 With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
 
@@ -218,6 +219,7 @@ sind logs controller --follow
 # Service logs
 sind logs controller slurmctld
 sind logs worker-0 slurmd --follow
+sind logs db slurmdbd
 ```
 
 ## List nodes

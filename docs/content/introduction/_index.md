@@ -22,7 +22,7 @@ Setting up a multi-node Slurm cluster for development or testing traditionally r
 
 ### Multi-node, multi-cluster & multi-realm
 
-Each cluster consists of individual containers for controller, submitter, and worker nodes. Run multiple clusters simultaneously with shared networking, and organize them into isolated realms for federation and multi-tenant testing scenarios.
+Each cluster consists of individual containers for controller, database, submitter, and worker nodes. Run multiple clusters simultaneously with shared networking, and organize them into isolated realms for federation and multi-tenant testing scenarios.
 
 ### System containers
 

@@ -2,7 +2,7 @@
 weight: 220
 title: "Node Definitions"
 icon: "dns"
-description: "Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters"
+description: "Node roles, shorthand syntax, managed vs unmanaged workers, database nodes, and unmanaged clusters"
 toc: true
 ---
 
@@ -11,6 +11,7 @@ toc: true
 | Role | Count | Required | Slurm daemons | Description |
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
+| `db` | 0–1 | no | mariadb, slurmdbd | Accounting database (see below) |
 | `submitter` | 0–1 | no | none (clients only) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
@@ -23,7 +24,7 @@ toc: true
 | `memory` | global + per-node | `"512m"` | Memory limit |
 | `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp` |
 | `count` | worker only | `1` | Number of worker nodes |
-| `managed` | controller + worker | `true` | Worker: start slurmd and add to slurm.conf. Controller: `false` makes the whole cluster unmanaged (see below) |
+| `managed` | controller + db + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see below). Controller: `false` makes the whole cluster unmanaged (see below) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` (see below) |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
 | `capDrop` | global + per-node | none | Dropped Linux capabilities |
@@ -102,6 +103,27 @@ nodes:
 
 `SlurmctldHost` and `StateSaveLocation` cannot be set in `slurm.main` when the backup is enabled. See [Controller Failover]({{< relref "/guides/controller-failover" >}}) for checking which controller is in control and triggering a failover.
 
+## Database node
+
+A `db` node runs MariaDB and slurmdbd, so the cluster records job accounting:
+
+```yaml
+nodes:
+  - controller
+  - db
+  - worker: 2
+```
+
+- The container is `<realm>-<cluster>-db`, reachable as `db` inside the cluster. `count` and `backupController` are not valid on it.
+- sind writes `slurmdbd.conf` (owned by `slurm`, mode `0600`) and adds `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup` to `slurm.conf`, each unless the `main` section sets it. Extra slurmdbd settings go in the [`slurmdbd` section]({{< relref "/configuration/cluster-config#slurm-section" >}}).
+- At creation, sind starts MariaDB, creates the `slurm_acct_db` database and the `slurm` database user, and starts slurmdbd before slurmctld and slurmd, so the controller registers the cluster on startup: `sind exec dev -- sacctmgr show cluster` lists it, and `sacct` shows finished jobs.
+- Accounting is not enforced: jobs run without users, accounts or associations. Add them with `sacctmgr` and set `AccountingStorageEnforce` in the `main` section to test limits.
+- `sind get cluster` and `sind get node` report `mariadb` and `slurmdbd` for the db node.
+- `managed: false` on the db node makes it a bare node in an otherwise managed cluster, to test your own slurmdbd provisioning while sind runs slurmctld and slurmd. sind then configures no accounting: no `slurmdbd.conf` (the `slurmdbd` section is rejected), no database, and no accounting parameters in `slurm.conf`. Point slurmctld at your slurmdbd through the `main` section, for example `AccountingStorageType=accounting_storage/slurmdbd` and `AccountingStorageHost=db`.
+- In an unmanaged cluster the db node is a bare node: sind starts neither MariaDB nor slurmdbd and writes no `slurmdbd.conf`.
+
+Each cluster has its own db node; clusters do not share a slurmdbd.
+
 ## Unmanaged cluster
 
 `managed: false` on the controller makes the whole cluster unmanaged: sind creates the nodes, the volumes and the munge key, but writes no Slurm configuration and starts no Slurm daemon, so your own tooling can provision Slurm.
@@ -116,7 +138,7 @@ nodes:
 
 - Every worker is unmanaged. A worker with `managed: true` is rejected, and so is any `slurm` section.
 - `backupController: true` still adds `controller-backup` and the shared state volume.
-- `managed` is not valid on the submitter, which runs no Slurm daemon.
+- `managed` is not valid on the submitter, which runs no Slurm daemon. A db node is bare too, and `managed: true` on it is rejected.
 
 See [Unmanaged Cluster]({{< relref "/guides/unmanaged-cluster" >}}) for provisioning Slurm on such a cluster.
 

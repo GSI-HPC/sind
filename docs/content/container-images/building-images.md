@@ -71,6 +71,7 @@ Custom images must provide the following:
 | Role | Additional requirements |
 |------|------------------------|
 | controller | slurmctld installed, **not enabled** |
+| db | mariadb-server with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user; the `slurm` user has the same uid as in the controller's image (sind sets `slurmdbd.conf`'s owner from there) and can write `/var/log/slurm` |
 | worker | slurmd installed, **not enabled** |
 | submitter | Slurm client tools only |
 

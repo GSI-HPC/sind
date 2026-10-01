@@ -52,12 +52,16 @@ slurm:
     SelectTypeParameters=CR_Core_Memory
   cgroup: |
     ConstrainCores=yes
+  slurmdbd: |
+    PurgeJobAfter=1month
 
 nodes:
   - role: controller
     cpus: 2
     memory: 1g
     tmpSize: 512m
+
+  - role: db
 
   - role: submitter
 
@@ -140,6 +144,7 @@ The `slurm` section extends the generated Slurm configuration. Each key maps to 
 | `gres` | `gres.conf` | no |
 | `topology` | `topology.conf` | no |
 | `plugstack` | `plugstack.conf` | yes (always scaffolded) |
+| `slurmdbd` | `slurmdbd.conf` | yes (needs a managed [`db` node]({{< relref "/configuration/node-definitions#database-node" >}})) |
 
 Each key supports two forms:
 
@@ -177,12 +182,14 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 
 - `kind` must be `"Cluster"`
 - Exactly one `controller` node is required
+- At most one `db` node is allowed
 - At most one `submitter` node is allowed
 - At least one `worker` node is required
 - `count` is only valid for worker nodes
-- `managed` is only valid for controller and worker nodes
-- With `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
+- `managed` is only valid for controller, db and worker nodes
+- With `managed: false` on the controller, no worker or db node may set `managed: true` and no `slurm` section may be set
 - `backupController` is only valid for controller nodes
+- The `slurmdbd` section requires a managed `db` node
 - With `backupController`, `slurm.main` must not set `SlurmctldHost` (or its deprecated forms `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `count` must not be negative; `0` means the default, 1
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)

@@ -58,6 +58,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── ha.go        Controller pair (backup controller) position and control state
+  ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
