@@ -34,6 +34,7 @@ type Role string
 // Valid node roles.
 const (
 	RoleController Role = "controller"
+	RoleDB         Role = "db"
 	RoleSubmitter  Role = "submitter"
 	RoleWorker     Role = "worker"
 )
@@ -225,6 +226,7 @@ type Slurm struct {
 	Gres      Section `json:"gres,omitempty"`
 	Topology  Section `json:"topology,omitempty"`
 	Plugstack Section `json:"plugstack,omitempty"`
+	Slurmdbd  Section `json:"slurmdbd,omitempty"`
 }
 
 // Cluster represents a sind cluster configuration.
@@ -338,17 +340,19 @@ func (c *Cluster) Validate() error {
 		}
 	}
 
-	var controllers, submitters, workers int
+	var controllers, dbs, submitters, workers int
 	for _, n := range c.Nodes {
 		switch n.Role {
 		case RoleController:
 			controllers++
+		case RoleDB:
+			dbs++
 		case RoleSubmitter:
 			submitters++
 		case RoleWorker:
 			workers++
 		default:
-			return fmt.Errorf("invalid role %q, must be one of: controller, submitter, worker", n.Role)
+			return fmt.Errorf("invalid role %q, must be one of: controller, db, submitter, worker", n.Role)
 		}
 
 		if n.Count < 0 {
@@ -357,8 +361,8 @@ func (c *Cluster) Validate() error {
 		if n.Count > 0 && n.Role != RoleWorker {
 			return fmt.Errorf("count is only valid for worker nodes, not %q", n.Role)
 		}
-		if n.Managed != nil && n.Role != RoleWorker && n.Role != RoleController {
-			return fmt.Errorf("managed is only valid for controller and worker nodes, not %q", n.Role)
+		if n.Managed != nil && n.Role != RoleWorker && n.Role != RoleController && n.Role != RoleDB {
+			return fmt.Errorf("managed is only valid for controller, db and worker nodes, not %q", n.Role)
 		}
 		if n.BackupController && n.Role != RoleController {
 			return fmt.Errorf("backupController is only valid for controller nodes, not %q", n.Role)
@@ -367,6 +371,9 @@ func (c *Cluster) Validate() error {
 
 	if controllers != 1 {
 		return fmt.Errorf("exactly one controller required, got %d", controllers)
+	}
+	if dbs > 1 {
+		return fmt.Errorf("at most one db node allowed, got %d", dbs)
 	}
 	if submitters > 1 {
 		return fmt.Errorf("at most one submitter allowed, got %d", submitters)
@@ -400,12 +407,13 @@ func (c *Cluster) Validate() error {
 		{"gres", c.Slurm.Gres},
 		{"topology", c.Slurm.Topology},
 		{"plugstack", c.Slurm.Plugstack},
+		{"slurmdbd", c.Slurm.Slurmdbd},
 	}
 
 	if !c.Managed() {
 		for _, n := range c.Nodes {
-			if n.Role == RoleWorker && n.Managed != nil && *n.Managed {
-				return fmt.Errorf("worker managed: true requires a managed controller")
+			if n.Role != RoleController && n.Managed != nil && *n.Managed {
+				return fmt.Errorf("%s managed: true requires a managed controller", n.Role)
 			}
 		}
 		for _, s := range sections {
@@ -413,6 +421,10 @@ func (c *Cluster) Validate() error {
 				return fmt.Errorf("slurm %s requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", s.name)
 			}
 		}
+	}
+
+	if !c.HasManagedDB() && !c.Slurm.Slurmdbd.IsEmpty() {
+		return fmt.Errorf("slurm slurmdbd requires a managed db node: sind writes no slurmdbd.conf for an unmanaged one")
 	}
 
 	if c.HasBackupController() {
@@ -438,6 +450,22 @@ func (c *Cluster) Validate() error {
 // spellings of SlurmctldHost.
 var backupControllerManagedKeys = []string{
 	"SlurmctldHost", "ControlMachine", "BackupController", "BackupAddr", "StateSaveLocation",
+}
+
+// HasManagedDB reports whether the cluster has a db node whose accounting
+// services sind manages: one without managed: false, in a managed cluster.
+// Only then does sind configure accounting (slurmdbd.conf and the accounting
+// parameters in slurm.conf).
+func (c *Cluster) HasManagedDB() bool {
+	if !c.Managed() {
+		return false
+	}
+	for _, n := range c.Nodes {
+		if n.Role == RoleDB {
+			return n.Managed == nil || *n.Managed
+		}
+	}
+	return false
 }
 
 // HasBackupController reports whether the controller node spec enables the
