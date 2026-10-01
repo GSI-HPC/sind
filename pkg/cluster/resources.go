@@ -63,8 +63,9 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	}
 	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
+	confOpts := slurm.ConfOptions{BackupController: cfg.HasBackupController()}
 	files := docker.FileContents{
-		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, cfg.HasBackupController())),
+		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, confOpts)),
 		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
 		"cgroup.conf":       []byte(slurm.GenerateCgroupConf(cfg.Slurm.Cgroup)),
 		"plugstack.conf":    []byte(slurm.GeneratePlugstackConf(cfg.Slurm.Plugstack)),
