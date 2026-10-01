@@ -534,6 +534,69 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 	assert.Equal(t, "worker-0", configs[2].ShortName)
 }
 
+func TestNodeRunConfigs_WithDB(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleDB, Image: "img:1", CPUs: 2, Memory: "1g", TmpSize: "1g"},
+			{Role: config.RoleWorker},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "25.11.8", "")
+
+	require.Len(t, configs, 3)
+	db := configs[1]
+	assert.Equal(t, "db", db.ShortName)
+	assert.Equal(t, config.RoleDB, db.Role)
+	assert.Equal(t, "img:1", db.Image)
+	assert.Equal(t, 2, db.CPUs)
+	assert.Equal(t, "1g", db.Memory)
+	assert.Equal(t, "25.11.8", db.SlurmVersion)
+	assert.Equal(t, 1, db.ContainerNumber)
+	assert.True(t, db.Managed, "db of a managed cluster")
+	assert.False(t, db.SharedState)
+}
+
+func TestNodeRunConfigs_UnmanagedDBInManagedCluster(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleDB, Managed: testutil.Ptr(false)},
+			{Role: config.RoleSubmitter},
+			{Role: config.RoleWorker},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "25.11.8", "")
+
+	require.Len(t, configs, 4)
+	assert.True(t, configs[0].Managed, "controller")
+	assert.Equal(t, "db", configs[1].ShortName)
+	assert.False(t, configs[1].Managed, "db with managed: false")
+	assert.True(t, configs[2].Managed, "submitter")
+	assert.True(t, configs[3].Managed, "worker")
+}
+
+func TestNodeRunConfigs_UnmanagedDB(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Managed: testutil.Ptr(false)},
+			{Role: config.RoleDB},
+			{Role: config.RoleWorker},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+
+	require.Len(t, configs, 3)
+	assert.Equal(t, "db", configs[1].ShortName)
+	assert.False(t, configs[1].Managed, "bare db node in an unmanaged cluster")
+}
+
 func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",

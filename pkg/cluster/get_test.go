@@ -324,22 +324,28 @@ func TestGetNodes_SortOrder(t *testing.T) {
 			ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
+		testutil.PsEntry{
+			ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=db",
+		},
 	), "", nil)
 	m.AddResult(inspectJSONBatch(t,
 		inspectEntry{Name: "sind-dev-worker-0", Status: "running", Networks: net},
 		inspectEntry{Name: "sind-dev-submitter", Status: "running", Networks: net},
 		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: net},
+		inspectEntry{Name: "sind-dev-db", Status: "running", Networks: net},
 	), "", nil)
 	c := docker.NewClient(&m)
 
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
-	require.Len(t, nodes, 3)
-	// Order: controller, submitter, worker
+	require.Len(t, nodes, 4)
+	// Order: controller, db, submitter, worker
 	assert.Equal(t, config.RoleController, nodes[0].Role)
-	assert.Equal(t, config.RoleSubmitter, nodes[1].Role)
-	assert.Equal(t, config.RoleWorker, nodes[2].Role)
+	assert.Equal(t, config.RoleDB, nodes[1].Role)
+	assert.Equal(t, config.RoleSubmitter, nodes[2].Role)
+	assert.Equal(t, config.RoleWorker, nodes[3].Role)
 }
 
 func TestGetNodes_UnknownRole(t *testing.T) {

@@ -168,6 +168,41 @@ func TestGetNodeHealth_UnmanagedWorker(t *testing.T) {
 	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "systemctl", "is-active", "munge", "sshd"}, m.Calls[1].Args)
 }
 
+func TestGetNodeHealth_DB(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = healthyOnCall("sind-dev-db", "172.18.0.5")
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-db", config.RoleDB, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, ServiceHealth{
+		probe.ServiceMunge: true, probe.ServiceSSHD: true,
+		probe.ServiceMariadb: true, probe.ServiceSlurmdbd: true,
+	}, health.Services)
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "is-active", "munge", "sshd", "mariadb", "slurmdbd"}, m.Calls[1].Args)
+}
+
+func TestGetNodeHealth_UnmanagedDB(t *testing.T) {
+	var m mock.Executor
+	base := healthyOnCall("sind-dev-db", "172.18.0.5")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if len(args) >= 2 && args[0] == "inspect" {
+			return mock.Result{Stdout: "[" + statusInspectEntryLabels("sind-dev-db", "running", "172.18.0.5",
+				docker.Labels{LabelRole: "db", LabelManaged: "false"}) + "]"}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-db", config.RoleDB, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services,
+		"mariadb and slurmdbd are not sind's on an unmanaged db node")
+}
+
 func TestGetNodeHealth_UnmanagedNotRunning(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
@@ -978,6 +1013,10 @@ func TestGetStatus_SortOrder(t *testing.T) {
 					Labels: "sind.cluster=dev,sind.role=submitter",
 				},
 				testutil.PsEntry{
+					ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
+					Labels: "sind.cluster=dev,sind.role=db",
+				},
+				testutil.PsEntry{
 					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
 					Labels: "sind.cluster=dev,sind.role=controller",
 				},
@@ -988,6 +1027,8 @@ func TestGetStatus_SortOrder(t *testing.T) {
 				switch name {
 				case "sind-dev-controller":
 					return "running", "172.18.0.2"
+				case "sind-dev-db":
+					return "running", "172.18.0.5"
 				case "sind-dev-submitter":
 					return "running", "172.18.0.4"
 				case "sind-dev-worker-0":
@@ -1003,10 +1044,11 @@ func TestGetStatus_SortOrder(t *testing.T) {
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
-	require.Len(t, status.Nodes, 3)
+	require.Len(t, status.Nodes, 4)
 	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
-	assert.Equal(t, config.RoleSubmitter, status.Nodes[1].Role)
-	assert.Equal(t, config.RoleWorker, status.Nodes[2].Role)
+	assert.Equal(t, config.RoleDB, status.Nodes[1].Role)
+	assert.Equal(t, config.RoleSubmitter, status.Nodes[2].Role)
+	assert.Equal(t, config.RoleWorker, status.Nodes[3].Role)
 }
 
 func TestGetStatus_MixedStates(t *testing.T) {

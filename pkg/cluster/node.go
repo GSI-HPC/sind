@@ -81,7 +81,7 @@ type RunConfig struct {
 	Realm           string      // realm name (e.g. "sind")
 	ClusterName     string      // cluster name
 	ShortName       string      // node hostname: "controller", "worker-0"
-	Role            config.Role // "controller", "submitter", "worker"
+	Role            config.Role // "controller", "db", "submitter", "worker"
 	Image           string      // container image
 	CPUs            int         // CPU limit
 	Memory          string      // memory limit (e.g. "2g")
@@ -263,9 +263,9 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 
 // NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
 // Worker nodes are indexed sequentially across all worker groups. In an
-// unmanaged cluster every node is unmanaged; otherwise only workers with
-// managed: false are. cvmfs is the backend every node mounts CVMFS with
-// (see DetectCVMFS), empty for none.
+// unmanaged cluster every node is unmanaged; otherwise only workers and db
+// nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
+// with (see DetectCVMFS), empty for none.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
 	workerIdx := 0
@@ -282,7 +282,11 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
-		case config.RoleController, config.RoleSubmitter:
+		case config.RoleController, config.RoleDB, config.RoleSubmitter:
+			nodeManaged := clusterManaged
+			if n.Role == config.RoleDB && n.Managed != nil && !*n.Managed {
+				nodeManaged = false
+			}
 			base := RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
@@ -296,7 +300,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				DNSIP:           dnsIP,
 				DataHostPath:    dataHostPath,
 				DataMountPath:   dataMountPath,
-				Managed:         clusterManaged,
+				Managed:         nodeManaged,
 				ContainerNumber: 1,
 				Pull:            cfg.Pull,
 				CapAdd:          n.CapAdd,
