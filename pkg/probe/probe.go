@@ -314,6 +314,18 @@ func SlurmdReady(ctx context.Context, client *docker.Client, name docker.Contain
 	return nil
 }
 
+// journalLines is the number of journal lines UnitJournal returns.
+const journalLines = "20"
+
+// UnitJournal returns the tail of a systemd unit's journal on the node, to
+// show why the unit failed. It is best effort: on error it returns what
+// journalctl printed, possibly nothing.
+func UnitJournal(ctx context.Context, client *docker.Client, name docker.ContainerName, unit string) string {
+	journal, _ := client.ExecAllowNonZero(ctx, name,
+		"journalctl", "-u", unit, "-n", journalLines, "--no-pager", "-o", "cat")
+	return strings.TrimSpace(journal)
+}
+
 // Snapshot returns a one-shot readiness snapshot of the given services on a
 // running node, fusing the systemd-based checks (munge, sshd, slurmd) into a
 // single docker exec. slurmctld is checked with scontrol ping instead,

@@ -1482,3 +1482,32 @@ func TestWaitReady_WithWatcher(t *testing.T) {
 	pipes.CloseAll()
 	w.Wait()
 }
+
+func TestEnableService(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	err := enableService(t.Context(), c, "sind-dev-worker-0", "worker-0", probe.ServiceSlurmd)
+
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "systemctl", "enable", "--now", "slurmd"}, m.Calls[0].Args)
+}
+
+func TestEnableService_FailureCarriesJournal(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Job for slurmd.service failed", fmt.Errorf("exit status 1"))
+	m.AddResult("slurmd: error: memory cgroup controller is not available.\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := enableService(t.Context(), c, "sind-dev-worker-0", "worker-0", probe.ServiceSlurmd)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabling slurmd on worker-0: ")
+	assert.Contains(t, err.Error(), "\nslurmd journal:\nslurmd: error: memory cgroup controller is not available.")
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t,
+		[]string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "-n", "20", "--no-pager", "-o", "cat"},
+		m.Calls[1].Args)
+}

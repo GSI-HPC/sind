@@ -302,6 +302,18 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmd not ready")
 }
 
+func TestUnitJournal(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("line 1\nline 2\n", "", nil)
+	c := docker.NewClient(&m)
+
+	assert.Equal(t, "line 1\nline 2", UnitJournal(t.Context(), c, testContainer, "slurmd"))
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "journalctl", "-u", "slurmd", "-n", "20", "--no-pager", "-o", "cat"},
+		m.Calls[0].Args)
+}
+
 func TestForService(t *testing.T) {
 	p := ForService(ServiceSlurmctld)
 	assert.Equal(t, "slurmctld", p.Name)
