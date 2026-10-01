@@ -112,11 +112,11 @@ func runGetClusters(cmd *cobra.Command) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/W)\tSLURM\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/D/W)\tSLURM\tSTATUS")
 	for _, c := range clusters {
-		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d)\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d/%d)\t%s\t%s\n",
 			c.Name,
-			c.NodeCount, c.Submitters, c.Controllers, c.Workers,
+			c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.Workers,
 			formatSlurmVersion(c.SlurmVersion),
 			c.State,
 		)

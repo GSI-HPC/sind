@@ -36,6 +36,10 @@ func TestGetClusters(t *testing.T) {
 			Labels: "sind.cluster=prod,sind.role=controller,sind.slurm.version=25.11.0",
 		},
 		testutil.PsEntry{
+			ID: "h", Names: "sind-prod-db", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=prod,sind.role=db,sind.slurm.version=25.11.0",
+		},
+		testutil.PsEntry{
 			ID: "e", Names: "sind-prod-submitter", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=prod,sind.role=submitter,sind.slurm.version=25.11.0",
 		},
@@ -62,14 +66,16 @@ func TestGetClusters(t *testing.T) {
 	assert.Equal(t, 3, clusters[0].NodeCount)
 	assert.Equal(t, 0, clusters[0].Submitters)
 	assert.Equal(t, 1, clusters[0].Controllers)
+	assert.Equal(t, 0, clusters[0].DBs)
 	assert.Equal(t, 2, clusters[0].Workers)
 
 	assert.Equal(t, "prod", clusters[1].Name)
 	assert.Equal(t, "25.11.0", clusters[1].SlurmVersion)
 	assert.Equal(t, StateRunning, clusters[1].State)
-	assert.Equal(t, 4, clusters[1].NodeCount)
+	assert.Equal(t, 5, clusters[1].NodeCount)
 	assert.Equal(t, 1, clusters[1].Submitters)
 	assert.Equal(t, 1, clusters[1].Controllers)
+	assert.Equal(t, 1, clusters[1].DBs)
 	assert.Equal(t, 2, clusters[1].Workers)
 }
 

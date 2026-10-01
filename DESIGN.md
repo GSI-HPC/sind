@@ -329,17 +329,18 @@ Example output:
 
 ```
 $ sind get clusters
-NAME      NODES (S/C/W)   SLURM     STATUS
-default   4 (1/1/2)       26.05.4   running
-dev       3 (0/1/2)       25.11.8   running
+NAME      NODES (S/C/D/W)   SLURM     STATUS
+default   4 (1/1/0/2)       26.05.4   running
+dev       4 (0/1/1/2)       25.11.8   running
 ```
 
-NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
+NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **W**orker. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
 
 ```
 $ sind get nodes dev
 CONTAINER            ROLE         FQDN                         IP           STATUS
 sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
+sind-dev-db          db           db.dev.sind.sind             172.19.0.5   running
 sind-dev-worker-0    worker       worker-0.dev.sind.sind       172.19.0.3   running
 sind-dev-worker-1    worker       worker-1.dev.sind.sind       172.19.0.4   running
 ```

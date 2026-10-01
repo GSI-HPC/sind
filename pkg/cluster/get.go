@@ -22,6 +22,7 @@ type Summary struct {
 	NodeCount    int    `json:"nodes"`
 	Submitters   int    `json:"submitters"`
 	Controllers  int    `json:"controllers"`
+	DBs          int    `json:"dbs"`
 	Workers      int    `json:"workers"`
 }
 
@@ -62,6 +63,8 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 		switch config.Role(c.Labels[LabelRole]) {
 		case config.RoleController:
 			cd.summary.Controllers++
+		case config.RoleDB:
+			cd.summary.DBs++
 		case config.RoleSubmitter:
 			cd.summary.Submitters++
 		case config.RoleWorker:
