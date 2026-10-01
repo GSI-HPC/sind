@@ -1417,6 +1417,113 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	assert.Contains(t, err.Error(), "not ready")
 }
 
+func TestEnableSlurm_DBFirst(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) > 3 && args[2] == "systemctl" && args[3] == "is-active" {
+			return mock.Result{Stdout: "active\n"}
+		}
+		return mock.Result{}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker, Managed: true},
+	}
+
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+	require.NoError(t, err)
+
+	// The db node's four calls (mariadb, SQL, slurmdbd, slurmdbd probe) come
+	// first and in order; slurmctld and slurmd follow in either order.
+	require.GreaterOrEqual(t, len(m.Calls), 4)
+	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "mariadb"}, m.Calls[0].Args)
+	assert.Equal(t, "mysql", m.Calls[1].Args[2])
+	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "enable", "--now", "slurmdbd"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-db", "systemctl", "is-active", "slurmdbd"}, m.Calls[3].Args)
+	var enabled []string
+	for _, call := range m.Calls[4:] {
+		assert.NotEqual(t, "sind-dev-db", call.Args[1], "db handled only in the first phase")
+		if len(call.Args) > 4 && call.Args[3] == "enable" {
+			enabled = append(enabled, call.Args[1]+" "+call.Args[5])
+		}
+	}
+	assert.ElementsMatch(t, []string{"sind-dev-controller slurmctld", "sind-dev-worker-0 slurmd"}, enabled)
+}
+
+func TestEnableSlurm_DBFailedIsTerminal(t *testing.T) {
+	exitErr := notFoundErr(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) > 4 && args[2] == "systemctl" && args[3] == "is-active" && args[4] == "slurmdbd" {
+			return mock.Result{Stdout: "failed\n", Err: exitErr}
+		}
+		if len(args) > 2 && args[2] == "journalctl" {
+			return mock.Result{Stdout: "slurmdbd: fatal: example\n"}
+		}
+		return mock.Result{}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
+	}
+
+	// No deadline: a failed slurmdbd unit must end the wait on its own.
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slurmdbd failed:\nslurmdbd: fatal: example")
+	for _, call := range m.Calls {
+		assert.NotEqual(t, "sind-dev-controller", call.Args[1], "controller untouched after the db failed")
+	}
+}
+
+func TestEnableSlurm_DBEnableError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("mariadb failed"))
+	client := docker.NewClient(&m)
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB, Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
+	}
+
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabling mariadb on db")
+	require.Len(t, m.Calls, 2, "enable, then the journal; the controller is untouched")
+	assert.Equal(t, "journalctl", m.Calls[1].Args[2])
+}
+
+func TestEnableSlurm_UnmanagedDBSkipped(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if len(args) > 2 && args[2] == "scontrol" {
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+		}
+		return mock.Result{}
+	}
+	client := docker.NewClient(&m)
+	configs := []RunConfig{
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true},
+		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "db", Role: config.RoleDB},
+	}
+
+	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, m.Calls)
+	assert.Equal(t, []string{"exec", "sind-dev-controller", "systemctl", "enable", "--now", "slurmctld"}, m.Calls[0].Args,
+		"slurmctld starts without waiting for the unmanaged db node")
+	for _, call := range m.Calls {
+		assert.NotEqual(t, "sind-dev-db", call.Args[1], "nothing runs on the unmanaged db node")
+	}
+}
+
 func TestStartWatcher_Success(t *testing.T) {
 	pipes := &mock.Pipes{}
 	m := &mock.Executor{OnStart: pipes.OnStart}
