@@ -17,9 +17,9 @@ import (
 )
 
 // Service identifies a per-node readiness check. The string value is the
-// systemd unit name for munge/sshd/slurmd and the slurm RPC endpoint name
-// for slurmctld, so it also doubles as the user-facing label for each
-// check in status output.
+// systemd unit name for munge/sshd/slurmd/slurmdbd/mariadb and the slurm RPC
+// endpoint name for slurmctld, so it also doubles as the user-facing label
+// for each check in status output.
 type Service string
 
 // Per-node readiness services managed by sind.
@@ -28,6 +28,8 @@ const (
 	ServiceSSHD      Service = "sshd"
 	ServiceSlurmctld Service = "slurmctld"
 	ServiceSlurmd    Service = "slurmd"
+	ServiceSlurmdbd  Service = "slurmdbd"
+	ServiceMariadb   Service = "mariadb"
 )
 
 // ServiceForRole returns the Slurm readiness-check service associated with
@@ -37,6 +39,8 @@ func ServiceForRole(role config.Role) (Service, bool) {
 	switch role {
 	case config.RoleController:
 		return ServiceSlurmctld, true
+	case config.RoleDB:
+		return ServiceSlurmdbd, true
 	case config.RoleWorker:
 		return ServiceSlurmd, true
 	default:
@@ -69,6 +73,8 @@ func ForService(svc Service) Probe {
 		return Probe{Name: string(svc), Check: SlurmctldReady}
 	case ServiceSlurmd:
 		return Probe{Name: string(svc), Check: SlurmdReady}
+	case ServiceSlurmdbd:
+		return Probe{Name: string(svc), Check: SlurmdbdReady}
 	default:
 		return Probe{Name: string(svc)}
 	}
@@ -84,6 +90,8 @@ func NodeProbes(role config.Role) []Probe {
 	switch role {
 	case config.RoleController:
 		probes = append(probes, Probe{"slurmctld", SlurmctldReady})
+	case config.RoleDB:
+		probes = append(probes, Probe{"slurmdbd", SlurmdbdReady})
 	case config.RoleWorker:
 		probes = append(probes, Probe{"slurmd", SlurmdReady})
 	}
@@ -326,11 +334,30 @@ func UnitJournal(ctx context.Context, client *docker.Client, name docker.Contain
 	return strings.TrimSpace(journal)
 }
 
+// SlurmdbdReady verifies that the slurmdbd service is active. A failed unit
+// does not recover on its own, so it is reported as a TerminalError carrying
+// the tail of the unit's journal to show why slurmdbd stopped.
+func SlurmdbdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	stdout, err := client.ExecAllowNonZero(ctx, name, "systemctl", "is-active", "slurmdbd")
+	if err != nil {
+		return fmt.Errorf("slurmdbd not ready: %w", err)
+	}
+	switch state := strings.TrimSpace(stdout); state {
+	case "active":
+		return nil
+	case "failed":
+		return &TerminalError{Msg: "slurmdbd failed:\n" + UnitJournal(ctx, client, name, "slurmdbd")}
+	default:
+		return fmt.Errorf("slurmdbd not ready: %s", state)
+	}
+}
+
 // Snapshot returns a one-shot readiness snapshot of the given services on a
-// running node, fusing the systemd-based checks (munge, sshd, slurmd) into a
-// single docker exec. slurmctld is checked with scontrol ping instead,
-// because "slurmctld is active" is weaker than "slurmctld answers RPCs" — the
-// unit can be active during startup while RPCs still fail.
+// running node, fusing the systemd-based checks (munge, sshd, slurmd,
+// mariadb, slurmdbd) into a single docker exec. slurmctld is checked with
+// scontrol ping instead, because "slurmctld is active" is weaker than
+// "slurmctld answers RPCs" — the unit can be active during startup while RPCs
+// still fail.
 //
 // Snapshot is intended for status-query call sites such as cluster.GetStatus.
 // Unlike the individual *Ready probes, it does not surface per-probe errors;
