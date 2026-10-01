@@ -43,9 +43,16 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 // WriteClusterConfig generates and writes slurm.conf, sind-nodes.conf, and
 // cgroup.conf to the config volume. Uses a temporary container to access the
 // volume.
+//
+// With a managed db node it also writes slurmdbd.conf and turns on accounting
+// in slurm.conf; an unmanaged db node gets neither. slurmdbd refuses a
+// slurmdbd.conf not owned by SlurmUser with mode 0600, and docker cp writes
+// files as root, so the helper then runs (like the munge helper) to fix
+// ownership and mode with docker exec.
 func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string, pull bool) error {
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
 	volName := VolumeName(realm, cfg.Name, VolumeConfig)
+	hasDB := cfg.HasManagedDB()
 
 	args := []string{
 		"--name", string(helperName),
@@ -56,14 +63,27 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	if pull {
 		args = append(args, "--pull", "always")
 	}
-	args = append(args, image)
-	_, err := client.CreateContainer(ctx, args...)
-	if err != nil {
-		return fmt.Errorf("creating config helper container: %w", err)
+	if hasDB {
+		args = append(args, image, "sleep", "30")
+		if _, err := client.RunContainer(ctx, args...); err != nil {
+			return fmt.Errorf("creating config helper container: %w", err)
+		}
+		defer func() {
+			_ = client.KillContainer(ctx, helperName)
+			_ = client.RemoveContainer(ctx, helperName)
+		}()
+	} else {
+		args = append(args, image)
+		if _, err := client.CreateContainer(ctx, args...); err != nil {
+			return fmt.Errorf("creating config helper container: %w", err)
+		}
+		defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 	}
-	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
-	confOpts := slurm.ConfOptions{BackupController: cfg.HasBackupController()}
+	confOpts := slurm.ConfOptions{
+		BackupController: cfg.HasBackupController(),
+		Accounting:       hasDB,
+	}
 	files := docker.FileContents{
 		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, confOpts)),
 		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
@@ -93,9 +113,22 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		files["plugstack.conf.d/.keep"] = nil
 	}
 
-	err = client.CopyToContainer(ctx, helperName, slurm.ConfDir, files)
-	if err != nil {
+	if hasDB {
+		files[slurm.SlurmdbdConfFile] = []byte(slurm.GenerateSlurmdbdConf(cfg.Slurm.Slurmdbd))
+		addSectionFragments(files, "slurmdbd", cfg.Slurm.Slurmdbd)
+	}
+
+	if err := client.CopyToContainer(ctx, helperName, slurm.ConfDir, files); err != nil {
 		return fmt.Errorf("writing slurm config: %w", err)
+	}
+
+	if hasDB {
+		if _, err := client.Exec(ctx, helperName, "chown", "slurm:slurm", slurm.SlurmdbdConfPath); err != nil {
+			return fmt.Errorf("fixing slurmdbd.conf ownership: %w", err)
+		}
+		if _, err := client.Exec(ctx, helperName, "chmod", "0600", slurm.SlurmdbdConfPath); err != nil {
+			return fmt.Errorf("fixing slurmdbd.conf permissions: %w", err)
+		}
 	}
 
 	return nil
