@@ -30,7 +30,7 @@ type ServiceHealth map[probe.Service]bool
 type NodeHealth struct {
 	State    docker.ContainerState `json:"status"`       // container state from Docker (e.g. "running", "exited")
 	IP       string                `json:"ip"`           // container IP address
-	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge, sshd, and on managed nodes the role's slurmctld/slurmd)
+	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge, sshd, and on managed nodes the role's slurmctld/slurmd, or mariadb and slurmdbd)
 	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
@@ -236,7 +236,7 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
 	Name    string      `json:"name"`    // DNS-style name: "controller.dev"
-	Role    config.Role `json:"role"`    // "controller", "submitter", "worker"
+	Role    config.Role `json:"role"`    // "controller", "db", "submitter", "worker"
 	Managed bool        `json:"managed"` // sind manages Slurm on the node (see IsManaged)
 	Health  *NodeHealth `json:"health"`  //nolint:revive // nested health is intentional
 }
@@ -361,8 +361,8 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}, nil
 }
 
-// nodeStatusOrder returns a sort key for NodeStatus (controller, submitter,
-// worker) with natural ordering of any numeric suffixes in the node name.
+// nodeStatusOrder returns a sort key for NodeStatus (controller, db,
+// submitter, worker) with natural ordering of any numeric suffixes in the node name.
 // The key uses the short name, so "controller" sorts before
 // "controller-backup" ("-" < "." would otherwise put "controller-backup.dev"
 // first).
@@ -372,10 +372,17 @@ func nodeStatusOrder(n *NodeStatus) string {
 }
 
 // nodeServices returns the services checked on a node: munge and sshd, plus
-// the role's Slurm daemon when sind manages Slurm on the node.
+// the role's Slurm daemon when sind manages Slurm on the node. A managed db
+// node reports mariadb next to slurmdbd.
 func nodeServices(role config.Role, managed bool) []probe.Service {
 	services := []probe.Service{probe.ServiceMunge, probe.ServiceSSHD}
-	if svc, ok := probe.ServiceForRole(role); ok && managed {
+	if !managed {
+		return services
+	}
+	if role == config.RoleDB {
+		return append(services, probe.ServiceMariadb, probe.ServiceSlurmdbd)
+	}
+	if svc, ok := probe.ServiceForRole(role); ok {
 		services = append(services, svc)
 	}
 	return services

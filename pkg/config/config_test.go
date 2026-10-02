@@ -414,6 +414,47 @@ func TestValidate_Valid(t *testing.T) {
 			},
 		},
 		{
+			name: "all roles",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDB},
+				{Role: RoleSubmitter},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "unmanaged db in a managed cluster",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDB, Managed: testutil.Ptr(false)},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "managed: true on db",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDB, Managed: testutil.Ptr(true)},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "unmanaged db in an unmanaged cluster",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleDB, Managed: testutil.Ptr(false)},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "db in an unmanaged cluster",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleDB},
+				{Role: RoleWorker},
+			},
+		},
+		{
 			name: "controller with backupController",
 			nodes: []Node{
 				{Role: RoleController, BackupController: true},
@@ -520,6 +561,43 @@ func TestValidate_Constraints(t *testing.T) {
 		wantErr string
 	}{
 		{
+			name: "multiple dbs",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDB},
+				{Role: RoleDB},
+				{Role: RoleWorker},
+			},
+			wantErr: "at most one db node allowed, got 2",
+		},
+		{
+			name: "count on db",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDB, Count: 2},
+				{Role: RoleWorker},
+			},
+			wantErr: "count is only valid for worker",
+		},
+		{
+			name: "managed db under unmanaged controller",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleDB, Managed: testutil.Ptr(true)},
+				{Role: RoleWorker},
+			},
+			wantErr: "db managed: true requires a managed controller",
+		},
+		{
+			name: "backupController on db",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleDB, BackupController: true},
+				{Role: RoleWorker},
+			},
+			wantErr: "backupController is only valid for controller",
+		},
+		{
 			name: "multiple submitters",
 			nodes: []Node{
 				{Role: RoleController},
@@ -553,7 +631,7 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: "compute"},
 				{Role: RoleWorker},
 			},
-			wantErr: `invalid role "compute"`,
+			wantErr: `invalid role "compute", must be one of: controller, db, submitter, worker`,
 		},
 		{
 			name: "managed false on submitter",
@@ -562,7 +640,7 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: RoleSubmitter, Managed: testutil.Ptr(false)},
 				{Role: RoleWorker},
 			},
-			wantErr: `managed is only valid for controller and worker nodes, not "submitter"`,
+			wantErr: `managed is only valid for controller, db and worker nodes, not "submitter"`,
 		},
 		{
 			name: "managed true on submitter",
@@ -571,7 +649,7 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: RoleSubmitter, Managed: testutil.Ptr(true)},
 				{Role: RoleWorker},
 			},
-			wantErr: `managed is only valid for controller and worker nodes, not "submitter"`,
+			wantErr: `managed is only valid for controller, db and worker nodes, not "submitter"`,
 		},
 		{
 			name: "managed worker under unmanaged controller",
@@ -898,6 +976,30 @@ slurm:
 		require.Len(t, cfg.Slurm.Plugstack.Fragments, 1)
 	})
 
+	t.Run("slurmdbd string form", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  slurmdbd: |
+    ArchiveEvents=yes`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		assert.Contains(t, cfg.Slurm.Slurmdbd.Content, "ArchiveEvents=yes")
+	})
+
+	t.Run("slurmdbd map form", func(t *testing.T) {
+		input := `kind: Cluster
+slurm:
+  slurmdbd:
+    archive: |
+      ArchiveEvents=yes`
+
+		cfg, err := Parse([]byte(input))
+		require.NoError(t, err)
+		require.Len(t, cfg.Slurm.Slurmdbd.Fragments, 1)
+		assert.Contains(t, cfg.Slurm.Slurmdbd.Fragments["archive"], "ArchiveEvents=yes")
+	})
+
 	t.Run("no slurm section", func(t *testing.T) {
 		cfg, err := Parse([]byte("kind: Cluster"))
 		require.NoError(t, err)
@@ -906,6 +1008,7 @@ slurm:
 		assert.True(t, cfg.Slurm.Gres.IsEmpty())
 		assert.True(t, cfg.Slurm.Topology.IsEmpty())
 		assert.True(t, cfg.Slurm.Plugstack.IsEmpty())
+		assert.True(t, cfg.Slurm.Slurmdbd.IsEmpty())
 	})
 }
 
@@ -1027,6 +1130,7 @@ func TestValidate_UnmanagedSlurmSections(t *testing.T) {
 		"gres":      func(s *Slurm) { s.Gres = Section{Fragments: map[string]string{"gpu": "Name=gpu\n"}} },
 		"topology":  func(s *Slurm) { s.Topology = Section{Content: "SwitchName=s0\n"} },
 		"plugstack": func(s *Slurm) { s.Plugstack = Section{Content: "optional x.so\n"} },
+		"slurmdbd":  func(s *Slurm) { s.Slurmdbd = Section{Content: "ArchiveEvents=yes\n"} },
 	}
 	for name, set := range sections {
 		t.Run("rejects "+name, func(t *testing.T) {
@@ -1064,6 +1168,48 @@ func TestSection_SetsParameter(t *testing.T) {
 
 	frag := Section{Fragments: map[string]string{"a": "X=1\n", "b": "SlurmctldTimeout=60\n"}}
 	assert.True(t, frag.SetsParameter("SlurmctldTimeout"))
+}
+
+func TestValidate_SlurmdbdSection(t *testing.T) {
+	cfg := &Cluster{
+		Kind:  "Cluster",
+		Name:  "default",
+		Nodes: []Node{{Role: RoleController}, {Role: RoleWorker}},
+		Slurm: Slurm{Slurmdbd: Section{Content: "ArchiveEvents=yes\n"}},
+	}
+	const wantErr = "slurm slurmdbd requires a managed db node: sind writes no slurmdbd.conf for an unmanaged one"
+	err := cfg.Validate()
+	require.EqualError(t, err, wantErr)
+
+	cfg.Nodes = append(cfg.Nodes, Node{Role: RoleDB, Managed: testutil.Ptr(false)})
+	require.EqualError(t, cfg.Validate(), wantErr)
+
+	cfg.Nodes[2].Managed = nil
+	require.NoError(t, cfg.Validate())
+
+	cfg.Slurm.Slurmdbd = Section{Fragments: map[string]string{"archive": ""}}
+	err = cfg.Validate()
+	require.EqualError(t, err, `slurm slurmdbd fragment "archive" must not be empty`)
+}
+
+func TestCluster_HasManagedDB(t *testing.T) {
+	tests := []struct {
+		name  string
+		nodes []Node
+		want  bool
+	}{
+		{"no db", []Node{{Role: RoleController}, {Role: RoleWorker}}, false},
+		{"db", []Node{{Role: RoleController}, {Role: RoleDB}, {Role: RoleWorker}}, true},
+		{"managed: true db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(true)}, {Role: RoleWorker}}, true},
+		{"unmanaged db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, false},
+		{"db in an unmanaged cluster", []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleDB}, {Role: RoleWorker}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Cluster{Nodes: tt.nodes}
+			assert.Equal(t, tt.want, c.HasManagedDB())
+		})
+	}
 }
 
 func TestCluster_HasBackupController(t *testing.T) {

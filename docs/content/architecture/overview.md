@@ -29,6 +29,9 @@ Containers require specific security options for systemd:
 - `--security-opt label=disable` — SELinux compatibility
 - `--tmpfs /run:exec,mode=755` — systemd runtime directory
 - `--tmpfs /run/lock` — systemd lock files
+- `--entrypoint /bin/sh` with a short script — PID 1 moves itself into `init.scope`, enables every available cgroup controller in the root cgroup's `cgroup.subtree_control`, then execs `/sbin/init`
+
+`docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and with a process there systemd can no longer enable them (cgroup v2's no internal processes rule). Enabling them before systemd starts keeps a `docker exec` of sind's from racing systemd's boot, so `Delegate=yes` daemons such as slurmd always get the memory and cpu controllers.
 
 ## Concurrency
 
@@ -49,7 +52,7 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 - `createResources` creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key, the data volume (unless the data is a host path) and, for a backup controller pair, the state volume, all in parallel.
 - `resolveInfra` looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
 - `setupNodes` creates, waits for, and sets up SSH and host keys on every node.
-- `enableSlurm` starts slurmctld and slurmd on managed clusters only.
+- `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd.
 - If any step fails, `sind create cluster` removes what it created.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
@@ -73,6 +76,9 @@ When an event arrives, probes re-evaluate immediately instead of waiting for the
 | munge ready | munge service active |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (managed workers only) |
+| slurmdbd ready | slurmdbd service active (managed db nodes); a failed unit fails `sind create cluster` at once with the unit's journal tail. mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
+
+With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), mariadb and slurmdbd are started and slurmdbd must be ready before slurmctld and slurmd are enabled.
 
 ## Docker CLI, not SDK
 

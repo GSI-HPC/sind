@@ -81,7 +81,7 @@ type RunConfig struct {
 	Realm           string      // realm name (e.g. "sind")
 	ClusterName     string      // cluster name
 	ShortName       string      // node hostname: "controller", "worker-0"
-	Role            config.Role // "controller", "submitter", "worker"
+	Role            config.Role // "controller", "db", "submitter", "worker"
 	Image           string      // container image
 	CPUs            int         // CPU limit
 	Memory          string      // memory limit (e.g. "2g")
@@ -211,11 +211,33 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "--pull", "always")
 	}
 
-	// Image (must be last for docker create/run)
-	args = append(args, cfg.Image)
+	// Entrypoint: delegate the cgroup controllers, then start systemd
+	args = append(args, "--entrypoint", "/bin/sh")
+
+	// Image, followed by the entrypoint's arguments
+	args = append(args, cfg.Image, "-c", NodeEntrypoint)
 
 	return args
 }
+
+// NodeEntrypoint is the shell script every node container starts with, as
+// PID 1, before it execs systemd. It moves itself into init.scope and enables
+// all available controllers in the root cgroup's cgroup.subtree_control.
+//
+// docker exec places its process in the container's root cgroup unless that
+// cgroup has controllers enabled; runc then falls back to init's cgroup. A
+// process in the root cgroup makes every later write to its
+// cgroup.subtree_control fail with EBUSY (cgroup v2's no internal processes
+// rule). Without this script, a docker exec of sind's that lands before
+// systemd has enabled controllers keeps systemd from ever doing so, and
+// daemons with Delegate=yes get none: slurmd then cannot use the memory or
+// cpu controller, which jobacct_gather/cgroup needs. Each controller is
+// enabled on its own, as one write of all of them fails as a whole if the
+// kernel refuses one. Failures are ignored so the node still boots.
+const NodeEntrypoint = `cg=/sys/fs/cgroup
+mkdir -p $cg/init.scope && echo $$ > $cg/init.scope/cgroup.procs
+for c in $(cat $cg/cgroup.controllers); do echo +$c > $cg/cgroup.subtree_control; done 2>/dev/null
+exec /sbin/init`
 
 // CreateNode creates a node container, connects it to the mesh network,
 // and starts it. Returns the container ID.
@@ -241,9 +263,9 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 
 // NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
 // Worker nodes are indexed sequentially across all worker groups. In an
-// unmanaged cluster every node is unmanaged; otherwise only workers with
-// managed: false are. cvmfs is the backend every node mounts CVMFS with
-// (see DetectCVMFS), empty for none.
+// unmanaged cluster every node is unmanaged; otherwise only workers and db
+// nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
+// with (see DetectCVMFS), empty for none.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
 	workerIdx := 0
@@ -260,7 +282,11 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
-		case config.RoleController, config.RoleSubmitter:
+		case config.RoleController, config.RoleDB, config.RoleSubmitter:
+			nodeManaged := clusterManaged
+			if n.Role == config.RoleDB && n.Managed != nil && !*n.Managed {
+				nodeManaged = false
+			}
 			base := RunConfig{
 				Realm:           realm,
 				ClusterName:     cfg.Name,
@@ -274,7 +300,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				DNSIP:           dnsIP,
 				DataHostPath:    dataHostPath,
 				DataMountPath:   dataMountPath,
-				Managed:         clusterManaged,
+				Managed:         nodeManaged,
 				ContainerNumber: 1,
 				Pull:            cfg.Pull,
 				CapAdd:          n.CapAdd,

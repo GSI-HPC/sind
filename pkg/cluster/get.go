@@ -22,6 +22,7 @@ type Summary struct {
 	NodeCount    int    `json:"nodes"`
 	Submitters   int    `json:"submitters"`
 	Controllers  int    `json:"controllers"`
+	DBs          int    `json:"dbs"`
 	Workers      int    `json:"workers"`
 }
 
@@ -62,6 +63,8 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 		switch config.Role(c.Labels[LabelRole]) {
 		case config.RoleController:
 			cd.summary.Controllers++
+		case config.RoleDB:
+			cd.summary.DBs++
 		case config.RoleSubmitter:
 			cd.summary.Submitters++
 		case config.RoleWorker:
@@ -94,7 +97,8 @@ type NodeSummary struct {
 // NodeDetail holds the full identity and health information for a single node
 // as reported by 'sind get node'. It extends NodeSummary with a per-service
 // health map. All readiness-checked services (munge, sshd, and on managed
-// nodes the role's Slurm service) are reported under Services.
+// nodes the role's Slurm service, or mariadb and slurmdbd on a db node) are
+// reported under Services.
 type NodeDetail struct {
 	Container string                `json:"container"`
 	Cluster   string                `json:"cluster"`
@@ -190,15 +194,17 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 }
 
 // rolePrefix returns a single-character sort prefix that orders nodes by role
-// (controller < submitter < worker < other).
+// (controller < db < submitter < worker < other).
 func rolePrefix(role config.Role) string {
 	switch role {
 	case config.RoleController:
 		return "0"
-	case config.RoleSubmitter:
+	case config.RoleDB:
 		return "1"
-	case config.RoleWorker:
+	case config.RoleSubmitter:
 		return "2"
+	case config.RoleWorker:
+		return "3"
 	default:
 		return "9"
 	}

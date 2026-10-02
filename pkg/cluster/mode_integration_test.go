@@ -362,6 +362,7 @@ nodes:
   - role: controller
     managed: false
     backupController: true
+  - db
   - submitter
   - worker
 `, clusterName, img)))
@@ -372,7 +373,7 @@ nodes:
 	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
 	require.NoError(t, err)
 	assert.Empty(t, result.SlurmVersion)
-	require.Len(t, result.Nodes, 4)
+	require.Len(t, result.Nodes, 5)
 
 	primary := ContainerName(realm, clusterName, "controller")
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
@@ -391,6 +392,12 @@ nodes:
 	out, err = c.ExecAllowNonZero(ctx, worker, "systemctl", "is-active", "slurmd")
 	require.NoError(t, err)
 	assert.NotEqual(t, "active", strings.TrimSpace(out), "slurmd on %s", worker)
+	db := ContainerName(realm, clusterName, "db")
+	for _, unit := range []string{"mariadb", "slurmdbd"} {
+		out, err = c.ExecAllowNonZero(ctx, db, "systemctl", "is-active", unit)
+		require.NoError(t, err)
+		assert.NotEqual(t, "active", strings.TrimSpace(out), "%s on the bare db node", unit)
+	}
 
 	// The config volume is shared and writable on the controllers only.
 	_, err = c.Exec(ctx, primary, "touch", slurm.ConfDir+"/from-controller")
@@ -417,7 +424,7 @@ nodes:
 	status, err := GetStatus(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.Empty(t, status.SlurmVersion)
-	require.Len(t, status.Nodes, 4)
+	require.Len(t, status.Nodes, 5)
 	for _, n := range status.Nodes {
 		assert.False(t, n.Managed, n.Name)
 		assert.Nil(t, n.Health.HA, n.Name)
@@ -464,6 +471,187 @@ PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP
 	out, err = c.Exec(ctx, primary, "ls", "-A", slurm.ConfDir)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"cgroup.conf", "slurm.conf"}, strings.Fields(out))
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestDBNodeAccounting(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	// Bound the test so a db service stuck in startup fails here instead of
+	// running into the package-wide go test timeout.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-db")
+	clusterName := "it-db"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+slurm:
+  slurmdbd: |
+    DebugLevel=info
+nodes:
+  - controller
+  - db
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	result, err := Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+	assert.Equal(t, StateRunning, result.State)
+	require.Len(t, result.Nodes, 3)
+
+	// slurmdbd.conf carries the slurmdbd section and the ownership and mode
+	// slurmdbd insists on.
+	db := ContainerName(realm, clusterName, "db")
+	out, err := c.Exec(ctx, db, "stat", "-c", "%U:%G %a", slurm.SlurmdbdConfPath)
+	require.NoError(t, err)
+	assert.Equal(t, "slurm:slurm 600", strings.TrimSpace(out))
+	out, err = c.Exec(ctx, db, "cat", slurm.SlurmdbdConfPath)
+	require.NoError(t, err)
+	assert.Contains(t, out, "DebugLevel=info")
+
+	// The controller sends accounting data to slurmdbd on the db node.
+	controller := ContainerName(realm, clusterName, "controller")
+	out, err = c.Exec(ctx, controller, "scontrol", "show", "config")
+	require.NoError(t, err)
+	assert.Contains(t, out, "AccountingStorageType   = accounting_storage/slurmdbd")
+	assert.Contains(t, out, "AccountingStorageHost   = db")
+	assert.Contains(t, out, "JobAcctGatherType       = jobacct_gather/cgroup")
+
+	// slurmctld registers the cluster with slurmdbd on startup; the
+	// registration can land after slurmctld answers pings.
+	assert.Eventually(t, func() bool {
+		out, err := c.Exec(ctx, controller, "sacctmgr", "-n", "-P", "show", "cluster", "format=cluster")
+		return err == nil && strings.Contains(out, clusterName)
+	}, time.Minute, time.Second, "cluster %q not registered with slurmdbd", clusterName)
+
+	// A finished job is recorded in the accounting database.
+	waitNodeIdle(t, c, controller, "worker-0")
+	out, err = c.Exec(ctx, controller, "srun", "-N1", "hostname")
+	require.NoError(t, err)
+	assert.Equal(t, "worker-0", strings.TrimSpace(out))
+	assert.Eventually(t, func() bool {
+		out, err := c.Exec(ctx, controller, "sacct", "-a", "-n", "-X", "-P", "-o", "JobName,State")
+		return err == nil && strings.Contains(out, "hostname|COMPLETED")
+	}, time.Minute, time.Second, "job not recorded by sacct")
+
+	// get cluster reports mariadb and slurmdbd healthy on the db node.
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	var dbNode *NodeStatus
+	for _, n := range status.Nodes {
+		if n.Role == config.RoleDB {
+			dbNode = n
+		}
+	}
+	require.NotNil(t, dbNode, "db node missing from status")
+	assert.Equal(t, ServiceHealth{
+		probe.ServiceMunge: true, probe.ServiceSSHD: true,
+		probe.ServiceMariadb: true, probe.ServiceSlurmdbd: true,
+	}, dbNode.Health.Services)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestUnmanagedDBNode(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-db-unmanaged")
+	clusterName := "it-db-unmanaged"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+nodes:
+  - controller
+  - role: db
+    managed: false
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+
+	// sind configures no accounting and starts nothing on the db node.
+	controller := ContainerName(realm, clusterName, "controller")
+	conf, err := c.ReadFile(ctx, controller, slurm.ConfDir+"/slurm.conf")
+	require.NoError(t, err)
+	assert.NotContains(t, conf, "AccountingStorage")
+	assert.NotContains(t, conf, "JobAcctGather")
+	_, err = c.Exec(ctx, controller, "test", "-e", slurm.SlurmdbdConfPath)
+	assert.Error(t, err, "no slurmdbd.conf")
+	db := ContainerName(realm, clusterName, "db")
+	for _, unit := range []string{"mariadb", "slurmdbd"} {
+		out, err := c.ExecAllowNonZero(ctx, db, "systemctl", "is-active", unit)
+		require.NoError(t, err)
+		assert.NotEqual(t, "active", strings.TrimSpace(out), "%s on the unmanaged db node", unit)
+	}
+
+	// Slurm itself is sind's and runs jobs.
+	waitNodeIdle(t, c, controller, "worker-0")
+	out, err := c.Exec(ctx, controller, "srun", "-N1", "hostname")
+	require.NoError(t, err)
+	assert.Equal(t, "worker-0", strings.TrimSpace(out))
+
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	var dbNode *NodeStatus
+	for _, n := range status.Nodes {
+		if n.Role == config.RoleDB {
+			dbNode = n
+		}
+	}
+	require.NotNil(t, dbNode, "db node missing from status")
+	assert.False(t, dbNode.Managed)
+	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, dbNode.Health.Services)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

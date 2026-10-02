@@ -45,7 +45,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 
 **Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
 1. Create cluster network
-2. Create config volume → write Slurm configuration (managed clusters only; see Unmanaged Cluster)
+2. Create config volume → write Slurm configuration, and `slurmdbd.conf` for a managed db node (managed clusters only; see Unmanaged Cluster)
 3. Create munge volume → generate and write munge key
 4. Create data volume (if needed)
 5. Create state volume (backup controller only)
@@ -54,6 +54,8 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 1. Create and start each node container in parallel
 2. Start per-node systemd D-Bus monitor immediately after each container starts
 3. Wait for each node to become ready, accelerated by events
+
+Every node container starts with a short `/bin/sh` entrypoint instead of the image's own entrypoint or command. As PID 1, it moves itself into `init.scope`, enables each controller of the container's root cgroup in its `cgroup.subtree_control`, and execs `/sbin/init`. `docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and a process there makes systemd's own attempt to enable them fail (cgroup v2's no internal processes rule). An exec of sind's that landed before systemd had enabled controllers would otherwise leave every unit without them, including `Delegate=yes` daemons such as slurmd.
 
 There is no barrier between node creation and readiness probing — each node's goroutine creates its container, starts a systemd monitor, and begins probing in a single pipeline. This allows early-starting nodes to be probed while later nodes are still being created.
 
@@ -76,12 +78,15 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | munge ready | munge service active |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (managed workers only) |
+| slurmdbd ready | slurmdbd service active (managed db nodes); a failed unit fails `sind create cluster` at once with the unit's journal tail. mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
 
 If any node fails to become ready within the timeout, `sind create cluster` fails, reports which nodes/checks failed and removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
 
 **Phase 4: Mesh Registration and Slurm** (concurrent)
 
 After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts) and Slurm enablement concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
+
+With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmctld registers the cluster with slurmdbd when it starts (see Database Node).
 
 ### Design Goals
 
@@ -327,17 +332,18 @@ Example output:
 
 ```
 $ sind get clusters
-NAME      NODES (S/C/W)   SLURM     STATUS
-default   4 (1/1/2)       26.05.4   running
-dev       3 (0/1/2)       25.11.8   running
+NAME      NODES (S/C/D/W)   SLURM     STATUS
+default   4 (1/1/0/2)       26.05.4   running
+dev       4 (0/1/1/2)       25.11.8   running
 ```
 
-NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **W**orker. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
+NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **W**orker. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
 
 ```
 $ sind get nodes dev
 CONTAINER            ROLE         FQDN                         IP           STATUS
 sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
+sind-dev-db          db           db.dev.sind.sind             172.19.0.5   running
 sind-dev-worker-0    worker       worker-0.dev.sind.sind       172.19.0.3   running
 sind-dev-worker-1    worker       worker-1.dev.sind.sind       172.19.0.4   running
 ```
@@ -361,7 +367,7 @@ sind-dev-worker-10       dev       worker       worker-10.dev.sind.sind         
 ```
 $ sind get cluster dev
 CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.8   running (3/0/0/3)
+dev       25.11.8   running (4/0/0/4)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -381,15 +387,16 @@ MOUNT        SOURCE                    TYPE       STATUS
 NODES
 NAME              ROLE        IP            STATUS    SERVICES
 controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
 worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
-`SERVICES` lists munge and sshd for every node, plus slurmctld or slurmd where sind manages Slurm. Unmanaged nodes (unmanaged workers, and every node of an unmanaged cluster) list only munge and sshd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
+`SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, or mariadb and slurmdbd on a db node, where sind manages Slurm. Unmanaged nodes (unmanaged workers and db nodes, and every node of an unmanaged cluster) list only munge and sshd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
-Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Workers and submitters leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
+Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Other nodes leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
 
 ```
 NODES
@@ -521,6 +528,7 @@ Examples:
 sind logs controller --follow          # tail container logs
 sind logs controller slurmctld         # slurmctld journal logs
 sind logs worker-0 slurmd --follow    # follow slurmd logs
+sind logs db slurmdbd                  # slurmdbd journal logs on the db node
 ```
 
 ### Utilities
@@ -684,6 +692,8 @@ slurm:
     SelectTypeParameters=CR_Core_Memory
   cgroup: |                              # appended to cgroup.conf
     ConstrainCores=yes
+  slurmdbd: |                            # appended to slurmdbd.conf (needs a managed db node)
+    PurgeJobAfter=1month
 
 nodes:
   - role: controller
@@ -691,6 +701,8 @@ nodes:
     cpus: 1
     memory: 1g
     backupController: true               # add controller-backup (active/passive pair)
+
+  - role: db                             # optional, at most one: MariaDB + slurmdbd
 
   - role: submitter                      # optional, at most one
 
@@ -718,6 +730,7 @@ The `slurm` key contains named sections that map to Slurm config files. Each sec
 | `gres` | `gres.conf` | no |
 | `topology` | `topology.conf` | no |
 | `plugstack` | `plugstack.conf` | yes (always scaffolded) |
+| `slurmdbd` | `slurmdbd.conf` | yes (needs a managed `db` node) |
 
 **String form** — content appended to the config file:
 
@@ -769,6 +782,7 @@ Validation rules:
 | Role | Count | Required | Slurm Daemons | Description |
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
+| `db` | 0-1 | no | mariadb, slurmdbd | Accounting database (see Database Node) |
 | `submitter` | 0-1 | no | none (clients only) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
@@ -785,7 +799,7 @@ Validation rules:
 | `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
 | `securityOpt` | global + per-node | none | Extra security options |
 | `count` | worker only | `1` | Number of worker nodes |
-| `managed` | controller + worker | `true` | Worker: start slurmd and add to slurm.conf. Controller: `false` makes the whole cluster unmanaged (see Unmanaged Cluster) |
+| `managed` | controller + db + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see Database Node). Controller: `false` makes the whole cluster unmanaged (see Unmanaged Cluster) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` |
 
 Per-node scalar values override the `defaults` section. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
@@ -794,11 +808,13 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 
 - `nodes` - optional; if omitted, creates 1 controller + 1 worker
 - `role: controller` - exactly one (auto-created if nodes omitted)
+- `role: db` - at most one
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
 - `count` - only valid for worker role; must not be negative, and `0` means the default, 1
-- `managed` - only valid for controller and worker roles; with `managed: false` on the controller, no worker may set `managed: true` and no `slurm` section may be set
+- `managed` - only valid for controller, db and worker roles; with `managed: false` on the controller, no worker or db node may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
+- `slurm.slurmdbd` - requires a managed `db` node
 - `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
 - `devices` - absolute paths
 - `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute
@@ -852,6 +868,27 @@ nodes:
 
 The runtime command `sind create controller --unmanaged` is not provided: the mode is fixed at cluster creation.
 
+### Database Node
+
+A `db` node runs MariaDB and slurmdbd, so the cluster records job accounting:
+
+```yaml
+nodes:
+  - controller
+  - db
+  - worker: 2
+```
+
+- The container is `<realm>-<cluster>-db` with hostname `db`; it gets the defaults and per-node parameters like any node, but not `count` or `backupController`.
+- sind writes `slurmdbd.conf` to the config volume, owned by `slurm` with mode `0600` as slurmdbd requires: `DbdHost=db`, `SlurmUser=slurm`, the log in `/var/log/slurm/slurmdbd.log`, the pid file in `/run/slurmdbd`, and MariaDB storage on `localhost` (database `slurm_acct_db`, user `slurm` without a password). `slurm.slurmdbd` extends it like the other sections.
+- `slurm.conf` gets `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup`, each unless `slurm.main` sets it. sind sets no `AccountingStorageEnforce`: jobs run without users, accounts or associations, and `sacct` reports them.
+- At creation, sind enables mariadb, creates the database and the `slurm` database user, enables slurmdbd and waits for it before enabling slurmctld and slurmd. slurmdbd creates its schema and slurmctld registers the cluster (`sacctmgr show cluster`) on their first start. A failed slurmdbd fails `sind create cluster` with the unit's journal tail.
+- `sind get cluster` and `sind get node` report mariadb and slurmdbd for the db node, and `sind get clusters` counts it in `NODES (S/C/D/W)`.
+- `managed: false` on the db node of a managed cluster makes it a bare node, labelled `sind.managed=false`, for testing your own slurmdbd provisioning while sind runs slurmctld and slurmd. sind then configures no accounting at all: no `slurmdbd.conf` (a `slurm.slurmdbd` section is rejected), no database, and none of the accounting parameters in `slurm.conf`; add them to `slurm.main` to point slurmctld at your slurmdbd. `slurmctld` starts without waiting for the db node, and `sind get cluster` lists only munge and sshd for it.
+- In an unmanaged cluster the db node is a bare node like the others: sind starts neither MariaDB nor slurmdbd and writes no `slurmdbd.conf`, leaving them to the provisioning under test.
+
+Each cluster has its own db node; clusters do not share a slurmdbd.
+
 ## Docker Resources
 
 ### Per-Cluster Resources
@@ -861,6 +898,7 @@ The runtime command `sind create controller --unmanaged` is not provided: the mo
 | Network | `<realm>-<cluster>-net` | `sind-dev-net` |
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
 | Backup controller | `<realm>-<cluster>-controller-backup` | `sind-dev-controller-backup` |
+| Db | `<realm>-<cluster>-db` | `sind-dev-db` |
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
@@ -885,14 +923,14 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 
 ## Volume Mounts
 
-| Volume | Mount Point | Controller | Worker | Submitter |
-|--------|-------------|------------|---------|-----------|
-| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
-| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
-| `<realm>-<cluster>-data` | `/data` | rw | rw | rw |
-| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
-| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro (`storage.cvmfs` only) |
-| tmpfs | `/tmp` | per-node | per-node | per-node |
+| Volume | Mount Point | Controller | Db | Worker | Submitter |
+|--------|-------------|------------|----|---------|-----------|
+| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro |
+| `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw |
+| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — |
+| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro (`storage.cvmfs` only) |
+| tmpfs | `/tmp` | per-node | per-node | per-node | per-node |
 
 ### Mount Options
 
@@ -980,7 +1018,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
-| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
+| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and db nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
 | `sind.data.mountpath` | `/shared` | Data mount point, when not `/data` |
@@ -1215,7 +1253,7 @@ The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UC
 Custom images must provide:
 
 **All roles:**
-- systemd as init (PID 1)
+- systemd as init at `/sbin/init`, and `/bin/sh`: sind starts each node with its own `/bin/sh` entrypoint, which execs `/sbin/init` (see Container Startup), so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
 - sshd service (enabled, sind injects authorized_keys at runtime)
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (e.g. `0400 root:root`; Rocky's default `0000` is not). On nodes with `apparmor=unconfined`, the host's `unix-chkpwd` AppArmor profile (e.g. Ubuntu 24.04) denies that capability, and sshd's `pam_unix` account check would refuse root
 - munge service (enabled)
@@ -1226,6 +1264,7 @@ Custom images must provide:
 | Role | Additional Requirements |
 |------|------------------------|
 | controller | slurmctld (installed, not enabled) |
+| db | mariadb-server with the `mysql` client, root access to MariaDB over its local socket without a password, slurmdbd (installed, not enabled) with a unit that creates `/run/slurmdbd` for the `slurm` user, a `slurm` user with the same uid as in the controller's image (sind sets `slurmdbd.conf`'s owner from there), and `/var/log/slurm` writable by it |
 | worker | slurmd (installed, not enabled) |
 | submitter | Slurm client tools only |
 
@@ -1261,7 +1300,9 @@ sind generates a multi-file configuration structure:
 ├── gres.conf               # generic resources (if slurm.gres is set)
 ├── gres.conf.d/            # gres fragments (if slurm.gres is a map)
 ├── topology.conf           # network topology (if slurm.topology is set)
-└── topology.conf.d/        # topology fragments (if slurm.topology is a map)
+├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
+├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
+└── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
 ```
 
 The main `slurm.conf` always contains:
@@ -1286,6 +1327,10 @@ Nodes with `managed: false` in the cluster config are excluded from `sind-nodes.
 #### cgroup.conf
 
 sind generates a `cgroup.conf` for cgroupv2 support on worker nodes. This enables resource isolation and accounting for jobs.
+
+#### slurmdbd.conf
+
+Only generated for a cluster with a managed db node (not with `managed: false`), together with the accounting parameters in `slurm.conf`; see Database Node.
 
 #### User Customization
 
@@ -1398,23 +1443,3 @@ sind start cluster [NAME]              # start previously stopped cluster
 - Slurm daemons resume normal operation
 
 This enables resource conservation when clusters are not actively in use without losing cluster state or configuration.
-
-### Database Role (slurmdbd)
-
-Planned support for a dedicated database node role:
-
-```yaml
-nodes:
-  - role: db                           # slurmdbd + MariaDB
-  - role: controller
-  - role: worker
-    count: 3
-```
-
-The `db` role would run slurmdbd and MariaDB for job accounting. sind would:
-- Generate `slurmdbd.conf` with appropriate settings
-- Configure `slurm.conf` to use the accounting database
-- Initialize the MariaDB database schema
-
-This enables testing of Slurm accounting features and multi-cluster federation scenarios.
-

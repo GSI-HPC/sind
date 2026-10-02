@@ -13,6 +13,7 @@ toc: true
 | Network | `<realm>-<cluster>-net` | `sind-dev-net` |
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
 | Backup controller | `<realm>-<cluster>-controller-backup` | `sind-dev-controller-backup` |
+| Db | `<realm>-<cluster>-db` | `sind-dev-db` |
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
@@ -35,16 +36,16 @@ The mesh images do not follow `defaults.image`: the SSH relay always runs `sind-
 
 ## Volume mounts
 
-| Volume | Mount point | Controller | Worker | Submitter |
-|--------|------------|------------|--------|-----------|
-| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro |
-| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro |
-| `<realm>-<cluster>-data` | `/data` | rw | rw | rw |
-| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — |
-| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro (`storage.cvmfs` only) |
-| tmpfs | `/tmp` | configurable | configurable | configurable |
-| tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 |
-| tmpfs | `/run/lock` | — | — | — |
+| Volume | Mount point | Controller | Db | Worker | Submitter |
+|--------|------------|------------|----|--------|-----------|
+| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro |
+| `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw |
+| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — |
+| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro (`storage.cvmfs` only) |
+| tmpfs | `/tmp` | configurable | configurable | configurable | configurable |
+| tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 | exec,mode=755 |
+| tmpfs | `/run/lock` | — | — | — | — |
 
 Unmanaged clusters use the same mounts; their config volume starts empty.
 
@@ -87,7 +88,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
-| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
+| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and db nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
 | `sind.data.mountpath` | `/shared` | Data mount point, when `storage.dataStorage.mountPath` is not `/data` |

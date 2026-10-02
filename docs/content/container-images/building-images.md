@@ -60,7 +60,7 @@ Custom images must provide the following:
 
 ### All roles
 
-- **systemd** as init (PID 1)
+- **systemd** as init at `/sbin/init`, and `/bin/sh`: sind starts each node with a short `/bin/sh` entrypoint that sets up the cgroup controllers and execs `/sbin/init`, so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
 - **sshd** service (enabled) — sind injects authorized_keys at runtime
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (see [Shadow file permissions](#shadow-file-permissions))
 - **munge** service (enabled)
@@ -71,6 +71,7 @@ Custom images must provide the following:
 | Role | Additional requirements |
 |------|------------------------|
 | controller | slurmctld installed, **not enabled** |
+| db | mariadb-server with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user; the `slurm` user has the same uid as in the controller's image (sind sets `slurmdbd.conf`'s owner from there) and can write `/var/log/slurm` |
 | worker | slurmd installed, **not enabled** |
 | submitter | Slurm client tools only |
 
@@ -80,7 +81,7 @@ The Slurm requirements apply to managed clusters only. sind neither runs nor que
 
 ### Container settings
 
-The image should use `SIGRTMIN+3` as the stop signal (systemd's graceful shutdown signal) and declare the shared volumes:
+The image should use `SIGRTMIN+3` as the stop signal (systemd's graceful shutdown signal) and declare the shared volumes. sind replaces the entrypoint of node containers, so `CMD` only matters when the image runs outside sind:
 
 ```dockerfile
 VOLUME ["/etc/slurm", "/etc/munge", "/data"]

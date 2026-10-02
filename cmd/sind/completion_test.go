@@ -87,7 +87,7 @@ func TestCompleteLogsArgs_Service(t *testing.T) {
 	sub := findCmd(completionCtx(&mock.Executor{}), t, "logs")
 
 	names, directive := sub.ValidArgsFunction(sub, []string{"controller.dev"}, "")
-	assert.ElementsMatch(t, []string{"slurmctld", "slurmd", "sshd", "munge"}, names)
+	assert.ElementsMatch(t, []string{"slurmctld", "slurmd", "slurmdbd", "mariadb", "sshd", "munge"}, names)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 

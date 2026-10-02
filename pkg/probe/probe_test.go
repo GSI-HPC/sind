@@ -302,6 +302,74 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmd not ready")
 }
 
+func TestUnitJournal(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("line 1\nline 2\n", "", nil)
+	c := docker.NewClient(&m)
+
+	assert.Equal(t, "line 1\nline 2", UnitJournal(t.Context(), c, testContainer, "slurmd"))
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "journalctl", "-u", "slurmd", "-n", "20", "--no-pager", "-o", "cat"},
+		m.Calls[0].Args)
+}
+
+func TestSlurmdbdReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := SlurmdbdReady(t.Context(), c, testContainer)
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmdbd"}, m.Calls[0].Args)
+}
+
+func TestSlurmdbdReady_ExecError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("daemon unreachable"))
+	c := docker.NewClient(&m)
+
+	err := SlurmdbdReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slurmdbd not ready")
+	var te *TerminalError
+	assert.NotErrorAs(t, err, &te)
+}
+
+func TestSlurmdbdReady_Activating(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("activating\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := docker.NewClient(&m)
+
+	err := SlurmdbdReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slurmdbd not ready: activating")
+	var te *TerminalError
+	assert.NotErrorAs(t, err, &te)
+	assert.Len(t, m.Calls, 1)
+}
+
+func TestSlurmdbdReady_Failed(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("slurmdbd: fatal: mysql_real_connect failed\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := SlurmdbdReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	var te *TerminalError
+	require.ErrorAs(t, err, &te)
+	assert.Equal(t, "slurmdbd failed:\nslurmdbd: fatal: mysql_real_connect failed", te.Msg)
+
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t,
+		[]string{"exec", string(testContainer), "journalctl", "-u", "slurmdbd", "-n", "20", "--no-pager", "-o", "cat"},
+		m.Calls[1].Args,
+	)
+}
+
 func TestForService(t *testing.T) {
 	p := ForService(ServiceSlurmctld)
 	assert.Equal(t, "slurmctld", p.Name)
@@ -309,6 +377,10 @@ func TestForService(t *testing.T) {
 
 	p = ForService(ServiceSlurmd)
 	assert.Equal(t, "slurmd", p.Name)
+	assert.NotNil(t, p.Check)
+
+	p = ForService(ServiceSlurmdbd)
+	assert.Equal(t, "slurmdbd", p.Name)
 	assert.NotNil(t, p.Check)
 
 	p = ForService("unknown")
@@ -320,6 +392,10 @@ func TestServiceForRole(t *testing.T) {
 	svc, ok := ServiceForRole(config.RoleController)
 	assert.True(t, ok)
 	assert.Equal(t, ServiceSlurmctld, svc)
+
+	svc, ok = ServiceForRole(config.RoleDB)
+	assert.True(t, ok)
+	assert.Equal(t, ServiceSlurmdbd, svc)
 
 	svc, ok = ServiceForRole(config.RoleWorker)
 	assert.True(t, ok)
@@ -338,6 +414,7 @@ func TestNodeProbes(t *testing.T) {
 		names []string
 	}{
 		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}},
+		{config.RoleDB, []string{"container", "systemd", "sshd", "slurmdbd"}},
 		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}},
 		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}},
 		{"unknown", []string{"container", "systemd", "sshd"}},

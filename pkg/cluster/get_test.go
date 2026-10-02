@@ -36,6 +36,10 @@ func TestGetClusters(t *testing.T) {
 			Labels: "sind.cluster=prod,sind.role=controller,sind.slurm.version=25.11.0",
 		},
 		testutil.PsEntry{
+			ID: "h", Names: "sind-prod-db", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=prod,sind.role=db,sind.slurm.version=25.11.0",
+		},
+		testutil.PsEntry{
 			ID: "e", Names: "sind-prod-submitter", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=prod,sind.role=submitter,sind.slurm.version=25.11.0",
 		},
@@ -62,14 +66,16 @@ func TestGetClusters(t *testing.T) {
 	assert.Equal(t, 3, clusters[0].NodeCount)
 	assert.Equal(t, 0, clusters[0].Submitters)
 	assert.Equal(t, 1, clusters[0].Controllers)
+	assert.Equal(t, 0, clusters[0].DBs)
 	assert.Equal(t, 2, clusters[0].Workers)
 
 	assert.Equal(t, "prod", clusters[1].Name)
 	assert.Equal(t, "25.11.0", clusters[1].SlurmVersion)
 	assert.Equal(t, StateRunning, clusters[1].State)
-	assert.Equal(t, 4, clusters[1].NodeCount)
+	assert.Equal(t, 5, clusters[1].NodeCount)
 	assert.Equal(t, 1, clusters[1].Submitters)
 	assert.Equal(t, 1, clusters[1].Controllers)
+	assert.Equal(t, 1, clusters[1].DBs)
 	assert.Equal(t, 2, clusters[1].Workers)
 }
 
@@ -324,22 +330,28 @@ func TestGetNodes_SortOrder(t *testing.T) {
 			ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
+		testutil.PsEntry{
+			ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=db",
+		},
 	), "", nil)
 	m.AddResult(inspectJSONBatch(t,
 		inspectEntry{Name: "sind-dev-worker-0", Status: "running", Networks: net},
 		inspectEntry{Name: "sind-dev-submitter", Status: "running", Networks: net},
 		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: net},
+		inspectEntry{Name: "sind-dev-db", Status: "running", Networks: net},
 	), "", nil)
 	c := docker.NewClient(&m)
 
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
-	require.Len(t, nodes, 3)
-	// Order: controller, submitter, worker
+	require.Len(t, nodes, 4)
+	// Order: controller, db, submitter, worker
 	assert.Equal(t, config.RoleController, nodes[0].Role)
-	assert.Equal(t, config.RoleSubmitter, nodes[1].Role)
-	assert.Equal(t, config.RoleWorker, nodes[2].Role)
+	assert.Equal(t, config.RoleDB, nodes[1].Role)
+	assert.Equal(t, config.RoleSubmitter, nodes[2].Role)
+	assert.Equal(t, config.RoleWorker, nodes[3].Role)
 }
 
 func TestGetNodes_UnknownRole(t *testing.T) {

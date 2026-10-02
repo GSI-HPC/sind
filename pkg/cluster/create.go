@@ -403,8 +403,15 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 
 // enableSlurm enables the Slurm daemon on each managed node with a Slurm
 // role and waits for the service to become ready — concurrently per node.
+// A managed db node goes first: slurmctld registers the cluster with slurmdbd
+// when it starts, so mariadb and slurmdbd must be up by then.
 //
-//	┌────────────────────┐ ┌─────────────────────┐
+//	┌──────────────────────────────────┐
+//	│ managed db (if present):         │
+//	│ enable mariadb → init DB         │
+//	│ enable slurmdbd → wait slurmdbd  │
+//	└────────────────┬─────────────────┘
+//	┌────────────────┴───┐ ┌─────────────────────┐
 //	│ controller:        │ │ worker-0:            │
 //	│ enable slurmctld   │ │ enable slurmd        │ ...
 //	│ wait slurmctld     │ │ wait slurmd          │
@@ -412,9 +419,25 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	          └───────────┬───────────┘
 func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) error {
 	log := sindlog.From(ctx)
+
+	for _, nc := range nodeConfigs {
+		if nc.Role != config.RoleDB || !nc.Managed {
+			continue
+		}
+		containerName := ContainerName(realm, clusterName, nc.ShortName)
+		log.DebugContext(ctx, "enabling accounting services", "node", nc.ShortName)
+		if err := enableDBNode(ctx, client, containerName, nc.ShortName); err != nil {
+			return err
+		}
+		slurmdbdProbe := probe.ForService(probe.ServiceSlurmdbd)
+		if err := waitReady(ctx, client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher); err != nil {
+			return err
+		}
+	}
+
 	g, gctx := errgroup.WithContext(ctx)
 	for _, nc := range nodeConfigs {
-		if !nc.Managed {
+		if !nc.Managed || nc.Role == config.RoleDB {
 			continue
 		}
 		service, ok := probe.ServiceForRole(nc.Role)
@@ -425,14 +448,24 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		g.Go(func() error {
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 			log.DebugContext(gctx, "enabling slurm service", "node", nc.ShortName, "service", service)
-			_, err := client.Exec(gctx, containerName, "systemctl", "enable", "--now", string(service))
-			if err != nil {
-				return fmt.Errorf("enabling %s on %s: %w", service, nc.ShortName, err)
+			if err := enableService(gctx, client, containerName, nc.ShortName, service); err != nil {
+				return err
 			}
 			return waitReady(gctx, client, containerName, []probe.Probe{slurmProbe}, interval, watcher)
 		})
 	}
 	return g.Wait()
+}
+
+// enableService enables and starts a systemd unit on a node. When the unit
+// fails to start, the error carries the tail of its journal: systemctl only
+// points to journalctl, which is gone once a failed create removes the node.
+func enableService(ctx context.Context, client *docker.Client, name docker.ContainerName, shortName string, service probe.Service) error {
+	if _, err := client.Exec(ctx, name, "systemctl", "enable", "--now", string(service)); err != nil {
+		return fmt.Errorf("enabling %s on %s: %w\n%s journal:\n%s",
+			service, shortName, err, service, probe.UnitJournal(ctx, client, name, string(service)))
+	}
+	return nil
 }
 
 // startWatcher creates and starts an event watcher for the given cluster.

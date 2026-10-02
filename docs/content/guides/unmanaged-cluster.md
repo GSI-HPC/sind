@@ -29,8 +29,9 @@ sind create cluster --config unmanaged.yaml
 
 The flag applies to the whole cluster:
 
-- Every node is unmanaged. A worker with `managed: true` is rejected.
-- `slurm` sections (`main`, `cgroup`, `gres`, `topology`, `plugstack`) are rejected, because sind writes no Slurm configuration.
+- Every node is unmanaged. A worker or db node with `managed: true` is rejected.
+- `slurm` sections (`main`, `cgroup`, `gres`, `topology`, `plugstack`, `slurmdbd`) are rejected, because sind writes no Slurm configuration.
+- A [db node]({{< relref "/configuration/node-definitions#database-node" >}}) is a bare node too: sind starts neither MariaDB nor slurmdbd on it, so your tooling can provision accounting as well. To keep sind's Slurm and provision only slurmdbd, use a managed cluster with `managed: false` on the db node instead.
 - `backupController: true` still adds `controller-backup` and the shared state volume (see [Controller pair](#controller-pair)).
 
 ## What sind sets up
@@ -41,9 +42,10 @@ The flag applies to the whole cluster:
 | munge key, munge running | ✓ | ✓ |
 | `/etc/slurm` | generated configuration | empty |
 | slurmctld and slurmd | running | not started |
+| MariaDB and slurmdbd (db node) | running | not started |
 | Slurm version (`sind.slurm.version` label) | discovered from the image | empty |
 
-`/etc/slurm` is one volume shared by all nodes, like an NFS share: writable on the controllers, read-only on the submitter and the workers. `/etc/munge` holds sind's munge key and is read-only on every node. `sind create cluster` returns once each node runs systemd, sshd and munge.
+`/etc/slurm` is one volume shared by all nodes, like an NFS share: writable on the controllers, read-only on the other nodes. `/etc/munge` holds sind's munge key and is read-only on every node. `sind create cluster` returns once each node runs systemd, sshd and munge.
 
 The stock `sind-node` image has Slurm installed but not enabled. sind neither runs nor queries Slurm on an unmanaged cluster, so a custom image may also leave Slurm out for your provisioning to install (see [Building Images]({{< relref "/container-images/building-images" >}})).
 
@@ -87,7 +89,7 @@ worker-1.dev.sind.sind
 
 Keep in mind:
 
-- Write Slurm files on a controller. On the submitter and the workers `/etc/slurm` is read-only, and every node reads the same files.
+- Write Slurm files on a controller. On the other nodes `/etc/slurm` is read-only, and every node reads the same files. slurmdbd insists on a `slurmdbd.conf` owned by its `SlurmUser` with mode `0600`.
 - munge is sind's. `/etc/munge` is read-only, so recipes that manage the munge key must leave it as it is. `sind get munge-key dev` prints the key base64-encoded if your tooling needs it.
 - `sind get cluster dev` reports munge and sshd only. Check Slurm itself with `sind exec dev -- sinfo` and `sind logs controller.dev slurmctld`.
 

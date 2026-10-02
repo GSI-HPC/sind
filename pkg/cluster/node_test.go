@@ -102,8 +102,9 @@ func TestBuildRunArgs_Basic(t *testing.T) {
 	assert.True(t, ok, "--hostname flag present")
 	assert.Equal(t, "controller", hostname)
 
-	// Image is last element
-	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", args[len(args)-1])
+	// The image runs the node entrypoint, which ends by starting systemd
+	assert.Equal(t, []string{"--entrypoint", "/bin/sh", "ghcr.io/gsi-hpc/sind-node:25.11", "-c", NodeEntrypoint},
+		args[len(args)-5:])
 
 	// Labels
 	labels := testutil.ArgValues(args, "--label")
@@ -362,8 +363,8 @@ func TestBuildRunArgs_Pull(t *testing.T) {
 	assert.True(t, ok, "--pull flag present")
 	assert.Equal(t, "always", pull)
 
-	// Image is still the last element
-	assert.Equal(t, cfg.Image, args[len(args)-1])
+	// The image and the entrypoint's arguments still come last
+	assert.Equal(t, []string{cfg.Image, "-c", NodeEntrypoint}, args[len(args)-3:])
 }
 
 func TestBuildRunArgs_NoPull(t *testing.T) {
@@ -407,9 +408,9 @@ func TestCreateNode(t *testing.T) {
 
 	require.Len(t, m.Calls, 3)
 
-	// CreateContainer: first arg is "create", last is image
+	// CreateContainer: first arg is "create", then the image and its entrypoint arguments
 	assert.Equal(t, "create", m.Calls[0].Args[0])
-	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:25.11", m.Calls[0].Args[len(m.Calls[0].Args)-1])
+	assert.Equal(t, []string{"ghcr.io/gsi-hpc/sind-node:25.11", "-c", NodeEntrypoint}, m.Calls[0].Args[len(m.Calls[0].Args)-3:])
 
 	// ConnectNetwork
 	assert.Equal(t, []string{"network", "connect", "sind-mesh", "sind-dev-controller"}, m.Calls[1].Args)
@@ -531,6 +532,69 @@ func TestNodeRunConfigs_WithSubmitter(t *testing.T) {
 	assert.Equal(t, "submitter", configs[1].ShortName)
 	assert.True(t, configs[1].Managed, "submitter of a managed cluster")
 	assert.Equal(t, "worker-0", configs[2].ShortName)
+}
+
+func TestNodeRunConfigs_WithDB(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleDB, Image: "img:1", CPUs: 2, Memory: "1g", TmpSize: "1g"},
+			{Role: config.RoleWorker},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "25.11.8", "")
+
+	require.Len(t, configs, 3)
+	db := configs[1]
+	assert.Equal(t, "db", db.ShortName)
+	assert.Equal(t, config.RoleDB, db.Role)
+	assert.Equal(t, "img:1", db.Image)
+	assert.Equal(t, 2, db.CPUs)
+	assert.Equal(t, "1g", db.Memory)
+	assert.Equal(t, "25.11.8", db.SlurmVersion)
+	assert.Equal(t, 1, db.ContainerNumber)
+	assert.True(t, db.Managed, "db of a managed cluster")
+	assert.False(t, db.SharedState)
+}
+
+func TestNodeRunConfigs_UnmanagedDBInManagedCluster(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleDB, Managed: testutil.Ptr(false)},
+			{Role: config.RoleSubmitter},
+			{Role: config.RoleWorker},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "25.11.8", "")
+
+	require.Len(t, configs, 4)
+	assert.True(t, configs[0].Managed, "controller")
+	assert.Equal(t, "db", configs[1].ShortName)
+	assert.False(t, configs[1].Managed, "db with managed: false")
+	assert.True(t, configs[2].Managed, "submitter")
+	assert.True(t, configs[3].Managed, "worker")
+}
+
+func TestNodeRunConfigs_UnmanagedDB(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Managed: testutil.Ptr(false)},
+			{Role: config.RoleDB},
+			{Role: config.RoleWorker},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+
+	require.Len(t, configs, 3)
+	assert.Equal(t, "db", configs[1].ShortName)
+	assert.False(t, configs[1].Managed, "bare db node in an unmanaged cluster")
 }
 
 func TestNodeRunConfigs_ComputeDefaultCount(t *testing.T) {

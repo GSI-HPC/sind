@@ -22,7 +22,9 @@ sind generates a multi-file Slurm configuration and writes it to the `<realm>-<c
 ├── gres.conf               # generic resources (if slurm.gres is set)
 ├── gres.conf.d/            # gres fragments (if slurm.gres is a map)
 ├── topology.conf           # network topology (if slurm.topology is set)
-└── topology.conf.d/        # topology fragments (if slurm.topology is a map)
+├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
+├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
+└── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
 ```
 
 ## slurm.conf
@@ -34,7 +36,19 @@ include /etc/slurm/sind-nodes.conf
 PlugStackConfig=/etc/slurm/plugstack.conf
 ```
 
+With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}) it also contains these accounting parameters, each unless the `main` section sets it:
+
+```
+AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost=db
+JobAcctGatherType=jobacct_gather/cgroup
+```
+
 sind does not modify `slurm.conf` after initial creation.
+
+## slurmdbd.conf
+
+Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (`StorageHost=localhost`, `StorageLoc=slurm_acct_db`, `StorageUser=slurm` without a password), keeps the pid file in `/run/slurmdbd` and the log in `/var/log/slurm/slurmdbd.log`, and is owned by `slurm` with mode `0600`, as slurmdbd requires. The `slurmdbd` section extends it like the other sections.
 
 ## sind-nodes.conf
 

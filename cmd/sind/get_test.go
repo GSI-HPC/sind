@@ -79,6 +79,10 @@ func TestGetClusters_Output(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0",
 		},
 		testutil.PsEntry{
+			ID: "c", Names: "sind-dev-db", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=db,sind.slurm.version=25.11.0",
+		},
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
@@ -86,6 +90,10 @@ func TestGetClusters_Output(t *testing.T) {
 
 	stdout, _, err := executeWithMock(&m, "get", "clusters")
 	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, []string{"NAME", "NODES", "(S/C/D/W)", "SLURM", "STATUS"}, strings.Fields(lines[0]))
+	assert.Equal(t, []string{"dev", "3", "(0/1/1/1)", "25.11.0", "running"}, strings.Fields(lines[1]))
 	assert.Contains(t, stdout, "NAME")
 	assert.Contains(t, stdout, "dev")
 	assert.Contains(t, stdout, "25.11.0")
@@ -105,7 +113,7 @@ func TestGetClusters_UnknownSlurmVersion(t *testing.T) {
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	require.Len(t, lines, 2)
-	assert.Equal(t, []string{"dev", "1", "(0/1/0)", "-", "running"}, strings.Fields(lines[1]))
+	assert.Equal(t, []string{"dev", "1", "(0/1/0/0)", "-", "running"}, strings.Fields(lines[1]))
 }
 
 func TestGetNodes_CommandExists(t *testing.T) {
@@ -292,6 +300,7 @@ func TestGetClusters_JSON(t *testing.T) {
 		Status       string `json:"status"`
 		Nodes        int    `json:"nodes"`
 		Controllers  int    `json:"controllers"`
+		DBs          int    `json:"dbs"`
 		Workers      int    `json:"workers"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
@@ -301,6 +310,7 @@ func TestGetClusters_JSON(t *testing.T) {
 	assert.Equal(t, "running", got[0].Status)
 	assert.Equal(t, 2, got[0].Nodes)
 	assert.Equal(t, 1, got[0].Controllers)
+	assert.Equal(t, 0, got[0].DBs)
 	assert.Equal(t, 1, got[0].Workers)
 }
 
