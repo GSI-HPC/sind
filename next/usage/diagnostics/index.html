@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-29T23:04:44+00:00"
+      content="2026-10-01T22:57:14+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1411",
+      "wordCount": "1430",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-29T23:04:44.00Z",
+      "dateModified": "2026-10-01T22:57:14.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2429,7 +2429,7 @@ sudo systemctl daemon-reload
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get cluster <span class="o">[</span>NAME<span class="o">]</span>
 </span></span></code></pre></div><p>Displays detailed health information:</p>
 <pre tabindex="0"><code>CLUSTER   SLURM     STATUS (R/S/P/T)
-dev       25.11.8   running (3/0/0/3)
+dev       25.11.8   running (4/0/0/4)
 
 NETWORKS
 NAME             DRIVER   SUBNET           GATEWAY        STATUS
@@ -2449,6 +2449,7 @@ MOUNT        SOURCE               TYPE       STATUS
 NODES
 NAME              ROLE        IP            STATUS    SERVICES
 controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
+db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
 worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 </code></pre><p><code>SLURM</code> shows <code>-</code> when sind does not know the version, as for unmanaged clusters. The <code>STATUS (R/S/P/T)</code> column shows the cluster state followed by container counts: <strong>R</strong>unning, <strong>S</strong>topped, <strong>P</strong>aused, <strong>T</strong>otal. The cluster state is derived from the container states of all nodes:</p>
@@ -2487,7 +2488,7 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 	</tbody>
 </table> </div>
 <p>The cluster status reflects container health only. A running cluster can still have failing services — check the <code>SERVICES</code> column in the <code>NODES</code> table for individual service health (e.g. <code>slurmctld ✗</code>).</p>
-<p>Nodes where sind does not manage Slurm (unmanaged workers, and every node of an <a
+<p>Nodes where sind does not manage Slurm (unmanaged workers and db nodes, and every node of an <a
   class="gdoc-markdown__link"
   href="/sind/next/guides/unmanaged-cluster/"
 >unmanaged cluster</a>) list only <code>munge</code> and <code>sshd</code>. The JSON output marks each node with <code>&quot;managed&quot;: true|false</code>, as does <code>sind get node -o json</code>.</p>
@@ -2540,6 +2541,7 @@ sshd        ✓
 </span></span><span class="line"><span class="cl"><span class="c1"># Service logs</span>
 </span></span><span class="line"><span class="cl">sind logs controller slurmctld
 </span></span><span class="line"><span class="cl">sind logs worker-0 slurmd --follow
+</span></span><span class="line"><span class="cl">sind logs db slurmdbd
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-nodes"
     >

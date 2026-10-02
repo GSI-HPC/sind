@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:19:08+00:00"
+      content="2026-10-01T22:57:14+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/overview/",
       "headline": "Design Overview",
       "description": "Operational model and design philosophy",
-      "wordCount": "613",
+      "wordCount": "771",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:19:08.00Z",
+      "dateModified": "2026-10-01T22:57:14.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2289,7 +2289,9 @@
 <li><code>--security-opt label=disable</code> — SELinux compatibility</li>
 <li><code>--tmpfs /run:exec,mode=755</code> — systemd runtime directory</li>
 <li><code>--tmpfs /run/lock</code> — systemd lock files</li>
+<li><code>--entrypoint /bin/sh</code> with a short script — PID 1 moves itself into <code>init.scope</code>, enables every available cgroup controller in the root cgroup&rsquo;s <code>cgroup.subtree_control</code>, then execs <code>/sbin/init</code></li>
 </ul>
+<p><code>docker exec</code> puts its process in the container&rsquo;s root cgroup unless that cgroup has controllers enabled, and with a process there systemd can no longer enable them (cgroup v2&rsquo;s no internal processes rule). Enabling them before systemd starts keeps a <code>docker exec</code> of sind&rsquo;s from racing systemd&rsquo;s boot, so <code>Delegate=yes</code> daemons such as slurmd always get the memory and cpu controllers.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="concurrency"
     >
@@ -2323,7 +2325,7 @@
 <li><code>createResources</code> creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key, the data volume (unless the data is a host path) and, for a backup controller pair, the state volume, all in parallel.</li>
 <li><code>resolveInfra</code> looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller&rsquo;s image, while the resources are created.</li>
 <li><code>setupNodes</code> creates, waits for, and sets up SSH and host keys on every node.</li>
-<li><code>enableSlurm</code> starts slurmctld and slurmd on managed clusters only.</li>
+<li><code>enableSlurm</code> (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd.</li>
 <li>If any step fails, <code>sind create cluster</code> removes what it created.</li>
 </ul>
 <p>Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.</p>
@@ -2375,8 +2377,16 @@
 					<td>slurmd ready</td>
 					<td>slurmd service active (managed workers only)</td>
 			</tr>
+			<tr>
+					<td>slurmdbd ready</td>
+					<td>slurmdbd service active (managed db nodes); a failed unit fails <code>sind create cluster</code> at once with the unit&rsquo;s journal tail. mariadb is started before it with <code>systemctl enable --now</code>, which returns once the unit is active</td>
+			</tr>
 	</tbody>
 </table> </div>
+<p>With a managed <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/node-definitions/#database-node"
+>db node</a>, mariadb and slurmdbd are started and slurmdbd must be ready before slurmctld and slurmd are enabled.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="docker-cli-not-sdk"
     >

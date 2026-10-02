@@ -12,7 +12,7 @@
 <meta name="generator" content="Hugo 0.167.0">
 
 
-  <meta name="description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
+  <meta name="description" content="Node roles, shorthand syntax, managed vs unmanaged workers, database nodes, and unmanaged clusters" />
 
     <title>Node Definitions | sind</title>
 
@@ -38,20 +38,20 @@
     content="Node Definitions"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
+  <meta property="og:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, database nodes, and unmanaged clusters" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://gsi-hpc.github.io/sind/next/configuration/node-definitions/" />
 
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-29T23:04:44+00:00"
+      content="2026-10-01T22:57:14+00:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
 <meta name="twitter:title" content="Node Definitions" />
-  <meta name="twitter:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters" />
+  <meta name="twitter:description" content="Node roles, shorthand syntax, managed vs unmanaged workers, database nodes, and unmanaged clusters" />
 
 
   <script type="application/ld+json">
@@ -62,8 +62,8 @@
       "name": "Node Definitions",
       "url": "https://gsi-hpc.github.io/sind/next/configuration/node-definitions/",
       "headline": "Node Definitions",
-      "description": "Node roles, shorthand syntax, managed vs unmanaged workers, and unmanaged clusters",
-      "wordCount": "725",
+      "description": "Node roles, shorthand syntax, managed vs unmanaged workers, database nodes, and unmanaged clusters",
+      "wordCount": "1010",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-29T23:04:44.00Z",
+      "dateModified": "2026-10-01T22:57:14.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2283,6 +2283,13 @@
 					<td>Cluster controller</td>
 			</tr>
 			<tr>
+					<td><code>db</code></td>
+					<td>0–1</td>
+					<td>no</td>
+					<td>mariadb, slurmdbd</td>
+					<td>Accounting database (see below)</td>
+			</tr>
+			<tr>
 					<td><code>submitter</code></td>
 					<td>0–1</td>
 					<td>no</td>
@@ -2349,9 +2356,9 @@
 			</tr>
 			<tr>
 					<td><code>managed</code></td>
-					<td>controller + worker</td>
+					<td>controller + db + worker</td>
 					<td><code>true</code></td>
-					<td>Worker: start slurmd and add to slurm.conf. Controller: <code>false</code> makes the whole cluster unmanaged (see below)</td>
+					<td>Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see below). Controller: <code>false</code> makes the whole cluster unmanaged (see below)</td>
 			</tr>
 			<tr>
 					<td><code>backupController</code></td>
@@ -2462,6 +2469,33 @@
   href="/sind/next/guides/controller-failover/"
 >Controller Failover</a> for checking which controller is in control and triggering a failover.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="database-node"
+    >
+        Database node
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/node-definitions/#database-node" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Database node" aria-label="Anchor to: Database node" href="#database-node">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>A <code>db</code> node runs MariaDB and slurmdbd, so the cluster records job accounting:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">controller</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">db</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">worker</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
+</span></span></span></code></pre></div><ul>
+<li>The container is <code>&lt;realm&gt;-&lt;cluster&gt;-db</code>, reachable as <code>db</code> inside the cluster. <code>count</code> and <code>backupController</code> are not valid on it.</li>
+<li>sind writes <code>slurmdbd.conf</code> (owned by <code>slurm</code>, mode <code>0600</code>) and adds <code>AccountingStorageType=accounting_storage/slurmdbd</code>, <code>AccountingStorageHost=db</code> and <code>JobAcctGatherType=jobacct_gather/cgroup</code> to <code>slurm.conf</code>, each unless the <code>main</code> section sets it. Extra slurmdbd settings go in the <a
+  class="gdoc-markdown__link--code"
+  href="/sind/next/configuration/cluster-config/#slurm-section"
+><code>slurmdbd</code> section</a>.</li>
+<li>At creation, sind starts MariaDB, creates the <code>slurm_acct_db</code> database and the <code>slurm</code> database user, and starts slurmdbd before slurmctld and slurmd, so the controller registers the cluster on startup: <code>sind exec dev -- sacctmgr show cluster</code> lists it, and <code>sacct</code> shows finished jobs.</li>
+<li>Accounting is not enforced: jobs run without users, accounts or associations. Add them with <code>sacctmgr</code> and set <code>AccountingStorageEnforce</code> in the <code>main</code> section to test limits.</li>
+<li><code>sind get cluster</code> and <code>sind get node</code> report <code>mariadb</code> and <code>slurmdbd</code> for the db node.</li>
+<li><code>managed: false</code> on the db node makes it a bare node in an otherwise managed cluster, to test your own slurmdbd provisioning while sind runs slurmctld and slurmd. sind then configures no accounting: no <code>slurmdbd.conf</code> (the <code>slurmdbd</code> section is rejected), no database, and no accounting parameters in <code>slurm.conf</code>. Point slurmctld at your slurmdbd through the <code>main</code> section, for example <code>AccountingStorageType=accounting_storage/slurmdbd</code> and <code>AccountingStorageHost=db</code>.</li>
+<li>In an unmanaged cluster the db node is a bare node: sind starts neither MariaDB nor slurmdbd and writes no <code>slurmdbd.conf</code>.</li>
+</ul>
+<p>Each cluster has its own db node; clusters do not share a slurmdbd.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="unmanaged-cluster"
     >
         Unmanaged cluster
@@ -2479,7 +2513,7 @@
 </span></span></span></code></pre></div><ul>
 <li>Every worker is unmanaged. A worker with <code>managed: true</code> is rejected, and so is any <code>slurm</code> section.</li>
 <li><code>backupController: true</code> still adds <code>controller-backup</code> and the shared state volume.</li>
-<li><code>managed</code> is not valid on the submitter, which runs no Slurm daemon.</li>
+<li><code>managed</code> is not valid on the submitter, which runs no Slurm daemon. A db node is bare too, and <code>managed: true</code> on it is rejected.</li>
 </ul>
 <p>See <a
   class="gdoc-markdown__link"

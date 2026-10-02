@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:19:08+00:00"
+      content="2026-10-01T22:57:14+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/slurm-config/",
       "headline": "Slurm Configuration",
       "description": "Generated configuration files and version discovery",
-      "wordCount": "551",
+      "wordCount": "649",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:19:08.00Z",
+      "dateModified": "2026-10-01T22:57:14.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2279,7 +2279,9 @@
 ├── gres.conf               # generic resources (if slurm.gres is set)
 ├── gres.conf.d/            # gres fragments (if slurm.gres is a map)
 ├── topology.conf           # network topology (if slurm.topology is set)
-└── topology.conf.d/        # topology fragments (if slurm.topology is a map)
+├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
+├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
+└── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurmconf"
     >
@@ -2292,7 +2294,24 @@
 <p>The main configuration file includes cluster name, controller host, process tracking settings, and always contains:</p>
 <pre tabindex="0"><code>include /etc/slurm/sind-nodes.conf
 PlugStackConfig=/etc/slurm/plugstack.conf
+</code></pre><p>With a managed <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/node-definitions/#database-node"
+>db node</a> it also contains these accounting parameters, each unless the <code>main</code> section sets it:</p>
+<pre tabindex="0"><code>AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost=db
+JobAcctGatherType=jobacct_gather/cgroup
 </code></pre><p>sind does not modify <code>slurm.conf</code> after initial creation.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="slurmdbdconf"
+    >
+        slurmdbd.conf
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/architecture/slurm-config/#slurmdbdconf" class="gdoc-page__anchor clip flex align-center" title="Anchor to: slurmdbd.conf" aria-label="Anchor to: slurmdbd.conf" href="#slurmdbdconf">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (<code>StorageHost=localhost</code>, <code>StorageLoc=slurm_acct_db</code>, <code>StorageUser=slurm</code> without a password), keeps the pid file in <code>/run/slurmdbd</code> and the log in <code>/var/log/slurm/slurmdbd.log</code>, and is owned by <code>slurm</code> with mode <code>0600</code>, as slurmdbd requires. The <code>slurmdbd</code> section extends it like the other sections.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="sind-nodesconf"
     >

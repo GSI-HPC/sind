@@ -45,7 +45,7 @@
 <meta property="article:section" content="Container Images" />
     <meta
       property="article:modified_time"
-      content="2026-09-27T22:20:05+00:00"
+      content="2026-10-01T22:57:14+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/container-images/building-images/",
       "headline": "Building Images",
       "description": "Official images and custom image requirements",
-      "wordCount": "736",
+      "wordCount": "854",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-27T22:20:05.00Z",
+      "dateModified": "2026-10-01T22:57:14.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2340,7 +2340,7 @@
     </a>
 </div>
 <ul>
-<li><strong>systemd</strong> as init (PID 1)</li>
+<li><strong>systemd</strong> as init at <code>/sbin/init</code>, and <code>/bin/sh</code>: sind starts each node with a short <code>/bin/sh</code> entrypoint that sets up the cgroup controllers and execs <code>/sbin/init</code>, so node containers do not use the image&rsquo;s <code>ENTRYPOINT</code> and <code>CMD</code>. sind&rsquo;s helper containers run commands in the image directly, so it should not set an <code>ENTRYPOINT</code> that wraps them</li>
 <li><strong>sshd</strong> service (enabled) — sind injects authorized_keys at runtime</li>
 <li><code>/etc/shadow</code> readable by root without <code>CAP_DAC_OVERRIDE</code> (see <a
   class="gdoc-markdown__link"
@@ -2371,6 +2371,10 @@
 					<td>slurmctld installed, <strong>not enabled</strong></td>
 			</tr>
 			<tr>
+					<td>db</td>
+					<td>mariadb-server with the <code>mysql</code> client and slurmdbd installed, <strong>not enabled</strong>; root reaches MariaDB over its local socket without a password; slurmdbd&rsquo;s unit creates <code>/run/slurmdbd</code> for the <code>slurm</code> user; the <code>slurm</code> user has the same uid as in the controller&rsquo;s image (sind sets <code>slurmdbd.conf</code>&rsquo;s owner from there) and can write <code>/var/log/slurm</code></td>
+			</tr>
+			<tr>
 					<td>worker</td>
 					<td>slurmd installed, <strong>not enabled</strong></td>
 			</tr>
@@ -2394,7 +2398,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>The image should use <code>SIGRTMIN+3</code> as the stop signal (systemd&rsquo;s graceful shutdown signal) and declare the shared volumes:</p>
+<p>The image should use <code>SIGRTMIN+3</code> as the stop signal (systemd&rsquo;s graceful shutdown signal) and declare the shared volumes. sind replaces the entrypoint of node containers, so <code>CMD</code> only matters when the image runs outside sind:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-dockerfile" data-lang="dockerfile"><span class="line"><span class="cl"><span class="k">VOLUME</span> <span class="p">[</span><span class="s2">&#34;/etc/slurm&#34;</span><span class="p">,</span> <span class="s2">&#34;/etc/munge&#34;</span><span class="p">,</span> <span class="s2">&#34;/data&#34;</span><span class="p">]</span><span class="err">
 </span></span></span><span class="line"><span class="cl"><span class="k">STOPSIGNAL</span><span class="w"> </span><span class="s">SIGRTMIN+3</span><span class="err">
 </span></span></span><span class="line"><span class="cl"><span class="k">CMD</span> <span class="p">[</span><span class="s2">&#34;/sbin/init&#34;</span><span class="p">]</span><span class="err">

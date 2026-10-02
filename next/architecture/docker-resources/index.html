@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-09-29T23:04:44+00:00"
+      content="2026-10-01T22:57:14+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/docker-resources/",
       "headline": "Docker Resources",
       "description": "Resource naming conventions, volumes, and labels",
-      "wordCount": "546",
+      "wordCount": "561",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-29T23:04:44.00Z",
+      "dateModified": "2026-10-01T22:57:14.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2289,6 +2289,11 @@
 					<td><code>sind-dev-controller-backup</code></td>
 			</tr>
 			<tr>
+					<td>Db</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-db</code></td>
+					<td><code>sind-dev-db</code></td>
+			</tr>
+			<tr>
 					<td>Submitter</td>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-submitter</code></td>
 					<td><code>sind-dev-submitter</code></td>
@@ -2385,6 +2390,7 @@
 					<th>Volume</th>
 					<th>Mount point</th>
 					<th>Controller</th>
+					<th>Db</th>
 					<th>Worker</th>
 					<th>Submitter</th>
 			</tr>
@@ -2396,10 +2402,12 @@
 					<td>rw</td>
 					<td>ro</td>
 					<td>ro</td>
+					<td>ro</td>
 			</tr>
 			<tr>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-munge</code></td>
 					<td><code>/etc/munge</code></td>
+					<td>ro</td>
 					<td>ro</td>
 					<td>ro</td>
 					<td>ro</td>
@@ -2410,6 +2418,7 @@
 					<td>rw</td>
 					<td>rw</td>
 					<td>rw</td>
+					<td>rw</td>
 			</tr>
 			<tr>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-state</code></td>
@@ -2417,10 +2426,12 @@
 					<td>rw (backup controller pairs only)</td>
 					<td>—</td>
 					<td>—</td>
+					<td>—</td>
 			</tr>
 			<tr>
 					<td><code>cvmfs</code> plugin volume or host <code>/cvmfs</code></td>
 					<td><code>/cvmfs</code></td>
+					<td>ro</td>
 					<td>ro</td>
 					<td>ro</td>
 					<td>ro (<code>storage.cvmfs</code> only)</td>
@@ -2431,6 +2442,7 @@
 					<td>configurable</td>
 					<td>configurable</td>
 					<td>configurable</td>
+					<td>configurable</td>
 			</tr>
 			<tr>
 					<td>tmpfs</td>
@@ -2438,10 +2450,12 @@
 					<td>exec,mode=755</td>
 					<td>exec,mode=755</td>
 					<td>exec,mode=755</td>
+					<td>exec,mode=755</td>
 			</tr>
 			<tr>
 					<td>tmpfs</td>
 					<td><code>/run/lock</code></td>
+					<td>—</td>
 					<td>—</td>
 					<td>—</td>
 					<td>—</td>
@@ -2520,7 +2534,7 @@
 			<tr>
 					<td><code>sind.managed</code></td>
 					<td><code>true</code></td>
-					<td>Whether sind manages Slurm on the node: <code>false</code> for unmanaged workers and for every node of an unmanaged cluster. Nodes created before this label existed count as managed.</td>
+					<td>Whether sind manages Slurm on the node: <code>false</code> for unmanaged workers and db nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed.</td>
 			</tr>
 			<tr>
 					<td><code>sind.slurm.version</code></td>

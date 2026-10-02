@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-09-29T23:04:44+00:00"
+      content="2026-10-01T22:57:14+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
       "headline": "Cluster Configuration",
       "description": "YAML configuration schema reference",
-      "wordCount": "783",
+      "wordCount": "816",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-29T23:04:44.00Z",
+      "dateModified": "2026-10-01T22:57:14.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -2306,12 +2306,16 @@
 </span></span></span><span class="line"><span class="cl"><span class="sd">    SelectTypeParameters=CR_Core_Memory</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">cgroup</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
 </span></span></span><span class="line"><span class="cl"><span class="sd">    ConstrainCores=yes</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">slurmdbd</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
+</span></span></span><span class="line"><span class="cl"><span class="sd">    PurgeJobAfter=1month</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">controller</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l">1g</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">tmpSize</span><span class="p">:</span><span class="w"> </span><span class="l">512m</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">db</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">submitter</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
@@ -2561,6 +2565,14 @@
 					<td><code>plugstack.conf</code></td>
 					<td style="text-align: center">yes (always scaffolded)</td>
 			</tr>
+			<tr>
+					<td><code>slurmdbd</code></td>
+					<td><code>slurmdbd.conf</code></td>
+					<td style="text-align: center">yes (needs a managed <a
+  class="gdoc-markdown__link--code"
+  href="/sind/next/configuration/node-definitions/#database-node"
+><code>db</code> node</a>)</td>
+			</tr>
 	</tbody>
 </table> </div>
 <p>Each key supports two forms:</p>
@@ -2600,12 +2612,14 @@
 <ul>
 <li><code>kind</code> must be <code>&quot;Cluster&quot;</code></li>
 <li>Exactly one <code>controller</code> node is required</li>
+<li>At most one <code>db</code> node is allowed</li>
 <li>At most one <code>submitter</code> node is allowed</li>
 <li>At least one <code>worker</code> node is required</li>
 <li><code>count</code> is only valid for worker nodes</li>
-<li><code>managed</code> is only valid for controller and worker nodes</li>
-<li>With <code>managed: false</code> on the controller, no worker may set <code>managed: true</code> and no <code>slurm</code> section may be set</li>
+<li><code>managed</code> is only valid for controller, db and worker nodes</li>
+<li>With <code>managed: false</code> on the controller, no worker or db node may set <code>managed: true</code> and no <code>slurm</code> section may be set</li>
 <li><code>backupController</code> is only valid for controller nodes</li>
+<li>The <code>slurmdbd</code> section requires a managed <code>db</code> node</li>
 <li>With <code>backupController</code>, <code>slurm.main</code> must not set <code>SlurmctldHost</code> (or its deprecated forms <code>ControlMachine</code>, <code>BackupController</code>, <code>BackupAddr</code>) or <code>StateSaveLocation</code></li>
 <li><code>count</code> must not be negative; <code>0</code> means the default, 1</li>
 <li><code>capAdd</code>/<code>capDrop</code> values must be recognized Linux capability names (e.g. <code>SYS_ADMIN</code>, <code>NET_ADMIN</code>, <code>ALL</code>)</li>
