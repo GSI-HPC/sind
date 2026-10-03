@@ -89,6 +89,37 @@ sind doctor -o json
 ]
 ```
 
+## Version
+
+```bash
+sind version
+```
+
+Prints the version and, for a release build, the commit it was built from:
+
+```
+sind 0.10.0 (0a57d68)
+```
+
+`--json` prints all fields as one JSON object, for scripts such as [sind-action](https://github.com/GSI-HPC/sind-action), which reads `version`:
+
+```bash
+sind version --json
+```
+
+```json
+{"version":"0.10.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}
+```
+
+| Field | Description |
+|-------|-------------|
+| `version` | sind's version, without the `v` of the release tag |
+| `commit` | the commit the binary was built from; left out when unknown |
+| `goVersion` | the Go toolchain that built the binary |
+| `platform` | operating system and architecture, `linux/amd64` or `linux/arm64` |
+
+A development build reports the output of `git describe`, such as `0.10.0-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
+
 ## Verbose logging
 
 By default, sind operates silently — only command output and errors are shown. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
