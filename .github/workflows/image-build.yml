@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.targets.outputs.matrix }}
-      builds: ${{ steps.builds.outputs.matrix }}
+      platforms: ${{ steps.platforms.outputs.platforms }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,25 +52,34 @@ jobs:
         id: targets
         uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
 
-      # Each target once per platform, built on a native runner: compiling
-      # the image under emulation would take hours.
       - name: List builds per platform
         id: builds
         uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           fields: platforms
 
+      - name: List the platforms
+        id: platforms
+        env:
+          BUILDS: ${{ steps.builds.outputs.matrix }}
+        run: echo "platforms=$(jq -c '[.[].platforms] | unique' <<<"$BUILDS")" >> "$GITHUB_OUTPUT"
+
+  # Every target of a platform in one build on a native runner (compiling
+  # the image under emulation would take hours). The release lines then
+  # build the layers they share, all up to the Slurm COPY, once and publish
+  # them as the same blobs, so a host that pulls several lines downloads
+  # those layers once.
   build:
-    name: build (${{ matrix.target }}, ${{ matrix.platforms }})
+    name: build (${{ matrix.platform }})
     needs: targets
-    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.targets.outputs.builds) }}
+        platform: ${{ fromJSON(needs.targets.outputs.platforms) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,7 +95,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Push untagged; the merge job tags the multi-platform image.
+      # Each target has its own cache scope, apart from the CI's, so test
+      # runs cannot feed layers into the published images. Release builds
+      # read main's cache but do not write it, so a rebuild of an older
+      # release does not replace it.
+      - name: Cache settings
+        id: cache
+        env:
+          TARGETS: ${{ needs.targets.outputs.targets }}
+          WRITE: ${{ inputs.release == '' }}
+        run: |
+          {
+            echo "set<<EOF"
+            jq -r --arg arch "$RUNNER_ARCH" --argjson write "$WRITE" '.[].target |
+              "\(.).cache-from=type=gha,scope=image-\(.)-\($arch)",
+              (if $write then "\(.).cache-to=type=gha,mode=max,scope=image-\(.)-\($arch)" else empty end)' <<<"$TARGETS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # Push untagged; the merge jobs tag the multi-platform images.
       - name: Build and push by digest
         id: bake
         uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
@@ -94,26 +121,28 @@ jobs:
           # docker-bake.hcl then builds the runtime stage without the cache.
           REFRESH_PACKAGES: ${{ inputs.refresh }}
         with:
-          targets: ${{ matrix.target }}
           allow: network.host
           set: |
-            *.platform=${{ matrix.platforms }}
+            *.platform=${{ matrix.platform }}
             *.tags=${{ env.IMAGE }}
             *.output=type=image,push-by-digest=true,name-canonical=true,push=true
-            *.cache-from=type=gha,scope=${{ matrix.target }}-${{ runner.arch }}
-            *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}-${{ runner.arch }}
+            ${{ steps.cache.outputs.set }}
 
-      - name: Export digest
+      - name: Export digests
         env:
-          DIGEST: ${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['containerimage.digest'] }}
+          METADATA: ${{ steps.bake.outputs.metadata }}
         run: |
-          mkdir -p "$RUNNER_TEMP/digests"
-          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+          jq -r 'to_entries[] | select((.value | type) == "object" and (.value | has("containerimage.digest")))
+            | "\(.key) \(.value["containerimage.digest"])"' <<<"$METADATA" |
+            while read -r target digest; do
+              mkdir -p "$RUNNER_TEMP/digests/$target"
+              touch "$RUNNER_TEMP/digests/$target/${digest#sha256:}"
+            done
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: digests-${{ matrix.target }}-${{ runner.arch }}
-          path: ${{ runner.temp }}/digests/*
+          name: digests-${{ runner.arch }}
+          path: ${{ runner.temp }}/digests
           if-no-files-found: error
           retention-days: 1
 
@@ -139,7 +168,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: digests-${{ matrix.target }}-*
+          pattern: digests-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
 
@@ -171,7 +200,7 @@ jobs:
           for tag in "${tags[@]}"; do
             args+=(--tag "$tag")
           done
-          for digest in "$RUNNER_TEMP"/digests/*; do
+          for digest in "$RUNNER_TEMP/digests/$TARGET"/*; do
             args+=("$IMAGE@sha256:$(basename "$digest")")
           done
           docker buildx imagetools create "${args[@]}"
