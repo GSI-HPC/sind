@@ -113,6 +113,6 @@ sind applies labels to containers for filtering and metadata:
 
 Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image.
 
-A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network and the SSH volume carry `sind.realm` only. `sind get networks`, `sind get volumes` and `sind delete cluster --all` find resources by these labels.
+A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network and the SSH volume carry `sind.realm` only. `sind get networks` and `sind get volumes` find resources by these labels. `sind delete cluster --all` finds clusters by them and by the labels of their containers, which also covers clusters made before sind labelled networks and volumes (v0.9.0).
 
 Every node container, the mesh's DNS and SSH containers, and every network and volume also carry Docker Compose labels, so Compose-aware tools group them: the project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh), the service is the node's role (`dns` or `ssh` in the mesh), the container number is 1, or N+1 for `worker-N` and 2 for `controller-backup`, and networks and volumes name themselves `net`, `mesh`, the volume type or `ssh-config`.

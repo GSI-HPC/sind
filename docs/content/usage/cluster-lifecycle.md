@@ -111,3 +111,5 @@ sind delete cluster --all
 ```
 
 When the last cluster is deleted, sind also removes the shared mesh infrastructure (DNS, SSH, mesh network).
+
+`--all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the labels of their containers, networks and volumes, and also removes a mesh that no cluster is left in, as after a create that was killed. A cluster that fails to delete does not stop the others: sind deletes the rest, keeps the mesh, and exits non-zero naming the failed cluster.

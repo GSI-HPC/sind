@@ -23,7 +23,7 @@ Every node also joins its realm's mesh network, which carries the realm's DNS se
 |-------|--------|
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and `sind-ssh` |
 | Subsequent clusters | Connects nodes to `sind-mesh`, updates DNS |
-| Cluster deleted | Disconnects nodes, updates DNS |
+| Cluster deleted | Disconnects nodes, updates DNS (unless it was the last cluster) |
 | Last cluster deleted | Removes `sind-dns`, `sind-ssh`, and `sind-mesh` |
 
 The mesh does not route traffic between clusters by their DNS names: the `*.<realm>.sind` names resolve to cluster network addresses (see below), which the SSH relay and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name, such as `sind-dev-controller`.

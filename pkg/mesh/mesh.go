@@ -275,17 +275,28 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		m.revertHostDNS(ctx)
 	}
 
-	// Remove containers first (auto-disconnects from networks).
-	// Include the keygen container which may be orphaned if a previous
-	// EnsureSSHVolume was interrupted.
-	if err := m.removeContainerIfExists(ctx, m.SSHKeygenName()); err != nil {
-		return fmt.Errorf("removing SSH keygen container: %w", err)
+	// Remove containers first (auto-disconnects from networks), in
+	// parallel. Include the keygen container that earlier sind versions
+	// created to write the SSH keys, and could leave behind when
+	// interrupted.
+	g, gctx := errgroup.WithContext(ctx)
+	for _, c := range []struct {
+		name docker.ContainerName
+		what string
+	}{
+		{m.SSHKeygenName(), "SSH keygen"},
+		{m.SSHContainerName(), "SSH"},
+		{m.DNSContainerName(), "DNS"},
+	} {
+		g.Go(func() error {
+			if err := m.removeContainerIfExists(gctx, c.name); err != nil {
+				return fmt.Errorf("removing %s container: %w", c.what, err)
+			}
+			return nil
+		})
 	}
-	if err := m.removeContainerIfExists(ctx, m.SSHContainerName()); err != nil {
-		return fmt.Errorf("removing SSH container: %w", err)
-	}
-	if err := m.removeContainerIfExists(ctx, m.DNSContainerName()); err != nil {
-		return fmt.Errorf("removing DNS container: %w", err)
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	if err := m.removeNetworkIfExists(ctx, m.NetworkName()); err != nil {

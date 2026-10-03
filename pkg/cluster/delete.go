@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,50 +27,139 @@ import (
 // partial clusters (e.g., from a failed creation) by removing whatever
 // resources exist.
 //
-//	deleteClusterResources
-//	      │
 //	HasOtherClusters?
+//	      │
+//	deleteClusterResources   deregisters from the mesh only if other clusters remain
+//	      │
 //	    yes → done
 //	    no  → CleanupMesh
+//
+// Whether other clusters remain does not depend on this cluster's
+// containers, so Delete settles it first: when the mesh goes too, removing
+// the nodes' DNS records and known_hosts entries would be wasted work.
 func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 
 	log.InfoContext(ctx, "deleting cluster", "name", clusterName)
 
-	if err := deleteClusterResources(ctx, client, meshMgr, clusterName); err != nil {
-		return err
-	}
-
-	// Clean up mesh infrastructure if this was the last cluster.
 	hasOther, err := HasOtherClusters(ctx, client, realm, clusterName)
 	if err != nil {
 		return err
 	}
-	if !hasOther {
-		log.InfoContext(ctx, "last cluster deleted, cleaning up mesh")
-		return meshMgr.CleanupMesh(ctx)
+
+	if err := deleteClusterResources(ctx, client, meshMgr, clusterName, hasOther); err != nil {
+		return err
 	}
 
-	return nil
+	// Clean up mesh infrastructure if this was the last cluster.
+	if hasOther {
+		return nil
+	}
+	log.InfoContext(ctx, "last cluster deleted, cleaning up mesh")
+	return meshMgr.CleanupMesh(ctx)
+}
+
+// deleteAllConcurrency bounds how many clusters DeleteAll deletes at once.
+const deleteAllConcurrency = 4
+
+// DeleteAll deletes every cluster of the realm, in parallel, and then the
+// realm's mesh. It finds the clusters by the labels of their containers,
+// networks and volumes, and removes the mesh even when it finds no cluster:
+// a create that was killed can leave a mesh behind without one.
+//
+// A cluster that fails to delete does not stop the others. The mesh then
+// stays for what is left, the clusters that were deleted are deregistered
+// from it, and DeleteAll returns the failures, joined.
+func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+	log := sindlog.From(ctx)
+	realm := meshMgr.Realm
+
+	names, err := realmClusterNames(ctx, client, realm)
+	if err != nil {
+		return err
+	}
+
+	// The mesh goes too, so the clusters skip mesh deregistration, and
+	// with it the read-modify-write of the realm's Corefile and
+	// known_hosts that must not run concurrently.
+	deleted := make([]*Resources, len(names))
+	errs := make([]error, len(names))
+	var g errgroup.Group
+	g.SetLimit(deleteAllConcurrency)
+	for i, name := range names {
+		g.Go(func() error {
+			log.InfoContext(ctx, "deleting cluster", "name", name)
+			res, err := ListClusterResources(ctx, client, realm, name)
+			if err == nil {
+				err = removeClusterResources(ctx, client, meshMgr, name, res, false)
+			}
+			if err != nil {
+				errs[i] = fmt.Errorf("deleting cluster %s: %w", name, err)
+				return nil
+			}
+			deleted[i] = res
+			return nil
+		})
+	}
+	_ = g.Wait() // the goroutines report through errs
+
+	if err := errors.Join(errs...); err != nil {
+		var hostnames []string
+		for i, res := range deleted {
+			if res != nil {
+				hostnames = append(hostnames, meshHostnames(realm, names[i], res.Containers)...)
+			}
+		}
+		deregisterHostnames(ctx, meshMgr, hostnames)
+		return err
+	}
+
+	log.InfoContext(ctx, "all clusters deleted, cleaning up mesh")
+	return meshMgr.CleanupMesh(ctx)
+}
+
+// realmClusterNames returns the names of the realm's clusters, sorted:
+// those DiscoverClusterNames finds from networks and volumes, and those
+// whose containers carry a cluster label. sind before v0.9.0 labelled only
+// the containers.
+func realmClusterNames(ctx context.Context, client *docker.Client, realm string) ([]string, error) {
+	names, err := DiscoverClusterNames(ctx, client, realm)
+	if err != nil {
+		return nil, err
+	}
+	containers, err := client.ListContainers(ctx,
+		"label="+LabelRealm+"="+realm,
+		"label="+LabelCluster)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	for _, c := range containers {
+		if name := c.Labels[LabelCluster]; name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // deleteClusterResources removes containers, network, and volumes for a
-// cluster. It also deregisters DNS records and known_hosts entries. Does NOT
+// cluster. With deregister it also removes the nodes' DNS records and
+// known_hosts entries; callers that remove the mesh next skip that. Does NOT
 // clean up mesh infrastructure — that decision belongs to the caller.
 //
 // Removing a non-existent cluster is not an error.
 //
 //	ListClusterResources
 //	      │
-//	DeregisterMesh        DNS + known_hosts per node
+//	DeregisterMesh        DNS ║ known_hosts (with deregister)
 //	      │
 //	DeleteContainers      stop + rm per container
 //	      │
 //	DeleteNetwork         rm cluster network
 //	      │
 //	DeleteVolumes         rm cluster volumes
-func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
+func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, deregister bool) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
 
@@ -83,9 +174,19 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 		return nil
 	}
 
+	return removeClusterResources(ctx, client, meshMgr, clusterName, res, deregister)
+}
+
+// removeClusterResources removes the cluster resources that res lists, and
+// with deregister first the nodes' DNS records and known_hosts entries.
+func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, res *Resources, deregister bool) error {
+	log := sindlog.From(ctx)
+
 	// Remove DNS records and known_hosts entries before deleting containers.
 	// Failures are logged inside DeregisterMesh; the teardown continues.
-	_ = DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
+	if deregister {
+		_ = DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
+	}
 
 	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
 	if err := DeleteContainers(ctx, client, res.Containers); err != nil {
@@ -182,22 +283,42 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 // be overwritten on next register or cleared when the mesh itself is torn
 // down.
 func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {
-	if len(containers) == 0 {
-		return nil
-	}
-	log := sindlog.From(ctx)
-	prefix := ContainerPrefix(meshMgr.Realm, clusterName)
+	deregisterHostnames(ctx, meshMgr, meshHostnames(meshMgr.Realm, clusterName, containers))
+	return nil
+}
+
+// meshHostnames returns the mesh DNS names of a cluster's node containers.
+func meshHostnames(realm, clusterName string, containers []docker.ContainerListEntry) []string {
+	prefix := ContainerPrefix(realm, clusterName)
 	hostnames := make([]string, len(containers))
 	for i, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
-		hostnames[i] = DNSName(shortName, clusterName, meshMgr.Realm)
+		hostnames[i] = DNSName(shortName, clusterName, realm)
 	}
+	return hostnames
+}
 
-	if err := meshMgr.RemoveDNSRecords(ctx, hostnames); err != nil {
-		log.WarnContext(ctx, "removing DNS records failed, continuing", "error", err)
+// deregisterHostnames removes the DNS records and known_hosts entries of the
+// given mesh host names, logging failures. The Corefile and known_hosts live
+// in different containers, so the two updates run in parallel; each stays a
+// single read-modify-write.
+func deregisterHostnames(ctx context.Context, meshMgr *mesh.Manager, hostnames []string) {
+	if len(hostnames) == 0 {
+		return
 	}
-	if err := meshMgr.RemoveKnownHosts(ctx, hostnames); err != nil {
-		log.WarnContext(ctx, "removing known_hosts entries failed, continuing", "error", err)
-	}
-	return nil
+	log := sindlog.From(ctx)
+	var g errgroup.Group
+	g.Go(func() error {
+		if err := meshMgr.RemoveDNSRecords(ctx, hostnames); err != nil {
+			log.WarnContext(ctx, "removing DNS records failed, continuing", "error", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if err := meshMgr.RemoveKnownHosts(ctx, hostnames); err != nil {
+			log.WarnContext(ctx, "removing known_hosts entries failed, continuing", "error", err)
+		}
+		return nil
+	})
+	_ = g.Wait() // failures are logged
 }

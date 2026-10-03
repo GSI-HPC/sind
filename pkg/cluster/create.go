@@ -213,7 +213,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		if resourcesCreated {
 			logClusterDiagnostics(cleanupCtx, client, realm, cfg.Name)
 			log.DebugContext(ctx, "removing cluster resources", "name", cfg.Name)
-			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name); err != nil {
+			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name, !removeMesh); err != nil {
 				errs = append(errs, fmt.Errorf("rolling back: removing cluster resources (sind delete cluster removes what is left): %w", err))
 			}
 		}

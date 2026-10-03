@@ -356,6 +356,9 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 - Removes all matching Docker resources regardless of state
 - Updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes
 - Order: stops/removes containers → disconnects/removes networks → removes volumes
+- The last cluster of a realm takes the mesh with it; its nodes are then not removed from the mesh DNS and `known_hosts` first
+
+`sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure.
 
 Example output:
 
@@ -1304,7 +1307,7 @@ All nodes of a realm also join its shared mesh network, which carries the realm'
 |-------|--------|
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` |
 | Subsequent clusters | Connects cluster nodes to `sind-mesh`, updates DNS |
-| Cluster deleted | Disconnects cluster nodes, updates DNS |
+| Cluster deleted | Disconnects cluster nodes, updates DNS (unless it is the last cluster) |
 | Last cluster deleted | Removes `sind-dns` and `sind-mesh` network |
 
 The mesh does not route traffic between clusters by DNS name: the mesh DNS records point at cluster network addresses, which the SSH relay (on every cluster network) and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name (`sind-dev-controller`).

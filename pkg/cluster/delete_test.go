@@ -541,13 +541,11 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 		volumes:       []string{"config"},
 		otherClusters: false,
 	})
-	// Override: make CleanupMesh's first `rm -f` (for the SSH keygen container)
+	// Override: make CleanupMesh's `rm -f` of the SSH keygen container
 	// fail with a real (non-IsNotFound) error.
 	inner := m.OnCall
-	rmSeen := false
 	m.OnCall = func(args []string, stdin string) mock.Result {
-		if !rmSeen && len(args) >= 3 && args[0] == "rm" && args[1] == "-f" {
-			rmSeen = true
+		if len(args) >= 4 && args[0] == "rm" && args[3] == "sind-ssh-keygen" {
 			return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
 		}
 		return inner(args, stdin)
@@ -559,6 +557,278 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "removing SSH keygen container")
+}
+
+// meshUpdates returns the recorded calls that update the realm's Corefile
+// or known_hosts.
+func meshUpdates(m *mock.Executor) []string {
+	var out []string
+	for _, c := range m.Calls {
+		joined := strings.Join(c.Args, " ")
+		if strings.HasPrefix(joined, "cp ") || strings.HasPrefix(joined, "exec sind-ssh") || strings.HasPrefix(joined, "exec -i sind-ssh") {
+			out = append(out, joined)
+		}
+	}
+	return out
+}
+
+// TestDelete_LastClusterSkipsDeregistration covers the last cluster of a
+// realm: the mesh goes with it, so its nodes are not deregistered first.
+func TestDelete_LastClusterSkipsDeregistration(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+		containers: []testutil.PsEntry{
+			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		},
+		networkExists: true,
+		volumes:       []string{"config"},
+		otherClusters: false,
+	})
+	c := docker.NewClient(&m)
+
+	err := Delete(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm), "dev")
+
+	require.NoError(t, err)
+	assert.Empty(t, meshUpdates(&m))
+	var removed []string
+	for _, call := range m.Calls {
+		if call.Args[0] == "rm" {
+			removed = append(removed, call.Args[3])
+		}
+	}
+	assert.Contains(t, removed, "sind-dns", "mesh removed")
+}
+
+// TestDelete_OtherClusterDeregisters covers a realm that keeps its mesh: the
+// nodes leave the Corefile and known_hosts.
+func TestDelete_OtherClusterDeregisters(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+		containers: []testutil.PsEntry{
+			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
+		},
+		networkExists: true,
+		volumes:       []string{"config"},
+		otherClusters: true,
+		knownHosts:    "controller.dev.sind.sind ssh-ed25519 K1\n",
+	})
+	c := docker.NewClient(&m)
+
+	err := Delete(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm), "dev")
+
+	require.NoError(t, err)
+	updates := meshUpdates(&m)
+	assert.Contains(t, updates, "cp sind-dns:/Corefile -")
+	assert.Contains(t, updates, "exec sind-ssh cat /root/.ssh/known_hosts")
+	for _, call := range m.Calls {
+		if call.Args[0] == "rm" {
+			assert.NotEqual(t, "sind-dns", call.Args[3], "mesh kept")
+		}
+	}
+}
+
+// --- DeleteAll ---
+
+// realmFake answers the calls of DeleteAll for a realm whose clusters have
+// the given nodes. Clusters in containersOnly have labelled containers but
+// unlabelled networks and volumes (sind before v0.9.0). fail answers a call
+// first when it returns true.
+type realmFake struct {
+	t              *testing.T
+	clusters       map[string][]string
+	containersOnly map[string]bool
+	fail           func(args []string) bool
+}
+
+func (f *realmFake) onCall(args []string, _ string) mock.Result {
+	if f.fail != nil && f.fail(args) {
+		return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}
+	}
+	joined := strings.Join(args, " ")
+	notFound := mock.Result{Stderr: "Error: No such object\n", Err: notFoundErr(f.t)}
+	lsEntries := func() string {
+		var lines []string
+		for name := range f.clusters {
+			if !f.containersOnly[name] {
+				lines = append(lines, fmt.Sprintf(`{"Name":"sind-%s-net","Labels":"sind.cluster=%s,sind.realm=sind"}`, name, name))
+			}
+		}
+		return strings.Join(lines, "\n")
+	}
+	switch {
+	case strings.HasPrefix(joined, "network ls"), strings.HasPrefix(joined, "volume ls"):
+		return mock.Result{Stdout: lsEntries()}
+	case args[0] == "ps":
+		filter := args[len(args)-1]
+		var entries []testutil.PsEntry
+		for name, nodes := range f.clusters {
+			if filter != "label=sind.cluster" && filter != "label=sind.cluster="+name {
+				continue
+			}
+			for _, n := range nodes {
+				entries = append(entries, testutil.PsEntry{ID: n, Names: "sind-" + name + "-" + n, State: "running", Image: "img",
+					Labels: "sind.cluster=" + name + ",sind.realm=sind"})
+			}
+		}
+		if len(entries) == 0 {
+			return mock.Result{}
+		}
+		return mock.Result{Stdout: testutil.NDJSON(entries...)}
+	case args[0] == "network" && args[1] == "inspect":
+		for name := range f.clusters {
+			if args[2] == "sind-"+name+"-net" {
+				return mock.Result{Stdout: "{}\n"}
+			}
+		}
+		return notFound
+	case args[0] == "volume" && args[1] == "inspect":
+		for name := range f.clusters {
+			if args[2] == "sind-"+name+"-config" {
+				return mock.Result{Stdout: "{}\n"}
+			}
+		}
+		return notFound
+	case args[0] == "rm", args[0] == "network" && (args[1] == "rm" || args[1] == "disconnect"), args[0] == "volume" && args[1] == "rm":
+		return mock.Result{}
+	case args[0] == "cp" && args[1] == "sind-dns:/Corefile":
+		return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
+	case args[0] == "cp", args[0] == "kill":
+		return mock.Result{}
+	case joined == "inspect sind-dns":
+		return mock.Result{Stdout: dnsRunningInspectJSON}
+	case args[0] == "exec":
+		return mock.Result{}
+	}
+	f.t.Errorf("unexpected docker call: %s", joined)
+	return mock.Result{Err: fmt.Errorf("unexpected call: %s", joined)}
+}
+
+// removed returns the containers, networks and volumes m removed.
+func removed(m *mock.Executor) []string {
+	var out []string
+	for _, c := range m.Calls {
+		switch {
+		case c.Args[0] == "rm":
+			out = append(out, c.Args[3])
+		case c.Args[0] == "network" && c.Args[1] == "rm", c.Args[0] == "volume" && c.Args[1] == "rm":
+			out = append(out, c.Args[2])
+		}
+	}
+	return out
+}
+
+func TestDeleteAll(t *testing.T) {
+	f := &realmFake{t: t,
+		clusters: map[string][]string{
+			"dev":    {"controller", "worker-0"},
+			"test":   {"controller"},
+			"legacy": {"controller"}, // found by its containers only
+		},
+		containersOnly: map[string]bool{"legacy": true},
+	}
+	var m mock.Executor
+	m.OnCall = f.onCall
+	c := docker.NewClient(&m)
+
+	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
+
+	require.NoError(t, err)
+	got := removed(&m)
+	assert.Subset(t, got, []string{
+		"sind-dev-controller", "sind-dev-worker-0", "sind-test-controller", "sind-legacy-controller",
+		"sind-dev-net", "sind-test-net", "sind-legacy-net",
+		"sind-ssh", "sind-dns", "sind-mesh", "sind-ssh-config",
+	})
+	assert.Empty(t, meshUpdates(&m), "no deregistration from a mesh that goes")
+	assert.Equal(t, "volume rm sind-ssh-config", strings.Join(m.Calls[len(m.Calls)-1].Args, " "), "mesh removed last")
+}
+
+// TestDeleteAll_MeshOnly covers a realm left with a mesh and no cluster, as
+// after a killed create: the mesh is removed.
+func TestDeleteAll_MeshOnly(t *testing.T) {
+	f := &realmFake{t: t, clusters: map[string][]string{}}
+	var m mock.Executor
+	m.OnCall = f.onCall
+	c := docker.NewClient(&m)
+
+	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"sind-ssh-keygen", "sind-ssh", "sind-dns", "sind-mesh", "sind-ssh-config"}, removed(&m))
+}
+
+// TestDeleteAll_ClusterFails covers one cluster that fails to delete: the
+// others are deleted and deregistered, the mesh stays, and the error names
+// the cluster.
+func TestDeleteAll_ClusterFails(t *testing.T) {
+	f := &realmFake{t: t,
+		clusters: map[string][]string{"dev": {"controller"}, "test": {"controller"}},
+		fail: func(args []string) bool {
+			return args[0] == "rm" && args[3] == "sind-test-controller"
+		},
+	}
+	var m mock.Executor
+	m.OnCall = f.onCall
+	c := docker.NewClient(&m)
+
+	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "deleting cluster test")
+	got := removed(&m)
+	assert.Contains(t, got, "sind-dev-controller")
+	assert.NotContains(t, got, "sind-dns", "mesh kept for test")
+
+	// Only dev's node left the mesh.
+	var corefile string
+	for _, call := range m.Calls {
+		if call.Args[0] == "cp" && call.Args[1] == "-" {
+			corefile = call.Stdin
+		}
+	}
+	require.NotEmpty(t, corefile, "Corefile rewritten")
+	assert.Contains(t, meshUpdates(&m), "exec sind-ssh cat /root/.ssh/known_hosts")
+}
+
+func TestDeleteAll_ListError(t *testing.T) {
+	f := &realmFake{t: t,
+		clusters: map[string][]string{"dev": {"controller"}},
+		fail: func(args []string) bool {
+			return args[0] == "ps" && args[len(args)-1] == "label=sind.cluster=dev"
+		},
+	}
+	var m mock.Executor
+	m.OnCall = f.onCall
+	c := docker.NewClient(&m)
+
+	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "deleting cluster dev: listing containers")
+}
+
+func TestDeleteAll_DiscoveryErrors(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		fail  func(args []string) bool
+		match string
+	}{
+		{"networks", func(a []string) bool { return a[0] == "network" && a[1] == "ls" }, "listing networks"},
+		{"containers", func(a []string) bool { return a[0] == "ps" }, "listing containers"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &realmFake{t: t, clusters: map[string][]string{"dev": {"controller"}}, fail: tt.fail}
+			var m mock.Executor
+			m.OnCall = f.onCall
+			c := docker.NewClient(&m)
+
+			err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.match)
+			assert.Empty(t, removed(&m))
+		})
+	}
 }
 
 // --- helpers ---

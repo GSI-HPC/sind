@@ -94,16 +94,9 @@ func runDeleteClustersAll(cmd *cobra.Command) error {
 
 	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	names, err := cluster.DiscoverClusterNames(ctx, client, realm)
-	if err != nil {
-		return err
-	}
-
-	for _, name := range names {
-		if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
-			return err
-		}
-	}
+	// The SSH export follows the mesh even when some clusters fail to
+	// delete.
+	err = cluster.DeleteAll(ctx, client, meshMgr)
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
@@ -111,5 +104,5 @@ func runDeleteClustersAll(cmd *cobra.Command) error {
 		}
 	}
 
-	return nil
+	return err
 }

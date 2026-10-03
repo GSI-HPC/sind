@@ -1039,6 +1039,40 @@ func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
 	assert.False(t, meshRemoved(&m))
 }
 
+// TestCreate_RollbackSkipsDeregistrationOfRemovedMesh covers the rollback
+// of a create that made the mesh: the mesh goes, so the nodes are not
+// deregistered from it first.
+func TestCreate_RollbackSkipsDeregistrationOfRemovedMesh(t *testing.T) {
+	failed := false
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			failed = true
+			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		if failed && args[0] == "ps" && args[len(args)-1] == "label=sind.cluster=dev" {
+			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "a", Names: "sind-dev-controller",
+				State: "running", Image: "img", Labels: "sind.cluster=dev,sind.realm=sind"})}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+
+	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.True(t, meshRemoved(&m))
+	var reads int
+	for _, call := range m.Calls {
+		if call.Args[0] == "exec" && call.Args[1] == "sind-ssh" && len(call.Args) > 3 && call.Args[3] == "/root/.ssh/known_hosts" {
+			reads++
+		}
+	}
+	assert.Equal(t, 1, reads, "known_hosts read once, by the registration, not by the rollback")
+}
+
 func TestResolveMeshInfra_NoDNSContainer(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
