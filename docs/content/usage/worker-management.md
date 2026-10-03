@@ -26,7 +26,7 @@ sind create worker [CLUSTER] [FLAGS]
 | `--device` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
 | `--security-opt` | none | Security option (repeatable) |
 
-`--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, and `--device` needs an absolute host path, as `devices` does; sind checks them before it creates any container.
+`--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, `--device` needs an absolute host path, as `devices` does, and `--security-opt` an option Docker knows, as `securityOpt` does; sind checks them before it creates any container. With `-v`, it logs the extra privileges of the new nodes, as `sind create cluster` does.
 
 ### Examples
 

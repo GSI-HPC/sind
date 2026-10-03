@@ -177,7 +177,9 @@ nodes:
       - NET_ADMIN    # workers get both SYS_ADMIN and NET_ADMIN
 ```
 
-sind logs a notice at cluster creation when extra privileges are configured, making the escalation visible.
+With `-v`, `sind create cluster` and `sind create worker` log an `extra privileges` notice at the info level for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). Without `-v` nothing is shown: like every successful mutation, creation is silent.
+
+`securityOpt` entries must name an option Docker knows (`label`, `apparmor`, `seccomp`, `no-new-privileges`, `writable-cgroups` or `systempaths`); sind rejects others before it creates any container, and Docker checks the values.
 
 One capability sind adds itself: workers of a cluster with [users]({{< relref "/configuration/cluster-config#users-section" >}}) get `SYS_NICE`. slurmstepd binds each task to its CPUs (`task/affinity`) after the task has become the job's user, and setting the CPU affinity of another user's process needs `CAP_SYS_NICE`, which Docker drops by default. Without it, every job of a user other than root fails with `task_g_set_affinity` and "Slurmd could not execve job".
 

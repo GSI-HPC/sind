@@ -29,25 +29,41 @@ func controllerImage(cfg *config.Cluster) string {
 	return config.DefaultImage
 }
 
-// logExtraPrivileges emits a notice for each node that has extra capabilities,
-// devices, or security options configured, making privilege escalation visible.
+// logExtraPrivileges emits a notice, at info level, for each node that has
+// extra capabilities, devices or security options configured or bind-mounts
+// host directories (the data directory, the host's /cvmfs), making the
+// node's access to the host visible with -v.
 func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 	log := sindlog.From(ctx)
 	for _, cfg := range configs {
-		if len(cfg.CapAdd) == 0 && len(cfg.Devices) == 0 && len(cfg.SecurityOpt) == 0 {
-			continue
+		var binds []string
+		if cfg.DataHostPath != "" {
+			mountPath := cfg.DataMountPath
+			if mountPath == "" {
+				mountPath = DefaultDataMountPath
+			}
+			binds = append(binds, cfg.DataHostPath+":"+mountPath)
+		}
+		if cfg.CVMFS == config.StorageHostPath {
+			binds = append(binds, CVMFSPath+":"+CVMFSPath+":ro")
 		}
 		var parts []string
-		if len(cfg.CapAdd) > 0 {
-			parts = append(parts, "capAdd=["+strings.Join(cfg.CapAdd, ",")+"]")
+		for _, p := range []struct {
+			name   string
+			values []string
+		}{
+			{"capAdd", cfg.CapAdd},
+			{"devices", cfg.Devices},
+			{"securityOpt", cfg.SecurityOpt},
+			{"hostMounts", binds},
+		} {
+			if len(p.values) > 0 {
+				parts = append(parts, p.name+"=["+strings.Join(p.values, ",")+"]")
+			}
 		}
-		if len(cfg.Devices) > 0 {
-			parts = append(parts, "devices=["+strings.Join(cfg.Devices, ",")+"]")
+		if len(parts) > 0 {
+			log.InfoContext(ctx, "extra privileges", "node", cfg.ShortName, "config", strings.Join(parts, " "))
 		}
-		if len(cfg.SecurityOpt) > 0 {
-			parts = append(parts, "securityOpt=["+strings.Join(cfg.SecurityOpt, ",")+"]")
-		}
-		log.InfoContext(ctx, "extra privileges", "node", cfg.ShortName, "config", strings.Join(parts, " "))
 	}
 }
 

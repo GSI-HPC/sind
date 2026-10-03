@@ -3,10 +3,12 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"slices"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/monitor"
 	"github.com/GSI-HPC/sind/pkg/probe"
@@ -1347,46 +1350,40 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 }
 
 func TestLogExtraPrivileges(t *testing.T) {
-	t.Run("no privileges", func(t *testing.T) {
-		configs := []RunConfig{
-			{ShortName: "controller"},
-			{ShortName: "worker-0"},
-		}
-		// Should not panic or log anything.
-		logExtraPrivileges(t.Context(), configs)
-	})
+	tests := []struct {
+		name string
+		cfg  RunConfig
+		want string // the notice's config, empty for none
+	}{
+		{"no privileges", RunConfig{ShortName: "worker-0"}, ""},
+		{"data volume and cvmfs volume", RunConfig{ShortName: "worker-0", CVMFS: config.StorageVolume}, ""},
+		{"capAdd", RunConfig{ShortName: "worker-0", CapAdd: []string{"SYS_ADMIN", "NET_ADMIN"}}, "capAdd=[SYS_ADMIN,NET_ADMIN]"},
+		{"devices", RunConfig{ShortName: "worker-0", Devices: []string{"/dev/fuse"}}, "devices=[/dev/fuse]"},
+		{"securityOpt", RunConfig{ShortName: "worker-0", SecurityOpt: []string{"apparmor=unconfined"}}, "securityOpt=[apparmor=unconfined]"},
+		{"data host path", RunConfig{ShortName: "worker-0", DataHostPath: "/home/u/proj"}, "hostMounts=[/home/u/proj:/data]"},
+		{"all", RunConfig{
+			ShortName:     "worker-0",
+			CapAdd:        []string{"SYS_ADMIN"},
+			Devices:       []string{"/dev/fuse"},
+			SecurityOpt:   []string{"apparmor=unconfined"},
+			DataHostPath:  "/",
+			DataMountPath: "/host",
+			CVMFS:         config.StorageHostPath,
+		}, "capAdd=[SYS_ADMIN] devices=[/dev/fuse] securityOpt=[apparmor=unconfined] hostMounts=[/:/host,/cvmfs:/cvmfs:ro]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+			logExtraPrivileges(sindlog.With(t.Context(), logger), []RunConfig{tt.cfg})
 
-	t.Run("capAdd only", func(t *testing.T) {
-		configs := []RunConfig{
-			{ShortName: "worker-0", CapAdd: []string{"SYS_ADMIN"}},
-		}
-		logExtraPrivileges(t.Context(), configs)
-	})
-
-	t.Run("devices only", func(t *testing.T) {
-		configs := []RunConfig{
-			{ShortName: "worker-0", Devices: []string{"/dev/fuse"}},
-		}
-		logExtraPrivileges(t.Context(), configs)
-	})
-
-	t.Run("securityOpt only", func(t *testing.T) {
-		configs := []RunConfig{
-			{ShortName: "worker-0", SecurityOpt: []string{"apparmor=unconfined"}},
-		}
-		logExtraPrivileges(t.Context(), configs)
-	})
-
-	t.Run("all fields", func(t *testing.T) {
-		configs := []RunConfig{
-			{ShortName: "worker-0",
-				CapAdd:      []string{"SYS_ADMIN", "NET_ADMIN"},
-				Devices:     []string{"/dev/fuse"},
-				SecurityOpt: []string{"apparmor=unconfined"},
-			},
-		}
-		logExtraPrivileges(t.Context(), configs)
-	})
+			if tt.want == "" {
+				assert.Empty(t, buf.String())
+				return
+			}
+			assert.Contains(t, buf.String(), `level=INFO msg="extra privileges" node=worker-0 config="`+tt.want+`"`)
+		})
+	}
 }
 
 func TestEnableSlurm_ProbeTimeout(t *testing.T) {

@@ -653,6 +653,7 @@ func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
 		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
 		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
 		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device path must be absolute, got "dev/fuse"`},
+		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, `unknown security option "privileged" in --security-opt`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

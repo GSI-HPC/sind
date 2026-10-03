@@ -66,6 +66,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if err := config.CheckDevices(opts.Devices); err != nil {
 		return nil, err
 	}
+	if err := config.CheckSecurityOpts("--security-opt", opts.SecurityOpt); err != nil {
+		return nil, err
+	}
 
 	// List cluster containers once for validation + index + image resolution.
 	containers, err := client.ListContainers(ctx,
@@ -172,6 +175,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			NSSSlurm:        !opts.Unmanaged && identity.UsesNSSSlurm(),
 		}
 	}
+	logExtraPrivileges(ctx, nodeConfigs)
 
 	// From this point on, worker containers may exist. Clean them up on failure
 	// so the user does not have to remove them manually before retrying.

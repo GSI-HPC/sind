@@ -310,6 +310,7 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - `count` must not be negative; `0` means the default, 1
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
+- `securityOpt` entries must name an option Docker knows, with a value: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges` (value optional), `writable-cgroups=` or `systempaths=`
 - `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute
 - User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647 and unique, private groups included; a user's `group` and `groups` must be declared in `groups`
 - `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`

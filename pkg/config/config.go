@@ -416,6 +416,9 @@ func (c *Cluster) Validate() error {
 		if err := CheckDevices(n.Devices); err != nil {
 			return err
 		}
+		if err := CheckSecurityOpts("securityOpt", n.SecurityOpt); err != nil {
+			return err
+		}
 	}
 
 	sections := []struct {

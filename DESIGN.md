@@ -479,7 +479,9 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--device PATH` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
 | `--security-opt OPT` | none | Security option (repeatable) |
 
-`--cap-add`, `--cap-drop` and `--device` are checked like the config's `capAdd`, `capDrop` and `devices`, before any container is created.
+`--cap-add`, `--cap-drop`, `--device` and `--security-opt` are checked like the config's `capAdd`, `capDrop`, `devices` and `securityOpt`, before any container is created.
+
+With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: mutations stay silent by default.
 
 Examples:
 
@@ -855,6 +857,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `accounts`, and the users' `accounts`, `coordinator` and `adminLevel` - require a managed `db` node; account names hold only lowercase letters, digits, `_` and `-`, do not start with `-`, have at most 64 characters, are unique and are not `root`; a `parent` is `root` or an account declared before; `limits` keys are sacctmgr options other than `name`, `parent` and `cluster`, with non-empty values; every account a user names is declared, at most once per list; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
 - `devices` - absolute paths
+- `securityOpt` - options Docker knows by name: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges`, `writable-cgroups=` or `systempaths=`, each with a value (`no-new-privileges` may go without); Docker checks the values
 - `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute
 - `users`, `groups` - a name or an object; user and group names start with a lowercase letter or `_`, hold only lowercase letters, digits, `_` and `-`, and have at most 32 characters; `uid` and `gid` are between 1000 and 2147483647; no two users share a name or `uid`, no two groups (private ones included) a name or `gid`; a user's `group` and `groups` are declared in `groups`, and `groups` repeats neither an entry nor `group`
 - `identity` - `local`, `nssSlurm` or `clientIds`, or an object with `mode` and `controllerUsers`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` only with `clientIds`
