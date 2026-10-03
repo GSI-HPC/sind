@@ -1,0 +1,41 @@
+{{- /*
+  Embed a Sindy video episode: {{< video "quickstart" >}}
+
+  The files come from the video pipeline (video/tools/publish.mjs), which
+  writes static/videos/<id>.{mp4,jpg,vtt} and data/videos/<id>.json. When an
+  episode has not been published (e.g. a local build without the pipeline),
+  the shortcode renders nothing.
+*/ -}}
+{{- $id := .Get 0 -}}
+{{- $meta := index (site.Data.videos | default dict) $id -}}
+{{- if and $meta (fileExists (printf "static/videos/%s.mp4" $id)) -}}
+{{- $base := printf "videos/%s" $id -}}
+<figure class="sind-video" id="video-{{ $id }}">
+  <video controls preload="none" playsinline poster="{{ printf "%s.jpg" $base | relURL }}" aria-label="{{ $meta.title }}">
+    <source src="{{ printf "%s.mp4" $base | relURL }}" type="video/mp4">
+    <track kind="captions" src="{{ printf "%s.vtt" $base | relURL }}" srclang="en" label="English" default>
+  </video>
+  <figcaption>
+    <div class="sind-video-title"><strong>{{ $meta.title }}</strong><span>{{ $meta.length }} · presented by Sindy, an AI-voiced virtual presenter</span></div>
+    {{- with $meta.chapters }}
+    <ol class="sind-video-chapters">
+      {{- range . }}
+      <li><button type="button" data-t="{{ .start }}">{{ .time }}</button>{{ .title }}</li>
+      {{- end }}
+    </ol>
+    {{- end }}
+  </figcaption>
+</figure>
+{{- if not (.Page.Store.Get "sindVideoScript") }}
+{{- .Page.Store.Set "sindVideoScript" true }}
+<script>
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".sind-video-chapters button");
+    if (!b) return;
+    var v = b.closest(".sind-video").querySelector("video");
+    v.currentTime = Number(b.dataset.t);
+    v.play();
+  });
+</script>
+{{- end }}
+{{- end -}}
