@@ -41,7 +41,7 @@ sind --realm ci-42 delete cluster dev
 
 When a command does not find a cluster in its realm, the error names the realms that hold a cluster of that name, for example `cluster "dev" not found in realm "sind" (it exists in realm "ci-42")`.
 
-A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source; `SIND_REALM` is only checked when it is the realm in effect.
+A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source. An invalid `--realm` fails every command with exit status 2, even one that does not use a realm such as `sind version`; `SIND_REALM` is only checked when it is the realm in effect.
 
 ## Resource naming
 

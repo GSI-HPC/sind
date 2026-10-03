@@ -121,7 +121,7 @@ func TestRootCommand_RealmFlagAfterSubcommand(t *testing.T) {
 	m.AddResult("", "", nil) // empty container list for realms query
 
 	// Flag placed AFTER the subcommand must parse cleanly.
-	stdout, _, err := executeWithMock(&m, "get", "realms", "--realm", "someRealm", "-o", "json")
+	stdout, _, err := executeWithMock(&m, "get", "realms", "--realm", "some-realm", "-o", "json")
 	require.NoError(t, err)
 	assert.Equal(t, "[]\n", stdout)
 }
