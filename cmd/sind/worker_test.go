@@ -23,7 +23,7 @@ func TestCreateWorker_Flags(t *testing.T) {
 	c, _, err := cmd.Find([]string{"create", "worker"})
 	require.NoError(t, err)
 
-	flags := []string{"count", "image", "cpus", "memory", "tmp-size", "unmanaged"}
+	flags := []string{"count", "image", "cpus", "memory", "tmp-size", "unmanaged", "wait"}
 	for _, f := range flags {
 		assert.NotNil(t, c.Flags().Lookup(f), "missing flag: %s", f)
 	}

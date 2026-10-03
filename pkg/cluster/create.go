@@ -86,7 +86,12 @@ type nodeResult struct {
 // The caller must ensure mesh infrastructure exists (via mesh.Manager.EnsureMesh)
 // before calling Create. The context deadline controls the overall timeout;
 // readinessInterval controls the polling interval for readiness probes, and
-// zero or less means DefaultReadinessInterval.
+// zero or less means DefaultReadinessInterval. cfg.Wait, when positive,
+// limits how long Create waits for the nodes and Slurm to become ready,
+// counted for each node from when its container has started, so that image
+// pulls do not count; the steps after the nodes are ready end cfg.Wait
+// after the last node container started. When the limit is reached, Create
+// rolls back and returns an error that wraps ErrNotReady.
 //
 //	┌ PreflightCheck → createResources → ConnectNetwork ┐
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
@@ -102,6 +107,7 @@ type nodeResult struct {
 func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, readinessInterval time.Duration) (result *Cluster, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
+	rd := &readiness{interval: readinessInterval, wait: cfg.Wait}
 
 	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(NodeShortNames(cfg.Nodes)))
 
@@ -113,6 +119,9 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	defer func() {
 		if retErr == nil {
 			return
+		}
+		if rd.expired() {
+			retErr = fmt.Errorf("cluster %s %w within %s: %w", cfg.Name, ErrNotReady, rd.wait, retErr)
 		}
 		log.ErrorContext(ctx, "cleaning up partial resources, please wait")
 		cleanupCtx := context.WithoutCancel(ctx)
@@ -199,7 +208,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	watcher, stopWatcher := startWatcher(ctx, client, prefix, cfg.Name)
 	defer stopWatcher()
 
-	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, cfg.Name, sshPubKey, nodeConfigs, readinessInterval, watcher)
+	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, cfg.Name, sshPubKey, nodeConfigs, rd, watcher)
 	if err != nil {
 		return nil, err
 	}
@@ -208,8 +217,10 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// registerMesh, enableSlurm and createHomes are independent: Slurm uses
 	// short hostnames resolved by Docker embedded DNS on the cluster network.
 	// Mesh DNS records are for SSH relay and host-side resolution only.
+	readyCtx, cancelReady := rd.context(ctx)
+	defer cancelReady()
 	var cluster *Cluster
-	g, gctx := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(readyCtx)
 	g.Go(func() error {
 		var meshErr error
 		cluster, meshErr = registerMesh(gctx, meshMgr, cfg.Name, slurmVersion, nodeConfigs, nodeResults)
@@ -355,7 +366,8 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 //	per node:  create → monitor → wait(container, systemd, sshd, munge) → inspect → nss_slurm → users → SSH → hostkey
 //
 // With identity clientIds munge is masked, so there is no munge to wait for.
-func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) ([]nodeResult, error) {
+// rd bounds each node's steps after its container has started.
+func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, rd *readiness, watcher *monitor.Watcher) ([]nodeResult, error) {
 	log := sindlog.From(ctx)
 	results := make([]nodeResult, len(nodeConfigs))
 
@@ -367,6 +379,10 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			if _, err := CreateNode(gctx, client, meshMgr, nc); err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
+			// The wait limit counts from here, after the image pull
+			// that docker create may have made.
+			nctx, cancel := rd.nodeContext(gctx)
+			defer cancel()
 
 			if watcher != nil {
 				watcher.AddNodes([]monitor.NodeTarget{{
@@ -383,29 +399,29 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			if nc.Identity != config.IdentityClientIDs {
 				baseProbes = append(baseProbes, probe.Probe{Name: "munge", Check: probe.MungeReady})
 			}
-			log.DebugContext(gctx, "waiting for node", "node", nc.ShortName)
-			if err := waitReady(gctx, client, containerName, baseProbes, interval, watcher); err != nil {
+			log.DebugContext(nctx, "waiting for node", "node", nc.ShortName)
+			if err := waitReady(nctx, client, containerName, baseProbes, rd.interval, watcher); err != nil {
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
 			}
 
-			info, err := client.InspectContainer(gctx, containerName)
+			info, err := client.InspectContainer(nctx, containerName)
 			if err != nil {
 				return fmt.Errorf("inspecting node %s: %w", nc.ShortName, err)
 			}
 
 			if nc.NSSSlurm {
-				if err := enableNSSSlurm(gctx, client, containerName, nc); err != nil {
+				if err := enableNSSSlurm(nctx, client, containerName, nc); err != nil {
 					return fmt.Errorf("node %s: %w", nc.ShortName, err)
 				}
 			}
 
 			if nc.AddUsers && !nc.Users.IsEmpty() {
-				if err := addUsers(gctx, client, containerName, nc.Users); err != nil {
+				if err := addUsers(nctx, client, containerName, nc.Users); err != nil {
 					return fmt.Errorf("node %s: %w", nc.ShortName, err)
 				}
 			}
 
-			hostKey, err := ssh.InjectKeyAndCollectHostKey(gctx, client, containerName, sshPubKey)
+			hostKey, err := ssh.InjectKeyAndCollectHostKey(nctx, client, containerName, sshPubKey)
 			if err != nil {
 				return fmt.Errorf("setting up SSH on %s: %w", nc.ShortName, err)
 			}

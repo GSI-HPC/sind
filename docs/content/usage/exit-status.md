@@ -11,7 +11,7 @@ Scripts branch on sind's exit status, so it is part of the command line contract
 | Status | Meaning | Typical cause |
 |--------|---------|---------------|
 | `0` | The command succeeded | |
-| `1` | The command ran and failed | Docker is not reachable, a node did not become ready, a cluster does not exist, a required `sind doctor` check failed, an invalid `SIND_REALM` or config file |
+| `1` | The command ran and failed | Docker is not reachable, a node did not become ready within `--wait`, a cluster does not exist, a required `sind doctor` check failed, an invalid `SIND_REALM` or config file |
 | `2` | sind rejected the command line before acting on it | An unknown command or flag, a flag value or argument that is not valid, the wrong number of arguments |
 | `130` | SIGINT or SIGTERM interrupted the command | Ctrl-C, `timeout`, `docker stop` |
 
@@ -54,7 +54,7 @@ $ echo $?
 
 ## Interrupts
 
-The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish.
+The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A `--wait` limit of `sind create cluster` or `sind create worker` that runs out is not an interrupt: the command rolls back the same way and exits `1`. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish.
 
 ## MCP tools
 

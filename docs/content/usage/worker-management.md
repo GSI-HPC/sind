@@ -21,6 +21,7 @@ sind create worker [CLUSTER] [FLAGS]
 | `--tmp-size` | the newest worker's, else `256m` | `/tmp` tmpfs size, part of `--memory` |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | `false` | Pull the `--image` before creating containers; needs `--image` |
+| `--wait` | `5m` | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit |
 | `--cap-add` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
 | `--cap-drop` | the newest worker's, else none | Drop Linux capability (repeatable) |
 | `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`) |
@@ -80,6 +81,8 @@ This requires a running controller and `sind-nodes.conf` in `/etc/slurm`. If you
 If a step fails, or you interrupt the command, sind removes the new containers and their `sind-nodes.conf` definitions again, so you can simply retry.
 
 On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), every new worker is unmanaged, with or without `--unmanaged`.
+
+If a new worker is not ready within `--wait`, or its munge or slurmd unit fails, `sind create worker` fails with exit status 1, names the worker and the check that failed, and removes the workers it created, as `sind create cluster` does (see [Cluster Lifecycle]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}})).
 
 ## Remove workers
 

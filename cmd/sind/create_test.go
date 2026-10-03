@@ -121,6 +121,24 @@ func TestCreateCluster_CommandExists(t *testing.T) {
 	assert.Equal(t, ".", createCmd.Flags().Lookup("data").DefValue)
 }
 
+func TestCreate_WaitFlag(t *testing.T) {
+	for _, sub := range []string{"cluster", "worker"} {
+		t.Run(sub, func(t *testing.T) {
+			c, _, err := NewRootCommand().Find([]string{"create", sub})
+			require.NoError(t, err)
+			flag := c.Flags().Lookup("wait")
+			require.NotNil(t, flag)
+			assert.Equal(t, "5m0s", flag.DefValue)
+
+			// A negative limit is a usage error, reported before sind acts.
+			_, _, err = executeCommand("create", sub, "--wait", "-1s")
+			require.Error(t, err)
+			assert.True(t, isUsageError(err))
+			assert.Equal(t, "--wait must not be negative, got -1s", err.Error())
+		})
+	}
+}
+
 func TestApplyDataFlag_HostPath(t *testing.T) {
 	cfg, err := loadConfig(noStdin(t), "")
 	require.NoError(t, err)

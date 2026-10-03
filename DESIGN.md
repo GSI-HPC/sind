@@ -90,7 +90,9 @@ When an event of the node arrives, its readiness probes re-evaluate immediately 
 
 A unit that has failed does not recover on its own: a failed munge, slurmctld, slurmd, sackd or slurmdbd unit fails `sind create cluster` and `sind create worker` at once, with the tail of the unit's journal. So does a container that exits.
 
-If any node fails to become ready within the timeout, `sind create cluster` fails, reports which nodes/checks failed and removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
+`--wait DURATION` (default `5m`, `0` for no limit) bounds how long `sind create cluster` and `sind create worker` wait for the nodes and Slurm: the node checks above, the Slurm daemons, and with `accounts` the cluster's registration with slurmdbd and the `sacctmgr` commands. Each node's limit counts from when its container has started, so image pulls do not count; the steps after the nodes are ready (Phase 4) end the limit after the last node container started. When a node or check is not ready in time, the command fails with status `1`, not `130`, with an error that names the node and its last failing check (`cluster dev not ready within 5m0s: waiting for worker-0: ... last probe error: probe munge: ...`). The library returns that error wrapping `cluster.ErrNotReady`; `config.Cluster.Wait` and `WorkerAddOptions.Wait` set the limit, and zero sets none.
+
+When a check fails for good, or the limit runs out, `sind create cluster` removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
 
 **Phase 4: Mesh Registration, Slurm and Home Directories** (concurrent)
 
@@ -246,6 +248,7 @@ Exit status and signals:
 - A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`
 - `ssh`, `exec`, `enter` and `logs` exit with the status of the docker command they run, which `docker exec` takes from the command it ran (for `ssh`, from `ssh` and the remote command), and print no error line. A docker killed by signal N exits 128 + N, as a shell reports it, except SIGINT and SIGTERM, which exit `130` like an interrupted sind: they reach docker when sent to sind's process group, and the status must not depend on which process ends first
 - SIGTERM exits `130`, not `143`, so that callers check one status for "interrupted", as in clusterctl
+- A `--wait` limit that runs out is a failure, not an interrupt: `create cluster` and `create worker` exit `1`
 - The first SIGINT or SIGTERM cancels the command's context; deferred cleanup (e.g. the rollback of a failed `create cluster`) still runs under `context.WithoutCancel`
 - The signal handler is removed before the context is cancelled, so a second signal gets the default action and ends sind at once, even during a hung cleanup
 
@@ -311,7 +314,7 @@ Development follows Test-Driven Development (TDD) style:
 ### Cluster Management
 
 ```bash
-sind create cluster [NAME] [--config FILE] [--data PATH] [--pull]
+sind create cluster [NAME] [--config FILE] [--data PATH] [--pull] [--wait DURATION]
 sind delete cluster [NAME]
 sind delete cluster --all
 sind get cluster [NAME]
@@ -481,6 +484,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--tmp-size SIZE` | the newest worker's, else 256m | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | false | Pull the `--image` before creating containers; needs `--image` |
+| `--wait DURATION` | 5m | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit (see Readiness Checks) |
 | `--cap-add CAP` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
 | `--cap-drop CAP` | the newest worker's, else none | Drop Linux capability (repeatable) |
 | `--device PATH` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`) |

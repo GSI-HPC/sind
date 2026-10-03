@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"sigs.k8s.io/yaml"
 )
@@ -227,6 +228,10 @@ type Cluster struct {
 	// Pull is a runtime flag (not part of the config file) that forces
 	// fresh image pulls when creating containers.
 	Pull bool `json:"-" yaml:"-"`
+	// Wait is a runtime setting (not part of the config file): when
+	// positive, how long cluster.Create waits for the nodes and Slurm to
+	// become ready, counted from when the node containers have started.
+	Wait time.Duration `json:"-" yaml:"-"`
 }
 
 // Default resource values for cluster nodes.

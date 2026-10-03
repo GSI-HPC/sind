@@ -35,6 +35,9 @@ type WorkerAddOptions struct {
 	TmpSize     string
 	Unmanaged   bool
 	Pull        bool // pull Image first; needs Image
+	// Wait, when positive, limits how long WorkerAdd waits for the new
+	// workers to become ready, counted as for Create's config.Cluster.Wait.
+	Wait        time.Duration
 	CapAdd      []string
 	CapDrop     []string
 	Devices     []string
@@ -96,6 +99,7 @@ func (o WorkerAddOptions) Check() error {
 func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (result []*Node, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
+	rd := &readiness{interval: readinessInterval, wait: opts.Wait}
 
 	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
@@ -242,6 +246,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	needsCleanup := true
 	confUpdated := false
 	defer func() {
+		if retErr != nil && rd.expired() {
+			retErr = fmt.Errorf("workers %w within %s: %w", ErrNotReady, rd.wait, retErr)
+		}
 		if retErr != nil && needsCleanup {
 			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
 			cleanupCtx := context.WithoutCancel(ctx)
@@ -258,10 +265,12 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	defer stopWatcher()
 
 	// Create nodes, start systemd monitors, and wait for readiness.
-	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, opts.ClusterName, infra.sshPubKey, nodeConfigs, readinessInterval, watcher)
+	nodeResults, err := setupNodes(ctx, client, meshMgr, realm, opts.ClusterName, infra.sshPubKey, nodeConfigs, rd, watcher)
 	if err != nil {
 		return nil, err
 	}
+	readyCtx, cancelReady := rd.context(ctx)
+	defer cancelReady()
 
 	// Register DNS + known_hosts while the Slurm side is updated: Slurm
 	// uses short hostnames resolved by Docker embedded DNS on the cluster
@@ -272,16 +281,16 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		nodes, err = registerNodes(ctx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
+		nodes, err = registerNodes(readyCtx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
 		return err
 	})
 	if managed {
 		confUpdated = true
 		g.Go(func() error {
-			if err := updateNodesConf(ctx, client, controllerName, nodesConf, nodeConfigs); err != nil {
+			if err := updateNodesConf(readyCtx, client, controllerName, nodesConf, nodeConfigs); err != nil {
 				return err
 			}
-			return enableSlurm(ctx, client, realm, opts.ClusterName, nodeConfigs, readinessInterval, watcher)
+			return enableSlurm(readyCtx, client, realm, opts.ClusterName, nodeConfigs, readinessInterval, watcher)
 		})
 	}
 	if err := g.Wait(); err != nil {

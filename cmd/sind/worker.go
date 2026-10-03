@@ -39,6 +39,7 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd.Flags().StringSlice("cap-drop", nil, "drop Linux capabilities (default: the newest worker's)")
 	cmd.Flags().StringSlice("device", nil, "host devices to expose, e.g. /dev/fuse (default: the newest worker's)")
 	cmd.Flags().StringSlice("security-opt", nil, "security options (default: the newest worker's)")
+	addWaitFlag(cmd)
 
 	return cmd
 }
@@ -53,6 +54,10 @@ func checkCreateWorkerFlags(opts cluster.WorkerAddOptions) error {
 }
 
 func runCreateWorker(cmd *cobra.Command, clusterName string) error {
+	wait, err := waitFlag(cmd)
+	if err != nil {
+		return err
+	}
 	count, _ := cmd.Flags().GetInt("count")
 	image, _ := cmd.Flags().GetString("image")
 	cpus, _ := cmd.Flags().GetInt("cpus")
@@ -78,6 +83,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		CapDrop:     capDrop,
 		Devices:     devices,
 		SecurityOpt: securityOpt,
+		Wait:        wait,
 	}
 	if err := checkCreateWorkerFlags(opts); err != nil {
 		return err

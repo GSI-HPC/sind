@@ -1194,7 +1194,7 @@ func TestSetupNodes_InspectError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting node controller")
@@ -1226,7 +1226,7 @@ func TestSetupNodes_WaitsForMunge(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "probe munge")
@@ -1262,7 +1262,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "setting up SSH on controller: injecting SSH key")
@@ -1301,7 +1301,7 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
+	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "setting up SSH on controller: no ed25519 host key found")

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -16,6 +17,24 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
+
+// defaultWait is the --wait default of create cluster and create worker.
+const defaultWait = 5 * time.Minute
+
+// addWaitFlag adds --wait to a create command.
+func addWaitFlag(cmd *cobra.Command) {
+	cmd.Flags().Duration("wait", defaultWait,
+		"how long to wait for the nodes and Slurm to become ready, counted from when the node containers have started (0: no limit)")
+}
+
+// waitFlag returns the value of --wait. A negative one is a usage error.
+func waitFlag(cmd *cobra.Command) (time.Duration, error) {
+	wait, _ := cmd.Flags().GetDuration("wait")
+	if wait < 0 {
+		return 0, usagef("--wait must not be negative, got %s", wait)
+	}
+	return wait, nil
+}
 
 func newCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -49,11 +68,17 @@ func newCreateClusterCommand() *cobra.Command {
 	cmd.Flags().StringVar(&configFile, "config", "", "path to cluster configuration file")
 	cmd.Flags().String("data", ".", `host directory to mount as /data (use "volume" for Docker volume)`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
+	addWaitFlag(cmd)
 
 	return cmd
 }
 
 func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
+	wait, err := waitFlag(cmd)
+	if err != nil {
+		return err
+	}
+
 	cfg, err := loadConfig(cmd.InOrStdin(), configFile)
 	if err != nil {
 		return err
@@ -75,6 +100,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	pull, _ := cmd.Flags().GetBool("pull")
 	cfg.Pull = pull
+	cfg.Wait = wait
 
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
