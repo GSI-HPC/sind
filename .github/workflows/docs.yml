@@ -96,12 +96,20 @@ jobs:
       - name: Install Hugo
         uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3.2.1
         with:
-          hugo-version: latest
+          hugo-version: "0.167.0"
 
+      # Pinned to a release and its checksum: the theme renders every page,
+      # and a new release must not reach the site without a commit.
       - name: Install theme
+        env:
+          GEEKDOC_VERSION: v4.1.3
+          GEEKDOC_SHA256: 325d3960e568cb623ee47b498f70ae2da851c6b377b4c6723d5f73dfe24e9d21
         run: |
+          curl -fsSL -o "$RUNNER_TEMP/hugo-geekdoc.tar.gz" \
+            "https://github.com/thegeeklab/hugo-geekdoc/releases/download/$GEEKDOC_VERSION/hugo-geekdoc.tar.gz"
+          echo "$GEEKDOC_SHA256  $RUNNER_TEMP/hugo-geekdoc.tar.gz" | sha256sum --check -
           mkdir -p themes/hugo-geekdoc
-          curl -sL https://github.com/thegeeklab/hugo-geekdoc/releases/latest/download/hugo-geekdoc.tar.gz | tar -xz -C themes/hugo-geekdoc/
+          tar -xzf "$RUNNER_TEMP/hugo-geekdoc.tar.gz" -C themes/hugo-geekdoc/
 
       - name: Build
         run: |
