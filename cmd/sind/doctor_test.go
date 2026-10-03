@@ -51,6 +51,9 @@ func hermeticDoctorCtxWithMounts(
 	mounts string,
 ) context.Context {
 	t.Helper()
+	// A DOCKER_HOST of the environment would hide the host checks; a test
+	// that needs one sets it after this.
+	t.Setenv("DOCKER_HOST", "")
 
 	fs := afero.NewMemMapFs()
 	require.NoError(t, afero.WriteFile(fs, "/proc/mounts", []byte(mounts), 0o644))
@@ -312,6 +315,23 @@ func TestDoctorCommand_DNSPolicyNotAuthorized(t *testing.T) {
 	assert.True(t, strings.HasSuffix(out, "RULES\n\n"), out)
 }
 
+// TestDoctorCommand_DNSPolicyRemoteDaemon checks that doctor does not
+// promise host DNS for a daemon on another host, whose mesh bridge this
+// host's resolver cannot use.
+func TestDoctorCommand_DNSPolicyRemoteDaemon(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
+
+	sys := &mock.Executor{}
+	sys.AddResult("", "", nil) // systemctl is-active → resolved running
+	ctx := hermeticDoctorCtx(t, &m, sys)
+	t.Setenv("DOCKER_HOST", "ssh://build-host")
+	out, err := executeDoctor(ctx, t)
+	require.NoError(t, err, "the DNS policy check is advisory")
+	assert.Contains(t, out, "✗ DNS policy: not available: DOCKER_HOST names a daemon on another host (optional)\n")
+	assert.Len(t, sys.Calls, 1, "polkit is not asked")
+}
+
 func TestDoctorCommand_JSON(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
@@ -415,33 +435,30 @@ func TestDoctorCommand_CgroupHybrid(t *testing.T) {
 // TestDoctorCommand_Inotify checks the advisory inotify check: a warning
 // that does not fail doctor below the limit, left out for a remote daemon.
 func TestDoctorCommand_Inotify(t *testing.T) {
-	run := func(t *testing.T, limit string) (string, error) {
+	run := func(t *testing.T, limit, dockerHost string) (string, error) {
 		t.Helper()
 		var m mock.Executor
 		m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 		ctx := hermeticDoctorCtx(t, &m, nil)
+		t.Setenv("DOCKER_HOST", dockerHost)
 		require.NoError(t, afero.WriteFile(fsFrom(ctx), "/proc/sys/fs/inotify/max_user_instances", []byte(limit), 0o644))
 		return executeDoctor(ctx, t)
 	}
 
-	t.Setenv("DOCKER_HOST", "")
-	out, err := run(t, "128\n")
+	out, err := run(t, "128\n", "")
 	require.NoError(t, err, "the inotify check is advisory")
 	assert.Contains(t, out, "✗ inotify: max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)\n\n"+inotifyRemediation+"\n\n")
 
-	t.Setenv("DOCKER_HOST", "unix:///run/docker.sock")
-	out, err = run(t, "8192\n")
+	out, err = run(t, "8192\n", "unix:///run/docker.sock")
 	require.NoError(t, err)
 	assert.Contains(t, out, "✓ inotify: max_user_instances 8192 (>= 1024)\n")
 
-	t.Setenv("DOCKER_HOST", "tcp://build-host:2376")
-	out, err = run(t, "128\n")
+	out, err = run(t, "128\n", "tcp://build-host:2376")
 	require.NoError(t, err)
 	assert.NotContains(t, out, "inotify")
 }
 
 func TestDoctorCommand_InotifyJSON(t *testing.T) {
-	t.Setenv("DOCKER_HOST", "")
 	var m mock.Executor
 	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 	ctx := hermeticDoctorCtx(t, &m, nil)

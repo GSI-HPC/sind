@@ -67,8 +67,8 @@ Keep it across reboots:
 echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf`
 
 // remoteDockerHost reports whether DOCKER_HOST names a daemon that is not
-// reached through a local socket, whose host limits this machine's /proc
-// does not show.
+// reached through a local socket: its host's limits and its mesh bridges
+// are not on this machine. A remote `docker context` goes unnoticed.
 func remoteDockerHost() bool {
 	host := os.Getenv("DOCKER_HOST")
 	return host != "" && !strings.HasPrefix(host, "unix://")
@@ -232,12 +232,18 @@ func runDoctor(cmd *cobra.Command) error {
 		checks = append(checks, inotify)
 	}
 
-	// Advisory: host DNS resolution via systemd-resolved.
+	// Advisory: host DNS resolution via systemd-resolved. It points this
+	// host's resolver at the mesh bridge, which a remote daemon has on its
+	// own host.
 	if mgr.ResolvedActive(ctx) {
-		if mgr.DNSPolkitAuthorized(ctx) {
+		switch {
+		case remoteDockerHost():
+			checks = append(checks, doctorCheck{Name: "DNS policy", Status: checkWarning,
+				Detail: "not available: DOCKER_HOST names a daemon on another host (optional)"})
+		case mgr.DNSPolkitAuthorized(ctx):
 			checks = append(checks, doctorCheck{Name: "DNS policy", Status: checkOK,
 				Detail: "host resolution available"})
-		} else {
+		default:
 			checks = append(checks, doctorCheck{Name: "DNS policy", Status: checkWarning,
 				Detail: "not authorized (optional)", Remediation: dnsPolicyRemediation})
 		}
