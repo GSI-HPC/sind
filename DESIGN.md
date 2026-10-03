@@ -120,6 +120,8 @@ sind is written in Go and designed for dual use:
 
 The CLI command structure is reflected in the library API, allowing programmatic access to all sind operations.
 
+Library contract of `cluster.Create`: the caller sets up the mesh (`mesh.Manager.EnsureMesh`) and applies the config's defaults (`config.Cluster.ApplyDefaults`); `Create` validates the config itself before it creates anything, and refuses a config `realm` other than its `mesh.Manager`'s realm, the realm it creates the cluster in. The CLI resolves the realm first and sets it on the config.
+
 ### Go Dependencies
 
 sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.io/)'s approach of favoring simplicity and compatibility.

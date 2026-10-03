@@ -118,6 +118,9 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	if err != nil {
 		return err
 	}
+	// The cluster goes to the resolved realm; cluster.Create refuses a
+	// config realm that differs from its mesh manager's.
+	cfg.Realm = realm
 
 	// Refuse a daemon that cannot start the nodes before anything is pulled.
 	if err := cluster.CheckDaemon(ctx, client); err != nil {

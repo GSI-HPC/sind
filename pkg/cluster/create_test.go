@@ -365,6 +365,47 @@ func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
 	assert.Equal(t, probe.DefaultInterval, DefaultReadinessInterval)
 }
 
+func TestCreate_InvalidConfig(t *testing.T) {
+	// Without ApplyDefaults the config has no nodes; Create fails before it
+	// creates anything instead of returning a cluster without nodes.
+	var m mock.Executor
+	client := docker.NewClient(&m)
+	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), &config.Cluster{Kind: "Cluster", Name: "dev"}, time.Millisecond)
+	require.EqualError(t, err, "invalid cluster config: exactly one controller required, got 0")
+	assert.Empty(t, m.Calls)
+
+	// Validate guards the names the node scripts use unquoted.
+	cfg := createCfg()
+	cfg.Users = []config.User{{Name: "bad name", UID: 1000}}
+	_, err = Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	require.ErrorContains(t, err, "invalid cluster config: ")
+	assert.Empty(t, m.Calls)
+}
+
+func TestCreate_RealmMismatch(t *testing.T) {
+	var m mock.Executor
+	client := docker.NewClient(&m)
+	cfg := createCfg()
+	cfg.Realm = "ci"
+	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	require.EqualError(t, err, `config realm "ci" differs from the mesh manager's realm "sind"`)
+	assert.Empty(t, m.Calls)
+}
+
+func TestCreate_ConfigRealmMatches(t *testing.T) {
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnStart = pipes.OnStart
+	client := docker.NewClient(&m)
+	cfg := createCfg()
+	cfg.Realm = mesh.DefaultRealm
+	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	require.NoError(t, err)
+}
+
 func TestCreate_BackupController(t *testing.T) {
 	exitErr := notFoundErr(t)
 
@@ -1073,6 +1114,7 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
+			{Role: config.RoleWorker, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
 
@@ -1093,10 +1135,12 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 	cluster, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
 
 	require.NoError(t, err)
-	require.Len(t, cluster.Nodes, 2)
+	require.Len(t, cluster.Nodes, 3)
 	assert.Equal(t, "submitter", cluster.Nodes[1].Name)
-	// Only controller gets slurmctld; submitter is skipped entirely.
-	assert.Equal(t, []string{"sind-dev-controller"}, slurmCmds)
+	// The controller gets slurmctld and the worker slurmd; the submitter
+	// is skipped entirely.
+	slices.Sort(slurmCmds)
+	assert.Equal(t, []string{"sind-dev-controller", "sind-dev-worker-0"}, slurmCmds)
 }
 
 // --- Direct tests for unexported helpers ---

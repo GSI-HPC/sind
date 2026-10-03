@@ -152,7 +152,10 @@ type nodeResult struct {
 // CheckDaemon before either.
 //
 // The caller must ensure mesh infrastructure exists (via mesh.Manager.EnsureMesh)
-// before calling Create. The context deadline controls the overall timeout;
+// before calling Create, and apply the config's defaults
+// (config.Cluster.ApplyDefaults). Create validates the config first, and
+// refuses a config realm other than meshMgr.Realm, the realm it creates the
+// cluster in. The context deadline controls the overall timeout;
 // readinessInterval controls the polling interval for readiness probes, and
 // zero or less means DefaultReadinessInterval. cfg.Wait, when positive,
 // limits how long Create waits for the nodes and Slurm to become ready,
@@ -196,6 +199,9 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		if rd.expired() {
 			retErr = fmt.Errorf("cluster %s %w within %s: %w", cfg.Name, ErrNotReady, rd.wait, retErr)
 		}
+		if !resourcesCreated && !meshMgr.Created() {
+			return
+		}
 		log.ErrorContext(ctx, "cleaning up partial resources, please wait")
 		cleanupCtx := context.WithoutCancel(ctx)
 		if resourcesCreated {
@@ -212,6 +218,13 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			}
 		}
 	}()
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid cluster config: %w", err)
+	}
+	if cfg.Realm != "" && cfg.Realm != realm {
+		return nil, fmt.Errorf("config realm %q differs from the mesh manager's realm %q", cfg.Realm, realm)
+	}
 
 	var dnsIP, sshPubKey, slurmVersion string
 	prepGroup, prepCtx := errgroup.WithContext(ctx)
