@@ -40,10 +40,13 @@ type mcpEffect int
 const (
 	// readOnly tools only report state.
 	readOnly mcpEffect = iota
-	// additive tools create resources and destroy none.
+	// additive tools restore resources and destroy none.
 	additive
 	// destructive tools remove resources, stop nodes or run arbitrary
-	// commands.
+	// code. create cluster and create worker count: their flags choose
+	// the image a node runs as root, extra capabilities, devices, security
+	// options, a config file and a host directory mounted read-write, so
+	// one call can run code with host-root power.
 	destructive
 )
 
@@ -64,10 +67,10 @@ var mcpEffects = map[string]mcpEffect{
 	"get ssh-known-hosts": readOnly,
 	"get ssh-public-key":  readOnly,
 	"get volumes":         readOnly,
-	"create cluster":      additive,
-	"create worker":       additive,
 	"power on":            additive,
 	"power unfreeze":      additive,
+	"create cluster":      destructive,
+	"create worker":       destructive,
 	"delete cluster":      destructive,
 	"delete worker":       destructive,
 	"exec":                destructive,

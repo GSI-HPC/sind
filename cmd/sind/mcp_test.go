@@ -167,7 +167,9 @@ func TestMCPTools_Hints(t *testing.T) {
 			"%s must be read-only or say whether it is destructive; add it to mcpEffects", name)
 	}
 	assert.Equal(t, true, tools["sind_get_nodes"].Annotations["readOnlyHint"])
-	assert.Equal(t, false, tools["sind_create_cluster"].Annotations["destructiveHint"])
+	assert.Equal(t, true, tools["sind_create_cluster"].Annotations["destructiveHint"])
+	assert.Equal(t, true, tools["sind_create_worker"].Annotations["destructiveHint"])
+	assert.Equal(t, false, tools["sind_power_on"].Annotations["destructiveHint"])
 	assert.Equal(t, true, tools["sind_delete_cluster"].Annotations["destructiveHint"])
 	assert.Equal(t, true, tools["sind_exec"].Annotations["destructiveHint"])
 }
