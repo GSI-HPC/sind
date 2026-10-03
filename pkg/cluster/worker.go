@@ -22,7 +22,7 @@ import (
 // WorkerAddOptions holds the parameters for adding worker nodes to a cluster.
 type WorkerAddOptions struct {
 	ClusterName string
-	Count       int
+	Count       int // 0 or less adds one worker
 	Image       string
 	CPUs        int
 	Memory      string
@@ -35,6 +35,26 @@ type WorkerAddOptions struct {
 	SecurityOpt []string
 }
 
+// Check reports the first option WorkerAdd cannot act on: a negative CPU
+// count, an unknown capability or a device path that is not absolute. It
+// calls docker for none of them, so that the CLI can reject them as usage
+// errors before it takes the realm lock.
+func (o WorkerAddOptions) Check() error {
+	if o.CPUs < 0 {
+		return fmt.Errorf("--cpus must not be negative, got %d", o.CPUs)
+	}
+	if err := config.CheckCapabilities("--cap-add", o.CapAdd); err != nil {
+		return err
+	}
+	if err := config.CheckCapabilities("--cap-drop", o.CapDrop); err != nil {
+		return err
+	}
+	if err := config.CheckDevices(o.Devices); err != nil {
+		return err
+	}
+	return config.CheckSecurityOpts("--security-opt", o.SecurityOpt)
+}
+
 // --- Exported functions ---
 
 // WorkerAdd adds worker nodes to an existing cluster.
@@ -43,7 +63,7 @@ type WorkerAddOptions struct {
 // returns.
 //
 // For managed workers (default), the flow is:
-//  1. Validate: controller exists, sind-nodes.conf present
+//  1. Validate: options, controller exists, sind-nodes.conf present
 //  2. Create worker container(s)
 //  3. Wait for readiness, inject SSH keys, collect host keys
 //  4. Register DNS + known_hosts
@@ -61,18 +81,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	log.InfoContext(ctx, "adding workers", "cluster", opts.ClusterName, "count", opts.Count)
 
-	// Check capabilities and devices as the config's are checked, before
-	// any container exists.
-	if err := config.CheckCapabilities("--cap-add", opts.CapAdd); err != nil {
-		return nil, err
-	}
-	if err := config.CheckCapabilities("--cap-drop", opts.CapDrop); err != nil {
-		return nil, err
-	}
-	if err := config.CheckDevices(opts.Devices); err != nil {
-		return nil, err
-	}
-	if err := config.CheckSecurityOpts("--security-opt", opts.SecurityOpt); err != nil {
+	// Check the options as the config's are checked, before any container
+	// exists.
+	if err := opts.Check(); err != nil {
 		return nil, err
 	}
 

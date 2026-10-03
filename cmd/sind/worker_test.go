@@ -3,8 +3,10 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +26,34 @@ func TestCreateWorker_Flags(t *testing.T) {
 	flags := []string{"count", "image", "cpus", "memory", "tmp-size", "unmanaged"}
 	for _, f := range flags {
 		assert.NotNil(t, c.Flags().Lookup(f), "missing flag: %s", f)
+	}
+}
+
+func TestCreateWorker_InvalidFlags(t *testing.T) {
+	// Flag values create worker cannot act on are usage errors, reported
+	// before it takes the realm lock or calls docker.
+	tests := []struct {
+		args    []string
+		wantErr string
+	}{
+		{[]string{"--count", "0"}, "--count must be at least 1, got 0"},
+		{[]string{"--count", "-3"}, "--count must be at least 1, got -3"},
+		{[]string{"--cpus", "-1"}, "--cpus must not be negative, got -1"},
+		{[]string{"--cap-add", "BOGUS"}, `unknown capability "BOGUS" in --cap-add`},
+		{[]string{"--cap-drop", "net_raw"}, `unknown capability "net_raw" in --cap-drop`},
+		{[]string{"--device", "relative/dev"}, `device path must be absolute, got "relative/dev"`},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			var m mock.Executor
+
+			_, _, err := executeWithMock(&m, append([]string{"create", "worker"}, tt.args...)...)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.True(t, isUsageError(err), "exits 2")
+			assert.Empty(t, m.Calls, "no docker call")
+		})
 	}
 }
 

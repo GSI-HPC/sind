@@ -42,6 +42,15 @@ func newCreateWorkerCommand() *cobra.Command {
 	return cmd
 }
 
+// checkCreateWorkerFlags rejects flag values create worker cannot act on as
+// usage errors, before it takes the realm lock or calls docker.
+func checkCreateWorkerFlags(opts cluster.WorkerAddOptions) error {
+	if opts.Count < 1 {
+		return usagef("--count must be at least 1, got %d", opts.Count)
+	}
+	return usage(opts.Check())
+}
+
 func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	count, _ := cmd.Flags().GetInt("count")
 	image, _ := cmd.Flags().GetString("image")
@@ -68,6 +77,9 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		CapDrop:     capDrop,
 		Devices:     devices,
 		SecurityOpt: securityOpt,
+	}
+	if err := checkCreateWorkerFlags(opts); err != nil {
+		return err
 	}
 
 	ctx := cmd.Context()

@@ -481,7 +481,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--device PATH` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
 | `--security-opt OPT` | none | Security option (repeatable) |
 
-`--cap-add`, `--cap-drop`, `--device` and `--security-opt` are checked like the config's `capAdd`, `capDrop`, `devices` and `securityOpt`, before any container is created.
+`--count` must be at least 1 and `--cpus` must not be negative. These, and `--cap-add`, `--cap-drop`, `--device` and `--security-opt`, which are checked like the config's `capAdd`, `capDrop`, `devices` and `securityOpt`, are usage errors that sind reports before it takes the realm lock or creates any container.
 
 With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: mutations stay silent by default.
 
