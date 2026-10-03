@@ -1644,7 +1644,7 @@ The lock is `state.LockRealm` in `pkg/state`, which also resolves the state dire
 ### Behavior
 
 - Lock is attempted non-blocking first; if free, the operation proceeds immediately
-- If another operation holds the lock, sind logs `"waiting for another operation to complete"` (info level) and blocks until the lock is released
+- If another operation holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and blocks until the lock is released: waiting is a state the user may have to act on, so it is not left to `-v`. The wait has no timeout
 - Lock is released when the operation completes (success or failure)
 - Context cancellation (e.g., Ctrl+C) unblocks a waiting operation
 

@@ -63,7 +63,7 @@ Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delet
 $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
 ```
 
-If another operation already holds the lock, sind waits until it completes. Read-only operations (`get`, `logs`, etc.) are not affected.
+If another operation already holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr and waits until it completes. Read-only operations (`get`, `logs`, etc.) are not affected.
 
 Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs.
 

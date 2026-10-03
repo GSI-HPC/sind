@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -35,12 +36,15 @@ func TestAcquireRealmLock(t *testing.T) {
 		t.Parallel()
 		stateHome := t.TempDir()
 
-		unlock1, err := acquireRealmLock(context.Background(), "contention", stateHome)
+		var stderr1 bytes.Buffer
+		unlock1, err := acquireRealmLock(withStderr(context.Background(), &stderr1), "contention", stateHome)
 		require.NoError(t, err)
+		assert.Empty(t, stderr1.String(), "a free lock gives no warning")
 
+		var stderr2 bytes.Buffer
 		acquired := make(chan struct{})
 		go func() {
-			unlock2, err := acquireRealmLock(context.Background(), "contention", stateHome)
+			unlock2, err := acquireRealmLock(withStderr(context.Background(), &stderr2), "contention", stateHome)
 			assert.NoError(t, err)
 			close(acquired)
 			unlock2()
@@ -60,5 +64,12 @@ func TestAcquireRealmLock(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("second lock not acquired after first was released")
 		}
+		assert.Equal(t, "Warning: waiting for another sind command in realm \"contention\" to finish\n", stderr2.String())
 	})
+}
+
+func TestStderrFrom(t *testing.T) {
+	assert.Equal(t, os.Stderr, stderrFrom(context.Background()))
+	var buf bytes.Buffer
+	assert.Equal(t, &buf, stderrFrom(withStderr(context.Background(), &buf)))
 }

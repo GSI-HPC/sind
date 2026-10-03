@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -23,7 +24,23 @@ const (
 	clientKey contextKey = iota
 	meshMgrKey
 	fsKey
+	stderrKey
 )
+
+// withStderr stores the command's error stream in the context, for the
+// warnings that code without the command at hand prints.
+func withStderr(ctx context.Context, w io.Writer) context.Context {
+	return context.WithValue(ctx, stderrKey, w)
+}
+
+// stderrFrom retrieves the error stream from the context, falling back to
+// os.Stderr.
+func stderrFrom(ctx context.Context) io.Writer {
+	if w, ok := ctx.Value(stderrKey).(io.Writer); ok {
+		return w
+	}
+	return os.Stderr
+}
 
 // withFs stores an afero.Fs in the context.
 func withFs(ctx context.Context, fs afero.Fs) context.Context {

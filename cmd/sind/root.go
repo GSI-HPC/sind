@@ -30,6 +30,7 @@ func NewRootCommand() *cobra.Command {
 		TraverseChildren: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			applyVerbosity(cmd)
+			cmd.SetContext(withStderr(cmd.Context(), cmd.ErrOrStderr()))
 			return checkRealmFlag(cmd)
 		},
 	}
