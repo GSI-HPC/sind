@@ -669,6 +669,14 @@ func TestValidate_Constraints(t *testing.T) {
 			wantErr: "count must not be negative",
 		},
 		{
+			name: "negative cpus",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleWorker, CPUs: -2},
+			},
+			wantErr: "cpus must not be negative, got -2",
+		},
+		{
 			name: "backupController on worker",
 			nodes: []Node{
 				{Role: RoleController},

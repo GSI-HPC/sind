@@ -861,6 +861,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
 - `count` - only valid for worker role; must not be negative, and `0` means the default, 1
+- `cpus` - must not be negative; `0` means the default
 - `managed` - only valid for controller, db and worker roles; with `managed: false` on the controller, no worker or db node may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `slurm.slurmdbd` - requires a managed `db` node
