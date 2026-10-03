@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run of the commit it replaces.
+# Runs of pushes to a branch always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     name: Lint
@@ -166,11 +172,12 @@ jobs:
           reporter: java-junit
 
   # Single check over all release lines and platforms, so its name stays
-  # stable when SLURM_RELEASES or the platforms change.
+  # stable when SLURM_RELEASES or the platforms change. Skipped in a
+  # cancelled run, so a superseded commit gets no failed check.
   integration-test:
     name: Integration Test
     needs: integration-test-image
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check integration test results

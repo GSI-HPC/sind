@@ -53,6 +53,8 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
   URLs (e.g. `download.schedmd.com ... i/o timeout`) is an upstream outage, not this
   PR's fault. Confirm it by the error naming the download URL, re-run the job once, and
   report it if it fails again.
+- A push to a PR cancels the CI run of the commit it replaces. A cancelled run is not a
+  failure; look at the run of the PR's head commit.
 - Every other failure is this PR's to root-cause and fix. Never skip, disable or
   loosen tests or coverage thresholds.
 
