@@ -130,7 +130,7 @@ Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node 
 storage:
   dataStorage:
     type: hostPath     # "hostPath" or "volume"
-    hostPath: ./data   # host directory for type: hostPath
+    hostPath: ./data   # existing host directory for type: hostPath
     mountPath: /data   # default: /data
   cvmfs: true          # mount CVMFS read-only at /cvmfs (default: false)
 ```
@@ -140,7 +140,7 @@ storage:
 | Field | Default | Description |
 |-------|---------|-------------|
 | `type` | set by `--data` | `"hostPath"` bind-mounts `hostPath`; `"volume"` uses the Docker volume `<realm>-<cluster>-data` and ignores `hostPath`. A `hostPath` without `type` means `"hostPath"` |
-| `hostPath` | — | Host directory, required with `type: hostPath`. A relative path is taken relative to the directory `sind create cluster` runs in and stored as an absolute path |
+| `hostPath` | — | Host directory, required with `type: hostPath`. It must exist: `sind create cluster` fails otherwise rather than have Docker create it as root. A relative path is taken relative to the directory `sind create cluster` runs in and stored as an absolute path |
 | `mountPath` | `"/data"` | Absolute mount point inside the nodes |
 
 If the config sets neither `type` nor `hostPath`, the `--data` flag of `sind create cluster` decides; its default, `.`, bind-mounts the working directory (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})).

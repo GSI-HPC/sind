@@ -4,11 +4,14 @@ package cluster
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -184,7 +187,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 		dataMountPath = DefaultDataMountPath
 	}
 	if cfg.DataHostPath != "" {
-		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw")
+		args = append(args, "--mount", bindMount(cfg.DataHostPath, dataMountPath))
 	} else {
 		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeData))+":"+dataMountPath+":rw")
 	}
@@ -283,6 +286,20 @@ func BuildRunArgs(cfg RunConfig) []string {
 	return args
 }
 
+// bindMount returns the --mount value that bind-mounts the host directory
+// source read-write at target. Unlike -v, which has Docker create a missing
+// source as an empty root-owned directory, --mount fails on one. Docker
+// reads the value as a CSV record, so a field with a comma or a quote is
+// quoted.
+func bindMount(source, target string) string {
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	// Writing to a strings.Builder cannot fail.
+	_ = w.Write([]string{"type=bind", "source=" + source, "target=" + target})
+	w.Flush()
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
 // MaskMunge is the line the node entrypoint starts with under identity
 // clientIds: it masks munge.service before systemd starts, as auth/slurm
 // replaces munge and the node has no munge key.
@@ -346,7 +363,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 	dataHostPath := ""
 	dataMountPath := ""
 	if cfg.Storage.DataStorage.UsesHostPath() {
-		dataHostPath = cfg.Storage.DataStorage.HostPath
+		dataHostPath = absDataHostPath(cfg.Storage.DataStorage.HostPath)
 	}
 	if cfg.Storage.DataStorage.MountPath != "" {
 		dataMountPath = cfg.Storage.DataStorage.MountPath
@@ -433,6 +450,20 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 		}
 	}
 	return configs
+}
+
+// absDataHostPath returns a data host path (storage.dataStorage.hostPath)
+// made absolute against the working directory, as sind create cluster does
+// before it validates the config, so that a library caller gets the same
+// bind mount: Docker would read a bare relative name such as "data" as a
+// named volume. The node labels then record an absolute path for sind create
+// worker, which may run in another directory. If the working directory
+// cannot be found, the path is left as it is, and Docker rejects it.
+func absDataHostPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
 }
 
 // nodeGetsUsers reports whether a node gets the cluster's Linux users and

@@ -72,8 +72,10 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 With `dataStorage.type: hostPath`, or by default through `sind create cluster --data .` when the config sets no `dataStorage`, the data volume is replaced with a bind mount:
 
 ```
--v /path/on/host:/data:rw
+--mount type=bind,source=/path/on/host,target=/data
 ```
+
+The directory must exist on the Docker host: unlike `-v`, `--mount` fails on a missing source instead of creating it as an empty, root-owned directory.
 
 ### CVMFS
 

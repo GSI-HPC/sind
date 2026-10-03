@@ -696,7 +696,7 @@ defaults:
 storage:
   dataStorage:
     type: hostPath                       # hostPath | volume (default: from --data)
-    hostPath: ./data                     # only for type=hostPath
+    hostPath: ./data                     # only for type=hostPath; must exist
     mountPath: /data                     # default: /data
   cvmfs: true                            # mount CVMFS read-only at /cvmfs (default: false)
 
@@ -1102,7 +1102,8 @@ Container mount flags:
 -v <realm>-<cluster>-config:/etc/slurm:rw     # controller
 -v <realm>-<cluster>-config:/etc/slurm:ro     # all others
 -v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes
--v <realm>-<cluster>-data:/data:rw            # all nodes
+-v <realm>-<cluster>-data:/data:rw            # all nodes, data volume
+--mount type=bind,source=/host/dir,target=/data  # all nodes, data on a host directory
 -v <realm>-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 -v <realm>-<cluster>-home:/home:rw            # all nodes, users only
 --mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly     # storage.cvmfs: plugin
@@ -1116,7 +1117,7 @@ Container mount flags:
 
 By default, `sind create cluster` bind-mounts the current working directory as `/data` on all nodes:
 ```
--v /absolute/path/to/cwd:/data:rw
+--mount type=bind,source=/absolute/path/to/cwd,target=/data
 ```
 
 The `--data` flag controls the mount source:
@@ -1130,7 +1131,16 @@ The resolved host path is stored on each container as the `sind.data.hostpath` l
 the data volume), and the mount point as the `sind.data.mountpath` label, so that
 dynamically added workers (`sind create worker`) inherit the same mount, and `sind get cluster`,
 `enter` and `exec` use the same mount point. A relative `hostPath` from the config is resolved
-against the directory `sind create cluster` runs in.
+against the directory `sind create cluster` runs in; `pkg/cluster` resolves it the same way for
+library callers, so that Docker never reads it as a named volume.
+
+The bind mount uses `--mount`, not `-v`: with `-v`, Docker creates a missing source directory,
+empty and owned by root, while `--mount` fails, so a mistyped `--data` or a `hostPath` that does
+not exist yet fails `sind create cluster` (or `sind create worker`) instead. Docker reads the
+`--mount` value as a CSV record, so sind quotes a field whose path contains a comma or a quote.
+The directory is resolved on the Docker host, which sind assumes is the machine it runs on: with a
+Docker daemon elsewhere, such as a CI job container that shares the host's Docker socket, use
+`--data volume`.
 
 In the config, `type: hostPath` bind-mounts `hostPath` and `type: volume` uses the data volume and
 ignores `hostPath`; a `hostPath` without `type` means `hostPath`.

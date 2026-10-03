@@ -3,7 +3,10 @@
 package cluster
 
 import (
+	"encoding/csv"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -236,11 +239,29 @@ func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
 	cfg.DataMountPath = "/shared"
 	args := BuildRunArgs(cfg)
 
-	volumes := testutil.ArgValues(args, "-v")
-	assert.Contains(t, volumes, "/home/user/data:/shared:rw")
-	for _, v := range volumes {
+	assert.Equal(t, []string{"type=bind,source=/home/user/data,target=/shared"}, testutil.ArgValues(args, "--mount"),
+		"--mount, which fails on a missing source that -v would create as root")
+	for _, v := range testutil.ArgValues(args, "-v") {
 		assert.NotContains(t, v, "sind-dev-data")
+		assert.NotContains(t, v, "/home/user/data")
 	}
+}
+
+// TestBuildRunArgs_Mounts_HostPathQuoted checks that a path with a comma or a
+// quote is CSV-quoted, as Docker reads a --mount value as a CSV record.
+func TestBuildRunArgs_Mounts_HostPathQuoted(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataHostPath = `/srv/run,2024/"x"`
+	cfg.DataMountPath = "/my data"
+	args := BuildRunArgs(cfg)
+
+	mount := testutil.ArgValues(args, "--mount")
+	require.Len(t, mount, 1)
+	assert.Equal(t, `type=bind,"source=/srv/run,2024/""x""",target=/my data`, mount[0])
+
+	fields, err := csv.NewReader(strings.NewReader(mount[0])).Read()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"type=bind", `source=/srv/run,2024/"x"`, "target=/my data"}, fields)
 }
 
 func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
@@ -257,8 +278,7 @@ func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
 	// DataMountPath left empty — should default to /data
 	args := BuildRunArgs(cfg)
 
-	volumes := testutil.ArgValues(args, "-v")
-	assert.Contains(t, volumes, "/home/user/data:/data:rw")
+	assert.Equal(t, []string{"type=bind,source=/home/user/data,target=/data"}, testutil.ArgValues(args, "--mount"))
 }
 
 func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
@@ -768,6 +788,37 @@ func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 	require.Len(t, configs, 1)
 	assert.Equal(t, "/data/shared", configs[0].DataHostPath)
 	assert.Equal(t, "/shared", configs[0].DataMountPath)
+}
+
+func TestNodeRunConfigs_RelativeHostPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	cfg := &config.Cluster{
+		Name:    "dev",
+		Storage: config.Storage{DataStorage: config.DataStorage{HostPath: "data"}},
+		Nodes:   []config.Node{{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"}},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+
+	require.Len(t, configs, 1)
+	assert.Equal(t, filepath.Join(dir, "data"), configs[0].DataHostPath,
+		"absolute, not a named volume called data")
+}
+
+func TestAbsDataHostPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	assert.Equal(t, filepath.Join(dir, "data"), absDataHostPath("./data"))
+	assert.Equal(t, "/srv/data", absDataHostPath("/srv/data"))
+
+	// Without a working directory the path stays as it is, for Docker to
+	// reject.
+	gone := filepath.Join(dir, "gone")
+	require.NoError(t, os.Mkdir(gone, 0o755))
+	t.Chdir(gone)
+	require.NoError(t, os.Remove(gone))
+	assert.Equal(t, "data", absDataHostPath("data"))
 }
 
 func TestNodeRunConfigs_VolumeStorage(t *testing.T) {

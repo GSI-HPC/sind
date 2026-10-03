@@ -112,6 +112,8 @@ Use the `--data` flag to change this behavior:
 | `--data /path/to/dir` | Bind-mount the given directory as `/data` |
 | `--data volume` | Use a Docker-managed volume instead of a host mount |
 
+The directory must exist on the Docker host, which sind expects to be the machine it runs on; `sind create cluster` fails if it does not. The nodes mount it read-write, and files that root writes there from a node belong to root on the host.
+
 ```bash
 # Mount a specific directory
 sind create cluster --data /home/user/shared

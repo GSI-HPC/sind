@@ -600,7 +600,7 @@ func TestWorkerAdd_InheritsDataMount(t *testing.T) {
 	for _, call := range m.Calls {
 		if call.Args[0] == "create" {
 			created = true
-			assert.Contains(t, testutil.ArgValues(call.Args, "-v"), "/srv/project:/shared:rw")
+			assert.Contains(t, testutil.ArgValues(call.Args, "--mount"), "type=bind,source=/srv/project,target=/shared")
 			assert.Contains(t, testutil.ArgValues(call.Args, "--label"), LabelDataMountPath+"=/shared")
 		}
 	}
