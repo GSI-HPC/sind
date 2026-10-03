@@ -92,7 +92,24 @@ For multi-client setups, sind can serve MCP over HTTP:
 sind mcp stream --port 8080
 ```
 
-The stream listens on `127.0.0.1` unless `--host` names another address. It has no authentication, and its tools create and delete containers, so only pass `--host 0.0.0.0` (all interfaces) on a network you trust, or put an authenticating proxy in front of it.
+The stream listens on `127.0.0.1` unless `--host` names another address. Every request needs the header `Authorization: Bearer <token>`; without it the stream answers `401 Unauthorized`. Loopback keeps other hosts out, but not the other users of your machine, and every tool runs sind with your Docker access, so the token is what keeps them from creating containers as you.
+
+The token comes from `SIND_MCP_TOKEN`. When that is not set, the stream generates a new random token at every start and writes it, readable only by you, to `mcp-token` in sind's state directory (`$XDG_STATE_HOME/sind`, by default `~/.local/state/sind`). It prints where the token is, never the token itself, and a client configuration to stderr:
+
+```
+MCP server listening on http://127.0.0.1:8080/
+Bearer token in /home/alice/.local/state/sind/mcp-token (new at every start; set SIND_MCP_TOKEN to keep one)
+Client config: {"type": "http", "url": "http://127.0.0.1:8080/", "headers": {"Authorization": "Bearer <token>"}}
+```
+
+For example, with Claude Code:
+
+```bash
+claude mcp add --transport http sind http://127.0.0.1:8080/ \
+  --header "Authorization: Bearer $(cat ~/.local/state/sind/mcp-token)"
+```
+
+Set `SIND_MCP_TOKEN` (printable ASCII, no spaces) to keep one token across restarts, for example from a password manager: `SIND_MCP_TOKEN=$(openssl rand -hex 32) sind mcp stream`. The token travels in clear text over HTTP, so pass `--host 0.0.0.0` (all interfaces) only on a network you trust, or put a TLS proxy in front of the stream. `sind mcp start` (stdio) needs no token: only the program that started it can talk to it.
 
 ## Security
 

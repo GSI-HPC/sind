@@ -3,19 +3,24 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
+	"net"
+	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -260,27 +265,238 @@ func TestRefuseFlagArgs(t *testing.T) {
 	assert.Equal(t, map[string]any{"output": "json"}, called.Flags)
 }
 
-// TestMCPStream_StopsCleanly checks that a stream stopped through its
-// context, as an interrupt stops it, ends without an error.
-func TestMCPStream_StopsCleanly(t *testing.T) {
+// syncBuffer is a bytes.Buffer that a command goroutine writes while the
+// test reads it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// startMCPStream runs `sind mcp stream` with args on a free port and
+// returns its URL, its stderr, and the function that stops it and returns
+// its error.
+func startMCPStream(t *testing.T, args ...string) (string, *syncBuffer, func() error) {
+	t.Helper()
+	setVersion(t, "v1.2.3", "")
 	root := NewRootCommand()
-	root.SetArgs([]string{"mcp", "stream", "--port", "0"})
+	root.SetArgs(append([]string{"mcp", "stream", "--port", "0"}, args...))
+	stderr := &syncBuffer{}
 	root.SetOut(io.Discard)
+	root.SetErr(stderr)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- root.ExecuteContext(ctx) }()
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	select {
-	case err := <-done:
-		assert.NoError(t, err)
-	case <-time.After(10 * time.Second):
-		t.Fatal("the stream did not stop")
+	stop := func() error {
+		cancel()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(10 * time.Second):
+			t.Fatal("the stream did not stop")
+			return nil
+		}
 	}
+
+	listening := regexp.MustCompile(`MCP server listening on (http://\S+)\n`)
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if m := listening.FindStringSubmatch(stderr.String()); m != nil {
+			return m[1], stderr, stop
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("the stream ended: %v; stderr: %s", err, stderr.String())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	t.Fatalf("the stream did not start; stderr: %s", stderr.String())
+	return "", nil, nil
 }
 
-func TestStopCleanly_KeepsOtherErrors(t *testing.T) {
-	cmd := &cobra.Command{RunE: func(*cobra.Command, []string) error { return errors.New("listen tcp: address in use") }}
-	stopCleanly(cmd)
-	assert.EqualError(t, cmd.RunE(cmd, nil), "listen tcp: address in use")
+// bearerTransport adds a bearer token to every request.
+type bearerTransport struct{ token string }
+
+func (b bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+b.token)
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// postInitialize sends an MCP initialize request with the given
+// Authorization header, if any, and returns the HTTP status.
+func postInitialize(t *testing.T, url, authorization string) int {
+	t.Helper()
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	return resp.StatusCode
+}
+
+// TestMCPStream_RequiresToken runs `sind mcp stream` and checks that it
+// refuses a client without the generated bearer token, and serves sind's
+// tools, through ophis, to one that sends it.
+func TestMCPStream_RequiresToken(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv(mcpTokenEnv, "")
+	url, stderr, stop := startMCPStream(t)
+
+	tokenPath := filepath.Join(stateHome, "sind", "mcp-token")
+	data, err := os.ReadFile(tokenPath)
+	require.NoError(t, err)
+	token := strings.TrimSuffix(string(data), "\n")
+	assert.Len(t, token, 26)
+	info, err := os.Stat(tokenPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Contains(t, stderr.String(), "Bearer token in "+tokenPath)
+	assert.Contains(t, stderr.String(), `"Authorization": "Bearer <token>"`)
+	assert.NotContains(t, stderr.String(), token, "the token is not printed")
+
+	assert.Equal(t, http.StatusUnauthorized, postInitialize(t, url, ""))
+	assert.Equal(t, http.StatusUnauthorized, postInitialize(t, url, "Bearer wrong"))
+	assert.Equal(t, http.StatusUnauthorized, postInitialize(t, url, "Basic "+token))
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+		Endpoint:             url,
+		HTTPClient:           &http.Client{Transport: bearerTransport{token: token}},
+		DisableStandaloneSSE: true,
+	}, nil)
+	require.NoError(t, err)
+	serverInfo := session.InitializeResult().ServerInfo
+	assert.Equal(t, "sind", serverInfo.Name)
+	assert.Equal(t, "1.2.3", serverInfo.Version)
+
+	tools, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Len(t, tools.Tools, 27)
+	for _, tool := range tools.Tools {
+		if tool.Name == "sind_create_worker" {
+			require.NotNil(t, tool.Annotations.DestructiveHint)
+			assert.True(t, *tool.Annotations.DestructiveHint)
+		}
+	}
+
+	// The call reaches ophis's server, whose middleware refuses a flag in
+	// the arguments before anything runs.
+	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "sind_get_nodes",
+		Arguments: map[string]any{"flags": map[string]any{}, "args": []string{"-o", "human"}},
+	})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	require.NotEmpty(t, res.Content)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `argument "-o" is a flag`)
+
+	require.NoError(t, session.Close())
+	assert.NoError(t, stop(), "a stopped stream exits 0")
+}
+
+func TestMCPStream_TokenFromEnv(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv(mcpTokenEnv, "s3cret-token")
+	url, stderr, stop := startMCPStream(t)
+	defer func() { assert.NoError(t, stop()) }()
+
+	assert.Contains(t, stderr.String(), "Bearer token from "+mcpTokenEnv+"\n")
+	assert.NoFileExists(t, filepath.Join(stateHome, "sind", "mcp-token"))
+	assert.Equal(t, http.StatusUnauthorized, postInitialize(t, url, ""))
+	assert.Equal(t, http.StatusOK, postInitialize(t, url, "Bearer s3cret-token"))
+}
+
+func TestMCPStream_ListenError(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(mcpTokenEnv, "s3cret-token")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+
+	_, _, err = executeCommand("mcp", "stream", "--port", port)
+	require.ErrorContains(t, err, "listening")
+	require.ErrorContains(t, err, "address already in use")
+}
+
+func TestMCPStreamToken(t *testing.T) {
+	t.Run("invalid env", func(t *testing.T) {
+		for _, token := range []string{"two words", "tab\there", "nl\n", "ümlaut"} {
+			t.Setenv(mcpTokenEnv, token)
+			_, _, err := mcpStreamToken()
+			require.EqualError(t, err, mcpTokenEnv+": a token is printable ASCII without spaces", token)
+		}
+	})
+	t.Run("new at every start", func(t *testing.T) {
+		stateHome := t.TempDir()
+		t.Setenv("XDG_STATE_HOME", stateHome)
+		t.Setenv(mcpTokenEnv, "")
+		path := filepath.Join(stateHome, "sind", "mcp-token")
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte("old\n"), 0o644))
+
+		token1, path1, err := mcpStreamToken()
+		require.NoError(t, err)
+		assert.Equal(t, path, path1)
+		token2, _, err := mcpStreamToken()
+		require.NoError(t, err)
+		assert.NotEqual(t, token1, token2)
+
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, token2+"\n", string(data))
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "an older token file's mode is not kept")
+		entries, err := os.ReadDir(filepath.Dir(path))
+		require.NoError(t, err)
+		assert.Len(t, entries, 1, "no temporary file is left")
+	})
+	t.Run("no state directory", func(t *testing.T) {
+		t.Setenv(mcpTokenEnv, "")
+		t.Setenv("XDG_STATE_HOME", "")
+		t.Setenv("HOME", "")
+		_, _, err := mcpStreamToken()
+		require.ErrorContains(t, err, "resolving state directory")
+	})
+	t.Run("state directory cannot be created", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "file")
+		require.NoError(t, os.WriteFile(file, nil, 0o600))
+		t.Setenv(mcpTokenEnv, "")
+		t.Setenv("XDG_STATE_HOME", file)
+		_, _, err := mcpStreamToken()
+		require.ErrorContains(t, err, "creating state directory")
+	})
+	t.Run("token file cannot be written", func(t *testing.T) {
+		stateHome := t.TempDir()
+		t.Setenv(mcpTokenEnv, "")
+		t.Setenv("XDG_STATE_HOME", stateHome)
+		// A directory where the token file goes makes the rename fail.
+		require.NoError(t, os.MkdirAll(filepath.Join(stateHome, "sind", "mcp-token", "x"), 0o700))
+		_, _, err := mcpStreamToken()
+		require.ErrorContains(t, err, "writing MCP token")
+		entries, err := os.ReadDir(filepath.Join(stateHome, "sind"))
+		require.NoError(t, err)
+		assert.Len(t, entries, 1, "the temporary file is removed")
+	})
 }

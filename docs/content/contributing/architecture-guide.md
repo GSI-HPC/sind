@@ -21,6 +21,7 @@ cmd/sind/          CLI commands (cobra)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations
+  ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── worker.go    Worker create/delete commands
   └── *.go         One file per command group
 

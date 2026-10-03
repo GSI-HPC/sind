@@ -126,7 +126,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
-| `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware |
+| `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
@@ -578,7 +578,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 ```bash
 sind mcp start                          # MCP server on stdio
-sind mcp stream [--host H] [--port P]   # MCP server over HTTP (default 127.0.0.1:8080)
+sind mcp stream [--host H] [--port P]   # MCP server over HTTP (default 127.0.0.1:8080), bearer token required
 sind mcp tools                          # export the tool definitions to mcp-tools.json
 sind mcp {claude,vscode,cursor} {enable,disable,list}  # register sind with an editor
 ```
@@ -587,7 +587,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 
 - The server reports itself as `sind` with the version `sind version` prints.
 
-- `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces. Stopped by SIGINT or SIGTERM, it shuts down and exits 0.
+- `sind mcp stream` listens on `127.0.0.1` by default; `--host 0.0.0.0` opts in to all interfaces. Every request needs `Authorization: Bearer <token>` (go-sdk's `auth.RequireBearerToken`, constant-time comparison), else `401`: loopback keeps out other hosts but not the other users of this one, and every tool runs sind with the Docker access of the user who started the stream. The token is `SIND_MCP_TOKEN` (printable ASCII without spaces) or, when that is unset, a new `crypto/rand` token written at every start to `$XDG_STATE_HOME/sind/mcp-token` (`~/.local/state/sind/mcp-token`), mode `0600`, through a temporary file and a rename. The stream prints the listen URL, where the token is (never the token) and a client configuration to stderr. ophis's own stream has no hook for authentication, so `runMCPStream` (`cmd/sind/mcpstream.go`) replaces its run function and keeps its flags: it runs `sind mcp start`'s ophis server on an in-memory transport, lists its tools through an MCP client session, and serves them from a second MCP server whose handlers forward each call through that session, so ophis still builds every tool and runs every call with sind's selectors and middlewares. Stopped by SIGINT or SIGTERM, it shuts down and exits 0. `sind mcp start` (stdio) is unchanged and needs no token.
 - Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get auth-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `create`, `delete`, `exec`, and the other `power` actions). `create cluster` and `create worker` count as destructive because their flags choose the image a node runs as root, capabilities, devices, security options, a config file and a host directory mounted read-write: one call can run code with host-root power. A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
