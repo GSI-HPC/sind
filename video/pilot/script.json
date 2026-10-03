@@ -1,0 +1,11 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Welcome to sind, Slurm in Docker." },
+    { "id": "welcome", "text": "In this quick start, we'll create a complete Slurm cluster on your own machine. It takes about a minute, and all you need is Docker." },
+    { "id": "what", "text": "With one command, sind sets up the network, DNS and SSH, generates the munge key and Slurm configuration, and starts every node as a container." },
+    { "id": "create", "text": "Let's try it! Run sind create cluster, and you get a cluster named default, with one controller and one worker." },
+    { "id": "check", "text": "sind stays quiet when everything works. Now, sind get clusters shows that it's up and running." },
+    { "id": "outro", "text": "That's it! Your cluster is ready for jobs. See you in the next guide!" }
+  ]
+}
