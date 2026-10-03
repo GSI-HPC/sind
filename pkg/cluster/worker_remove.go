@@ -66,7 +66,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 			return fmt.Errorf("node %q not found in cluster %q", name, clusterName)
 		}
 		if config.Role(c.Labels[LabelRole]) != config.RoleWorker {
-			return fmt.Errorf("node %q has role %q: only worker nodes can be removed with worker remove", name, c.Labels[LabelRole])
+			return fmt.Errorf("node %q has role %q: only worker nodes can be removed", name, c.Labels[LabelRole])
 		}
 		targets = append(targets, c)
 	}

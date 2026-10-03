@@ -1301,7 +1301,7 @@ func TestWorkerRemove_RejectsController(t *testing.T) {
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"controller"})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "only worker nodes")
+	assert.Equal(t, `node "controller" has role "controller": only worker nodes can be removed`, err.Error())
 }
 
 func TestWorkerRemove_RejectsSubmitter(t *testing.T) {
