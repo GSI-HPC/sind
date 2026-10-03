@@ -63,7 +63,13 @@ goreleaser release --snapshot --clean # release binaries and checksums.txt into 
 
 Keep `DESIGN.md` and `docs/content/` in sync with code changes in the same PR: CLI
 flags and output samples, config schema, labels, versions. `next` publishes a preview
-docs site; `main` publishes the release docs.
+docs site; `main` publishes the release docs. `.github/workflows/docs.yml` builds both
+into one Pages artifact (`main` at `/`, `next` at `/next/`).
+
+Guides can embed a video episode with `{{< video "<id>" >}}`. Episodes live in
+`video/episodes/<id>/` (see `video/README.md`); the docs workflow renders them, so never
+commit rendered files. When a guide with an episode changes, update the episode in the
+same PR.
 
 ## Commits
 

@@ -2,3 +2,5 @@ public/
 themes/
 resources/
 .hugo_build.lock
+static/videos/
+data/videos/

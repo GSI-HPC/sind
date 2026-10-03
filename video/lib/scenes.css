@@ -1,0 +1,83 @@
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
+/* Shared look for Sindy videos (1920x1080). sind brand palette. */
+:root {
+  --bg: #0f172a;
+  --bg-2: #111c33;
+  --panel: #1e293b;
+  --line: #334155;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --blue: #0ea5e9;
+  --sky: #38bdf8;
+  --teal: #14b8a6;
+  --deep: #0d9488;
+  --mint: #5eead4;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+#root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: "Inter", sans-serif; color: var(--text); }
+
+/* Scenes: full-frame layers; the timeline owns their visibility. */
+.scene { position: absolute; inset: 0; overflow: hidden; visibility: hidden; opacity: 0; background: var(--bg); }
+.bg-glow { position: absolute; inset: 0; background: radial-gradient(circle at 72% 45%, rgba(20, 184, 166, 0.28) 0%, rgba(15, 23, 42, 0) 55%), radial-gradient(circle at 12% 90%, rgba(14, 165, 233, 0.18) 0%, rgba(15, 23, 42, 0) 45%), var(--bg); }
+.bg-grid { position: absolute; inset: 0; opacity: 0.35; background-image: linear-gradient(rgba(148, 163, 184, 0.08) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, rgba(0, 0, 0, 0) 1px); background-size: 64px 64px; }
+
+/* Chapter label (top-left). */
+.chapter { position: absolute; left: 80px; top: 56px; display: flex; align-items: center; gap: 16px; font-size: 26px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+.chapter b { color: var(--mint); font-weight: 600; }
+.chapter .dot { width: 10px; height: 10px; border-radius: 3px; background: var(--teal); }
+
+/* Avatar frame. */
+#sindy-frame { position: absolute; z-index: 10; overflow: hidden; }
+.sindy-bg { position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(circle at 50% 40%, #155e63 0%, #0f2a3a 70%); opacity: 0; }
+.sindy-ring { position: absolute; inset: 0; border-radius: inherit; border: 6px solid var(--teal); box-shadow: inset 0 0 0 3px rgba(15, 23, 42, 0.6); opacity: 0; z-index: 2; }
+.sindy-stage { position: absolute; }
+
+/* Captions. */
+#captions { position: absolute; z-index: 20; left: 0; right: 0; bottom: 48px; display: flex; justify-content: center; pointer-events: none; }
+.cap-box { max-width: 1000px; padding: 14px 30px; border-radius: 18px; background: rgba(15, 23, 42, 0.78); border: 1px solid rgba(94, 234, 212, 0.18); font-size: 40px; font-weight: 600; line-height: 1.3; text-align: center; color: rgba(226, 232, 240, 0.55); opacity: 0; }
+.cap-w.on { color: #ffffff; }
+
+/* Lower third. */
+.lower-third { position: absolute; left: 100px; bottom: 170px; display: flex; flex-direction: column; gap: 6px; padding: 18px 30px 20px; border-left: 8px solid var(--teal); background: rgba(15, 23, 42, 0.85); border-radius: 0 16px 16px 0; z-index: 15; }
+.lower-third .name { font-size: 44px; font-weight: 800; color: #fff; }
+.lower-third .role { font-size: 26px; font-weight: 600; color: var(--mint); }
+
+/* Title card (right side of the talk scene). */
+.card { position: absolute; left: 1020px; top: 250px; width: 800px; display: flex; flex-direction: column; gap: 28px; }
+.kicker { font-size: 28px; font-weight: 700; color: var(--mint); text-transform: uppercase; letter-spacing: 0.14em; }
+.headline { font-size: 92px; font-weight: 800; line-height: 1.02; color: #fff; letter-spacing: -0.02em; }
+.sub { font-size: 38px; font-weight: 400; color: var(--muted); line-height: 1.35; }
+.chips { display: flex; gap: 16px; }
+.chip { display: block; padding: 10px 22px; border-radius: 999px; border: 2px solid var(--line); font-size: 28px; font-weight: 600; color: var(--text); background: rgba(30, 41, 59, 0.8); }
+.chip.accent { border-color: var(--teal); color: var(--mint); }
+
+/* Slide layout. */
+.slide-title { position: absolute; left: 120px; top: 150px; font-size: 76px; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+.bullets { position: absolute; left: 120px; top: 320px; width: 1260px; display: flex; flex-direction: column; gap: 30px; }
+.bullet { display: flex; align-items: center; gap: 30px; padding: 26px 34px; border-radius: 22px; background: rgba(30, 41, 59, 0.75); border: 2px solid var(--line); }
+.bullet .icon { flex: none; width: 76px; height: 76px; border-radius: 18px; display: grid; place-items: center; background: rgba(20, 184, 166, 0.16); }
+.bullet .icon svg { width: 46px; height: 46px; }
+.bullet .txt { display: flex; flex-direction: column; gap: 4px; }
+.bullet .t1 { font-size: 40px; font-weight: 700; color: #fff; }
+.bullet .t2 { font-size: 28px; color: var(--muted); }
+
+/* Terminal window. */
+.term { position: absolute; left: 100px; top: 140px; width: 1340px; height: 700px; border-radius: 22px; background: #0b1220; border: 2px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); overflow: hidden; }
+.term-bar { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 22px; background: #111a2c; border-bottom: 2px solid #1c2740; }
+.term-bar i { width: 16px; height: 16px; border-radius: 50%; display: block; }
+.term-bar .title { margin-left: 18px; font-family: "JetBrains Mono", monospace; font-size: 22px; color: var(--muted); }
+.term-body { padding: 26px 34px; font-family: "JetBrains Mono", monospace; font-size: 34px; line-height: 1.55; color: #e2e8f0; white-space: pre; }
+.term-prompt { color: var(--teal); font-weight: 700; }
+.term-out { color: #a3b3c9; }
+.term-cursor { display: inline-block; width: 16px; height: 34px; margin-left: 2px; vertical-align: -6px; background: var(--mint); }
+.term-hl { color: #0b1220; background: var(--mint); border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
+.term-ff { position: absolute; right: 26px; top: 76px; padding: 8px 18px; border-radius: 999px; background: rgba(14, 165, 233, 0.18); border: 2px solid var(--blue); color: var(--sky); font-family: "Inter", sans-serif; font-size: 24px; font-weight: 700; opacity: 0; }
+
+/* Brand mark. */
+.logo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.logo-grid i { display: block; width: 100%; aspect-ratio: 1; border-radius: 18%; }
+.wordmark { font-weight: 600; color: #fff; letter-spacing: -0.03em; }
+.tagline { font-size: 22px; letter-spacing: 0.32em; color: var(--muted); font-weight: 600; }
+.disclosure { position: absolute; right: 60px; bottom: 40px; font-size: 20px; color: rgba(148, 163, 184, 0.75); }

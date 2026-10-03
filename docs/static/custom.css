@@ -108,3 +108,58 @@
     --footer-link-color-visited: var(--sind-dark-footer-link-color-visited);
   }
 }
+
+/* Video episodes ({{< video >}} shortcode) */
+.sind-video {
+  margin: 1.25rem 0 2rem;
+  border: 1px solid var(--accent-color);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--accent-color-lite);
+}
+
+.sind-video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--sind-dark);
+}
+
+.sind-video figcaption {
+  padding: 0.75rem 1rem 0.9rem;
+}
+
+.sind-video-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+}
+
+.sind-video-title span {
+  color: var(--sind-muted);
+  font-size: 0.875rem;
+}
+
+.sind-video .sind-video-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  padding-inline-start: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.sind-video .sind-video-chapters button {
+  margin-right: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--sind-teal);
+  border-radius: 4px;
+  background: none;
+  color: var(--sind-teal);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}

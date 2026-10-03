@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sindy character sheet</title>
+<style>
+  body { margin: 0; background: #0f172a; font-family: sans-serif; color: #cbd5e1; }
+  #grid { display: grid; grid-template-columns: repeat(var(--cols, 4), var(--w, 300px)); gap: 12px; padding: 16px; }
+  .cell { background: linear-gradient(#1e293b, #0f172a); border-radius: 12px; overflow: hidden; }
+  .cell .av { width: var(--w, 300px); height: var(--h, 400px); }
+  .cell p { margin: 0; padding: 6px 10px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="grid"></div>
+<script src="../lib/sindy.js"></script>
+<script>
+  // ?mode=expr (default) | visemes | big
+  const mode = new URLSearchParams(location.search).get("mode") || "expr";
+  const grid = document.getElementById("grid");
+  function cell(label, opts, t) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    const av = document.createElement("div");
+    av.className = "av";
+    c.appendChild(av);
+    const p = document.createElement("p");
+    p.textContent = label;
+    c.appendChild(p);
+    grid.appendChild(c);
+    const s = Sindy.create(av, opts);
+    s.render(t);
+    return s;
+  }
+  if (mode === "expr") {
+    for (const name of Object.keys(Sindy.EXPRESSIONS)) {
+      cell(name, { expressions: [{ t: 0, name }], seed: 3 }, 0.3);
+    }
+  } else if (mode === "visemes") {
+    for (const v of Object.keys(Sindy.VISEMES)) {
+      cell(v, { speech: { visemes: [[0, 1, v]] }, seed: 3 }, 0.5);
+    }
+  } else if (mode === "gaze") {
+    for (const [x, y] of [[-1, 0], [1, 0], [0, -1], [0.6, 0.6]]) {
+      cell(`gaze ${x},${y}`, { gaze: [{ t: 0, x, y }], seed: 3 }, 0.5);
+    }
+  } else if (mode === "big") {
+    document.documentElement.style.setProperty("--cols", 2);
+    document.documentElement.style.setProperty("--w", "600px");
+    document.documentElement.style.setProperty("--h", "800px");
+    cell("neutral", { seed: 3 }, 0.3);
+    cell("talking aa + happy + wave", { seed: 3, expressions: [{ t: 0, name: "happy" }], speech: { visemes: [[0, 1, "aa"]] }, gestures: [{ t: 0, name: "wave", dur: 2 }] }, 0.6);
+  }
+</script>
+</body>
+</html>
