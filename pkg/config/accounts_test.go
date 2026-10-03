@@ -36,6 +36,28 @@ users:
 	assert.Equal(t, []User{{Name: "alice", Accounts: []string{"theory", "physics"}, Coordinator: []string{"physics"}, AdminLevel: AdminOperator}}, cfg.Users)
 }
 
+func TestParse_LimitNumbers(t *testing.T) {
+	// YAML 1.1 reads unquoted numbers first; sind passes them in plain
+	// decimal form. Quoted values stay as written.
+	input := `kind: Cluster
+accounts:
+  - name: physics
+    limits:
+      MaxJobs: 010
+      MaxSubmitJobs: 0x10
+      GrpJobs: 1e3
+      Fairshare: 1.10
+      Description: "1.10"
+      Organization: "007"`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	assert.Equal(t, Limits{
+		"MaxJobs": "8", "MaxSubmitJobs": "16", "GrpJobs": "1000", "Fairshare": "1.1",
+		"Description": "1.10", "Organization": "007",
+	}, cfg.Accounts[0].Limits)
+}
+
 func TestParse_AccountsErrors(t *testing.T) {
 	tests := []struct {
 		name    string

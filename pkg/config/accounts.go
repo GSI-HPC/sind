@@ -48,8 +48,10 @@ func (a *Account) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Limits are sacctmgr options of an account, by option name. YAML numbers
-// are kept as written, so MaxJobs: 1 becomes MaxJobs=1.
+// Limits are sacctmgr options of an account, by option name. Numbers are
+// passed in plain decimal form, as YAML 1.1 reads them before sind sees
+// them: MaxJobs: 1 becomes MaxJobs=1, but 010 is octal and becomes 8, and
+// 1.10 becomes 1.1. A quoted value is passed as written.
 type Limits map[string]string
 
 // UnmarshalJSON accepts a map of strings and numbers.

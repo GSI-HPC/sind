@@ -233,6 +233,8 @@ sacctmgr -i add coordinator account=physics names=bob
 
 `limits` keys are these options, in any case: `Description`, `Organization` and `Flags` of the account, and `Comment`, `DefaultQOS`, `Fairshare` (or `Shares`), `GrpJobs`, `GrpJobsAccrue`, `GrpSubmitJobs`, `GrpTRES`, `GrpTRESMins`, `GrpTRESRunMins`, `GrpWall`, `MaxJobs`, `MaxJobsAccrue`, `MaxSubmitJobs`, `MaxTRES` (or `MaxTRESPerJob`), `MaxTRESMins` (or `MaxTRESMinsPerJob`), `MaxTRESPerNode`, `MaxTRESRunMins`, `MaxWall` (or `MaxWallDurationPerJob`), `MinPrioThresh`, `Priority` and `QOS` (or `QosLevel`) of its association. sacctmgr accepts abbreviations, but sind takes only these full names, so that no key reaches the name, parent or cluster options sind sets.
 
+YAML 1.1 reads unquoted numbers before sind sees them, and sind passes them in plain decimal form: `MaxJobs: 1` becomes `MaxJobs=1`, but `MaxJobs: 010` is octal and becomes `MaxJobs=8`, and `Description: 1.10` becomes `Description=1.1`. Quote a value to pass it as written, e.g. `Description: "1.10"`.
+
 Every account a user names must be declared, so a typo fails validation instead of creating a new account. See [Users and Identity]({{< relref "/guides/users" >}}) for a worked example with limits and roles. The associations are in place when `sind create cluster` returns. sind does not enforce them: set `AccountingStorageEnforce=associations,limits` in the [`main` section](#slurm-section) to reject jobs without an association and apply the limits. Slurm accounts and Linux groups are unrelated, even when they share a name.
 
 ## Identity section
