@@ -145,7 +145,7 @@ sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/
 | `ssh_config` | SSH config snippet, with a `Host` block for each node of the realm |
 | `id_ed25519` | Private key |
 | `known_hosts` | Host keys |
-| `lock` | Advisory lock that serializes creating and deleting clusters and workers in the realm |
+| `lock` | Advisory lock that serializes creating and deleting clusters and workers, and `sind power on`, `reboot` and `cycle`, in the realm |
 
 The SSH files are updated on every create/delete operation and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file.
 
@@ -181,11 +181,11 @@ The `Include` relies on these OpenSSH behaviours:
 
 - An `Include` after a `Host` or `Match` line belongs to that block and applies only to the hosts it matches, hence its place at the top.
 - ssh uses the first value it gets for each option, so the settings for the nodes take precedence over later ones, such as those of a `Host *` block.
-- Short names use hostname canonicalization (`CanonicalizeHostname`), only for names shaped like a node's: `controller`, `controller-backup`, `db`, `submitter` and `worker-*`, alone or followed by `.<cluster>`. For them, ssh looks up `<name>.default.sind.sind` and then `<name>.sind.sind` in the host's DNS, which needs [host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}}), and reads the config again for the name it found. Other host names are not looked up. Without host DNS resolution, use full names.
+- Short names use hostname canonicalization (`CanonicalizeHostname`), only for names shaped like a node's: `controller`, `controller-backup`, `db`, `submitter` and `worker-*`, alone or followed by `.<cluster>`. For them, ssh looks up `<name>.default.sind.sind` and then `<name>.sind.sind` in the host's DNS and reads the config again for the name it found (see below). Other host names are not looked up.
 - ssh puts a host name into a `ProxyCommand` as it was given, and runs the command in a shell. The relay's `ProxyCommand` is therefore set only in the `Host` block of each node, with the node's name written into it, so a host name with shell syntax in it, such as one from a git submodule URL, never reaches a shell (the pattern of CVE-2023-51385; OpenSSH 9.6 and later also refuse such names on the command line). sind rewrites the file whenever it creates or deletes a cluster or a worker in the realm.
 
 {{< hint warning >}}
 While a node of that name exists, `ssh controller`, `ssh db` or `ssh db.lab` (with a cluster named `lab`) connect to the sind node, as root, even when your network has a host of that name. Reach such a host by its full name, or include the default realm's `ssh_config` only while you need it.
 {{< /hint >}}
 
-Short names also need [host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}}) of `*.<realm>.sind`: OpenSSH keeps a canonical name only if the host's resolver finds it, and otherwise falls back to the bare name, which no `Host` block of the exported config matches (`Could not resolve hostname controller`). sind sets up host DNS only with systemd-resolved and the polkit authorization that `sind doctor` checks. Without it, use full names such as `controller.default.sind.sind`, which the relay resolves, or `sind ssh`.
+Short names need [host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}}) of `*.<realm>.sind`: OpenSSH keeps a canonical name only if the host's resolver finds it, and otherwise falls back to the bare name, which no `Host` block of the exported config matches (`Could not resolve hostname controller`). sind sets up host DNS only with systemd-resolved and the polkit authorization that `sind doctor` checks. Without it, use full names such as `controller.default.sind.sind`, which the relay resolves, or `sind ssh`.

@@ -564,7 +564,7 @@ sind power unfreeze NODES               # resume frozen node
 
 `docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
 
-A power command runs its Docker calls for all nodes in parallel (at most 8 at a time); `reboot` and `cycle` take every node down before they start any. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.
+A power command runs its Docker calls for the nodes of a cluster in parallel (at most 8 at a time), and handles the clusters of its nodes one after another; `reboot` and `cycle` take every node of a cluster down before they start any of them. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.
 
 `on`, `reboot` and `cycle` start the realm's mesh DNS and SSH relay first if they are stopped, start the nodes, and then point the started nodes' mesh DNS records at their current cluster network addresses: Docker releases a container's address when it stops and can give it another one on start, for example after `sind create worker` took the address of a node that was powered off. They warn about nodes created with a mesh DNS address the DNS container no longer has. Since they rewrite the realm's Corefile, they take the realm lock.
 
@@ -844,11 +844,11 @@ This produces:
 │   └── scheduling.conf
 ├── sind-nodes.conf
 ├── cgroup.conf
-├── plugstack.conf          # always: include plugstack.conf.d/*
+├── plugstack.conf          # always: include /etc/slurm/plugstack.conf.d/*
 └── plugstack.conf.d/
 ```
 
-`plugstack.conf` is always created with an `include plugstack.conf.d/*` directive, and `PlugStackConfig` is always set in `slurm.conf`. This allows SPANK plugins to be dropped in without additional configuration.
+`plugstack.conf` is always created with an `include /etc/slurm/plugstack.conf.d/*` directive, and `PlugStackConfig` is always set in `slurm.conf`. This allows SPANK plugins to be dropped in without additional configuration.
 
 Standalone sections (`gres`, `topology`) are only created when configured. They require enabling in `slurm.conf` (e.g., `GresTypes=gpu`, `TopologyPlugin=topology/tree`) via the `main` section.
 
@@ -1356,7 +1356,7 @@ The DNS container's address is fixed into every node's and the relay's `--dns` w
 
 - Each cluster network and each mesh takes one network from Docker's default address pools, which a stock daemon fills at about 30 networks, shared with every other network on the host. `default-address-pools` in `daemon.json` gives hosts that run many realms or clusters smaller pools.
 - A Linux bridge has 1,024 ports, so one Docker bridge network holds at most about 1,023 containers; the mesh holds the DNS container, the relay and every node of the realm. Host limits such as inotify instances and memory bind long before.
-- The realm lock is a file in the invoking user's state directory, while the realm's resources live on the Docker daemon. Clients that share a daemon (several users of a host, CI jobs that share the host's Docker socket) are not serialized against each other and must use separate realms. A mesh network that another client created between the check and the create counts as existing, so that client's failure handling never removes it.
+- The realm lock is a `flock(2)` on a file in the invoking user's state directory, while the realm's resources live on the Docker daemon, which sind does not lock. Clients that share a daemon (several users of a host, CI jobs that share the host's Docker socket, other `XDG_STATE_HOME`s) are not serialized against each other and must use separate realms. A mesh network that another client created between the check and the create counts as existing, so that client's failure handling never removes it.
 
 ### SSH
 
@@ -1627,19 +1627,20 @@ ReturnToService=2
 DefMemPerCPU=<the smallest RealMemory/CPUs of the managed workers>
 
 <identity parameters: identity nssSlurm and clientIds (see Identity Modes)>
+
 <accounting parameters: a managed db node (see Database Node)>
 
 <slurm.main: its content, or an include line per fragment>
 include /etc/slurm/sind-nodes.conf
 ```
 
-- The first block is fixed, as sind's volumes, images and readiness checks depend on it; a backup controller adds `SlurmctldHost=controller-backup` and `SlurmctldTimeout=20` (see Backup Controller).
+- The first block is fixed, as sind's volumes, images and readiness checks depend on it; a backup controller adds `SlurmctldHost=controller-backup` to it, and `SlurmctldTimeout=20` unless `slurm.main` sets it (see Backup Controller).
 - Every other parameter is set unless `slurm.main` sets it, so that a value there replaces sind's instead of following it (Slurm would take the later one and log an error for the duplicate).
 - `sind-nodes.conf` is included after `slurm.main`, so that the `NodeName=DEFAULT` and `PartitionName=DEFAULT` lines of `slurm.main`, which apply only to the lines after them, reach sind's nodes and partition `all`, e.g. `PartitionName=DEFAULT DefaultTime=00:30:00` for a default time limit. slurmctld reads every node before any partition, so a partition in `slurm.main` may name sind's nodes (`Nodes=worker-[0-1]` or `ALL`).
 - `TaskPlugin=task/cgroup` leaves out `task/affinity`. A node's CPUs are a CPU quota (`--cpus`), not a cpuset, so every worker sees all host CPUs, and `task/affinity` would bind the tasks of every worker, of every cluster on the host, to the same first host CPUs. To test CPU binding (`--cpu-bind`), set `TaskPlugin=task/cgroup,task/affinity` in `slurm.main`. Managed workers then get `--cap-add SYS_NICE`, unless their `capDrop` lists `SYS_NICE` or `ALL`: slurmstepd sets each task's CPU affinity after the task has switched to the job's user, and root needs `CAP_SYS_NICE`, which Docker drops by default, to change the affinity of another user's process; without it, every job of a user other than root fails with `task_g_set_affinity` ("Slurmd could not execve job"). `sind create worker` reads the `TaskPlugin` from `slurm.conf` and the files it includes on the config volume, so workers added later match. Nothing else adds `SYS_NICE`.
 - `MpiDefault=pmix` makes `srun` launch through PMIx, which needs Slurm's `mpi/pmix` plugin (see Custom Images); set `MpiDefault=none` in `slurm.main` for an image without it.
 - `ReturnToService=2` returns a `DOWN` worker to service when its slurmd registers with a valid configuration, e.g. after `sind power cut` and `sind power on`.
-- `DefMemPerCPU` is the smallest `RealMemory`/`CPUs` over the managed workers, in MB, rounded down, and is left out when `slurm.main` sets `DefMemPerCPU` or `DefMemPerNode`. Slurm's defaults, `SelectType=select/cons_tres` with `SelectTypeParameters=CR_Core_Memory`, make memory a consumable resource, and without a default a job that does not ask for memory gets all of a node's memory: a worker would run one such job at a time, whatever its `cpus`. With it, each CPU of every worker can run such a job. A worker's `RealMemory` is its whole container memory limit, without a reserve for its daemons or its `/tmp`, which is a tmpfs and counts against the limit. sind writes `slurm.conf` once, so a worker added later with less memory per CPU runs fewer jobs without `--mem` at a time than it has CPUs.
+- `DefMemPerCPU` is the smallest `RealMemory`/`CPUs` over the managed workers, in MB, rounded down, and is left out when `slurm.main` sets `DefMemPerCPU` or `DefMemPerNode`. Slurm's defaults, `SelectType=select/cons_tres` with `SelectTypeParameters=CR_Core_Memory`, make memory a consumable resource, and without a default a job that does not ask for memory gets all of a node's memory: a worker would run one such job at a time, whatever its `cpus`. With it, each CPU of every worker can run such a job. sind writes `slurm.conf` once, so a worker added later with less memory per CPU runs fewer jobs without `--mem` at a time than it has CPUs.
 
 #### sind-nodes.conf
 
@@ -1750,7 +1751,7 @@ Read-only operations (`get`, `logs`, `ssh`, etc.) and the other `power` commands
 
 ### Library callers
 
-The lock is `state.LockRealm` in `pkg/state`, which also resolves the state directory (`state.Dir`, `state.RealmDir`). `cluster.Create`, `cluster.Delete`, `cluster.WorkerAdd` and `cluster.WorkerRemove` take no lock themselves: their caller holds the realm lock for the whole operation, for `Create` from before `mesh.Manager.EnsureMesh`, as the CLI does. Without it, concurrent calls in one realm lose each other's DNS records, `known_hosts` entries and `sind-nodes.conf` lines, or remove each other's resources. The lock is a `flock(2)` on a file in the user's state directory, so it serializes the goroutines of one process and the sind commands of one user, but not two users, or two `XDG_STATE_HOME`s, that share one Docker daemon: such clients use separate realms.
+The lock is `state.LockRealm` in `pkg/state`, which also resolves the state directory (`state.Dir`, `state.RealmDir`). `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle` take no lock themselves: their caller holds the realm lock for the whole operation, for `Create` from before `mesh.Manager.EnsureMesh`, as the CLI does. Without it, concurrent calls in one realm lose each other's DNS records, `known_hosts` entries and `sind-nodes.conf` lines, or remove each other's resources. The lock is a `flock(2)` on a file in the user's state directory, so it also serializes the goroutines of one process (see Limits for clients that share a daemon).
 
 ### Behavior
 
@@ -1762,8 +1763,6 @@ The lock is `state.LockRealm` in `pkg/state`, which also resolves the state dire
 ### Realm independence
 
 Locks are per-realm. Operations in different realms run concurrently without contention. This makes realm-based CI isolation safe for parallel jobs.
-
-The lock file belongs to the invoking user's state directory, the realm's resources to the Docker daemon. sind clients that share a daemon (other users, CI jobs that share the host's Docker socket, other `XDG_STATE_HOME`s) do not see each other's locks and must use separate realms. sind does not lock on the daemon.
 
 ## Future Features
 

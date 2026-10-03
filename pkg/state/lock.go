@@ -31,8 +31,9 @@ type LockOptions struct {
 // function that releases it, which the caller must call when its
 // operation ends, failed or not.
 //
-// cluster.Create, cluster.Delete, cluster.WorkerAdd and cluster.WorkerRemove
-// change state that all clusters of a realm share: the mesh, its DNS
+// cluster.Create, cluster.Delete, cluster.DeleteAll, cluster.WorkerAdd,
+// cluster.WorkerRemove, cluster.PowerOn, cluster.PowerReboot and
+// cluster.PowerCycle change state that all clusters of a realm share: the mesh, its DNS
 // records and known_hosts, and a cluster's Slurm node list. They take no
 // lock themselves. A caller holds the realm lock from before
 // mesh.Manager.EnsureMesh until the call returns, as every sind command

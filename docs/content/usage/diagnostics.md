@@ -18,6 +18,7 @@ Checks system prerequisites and reports pass/fail for each:
 ✓ Docker Engine: 28.1.1 (>= 28.0)
 ✓ Docker daemon: rootful, no userns-remap
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
+✓ inotify: max_user_instances 8192 (>= 1024)
 ✓ DNS policy: host resolution available
 ```
 
@@ -29,7 +30,7 @@ Checks system prerequisites and reports pass/fail for each:
 | inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-The Docker checks ask the daemon. The cgroup mount and DNS policy checks look at the machine sind runs on, which has to be the Docker host: sind does not support Docker Desktop or a remote `DOCKER_HOST`.
+The Docker checks ask the daemon. The cgroup mount, inotify and DNS policy checks look at the machine sind runs on, which has to be the Docker host: sind does not support Docker Desktop or a remote `DOCKER_HOST`.
 
 The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
 
@@ -85,6 +86,11 @@ sind doctor -o json
     "status": "failed",
     "detail": "nsdelegate not found",
     "remediation": "Enable nsdelegate temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n..."
+  },
+  {
+    "name": "inotify",
+    "status": "ok",
+    "detail": "max_user_instances 8192 (>= 1024)"
   }
 ]
 ```

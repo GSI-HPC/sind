@@ -24,6 +24,8 @@ sind power <action> NODES
 
 `docker stop` sends the image's stop signal. The sind-node images set `SIGRTMIN+3`, which makes systemd shut the node down cleanly. A custom image needs the same [stop signal]({{< relref "/container-images/building-images#container-settings" >}}): without it the node gets SIGTERM, which systemd does not treat as a shutdown request, and Docker kills it after 10 seconds.
 
+A power command acts on the nodes of each cluster in parallel, and on several clusters one after another; `reboot` and `cycle` take every node of a cluster down before they start any. A node whose Docker call fails does not stop the others: the command reports every failed node and exits non-zero.
+
 ## Examples
 
 ```bash
@@ -48,8 +50,6 @@ sind power freeze worker-0
 # Resume a frozen node
 sind power unfreeze worker-0
 ```
-
-A power command acts on all its nodes in parallel; `reboot` and `cycle` take every node down before they start any. A node whose Docker call fails does not stop the others: the command reports every failed node and exits non-zero.
 
 ## Power on
 

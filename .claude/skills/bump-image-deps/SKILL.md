@@ -76,8 +76,8 @@ only the files below. With Docker, `docker run --rm <new image> slurmctld -V` mu
      For Slurm these are `DESIGN.md`, `docs/content/architecture/{docker-resources,slurm-config}.md`,
      `docs/content/usage/{cluster-lifecycle,diagnostics}.md`,
      `docs/content/getting-started/quickstart.md` (the newest release line),
-     `pkg/slurm/version_test.go`, `pkg/cluster/status_test.go` and
-     `cmd/sind/get_test.go`.
+     `docs/content/usage/worker-management.md`, `pkg/slurm/version_test.go`,
+     `pkg/cluster/{identity,node,status,worker}_test.go` and `cmd/sind/get_test.go`.
    - `docker buildx bake --print` shows the resulting targets, build args and tags.
 5. **Check:** `go mod download && make test` and `make lint-docs`.
 6. **Commit:** `build(image): bump slurm to X.Y.Z` with bullets for the version, the

@@ -51,6 +51,7 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
+  ├── info.go      docker info (daemon version, cgroup version, security options)
   ├── plugin.go    Volume plugin queries (CVMFS)
   └── labels.go    Docker Compose compatibility labels
 
@@ -60,6 +61,9 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
+  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNotReady), rollback bound
+  ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
+  ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
@@ -101,6 +105,7 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                        → pkg/log
                        → pkg/mesh    → pkg/docker
                                      → pkg/cmdexec
+                                     → pkg/config
                                      → pkg/retry
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
@@ -112,6 +117,7 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                                      → pkg/config
                        → pkg/ssh     → pkg/docker
          → pkg/nodeset
+         → pkg/state   (→ pkg/log)
 ```
 
 The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
