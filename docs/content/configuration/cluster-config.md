@@ -95,7 +95,7 @@ nodes:
 |-------|----------|---------|-------------|
 | `kind` | yes | — | Must be `"Cluster"` |
 | `name` | no | `"default"` | Cluster name, used in resource naming; must be a valid name (see below) |
-| `realm` | no | `"sind"` | Realm namespace for resource isolation; must be a valid name (see below) |
+| `realm` | no | `"sind"` | Realm namespace for resource isolation; must be a valid name (see below). `--realm` and `SIND_REALM` take precedence, and later commands do not read it: see [Realms]({{< relref "/configuration/realms#setting-the-realm" >}}) |
 | `defaults` | no | — | Default settings applied to all nodes |
 | `storage` | no | — | Shared storage configuration |
 | `slurm` | no | — | Slurm configuration extension |

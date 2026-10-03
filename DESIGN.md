@@ -688,7 +688,7 @@ The shorthand and full forms can be mixed in the same configuration.
 ```yaml
 kind: Cluster
 name: test-cluster                       # default: "default"
-realm: sind                              # default: "sind"
+realm: sind                              # default: "sind"; --realm and SIND_REALM win
 
 defaults:
   image: ghcr.io/gsi-hpc/sind-node:25.11 # default: sind-node:latest
@@ -884,6 +884,8 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 - not beginning or ending with `-`
 
 sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
+
+The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when `get cluster` does not find a cluster in its realm, the error names the realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (it exists in realm "ci-42")`).
 
 Resource names join realm and cluster with `-`, so realm `ci` with cluster `42-dev` and realm `ci-42` with cluster `dev` share the names `ci-42-dev-*`. The second `sind create cluster` fails its preflight check, and `sind delete cluster` only removes a network or volume whose `sind.realm` and `sind.cluster` labels, if present, name the cluster being deleted.
 

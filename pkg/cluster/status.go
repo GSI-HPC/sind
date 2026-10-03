@@ -293,7 +293,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	if len(containers) == 0 {
 		if _, nerr := client.InspectNetwork(ctx, NetworkName(realm, clusterName)); nerr != nil {
 			if docker.IsNotFound(nerr) {
-				return nil, fmt.Errorf("cluster %q not found in realm %q", clusterName, realm)
+				return nil, clusterNotFound(ctx, client, realm, clusterName)
 			}
 			return nil, fmt.Errorf("checking cluster network: %w", nerr)
 		}

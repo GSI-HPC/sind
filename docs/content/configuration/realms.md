@@ -27,9 +27,19 @@ Realm is determined by the following precedence (highest first):
 | Source | Example |
 |--------|---------|
 | `--realm` flag | `sind --realm ci-42 create cluster` |
-| Config file | `realm: ci-42` in the YAML config |
 | `SIND_REALM` environment variable | `export SIND_REALM=ci-42` |
+| Config file (`sind create cluster` only) | `realm: ci-42` in the YAML config |
 | Default | `sind` |
+
+Only `sind create cluster` reads a config file, so a `realm` set there applies to that command alone. Pass the same realm to the commands that follow, with `--realm` or `SIND_REALM`, or they look in another realm:
+
+```bash
+sind create cluster --config dev.yaml       # dev.yaml sets realm: ci-42
+sind --realm ci-42 get cluster dev
+sind --realm ci-42 delete cluster dev
+```
+
+When a command does not find a cluster in its realm, the error names the realms that hold a cluster of that name, for example `cluster "dev" not found in realm "sind" (it exists in realm "ci-42")`.
 
 A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source; `SIND_REALM` is only checked when it is the realm in effect.
 
