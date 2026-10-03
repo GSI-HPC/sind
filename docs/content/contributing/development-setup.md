@@ -63,8 +63,10 @@ sind uses a minimal set of dependencies:
 | Dependency | Purpose |
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
+| `github.com/spf13/pflag` | Flag library under cobra: the MCP tool flag filter, and the flag errors that exit 2 as usage errors |
 | `sigs.k8s.io/yaml` | YAML configuration parsing |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
+| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware |
