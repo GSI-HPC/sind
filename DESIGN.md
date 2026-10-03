@@ -211,7 +211,7 @@ Rules:
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
 - **One persistent root flag**: `--realm` (inherited by every subcommand)
 - **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
-- `ssh` passes its arguments through to SSH, so `--realm` and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's. `exec` parses its own flags up to its `--`
+- `ssh` passes its arguments through to SSH, so `--realm` and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's, and an argument that begins with `--` before the `--` separator is a usage error, as SSH has no long options. `exec` parses its own flags up to its `--`
 
 ### Output Conventions
 
@@ -454,7 +454,7 @@ NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `default`.
 
 `USER@` and `--user|-u USER` log in as a cluster user (see Users) instead of root. `sind ssh USER@NODE` is `ssh -l USER`; `enter` and `exec` run as USER in its home directory, `/home/USER`. `--user root` is the default. A USER that is not a valid user name is a usage error.
 
-`sind ssh` passes all options and arguments through to the underlying SSH command. See the SSH section for details.
+`sind ssh` passes the SSH options, before or after NODE, and the command after `--` through to the underlying SSH command. Any other argument before the `--` is a usage error. See the SSH section for details.
 
 ### Worker Lifecycle
 
@@ -1325,7 +1325,7 @@ docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [CO
 
 `-t` needs a terminal at both ends: through a pseudo-terminal, the output gets CRLF line endings and the remote stderr is merged into stdout, which would corrupt output that a script captures or redirects in an interactive shell.
 
-All SSH options and arguments are passed through verbatim. A `USER@` before the node becomes `-l USER` after the other SSH options. Examples:
+SSH options are passed through verbatim, before or after the node. sind reads them as ssh's getopt does: an option that takes a value (`-B -D -E -F -I -J -L -O -P -Q -R -S -W -b -c -e -i -l -m -o -p -w`) takes the rest of its argument (`-p2222`, `-vL`) or else the next one. The node is the one argument before `--` that is neither an option nor an option's value. Another one is a usage error that names it: ssh would run `sind ssh worker-0 hostname` as `ssh worker-0 hostname`, but sind takes a remote command only after `--`. A `USER@` before the node becomes `-l USER` after the other SSH options. Examples:
 
 ```bash
 sind ssh worker-0                           # interactive shell

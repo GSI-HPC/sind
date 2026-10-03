@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -18,8 +19,12 @@ import (
 
 func newSSHCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:                "ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]",
-		Short:              "SSH into a cluster node",
+		Use:   "ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]",
+		Short: "SSH into a cluster node",
+		Long: `SSH into a cluster node.
+
+SSH options, before or after NODE, are passed through to ssh. A remote
+command must follow --: NODE is the only other argument before it.`,
 		DisableFlagParsing: true,
 		ValidArgsFunction:  completeSSHNodeArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -216,36 +221,43 @@ func isTerminal(stream any) bool {
 
 // parseSSHArgs separates SSH options, node target, and remote command.
 // Format: [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]
+//
+// Before the --, the arguments are read the way ssh's getopt reads them:
+// SSH options, before or after the node, and their values. The node is the
+// one argument that is neither. Another such argument is a usage error,
+// not a second node: ssh would run it as the remote command, which sind
+// ssh takes only after the --, so the misplaced command is named rather
+// than taken for the node.
 func parseSSHArgs(args []string) (sshOptions []string, node string, command []string, err error) {
-	if len(args) == 0 {
-		return nil, "", nil, usagef("node argument required")
+	preArgs := args
+	if i := slices.Index(args, "--"); i >= 0 {
+		preArgs, command = args[:i], args[i+1:]
 	}
 
-	// Find the -- separator
-	dashIdx := -1
-	for i, a := range args {
-		if a == "--" {
-			dashIdx = i
-			break
+	for i := 0; i < len(preArgs); i++ {
+		a := preArgs[i]
+		switch {
+		case strings.HasPrefix(a, "--"):
+			return nil, "", nil, usagef("ssh has no option %s: sind's own flags go before ssh, as in sind --realm R ssh NODE", a)
+		case isSSHOption(a):
+			sshOptions = append(sshOptions, a)
+			if sshOptionTakesNext(a) {
+				if i+1 == len(preArgs) {
+					return nil, "", nil, usagef("ssh option %s needs a value", a)
+				}
+				i++
+				sshOptions = append(sshOptions, preArgs[i])
+			}
+		case node == "":
+			node = a
+		default:
+			return nil, "", nil, usagef("unexpected argument %q after node %q: a remote command goes after --, as in sind ssh NODE -- COMMAND", a, node)
 		}
 	}
 
-	var preArgs []string
-	if dashIdx >= 0 {
-		preArgs = args[:dashIdx]
-		command = args[dashIdx+1:]
-	} else {
-		preArgs = args
-	}
-
-	// Last non-option arg before -- is the node
-	if len(preArgs) == 0 {
+	if node == "" {
 		return nil, "", nil, usagef("node argument required")
 	}
-
-	node = preArgs[len(preArgs)-1]
-	sshOptions = preArgs[:len(preArgs)-1]
-
 	return sshOptions, node, command, nil
 }
 
@@ -278,40 +290,55 @@ func parseExecArgs(args []string, dashIdx int) (clusterName string, command []st
 	return clusterName, command, nil
 }
 
-// sshValueFlags lists SSH flags that consume the next argument as a value.
-var sshValueFlags = map[string]bool{
-	"-b": true, "-c": true, "-D": true, "-E": true, "-e": true,
-	"-F": true, "-I": true, "-i": true, "-J": true, "-L": true,
-	"-l": true, "-m": true, "-O": true, "-o": true, "-p": true,
-	"-Q": true, "-R": true, "-S": true, "-W": true, "-w": true,
+// sshValueOptions are the SSH options that take a value, from the getopt
+// string of OpenSSH's ssh.c.
+const sshValueOptions = "BDEFIJLOPQRSWbceilmopw"
+
+// isSSHOption reports whether arg is a group of SSH options, such as -v,
+// -tt or -p2222, which getopt takes to be any argument beginning with "-"
+// but "-" itself.
+func isSSHOption(arg string) bool {
+	return len(arg) > 1 && arg[0] == '-'
 }
 
-// completeSSHNodeArg provides completion for the NODE argument of the ssh command.
-// It uses a heuristic to skip SSH option flags and their values.
-func completeSSHNodeArg(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	// After --, we're in remote command territory.
-	for _, a := range args {
-		if a == "--" {
-			return nil, cobra.ShellCompDirectiveDefault
+// sshOptionTakesNext reports whether arg, a group of SSH options, ends in
+// an option whose value is the next argument: in a group, the first option
+// that takes a value takes the rest of the group as its value, or the next
+// argument when nothing is left, as -L in -vL does.
+func sshOptionTakesNext(arg string) bool {
+	for i := 1; i < len(arg); i++ {
+		if strings.IndexByte(sshValueOptions, arg[i]) >= 0 {
+			return i == len(arg)-1
 		}
 	}
+	return false
+}
 
-	// If the previous arg is an SSH flag that takes a value, this position is
-	// the flag's value — not the node name.
-	if len(args) > 0 && sshValueFlags[args[len(args)-1]] {
+// completeSSHNodeArg provides completion for the NODE argument of the ssh
+// command. It reads the arguments as parseSSHArgs does, skipping SSH
+// options and their values.
+func completeSSHNodeArg(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// After --, we're in remote command territory.
+	if slices.Contains(args, "--") {
 		return nil, cobra.ShellCompDirectiveDefault
 	}
 
-	// Check if a node name was already provided (a non-flag arg that isn't a flag value).
-	for i, a := range args {
-		if strings.HasPrefix(a, "-") {
-			continue
+	value := false // whether the next argument is an option's value
+	for _, a := range args {
+		switch {
+		case value:
+			value = false
+		case isSSHOption(a):
+			value = sshOptionTakesNext(a)
+		default:
+			// Node name already present.
+			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
-		if i > 0 && sshValueFlags[args[i-1]] {
-			continue
-		}
-		// Node name already present.
-		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// This position is the value of an SSH option, not the node name.
+	if value {
+		return nil, cobra.ShellCompDirectiveDefault
 	}
 
 	if strings.HasPrefix(toComplete, "-") {

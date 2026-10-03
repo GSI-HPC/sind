@@ -34,7 +34,7 @@ This covers:
 - an unknown flag, a flag without its value, or a value that is not valid: `sind get clusters -o yaml`, `sind --realm Not_A_Realm get clusters`
 - the wrong number of arguments, or an argument that is not valid: `sind get cluster a b`, `sind get cluster Not_A_Name`
 - a node argument that does not expand, or that names several nodes where one is needed: `sind power on 'worker-['`, `sind ssh 'worker-[0-1]'`
-- `sind exec` without `--` and a command
+- `sind exec` without `--` and a command, and `sind ssh` with a remote command that does not follow `--`: `sind ssh worker-0 hostname`
 
 `SIND_REALM` and the config file are not part of the command line: an invalid one exits `1`.
 

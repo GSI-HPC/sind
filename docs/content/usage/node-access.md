@@ -12,7 +12,7 @@ toc: true
 sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]
 ```
 
-SSH into a specific node. All SSH options and arguments are passed through to the underlying SSH command.
+SSH into a specific node. SSH options, before or after `NODE`, are passed through to the underlying SSH command. A remote command must follow `--`: `NODE` is the only other argument before it, so `sind ssh worker-0 hostname`, which `ssh` would run as a command, is a usage error. sind's own flags, such as `--realm`, go before `ssh`.
 
 ```bash
 # Interactive shell
