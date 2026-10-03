@@ -115,14 +115,16 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 |-------|---------|-------------|
 | `image` | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
 | `cpus` | `1` | CPU limit per container |
-| `memory` | `"512m"` | Memory limit per container |
-| `tmpSize` | `"256m"` | tmpfs size for `/tmp` |
+| `memory` | `"512m"` | Memory limit per container, without swap; `/dev/shm` gets half of it |
+| `tmpSize` | `"256m"` | tmpfs size for `/tmp`; files there count against `memory` |
 | `capAdd` | none | Extra Linux capabilities |
 | `capDrop` | none | Dropped Linux capabilities |
 | `devices` | none | Host devices to expose |
 | `securityOpt` | none | Extra security options |
 
 Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node values. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are merged with per-node values.
+
+`memory` covers everything in a node: the jobs, the node's own services (systemd, munge, sshd, the Slurm daemon; also mariadb and slurmdbd on a db node) and files in `/tmp`, `/run` and `/dev/shm`. Slurm is told the whole limit (`RealMemory`), so raise `memory` for jobs that need much memory or `/tmp`.
 
 ## Storage section
 

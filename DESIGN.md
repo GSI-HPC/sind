@@ -830,9 +830,9 @@ Validation rules:
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
 | `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp |
+| `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp; files there count against `memory` |
 | `cpus` | global + per-node | `1` | CPU limit |
-| `memory` | global + per-node | `512m` | Memory limit |
+| `memory` | global + per-node | `512m` | Memory limit, without swap; `/dev/shm` gets half of it |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
 | `capDrop` | global + per-node | none | Dropped Linux capabilities |
 | `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
@@ -842,6 +842,8 @@ Validation rules:
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` |
 
 Per-node scalar values override the `defaults` section. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
+
+`memory` limits everything in the node: the jobs, the node's own services (systemd, journald, munge, sshd and the Slurm daemon; mariadb and slurmdbd on the db node) and the files in its tmpfs mounts (`/tmp`, `/run`, `/dev/shm`). Slurm's `RealMemory` is the whole limit, so a job that uses all the memory it may allocate, or files left in `/tmp`, can push a node past it; the kernel then OOM-kills the largest process in the node, usually the job. Raise `memory` for jobs that need much memory or `/tmp`. Nodes get no swap (`--memory-swap` equal to `--memory`), so they behave the same on hosts with and without swap.
 
 ### Validation Rules
 
@@ -1111,9 +1113,16 @@ Container mount flags:
 -v <realm>-<cluster>-home:/home:rw            # all nodes, users only
 --mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly     # storage.cvmfs: plugin
 --mount type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave  # storage.cvmfs: host
---tmpfs /tmp:rw,nosuid,nodev,size=1g       # configurable size
---tmpfs /run:exec,mode=755                 # systemd runtime
+--tmpfs /tmp:rw,nosuid,nodev,size=256m     # tmpSize
+--tmpfs /run:exec,mode=755,size=64m        # systemd runtime, volatile journal
 --tmpfs /run/lock                          # systemd lock files
+```
+
+Resource flags, for the default `cpus: 1` and `memory: 512m`:
+```
+--cpus 1 --memory 512m
+--memory-swap 512m                         # no swap
+--shm-size 256m                            # /dev/shm: half the memory
 ```
 
 ### Data Mount

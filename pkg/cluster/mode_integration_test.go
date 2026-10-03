@@ -102,6 +102,16 @@ defaults:
 		VolumeName(realm, clusterName, VolumeData),
 	}, res.Volumes)
 
+	// The default 512m node has a 256m /dev/shm, a 64m /run and no swap.
+	worker := ContainerName(realm, clusterName, "worker-0")
+	out, err := c.Exec(ctx, worker, "df", "--output=size", "-BM", "/dev/shm", "/run")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1M-blocks", "256M", "64M"}, strings.Fields(out))
+	out, err = c.Exec(ctx, worker, "cat", "/sys/fs/cgroup/memory.swap.max")
+	if err == nil { // only where the kernel accounts swap
+		assert.Equal(t, "0", strings.TrimSpace(out))
+	}
+
 	// Delete.
 	err = Delete(ctx, c, meshMgr, clusterName)
 	require.NoError(t, err)

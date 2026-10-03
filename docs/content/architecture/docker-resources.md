@@ -50,8 +50,11 @@ The mesh images do not follow `defaults.image`: the SSH relay always runs `sind-
 | `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw (`users` only) |
 | `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro (`storage.cvmfs` only) |
 | tmpfs | `/tmp` | configurable | configurable | configurable | configurable |
-| tmpfs | `/run` | exec,mode=755 | exec,mode=755 | exec,mode=755 | exec,mode=755 |
+| tmpfs | `/run` | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m |
 | tmpfs | `/run/lock` | — | — | — | — |
+| shm | `/dev/shm` | half the memory | half the memory | half the memory | half the memory |
+
+Files in the tmpfs mounts and `/dev/shm` count against the node's `memory` limit, as do its services. Nodes get no swap: `--memory-swap` equals `--memory`.
 
 Unmanaged clusters use the same mounts; their config volume starts empty.
 

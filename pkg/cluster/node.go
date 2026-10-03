@@ -23,6 +23,13 @@ import (
 // DefaultDataMountPath is the default mount path for the shared data volume.
 const DefaultDataMountPath = "/data"
 
+// RunTmpfsSize is the size of every node's /run tmpfs. /run holds systemd's
+// runtime state, the daemons' sockets and pid files, and journald's
+// volatile journal, which journald keeps to a tenth of the file system;
+// without a size it could grow to half the host's memory, all of it
+// charged to the node. systemd wants 16M free on /run to reload.
+const RunTmpfsSize = "64m"
+
 // Label keys used on sind containers.
 //
 // Docker merges the image's labels into a container's, so a label sind
@@ -216,15 +223,23 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
 	args = append(args,
 		"--tmpfs", "/tmp:rw,nosuid,nodev,size="+cfg.TmpSize,
-		"--tmpfs", "/run:exec,mode=755",
+		"--tmpfs", "/run:exec,mode=755,size="+RunTmpfsSize,
 		"--tmpfs", "/run/lock",
 	)
 
-	// Resource limits
+	// Resource limits. The memory limit covers the node's own daemons and
+	// the files in its tmpfs mounts (/tmp, /run, /dev/shm) as well as the
+	// jobs. The node gets no swap, so it behaves the same on hosts with and
+	// without swap, and a /dev/shm of half its memory, as a real node has,
+	// rather than Docker's 64m.
 	args = append(args,
 		"--cpus", strconv.Itoa(cfg.CPUs),
 		"--memory", cfg.Memory,
+		"--memory-swap", cfg.Memory,
 	)
+	if memMB, err := slurm.ParseMemoryMB(cfg.Memory); err == nil {
+		args = append(args, "--shm-size", strconv.Itoa(memMB/2)+"m")
+	}
 
 	// Security options for systemd containers
 	args = append(args,

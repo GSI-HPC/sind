@@ -17,8 +17,8 @@ sind create worker [CLUSTER] [FLAGS]
 | `--count` | `1` | Number of nodes to add |
 | `--image` | the controller's image | Container image |
 | `--cpus` | `1` | CPU limit per node |
-| `--memory` | `512m` | Memory limit |
-| `--tmp-size` | `256m` | `/tmp` tmpfs size |
+| `--memory` | `512m` | Memory limit, without swap; it covers the node's services and `/tmp` files too |
+| `--tmp-size` | `256m` | `/tmp` tmpfs size, part of `--memory` |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | `false` | Pull images before creating containers |
 | `--cap-add` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |

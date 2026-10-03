@@ -383,10 +383,35 @@ func TestBuildRunArgs_Resources(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "8g", memory)
 
+	// No swap, and /dev/shm half the memory.
+	swap, ok := testutil.ArgValue(args, "--memory-swap")
+	assert.True(t, ok)
+	assert.Equal(t, "8g", swap)
+	shm, ok := testutil.ArgValue(args, "--shm-size")
+	assert.True(t, ok)
+	assert.Equal(t, "4096m", shm)
+
 	tmpfs := testutil.ArgValues(args, "--tmpfs")
 	assert.Contains(t, tmpfs, "/tmp:rw,nosuid,nodev,size=2g")
-	assert.Contains(t, tmpfs, "/run:exec,mode=755")
+	assert.Contains(t, tmpfs, "/run:exec,mode=755,size=64m")
 	assert.Contains(t, tmpfs, "/run/lock")
+}
+
+func TestBuildRunArgs_ShmSize(t *testing.T) {
+	for memory, want := range map[string]string{"512m": "256m", "1g": "512m", "3m": "1m"} {
+		cfg := defaultRunConfig()
+		cfg.Memory = memory
+		shm, ok := testutil.ArgValue(BuildRunArgs(cfg), "--shm-size")
+		assert.True(t, ok, memory)
+		assert.Equal(t, want, shm, memory)
+	}
+
+	// A memory value sind cannot read leaves /dev/shm at Docker's default;
+	// Docker rejects or reads --memory itself.
+	cfg := defaultRunConfig()
+	cfg.Memory = "lots"
+	_, ok := testutil.ArgValue(BuildRunArgs(cfg), "--shm-size")
+	assert.False(t, ok)
 }
 
 func TestBuildRunArgs_SecurityOpts(t *testing.T) {

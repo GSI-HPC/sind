@@ -27,7 +27,7 @@ Containers require specific security options for systemd:
 - `--security-opt writable-cgroups=true` — allows systemd to manage cgroups
 - `--cgroupns=private` — private cgroup namespace
 - `--security-opt label=disable` — SELinux compatibility
-- `--tmpfs /run:exec,mode=755` — systemd runtime directory
+- `--tmpfs /run:exec,mode=755,size=64m` — systemd runtime directory, sized so that a volatile journal cannot grow into the node's memory
 - `--tmpfs /run/lock` — systemd lock files
 - `--entrypoint /bin/sh` with a short script — PID 1 moves itself into `init.scope`, enables every available cgroup controller in the root cgroup's `cgroup.subtree_control`, then execs `/sbin/init`
 
