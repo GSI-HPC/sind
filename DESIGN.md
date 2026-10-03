@@ -1058,6 +1058,10 @@ identity:
 | Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
 | State volume (backup controller only) | `<realm>-<cluster>-state` | `sind-dev-state` |
 | Home volume (`users` only) | `<realm>-<cluster>-home` | `sind-dev-home` |
+| Config helper (temporary, managed clusters only) | `<realm>-<cluster>-config-helper` | `sind-dev-config-helper` |
+| Munge helper (temporary, not with identity `clientIds`) | `<realm>-<cluster>-munge-helper` | `sind-dev-munge-helper` |
+
+The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, using the controller's image, and are removed once the files are written. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
 
 ### Global Resources (Mesh)
 
@@ -1182,6 +1186,8 @@ sind applies labels to containers for filtering and metadata:
 | `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, space-separated `name:gid` entries with `:member+member...` for supplementary members; only with `users` or `groups` |
 | `sind.identity` | `clientIds` | The identity mode, `nssSlurm` or `clientIds`; not set for `local` |
 
+Every node container, the mesh's DNS and SSH containers, and every network and volume also carry Docker Compose labels (`com.docker.compose.*`), so Compose-aware tools group them. The project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh). A container's service is its role (`dns` or `ssh` in the mesh) and its container number is 1, N+1 for `worker-N` and 2 for `controller-backup`; networks and volumes name themselves `net`, `mesh`, the volume type (`config`, `munge`, `data`, `state`, `home`) or `ssh-config`.
+
 ### Enter and Exec
 
 `sind enter` and `sind exec` run commands directly inside the target container via `docker exec`
@@ -1230,6 +1236,17 @@ Nodes are configured with:
 ```
 
 The DNS container is lightweight and does not run systemd/sshd.
+
+#### Host DNS Resolution
+
+When systemd-resolved runs on the host and polkit lets the user change its per-link settings (`org.freedesktop.resolve1.set-dns-servers`, `set-domains` and `revert`), `sind create cluster` makes the mesh bridge (`br-` and the first 12 characters of the mesh network's ID) a resolver link:
+
+```
+resolvectl dns <bridge> <sind-dns-ip>
+resolvectl domain <bridge> ~<realm>.sind default.<realm>.sind
+```
+
+`~<realm>.sind` is a routing domain: the host sends queries for `*.<realm>.sind` to the realm's CoreDNS, and the link does not become a default route for other queries. `default.<realm>.sind` is a search domain, which systemd-resolved tries for single-label lookups from any process on the host, so a bare `controller` resolves to the `default` cluster's controller; each realm with a mesh adds its own. The setup is best-effort: without systemd-resolved, the polkit authorization or the bridge interface, sind skips it with a debug log line. `sind doctor` checks the polkit policy. Deleting the realm's last cluster runs `resolvectl revert <bridge>` before it removes the mesh network. The CLI turns it on with `mesh.Manager.HostDNS`, which is off by default for library callers.
 
 ### SSH
 
