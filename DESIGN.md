@@ -901,7 +901,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
 - `devices` - absolute paths
 - `securityOpt` - options Docker knows by name: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges`, `writable-cgroups=` or `systempaths=`, each with a value (`no-new-privileges` may go without); Docker checks the values
-- `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute
+- `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute and contains no comma (`sind enter` and `sind exec` read it back from `docker ps`, which joins labels with commas)
 - `users`, `groups` - a name or an object; user and group names start with a lowercase letter or `_`, hold only lowercase letters, digits, `_` and `-`, and have at most 32 characters; `uid` and `gid` are between 1000 and 2147483647 and not 65534 (`nobody` in the image) or 65535 (the 16-bit -1); no two users share a name or `uid`, no two groups (private ones included) a name or `gid`; a user's `group` and `groups` are declared in `groups`, and `groups` repeats neither an entry nor `group`
 - `identity` - `local`, `nssSlurm` or `clientIds`, or an object with `mode` and `controllerUsers`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` only with `clientIds`; a `LaunchParameters`, `AuthType`, `CredType` or `AuthInfo` that `slurm.main` sets for the mode lists sind's value (see Identity Modes)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)

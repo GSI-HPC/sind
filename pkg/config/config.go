@@ -136,6 +136,11 @@ func (d DataStorage) validate() error {
 	if d.MountPath != "" && !strings.HasPrefix(d.MountPath, "/") {
 		return fmt.Errorf("storage.dataStorage.mountPath must be absolute, got %q", d.MountPath)
 	}
+	// sind enter and sind exec read the mount point back from docker ps,
+	// which joins labels with commas.
+	if strings.Contains(d.MountPath, ",") {
+		return fmt.Errorf("storage.dataStorage.mountPath must not contain a comma, got %q", d.MountPath)
+	}
 	return nil
 }
 

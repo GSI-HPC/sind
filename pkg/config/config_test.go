@@ -282,6 +282,7 @@ func TestValidate_DataStorage(t *testing.T) {
 		{name: "unknown type", ds: DataStorage{Type: "bind"}, wantErr: `storage.dataStorage.type must be "volume" or "hostPath", got "bind"`},
 		{name: "hostPath type without path", ds: DataStorage{Type: StorageHostPath}, wantErr: "storage.dataStorage.hostPath is required"},
 		{name: "relative mountPath", ds: DataStorage{MountPath: "data"}, wantErr: "storage.dataStorage.mountPath must be absolute"},
+		{name: "mountPath with a comma", ds: DataStorage{MountPath: "/data,2"}, wantErr: "storage.dataStorage.mountPath must not contain a comma"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
