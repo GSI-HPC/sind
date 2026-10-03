@@ -93,7 +93,7 @@ sind interacts with Docker by shelling out to the `docker` CLI rather than using
 - Wider compatibility across Docker versions
 - No tight coupling to Docker daemon internals
 
-The `docker` package wraps command execution in a thin abstraction layer with proper output handling and error reporting.
+The `docker` package wraps command execution in a thin abstraction layer with proper output handling and error reporting. It runs at most 16 docker commands at once, so a large cluster does not fork hundreds of docker processes while its nodes boot; every node still boots at once, and long-lived streams such as `docker events` do not count.
 
 ## Dual use
 

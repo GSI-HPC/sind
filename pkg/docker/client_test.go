@@ -3,10 +3,16 @@
 package docker
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os/exec"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,4 +112,120 @@ func TestSortedLabelFlags_Sorted(t *testing.T) {
 		"--label", "a.label=first",
 		"--label", "z.label=last",
 	}, result)
+}
+
+// blockingExecutor runs every command until release is closed and records
+// how many ran at once.
+type blockingExecutor struct {
+	mock.Executor
+	release chan struct{}
+	started chan struct{}
+
+	mu      sync.Mutex
+	running int
+	peak    int
+}
+
+func newBlockingExecutor() *blockingExecutor {
+	return &blockingExecutor{release: make(chan struct{}), started: make(chan struct{}, 4*MaxConcurrentCalls)}
+}
+
+func (e *blockingExecutor) block() {
+	e.mu.Lock()
+	e.running++
+	e.peak = max(e.peak, e.running)
+	e.mu.Unlock()
+	e.started <- struct{}{}
+	<-e.release
+	e.mu.Lock()
+	e.running--
+	e.mu.Unlock()
+}
+
+func (e *blockingExecutor) Run(context.Context, string, ...string) (string, string, error) {
+	e.block()
+	return "", "", nil
+}
+
+func (e *blockingExecutor) RunWithStdin(context.Context, io.Reader, string, ...string) (string, string, error) {
+	e.block()
+	return "", "", nil
+}
+
+func TestClient_BoundsConcurrentCalls(t *testing.T) {
+	e := newBlockingExecutor()
+	c := NewClient(e)
+
+	var wg sync.WaitGroup
+	for i := range 2 * MaxConcurrentCalls {
+		wg.Go(func() {
+			if i%2 == 0 {
+				_, _, _ = c.run(t.Context(), "version")
+			} else {
+				_, _, _ = c.runWithStdin(t.Context(), strings.NewReader("x"), "cp", "-", "c:/")
+			}
+		})
+	}
+	for range MaxConcurrentCalls {
+		<-e.started
+	}
+	// Give the other calls time to queue for a slot.
+	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-e.started:
+		t.Fatal("more than MaxConcurrentCalls docker commands started")
+	default:
+	}
+	close(e.release)
+	wg.Wait()
+	assert.Equal(t, MaxConcurrentCalls, e.peak)
+}
+
+func TestClient_WaitingCallEndsWithContext(t *testing.T) {
+	e := newBlockingExecutor()
+	c := NewClient(e)
+	var wg sync.WaitGroup
+	for range MaxConcurrentCalls {
+		wg.Go(func() { _, _, _ = c.run(t.Context(), "version") })
+	}
+	for range MaxConcurrentCalls {
+		<-e.started
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, _, err := c.run(ctx, "version")
+	require.ErrorIs(t, err, context.Canceled)
+	_, _, err = c.runWithStdin(ctx, strings.NewReader("x"), "cp", "-", "c:/")
+	require.ErrorIs(t, err, context.Canceled)
+
+	close(e.release)
+	wg.Wait()
+}
+
+func TestClient_EndedContextTakesFreeSlot(t *testing.T) {
+	// With a slot free, the command runs and the executor reports the
+	// ended context, as it did before the bound.
+	var m mock.Executor
+	m.AddResult("27.0.0\n", "", nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	v, err := NewClient(&m).ServerVersion(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "27.0.0", v)
+}
+
+func TestClient_WithoutNewClientIsUnbounded(t *testing.T) {
+	e := newBlockingExecutor()
+	c := &Client{Executor: e, Command: "docker"}
+	var wg sync.WaitGroup
+	for range MaxConcurrentCalls + 1 {
+		wg.Go(func() { _, _, _ = c.run(t.Context(), "version") })
+	}
+	for range MaxConcurrentCalls + 1 {
+		<-e.started
+	}
+	close(e.release)
+	wg.Wait()
+	assert.Equal(t, MaxConcurrentCalls+1, e.peak)
 }

@@ -142,7 +142,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 ## Adding a Docker operation
 
 1. **Add the method** to `pkg/docker/client.go` (or the appropriate resource file)
-2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output
+2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
 3. **Use strong types**: `ContainerName`, `NetworkName`, `VolumeName`, etc.
 4. **Write unit tests** using `mock.Executor`
 

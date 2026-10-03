@@ -144,6 +144,8 @@ sind interacts with Docker by **shelling out to the `docker` CLI** rather than u
 
 sind wraps command execution in a thin abstraction layer (`pkg/cmdexec`) using Go's `os/exec` package, with proper output handling and error reporting. The executor interface is shared across `pkg/docker`, `pkg/mesh`, and `pkg/cluster`.
 
+A `docker.Client` runs at most 16 docker commands at once (`docker.MaxConcurrentCalls`); the others wait for a free slot. Creating a cluster probes every node in its own goroutine, and the bound keeps a large cluster from forking hundreds of docker processes that compete with the booting nodes for the daemon. It limits the commands, not the per-node goroutines, so every node still boots at once. Long-lived streams (`docker events`, `busctl monitor`) take no slot.
+
 **Runtime support:** Docker only. Support for alternative runtimes (Podman, nerdctl) may be added later via a provider abstraction pattern.
 
 ## License
