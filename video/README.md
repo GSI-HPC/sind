@@ -83,8 +83,10 @@ without changing episode scripts.
 
 While developing an episode, render it locally (a laptop or a Claude Code
 cloud session); the docs workflow renders the published version. Requires
-Node.js 22+, Python 3.10+ and FFmpeg; HyperFrames downloads its own Chrome, or
-uses `HYPERFRAMES_BROWSER_PATH`.
+Node.js 22+, Python 3.10 to 3.13 (kokoro-onnx does not support 3.14 yet) and
+FFmpeg with libx264; HyperFrames downloads its own Chrome, or uses
+`HYPERFRAMES_BROWSER_PATH`. With mise, create the venv from Python 3.12:
+`mise exec python@3.12 -- python -m venv ~/.venvs/sindy`.
 
 ```bash
 cd video
