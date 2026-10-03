@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 )
 
 // ID range of cluster users and groups. The IDs below MinUID belong to the
@@ -16,6 +17,11 @@ const (
 	MinUID = 1000
 	MaxUID = math.MaxInt32
 )
+
+// ReservedIDs are the IDs in the range that no cluster user or group may
+// have: 65534, the overflow user and group nobody that the image has, and
+// 65535, the 16-bit -1 that some tools read as no ID.
+var ReservedIDs = []int{65534, 65535}
 
 // User is a Linux user account that sind creates on the nodes of the
 // cluster, with a home directory under /home.
@@ -102,11 +108,14 @@ func decodeStrict(data []byte, v any) error {
 var userNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 
 // assignIDs gives each user without a UID, then each group without a GID,
-// the lowest ID from MinUID up that no user or group has, in list order.
-// Users skip the explicit GIDs too, so that a private group (gid = uid)
-// never collides with a declared group.
+// the lowest ID from MinUID up that no user or group has, in list order,
+// skipping ReservedIDs. Users skip the explicit GIDs too, so that a private
+// group (gid = uid) never collides with a declared group.
 func assignIDs(users []User, groups []Group) {
-	taken := make(map[int]bool, len(users)+len(groups))
+	taken := make(map[int]bool, len(users)+len(groups)+len(ReservedIDs))
+	for _, id := range ReservedIDs {
+		taken[id] = true
+	}
 	for _, u := range users {
 		taken[u.UID] = true
 	}
@@ -154,11 +163,15 @@ func checkAccountName(kind, name string) error {
 	return nil
 }
 
-// checkID reports whether id is in the range of cluster user and group IDs;
+// checkID reports whether id is in the range of cluster user and group IDs
+// and not one of ReservedIDs;
 // what names its owner and kind ("uid" or "gid") the ID in the error.
 func checkID(what, kind string, id int) error {
 	if id < MinUID || id > MaxUID {
 		return fmt.Errorf("%s: %s must be between %d and %d, got %d", what, kind, MinUID, MaxUID, id)
+	}
+	if slices.Contains(ReservedIDs, id) {
+		return fmt.Errorf("%s: %s %d is reserved: 65534 is the image's nobody user and group, and 65535 the 16-bit -1", what, kind, id)
 	}
 	return nil
 }

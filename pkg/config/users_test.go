@@ -105,6 +105,19 @@ func TestApplyDefaults_GroupGIDs(t *testing.T) {
 	}
 }
 
+func TestAssignIDs_SkipsReserved(t *testing.T) {
+	// With every ID up to 65533 taken, the next free one is 65536.
+	var users []User
+	for id := MinUID; id < ReservedIDs[0]; id++ {
+		users = append(users, User{UID: id})
+	}
+	users = append(users, User{Name: "last"})
+	groups := []Group{{Name: "hpc"}}
+	assignIDs(users, groups)
+	assert.Equal(t, 65536, users[len(users)-1].UID)
+	assert.Equal(t, 65537, groups[0].GID)
+}
+
 func TestApplyDefaults_UserUIDs(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -148,6 +161,9 @@ func TestValidate_Users(t *testing.T) {
 		{name: "system uid", users: []User{{Name: "alice", UID: 999}}, wantErr: `user "alice": uid must be between 1000 and 2147483647, got 999`},
 		{name: "negative uid", users: []User{{Name: "alice", UID: -1}}, wantErr: "got -1"},
 		{name: "uid too large", users: []User{{Name: "alice", UID: MaxUID + 1}}, wantErr: "got 2147483648"},
+		{name: "nobody's uid", users: []User{{Name: "alice", UID: 65534}}, wantErr: `user "alice": uid 65534 is reserved: 65534 is the image's nobody user and group, and 65535 the 16-bit -1`},
+		{name: "16-bit -1", users: []User{{Name: "alice", UID: 65535}}, wantErr: `user "alice": uid 65535 is reserved`},
+		{name: "above the 16-bit range", users: []User{{Name: "alice", UID: 65536}}},
 		{name: "duplicate uid", users: []User{{Name: "alice", UID: 2001}, {Name: "bob", UID: 2001}}, wantErr: `users "alice" and "bob" have the same uid 2001`},
 	}
 	for _, tt := range tests {
@@ -177,6 +193,7 @@ func TestValidate_Groups(t *testing.T) {
 		{name: "invalid name", groups: []Group{{Name: "HPC"}}, wantErr: `invalid group name "HPC": it must start with a lowercase letter or underscore, contain only lowercase letters, digits, underscores and hyphens, and have at most 32 characters`},
 		{name: "duplicate", groups: []Group{{Name: "hpc"}, {Name: "hpc"}}, wantErr: `duplicate group "hpc"`},
 		{name: "system gid", groups: []Group{{Name: "hpc", GID: 100}}, wantErr: `group "hpc": gid must be between 1000 and 2147483647, got 100`},
+		{name: "nobody's gid", groups: []Group{{Name: "hpc", GID: 65534}}, wantErr: `group "hpc": gid 65534 is reserved: 65534 is the image's nobody user and group, and 65535 the 16-bit -1`},
 		{name: "duplicate gid", groups: []Group{{Name: "hpc", GID: 3000}, {Name: "physics", GID: 3000}}, wantErr: `group "hpc" and group "physics" have the same gid 3000`},
 		{name: "gid of a private group", users: []User{{Name: "alice", UID: 3000}}, groups: []Group{{Name: "hpc", GID: 3000}}, wantErr: `group "hpc" and the private group of user "alice" have the same gid 3000`},
 		{name: "private group shares a gid with a primary group user", users: []User{{Name: "alice", UID: 3000, Group: "hpc"}, {Name: "bob", UID: 3001}}, groups: []Group{{Name: "hpc", GID: 3001}}, wantErr: `group "hpc" and the private group of user "bob" have the same gid 3001`},

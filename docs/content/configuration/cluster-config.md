@@ -177,7 +177,7 @@ users:
 | User field | Default | Description |
 |------------|---------|-------------|
 | `name` | — | User name: a lowercase letter or `_`, then lowercase letters, digits, `_` and `-`, at most 32 characters |
-| `uid` | lowest free from `1000` | ID of the user, between 1000 and 2147483647 |
+| `uid` | lowest free from `1000` | ID of the user, between 1000 and 2147483647, but not 65534 or 65535 |
 | `group` | private group | Primary group, from `groups`. Without it, the user gets a private group of its own name with gid = uid |
 | `groups` | none | Supplementary groups, from `groups` |
 | `accounts` | none | Slurm accounts the user gets associations with, from `accounts`; the first is the default account |
@@ -187,7 +187,7 @@ users:
 | Group field | Default | Description |
 |-------------|---------|-------------|
 | `name` | — | Group name, with the same rules as user names. It must not be the name of a user with a private group |
-| `gid` | lowest free from `1000` | ID of the group, between 1000 and 2147483647 |
+| `gid` | lowest free from `1000` | ID of the group, between 1000 and 2147483647, but not 65534 or 65535 |
 
 Users without `uid` get their IDs first, in list order, skipping the explicit `gid`s; then groups without `gid` get the lowest IDs no user or group has. Set the IDs explicitly to keep file ownership stable across re-creates, e.g. on a `hostPath` data directory.
 
@@ -330,7 +330,7 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `devices` paths must be absolute (start with `/`)
 - `securityOpt` entries must name an option Docker knows, with a value: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges` (value optional), `writable-cgroups=` or `systempaths=`
 - `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute
-- User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647 and unique, private groups included; a user's `group` and `groups` must be declared in `groups`
+- User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647, not 65534 or 65535, and unique, private groups included; a user's `group` and `groups` must be declared in `groups`
 - `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`
 - `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; every account a user names must be declared; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - Unknown keys are rejected
