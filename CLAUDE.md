@@ -49,7 +49,9 @@ goreleaser release --snapshot --clean # release binaries and checksums.txt into 
 
 - Every Go file starts with `// SPDX-License-Identifier: LGPL-3.0-or-later`.
 - `cmd/sind` stays thin (arg parsing, flags, output); logic lives in `pkg/cluster`.
-- Every external command goes through `cmdexec.Executor`; unit tests use
+- Every external command goes through `cmdexec.Executor`, except `dockerExec` in
+  `cmd/sind/ssh.go`, which hands the terminal to `docker exec`/`docker logs` through
+  os/exec (tested with the fake docker driven by `SIND_TEST_DOCKER_*`); unit tests use
   `internal/mock.Executor` (FIFO `AddResult` or `OnCall` dispatcher for concurrent code).
 - Dual-mode tests: `mode_unit_test.go` (`!integration`) and `mode_integration_test.go`
   (`integration`) provide the per-package helpers.
