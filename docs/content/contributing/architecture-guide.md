@@ -148,7 +148,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 
 ### Executor abstraction
 
-All external commands go through the `cmdexec.Executor` interface (from `pkg/cmdexec`), making every operation testable:
+All external commands go through the `cmdexec.Executor` interface (from `pkg/cmdexec`), making every operation testable, with one exception (see below):
 
 ```go
 type Executor interface {
@@ -159,6 +159,8 @@ type Executor interface {
 ```
 
 `pkg/docker` uses an executor for Docker CLI calls. `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl, pkcheck). The CLI wraps the mesh executor in a `LoggingExecutor` to emit TRACE-level logs for system commands.
+
+The exception is `dockerExec` in `cmd/sind/ssh.go`, used by `ssh`, `enter`, `exec` and `logs`. It runs `docker` through `os/exec` with the terminal's stdin, stdout and stderr attached, because `Executor` only captures output, and unlike the calls through `docker.Client` it logs no TRACE line. Its unit tests cannot use `mock.Executor`: they put the test binary first on `PATH` as a fake `docker`, controlled by the `SIND_TEST_DOCKER_*` variables in `cmd/sind/main_test.go`.
 
 ### Context-based dependency injection
 
