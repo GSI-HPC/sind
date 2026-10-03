@@ -25,8 +25,10 @@ Checks system prerequisites and reports pass/fail for each:
 |-------|----------|-------------|
 | Docker Engine | yes | Docker >= 28.0 reachable (`docker info`) |
 | Docker daemon | yes | rootful, without `userns-remap`: Docker refuses the writable cgroups of sind's nodes in rootless mode and with `userns-remap` |
-| cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
+| cgroupv2 | yes | Docker runs containers on cgroup v2 (`docker info`), and this host mounts the unified cgroup2 hierarchy at `/sys/fs/cgroup` with the `nsdelegate` option |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
+
+The Docker checks ask the daemon. The cgroup mount and DNS policy checks look at the machine sind runs on, which has to be the Docker host: sind does not support Docker Desktop or a remote `DOCKER_HOST`.
 
 The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
 
@@ -38,7 +40,7 @@ Add your user to the docker group, then log in again (or run newgrp docker):
 sudo usermod -aG docker $USER
 ```
 
-A missing `docker` CLI and a daemon that is not running get their own hint. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+A missing `docker` CLI and a daemon that is not running get their own hint. A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 

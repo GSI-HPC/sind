@@ -392,8 +392,41 @@ func TestDoctorCommand_JSONDockerNotReachable(t *testing.T) {
 		{Name: "Docker Engine", Status: checkFailed,
 			Detail:      "not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
 			Remediation: "Start the Docker daemon:\n\nsudo systemctl start docker"},
-		{Name: "cgroupv2", Status: checkFailed, Detail: "not mounted (sind requires cgroupv2)"},
+		{Name: "cgroupv2", Status: checkFailed, Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation},
 	}, checks)
+}
+
+// TestDoctorCommand_CgroupHybrid checks that a systemd host in hybrid mode
+// fails, although its cgroup2 mount has nsdelegate: Docker runs containers
+// on cgroup v1 there.
+func TestDoctorCommand_CgroupHybrid(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
+
+	ctx := hermeticDoctorCtxWithMounts(t, &m, nil,
+		"tmpfs /sys/fs/cgroup tmpfs ro,mode=755 0 0\n"+
+			"cgroup2 /sys/fs/cgroup/unified cgroup2 rw,nsdelegate 0 0\n"+
+			"cgroup /sys/fs/cgroup/memory cgroup rw,memory 0 0\n")
+	out, err := executeDoctor(ctx, t)
+	require.EqualError(t, err, "checks failed: cgroup")
+	assert.Contains(t, out, "✗ cgroupv2: hybrid hierarchy: cgroup2 is mounted at /sys/fs/cgroup/unified, not /sys/fs/cgroup (sind requires cgroupv2)\n\n"+unifiedRemediation+"\n\n")
+}
+
+// TestDoctorCommand_DaemonCgroupV1 checks that the cgroup version comes
+// from the daemon: a local mount that passes does not make up for a daemon
+// that runs containers on cgroup v1.
+func TestDoctorCommand_DaemonCgroupV1(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"ServerVersion":"29.0.0","CgroupVersion":"1","SecurityOptions":["name=seccomp,profile=builtin"]}`, "", nil)
+
+	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t, "-o", "json")
+	require.EqualError(t, err, "checks failed: cgroup")
+	var checks []doctorCheck
+	require.NoError(t, json.Unmarshal([]byte(out), &checks))
+	require.Len(t, checks, 3)
+	assert.Equal(t, doctorCheck{Name: "Docker daemon", Status: checkOK, Detail: "rootful, no userns-remap"}, checks[1])
+	assert.Equal(t, doctorCheck{Name: "cgroupv2", Status: checkFailed,
+		Detail: "Docker runs containers on cgroup v1 (sind requires cgroupv2)", Remediation: unifiedRemediation}, checks[2])
 }
 
 // TestDoctorCommand_DockerPermissionDenied checks that doctor says why it

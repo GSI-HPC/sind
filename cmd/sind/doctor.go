@@ -48,6 +48,13 @@ func nsdelegateRemediation(mountPath string) string {
 		"sudo systemctl daemon-reload"
 }
 
+// unifiedRemediation is shown when the host does not run the unified
+// cgroup2 hierarchy: cgroup v1, or systemd's hybrid mode.
+const unifiedRemediation = `Boot with the unified cgroup hierarchy: add
+systemd.unified_cgroup_hierarchy=1 to the kernel command line (for GRUB,
+GRUB_CMDLINE_LINUX in /etc/default/grub), regenerate the boot loader
+configuration and reboot.`
+
 // rootlessRemediation is shown for a Docker daemon in rootless mode.
 const rootlessRemediation = `sind starts its nodes with --security-opt writable-cgroups=true, which
 Docker refuses in rootless mode. Point the docker CLI at a rootful daemon,
@@ -162,15 +169,27 @@ func runDoctor(cmd *cobra.Command) error {
 		checks = append(checks, daemon)
 	}
 
-	// Check cgroup2 with nsdelegate.
+	// Check cgroup2 with nsdelegate: the cgroup version containers run on
+	// comes from the daemon, the nsdelegate mount option from this host's
+	// /proc/mounts, which must show the unified hierarchy.
 	log := sindlog.From(ctx)
 	log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
 	mountPath, hasV2, hasNsd := doctor.CgroupInfo(fs)
 	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd)
 	switch {
+	case info != nil && info.CgroupVersion != "" && info.CgroupVersion != "2":
+		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
+			Detail:      fmt.Sprintf("Docker runs containers on cgroup v%s (sind requires cgroupv2)", info.CgroupVersion),
+			Remediation: unifiedRemediation})
+		failures = append(failures, "cgroup")
+	case !hasV2 && mountPath != "":
+		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
+			Detail:      fmt.Sprintf("hybrid hierarchy: cgroup2 is mounted at %s, not %s (sind requires cgroupv2)", mountPath, doctor.CgroupRoot),
+			Remediation: unifiedRemediation})
+		failures = append(failures, "cgroup")
 	case !hasV2:
 		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail: "not mounted (sind requires cgroupv2)"})
+			Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation})
 		failures = append(failures, "cgroup")
 	case !hasNsd:
 		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,

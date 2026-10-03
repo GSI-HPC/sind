@@ -22,6 +22,8 @@ var (
 	ErrRootlessDaemon = errors.New("the Docker daemon runs in rootless mode")
 	// ErrUsernsRemap is a daemon that remaps user namespaces.
 	ErrUsernsRemap = errors.New("the Docker daemon runs with userns-remap")
+	// ErrCgroupV1 is a daemon that runs containers on cgroup v1.
+	ErrCgroupV1 = errors.New("the Docker daemon runs containers on cgroup v1")
 )
 
 // CheckDaemon asks the Docker daemon what it is and returns DaemonSupport's
@@ -39,7 +41,8 @@ func CheckDaemon(ctx context.Context, client *docker.Client) error {
 // sind nodes. Every node starts with --security-opt writable-cgroups=true,
 // which Docker refuses on a daemon in rootless mode or with userns-remap,
 // and only at `docker start`: after the images are pulled and the
-// cluster's network and volumes created.
+// cluster's network and volumes created. A node's entrypoint and systemd
+// need cgroup v2; on cgroup v1 the node never becomes ready.
 func DaemonSupport(info *docker.DaemonInfo) error {
 	const need = "sind needs a rootful Docker daemon without userns-remap, because Docker refuses the writable cgroups of sind's nodes otherwise"
 	switch {
@@ -47,6 +50,8 @@ func DaemonSupport(info *docker.DaemonInfo) error {
 		return fmt.Errorf("%w; %s", ErrRootlessDaemon, need)
 	case info.HasSecurityOption("userns"):
 		return fmt.Errorf("%w; %s", ErrUsernsRemap, need)
+	case info.CgroupVersion != "" && info.CgroupVersion != "2":
+		return fmt.Errorf("%w; sind requires cgroup v2 (the unified hierarchy)", ErrCgroupV1)
 	}
 	return nil
 }

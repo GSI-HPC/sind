@@ -314,6 +314,8 @@ func TestCheckDaemon(t *testing.T) {
 		{"rootful", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","name=cgroupns"]}`, nil},
 		{"rootless", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]}`, ErrRootlessDaemon},
 		{"userns-remap", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","name=userns","name=cgroupns"]}`, ErrUsernsRemap},
+		{"cgroup v1", `{"ServerVersion":"29.1.0","CgroupVersion":"1","SecurityOptions":["name=seccomp,profile=builtin"]}`, ErrCgroupV1},
+		{"no cgroup version", `{"ServerVersion":"29.1.0","SecurityOptions":[]}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -325,6 +327,10 @@ func TestCheckDaemon(t *testing.T) {
 				return
 			}
 			require.ErrorIs(t, err, tt.wantErr)
+			if tt.wantErr == ErrCgroupV1 {
+				assert.Contains(t, err.Error(), "sind requires cgroup v2")
+				return
+			}
 			assert.Contains(t, err.Error(), "sind needs a rootful Docker daemon without userns-remap")
 		})
 	}

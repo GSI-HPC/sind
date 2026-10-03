@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -88,8 +89,15 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
-// CgroupInfo reads /proc/mounts from fs and returns the cgroup2 mount path,
-// whether cgroup2 is mounted at all, and whether nsdelegate is enabled.
+// CgroupRoot is where the unified cgroup2 hierarchy that sind needs is
+// mounted. A systemd host in hybrid mode mounts cgroup2 elsewhere
+// (/sys/fs/cgroup/unified) and runs containers on cgroup v1.
+const CgroupRoot = "/sys/fs/cgroup"
+
+// CgroupInfo reads /proc/mounts from fs. hasV2 reports whether cgroup2 is
+// mounted at CgroupRoot, the unified hierarchy, and hasNsdelegate whether
+// that mount has the nsdelegate option. mountPath is CgroupRoot then, or
+// where else cgroup2 is mounted (a hybrid host), or empty.
 func CgroupInfo(fs afero.Fs) (mountPath string, hasV2, hasNsdelegate bool) {
 	data, err := afero.ReadFile(fs, "/proc/mounts")
 	if err != nil {
@@ -102,9 +110,15 @@ func CgroupInfo(fs afero.Fs) (mountPath string, hasV2, hasNsdelegate bool) {
 func parseCgroupInfo(mounts string) (mountPath string, hasV2, hasNsdelegate bool) {
 	for _, line := range strings.Split(mounts, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) >= 4 && fields[2] == "cgroup2" {
-			return fields[1], true, strings.Contains(fields[3], "nsdelegate")
+		if len(fields) < 4 || fields[2] != "cgroup2" {
+			continue
+		}
+		if fields[1] == CgroupRoot {
+			return CgroupRoot, true, slices.Contains(strings.Split(fields[3], ","), "nsdelegate")
+		}
+		if mountPath == "" {
+			mountPath = fields[1]
 		}
 	}
-	return "", false, false
+	return mountPath, false, false
 }
