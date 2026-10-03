@@ -35,6 +35,9 @@
 # ==============================================================================
 # Stage: builder-base — Rocky 10 with common build toolchain
 # ==============================================================================
+# Each builder stage installs into /install, which is all that leaves it, and
+# deletes its build tree in the same RUN, so the layer in the build cache
+# holds only the installed files.
 FROM quay.io/rockylinux/rockylinux:10 AS builder-base
 
 RUN dnf -y install epel-release dnf-plugins-core && \
@@ -70,7 +73,8 @@ RUN tar xf ucx.tar.gz && \
         --without-rocm \
         --without-java && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf ucx-${UCX_VERSION}
 
 # ==============================================================================
 # Stage: pmix-builder — compile PMIx from source
@@ -91,7 +95,8 @@ RUN tar xf pmix.tar.bz2 && \
         --libdir=/usr/lib64 \
         --disable-static && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf pmix-${PMIX_VERSION}
 
 # ==============================================================================
 # Stage: prrte-builder — compile PRRTE from source (with PMIx 6.x)
@@ -114,7 +119,8 @@ RUN tar xf prrte.tar.bz2 && \
         --libdir=/usr/lib64 \
         --disable-static && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf prrte-${PRRTE_VERSION}
 
 # ==============================================================================
 # Stage: libjwt-builder — compile libjwt 1.x from source
@@ -148,7 +154,8 @@ RUN git clone --depth 1 --branch v${LIBJWT_VERSION} https://github.com/benmcolli
         --disable-static \
         --without-examples && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf libjwt
 
 # ==============================================================================
 # Stage: slurm-builder — compile Slurm from source (with PMIx support)
@@ -217,7 +224,8 @@ RUN tar xf slurm.tar.bz2 && \
     find /install -type f ! -name srun \
         -exec sh -c 'test "$(head -c 4 "$1" | tail -c 3)" = ELF' sh {} \; \
         -exec strip --strip-debug {} + && \
-    mkdir -p /install/etc
+    mkdir -p /install/etc && \
+    cd /tmp && rm -rf slurm-${SLURM_VERSION}
 
 # ==============================================================================
 # Stage: ompi-builder — compile OpenMPI from source (with PRRTE + PMIx + UCX)
@@ -249,7 +257,8 @@ RUN tar xf openmpi.tar.bz2 && \
         --without-cuda \
         --without-rocm && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf openmpi-${OMPI_VERSION}
 
 # ==============================================================================
 # Stage: runtime — lean image with only the packages needed at run time
