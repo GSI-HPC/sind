@@ -351,6 +351,26 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 	assert.True(t, health.Services[probe.ServiceSlurmctld])
 }
 
+// TestGetNodeHealth_ProbeError covers a readiness exec that fails outright,
+// e.g. when docker cannot reach the daemon: every service reads unhealthy.
+func TestGetNodeHealth_ProbeError(t *testing.T) {
+	var m mock.Executor
+	base := healthyOnCall("sind-dev-worker-0", "172.18.0.3")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "exec" {
+			return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, docker.StateRunning, health.State)
+	assert.Equal(t, ServiceHealth{probe.ServiceMunge: false, probe.ServiceSSHD: false, probe.ServiceSlurmd: false}, health.Services)
+}
+
 func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, stdin string) mock.Result {
@@ -493,11 +513,14 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 
 // --- GetMountPoints ---
 
+// addVolumeLs queues docker volume ls output listing the named volumes.
+func addVolumeLs(m *mock.Executor, names ...string) {
+	m.AddResult(volumeLs(names...).Stdout, "", nil)
+}
+
 func TestGetMountPoints_AllVolumes(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	m.AddResult("[{}]\n", "", nil) // data
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data")
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -518,19 +541,14 @@ func TestGetMountPoints_AllVolumes(t *testing.T) {
 	assert.Equal(t, config.StorageVolume, mounts[2].Type)
 	assert.True(t, mounts[2].OK)
 
-	// Verify correct volume names were checked.
-	require.Len(t, m.Calls, 3)
-	assert.Equal(t, []string{"volume", "inspect", "sind-dev-config"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"volume", "inspect", "sind-dev-munge"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"volume", "inspect", "sind-dev-data"}, m.Calls[2].Args)
+	// One listing of the cluster's volumes instead of an inspect per volume.
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"volume", "ls", "--format", "json", "--filter", "name=sind-dev-"}, m.Calls[0].Args)
 }
 
 func TestGetMountPoints_BackupControllerState(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	m.AddResult("[{}]\n", "", nil) // data
-	m.AddResult("[{}]\n", "", nil) // state
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state")
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -542,14 +560,11 @@ func TestGetMountPoints_BackupControllerState(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mounts, 4)
 	assert.Equal(t, MountPoint{Path: "/var/spool/slurmctld", Source: "sind-dev-state", Type: config.StorageVolume, OK: true}, mounts[3])
-	assert.Equal(t, []string{"volume", "inspect", "sind-dev-state"}, m.Calls[3].Args)
 }
 
 func TestGetMountPoints_HostPath(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	// no data volume check — host path used
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge")
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -566,16 +581,12 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 	assert.Equal(t, "/home/user/project", mounts[2].Source)
 	assert.Equal(t, config.StorageHostPath, mounts[2].Type)
 	assert.True(t, mounts[2].OK)
-
-	// Only config and munge volumes checked.
-	require.Len(t, m.Calls, 2)
+	assert.Len(t, m.Calls, 1)
 }
 
 func TestGetMountPoints_CVMFSHostPath(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	m.AddResult("[{}]\n", "", nil) // data
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data")
 	// no check for the host's /cvmfs
 	c := docker.NewClient(&m)
 
@@ -588,7 +599,7 @@ func TestGetMountPoints_CVMFSHostPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mounts, 4)
 	assert.Equal(t, MountPoint{Path: "/cvmfs", Source: "/cvmfs", Type: config.StorageHostPath, OK: true}, mounts[3])
-	assert.Len(t, m.Calls, 3)
+	assert.Len(t, m.Calls, 1)
 }
 
 func TestGetMountPoints_CVMFSVolume(t *testing.T) {
@@ -606,9 +617,7 @@ func TestGetMountPoints_CVMFSVolume(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var m mock.Executor
-			m.AddResult("[{}]\n", "", nil) // config
-			m.AddResult("[{}]\n", "", nil) // munge
-			m.AddResult("[{}]\n", "", nil) // data
+			addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data")
 			m.AddResult(tt.result.Stdout, tt.result.Stderr, tt.result.Err)
 			c := docker.NewClient(&m)
 
@@ -620,16 +629,14 @@ func TestGetMountPoints_CVMFSVolume(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, mounts, 4)
 			assert.Equal(t, MountPoint{Path: "/cvmfs", Source: "cvmfs", Type: config.StorageVolume, OK: tt.wantOK}, mounts[3])
-			assert.Equal(t, []string{"volume", "inspect", "cvmfs"}, m.Calls[3].Args)
+			assert.Equal(t, []string{"volume", "inspect", "cvmfs"}, m.Calls[1].Args)
 		})
 	}
 }
 
 func TestGetMountPoints_CustomMountPath(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	m.AddResult("[{}]\n", "", nil) // data
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data")
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -648,10 +655,7 @@ func TestGetMountPoints_CustomMountPath(t *testing.T) {
 
 func TestGetMountPoints_NoneExist(t *testing.T) {
 	var m mock.Executor
-	notFound := testutil.ExitCode1(t)
-	m.AddResult("", "Error: No such volume\n", notFound) // config
-	m.AddResult("", "Error: No such volume\n", notFound) // munge
-	m.AddResult("", "Error: No such volume\n", notFound) // data
+	addVolumeLs(&m)
 	c := docker.NewClient(&m)
 
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
@@ -662,6 +666,22 @@ func TestGetMountPoints_NoneExist(t *testing.T) {
 	assert.False(t, mounts[2].OK)
 }
 
+// TestGetMountPoints_ExactNames checks that only the cluster's own volume
+// names count: the name filter also lists those of cluster "dev-2".
+func TestGetMountPoints_ExactNames(t *testing.T) {
+	var m mock.Executor
+	addVolumeLs(&m, "sind-dev-2-config", "sind-dev-2-munge", "sind-dev-2-data", "sind-dev-munge")
+	c := docker.NewClient(&m)
+
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
+
+	require.NoError(t, err)
+	require.Len(t, mounts, 3)
+	assert.False(t, mounts[0].OK, "config")
+	assert.True(t, mounts[1].OK, "munge")
+	assert.False(t, mounts[2].OK, "data")
+}
+
 func TestGetMountPoints_CheckError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))
@@ -670,33 +690,7 @@ func TestGetMountPoints_CheckError(t *testing.T) {
 	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volume sind-dev-config")
-}
-
-func TestGetMountPoints_MungeCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)                         // config OK
-	m.AddResult("", "", fmt.Errorf("docker daemon error")) // munge error
-	c := docker.NewClient(&m)
-
-	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volume sind-dev-munge")
-}
-
-func TestGetMountPoints_DataCheckError(t *testing.T) {
-	var m mock.Executor
-	notFound := testutil.ExitCode1(t)
-	m.AddResult("[{}]\n", "", nil)                         // config OK
-	m.AddResult("", "Error: No such volume\n", notFound)   // munge missing
-	m.AddResult("", "", fmt.Errorf("docker daemon error")) // data error
-	c := docker.NewClient(&m)
-
-	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volume sind-dev-data")
+	assert.Equal(t, "checking volumes: docker daemon error", err.Error())
 }
 
 // --- GetStatus ---
@@ -793,12 +787,12 @@ func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 			}
 		}
 
-		// docker network inspect / volume inspect
+		// docker network inspect / volume ls
 		if args[0] == "network" && args[1] == "inspect" {
 			return mock.Result{Stdout: "[{}]\n"}
 		}
-		if args[0] == "volume" && args[1] == "inspect" {
-			return mock.Result{Stdout: "[{}]\n"}
+		if args[0] == "volume" && args[1] == "ls" {
+			return volumeLs("sind-dev-config", "sind-dev-munge", "sind-dev-data")
 		}
 
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
@@ -858,8 +852,11 @@ func TestGetStatus_EmptyButClusterNetworkExists(t *testing.T) {
 		if args[0] == "ps" {
 			return mock.Result{Stdout: ""}
 		}
-		if (args[0] == "network" || args[0] == "volume") && args[1] == "inspect" {
+		if args[0] == "network" && args[1] == "inspect" {
 			return mock.Result{Stdout: "[{}]\n"}
+		}
+		if args[0] == "volume" && args[1] == "ls" {
+			return mock.Result{}
 		}
 		// InspectContainer used by GetNetworkHealth for the DNS container.
 		if args[0] == "inspect" {
@@ -984,7 +981,7 @@ func TestGetStatus_VolumeHealthError(t *testing.T) {
 	base := fullStatusOnCall(t)
 	m.OnCall = func(args []string, stdin string) mock.Result {
 		// Volume check fails.
-		if args[0] == "volume" && args[1] == "inspect" {
+		if args[0] == "volume" && args[1] == "ls" {
 			return mock.Result{Err: fmt.Errorf("docker daemon error")}
 		}
 		return base(args, stdin)
@@ -994,7 +991,27 @@ func TestGetStatus_VolumeHealthError(t *testing.T) {
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volume")
+	assert.Contains(t, err.Error(), "checking volumes")
+}
+
+// TestGetStatus_NetworkErrorBeforeVolumeError checks that when both
+// concurrent checks fail, the network error is reported, whichever returns
+// first.
+func TestGetStatus_NetworkErrorBeforeVolumeError(t *testing.T) {
+	var m mock.Executor
+	base := fullStatusOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if (args[0] == "network" && args[1] == "inspect") || (args[0] == "volume" && args[1] == "ls") {
+			return mock.Result{Err: fmt.Errorf("docker daemon error")}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking mesh network")
 }
 
 func TestGetStatus_SortOrder(t *testing.T) {
@@ -1137,8 +1154,8 @@ func TestGetStatus_Parallelism(t *testing.T) {
 		if args[0] == "network" && args[1] == "inspect" {
 			return mock.Result{Stdout: "[{}]\n"}
 		}
-		if args[0] == "volume" && args[1] == "inspect" {
-			return mock.Result{Stdout: "[{}]\n"}
+		if args[0] == "volume" && args[1] == "ls" {
+			return mock.Result{}
 		}
 		if args[0] == "inspect" {
 			return mock.Result{Stdout: "[{}]\n"}
@@ -1189,6 +1206,7 @@ func TestGetStatus_InspectMissingEntry(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspect returned no entry")
+	assert.Len(t, m.Calls, 2, "no probe or check starts")
 }
 
 // TestNodeHealth_JSONStatusKey locks in the JSON schema: container state is

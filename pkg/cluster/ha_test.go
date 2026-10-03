@@ -116,8 +116,10 @@ func pairStatusOnCall(t *testing.T, states map[string]string, ping string, hb mo
 			return fusedIsActiveResponse(t, args)
 		case args[0] == "exec" && args[2] == "scontrol":
 			return mock.Result{Stdout: ping}
-		case args[0] == "network" || args[0] == "volume":
+		case args[0] == "network":
 			return mock.Result{Stdout: "[{}]\n"}
+		case args[0] == "volume" && args[1] == "ls":
+			return volumeLs("sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state")
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}

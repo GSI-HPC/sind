@@ -84,7 +84,15 @@ defaults:
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
-	// ListClusterResources finds the network and the volumes.
+	// GetStatus and ListClusterResources find the network and the volumes
+	// with one listing each.
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.True(t, status.Network.Cluster)
+	require.Len(t, status.Mounts, 3)
+	for _, m := range status.Mounts {
+		assert.True(t, m.OK, "mount %s present", m.Path)
+	}
 	res, err := ListClusterResources(ctx, c, realm, clusterName)
 	require.NoError(t, err)
 	assert.True(t, res.NetworkExists)

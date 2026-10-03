@@ -909,8 +909,14 @@ func pairOnCall(t *testing.T) func([]string, string) mock.Result {
 			return mock.Result{Stdout: b.String()}
 		case args[0] == "exec" && args[2] == "scontrol":
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"}
-		case args[0] == "network" || args[0] == "volume":
+		case args[0] == "network":
 			return mock.Result{Stdout: "[{}]\n"}
+		case args[0] == "volume" && args[1] == "ls":
+			var vols strings.Builder
+			for _, v := range []string{"config", "munge", "data", "state"} {
+				vols.WriteString(`{"Name":"sind-dev-` + v + `","Driver":"local","Labels":""}` + "\n")
+			}
+			return mock.Result{Stdout: vols.String()}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
 	}

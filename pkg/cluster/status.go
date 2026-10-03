@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -218,16 +219,16 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 		}
 	}
 
-	// Check existence of Docker volumes.
+	// Check existence of Docker volumes, with one listing for all of them.
+	volumes, err := clusterVolumes(ctx, client, realm, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("checking volumes: %w", err)
+	}
 	for i := range mounts {
 		if mounts[i].Type != config.StorageVolume {
 			continue
 		}
-		exists, err := client.VolumeExists(ctx, docker.VolumeName(mounts[i].Source))
-		if err != nil {
-			return nil, fmt.Errorf("checking volume %s: %w", mounts[i].Source, err)
-		}
-		mounts[i].OK = exists
+		_, mounts[i].OK = volumes[docker.VolumeName(mounts[i].Source)]
 	}
 
 	// CVMFS, when the nodes mount it (storage.cvmfs). The plugin volume
@@ -311,8 +312,24 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 
 	prefix := ContainerPrefix(realm, clusterName)
+	for _, c := range containers {
+		if _, ok := infoByName[c.Name]; !ok {
+			return nil, fmt.Errorf("checking node %s: inspect returned no entry", strings.TrimPrefix(string(c.Name), prefix))
+		}
+	}
 	nodes := make([]*NodeStatus, len(containers))
 	states := make([]docker.ContainerState, len(containers))
+
+	// The network and mount checks need only the container list, so they
+	// run next to the node probes instead of after them.
+	var (
+		checks           sync.WaitGroup
+		network          *NetworkHealth
+		mounts           []MountPoint
+		netErr, mountErr error
+	)
+	checks.Go(func() { network, netErr = GetNetworkHealth(ctx, client, realm, clusterName) })
+	checks.Go(func() { mounts, mountErr = GetMountPoints(ctx, client, realm, clusterName, containers) })
 
 	// Probe nodes in parallel with a bounded worker pool. Each goroutine
 	// writes to its own pre-allocated index so no mutex is needed; the
@@ -322,11 +339,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	for i, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := config.Role(c.Labels[LabelRole])
-
-		info, ok := infoByName[c.Name]
-		if !ok {
-			return nil, fmt.Errorf("checking node %s: inspect returned no entry", shortName)
-		}
+		info := infoByName[c.Name]
 		states[i] = c.State
 		g.Go(func() error {
 			health := nodeHealthFromInfo(gctx, client, info, role, realm, clusterName)
@@ -352,14 +365,12 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		setControllerHA(ctx, client, realm, clusterName, nodes)
 	}
 
-	network, err := GetNetworkHealth(ctx, client, realm, clusterName)
-	if err != nil {
-		return nil, err
+	checks.Wait()
+	if netErr != nil {
+		return nil, netErr
 	}
-
-	mounts, err := GetMountPoints(ctx, client, realm, clusterName, containers)
-	if err != nil {
-		return nil, err
+	if mountErr != nil {
+		return nil, mountErr
 	}
 
 	var slurmVersion string

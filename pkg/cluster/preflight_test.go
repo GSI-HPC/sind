@@ -305,15 +305,6 @@ func TestPreflightCheck_MultiCompute(t *testing.T) {
 
 // --- helpers ---
 
-// addNotFound adds n "not found" results (exit code 1) to the mock.
-func addNotFound(t *testing.T, m *mock.Executor, n int) {
-	t.Helper()
-	for i := 0; i < n; i++ {
-		m.AddResult("", "Error: No such object\n",
-			testutil.ExitCode1(t))
-	}
-}
-
 func minimalConfig() *config.Cluster {
 	return &config.Cluster{
 		Name: "dev",

@@ -480,8 +480,7 @@ func TestNodeServices(t *testing.T) {
 
 func TestGetMountPoints_ClientIDs(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // data
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-data")
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{

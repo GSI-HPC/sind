@@ -472,10 +472,7 @@ func TestWorkerAdd_InvalidUsersLabel(t *testing.T) {
 
 func TestGetMountPoints_Home(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	m.AddResult("[{}]\n", "", nil) // data
-	addNotFound(t, &m, 1)          // home
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data") // no home volume
 	c := docker.NewClient(&m)
 
 	containers := []docker.ContainerListEntry{
@@ -487,6 +484,5 @@ func TestGetMountPoints_Home(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mounts, 4)
 	assert.Equal(t, MountPoint{Path: "/home", Source: "sind-dev-home", Type: config.StorageVolume, OK: false}, mounts[3])
-	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"volume", "inspect", "sind-dev-home"}, m.Calls[3].Args)
+	assert.Len(t, m.Calls, 1)
 }
