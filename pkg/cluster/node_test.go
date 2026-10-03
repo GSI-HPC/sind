@@ -164,7 +164,7 @@ func TestBuildRunArgs_Network(t *testing.T) {
 
 	network, ok := testutil.ArgValue(args, "--network")
 	assert.True(t, ok, "--network flag present")
-	assert.Equal(t, "sind-dev-net", network)
+	assert.Equal(t, "name=sind-dev-net,gw-priority=1", network, "cluster network first in name resolution")
 
 	dns, ok := testutil.ArgValue(args, "--dns")
 	assert.True(t, ok, "--dns flag present")
@@ -445,7 +445,7 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	assert.Equal(t, "sind-default-controller", name)
 
 	network, _ := testutil.ArgValue(args, "--network")
-	assert.Equal(t, "sind-default-net", network)
+	assert.Equal(t, "name=sind-default-net,gw-priority=1", network)
 
 	search, _ := testutil.ArgValue(args, "--dns-search")
 	assert.Equal(t, "default.sind.sind", search)

@@ -9,7 +9,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 ## Prerequisites
 
 - Linux host with the unified cgroupv2 hierarchy at `/sys/fs/cgroup` (not systemd's hybrid mode) and the `nsdelegate` mount option (`mount -o remount,nsdelegate /sys/fs/cgroup`); sind runs on the Docker host itself
-- Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true`)
+- Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true` and the `gw-priority` network option), with a Docker CLI of the same release
 - A rootful Docker daemon without `userns-remap`: Docker refuses `writable-cgroups` in rootless mode and with `userns-remap`, at `docker start`. `sind doctor` checks `docker info`'s `SecurityOptions` for `name=rootless` and `name=userns`, and `sind create cluster` does the same (`cluster.CheckDaemon`) before the mesh is set up or an image pulled; it also refuses a daemon whose `CgroupVersion` is `1`
 - For clusters with 10+ nodes: `fs.inotify.max_user_instances >= 1024` (default 128 is too low; `sind doctor` warns below it)
 
@@ -99,7 +99,7 @@ When a check fails for good, or the limit runs out, `sind create cluster` remove
 
 **Phase 4: Mesh Registration, Slurm and Home Directories** (concurrent)
 
-After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
+After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network, which nodes join with gateway priority 1 so that it answers before the mesh (see Cluster Network). The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
 
 With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmctld registers the cluster with slurmdbd when it starts (see Database Node). With `accounts`, sind then waits until `sacctmgr show cluster` lists the cluster and creates the Slurm accounts and associations (see Slurm Accounts).
 
@@ -1285,9 +1285,11 @@ Each cluster has an isolated Docker bridge network:
 - Name: `<realm>-<cluster>-net`
 - Nodes can reach each other by container hostname
 
+Nodes join it with gateway priority 1 (`--network name=<realm>-<cluster>-net,gw-priority=1`, Docker 28+), ahead of the mesh network's 0. Docker makes a container's hostname a DNS name on every user-defined network it joins, so the mesh holds `controller`, `db` and `worker-N` once per cluster of the realm. The embedded DNS answers a name from the first of the container's networks that knows it, ordered by gateway priority and then by network name. With the priority, the short names Slurm uses resolve to the node's own cluster whatever the cluster is called; without it, a cluster whose network name sorts after `<realm>-mesh` (`test`, `prod`) would resolve `controller` to the controllers of every cluster in the realm. A name the cluster lacks, such as `db` without a db node, still falls through to the mesh and resolves to another cluster's node. The cluster network is also the nodes' default gateway.
+
 ### Mesh Network
 
-All clusters automatically join a shared mesh network for cross-cluster communication:
+All nodes of a realm also join its shared mesh network, which carries the realm's DNS server and SSH relay:
 
 | Event | Result |
 |-------|--------|
@@ -1296,9 +1298,11 @@ All clusters automatically join a shared mesh network for cross-cluster communic
 | Cluster deleted | Disconnects cluster nodes, updates DNS |
 | Last cluster deleted | Removes `sind-dns` and `sind-mesh` network |
 
+The mesh does not route traffic between clusters by DNS name: the mesh DNS records point at cluster network addresses, which the SSH relay (on every cluster network) and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name (`sind-dev-controller`).
+
 ### DNS
 
-The `sind-dns` container (CoreDNS) provides name resolution across meshed clusters using a realm-aware zone:
+The `sind-dns` container (CoreDNS) names every node of the realm, for the SSH relay and host-side resolution, using a realm-aware zone:
 
 ```
 <realm>.sind:53

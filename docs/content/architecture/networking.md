@@ -13,9 +13,11 @@ Each cluster has an isolated Docker bridge network:
 - Name: `<realm>-<cluster>-net` (e.g., `sind-dev-net`)
 - Nodes can reach each other by container hostname within this network
 
+Slurm uses these short hostnames (`controller`, `db`, `worker-0`). Docker's embedded DNS answers them from the first of a node's networks that knows the name, and a node's hostname is a name on the mesh network too, once per cluster of the realm. Nodes therefore join their cluster network with gateway priority 1, ahead of the mesh's 0 (`--network name=<realm>-<cluster>-net,gw-priority=1`, Docker 28 or later), so the names resolve to the node's own cluster whatever the clusters are called. Without the priority, Docker orders the networks by name, and in a cluster whose network sorts after `<realm>-mesh`, such as `test` or `prod`, `controller` would resolve to the controllers of every cluster in the realm. A name the cluster lacks, such as `db` in a cluster without a db node, still falls through to the mesh and reaches another cluster's node. The cluster network is also the nodes' default gateway.
+
 ## Mesh network
 
-All clusters join a shared mesh network for cross-cluster communication:
+Every node also joins its realm's mesh network, which carries the realm's DNS server and SSH relay:
 
 | Event | Result |
 |-------|--------|
@@ -24,9 +26,11 @@ All clusters join a shared mesh network for cross-cluster communication:
 | Cluster deleted | Disconnects nodes, updates DNS |
 | Last cluster deleted | Removes `sind-dns`, `sind-ssh`, and `sind-mesh` |
 
+The mesh does not route traffic between clusters by their DNS names: the `*.<realm>.sind` names resolve to cluster network addresses (see below), which the SSH relay and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name, such as `sind-dev-controller`.
+
 ## DNS
 
-The `sind-dns` container runs CoreDNS and provides name resolution across all clusters using a realm-aware zone:
+The `sind-dns` container runs CoreDNS and names every node of the realm, for the SSH relay and the host, using a realm-aware zone:
 
 ```
 <node>.<cluster>.<realm>.sind → container IP
@@ -46,7 +50,7 @@ Nodes are configured with:
 
 Within a cluster, short names work via the search domain: a node in the `dev` cluster can reach `controller` without the full `controller.dev.sind.sind`.
 
-DNS records use each node's **cluster network IP** (not mesh network IP), so traffic between nodes routes through the cluster's isolated network.
+DNS records use each node's **cluster network IP** (not mesh network IP), so the SSH relay and the host reach the nodes through the cluster's network.
 
 The DNS container is lightweight — no systemd or sshd.
 

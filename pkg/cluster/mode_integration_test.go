@@ -429,6 +429,74 @@ slurm:
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+// TestClusterNamesAroundMesh creates two clusters in one realm whose
+// networks sort on both sides of the mesh network (<realm>-alpha-net <
+// <realm>-mesh < <realm>-test-net). Every node's hostname is also a DNS name
+// on the mesh, so without the cluster network's gateway priority, test's
+// nodes would resolve controller through the mesh, to both controllers.
+func TestClusterNamesAroundMesh(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-names")
+	meshMgr := mesh.NewManager(c, realm)
+	clusters := []string{"alpha", "test"}
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		for _, name := range clusters {
+			_ = Delete(bg, c, meshMgr, name)
+		}
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+	require.Less(t, string(NetworkName(realm, "alpha")), string(meshMgr.NetworkName()))
+	require.Greater(t, string(NetworkName(realm, "test")), string(meshMgr.NetworkName()))
+
+	// One create at a time: both rewrite the realm's Corefile.
+	for _, name := range clusters {
+		cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+`, name, img)))
+		require.NoError(t, err)
+		cfg.ApplyDefaults()
+		require.NoError(t, cfg.Validate())
+		_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+		require.NoError(t, err, "creating %s", name)
+	}
+
+	for _, name := range clusters {
+		controller, err := c.InspectContainer(ctx, ContainerName(realm, name, "controller"))
+		require.NoError(t, err)
+		want := controller.IPs[NetworkName(realm, name)]
+		require.NotEmpty(t, want)
+
+		out, err := c.Exec(ctx, ContainerName(realm, name, "worker-0"), "getent", "hosts", "controller")
+		require.NoError(t, err, "resolving controller in %s", name)
+		var got []string
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if fields := strings.Fields(line); len(fields) > 0 {
+				got = append(got, fields[0])
+			}
+		}
+		assert.Equal(t, []string{want}, got, "controller in cluster %s", name)
+	}
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 // TestUnmanagedCluster creates an unmanaged cluster with a controller pair,
 // a submitter and a worker, checks that sind leaves Slurm alone, then
 // provisions Slurm by hand the way a user's Chef or Ansible run would.

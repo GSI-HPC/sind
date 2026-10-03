@@ -165,6 +165,13 @@ type RunConfig struct {
 	TaskAffinity bool
 }
 
+// clusterNetworkSpec returns the --network value that attaches a node to its
+// cluster network with gateway priority 1 (Docker 28 and later), ahead of
+// the mesh network (see BuildRunArgs).
+func clusterNetworkSpec(realm, clusterName string) string {
+	return "name=" + string(NetworkName(realm, clusterName)) + ",gw-priority=1"
+}
+
 // TaskAffinityCapability is the capability managed workers get when the
 // cluster's TaskPlugin includes task/affinity: slurmstepd, as root, sets
 // each task's CPU affinity after the task has become the job's user, and
@@ -185,8 +192,15 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--hostname", cfg.ShortName,
 	)
 
-	// Network
-	args = append(args, "--network", string(NetworkName(cfg.Realm, cfg.ClusterName)))
+	// Network. Docker's embedded DNS answers a name from the first of the
+	// container's networks that knows it, ordered by gateway priority and
+	// then by network name. CreateNode also attaches the node to the realm's
+	// mesh, where the nodes of every cluster register their hostnames, so
+	// the cluster network gets priority 1 (the mesh keeps 0): controller,
+	// db and worker-N then resolve to this cluster's nodes whatever the
+	// cluster is called. It also makes the cluster network the default
+	// gateway.
+	args = append(args, "--network", clusterNetworkSpec(cfg.Realm, cfg.ClusterName))
 	if cfg.DNSIP != "" {
 		args = append(args, "--dns", cfg.DNSIP)
 	}
