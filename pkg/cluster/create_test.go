@@ -947,6 +947,98 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	assert.GreaterOrEqual(t, meshRm, 1, "mesh cleanup should run on resolveInfra failure")
 }
 
+// meshRemoved reports whether m removed a mesh container.
+func meshRemoved(m *mock.Executor) bool {
+	for _, call := range m.Calls {
+		if len(call.Args) >= 4 && call.Args[0] == "rm" && (call.Args[3] == "sind-ssh" || call.Args[3] == "sind-dns") {
+			return true
+		}
+	}
+	return false
+}
+
+// isRealmListing reports whether args list every container of the realm,
+// as HasOtherClusters does.
+func isRealmListing(args []string) bool {
+	return args[0] == "ps" && args[len(args)-1] == "label=sind.realm=sind"
+}
+
+// TestCreate_KeepsMeshOfOtherClusters covers a Manager that created the mesh
+// for an earlier cluster and then serves a create that fails: the mesh stays
+// for the earlier cluster.
+func TestCreate_KeepsMeshOfOtherClusters(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		if isRealmListing(args) {
+			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "x", Names: "sind-first-controller",
+				State: "running", Image: "img", Labels: "sind.cluster=first,sind.realm=sind"})}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+	require.True(t, meshMgr.Created())
+
+	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.False(t, meshRemoved(&m), "mesh kept for cluster first")
+}
+
+// TestCreate_KeepsMeshOnDuplicateName covers a create of a cluster that
+// exists: the preflight check fails, and the existing cluster keeps its
+// mesh.
+func TestCreate_KeepsMeshOnDuplicateName(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" && args[2] == "sind-dev-net" {
+			return mock.Result{}, true // network exists → preflight conflict
+		}
+		if isRealmListing(args) {
+			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "x", Names: "sind-dev-controller",
+				State: "running", Image: "img", Labels: "sind.cluster=dev,sind.realm=sind"})}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+	require.True(t, meshMgr.Created())
+
+	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.False(t, meshRemoved(&m), "mesh kept for the existing cluster dev")
+}
+
+// TestCreate_KeepsMeshWhenUsageUnknown covers a rollback that cannot tell
+// whether clusters use the mesh: it keeps the mesh.
+func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
+			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
+		}
+		if isRealmListing(args) {
+			return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	_ = meshMgr.EnsureMeshNetwork(t.Context())
+
+	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "systemctl failed")
+	assert.False(t, meshRemoved(&m))
+}
+
 func TestResolveMeshInfra_NoDNSContainer(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

@@ -97,7 +97,7 @@ A unit that has failed does not recover on its own: a failed munge, slurmctld, s
 
 `--wait DURATION` (default `5m`, `0` for no limit) bounds how long `sind create cluster` and `sind create worker` wait for the nodes and Slurm: the node checks above, the Slurm daemons, and with `accounts` the cluster's registration with slurmdbd and the `sacctmgr` commands. Each node's limit counts from when its container has started, so image pulls do not count; the steps after the nodes are ready (Phase 4) end the limit after the last node container started. When a node or check is not ready in time, the command fails with status `1`, not `130`, with an error that names the node and its last failing check (`cluster dev not ready within 5m0s: waiting for worker-0: ... last probe error: probe munge: ...`). The library returns that error wrapping `cluster.ErrNotReady`; `config.Cluster.Wait` and `WorkerAddOptions.Wait` set the limit, and zero sets none.
 
-When a check fails for good, or the limit runs out, `sind create cluster` removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
+When a check fails for good, or the limit runs out, `sind create cluster` removes the resources it created, and the mesh if this invocation set it up and no other cluster uses it (a library caller can reuse one `mesh.Manager` for several creates). If that cleanup fails too, `sind delete cluster` removes what is left.
 
 **Phase 4: Mesh Registration, Slurm and Home Directories** (concurrent)
 
@@ -1742,6 +1742,8 @@ The lock is `state.LockRealm` in `pkg/state`, which also resolves the state dire
 ### Realm independence
 
 Locks are per-realm. Operations in different realms run concurrently without contention. This makes realm-based CI isolation safe for parallel jobs.
+
+The lock file belongs to the invoking user's state directory, the realm's resources to the Docker daemon. sind clients that share a daemon (other users, CI jobs that share the host's Docker socket, other `XDG_STATE_HOME`s) do not see each other's locks and must use separate realms. sind does not lock on the daemon.
 
 ## Future Features
 

@@ -188,11 +188,12 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	log.InfoContext(ctx, "creating cluster", "name", cfg.Name, "nodes", len(NodeShortNames(cfg.Nodes)))
 
-	// Register cleanup before any fallible operation. Mesh cleanup runs
-	// whenever this invocation created the mesh. Cluster resource cleanup
-	// runs only after createResources starts. WithoutCancel keeps the
-	// cleanup running when the parent context is cancelled (e.g. Ctrl+C),
-	// and rollbackTimeout bounds it. Its failures are joined to the error.
+	// Register cleanup before any fallible operation. Cluster resource
+	// cleanup runs only after createResources starts; the mesh goes too
+	// when this invocation created it and no other cluster uses it.
+	// WithoutCancel keeps the cleanup running when the parent context is
+	// cancelled (e.g. Ctrl+C), and rollbackTimeout bounds it. Its failures
+	// are joined to the error.
 	resourcesCreated := false
 	defer func() {
 		if retErr == nil {
@@ -208,6 +209,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
 		defer cancel()
 		errs := []error{retErr}
+		removeMesh := rollbackRemovesMesh(cleanupCtx, client, meshMgr, cfg.Name, resourcesCreated)
 		if resourcesCreated {
 			logClusterDiagnostics(cleanupCtx, client, realm, cfg.Name)
 			log.DebugContext(ctx, "removing cluster resources", "name", cfg.Name)
@@ -215,7 +217,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 				errs = append(errs, fmt.Errorf("rolling back: removing cluster resources (sind delete cluster removes what is left): %w", err))
 			}
 		}
-		if meshMgr.Created() {
+		if removeMesh {
 			log.DebugContext(ctx, "removing mesh created by this invocation")
 			if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
 				errs = append(errs, fmt.Errorf("rolling back: removing the mesh: %w", err))
@@ -354,6 +356,27 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 
 	return cluster, nil
+}
+
+// rollbackRemovesMesh reports whether a failed Create removes the mesh: only
+// when EnsureMesh created it and no cluster uses it. A Manager can serve
+// several creates, so Created alone does not tell. When the create did not
+// get to make its resources, a cluster of the same name counts too: that
+// is the one the preflight check found.
+func rollbackRemovesMesh(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, resourcesCreated bool) bool {
+	if !meshMgr.Created() {
+		return false
+	}
+	ours := ""
+	if resourcesCreated {
+		ours = clusterName
+	}
+	inUse, err := HasOtherClusters(ctx, client, meshMgr.Realm, ours)
+	if err != nil {
+		sindlog.From(ctx).ErrorContext(ctx, "keeping the mesh", "error", err)
+		return false
+	}
+	return !inUse
 }
 
 // resolveMeshInfra starts the realm's mesh DNS and SSH relay if they are

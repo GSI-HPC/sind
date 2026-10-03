@@ -35,7 +35,7 @@ Containers require specific security options for systemd:
 
 ## Concurrency
 
-Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}).
+Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}). The lock lives in each user's state directory, so sind clients that share a Docker daemon need separate realms.
 
 ## Creation flow
 
@@ -58,7 +58,7 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 - `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, and `sackd` on the submitter with identity `clientIds`.
 - `createSlurmAccounts` (`accounts` only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users' associations and the coordinators with `sacctmgr -i` on `controller`.
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
-- If any step fails, `sind create cluster` removes what it created.
+- If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 

@@ -69,6 +69,8 @@ Locks are per-realm — operations in different realms run concurrently without 
 
 Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.WorkerAdd` and `cluster.WorkerRemove`, which do not lock themselves.
 
+The lock lives in the invoking user's state directory, while the realm's resources live on the Docker daemon. sind clients that share one daemon, such as several users of a host, or CI jobs that share the host's Docker socket, do not see each other's locks: give each of them its own realm.
+
 ## Example
 
 ```bash

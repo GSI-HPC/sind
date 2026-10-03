@@ -87,6 +87,7 @@ func TestMeshLifecycle(t *testing.T) {
 	// EnsureMesh is idempotent.
 	err = mgr.EnsureMesh(ctx)
 	require.NoError(t, err)
+	assert.False(t, mgr.Created(), "second EnsureMesh created nothing")
 
 	// The info reports the images the containers run.
 	info, err := mgr.GetInfo(ctx)
@@ -366,6 +367,19 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	}, m.Calls[1].Args)
 }
 
+// TestEnsureMeshNetwork_CreatedPerCall covers a Manager that serves several
+// creates: Created answers for the last call only.
+func TestEnsureMeshNetwork_CreatedPerCall(t *testing.T) {
+	_, c, _ := newFakeDocker(t)
+	mgr := NewManager(c, DefaultRealm)
+
+	require.NoError(t, mgr.EnsureMeshNetwork(t.Context()))
+	assert.True(t, mgr.Created())
+
+	require.NoError(t, mgr.EnsureMeshNetwork(t.Context()))
+	assert.False(t, mgr.Created(), "the mesh existed before the second call")
+}
+
 func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 	var m mock.Executor
 	// NetworkExists → found
@@ -380,6 +394,19 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 	// Only inspect, no create
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
+}
+
+// TestEnsureMeshNetwork_CreatedConcurrently covers another client of the
+// same daemon creating the network between the check and the create.
+func TestEnsureMeshNetwork_CreatedConcurrently(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.networks["sind-mesh"] = true
+	f.fail["network inspect"] = notFound(t, testutil.NoSuchNetwork("sind-mesh"))
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.EnsureMeshNetwork(t.Context())
+	require.NoError(t, err)
+	assert.False(t, mgr.Created(), "the other client created it")
 }
 
 func TestEnsureMeshNetwork_InspectError(t *testing.T) {
@@ -406,6 +433,7 @@ func TestEnsureMeshNetwork_CreateError(t *testing.T) {
 	err := mgr.EnsureMeshNetwork(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating mesh network")
+	assert.False(t, mgr.Created(), "no network was created")
 }
 
 // --- StartMesh ---

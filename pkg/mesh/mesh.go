@@ -331,15 +331,24 @@ func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeNa
 	return nil
 }
 
-// Created reports whether EnsureMesh created new mesh infrastructure in this
-// invocation (i.e. the mesh did not already exist). This is used to decide
-// whether cleanup should also tear down the mesh after a failed cluster create.
+// Created reports whether the last EnsureMesh (or EnsureMeshNetwork) call
+// created the mesh network, that is, the realm had no mesh before. Callers
+// use it to decide whether to remove the mesh again when a create fails. A
+// Manager can serve several creates, so they must still check that no
+// cluster uses the mesh before they remove it.
 func (m *Manager) Created() bool {
 	return m.created
 }
 
-// EnsureMeshNetwork creates the shared mesh network if it does not already exist.
+// EnsureMeshNetwork creates the shared mesh network if it does not already
+// exist, and records in Created whether it did.
+//
+// Another sind client of the same Docker daemon can create the network
+// between the check and the create, as the realm lock lives in each client's
+// home directory. Docker's "already exists" error then counts as an existing
+// network. Clients that share a daemon should still use separate realms.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
+	m.created = false
 	name := m.NetworkName()
 	exists, err := m.Docker.NetworkExists(ctx, name)
 	if err != nil {
@@ -348,7 +357,6 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	if exists {
 		return nil
 	}
-	m.created = true
 	networkLabels := docker.Labels{
 		LabelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
@@ -356,9 +364,19 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	}
 	_, err = m.Docker.CreateNetwork(ctx, name, networkLabels)
 	if err != nil {
+		if isAlreadyExists(err) {
+			return nil
+		}
 		return fmt.Errorf("creating mesh network: %w", err)
 	}
+	m.created = true
 	return nil
+}
+
+// isAlreadyExists reports whether err is Docker's error for a network name
+// that is taken ("network with name X already exists").
+func isAlreadyExists(err error) bool {
+	return strings.Contains(err.Error(), "already exists")
 }
 
 // ensureDNS creates the mesh DNS container if it does not exist yet, or
