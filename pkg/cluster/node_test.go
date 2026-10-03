@@ -821,6 +821,22 @@ func TestAbsDataHostPath(t *testing.T) {
 	assert.Equal(t, "data", absDataHostPath("data"))
 }
 
+func TestDataPathWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	assert.Equal(t, "every node mounts the root directory / read-write as its data; use --data DIR, --data volume or storage.dataStorage to share less",
+		DataPathWarning("/"))
+	assert.Equal(t, "every node mounts your home directory "+home+" read-write as its data; use --data DIR, --data volume or storage.dataStorage to share less",
+		DataPathWarning(home+"/"))
+	assert.Empty(t, DataPathWarning(filepath.Join(home, "project")))
+	assert.Empty(t, DataPathWarning("/srv"))
+
+	// Without $HOME only / is caught.
+	t.Setenv("HOME", "")
+	assert.Empty(t, DataPathWarning(home))
+}
+
 func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",

@@ -1125,7 +1125,12 @@ The `--data` flag controls the mount source:
 - `--data /path` — bind-mount a specific host directory
 - `--data volume` — use a Docker-managed volume (`<realm>-<cluster>-data`)
 
-When a YAML config specifies `storage.dataStorage`, the config takes precedence over `--data`.
+When a YAML config sets `storage.dataStorage.type` or `hostPath`, the config takes precedence over
+`--data`; a config that sets only `mountPath` keeps the source `--data` gives.
+
+When the resolved host directory is `/` or the user's home directory (`$HOME`), `sind create
+cluster` prints a `Warning:` on stderr and goes on: every node mounts it read-write, which is
+usually an accident, a create run there with the default `--data .`.
 
 The resolved host path is stored on each container as the `sind.data.hostpath` label (empty with
 the data volume), and the mount point as the `sind.data.mountpath` label, so that

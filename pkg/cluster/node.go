@@ -7,6 +7,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -464,6 +465,26 @@ func absDataHostPath(path string) string {
 		return abs
 	}
 	return path
+}
+
+// DataPathWarning returns a warning when a cluster's data host path is the
+// host's root directory or the user's home directory ($HOME), which every
+// node then mounts read-write: typically by accident, from sind create
+// cluster run there with the default --data . It returns "" for any other
+// path.
+func DataPathWarning(hostPath string) string {
+	path := filepath.Clean(hostPath)
+	home, homeErr := os.UserHomeDir()
+	var what string
+	switch {
+	case path == "/":
+		what = "the root directory /"
+	case homeErr == nil && path == filepath.Clean(home):
+		what = "your home directory " + path
+	default:
+		return ""
+	}
+	return "every node mounts " + what + " read-write as its data; use --data DIR, --data volume or storage.dataStorage to share less"
 }
 
 // nodeGetsUsers reports whether a node gets the cluster's Linux users and

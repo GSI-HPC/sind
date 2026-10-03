@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -190,6 +191,22 @@ func TestApplyDataStorage(t *testing.T) {
 			assert.Equal(t, tt.want, cfg.Storage.DataStorage)
 		})
 	}
+}
+
+func TestCreateCluster_WarnsAboutRootDataPath(t *testing.T) {
+	// An invalid config stops create after the warning, before any docker call.
+	cfgPath := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("kind: Cluster\nnodes: [worker]\n"), 0o644))
+	var m mock.Executor
+
+	_, stderr, err := executeWithMock(&m, "create", "cluster", "--config", cfgPath, "--data", "/")
+
+	require.Error(t, err)
+	assert.Contains(t, stderr, "Warning: every node mounts the root directory / read-write as its data")
+	assert.Empty(t, m.Calls)
+
+	_, stderr, _ = executeWithMock(&m, "create", "cluster", "--config", cfgPath, "--data", "volume")
+	assert.NotContains(t, stderr, "Warning")
 }
 
 func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {

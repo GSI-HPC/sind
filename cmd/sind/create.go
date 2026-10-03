@@ -70,6 +70,11 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	if err := applyDataStorage(cfg, dataFlag); err != nil {
 		return err
 	}
+	if ds := cfg.Storage.DataStorage; ds.UsesHostPath() {
+		if w := cluster.DataPathWarning(ds.HostPath); w != "" {
+			cmd.PrintErrln("Warning:", termtext.EscapeText(w))
+		}
+	}
 
 	pull, _ := cmd.Flags().GetBool("pull")
 	cfg.Pull = pull

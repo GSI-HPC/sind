@@ -27,3 +27,9 @@ chmod +x sind
 On 64-bit ARM, download `sind-linux-arm64` instead.
 
 sind requires Docker Engine 28.0+ and a Linux host with cgroupv2 and `nsdelegate`. Most modern CI runners meet these requirements out of the box.
+
+## Data directory
+
+By default every node mounts the job's working directory, usually the checked-out workspace, read-write at `/data` (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})). Files that root writes there from a node belong to root on the runner, so a later step that cleans the workspace may need `sudo`. `--data volume`, or `storage.dataStorage.type: volume` in the config, keeps the workspace out of the cluster.
+
+The directory is resolved on the Docker host. When the CI job runs in a container that shares the host's Docker socket, the job's paths do not exist there and `sind create cluster` fails; use `--data volume` in that case.
