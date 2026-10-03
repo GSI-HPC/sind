@@ -62,7 +62,7 @@ SlurmUser=slurm
 StateSaveLocation=/var/spool/slurmctld
 SlurmdSpoolDir=/var/spool/slurmd
 ProctrackType=proctrack/cgroup
-TaskPlugin=task/cgroup,task/affinity
+TaskPlugin=task/cgroup
 ReturnToService=2
 NodeName=worker-[0-1] CPUs=1 State=UNKNOWN
 PartitionName=all Nodes=ALL Default=YES MaxTime=INFINITE State=UP

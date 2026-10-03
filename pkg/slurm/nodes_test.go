@@ -227,7 +227,9 @@ func TestRemoveNodesFromConf_RemovesDuplicates(t *testing.T) {
 func TestNodesConf_RemoveUnlistedNodeChangesNothing(t *testing.T) {
 	// What sind generates comes back unchanged when the nodes to remove are
 	// not in it, which lets WorkerRemove skip the write and reconfigure.
-	conf := GenerateNodesConf([]config.Node{{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "2g"}})
+	workers, err := ManagedWorkers([]config.Node{{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "2g"}})
+	require.NoError(t, err)
+	conf := GenerateNodesConf(workers)
 	added := AddNodesToConf(conf, []NodeEntry{{Name: "worker-2", CPUs: 1, MemoryMB: 512}})
 
 	assert.Equal(t, conf, RemoveNodesFromConf(conf, []string{"worker-7"}))

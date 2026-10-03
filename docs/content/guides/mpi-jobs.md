@@ -83,7 +83,7 @@ rank 1 of 3 on worker-1
 rank 2 of 3 on worker-2
 ```
 
-Since `MpiDefault=pmix` is set in the generated `slurm.conf`, `srun` uses PMIx for process launch automatically — no `--mpi=pmix` flag needed.
+Since `MpiDefault=pmix` is set in the generated `slurm.conf` (unless the `main` section sets another `MpiDefault`), `srun` uses PMIx for process launch automatically — no `--mpi=pmix` flag needed.
 
 ## Batch submission
 

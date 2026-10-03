@@ -144,10 +144,18 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	managed := !opts.Unmanaged
 
 	// Read sind-nodes.conf for managed workers: it has to be there, and
-	// updateNodesConf adds the new nodes to it.
+	// updateNodesConf adds the new nodes to it. See too whether slurm.conf
+	// binds their tasks with task/affinity.
 	var nodesConf string
+	taskAffinity := false
 	if managed {
 		nodesConf, err = readNodesConf(ctx, client, controller)
+		if err != nil {
+			return nil, err
+		}
+		taskAffinity, err = slurm.ReadTaskAffinity(func(path string) (string, error) {
+			return client.ReadFile(ctx, controller.Name, path)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -221,6 +229,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			AddUsers:        nodeGetsUsers(identity, config.RoleWorker, managed, false),
 			Identity:        identity.Mode,
 			NSSSlurm:        managed && identity.UsesNSSSlurm(),
+			TaskAffinity:    taskAffinity,
 		}
 	}
 	logExtraPrivileges(ctx, nodeConfigs)
@@ -578,7 +587,7 @@ func defaultWorkerShape(controllerImage string) workerShape {
 // docker inspect reports it. The image is the container's image ID: its
 // tag may since have moved to another image, even another Slurm release.
 // A resource docker reports none for keeps fallback's value. The
-// capability sind adds by itself (UserJobCapability) and the security
+// capability sind adds by itself (TaskAffinityCapability) and the security
 // options every node gets are left out, as sind decides on them for each
 // new worker.
 func existingWorkerShape(ctx context.Context, info *docker.ContainerInfo, fallback workerShape) workerShape {
@@ -588,7 +597,7 @@ func existingWorkerShape(ctx context.Context, info *docker.ContainerInfo, fallba
 		CPUs:        fallback.CPUs,
 		Memory:      fallback.Memory,
 		TmpSize:     cmp.Or(tmpfsSize(hc.Tmpfs["/tmp"]), fallback.TmpSize),
-		CapAdd:      capabilityNames(hc.CapAdd, UserJobCapability),
+		CapAdd:      capabilityNames(hc.CapAdd, TaskAffinityCapability),
 		CapDrop:     capabilityNames(hc.CapDrop),
 		Devices:     deviceArgs(hc.Devices),
 		SecurityOpt: extraSecurityOpts(ctx, info.Name, hc.SecurityOpt),

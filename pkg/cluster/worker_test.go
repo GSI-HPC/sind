@@ -2371,7 +2371,9 @@ func TestWorkerAdd_RollbackNodesConfErrors(t *testing.T) {
 		name string
 		fail func(args []string, reads int) bool
 	}{
-		{"read", func(args []string, reads int) bool { return args[0] == "exec" && args[2] == "cat" && reads > 1 }},
+		{"read", func(args []string, _ int) bool {
+			return args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "cat" && strings.Contains(strings.Join(args, " "), "sind-nodes.conf")
+		}},
 		{"write", func(args []string, _ int) bool {
 			return args[0] == "exec" && args[1] == "-i" && args[2] == "sind-dev-controller" && strings.Contains(strings.Join(args, " "), "sind-nodes.conf")
 		}},
@@ -2796,7 +2798,7 @@ func TestTmpfsSize(t *testing.T) {
 }
 
 func TestCapabilityNames(t *testing.T) {
-	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN", "ALL"}, capabilityNames([]string{"CAP_SYS_ADMIN", "CAP_SYS_NICE", "net_admin", "ALL"}, UserJobCapability))
+	assert.Equal(t, []string{"SYS_ADMIN", "NET_ADMIN", "ALL"}, capabilityNames([]string{"CAP_SYS_ADMIN", "CAP_SYS_NICE", "net_admin", "ALL"}, TaskAffinityCapability))
 	assert.Equal(t, []string{"SYS_NICE"}, capabilityNames([]string{"CAP_SYS_NICE"}))
 	assert.Nil(t, capabilityNames(nil))
 }

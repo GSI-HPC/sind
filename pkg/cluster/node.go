@@ -159,11 +159,20 @@ type RunConfig struct {
 	// section sets: the password of slurmdbd's MariaDB account, which
 	// authenticates with unix_socket without one (see accountingSQL).
 	StoragePass string
+
+	// TaskAffinity is set on managed workers of a cluster whose slurm.conf
+	// enables task/affinity (see slurm.TaskAffinity): they get
+	// TaskAffinityCapability.
+	TaskAffinity bool
 }
 
-// UserJobCapability is the capability workers of a cluster with users get,
-// so that slurmstepd can bind the tasks of users other than root.
-const UserJobCapability = "SYS_NICE"
+// TaskAffinityCapability is the capability managed workers get when the
+// cluster's TaskPlugin includes task/affinity: slurmstepd, as root, sets
+// each task's CPU affinity after the task has become the job's user, and
+// changing the affinity of another user's process needs CAP_SYS_NICE,
+// which Docker drops by default. Without it, every job of a user other
+// than root fails with task_g_set_affinity.
+const TaskAffinityCapability = "SYS_NICE"
 
 // BuildRunArgs returns the docker arguments for creating a node container.
 // The returned slice does not include "create" or "run -d" — the caller
@@ -248,12 +257,12 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--security-opt", "label=disable",
 	)
 
-	// Workers of a cluster with users may set the CPU affinity of other
-	// users' processes: slurmstepd, as root, binds each task after the task
-	// has become the job's user (task/affinity), which needs CAP_SYS_NICE
-	// unless the user is root. Docker drops it by default.
-	if cfg.Role == config.RoleWorker && len(cfg.Users.Users) > 0 {
-		args = append(args, "--cap-add", UserJobCapability)
+	// Workers that bind tasks with task/affinity may set the CPU affinity of
+	// other users' processes, unless the node drops the capability: a
+	// --cap-drop does not undo a --cap-add.
+	if cfg.Role == config.RoleWorker && cfg.TaskAffinity &&
+		!slices.Contains(cfg.CapDrop, TaskAffinityCapability) && !slices.Contains(cfg.CapDrop, "ALL") {
+		args = append(args, "--cap-add", TaskAffinityCapability)
 	}
 
 	// Extra capabilities and devices (opt-in)
@@ -373,13 +382,15 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
 // with (see DetectCVMFS), empty for none. The identity mode decides which
 // nodes get the cluster users and groups (see nodeGetsUsers) and which
-// resolve them with nss_slurm.
+// resolve them with nss_slurm. Managed workers get TaskAffinity when the
+// slurm.conf sind generates enables task/affinity.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
 	users := NewLinuxUsers(cfg)
 	hasSubmitter := slices.ContainsFunc(cfg.Nodes, func(n config.Node) bool { return n.Role == config.RoleSubmitter })
 	workerIdx := 0
 	clusterManaged := cfg.Managed()
+	taskAffinity := slurm.TaskAffinity(cfg.Slurm.Main)
 
 	dataHostPath := ""
 	dataMountPath := ""
@@ -468,6 +479,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 					AddUsers:        nodeGetsUsers(cfg.Identity, config.RoleWorker, isManaged, hasSubmitter),
 					Identity:        cfg.Identity.Mode,
 					NSSSlurm:        isManaged && cfg.Identity.UsesNSSSlurm(),
+					TaskAffinity:    isManaged && taskAffinity,
 				})
 				workerIdx++
 			}

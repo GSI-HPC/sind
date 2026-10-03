@@ -66,6 +66,7 @@ Custom images must provide the following:
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (see [Shadow file permissions](#shadow-file-permissions))
 - **munge** service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
+- Slurm's **mpi/pmix** plugin (`mpi_pmix.so`, which Slurm builds only when it finds PMIx, `--with-pmix`): the generated `slurm.conf` sets `MpiDefault=pmix`, and without the plugin every `srun` fails with "Invalid MPI type 'pmix'". For an image without it, set `MpiDefault=none` in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}})
 
 ### Per-role requirements
 

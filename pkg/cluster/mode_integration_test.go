@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -235,6 +236,7 @@ kind: Cluster
 name: %s
 defaults:
   image: %s
+users: [alice]
 slurm:
   main:
     scheduling: |
@@ -242,6 +244,8 @@ slurm:
       SchedulerParameters=bf_continue
     resources: |
       SelectType=select/cons_tres
+    tasks: |
+      TaskPlugin=task/cgroup,task/affinity
 `, clusterName, img)))
 	require.NoError(t, err)
 	cfg.ApplyDefaults()
@@ -259,8 +263,44 @@ slurm:
 	assert.Contains(t, out, "SchedulerType           = sched/backfill")
 	assert.Contains(t, out, "SchedulerParameters     = bf_continue")
 	assert.Contains(t, out, "SelectType              = select/cons_tres")
+	assert.Contains(t, out, "TaskPlugin              = task/cgroup,task/affinity")
+
+	// The fragment's TaskPlugin replaces sind's instead of following it.
+	conf, err := c.ReadFile(ctx, controller, slurm.SlurmConfPath)
+	require.NoError(t, err)
+	assert.NotContains(t, conf, "TaskPlugin=")
+
+	// task/affinity binds the tasks of users other than root, which needs
+	// CAP_SYS_NICE on the worker: a job of alice runs.
+	worker := ContainerName(realm, clusterName, "worker-0")
+	assert.True(t, hasSysNice(t, c, worker))
+	assert.False(t, hasSysNice(t, c, controller))
+	waitNodeIdle(t, c, controller, "worker-0")
+	out, err = c.Exec(ctx, controller, "runuser", "-u", "alice", "--", "srun", "-N1", "id", "-un")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+
+	// A worker added later gets it too: sind reads the TaskPlugin from the
+	// fragment slurm.conf includes.
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	require.NoError(t, err)
+	require.Len(t, added, 1)
+	assert.True(t, hasSysNice(t, c, ContainerName(realm, clusterName, added[0].Name)))
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// hasSysNice reports whether a node container has CAP_SYS_NICE (bit 23)
+// in its bounding set.
+func hasSysNice(t *testing.T, c *docker.Client, container docker.ContainerName) bool {
+	t.Helper()
+	out, err := c.Exec(t.Context(), container, "grep", "CapBnd", "/proc/1/status")
+	require.NoError(t, err)
+	fields := strings.Fields(out)
+	require.Len(t, fields, 2, out)
+	caps, err := strconv.ParseUint(fields[1], 16, 64)
+	require.NoError(t, err)
+	return caps&(1<<23) != 0
 }
 
 // TestControllerPairFailover exercises a primary/backup controller pair:
@@ -796,7 +836,9 @@ nodes:
 	assert.Equal(t, "bob", strings.TrimSpace(out))
 
 	// A job runs as its user, and what it writes to its home directory on
-	// the worker shows up on every node.
+	// the worker shows up on every node. With the default task/cgroup,
+	// which binds no tasks, the worker needs no CAP_SYS_NICE for that.
+	assert.False(t, hasSysNice(t, c, worker))
 	waitNodeIdle(t, c, submitter, "worker-0")
 	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", DNSName("submitter", clusterName, realm), "srun -N1 sh -c 'id -un > from-job; id -Gn > groups-in-job'")
 	require.NoError(t, err)
@@ -837,6 +879,7 @@ nodes:
 	out, err = c.ReadFile(ctx, newWorker, "/home/alice/from-job")
 	require.NoError(t, err)
 	assert.Equal(t, "alice", strings.TrimSpace(out))
+	assert.False(t, hasSysNice(t, c, newWorker))
 
 	// Deleting the cluster removes the home volume.
 	require.NoError(t, Delete(ctx, c, meshMgr, clusterName))
