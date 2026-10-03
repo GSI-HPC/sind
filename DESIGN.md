@@ -867,6 +867,14 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
 
+Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as
+trusted as a script run with Docker access: `image` runs any image's services as root,
+`storage.dataStorage.hostPath` bind-mounts any host directory read-write (`/` included),
+`capAdd`, `devices` and `securityOpt` grant host privileges, and the `slurm` sections set programs
+Slurm runs as root (`Prolog`, `HealthCheckProgram`). sind does not gate these behind an opt-in
+flag: `--data`, `image` and `sind exec` reach the same, and the docs say so instead
+(cluster-config.md, Trust).
+
 ### Cluster and Realm Names
 
 Cluster and realm names become part of Docker resource names, of DNS names (`<node>.<cluster>.<realm>.sind`) and of state paths (`$XDG_STATE_HOME/sind/<realm>/`), so each must be one DNS label as RFC 1123 defines it:

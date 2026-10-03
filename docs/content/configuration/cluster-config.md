@@ -296,6 +296,17 @@ Fragment validation:
 
 See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
 
+## Trust
+
+Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as trusted as a script run with your Docker access, which amounts to root on the Docker host:
+
+- `image` runs any image, whose init and services run as root.
+- `storage.dataStorage.hostPath` bind-mounts any host directory read-write into every node, `/` included.
+- `capAdd`, `devices` and `securityOpt` give nodes host privileges, such as `SYS_ADMIN`, raw block devices or `apparmor=unconfined`.
+- The `slurm` sections set programs Slurm runs as root, such as `Prolog` or `HealthCheckProgram`.
+
+Use only configs you would run as a script: not a config from an untrusted pull request in a privileged CI workflow, and not one an agent wrote that you have not read.
+
 ## Validation rules
 
 - `kind` must be `"Cluster"`

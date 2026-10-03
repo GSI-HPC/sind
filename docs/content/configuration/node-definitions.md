@@ -160,6 +160,8 @@ nodes:
 
 Capability names follow Docker convention (without the `CAP_` prefix). Device strings use Docker's format: `/dev/fuse` or `/dev/sda:/dev/xvda:rwm`.
 
+These fields can give a node root access to the host, so a config that sets them is only as safe as its author; see [Trust]({{< relref "/configuration/cluster-config#trust" >}}).
+
 When set in the `defaults` section, security fields apply to all nodes. Per-node values merge with (not replace) defaults:
 
 ```yaml
