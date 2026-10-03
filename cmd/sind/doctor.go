@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/termtext"
@@ -54,6 +55,24 @@ const unifiedRemediation = `Boot with the unified cgroup hierarchy: add
 systemd.unified_cgroup_hierarchy=1 to the kernel command line (for GRUB,
 GRUB_CMDLINE_LINUX in /etc/default/grub), regenerate the boot loader
 configuration and reboot.`
+
+// inotifyRemediation is shown when fs.inotify.max_user_instances is below
+// doctor.MinInotifyInstances.
+const inotifyRemediation = `Raise the limit now:
+
+sudo sysctl fs.inotify.max_user_instances=1024
+
+Keep it across reboots:
+
+echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf`
+
+// remoteDockerHost reports whether DOCKER_HOST names a daemon that is not
+// reached through a local socket, whose host limits this machine's /proc
+// does not show.
+func remoteDockerHost() bool {
+	host := os.Getenv("DOCKER_HOST")
+	return host != "" && !strings.HasPrefix(host, "unix://")
+}
 
 // rootlessRemediation is shown for a Docker daemon in rootless mode.
 const rootlessRemediation = `sind starts its nodes with --security-opt writable-cgroups=true, which
@@ -198,6 +217,19 @@ func runDoctor(cmd *cobra.Command) error {
 	default:
 		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkOK,
 			Detail: fmt.Sprintf("nsdelegate enabled (%s)", mountPath)})
+	}
+
+	// Advisory: enough inotify instances for large clusters. The limit is
+	// the Docker host's, so the check is left out for a remote daemon.
+	if n, ok := doctor.InotifyInstances(fs); ok && !remoteDockerHost() {
+		inotify := doctorCheck{Name: "inotify", Status: checkOK,
+			Detail: fmt.Sprintf("max_user_instances %d (>= %d)", n, doctor.MinInotifyInstances)}
+		if n < doctor.MinInotifyInstances {
+			inotify = doctorCheck{Name: "inotify", Status: checkWarning,
+				Detail:      fmt.Sprintf("max_user_instances %d (clusters of 10 or more nodes need %d; optional)", n, doctor.MinInotifyInstances),
+				Remediation: inotifyRemediation}
+		}
+		checks = append(checks, inotify)
 	}
 
 	// Advisory: host DNS resolution via systemd-resolved.

@@ -89,6 +89,27 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
+// MinInotifyInstances is the fs.inotify.max_user_instances that clusters
+// of 10 or more nodes need. The systemd and journald of every node take
+// inotify instances of the host's root user, and the kernel's default of
+// 128 runs out first.
+const MinInotifyInstances = 1024
+
+// inotifyInstancesPath is where the kernel exposes
+// fs.inotify.max_user_instances.
+const inotifyInstancesPath = "/proc/sys/fs/inotify/max_user_instances"
+
+// InotifyInstances reads fs.inotify.max_user_instances from fs. ok is false
+// when it cannot be read or parsed.
+func InotifyInstances(fs afero.Fs) (n int, ok bool) {
+	data, err := afero.ReadFile(fs, inotifyInstancesPath)
+	if err != nil {
+		return 0, false
+	}
+	n, err = strconv.Atoi(strings.TrimSpace(string(data)))
+	return n, err == nil
+}
+
 // CgroupRoot is where the unified cgroup2 hierarchy that sind needs is
 // mounted. A systemd host in hybrid mode mounts cgroup2 elsewhere
 // (/sys/fs/cgroup/unified) and runs containers on cgroup v1.

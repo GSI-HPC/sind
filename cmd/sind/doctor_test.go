@@ -412,6 +412,51 @@ func TestDoctorCommand_CgroupHybrid(t *testing.T) {
 	assert.Contains(t, out, "✗ cgroupv2: hybrid hierarchy: cgroup2 is mounted at /sys/fs/cgroup/unified, not /sys/fs/cgroup (sind requires cgroupv2)\n\n"+unifiedRemediation+"\n\n")
 }
 
+// TestDoctorCommand_Inotify checks the advisory inotify check: a warning
+// that does not fail doctor below the limit, left out for a remote daemon.
+func TestDoctorCommand_Inotify(t *testing.T) {
+	run := func(t *testing.T, limit string) (string, error) {
+		t.Helper()
+		var m mock.Executor
+		m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
+		ctx := hermeticDoctorCtx(t, &m, nil)
+		require.NoError(t, afero.WriteFile(fsFrom(ctx), "/proc/sys/fs/inotify/max_user_instances", []byte(limit), 0o644))
+		return executeDoctor(ctx, t)
+	}
+
+	t.Setenv("DOCKER_HOST", "")
+	out, err := run(t, "128\n")
+	require.NoError(t, err, "the inotify check is advisory")
+	assert.Contains(t, out, "✗ inotify: max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)\n\n"+inotifyRemediation+"\n\n")
+
+	t.Setenv("DOCKER_HOST", "unix:///run/docker.sock")
+	out, err = run(t, "8192\n")
+	require.NoError(t, err)
+	assert.Contains(t, out, "✓ inotify: max_user_instances 8192 (>= 1024)\n")
+
+	t.Setenv("DOCKER_HOST", "tcp://build-host:2376")
+	out, err = run(t, "128\n")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "inotify")
+}
+
+func TestDoctorCommand_InotifyJSON(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "")
+	var m mock.Executor
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
+	ctx := hermeticDoctorCtx(t, &m, nil)
+	require.NoError(t, afero.WriteFile(fsFrom(ctx), "/proc/sys/fs/inotify/max_user_instances", []byte("128\n"), 0o644))
+
+	out, err := executeDoctor(ctx, t, "-o", "json")
+	require.NoError(t, err)
+	var checks []doctorCheck
+	require.NoError(t, json.Unmarshal([]byte(out), &checks))
+	require.Len(t, checks, 4)
+	assert.Equal(t, doctorCheck{Name: "inotify", Status: checkWarning,
+		Detail:      "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)",
+		Remediation: inotifyRemediation}, checks[3])
+}
+
 // TestDoctorCommand_DaemonCgroupV1 checks that the cgroup version comes
 // from the daemon: a local mount that passes does not make up for a daemon
 // that runs containers on cgroup v1.

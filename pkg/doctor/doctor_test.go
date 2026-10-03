@@ -138,6 +138,21 @@ func TestParseCgroupInfo_Empty(t *testing.T) {
 	assert.False(t, hasNsd)
 }
 
+func TestInotifyInstances(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	_, ok := InotifyInstances(fs)
+	assert.False(t, ok, "missing file")
+
+	require.NoError(t, afero.WriteFile(fs, "/proc/sys/fs/inotify/max_user_instances", []byte("128\n"), 0o644))
+	n, ok := InotifyInstances(fs)
+	assert.True(t, ok)
+	assert.Equal(t, 128, n)
+
+	require.NoError(t, afero.WriteFile(fs, "/proc/sys/fs/inotify/max_user_instances", []byte("lots\n"), 0o644))
+	_, ok = InotifyInstances(fs)
+	assert.False(t, ok, "not a number")
+}
+
 // exitError returns the error of a docker command that exited 1 after
 // writing stderr.
 func exitError(t *testing.T, stderr string) error {
