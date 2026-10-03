@@ -501,7 +501,6 @@ func TestGetMesh_RejectsArgs(t *testing.T) {
 func TestGetMesh_Output(t *testing.T) {
 	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
 	m.AddResult(inspectJSON, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "mesh")
@@ -518,7 +517,6 @@ func TestGetMesh_Output(t *testing.T) {
 func TestGetMesh_JSON(t *testing.T) {
 	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
 	m.AddResult(inspectJSON, "", nil)
 
 	stdout, _, err := executeWithMock(&m, "get", "mesh", "--output", "json")
@@ -534,7 +532,8 @@ func TestGetMesh_JSON(t *testing.T) {
 
 func TestGetMesh_Error(t *testing.T) {
 	var m mock.Executor
-	// ContainerExists returns a non-exit-code-1 error (daemon unreachable).
+	// The DNS container inspect fails with a non-exit-code-1 error (daemon
+	// unreachable).
 	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
 
 	_, _, err := executeWithMock(&m, "get", "mesh")
@@ -803,6 +802,14 @@ func TestGetNode_Output(t *testing.T) {
 	assert.Contains(t, stdout, "slurmctld")
 	assert.Contains(t, stdout, "\u2713")
 	assert.NotContains(t, stdout, "HA")
+
+	var inspects int
+	for _, call := range m.Calls {
+		if call.Args[0] == "inspect" && call.Args[1] == "sind-dev-controller" {
+			inspects++
+		}
+	}
+	assert.Equal(t, 1, inspects, "the node container is inspected once")
 }
 
 func TestGetNode_JSON(t *testing.T) {

@@ -36,20 +36,18 @@ type NodeHealth struct {
 	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
-// GetNodeHealth checks the health of a single node container.
+// GetNodeHealth checks the health of a single node container, from its
+// docker inspect result, which the caller already holds.
 // If the container is not running, remaining checks are skipped and
 // default to false. The role determines which Slurm service is checked;
 // unmanaged nodes (see IsManaged) get none. clusterName is used to select
 // the cluster network IP.
-func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
-	info, err := client.InspectContainer(ctx, docker.ContainerName(containerName))
-	if err != nil {
-		return nil, fmt.Errorf("inspecting container: %w", err)
-	}
+func GetNodeHealth(ctx context.Context, client *docker.Client, info *docker.ContainerInfo, role config.Role, realm, clusterName string) (*NodeHealth, error) {
 	health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
 	// sind cannot tell which controller of an unmanaged pair is in control.
 	if role == config.RoleController && IsManaged(info.Labels) {
-		shortName := strings.TrimPrefix(containerName, ContainerPrefix(realm, clusterName))
+		shortName := strings.TrimPrefix(string(info.Name), ContainerPrefix(realm, clusterName))
+		var err error
 		if health.HA, err = nodeHA(ctx, client, realm, clusterName, shortName, health); err != nil {
 			return nil, err
 		}

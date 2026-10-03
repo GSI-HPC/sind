@@ -394,11 +394,10 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	dnsName := m.DNSContainerName()
 	netName := m.NetworkName()
 
-	if err := m.requireMeshContainer(ctx, dnsName); err != nil {
-		return nil, err
-	}
-
 	dnsInfo, err := m.Docker.InspectContainer(ctx, dnsName)
+	if docker.IsNotFound(err) {
+		return nil, fmt.Errorf("no mesh found for realm %q", m.Realm)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("inspecting DNS container: %w", err)
 	}

@@ -263,8 +263,8 @@ func TestGetNodeHealth_UnmanagedControllerHasNoHA(t *testing.T) {
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 
-	health, err := GetNodeHealth(t.Context(), docker.NewClient(&m), "sind-dev-controller-backup",
-		config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, docker.NewClient(&m), "sind-dev-controller-backup",
+		config.RoleController)
 
 	require.NoError(t, err)
 	assert.Nil(t, health.HA)
@@ -329,7 +329,7 @@ func TestGetNodeHealth_ControllerHA(t *testing.T) {
 			m.OnCall = nodeHAOnCall(t, tt.states, tt.inspectErr, fresh)
 			c := docker.NewClient(&m)
 
-			health, err := GetNodeHealth(t.Context(), c, "sind-dev-"+tt.node, config.RoleController, mesh.DefaultRealm, "dev")
+			health, err := inspectedNodeHealth(t, c, "sind-dev-"+tt.node, config.RoleController)
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr)

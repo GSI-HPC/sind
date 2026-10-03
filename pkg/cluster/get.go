@@ -287,14 +287,28 @@ func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*N
 	if len(entries) == 0 {
 		return []*NetworkSummary{}, nil
 	}
+	// One inspect for all networks. IPAM details are best-effort: a
+	// network that cannot be inspected, e.g. one removed since it was
+	// listed, is reported without them.
+	names := make([]docker.NetworkName, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name
+	}
+	infos, err := client.InspectNetworks(ctx, names...)
+	if err != nil {
+		sindlog.From(ctx).DebugContext(ctx, "inspecting networks", "err", err)
+	}
+	infoByName := make(map[docker.NetworkName]*docker.NetworkInfo, len(infos))
+	for _, info := range infos {
+		infoByName[info.Name] = info
+	}
 	result := make([]*NetworkSummary, 0, len(entries))
 	for _, e := range entries {
 		ns := &NetworkSummary{
 			Name:   string(e.Name),
 			Driver: e.Driver,
 		}
-		info, err := client.InspectNetwork(ctx, e.Name)
-		if err == nil {
+		if info, ok := infoByName[e.Name]; ok {
 			ns.Subnet = info.Subnet
 			ns.Gateway = info.Gateway
 		}

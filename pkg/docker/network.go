@@ -75,23 +75,50 @@ type networkInspectResult struct {
 
 // InspectNetwork returns detailed information about a network.
 func (c *Client) InspectNetwork(ctx context.Context, name NetworkName) (*NetworkInfo, error) {
-	stdout, _, err := c.run(ctx, "network", "inspect", string(name))
+	infos, err := c.InspectNetworks(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	var results []networkInspectResult
-	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
-		return nil, fmt.Errorf("parsing network inspect output: %w", err)
-	}
-	if len(results) == 0 {
+	if len(infos) == 0 {
 		return nil, fmt.Errorf("network inspect returned no results for %q", name)
 	}
-	info := &NetworkInfo{ID: results[0].ID, Name: NetworkName(results[0].Name), Driver: results[0].Driver}
-	if len(results[0].IPAM.Config) > 0 {
-		info.Subnet = results[0].IPAM.Config[0].Subnet
-		info.Gateway = results[0].IPAM.Config[0].Gateway
+	return infos[0], nil
+}
+
+// InspectNetworks returns details for the given networks in a single docker
+// network inspect invocation. Returns nil when names is empty.
+//
+// When some of the networks cannot be inspected, e.g. one was removed after
+// it was listed, docker exits non-zero but still prints the others.
+// InspectNetworks then returns those together with the error, so callers
+// that can do without the missing ones may use them.
+func (c *Client) InspectNetworks(ctx context.Context, names ...NetworkName) ([]*NetworkInfo, error) {
+	if len(names) == 0 {
+		return nil, nil
 	}
-	return info, nil
+	args := make([]string, 0, 2+len(names))
+	args = append(args, "network", "inspect")
+	for _, n := range names {
+		args = append(args, string(n))
+	}
+	stdout, _, runErr := c.run(ctx, args...)
+	var results []networkInspectResult
+	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
+		if runErr != nil {
+			return nil, runErr
+		}
+		return nil, fmt.Errorf("parsing network inspect output: %w", err)
+	}
+	infos := make([]*NetworkInfo, 0, len(results))
+	for _, r := range results {
+		info := &NetworkInfo{ID: r.ID, Name: NetworkName(r.Name), Driver: r.Driver}
+		if len(r.IPAM.Config) > 0 {
+			info.Subnet = r.IPAM.Config[0].Subnet
+			info.Gateway = r.IPAM.Config[0].Gateway
+		}
+		infos = append(infos, info)
+	}
+	return infos, runErr
 }
 
 // NetworkListEntry holds summary information from docker network ls.

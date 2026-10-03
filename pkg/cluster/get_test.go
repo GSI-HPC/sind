@@ -5,6 +5,7 @@ package cluster
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -659,33 +660,73 @@ type networkEntry struct {
 	Driver string `json:"Driver"`
 }
 
-func networkInspectJSON(name, subnet, gateway string) string {
-	return fmt.Sprintf(`[{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gateway)
+// networkInspectEntry is one network of docker network inspect output.
+func networkInspectEntry(name, subnet, gateway string) string {
+	return fmt.Sprintf(`{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}`, name, subnet, gateway)
 }
 
 func TestGetNetworks(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
+		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
 		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
 		networkEntry{Name: "sind-mesh", Driver: "bridge"},
-		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
 	), "", nil)
-	m.AddResult(networkInspectJSON("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil)
-	m.AddResult(networkInspectJSON("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)
-	m.AddResult(networkInspectJSON("sind-prod-net", "172.20.0.0/16", "172.20.0.1"), "", nil)
+	m.AddResult("["+strings.Join([]string{
+		networkInspectEntry("sind-prod-net", "172.20.0.0/16", "172.20.0.1"),
+		networkInspectEntry("sind-dev-net", "172.18.0.0/16", "172.18.0.1"),
+		networkInspectEntry("sind-mesh", "172.19.0.0/16", "172.19.0.1"),
+	}, ",")+"]", "", nil)
 	c := docker.NewClient(&m)
 
 	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
-	require.Len(t, networks, 3)
 	// Sorted by name.
-	assert.Equal(t, "sind-dev-net", networks[0].Name)
-	assert.Equal(t, "bridge", networks[0].Driver)
-	assert.Equal(t, "172.18.0.0/16", networks[0].Subnet)
-	assert.Equal(t, "172.18.0.1", networks[0].Gateway)
-	assert.Equal(t, "sind-mesh", networks[1].Name)
-	assert.Equal(t, "sind-prod-net", networks[2].Name)
+	assert.Equal(t, []*NetworkSummary{
+		{Name: "sind-dev-net", Driver: "bridge", Subnet: "172.18.0.0/16", Gateway: "172.18.0.1"},
+		{Name: "sind-mesh", Driver: "bridge", Subnet: "172.19.0.0/16", Gateway: "172.19.0.1"},
+		{Name: "sind-prod-net", Driver: "bridge", Subnet: "172.20.0.0/16", Gateway: "172.20.0.1"},
+	}, networks)
+
+	// One inspect for all networks.
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"network", "inspect", "sind-prod-net", "sind-dev-net", "sind-mesh"}, m.Calls[1].Args)
+}
+
+// TestGetNetworks_InspectPartial covers a network removed between listing
+// and inspecting: it is still listed, without IPAM details.
+func TestGetNetworks_InspectPartial(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
+		networkEntry{Name: "sind-mesh", Driver: "bridge"},
+	), "", nil)
+	m.AddResult("["+networkInspectEntry("sind-mesh", "172.19.0.0/16", "172.19.0.1")+"]\n",
+		testutil.NoSuchNetwork("sind-dev-net"), testutil.ExitCode1(t))
+	c := docker.NewClient(&m)
+
+	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []*NetworkSummary{
+		{Name: "sind-dev-net", Driver: "bridge"},
+		{Name: "sind-mesh", Driver: "bridge", Subnet: "172.19.0.0/16", Gateway: "172.19.0.1"},
+	}, networks)
+}
+
+// TestGetNetworks_InspectError checks that IPAM details are best-effort:
+// a failed inspect leaves them empty instead of failing the listing.
+func TestGetNetworks_InspectError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(networkEntry{Name: "sind-dev-net", Driver: "bridge"}), "", nil)
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []*NetworkSummary{{Name: "sind-dev-net", Driver: "bridge"}}, networks)
 }
 
 func TestGetNetworks_Empty(t *testing.T) {

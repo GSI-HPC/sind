@@ -83,6 +83,39 @@ func TestNetworkLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+// TestInspectNetworksLifecycle checks against docker that a batched inspect
+// naming a missing network fails as not found but still returns the
+// networks that exist.
+func TestInspectNetworksLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := itNetworkName("inspect")
+	missing := itNetworkName("inspect-missing")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("net-id\n", "", nil) // create
+		rec.AddResult(`[{"Name":"`+string(name)+`","Driver":"bridge","IPAM":{"Config":[{"Subnet":"172.30.0.0/16","Gateway":"172.30.0.1"}]}}]`+"\n",
+			"Error response from daemon: network "+string(missing)+" not found\n",
+			&exec.ExitError{ProcessState: exitCode1(t)}) // inspect
+		rec.AddResult(string(name)+"\n", "", nil) // remove (cleanup)
+	}
+	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
+
+	_, err := c.CreateNetwork(ctx, name, nil)
+	require.NoError(t, err)
+
+	infos, err := c.InspectNetworks(ctx, name, missing)
+	require.Error(t, err)
+	assert.True(t, IsNotFound(err), "missing network reported as not found: %v", err)
+	require.Len(t, infos, 1)
+	assert.Equal(t, name, infos[0].Name)
+	assert.Equal(t, "bridge", infos[0].Driver)
+	assert.NotEmpty(t, infos[0].Subnet)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := newTestClient(t)
@@ -374,6 +407,60 @@ func TestInspectNetwork_InvalidJSON(t *testing.T) {
 	_, err := c.InspectNetwork(t.Context(), testNetworkName)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing")
+}
+
+// --- InspectNetworks ---
+
+func TestInspectNetworks(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Name":"sind-dev-net","Driver":"bridge","IPAM":{"Config":[{"Subnet":"172.18.0.0/16","Gateway":"172.18.0.1"}]}},`+
+		`{"Name":"sind-mesh","Driver":"bridge","IPAM":{"Config":[]}}]`, "", nil)
+	c := NewClient(&m)
+
+	infos, err := c.InspectNetworks(t.Context(), "sind-dev-net", "sind-mesh")
+	require.NoError(t, err)
+	require.Len(t, infos, 2)
+	assert.Equal(t, &NetworkInfo{Name: "sind-dev-net", Driver: "bridge", Subnet: "172.18.0.0/16", Gateway: "172.18.0.1"}, infos[0])
+	assert.Equal(t, &NetworkInfo{Name: "sind-mesh", Driver: "bridge"}, infos[1])
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "inspect", "sind-dev-net", "sind-mesh"}, m.Calls[0].Args)
+}
+
+func TestInspectNetworks_NoNames(t *testing.T) {
+	var m mock.Executor
+	c := NewClient(&m)
+
+	infos, err := c.InspectNetworks(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, infos)
+	assert.Empty(t, m.Calls)
+}
+
+// TestInspectNetworks_Partial covers a network removed between listing and
+// inspecting: docker exits 1 but still prints the networks it found.
+func TestInspectNetworks_Partial(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Name":"sind-mesh","Driver":"bridge","IPAM":{"Config":[]}}]`+"\n",
+		"Error response from daemon: network sind-dev-net not found\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	infos, err := c.InspectNetworks(t.Context(), "sind-dev-net", "sind-mesh")
+	require.Error(t, err)
+	assert.True(t, IsNotFound(err))
+	require.Len(t, infos, 1)
+	assert.Equal(t, NetworkName("sind-mesh"), infos[0].Name)
+}
+
+func TestInspectNetworks_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Cannot connect to the Docker daemon\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	infos, err := c.InspectNetworks(t.Context(), "sind-dev-net", "sind-mesh")
+	require.Error(t, err)
+	assert.Nil(t, infos)
 }
 
 const networkLsJSON = `{"Name":"sind-dev-net","Driver":"bridge","ID":"abc123","Scope":"local"}

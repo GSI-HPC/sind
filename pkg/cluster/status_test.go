@@ -99,12 +99,21 @@ func fusedIsActiveResponse(t *testing.T, args []string, failing ...string) mock.
 	return res
 }
 
+// inspectedNodeHealth inspects the container, as sind get node does, and
+// runs GetNodeHealth on the result for cluster dev in the default realm.
+func inspectedNodeHealth(t *testing.T, c *docker.Client, containerName string, role config.Role) (*NodeHealth, error) {
+	t.Helper()
+	info, err := c.InspectContainer(t.Context(), docker.ContainerName(containerName))
+	require.NoError(t, err)
+	return GetNodeHealth(t.Context(), c, info, role, mesh.DefaultRealm, "dev")
+}
+
 func TestGetNodeHealth_Controller(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = healthyOnCall("sind-dev-controller", "172.18.0.2")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -120,7 +129,7 @@ func TestGetNodeHealth_Compute(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-worker-0", "172.18.0.3")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -136,7 +145,7 @@ func TestGetNodeHealth_Submitter(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-submitter", "172.18.0.4")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-submitter", config.RoleSubmitter, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-submitter", config.RoleSubmitter)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -159,7 +168,7 @@ func TestGetNodeHealth_UnmanagedWorker(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
 
 	require.NoError(t, err)
 	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services,
@@ -173,7 +182,7 @@ func TestGetNodeHealth_DB(t *testing.T) {
 	m.OnCall = healthyOnCall("sind-dev-db", "172.18.0.5")
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-db", config.RoleDB, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-db", config.RoleDB)
 
 	require.NoError(t, err)
 	assert.Equal(t, ServiceHealth{
@@ -196,7 +205,7 @@ func TestGetNodeHealth_UnmanagedDB(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-db", config.RoleDB, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-db", config.RoleDB)
 
 	require.NoError(t, err)
 	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, health.Services,
@@ -214,7 +223,7 @@ func TestGetNodeHealth_UnmanagedNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
 
 	require.NoError(t, err)
 	assert.Equal(t, ServiceHealth{probe.ServiceMunge: false, probe.ServiceSSHD: false}, health.Services)
@@ -230,24 +239,13 @@ func TestGetNodeHealth_ContainerNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateExited, health.State)
 	assert.False(t, health.Services[probe.ServiceMunge])
 	assert.False(t, health.Services[probe.ServiceSSHD])
 	assert.False(t, health.Services[probe.ServiceSlurmctld])
-}
-
-func TestGetNodeHealth_InspectError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	_, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting container")
 }
 
 func TestGetNodeHealth_ServiceFailing(t *testing.T) {
@@ -261,7 +259,7 @@ func TestGetNodeHealth_ServiceFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -282,7 +280,7 @@ func TestGetNodeHealth_SlurmctldFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -301,7 +299,7 @@ func TestGetNodeHealth_ComputeNotRunning(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateExited, health.State)
@@ -322,7 +320,7 @@ func TestGetNodeHealth_MungeFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -342,7 +340,7 @@ func TestGetNodeHealth_SSHDFailing(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -364,7 +362,7 @@ func TestGetNodeHealth_ProbeError(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-worker-0", config.RoleWorker, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-worker-0", config.RoleWorker)
 
 	require.NoError(t, err)
 	assert.Equal(t, docker.StateRunning, health.State)
@@ -390,7 +388,7 @@ func TestGetNodeHealth_MultipleIPs(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	health, err := GetNodeHealth(t.Context(), c, "sind-dev-controller", config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, c, "sind-dev-controller", config.RoleController)
 
 	require.NoError(t, err)
 	assert.Equal(t, "172.18.0.2", health.IP)

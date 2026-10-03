@@ -203,7 +203,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	}
 
 	role := config.Role(info.Labels[cluster.LabelRole])
-	health, err := cluster.GetNodeHealth(cmd.Context(), client, containerName, role, realm, clusterName)
+	health, err := cluster.GetNodeHealth(cmd.Context(), client, info, role, realm, clusterName)
 	if err != nil {
 		return err
 	}
