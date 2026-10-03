@@ -71,7 +71,7 @@ func TestTaskAffinity(t *testing.T) {
 	assert.False(t, TaskAffinity(config.Section{Content: "TaskPluginParam=autobind=cores\n"}))
 }
 
-// confFiles serves the files of a config volume to ReadTaskAffinity.
+// confFiles serves the files of a config volume to ReadSlurmConf.
 func confFiles(files map[string]string) func(string) (string, error) {
 	return func(path string) (string, error) {
 		content, ok := files[path]
@@ -82,7 +82,22 @@ func confFiles(files map[string]string) func(string) (string, error) {
 	}
 }
 
-func TestReadTaskAffinity(t *testing.T) {
+func TestReadSlurmConf(t *testing.T) {
+	// Each include line gives way to the file it names: a relative path,
+	// %c and a file without a final newline. sind-nodes.conf and globs are
+	// left out.
+	conf, err := ReadSlurmConf(confFiles(map[string]string{
+		SlurmConfPath:            "ClusterName=Dev\ninclude site.conf # comment\nInclude /etc/slurm/*.conf\ninclude %c.conf\ninclude /etc/slurm/sind-nodes.conf\n",
+		ConfDir + "/site.conf":   "MpiDefault=none",
+		ConfDir + "/dev.conf":    "include /etc/slurm/nested.conf\nTaskPlugin=task/cgroup\n",
+		ConfDir + "/nested.conf": "MaxJobCount=10\n",
+		NodesConfPath:            "PartitionName=all Nodes=worker-0 Default=YES\n",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, config.Section{Content: "ClusterName=Dev\nMpiDefault=none\nMaxJobCount=10\nTaskPlugin=task/cgroup\n"}, conf)
+}
+
+func TestEnablesTaskAffinity(t *testing.T) {
 	// What sind generates, with and without slurm.main's TaskPlugin.
 	for _, tt := range []struct {
 		main config.Section
@@ -96,37 +111,32 @@ func TestReadTaskAffinity(t *testing.T) {
 		for name, content := range tt.main.Fragments {
 			files[ConfDir+"/slurm.conf.d/"+name+".conf"] = content
 		}
-		got, err := ReadTaskAffinity(confFiles(files))
+		conf, err := ReadSlurmConf(confFiles(files))
 		require.NoError(t, err)
-		assert.Equal(t, tt.want, got, tt.main)
+		assert.Equal(t, tt.want, EnablesTaskAffinity(conf), tt.main)
 		assert.Equal(t, tt.want, TaskAffinity(tt.main), tt.main)
 	}
 
-	// Edited by hand: a relative include, %c, a glob, and a later value
-	// that wins over an included one.
-	got, err := ReadTaskAffinity(confFiles(map[string]string{
-		SlurmConfPath:          "ClusterName=Dev\ninclude site.conf # comment\nInclude /etc/slurm/*.conf\ninclude %c.conf\n",
+	// Edited by hand: a later value wins over an included one.
+	conf, err := ReadSlurmConf(confFiles(map[string]string{
+		SlurmConfPath:          "include site.conf\nTaskPlugin=affinity,cgroup\n",
 		ConfDir + "/site.conf": "TaskPlugin=task/cgroup\n",
-		ConfDir + "/dev.conf":  "TaskPlugin=task/affinity,task/cgroup\n",
-		NodesConfPath:          "TaskPlugin=ignored\n",
 	}))
 	require.NoError(t, err)
-	assert.True(t, got)
+	assert.True(t, EnablesTaskAffinity(conf))
 
 	// Without a TaskPlugin there is no task plugin.
-	got, err = ReadTaskAffinity(confFiles(map[string]string{SlurmConfPath: "ClusterName=dev\ninclude /etc/slurm/sind-nodes.conf\n"}))
-	require.NoError(t, err)
-	assert.False(t, got)
+	assert.False(t, EnablesTaskAffinity(config.Section{Content: "ClusterName=dev\n"}))
 }
 
-func TestReadTaskAffinity_Errors(t *testing.T) {
-	_, err := ReadTaskAffinity(confFiles(nil))
+func TestReadSlurmConf_Errors(t *testing.T) {
+	_, err := ReadSlurmConf(confFiles(nil))
 	require.EqualError(t, err, "reading /etc/slurm/slurm.conf: cat: /etc/slurm/slurm.conf: No such file or directory")
 
-	_, err = ReadTaskAffinity(confFiles(map[string]string{SlurmConfPath: "include missing.conf\n"}))
+	_, err = ReadSlurmConf(confFiles(map[string]string{SlurmConfPath: "include missing.conf\n"}))
 	require.EqualError(t, err, "reading /etc/slurm/missing.conf: cat: /etc/slurm/missing.conf: No such file or directory")
 
-	_, err = ReadTaskAffinity(confFiles(map[string]string{SlurmConfPath: "include slurm.conf\n"}))
+	_, err = ReadSlurmConf(confFiles(map[string]string{SlurmConfPath: "include slurm.conf\n"}))
 	require.EqualError(t, err, "reading /etc/slurm/slurm.conf: includes nested more than 10 deep")
 }
 

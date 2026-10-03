@@ -149,22 +149,24 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	managed := !opts.Unmanaged
 
 	// Read sind-nodes.conf for managed workers: it has to be there, and
-	// updateNodesConf adds the new nodes to it. See too whether slurm.conf
-	// binds their tasks with task/affinity.
+	// updateNodesConf adds the new nodes to it. Read slurm.conf too: whether
+	// it binds their tasks with task/affinity, and whether it declares a
+	// default partition other than sind's.
 	var nodesConf string
-	taskAffinity := false
+	var slurmConf config.Section
 	if managed {
 		nodesConf, err = readNodesConf(ctx, client, controller)
 		if err != nil {
 			return nil, err
 		}
-		taskAffinity, err = slurm.ReadTaskAffinity(func(path string) (string, error) {
+		slurmConf, err = slurm.ReadSlurmConf(func(path string) (string, error) {
 			return client.ReadFile(ctx, controller.Name, path)
 		})
 		if err != nil {
 			return nil, err
 		}
 	}
+	taskAffinity := slurm.EnablesTaskAffinity(slurmConf)
 
 	// Inherit the data and CVMFS mounts, the users and the identity mode
 	// from the controller. A managed worker gets the users only with
@@ -287,7 +289,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if managed {
 		confUpdated = true
 		g.Go(func() error {
-			if err := updateNodesConf(readyCtx, client, controllerName, nodesConf, nodeConfigs); err != nil {
+			if err := updateNodesConf(readyCtx, client, controllerName, nodesConf, slurmConf, nodeConfigs); err != nil {
 				return err
 			}
 			return enableSlurm(readyCtx, client, realm, opts.ClusterName, nodeConfigs, readinessInterval, watcher)
@@ -430,8 +432,9 @@ func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAdd
 
 // updateNodesConf adds the new node definitions to the sind-nodes.conf
 // content read before (see readNodesConf), writes it back, and
-// reconfigures slurmctld.
-func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, current string, nodeConfigs []RunConfig) error {
+// reconfigures slurmctld. slurmConf, the cluster's slurm.conf, decides
+// whether a new partition line is the default (see slurm.AddNodesToConf).
+func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, current string, slurmConf config.Section, nodeConfigs []RunConfig) error {
 	var entries []slurm.NodeEntry
 	for _, nc := range nodeConfigs {
 		memMB, err := slurm.ParseMemoryMB(nc.Memory)
@@ -444,7 +447,7 @@ func updateNodesConf(ctx context.Context, client *docker.Client, controllerName 
 			MemoryMB: memMB,
 		})
 	}
-	updated := slurm.AddNodesToConf(current, entries)
+	updated := slurm.AddNodesToConf(current, entries, slurmConf)
 
 	return writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
 }

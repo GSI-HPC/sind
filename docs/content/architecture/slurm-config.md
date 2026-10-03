@@ -101,7 +101,7 @@ PartitionName=all Nodes=worker-0,worker-1,worker-2 Default=YES
 
 A worker's Slurm `CPUs` and `RealMemory` are its container's `cpus` and `memory` (in MiB). Nodes with `managed: false` are left out.
 
-Partition `all` holds every managed worker and is the default partition. It sets nothing else, so Slurm's defaults apply: no time limit (`MaxTime=UNLIMITED`, no `DefaultTime`) and `State=UP`. Change them with a `PartitionName=DEFAULT` line in the `main` section, or add partitions of your own there. If `main` declares a default partition of its own (`Default=YES` on a partition other than `DEFAULT`), sind writes `Default=NO` on `all`, so that yours stays the default.
+Partition `all` holds every managed worker and is the default partition. It sets nothing else, so Slurm's defaults apply: no time limit (`MaxTime=UNLIMITED`, no `DefaultTime`) and `State=UP`. Change them with a `PartitionName=DEFAULT` line in the `main` section, or add partitions of your own there. If `main` declares a default partition of its own (`Default=YES` on a partition other than `DEFAULT`), sind writes `Default=NO` on `all`, so that yours stays the default. `sind create worker` checks `slurm.conf` and the files it includes the same way when it writes the partition line again: after `sind delete worker` removed it with the last managed worker, or on a cluster created without managed workers.
 
 - `sind create cluster` generates the file
 - `sind create worker` adds new managed nodes, replacing a definition of the same name, and removes them again when it fails

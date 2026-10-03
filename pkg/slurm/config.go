@@ -132,58 +132,61 @@ func listsTaskAffinity(plugins string) bool {
 }
 
 // maxIncludeDepth bounds the nesting of include directives that
-// ReadTaskAffinity follows, which could otherwise loop.
+// ReadSlurmConf follows, which could otherwise loop.
 const maxIncludeDepth = 10
 
-// ReadTaskAffinity reports whether a cluster's slurm.conf, with the files
-// it includes, enables task/affinity, as slurmd on a worker added now would
-// read it. read returns a file of the config volume by path. Without a
-// TaskPlugin, Slurm runs no task plugin.
-func ReadTaskAffinity(read func(path string) (string, error)) (bool, error) {
-	plugins, _, err := readParameter(read, SlurmConfPath, "TaskPlugin", map[string]string{}, 0)
-	if err != nil {
-		return false, err
+// ReadSlurmConf returns a cluster's slurm.conf as slurmctld and slurmd
+// read it, as a section whose content holds its lines with each include
+// directive replaced by the lines of the file it names. read returns a
+// file of the config volume by path. sind-nodes.conf holds only sind's
+// nodes and partition and is left out, as are include paths with a "*",
+// which Slurm skips.
+func ReadSlurmConf(read func(path string) (string, error)) (config.Section, error) {
+	var b strings.Builder
+	var clusterName string
+	if err := readConfFile(read, SlurmConfPath, &b, &clusterName, 0); err != nil {
+		return config.Section{}, err
 	}
-	return listsTaskAffinity(plugins), nil
+	return config.Section{Content: b.String()}, nil
 }
 
-// readParameter returns the last value the file at path, with the files
-// it includes, gives a parameter, and whether it sets it. vars holds the
-// ClusterName read so far under "%c", which Slurm puts in place of %c in
-// an include path. sind-nodes.conf holds only nodes and the partition and
-// is skipped, as Slurm skips include paths with a "*".
-func readParameter(read func(path string) (string, error), path, key string, vars map[string]string, depth int) (string, bool, error) {
+// readConfFile writes the lines of the file at path to b, each ending in a
+// newline, with the files it includes in place of their include
+// directives (see ReadSlurmConf). clusterName holds the ClusterName read
+// so far, which Slurm puts in place of %c in an include path.
+func readConfFile(read func(path string) (string, error), path string, b *strings.Builder, clusterName *string, depth int) error {
 	if depth > maxIncludeDepth {
-		return "", false, fmt.Errorf("reading %s: includes nested more than %d deep", path, maxIncludeDepth)
+		return fmt.Errorf("reading %s: includes nested more than %d deep", path, maxIncludeDepth)
 	}
 	content, err := read(path)
 	if err != nil {
-		return "", false, fmt.Errorf("reading %s: %w", path, err)
+		return fmt.Errorf("reading %s: %w", path, err)
 	}
-	var value string
-	var found bool
 	for line := range strings.Lines(content) {
-		if inc, ok := includePath(line, vars["%c"]); ok {
+		if inc, ok := includePath(line, *clusterName); ok {
 			if inc == NodesConfPath || strings.Contains(inc, "*") {
 				continue
 			}
-			v, ok, err := readParameter(read, inc, key, vars, depth+1)
-			if err != nil {
-				return "", false, err
-			}
-			if ok {
-				value, found = v, true
+			if err := readConfFile(read, inc, b, clusterName, depth+1); err != nil {
+				return err
 			}
 			continue
 		}
 		if v, ok := config.LineParameter(line, "ClusterName"); ok {
-			vars["%c"] = strings.ToLower(v)
+			*clusterName = strings.ToLower(v)
 		}
-		if v, ok := config.LineParameter(line, key); ok {
-			value, found = v, true
-		}
+		b.WriteString(strings.TrimSuffix(line, "\n") + "\n")
 	}
-	return value, found, nil
+	return nil
+}
+
+// EnablesTaskAffinity reports whether a cluster's slurm.conf, as
+// ReadSlurmConf returns it, enables task/affinity, as slurmd on a worker
+// added now would read it: whether its TaskPlugin lists it. Without a
+// TaskPlugin, Slurm runs no task plugin.
+func EnablesTaskAffinity(conf config.Section) bool {
+	plugins, _ := conf.Parameter("TaskPlugin")
+	return listsTaskAffinity(plugins)
 }
 
 // includePath returns the file an include directive of slurm.conf names,
