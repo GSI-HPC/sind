@@ -70,6 +70,43 @@ func TestVolumeLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+// TestListVolumesNamePrefixLifecycle checks against docker that a name
+// filter matches the volumes whose names start with it, which cluster
+// discovery relies on to find a cluster's volumes with one listing.
+func TestListVolumesNamePrefixLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	prefix := itName("pfx") + "-"
+	config, data := VolumeName(prefix+"config"), VolumeName(prefix+"data")
+
+	if !rec.IsIntegration() {
+		rec.AddResult(string(config)+"\n", "", nil) // create config
+		rec.AddResult(string(data)+"\n", "", nil)   // create data
+		rec.AddResult(`{"Name":"`+string(config)+`","Driver":"local","Labels":""}`+"\n"+
+			`{"Name":"`+string(data)+`","Driver":"local","Labels":""}`+"\n", "", nil) // list
+		rec.AddResult(string(config)+"\n", "", nil) // remove config (cleanup)
+		rec.AddResult(string(data)+"\n", "", nil)   // remove data (cleanup)
+	}
+	t.Cleanup(func() {
+		_ = c.RemoveVolume(context.Background(), config)
+		_ = c.RemoveVolume(context.Background(), data)
+	})
+
+	require.NoError(t, c.CreateVolume(ctx, config, nil))
+	require.NoError(t, c.CreateVolume(ctx, data, nil))
+
+	entries, err := c.ListVolumes(ctx, "name="+prefix)
+	require.NoError(t, err)
+	names := make([]VolumeName, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name)
+	}
+	assert.ElementsMatch(t, []VolumeName{config, data}, names)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestIsVolumeInUse(t *testing.T) {
 	cases := []struct {
 		name string

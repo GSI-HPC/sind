@@ -84,9 +84,26 @@ defaults:
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
+	// ListClusterResources finds the network and the volumes.
+	res, err := ListClusterResources(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.True(t, res.NetworkExists)
+	assert.Equal(t, []docker.VolumeName{
+		VolumeName(realm, clusterName, VolumeConfig),
+		VolumeName(realm, clusterName, VolumeMunge),
+		VolumeName(realm, clusterName, VolumeData),
+	}, res.Volumes)
+
 	// Delete.
 	err = Delete(ctx, c, meshMgr, clusterName)
 	require.NoError(t, err)
+
+	// The network and the volumes are gone too.
+	res, err = ListClusterResources(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.Empty(t, res.Containers)
+	assert.False(t, res.NetworkExists)
+	assert.Empty(t, res.Volumes)
 
 	// Verify gone.
 	clusters, err = GetClusters(ctx, c, realm)

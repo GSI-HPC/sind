@@ -137,8 +137,8 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 		}
 		joined := strings.Join(args, " ")
 
-		// Cleanup: ListContainers for deleteClusterResources
-		if args[0] == "ps" {
+		// Cleanup: ListContainers and ListVolumes for deleteClusterResources
+		if args[0] == "ps" || (args[0] == "volume" && args[1] == "ls") {
 			return mock.Result{Stdout: ""}
 		}
 		// Cleanup: resource removal (best-effort during rollback)

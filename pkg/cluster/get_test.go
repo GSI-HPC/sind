@@ -652,6 +652,7 @@ func TestGetNetworks_Error(t *testing.T) {
 type volumeEntry struct {
 	Name   string `json:"Name"`
 	Driver string `json:"Driver"`
+	Labels string `json:"Labels,omitempty"`
 }
 
 func TestGetVolumes(t *testing.T) {

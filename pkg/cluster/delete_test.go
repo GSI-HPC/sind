@@ -117,45 +117,63 @@ func TestDeleteNetwork_AlreadyGone(t *testing.T) {
 
 func TestDeleteVolumes(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil) // config
-	m.AddResult("", "", nil) // munge
-	m.AddResult("", "", nil) // data
+	m.OnCall = func(_ []string, _ string) mock.Result { return mock.Result{} }
 	c := docker.NewClient(&m)
 
 	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
 	err := DeleteVolumes(t.Context(), c, volumes)
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 3)
-	assert.Equal(t, []string{"volume", "rm", "sind-dev-config"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"volume", "rm", "sind-dev-munge"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"volume", "rm", "sind-dev-data"}, m.Calls[2].Args)
+	// Order is nondeterministic (parallel removal).
+	args := make([][]string, 0, len(m.Calls))
+	for _, call := range m.Calls {
+		args = append(args, call.Args)
+	}
+	assert.ElementsMatch(t, [][]string{
+		{"volume", "rm", "sind-dev-config"},
+		{"volume", "rm", "sind-dev-munge"},
+		{"volume", "rm", "sind-dev-data"},
+	}, args)
 }
 
+// volumeRmOnCall serves docker volume rm with a result per volume name;
+// volumes without one are removed.
+func volumeRmOnCall(results map[string]mock.Result) func([]string, string) mock.Result {
+	return func(args []string, _ string) mock.Result {
+		return results[args[2]]
+	}
+}
+
+// TestDeleteVolumes_Error checks that a failed removal does not stop the
+// others and that every failure is reported.
 func TestDeleteVolumes_Error(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil)                         // config OK
-	m.AddResult("", "", fmt.Errorf("volume in use")) // munge fails
+	m.OnCall = volumeRmOnCall(map[string]mock.Result{
+		"sind-dev-munge": {Err: fmt.Errorf("permission denied")},
+		"sind-dev-data":  {Err: fmt.Errorf("device busy")},
+	})
 	c := docker.NewClient(&m)
 
 	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
 	err := DeleteVolumes(t.Context(), c, volumes)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing volume sind-dev-munge")
+	assert.Equal(t, "removing volume sind-dev-munge: permission denied\nremoving volume sind-dev-data: device busy", err.Error())
+	assert.Len(t, m.Calls, 3, "every volume is attempted")
 }
 
 // TestDeleteVolumes_AlreadyGone covers volumes that were manually removed.
 func TestDeleteVolumes_AlreadyGone(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil)                                                        // config OK
-	m.AddResult("", testutil.NoSuchVolume("sind-dev-munge"), testutil.ExitCode1(t)) // munge already gone
-	m.AddResult("", "", nil)                                                        // data OK
+	m.OnCall = volumeRmOnCall(map[string]mock.Result{
+		"sind-dev-munge": {Stderr: testutil.NoSuchVolume("sind-dev-munge"), Err: testutil.ExitCode1(t)},
+	})
 	c := docker.NewClient(&m)
 
 	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
 	err := DeleteVolumes(t.Context(), c, volumes)
 	require.NoError(t, err)
+	assert.Len(t, m.Calls, 3)
 }
 
 // volumeInUse is what docker writes to stderr, with exit code 1, when a
@@ -615,12 +633,6 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 	if len(opts.containers) > 0 {
 		containerJSON = testutil.NDJSON(opts.containers...)
 	}
-	// Build set of existing volumes for quick lookup.
-	existingVolumes := map[string]bool{}
-	for _, v := range opts.volumes {
-		existingVolumes["sind-"+clusterName+"-"+v] = true
-	}
-
 	// Track which phase we're in based on calls.
 	listClusterDone := false
 
@@ -666,13 +678,13 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 			}
 			return mock.Result{}
 
-		// docker volume inspect (VolumeExists check)
-		case args[0] == "volume" && args[1] == "inspect":
-			volName := args[2]
-			if existingVolumes[volName] {
-				return mock.Result{}
+		// docker volume ls --filter name=sind-<cluster>- (ListClusterResources)
+		case args[0] == "volume" && args[1] == "ls":
+			var entries []string
+			for _, v := range opts.volumes {
+				entries = append(entries, `{"Name":"sind-`+clusterName+`-`+v+`","Driver":"local","Labels":""}`)
 			}
-			return mock.Result{Stderr: "Error: No such volume\n", Err: exitErr}
+			return mock.Result{Stdout: strings.Join(entries, "\n")}
 
 		// docker volume rm (DeleteVolumes)
 		case args[0] == "volume" && args[1] == "rm":

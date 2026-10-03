@@ -4,8 +4,10 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -143,26 +145,32 @@ func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.Netwo
 	return fmt.Errorf("removing network %s: %w", name, err)
 }
 
-// DeleteVolumes removes the given cluster volumes. Each removal retries past
-// the dockerd async-cleanup race that follows `docker rm -f`. A volume that
-// is already gone is logged and treated as success.
+// DeleteVolumes removes the given cluster volumes in parallel. Each removal
+// retries past the dockerd async-cleanup race that follows `docker rm -f`.
+// A volume that is already gone is logged and treated as success. Every
+// volume is attempted; the errors of those that could not be removed are
+// joined in argument order.
 func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
 	log := sindlog.From(ctx)
-	for _, v := range volumes {
-		err := retry.Do(ctx,
-			func() error { return client.RemoveVolume(ctx, v) },
-			docker.IsVolumeInUse,
-			6, 100*time.Millisecond)
-		if err == nil {
-			continue
-		}
-		if docker.IsNotFound(err) {
-			log.WarnContext(ctx, "volume already gone, skipping", "name", string(v))
-			continue
-		}
-		return fmt.Errorf("removing volume %s: %w", v, err)
+	errs := make([]error, len(volumes))
+	var wg sync.WaitGroup
+	for i, v := range volumes {
+		wg.Go(func() {
+			err := retry.Do(ctx,
+				func() error { return client.RemoveVolume(ctx, v) },
+				docker.IsVolumeInUse,
+				6, 100*time.Millisecond)
+			switch {
+			case err == nil:
+			case docker.IsNotFound(err):
+				log.WarnContext(ctx, "volume already gone, skipping", "name", string(v))
+			default:
+				errs[i] = fmt.Errorf("removing volume %s: %w", v, err)
+			}
+		})
 	}
-	return nil
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 // DeregisterMesh removes DNS records and known_hosts entries for all
