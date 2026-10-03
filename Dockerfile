@@ -189,6 +189,10 @@ ADD --checksum=sha256:${SLURM_SHA256} \
 # the job's user and groups from slurmstepd, is built and installed on its
 # own. Its libnss_slurm.so.2 lands in --libdir, /usr/lib64, where glibc
 # looks for NSS modules.
+#
+# Like Slurm's RPM spec, the image ships no static archives and no libtool
+# .la files. The debug sections are stripped from every ELF file except
+# srun, whose debugger symbols (MPIR) parallel debuggers read.
 WORKDIR /tmp
 RUN tar xf slurm.tar.bz2 && \
     cd slurm-${SLURM_VERSION} && \
@@ -198,6 +202,7 @@ RUN tar xf slurm.tar.bz2 && \
         --sysconfdir=/etc/slurm \
         --localstatedir=/var \
         --runstatedir=/run \
+        --disable-static \
         --with-munge \
         --with-pmix \
         --with-jwt \
@@ -208,6 +213,10 @@ RUN tar xf slurm.tar.bz2 && \
     make -j$(nproc) -C contribs/nss_slurm && \
     DESTDIR=/install make install && \
     DESTDIR=/install make -C contribs/nss_slurm install && \
+    find /install -name '*.la' -delete && \
+    find /install -type f ! -name srun \
+        -exec sh -c 'test "$(head -c 4 "$1" | tail -c 3)" = ELF' sh {} \; \
+        -exec strip --strip-debug {} + && \
     mkdir -p /install/etc
 
 # ==============================================================================
