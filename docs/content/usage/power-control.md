@@ -14,13 +14,15 @@ sind power <action> NODES
 
 | Command | Description | Docker operation |
 |---------|-------------|-----------------|
-| `shutdown` | Graceful shutdown | `docker stop` (SIGTERM, then SIGKILL) |
+| `shutdown` | Graceful shutdown | `docker stop` (the image's stop signal, `SIGRTMIN+3` for sind-node, then SIGKILL after 10 s) |
 | `cut` | Hard power off | `docker kill` (immediate SIGKILL) |
 | `on` | Power on | `docker start` |
 | `reboot` | Graceful reboot | `docker stop` + `docker start` |
 | `cycle` | Hard power cycle | `docker kill` + `docker start` |
 | `freeze` | Simulate unresponsive node | `docker pause` (cgroup freezer) |
 | `unfreeze` | Resume frozen node | `docker unpause` |
+
+`docker stop` sends the image's stop signal. The sind-node images set `SIGRTMIN+3`, which makes systemd shut the node down cleanly. A custom image needs the same [stop signal]({{< relref "/container-images/building-images#container-settings" >}}): without it the node gets SIGTERM, which systemd does not treat as a shutdown request, and Docker kills it after 10 seconds.
 
 ## Examples
 

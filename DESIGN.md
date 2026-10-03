@@ -511,13 +511,15 @@ sind power unfreeze NODES               # resume frozen node
 
 | Command | Implementation |
 |---------|----------------|
-| shutdown | `docker stop` (SIGTERM, then SIGKILL) |
+| shutdown | `docker stop` (the image's stop signal, `SIGRTMIN+3` for sind-node, then SIGKILL after 10 s) |
 | cut | `docker kill` (immediate SIGKILL) |
 | on | `docker start` |
 | reboot | `docker stop` + `docker start` |
 | cycle | `docker kill` + `docker start` |
 | freeze | `docker pause` (cgroup freezer) |
 | unfreeze | `docker unpause` |
+
+`docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
 
 Freeze/unfreeze uses Docker's cgroup freezer to suspend all processes. The container remains "running" but is completely unresponsive, simulating a hung or unreachable node.
 
@@ -1408,6 +1410,7 @@ Custom images must provide:
 
 **All roles:**
 - systemd as init at `/sbin/init`, and `/bin/sh`: sind starts each node with its own `/bin/sh` entrypoint, which execs `/sbin/init` (see Container Startup), so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
+- `STOPSIGNAL SIGRTMIN+3`, systemd's shutdown request, so that `sind power shutdown` and `sind power reboot` shut the node down cleanly
 - sshd service (enabled, sind injects authorized_keys at runtime)
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (e.g. `0400 root:root`; Rocky's default `0000` is not). On nodes with `apparmor=unconfined`, the host's `unix-chkpwd` AppArmor profile (e.g. Ubuntu 24.04) denies that capability, and sshd's `pam_unix` account check would refuse root
 - munge service (enabled)
