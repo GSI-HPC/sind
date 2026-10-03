@@ -146,12 +146,15 @@ func TestGenerateSlurmConf_NoTrailingWhitespace(t *testing.T) {
 }
 
 func TestGenerateSlurmConf_MainStringAppend(t *testing.T) {
-	main := config.Section{Content: "SchedulerType=sched/backfill\n"}
+	// The main section comes after the base config and before
+	// sind-nodes.conf, so that its DEFAULT lines apply to sind's nodes and
+	// partition; a missing final newline is added.
+	main := config.Section{Content: "SchedulerType=sched/backfill\nPartitionName=DEFAULT DefaultTime=30"}
 	conf := GenerateSlurmConf("dev", main, ConfOptions{})
 
-	assert.Contains(t, conf, "SchedulerType=sched/backfill\n")
-	// Appended after the base config
-	assert.Contains(t, conf, "include /etc/slurm/sind-nodes.conf")
+	assert.True(t, strings.HasSuffix(conf, "ReturnToService=2\n\n"+
+		"SchedulerType=sched/backfill\nPartitionName=DEFAULT DefaultTime=30\n"+
+		"include /etc/slurm/sind-nodes.conf\n"), conf)
 }
 
 func TestGenerateSlurmConf_MainMapIncludes(t *testing.T) {
@@ -161,8 +164,9 @@ func TestGenerateSlurmConf_MainMapIncludes(t *testing.T) {
 	}}
 	conf := GenerateSlurmConf("dev", main, ConfOptions{})
 
-	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/resources.conf\n")
-	assert.Contains(t, conf, "include /etc/slurm/slurm.conf.d/scheduling.conf\n")
+	assert.True(t, strings.HasSuffix(conf, "\n\ninclude /etc/slurm/slurm.conf.d/resources.conf\n"+
+		"include /etc/slurm/slurm.conf.d/scheduling.conf\n"+
+		"include /etc/slurm/sind-nodes.conf\n"), conf)
 	assert.NotContains(t, conf, "*")
 }
 

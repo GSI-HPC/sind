@@ -38,6 +38,24 @@ func TestLineParameter(t *testing.T) {
 	}
 }
 
+func TestLinePairs(t *testing.T) {
+	assert.Nil(t, LinePairs("# PartitionName=p\n"))
+	assert.Equal(t, [][2]string{{"PartitionName", "p"}, {"Nodes", "worker-[0-1]"}, {"Default", "YES"}, {"AllowGroups", "a b"}},
+		LinePairs(`PartitionName=p Nodes=worker-[0-1]  Default = YES AllowGroups="a b" # MaxTime=1`))
+}
+
+func TestSection_Lines(t *testing.T) {
+	s := Section{Fragments: map[string]string{"b": "B=1\nB=2\n", "a": "A=1"}}
+	var lines []string
+	for line := range s.Lines() {
+		lines = append(lines, line)
+		if line == "B=1\n" {
+			break
+		}
+	}
+	assert.Equal(t, []string{"A=1", "B=1\n"}, lines)
+}
+
 func TestSection_Parameter(t *testing.T) {
 	_, ok := Section{}.Parameter("TaskPlugin")
 	assert.False(t, ok)

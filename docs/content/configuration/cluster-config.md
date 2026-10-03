@@ -302,7 +302,7 @@ Fragment validation:
 - Names must be plain filenames (no path separators)
 - Names and content must not be empty
 
-See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
+`main` goes into `slurm.conf` after sind's parameters and before the `include` of `sind-nodes.conf`, sind's nodes and its default partition `all`. A parameter `main` sets replaces sind's, and `NodeName=DEFAULT` and `PartitionName=DEFAULT` lines there apply to sind's nodes and partition, e.g. `PartitionName=DEFAULT DefaultTime=00:30:00` for a default time limit. See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
 
 ## Trust
 

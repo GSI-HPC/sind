@@ -182,6 +182,8 @@ slurm:
     MaxNodeCount=10
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
+    PartitionName=DEFAULT DefaultTime=00:30:00
+    PartitionName=debug Nodes=worker-0 Default=YES MaxTime=01:00:00
   cgroup: |
     ConstrainCores=yes
 `, clusterName, img)))
@@ -204,6 +206,18 @@ slurm:
 	assert.Contains(t, out, "ConstrainCores          = yes")
 	// A job without --mem gets 512 MB per CPU, not the whole node.
 	assert.Contains(t, out, fmt.Sprintf("%-23s = %s", "DefMemPerCPU", "512"))
+
+	// sind-nodes.conf comes after slurm.main: its PartitionName=DEFAULT
+	// line applies to partition all, its partition may name sind's nodes,
+	// and its default partition stays the default.
+	out, err = c.Exec(ctx, controller, "scontrol", "show", "partition", "all")
+	require.NoError(t, err)
+	assert.Contains(t, out, "DefaultTime=00:30:00")
+	assert.Contains(t, out, "Default=NO")
+	out, err = c.Exec(ctx, controller, "scontrol", "show", "partition", "debug")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Default=YES")
+	assert.Contains(t, out, "Nodes=worker-0")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

@@ -242,10 +242,16 @@ func GenerateSlurmConf(clusterName string, main config.Section, opts ConfOptions
 		writeDefaults(&b, main, accountingDefaults)
 	}
 	b.WriteString("\n")
-	b.WriteString("include " + NodesConfPath + "\n")
 	appendSection(&b, "slurm", main)
+	b.WriteString(nodesInclude)
 	return b.String()
 }
+
+// nodesInclude ends slurm.conf: sind-nodes.conf comes after the main
+// section, so that its NodeName=DEFAULT and PartitionName=DEFAULT lines
+// apply to sind's nodes and partition. slurmctld reads every node before
+// any partition, so the main section's partitions may name sind's nodes.
+const nodesInclude = "include " + NodesConfPath + "\n"
 
 // GenerateSlurmdbdConf generates slurmdbd.conf for the db node: slurmdbd
 // runs as SlurmUser and stores accounting data in the local MariaDB as
@@ -316,16 +322,20 @@ func GenerateSectionConf(name string, section config.Section) string {
 }
 
 // appendSection appends section content to a config file builder.
-// String form appends content directly; map form appends an include
-// line for each fragment file (Slurm does not support glob includes).
+// String form appends content directly, ending with a newline; map form
+// appends an include line for each fragment file (Slurm does not support
+// glob includes).
 func appendSection(b *strings.Builder, name string, s config.Section) {
 	if s.IsEmpty() {
 		return
 	}
 	if s.IsMap() {
 		appendFragmentIncludes(b, name, s)
-	} else {
-		b.WriteString(s.Content)
+		return
+	}
+	b.WriteString(s.Content)
+	if !strings.HasSuffix(s.Content, "\n") {
+		b.WriteString("\n")
 	}
 }
 

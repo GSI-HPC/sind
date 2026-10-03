@@ -3,6 +3,7 @@
 package config
 
 import (
+	"iter"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,47 +19,69 @@ var keyValuePattern = regexp.MustCompile(`^\s*([[:alnum:]_.]+)\s*[-*+/]?=\s*(?:"
 // the cluster.
 var lineKeys = []string{"DownNodes", "FrontendName", "NodeName", "NodeSet", "PartitionName", "PowerAction"}
 
-// LineParameter returns the value one slurm.conf-style line assigns to a
-// parameter, and whether it assigns it. It reads the line as Slurm does: a
-// "#" starts a comment, a line may hold several key=value pairs, and keys
-// match case-insensitively. Pairs after a key such as NodeName or
-// PartitionName belong to that node or partition, not to the cluster, so
-// they do not count. Of several assignments the last one wins, as in Slurm.
-func LineParameter(line, key string) (string, bool) {
+// LinePairs returns the key=value pairs of one slurm.conf-style line, in
+// order, as Slurm's parser reads them: a "#" starts a comment, a line may
+// hold several pairs, and a value may be quoted.
+func LinePairs(line string) [][2]string {
 	line, _, _ = strings.Cut(line, "#")
-	var value string
-	var found bool
+	var pairs [][2]string
 	for {
 		m := keyValuePattern.FindStringSubmatch(line)
 		if m == nil {
-			return value, found
+			return pairs
 		}
-		if strings.EqualFold(m[1], key) {
-			value, found = m[2]+m[3], true
-		}
-		if slices.ContainsFunc(lineKeys, func(k string) bool { return strings.EqualFold(k, m[1]) }) {
-			return value, found
-		}
+		pairs = append(pairs, [2]string{m[1], m[2] + m[3]})
 		line = line[len(m[0]):]
+	}
+}
+
+// LineParameter returns the value one slurm.conf-style line assigns to a
+// parameter, and whether it assigns it (see LinePairs); keys match
+// case-insensitively, as Slurm matches them. Pairs after a key such as
+// NodeName or PartitionName belong to that node or partition, not to the
+// cluster, so they do not count. Of several assignments the last one
+// wins, as in Slurm.
+func LineParameter(line, key string) (string, bool) {
+	var value string
+	var found bool
+	for _, p := range LinePairs(line) {
+		if strings.EqualFold(p[0], key) {
+			value, found = p[1], true
+		}
+		if slices.ContainsFunc(lineKeys, func(k string) bool { return strings.EqualFold(k, p[0]) }) {
+			break
+		}
+	}
+	return value, found
+}
+
+// Lines returns the lines of the section in the order sind writes them:
+// the string form, then the fragments by name.
+func (s Section) Lines() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		contents := []string{s.Content}
+		for _, name := range s.FragmentNames() {
+			contents = append(contents, s.Fragments[name])
+		}
+		for _, content := range contents {
+			for line := range strings.Lines(content) {
+				if !yield(line) {
+					return
+				}
+			}
+		}
 	}
 }
 
 // Parameter returns the value the section gives a slurm.conf-style
 // parameter, and whether it sets it (see LineParameter). Like Slurm, it
-// takes the last assignment, in the order sind writes the section: the
-// string form, then the fragments by name.
+// takes the last assignment, in the order of Lines.
 func (s Section) Parameter(key string) (string, bool) {
-	contents := []string{s.Content}
-	for _, name := range s.FragmentNames() {
-		contents = append(contents, s.Fragments[name])
-	}
 	var value string
 	var found bool
-	for _, content := range contents {
-		for line := range strings.Lines(content) {
-			if v, ok := LineParameter(line, key); ok {
-				value, found = v, true
-			}
+	for line := range s.Lines() {
+		if v, ok := LineParameter(line, key); ok {
+			value, found = v, true
 		}
 	}
 	return value, found
