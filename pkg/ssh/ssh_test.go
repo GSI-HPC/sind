@@ -9,170 +9,88 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// --- InjectAndCollect Lifecycle ---
+// --- InjectKeyAndCollectHostKey ---
 
-// TestInjectAndCollectLifecycle exercises InjectPublicKey and CollectHostKey
-// in sequence on a container. Integration coverage for these functions is
-// provided by TestClusterCreateDeleteLifecycle (full cluster with sshd).
-func TestInjectAndCollectLifecycle(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)                                                     // mkdir .ssh
-	m.AddResult("", "", nil)                                                     // append authorized_keys
-	m.AddResult("# comment\nlocalhost ssh-ed25519 AAAA-test-hostkey\n", "", nil) // ssh-keyscan
-	c := docker.NewClient(&m)
-	name := docker.ContainerName("sind-dev-controller")
+// Integration coverage is provided by TestClusterCreateDeleteLifecycle (full
+// cluster with sshd).
 
-	// Inject public key.
-	err := InjectPublicKey(t.Context(), c, name, "ssh-ed25519 AAAA-test-pubkey")
-	require.NoError(t, err)
-
-	// Collect host key.
-	hostKey, err := CollectHostKey(t.Context(), c, name)
-	require.NoError(t, err)
-	assert.Equal(t, "ssh-ed25519 AAAA-test-hostkey", hostKey)
-}
-
-// --- InjectPublicKey ---
-
-func TestInjectPublicKey(t *testing.T) {
-	var m mock.Executor
-	// Exec mkdir → success
-	m.AddResult("", "", nil)
-	// AppendFile → success
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	err := InjectPublicKey(t.Context(), c,
-		"sind-dev-controller", "ssh-ed25519 AAAA...\n")
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{
-		"exec", "sind-dev-controller",
-		"mkdir", "-p", "/root/.ssh",
-	}, m.Calls[0].Args)
-	assert.Equal(t, []string{
-		"exec", "-i", "sind-dev-controller",
-		"sh", "-c", "cat >> " + authorizedKeysPath,
-	}, m.Calls[1].Args)
-	assert.Equal(t, "ssh-ed25519 AAAA...\n", m.Calls[1].Stdin)
-}
-
-func TestInjectPublicKey_AddsNewline(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	err := InjectPublicKey(t.Context(), c,
-		"sind-dev-controller", "ssh-ed25519 AAAA...")
-	require.NoError(t, err)
-
-	// Should append newline if missing.
-	assert.Equal(t, "ssh-ed25519 AAAA...\n", m.Calls[1].Stdin)
-}
-
-func TestInjectPublicKey_MkdirError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	err := InjectPublicKey(t.Context(), c,
-		"sind-dev-controller", "ssh-ed25519 AAAA...\n")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating .ssh directory")
-}
-
-func TestInjectPublicKey_WriteError(t *testing.T) {
-	var m mock.Executor
-	// Exec mkdir → success
-	m.AddResult("", "", nil)
-	// AppendFile → error
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	err := InjectPublicKey(t.Context(), c,
-		"sind-dev-controller", "ssh-ed25519 AAAA...\n")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "writing authorized_keys")
-}
-
-// --- CollectHostKey ---
-
-func TestCollectHostKey(t *testing.T) {
+func TestInjectKeyAndCollectHostKey(t *testing.T) {
 	var m mock.Executor
 	// ssh-keyscan output includes comments and the key line
 	m.AddResult("# localhost:22 SSH-2.0-OpenSSH_9.6\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n", "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := CollectHostKey(t.Context(), c, "sind-dev-controller")
+	key, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA-test-pubkey\n")
 	require.NoError(t, err)
 	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest", key)
 
+	// One docker exec, with the key as an argument of the shell.
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{
 		"exec", "sind-dev-controller",
-		"ssh-keyscan", "-t", "ed25519", "localhost",
+		"sh", "-c", `mkdir -p /root/.ssh && printf '%s\n' "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost`,
+		"sh", "ssh-ed25519 AAAA-test-pubkey",
 	}, m.Calls[0].Args)
 }
 
-func TestCollectHostKey_NoKey(t *testing.T) {
+func TestInjectKeyAndCollectHostKey_KeyWithoutNewline(t *testing.T) {
 	var m mock.Executor
-	// ssh-keyscan returns only comments (e.g. sshd not serving ed25519)
-	m.AddResult("# localhost:22 SSH-2.0-OpenSSH_9.6\n", "", nil)
+	m.AddResult("localhost ssh-ed25519 AAAA-hostkey\n", "", nil)
 	c := docker.NewClient(&m)
 
-	_, err := CollectHostKey(t.Context(), c, "sind-dev-controller")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no ed25519 host key found")
+	_, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...")
+	require.NoError(t, err)
+
+	// The script adds the newline.
+	assert.Equal(t, "ssh-ed25519 AAAA...", m.Calls[0].Args[len(m.Calls[0].Args)-1])
 }
 
-func TestCollectHostKey_MalformedLine(t *testing.T) {
+func TestInjectKeyAndCollectHostKey_ExecError(t *testing.T) {
 	var m mock.Executor
-	// Non-comment line with no space (malformed, skipped)
-	m.AddResult("malformed\n", "", nil)
+	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
 
-	_, err := CollectHostKey(t.Context(), c, "sind-dev-controller")
+	_, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...\n")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no ed25519 host key found")
+	assert.Contains(t, err.Error(), "injecting SSH key and scanning host key")
 }
 
-func TestCollectHostKey_MalformedThenValid(t *testing.T) {
+func TestInjectKeyAndCollectHostKey_NoKey(t *testing.T) {
+	for name, stdout := range map[string]string{
+		// ssh-keyscan returns only comments (e.g. sshd not serving ed25519)
+		"only comments": "# localhost:22 SSH-2.0-OpenSSH_9.6\n",
+		// Non-comment line with no space (malformed, skipped)
+		"malformed line": "malformed\n",
+		"empty output":   "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(stdout, "", nil)
+			c := docker.NewClient(&m)
+
+			_, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...\n")
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "no ed25519 host key found")
+		})
+	}
+}
+
+func TestInjectKeyAndCollectHostKey_MalformedThenValid(t *testing.T) {
 	var m mock.Executor
 	// Malformed line skipped, valid key returned from next line
 	m.AddResult("malformed\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n", "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := CollectHostKey(t.Context(), c, "sind-dev-controller")
+	key, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...\n")
 	require.NoError(t, err)
 	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest", key)
-}
-
-func TestCollectHostKey_EmptyOutput(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	_, err := CollectHostKey(t.Context(), c, "sind-dev-controller")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no ed25519 host key found")
-}
-
-func TestCollectHostKey_ExecError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	_, err := CollectHostKey(t.Context(), c, "sind-dev-controller")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "scanning host key")
 }
 
 // --- GenerateSSHConfig ---
@@ -262,15 +180,13 @@ const testExportDir = "/home/user/.sind"
 
 func exportDockerMock() (*mock.Executor, *docker.Client) {
 	var m mock.Executor
-	m.AddResult("PRIVATE-KEY-DATA", "", nil)
-	m.AddResult("known-hosts-data\n", "", nil)
+	m.AddResult("PRIVATE-KEY-DATA\x00known-hosts-data\n", "", nil)
 	return &m, docker.NewClient(&m)
 }
 
 func TestExportConfig(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("PRIVATE-KEY-DATA", "", nil)
-	m.AddResult("controller.dev.sind.sind ssh-ed25519 AAAA...\n", "", nil)
+	m.AddResult("PRIVATE-KEY-DATA\x00controller.dev.sind.sind ssh-ed25519 AAAA...\n", "", nil)
 	c := docker.NewClient(&m)
 
 	fs := afero.NewMemMapFs()
@@ -296,10 +212,26 @@ func TestExportConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "controller.dev.sind.sind ssh-ed25519 AAAA...\n", string(knownHosts))
 
-	// Verify docker calls read from SSH container.
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/id_ed25519"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"exec", "sind-ssh", "cat", "/root/.ssh/known_hosts"}, m.Calls[1].Args)
+	// Verify one docker exec read both files from the SSH container.
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{
+		"exec", "sind-ssh",
+		"sh", "-c", `cat /root/.ssh/id_ed25519 && printf '\0' && cat /root/.ssh/known_hosts`,
+	}, m.Calls[0].Args)
+}
+
+func TestExportConfig_EmptyKnownHosts(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("PRIVATE-KEY-DATA\x00", "", nil)
+	c := docker.NewClient(&m)
+	fs := afero.NewMemMapFs()
+
+	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	require.NoError(t, err)
+
+	knownHosts, err := afero.ReadFile(fs, testExportDir+"/known_hosts")
+	require.NoError(t, err)
+	assert.Empty(t, knownHosts)
 }
 
 func TestExportConfig_FilePermissions(t *testing.T) {
@@ -324,25 +256,43 @@ func TestExportConfig_FilePermissions(t *testing.T) {
 	assert.Equal(t, os.FileMode(0644), info.Mode().Perm())
 }
 
-func TestExportConfig_ReadPrivKeyError(t *testing.T) {
+func TestExportConfig_ReadError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
 	c := docker.NewClient(&m)
+	fs := afero.NewMemMapFs()
 
-	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reading private key")
+	assert.Contains(t, err.Error(), "reading private key and known_hosts")
+	assert.False(t, docker.IsNotFound(err))
+
+	// Nothing is written.
+	exists, err := afero.DirExists(fs, testExportDir)
+	require.NoError(t, err)
+	assert.False(t, exists)
 }
 
-func TestExportConfig_ReadKnownHostsError(t *testing.T) {
+// TestExportConfig_NoRelay checks that the error for a relay container that
+// does not exist is one docker.IsNotFound recognises, which the caller
+// takes for a realm without clusters.
+func TestExportConfig_NoRelay(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("PRIVATE-KEY-DATA", "", nil)
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
+	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "sind", docker.ContainerName("sind-ssh"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reading known_hosts")
+	require.Error(t, err)
+	assert.True(t, docker.IsNotFound(err))
+}
+
+func TestExportConfig_NoSeparator(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("PRIVATE-KEY-DATA", "", nil)
+	c := docker.NewClient(&m)
+
+	err := ExportConfig(t.Context(), c, afero.NewMemMapFs(), testExportDir, "sind", docker.ContainerName("sind-ssh"))
+	assert.EqualError(t, err, "reading private key and known_hosts: sind-ssh printed no separator")
 }
 
 func TestExportConfig_MkdirError(t *testing.T) {

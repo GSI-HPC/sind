@@ -217,9 +217,7 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 					return mock.Result{Stdout: "running\n"}
 				case cmd == "bash" && strings.Contains(joined, "/dev/tcp"):
 					return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-				case cmd == "mkdir":
-					return mock.Result{}
-				case cmd == "ssh-keyscan":
+				case cmd == "sh" && strings.Contains(joined, "ssh-keyscan"):
 					return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey-" + container + "\n"}
 				case cmd == "systemctl" && len(args) > 3 && args[3] == "enable":
 					return mock.Result{}
@@ -1223,7 +1221,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 				return mock.Result{Stdout: "running\n"}
 			case strings.Contains(joined, "/dev/tcp"):
 				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case args[2] == "mkdir":
+			case strings.Contains(joined, "ssh-keyscan"):
 				return mock.Result{Err: fmt.Errorf("permission denied")}
 			}
 		}
@@ -1239,7 +1237,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "injecting SSH key")
+	assert.Contains(t, err.Error(), "setting up SSH on controller: injecting SSH key")
 }
 
 func TestSetupNodes_HostKeyError(t *testing.T) {
@@ -1260,10 +1258,8 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 				return mock.Result{Stdout: "running\n"}
 			case strings.Contains(joined, "/dev/tcp"):
 				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case args[2] == "mkdir":
-				return mock.Result{}
-			case args[2] == "ssh-keyscan":
-				return mock.Result{Err: fmt.Errorf("keyscan failed")}
+			case strings.Contains(joined, "ssh-keyscan"):
+				return mock.Result{Stdout: "# localhost:22 SSH-2.0-OpenSSH_9.0\n"}
 			}
 		}
 		return mock.Result{}
@@ -1278,7 +1274,7 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, time.Millisecond, nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "collecting host key")
+	assert.Contains(t, err.Error(), "setting up SSH on controller: no ed25519 host key found")
 }
 
 func TestRegisterMesh_DNSError(t *testing.T) {

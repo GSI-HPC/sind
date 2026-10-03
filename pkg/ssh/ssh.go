@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-// Package ssh handles SSH key injection and host key collection for node containers.
+// Package ssh handles SSH key injection and host key collection for node
+// containers, and the export of the SSH client configuration.
 package ssh
 
 import (
@@ -17,32 +18,23 @@ import (
 // authorizedKeysPath is the path to the authorized_keys file inside node containers.
 const authorizedKeysPath = "/root/.ssh/authorized_keys"
 
-// InjectPublicKey writes the given SSH public key into the container's
-// /root/.ssh/authorized_keys file, creating the directory if needed.
-func InjectPublicKey(ctx context.Context, client *docker.Client, container docker.ContainerName, pubKey string) error {
-	_, err := client.Exec(ctx, container, "mkdir", "-p", "/root/.ssh")
-	if err != nil {
-		return fmt.Errorf("creating .ssh directory: %w", err)
-	}
+// injectKeyScript appends $1, a public key, to root's authorized_keys,
+// creating the directory if needed, and prints the ed25519 host key that
+// sshd serves, as ssh-keyscan reports it: "localhost ssh-ed25519 AAAA...".
+const injectKeyScript = `mkdir -p /root/.ssh && printf '%s\n' "$1" >> ` + authorizedKeysPath +
+	` && ssh-keyscan -t ed25519 localhost`
 
-	if !strings.HasSuffix(pubKey, "\n") {
-		pubKey += "\n"
-	}
-
-	err = client.AppendFile(ctx, container, authorizedKeysPath, pubKey)
+// InjectKeyAndCollectHostKey writes the given SSH public key into the
+// container's /root/.ssh/authorized_keys file and returns the container's
+// ed25519 host public key in "ssh-ed25519 AAAA..." format (without the
+// hostname prefix). Both take one docker exec, as creating a cluster waits
+// for its slowest node: the key is an argument of the shell, not part of
+// its script, and ssh-keyscan asks sshd, which the caller has waited for,
+// for the key it serves.
+func InjectKeyAndCollectHostKey(ctx context.Context, client *docker.Client, container docker.ContainerName, pubKey string) (string, error) {
+	stdout, err := client.Exec(ctx, container, "sh", "-c", injectKeyScript, "sh", strings.TrimRight(pubKey, "\n"))
 	if err != nil {
-		return fmt.Errorf("writing authorized_keys: %w", err)
-	}
-	return nil
-}
-
-// CollectHostKey retrieves the ed25519 host public key from a node container
-// by running ssh-keyscan against localhost. Returns the key in "ssh-ed25519 AAAA..."
-// format (without the hostname prefix).
-func CollectHostKey(ctx context.Context, client *docker.Client, container docker.ContainerName) (string, error) {
-	stdout, err := client.Exec(ctx, container, "ssh-keyscan", "-t", "ed25519", "localhost")
-	if err != nil {
-		return "", fmt.Errorf("scanning host key: %w", err)
+		return "", fmt.Errorf("injecting SSH key and scanning host key: %w", err)
 	}
 
 	for _, line := range strings.Split(stdout, "\n") {
@@ -159,18 +151,23 @@ func knownHostNames(knownHosts string) []string {
 	return names
 }
 
-// ExportConfig exports SSH configuration to the given directory by reading
-// the private key and known_hosts from the SSH relay container and writing
-// ssh_config, id_ed25519, and known_hosts to dir.
-func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir, realm string, sshContainer docker.ContainerName) error {
-	privKey, err := client.ReadFile(ctx, sshContainer, "/root/.ssh/id_ed25519")
-	if err != nil {
-		return fmt.Errorf("reading private key: %w", err)
-	}
+// readExportScript prints the relay's private key and known_hosts,
+// separated by a NUL byte, which neither file contains.
+const readExportScript = `cat /root/.ssh/id_ed25519 && printf '\0' && cat /root/.ssh/known_hosts`
 
-	knownHosts, err := client.ReadFile(ctx, sshContainer, "/root/.ssh/known_hosts")
+// ExportConfig exports SSH configuration to the given directory by reading
+// the private key and known_hosts from the SSH relay container, in one
+// docker exec, and writing ssh_config, id_ed25519, and known_hosts to dir.
+// When the relay container does not exist, the error satisfies
+// docker.IsNotFound and dir is left as it is.
+func ExportConfig(ctx context.Context, client *docker.Client, fs afero.Fs, dir, realm string, sshContainer docker.ContainerName) error {
+	out, err := client.Exec(ctx, sshContainer, "sh", "-c", readExportScript)
 	if err != nil {
-		return fmt.Errorf("reading known_hosts: %w", err)
+		return fmt.Errorf("reading private key and known_hosts: %w", err)
+	}
+	privKey, knownHosts, ok := strings.Cut(out, "\x00")
+	if !ok {
+		return fmt.Errorf("reading private key and known_hosts: %s printed no separator", sshContainer)
 	}
 
 	if err := fs.MkdirAll(dir, 0700); err != nil {

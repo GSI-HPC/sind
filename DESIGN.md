@@ -1279,31 +1279,20 @@ The `sind-ssh-config` volume contains:
 | Node deleted | Removes entry from `known_hosts` |
 | Last cluster deleted | Removes `sind-ssh` container and `sind-ssh-config` volume |
 
-#### Host Key Collection
+#### Public Key Injection and Host Key Collection
 
-When sind creates a node, it waits for sshd to start, then collects the host key:
+When sind creates a node, it waits for sshd to start, then appends the public key from `sind-ssh-config` to root's `authorized_keys` and collects the host key that sshd serves, in one `docker exec`, as the cluster's setup waits for its slowest node:
 
 ```bash
-docker exec <node> ssh-keyscan -t ed25519 localhost
+docker exec <node> sh -c 'mkdir -p /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost' sh "$pubkey"
 ```
 
-The `localhost` field is dropped and the key is added to `known_hosts` with the node's DNS name:
+The public key is an argument of the shell, not part of its script. The `localhost` field is dropped and the key is added to `known_hosts` with the node's DNS name:
 
 ```
 controller.dev.sind.sind ssh-ed25519 AAAA...
 worker-0.dev.sind.sind ssh-ed25519 AAAA...
 ```
-
-#### Public Key Injection
-
-The public key from `sind-ssh-config` is injected into nodes via:
-
-```bash
-docker exec <node> mkdir -p /root/.ssh
-docker exec <node> sh -c 'cat >> /root/.ssh/authorized_keys' < pubkey
-```
-
-This happens after container start, before host key collection.
 
 #### User Access
 
@@ -1394,7 +1383,7 @@ scp file.txt controller.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller.default.sind.sind   # port forwarding to the host
 ```
 
-sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file.
+sind updates these files automatically when clusters or nodes are created/deleted, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file.
 
 ## Command Routing
 

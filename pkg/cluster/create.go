@@ -375,13 +375,9 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 				}
 			}
 
-			if err := ssh.InjectPublicKey(gctx, client, containerName, sshPubKey); err != nil {
-				return fmt.Errorf("injecting SSH key into %s: %w", nc.ShortName, err)
-			}
-
-			hostKey, err := ssh.CollectHostKey(gctx, client, containerName)
+			hostKey, err := ssh.InjectKeyAndCollectHostKey(gctx, client, containerName, sshPubKey)
 			if err != nil {
-				return fmt.Errorf("collecting host key from %s: %w", nc.ShortName, err)
+				return fmt.Errorf("setting up SSH on %s: %w", nc.ShortName, err)
 			}
 
 			results[i] = nodeResult{info: info, hostKey: hostKey}

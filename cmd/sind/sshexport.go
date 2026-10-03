@@ -20,15 +20,12 @@ var sshExportFiles = []string{"ssh_config", "id_ed25519", "known_hosts"}
 // syncSSHExport updates or cleans the SSH configuration export directory.
 // If the mesh SSH container exists, it exports ssh_config, id_ed25519, and
 // known_hosts to dir. If the SSH container is gone (mesh cleaned up after
-// last cluster deletion), it removes those files but preserves the directory.
+// last cluster deletion), which the export's docker exec reports, it
+// removes those files but preserves the directory.
 func syncSSHExport(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, fs afero.Fs, dir string) error {
-	exists, err := client.ContainerExists(ctx, meshMgr.SSHContainerName())
-	if err != nil {
+	err := ssh.ExportConfig(ctx, client, fs, dir, meshMgr.Realm, meshMgr.SSHContainerName())
+	if !docker.IsNotFound(err) {
 		return err
-	}
-
-	if exists {
-		return ssh.ExportConfig(ctx, client, fs, dir, meshMgr.Realm, meshMgr.SSHContainerName())
 	}
 
 	for _, name := range sshExportFiles {

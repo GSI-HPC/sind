@@ -447,7 +447,7 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		case args[0] == "exec":
 			container := args[1]
 			if container == "-i" {
-				// ExecWithStdin (SSH key inject, WriteFile)
+				// ExecWithStdin (WriteFile)
 				return mock.Result{}
 			}
 			if len(args) > 2 {
@@ -456,9 +456,7 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 					return mock.Result{Stdout: "running\n"}
 				case cmd == "bash" && strings.Contains(joined, "/dev/tcp"):
 					return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-				case cmd == "mkdir":
-					return mock.Result{}
-				case cmd == "ssh-keyscan":
+				case cmd == "sh" && strings.Contains(joined, "ssh-keyscan"):
 					return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey-" + container + "\n"}
 				case cmd == "systemctl" && len(args) > 3 && args[3] == "enable":
 					return mock.Result{}
@@ -1823,9 +1821,7 @@ func workerLifecycleOnCall(t *testing.T) func([]string, string) mock.Result {
 					return mock.Result{Stdout: "running\n"}
 				case cmd == "bash" && strings.Contains(joined, "/dev/tcp"):
 					return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-				case cmd == "mkdir":
-					return mock.Result{}
-				case cmd == "ssh-keyscan":
+				case cmd == "sh" && strings.Contains(joined, "ssh-keyscan"):
 					return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey-" + container + "\n"}
 				case cmd == "systemctl" && len(args) > 3 && args[3] == "enable":
 					return mock.Result{}
