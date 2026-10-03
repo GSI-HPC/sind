@@ -195,19 +195,24 @@ func TestGetVolumes_CommandExists(t *testing.T) {
 	assert.Equal(t, "volumes", c.Use)
 }
 
-func TestGetMungeKey_CommandExists(t *testing.T) {
+func TestGetAuthKey_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"get", "munge-key"})
+	c, _, err := cmd.Find([]string{"get", "auth-key"})
 	require.NoError(t, err)
-	assert.Equal(t, "munge-key [CLUSTER]", c.Use)
+	assert.Equal(t, "auth-key [CLUSTER]", c.Use)
 }
 
-func TestGetMungeKey_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("get", "munge-key", "a", "b")
+func TestGetMungeKey_Removed(t *testing.T) {
+	_, _, err := executeCommand("get", "munge-key")
 	assert.Error(t, err)
 }
 
-func TestGetMungeKey_Output(t *testing.T) {
+func TestGetAuthKey_TooManyArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "auth-key", "a", "b")
+	assert.Error(t, err)
+}
+
+func TestGetAuthKey_Output(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "a", Names: "sind-dev-controller", State: "running",
@@ -215,7 +220,7 @@ func TestGetMungeKey_Output(t *testing.T) {
 	}), "", nil)
 	m.AddResult(testutil.TarArchive("munge.key", "secret-key"), "", nil)
 
-	stdout, _, err := executeWithMock(&m, "get", "munge-key", "dev")
+	stdout, _, err := executeWithMock(&m, "get", "auth-key", "dev")
 	require.NoError(t, err)
 	assert.Equal(t, "c2VjcmV0LWtleQ==\n", stdout)
 }
@@ -454,7 +459,7 @@ func TestGetDNS_JSON(t *testing.T) {
 	assert.Equal(t, "172.18.0.2", got[0].IP)
 }
 
-func TestGetMungeKey_JSON(t *testing.T) {
+func TestGetAuthKey_JSON(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "a", Names: "sind-dev-controller", State: "running",
@@ -462,14 +467,9 @@ func TestGetMungeKey_JSON(t *testing.T) {
 	}), "", nil)
 	m.AddResult(testutil.TarArchive("munge.key", "secret-key"), "", nil)
 
-	stdout, _, err := executeWithMock(&m, "get", "munge-key", "dev", "--output", "json")
+	stdout, _, err := executeWithMock(&m, "get", "auth-key", "dev", "--output", "json")
 	require.NoError(t, err)
-
-	var got struct {
-		Key string `json:"key"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
-	assert.Equal(t, "c2VjcmV0LWtleQ==", got.Key)
+	assert.JSONEq(t, `{"type": "munge", "key": "c2VjcmV0LWtleQ=="}`, stdout)
 }
 
 func TestGetSSHConfig_JSON(t *testing.T) {
@@ -1061,8 +1061,8 @@ func TestGetLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, string(volMunge))
 	assert.Contains(t, stdout, string(volData))
 
-	// get munge-key
-	stdout, _, err = executeWithRealm(realm, "get", "munge-key", cluster)
+	// get auth-key
+	stdout, _, err = executeWithRealm(realm, "get", "auth-key", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "dGVzdC1tdW5nZS1rZXk=") // base64("test-munge-key")
 }

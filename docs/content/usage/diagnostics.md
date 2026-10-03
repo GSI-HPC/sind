@@ -90,7 +90,7 @@ Log output goes to stderr in structured `key=value` format with timestamps and c
 
 ```bash
 # Capture logs while piping output
-sind -v get munge-key 2>create.log | base64 -d > munge.key
+sind -v get auth-key 2>create.log | base64 -d > munge.key
 
 # Watch creation progress
 sind -vv create cluster --config cluster.yaml
@@ -289,13 +289,13 @@ controller.default.sind.sind         172.19.0.2
 worker-0.default.sind.sind           172.19.0.3
 ```
 
-## Munge key
+## Authentication key
 
 ```bash
-sind get munge-key [CLUSTER]
+sind get auth-key [CLUSTER]
 ```
 
-Outputs the cluster's munge key encoded as base64, suitable for injection into external tooling.
+Outputs the key that authenticates the cluster's Slurm traffic, the munge key, encoded as base64, suitable for injection into external tooling. `-o json` returns it with its type: `{"type": "munge", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`.
 
 ## Mesh infrastructure
 

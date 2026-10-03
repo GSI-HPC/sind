@@ -187,7 +187,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 
 | Pattern | Positional | Default | Examples |
 |---------|-----------|---------|---------|
-| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get munge-key` |
+| Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get auth-key` |
 | Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
 | Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
 | Nodeset expansion | bracket patterns | — | `worker-[0-2].dev` |
@@ -212,7 +212,7 @@ Rules:
 | Command type | Output | Target |
 |-------------|--------|--------|
 | List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
-| Single value (`get munge-key`) | raw value, one line | stdout |
+| Single value (`get auth-key`) | raw value, one line | stdout |
 | Checks (`doctor`) | one ✓/✗ line per check, fix instructions below a check that did not pass | stdout |
 | Mutations (`create`, `delete`, `power`) | silent on success | — |
 | Errors | structured slog at error level (always visible) | stderr |
@@ -314,7 +314,7 @@ sind get ssh-config
 sind get ssh-private-key
 sind get ssh-public-key
 sind get ssh-known-hosts
-sind get munge-key [CLUSTER]
+sind get auth-key [CLUSTER]
 ```
 
 All `get` subcommands accept `--output|-o {human,json}`. The default is `human` (tabular text); `json` emits a machine-readable document.
@@ -541,7 +541,7 @@ sind logs db slurmdbd                  # slurmdbd journal logs on the db node
 sind version [--json]                  # print version information
 sind doctor [-o json]                  # check host prerequisites
 sind get realms                        # list active realms
-sind get munge-key [CLUSTER]           # output munge key (base64)
+sind get auth-key [CLUSTER]            # output the Slurm authentication key (base64)
 sind get ssh-config                    # show SSH config path for Include
 sind get mesh                          # show mesh infrastructure info
 sind get dns                           # list mesh DNS records
@@ -552,7 +552,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
-`sind get munge-key` outputs the cluster's munge key encoded as base64, suitable for injection into external management tooling.
+`sind get auth-key` outputs the key that authenticates the cluster's Slurm traffic, the munge key, encoded as base64, suitable for injection into external management tooling. `-o json` returns `{"type": "munge", "key": "<base64>"}`. It replaces `sind get munge-key`.
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
@@ -574,7 +574,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - The server reports itself as `sind` with the version `sind version` prints.
 
 - `sind mcp stream` listens on `127.0.0.1` by default: it has no authentication and its tools create and delete containers. `--host 0.0.0.0` opts in to all interfaces. Stopped by SIGINT or SIGTERM, it shuts down and exits 0.
-- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get munge-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
+- Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get auth-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `create cluster`, `create worker`, `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `delete`, `exec`, and the other `power` actions). A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
 - Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).

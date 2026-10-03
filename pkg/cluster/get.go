@@ -303,9 +303,25 @@ func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*Vo
 	return result, nil
 }
 
-// GetMungeKey reads the munge key from a cluster's node container.
-// Any container in the cluster can be used since all mount the same munge volume.
-func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string) ([]byte, error) {
+// AuthType is how a cluster's Slurm daemons and commands authenticate, and
+// so which key GetAuthKey returns.
+type AuthType string
+
+// Authentication types.
+const (
+	// AuthMunge is auth/munge: munged on every node, with the munge key.
+	AuthMunge AuthType = "munge"
+)
+
+// AuthKey is the key that authenticates a cluster's Slurm traffic.
+type AuthKey struct {
+	Type AuthType
+	Key  []byte
+}
+
+// GetAuthKey reads the key that authenticates a cluster's Slurm traffic
+// from one of its node containers: the munge key.
+func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName string) (*AuthKey, error) {
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
@@ -319,7 +335,7 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 	if err != nil {
 		return nil, fmt.Errorf("reading munge key: %w", err)
 	}
-	return key, nil
+	return &AuthKey{Type: AuthMunge, Key: key}, nil
 }
 
 // RealmSummary holds summary information about a sind realm.

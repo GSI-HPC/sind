@@ -34,7 +34,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetNetworksCommand())
 	cmd.AddCommand(newGetRealmsCommand())
 	cmd.AddCommand(newGetVolumesCommand())
-	cmd.AddCommand(newGetMungeKeyCommand())
+	cmd.AddCommand(newGetAuthKeyCommand())
 	cmd.AddCommand(newGetDNSCommand())
 	cmd.AddCommand(newGetSSHConfigCommand())
 	cmd.AddCommand(newGetMeshCommand())
@@ -400,10 +400,10 @@ func runGetDNS(cmd *cobra.Command) error {
 	return w.Flush()
 }
 
-func newGetMungeKeyCommand() *cobra.Command {
+func newGetAuthKeyCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "munge-key [CLUSTER]",
-		Short:             "Output munge key (base64)",
+		Use:               "auth-key [CLUSTER]",
+		Short:             "Output the key that authenticates Slurm traffic (base64)",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -411,12 +411,12 @@ func newGetMungeKeyCommand() *cobra.Command {
 			if len(args) > 0 {
 				name = args[0]
 			}
-			return runGetMungeKey(cmd, name)
+			return runGetAuthKey(cmd, name)
 		},
 	}
 }
 
-func runGetMungeKey(cmd *cobra.Command, name string) error {
+func runGetAuthKey(cmd *cobra.Command, name string) error {
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
@@ -425,15 +425,16 @@ func runGetMungeKey(cmd *cobra.Command, name string) error {
 	if err != nil {
 		return err
 	}
-	key, err := cluster.GetMungeKey(cmd.Context(), client, realm, name)
+	key, err := cluster.GetAuthKey(cmd.Context(), client, realm, name)
 	if err != nil {
 		return err
 	}
-	encoded := base64.StdEncoding.EncodeToString(key)
+	encoded := base64.StdEncoding.EncodeToString(key.Key)
 	if isJSONOutput(cmd) {
 		return writeJSON(cmd.OutOrStdout(), struct {
-			Key string `json:"key"`
-		}{Key: encoded})
+			Type cluster.AuthType `json:"type"`
+			Key  string           `json:"key"`
+		}{Type: key.Type, Key: encoded})
 	}
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), encoded)
 	return nil

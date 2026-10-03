@@ -29,7 +29,7 @@ var mcpExcluded = map[string]bool{
 	"enter":               true, // interactive shell
 	"ssh":                 true, // interactive shell or remote command without a terminal
 	"get ssh-private-key": true, // the mesh's SSH private key
-	"get munge-key":       true, // the cluster's munge key
+	"get auth-key":        true, // the cluster's munge key or slurm.key
 }
 
 // mcpEffect is what an MCP tool does to its environment, which sets the
@@ -181,7 +181,7 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 	}
 }
 
-// commandPath returns the path of cmd below the root, e.g. "get munge-key".
+// commandPath returns the path of cmd below the root, e.g. "get auth-key".
 func commandPath(cmd *cobra.Command) string {
 	return strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")
 }

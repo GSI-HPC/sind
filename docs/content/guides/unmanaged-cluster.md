@@ -90,7 +90,7 @@ worker-1.dev.sind.sind
 Keep in mind:
 
 - Write Slurm files on a controller. On the other nodes `/etc/slurm` is read-only, and every node reads the same files. slurmdbd insists on a `slurmdbd.conf` owned by its `SlurmUser` with mode `0600`.
-- munge is sind's. `/etc/munge` is read-only, so recipes that manage the munge key must leave it as it is. `sind get munge-key dev` prints the key base64-encoded if your tooling needs it.
+- munge is sind's. `/etc/munge` is read-only, so recipes that manage the munge key must leave it as it is. `sind get auth-key dev` prints the key base64-encoded if your tooling needs it.
 - `sind get cluster dev` reports munge and sshd only. Check Slurm itself with `sind exec dev -- sinfo` and `sind logs controller.dev slurmctld`.
 
 ## Run slurmctld by hand
