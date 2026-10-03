@@ -360,6 +360,12 @@ RUN systemctl mask \
     getty.target \
     console-getty.service
 
+# Cap the journal, which the Slurm daemons log to. journald's defaults let a
+# volatile journal in /run, a tmpfs charged to the node's memory limit, grow
+# to 10% of /run (half the host's memory), and a persistent one to 4 GB.
+RUN mkdir -p /etc/systemd/journald.conf.d && \
+    printf '[Journal]\nRuntimeMaxUse=32M\nSystemMaxUse=64M\n' > /etc/systemd/journald.conf.d/50-sind.conf
+
 # Initialise MariaDB's data directory with the script mariadb.service runs
 # before its first start, which then finds it initialised: a db node's first
 # start then skips mariadb-install-db and the script's one-second sleep.
