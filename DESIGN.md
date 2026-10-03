@@ -1023,7 +1023,7 @@ accounts:                                # Slurm accounts (needs a managed db no
 - Jobs of the users need no extra capability with sind's default `TaskPlugin=task/cgroup`. With `task/affinity` in `slurm.main`'s `TaskPlugin`, managed workers get `--cap-add SYS_NICE` for them (see slurm.conf under Generated Configuration).
 - `sind enter --user USER` and `sind exec --user USER` run as the user in its home directory, on the submitter or the controller.
 - The users and groups are stored on each container as the `sind.users` and `sind.groups` labels, so `sind create worker` adds them to new workers. The home volume only exists for clusters with users.
-- A user or group name that already exists in the image (`root`, `slurm`, `munge`, `wheel`, ...) fails `sind create cluster` with the `groupadd` or `useradd` error.
+- A user or group name that already exists in the image (`root`, `slurm`, `munge`, `wheel`, ...), or a uid or gid an image account already has (Ubuntu's `ubuntu` at 1000), fails `sind create cluster` with the `groupadd` or `useradd` error.
 
 Users exist on unmanaged clusters too.
 
@@ -1551,19 +1551,22 @@ Custom images must provide:
 - munge service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
 - Slurm's `mpi/pmix` plugin (`mpi_pmix.so`, built when Slurm finds PMIx, `--with-pmix`): the generated `slurm.conf` sets `MpiDefault=pmix`, and without the plugin every `srun` fails with "Invalid MPI type 'pmix'". An image without it needs `MpiDefault=none` in `slurm.main`
+- `munge` and `slurm` users with the same uids as in the controller's image: sind sets the owner of the munge key, `slurm.key` and `slurmdbd.conf` from there, and munged, slurmctld, slurmdbd and, with identity `clientIds`, sackd read them as these users
 
 **Per-role requirements:**
 
 | Role | Additional Requirements |
 |------|------------------------|
 | controller | slurmctld (installed, not enabled) |
-| db | mariadb-server (MariaDB 10.4 or later, for the built-in `unix_socket` authentication) with the `mysql` client, root access to MariaDB over its local socket without a password, slurmdbd (installed, not enabled) with a unit that creates `/run/slurmdbd` for the `slurm` user, a `slurm` user with the same uid as in the controller's image (sind sets `slurmdbd.conf`'s owner from there), and `/var/log/slurm` writable by it |
+| db | mariadb-server (MariaDB 10.4 or later, for the built-in `unix_socket` authentication) with the `mysql` client, root access to MariaDB over its local socket without a password, slurmdbd (installed, not enabled) with a unit that creates `/run/slurmdbd` for the `slurm` user, and `/var/log/slurm` writable by it |
 | worker | slurmd (installed, not enabled) |
 | submitter | Slurm client tools only |
 
 sind enables Slurm services based on the node's role once every node is ready (`systemctl enable --now`). Services should be installed but not enabled in the image.
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an unmanaged cluster, so its image may leave Slurm for the provisioning under test to install.
+
+**With users** (managed or unmanaged): the nodes that get the users need `groupadd`/`useradd` and `/bin/bash`, the controller `/etc/skel`; the image must have no user or group with a declared name or ID, and IDs from 1000 up, which sind assigns, must be free unless the configuration sets them.
 
 The repository's `Dockerfile`, which builds the official images, serves as the reference.
 

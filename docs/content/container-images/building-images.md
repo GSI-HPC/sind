@@ -87,13 +87,14 @@ Custom images must provide the following:
 - **munge** service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
 - Slurm's **mpi/pmix** plugin (`mpi_pmix.so`, which Slurm builds only when it finds PMIx, `--with-pmix`): the generated `slurm.conf` sets `MpiDefault=pmix`, and without the plugin every `srun` fails with "Invalid MPI type 'pmix'". For an image without it, set `MpiDefault=none` in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}})
+- The `munge` and `slurm` users with the same uids as in the controller's image: sind sets the owner of the munge key, `slurm.key` and `slurmdbd.conf` (modes 0400 and 0600) from there, and munged, slurmctld, slurmdbd and, with identity `clientIds`, sackd read them as these users. Images built from the same distribution's packages agree; a cluster that mixes images of different origins may not
 
 ### Per-role requirements
 
 | Role | Additional requirements |
 |------|------------------------|
 | controller | slurmctld installed, **not enabled** |
-| db | mariadb-server (MariaDB 10.4 or later, whose `unix_socket` authentication sind uses for slurmdbd's `slurm` account) with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd runs as the OS user `slurm`; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user; the `slurm` user has the same uid as in the controller's image (sind sets `slurmdbd.conf`'s owner from there) and can write `/var/log/slurm` |
+| db | mariadb-server (MariaDB 10.4 or later, whose `unix_socket` authentication sind uses for slurmdbd's `slurm` account) with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd runs as the OS user `slurm`; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user, which can write `/var/log/slurm` |
 | worker | slurmd installed, **not enabled** |
 | submitter | Slurm client tools only |
 
@@ -102,6 +103,14 @@ sind enables Slurm services based on the node's role (`systemctl enable --now`) 
 With [identity]({{< relref "/configuration/cluster-config#identity-section" >}}) `nssSlurm` or `clientIds`, the image of managed workers needs nss_slurm: `libnss_slurm.so.2` where glibc finds it (in the `ldconfig` cache or `/usr/lib64`), built from Slurm's `contribs/nss_slurm`, which `make install` skips. sind checks for it before it changes `/etc/nsswitch.conf`. With `clientIds` every node needs Slurm's `auth/slurm` plugin (`auth_slurm.so`), which Slurm builds only with libjwt 1.x (`--with-jwt`), and the `serializer/json` plugin it loads (`serializer_json.so`, built only with json-c, `--with-json`), the submitter also needs `sackd` with its systemd unit, installed but not enabled, and since sind masks `munge.service` on every node, no other unit may require it.
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), so its image may leave Slurm for the provisioning under test to install.
+
+### With users
+
+With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), on managed and unmanaged clusters alike:
+
+- The nodes that get the users need `groupadd` and `useradd` (shadow-utils), and `/bin/bash`, the users' login shell, which `sind ssh USER@NODE` and `sind enter --user` log in with
+- The controller needs `/etc/skel`, from which sind creates the home directories
+- No user or group in the image may have a declared name or ID. sind assigns IDs from 1000 up, so an image with an account at 1000 or above, such as Ubuntu's `ubuntu` user and group at 1000, needs explicit `uid` and `gid` values it does not use
 
 ### Container settings
 

@@ -193,7 +193,7 @@ Users without `uid` get their IDs first, in list order, skipping the explicit `g
 
 Every node, including workers added later with `sind create worker`, gets each group and user with the same IDs, as munge and Slurm require. With `task/affinity` in the `TaskPlugin` of the [`main` section](#slurm-section), managed workers also get the `SYS_NICE` capability, which slurmstepd then needs to bind the tasks of users other than root (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})). The [identity mode](#identity-section) can keep them off some nodes. The home directories, `/home/<user>`, are on the Docker volume `<realm>-<cluster>-home`, which every node mounts at `/home`, so job output written there is the same on every node. The realm's SSH key may log in as each user, as it may as root. See [Node access]({{< relref "/usage/node-access#cluster-users" >}}) for running commands as a user.
 
-A user or group name that already exists in the image, such as `root`, `slurm` or `wheel`, makes `sind create cluster` fail.
+A user or group name that already exists in the image, such as `root`, `slurm` or `wheel`, or a uid or gid an account of the image already has, such as Ubuntu's `ubuntu` at 1000, makes `sind create cluster` fail. See [Custom image requirements]({{< relref "/container-images/building-images#with-users" >}}).
 
 ## Accounts section
 
