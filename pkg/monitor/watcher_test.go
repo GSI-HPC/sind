@@ -92,7 +92,7 @@ func TestWatcher_AddNodes(t *testing.T) {
 	err := w.Start(ctx, nil)
 	require.NoError(t, err, "Start")
 
-	w.AddNodes(ctx, []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
 
 	// pipe 0 = docker events, pipe 1 = systemd monitor added via AddNodes.
 	pipes.Write(1, `{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"ActiveState":{"type":"s","data":"active"}},["Conditions"]]}}`+"\n")
@@ -107,6 +107,39 @@ func TestWatcher_AddNodes(t *testing.T) {
 	cancel()
 	pipes.CloseAll()
 	w.Wait()
+}
+
+func TestWatcher_AddNodesBeforeStart(t *testing.T) {
+	m := &mock.Executor{}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	assert.Empty(t, m.Calls)
+}
+
+func TestWatcher_AddNodesStopsWithWatcher(t *testing.T) {
+	// The monitors AddNodes starts run on the watcher's context: cancelling
+	// it ends them, without their streams being closed, and Wait returns.
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	ctx, cancel := context.WithCancel(t.Context())
+	w := NewWatcher(m, "sind-dev-", "dev")
+	require.NoError(t, w.Start(ctx, nil))
+	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	require.Equal(t, 2, pipes.Len())
+
+	cancel()
+	done := make(chan struct{})
+	go func() {
+		w.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait did not return after the watcher's context ended")
+	}
 }
 
 func TestWatcher_MultipleSubscribers(t *testing.T) {

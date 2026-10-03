@@ -67,7 +67,7 @@ Mesh registration (batch DNS + known_hosts), Slurm enablement and the home direc
 sind waits for each node to become ready before returning success. Probes are accelerated by two event sources:
 
 - **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
-- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active)
+- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active or slurmd.service failing). They run until the command ends, through the waits for the Slurm daemons and the accounts
 
 When an event arrives, probes re-evaluate immediately instead of waiting for the next poll tick. If event sources are unavailable, sind falls back to poll-only mode.
 

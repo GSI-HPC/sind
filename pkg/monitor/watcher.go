@@ -34,6 +34,10 @@ type Watcher struct {
 
 	internalCh chan Event
 
+	// ctx is the context Start was given. Every monitor, including those
+	// AddNodes starts later, runs until it ends.
+	ctx context.Context
+
 	mu          sync.Mutex
 	subscribers []chan Event
 
@@ -77,7 +81,8 @@ func (w *Watcher) Unsubscribe(ch <-chan Event) {
 
 // Start begins monitoring. It starts the docker events stream, spawns
 // systemd monitors for each given node, and starts the broadcast loop.
-// Cancel the context to stop all monitors.
+// Cancel the context to stop all monitors, those AddNodes starts later
+// included.
 func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 	log := sindlog.From(ctx)
 
@@ -88,6 +93,7 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 		log.Log(ctx, sindlog.LevelTrace, "failed to start docker events monitor", "err", err)
 		return err
 	}
+	w.ctx = ctx
 
 	dm := NewDockerMonitor(w.prefix)
 
@@ -144,11 +150,17 @@ func (w *Watcher) Wait() {
 }
 
 // AddNodes starts systemd monitors for the given nodes. Call this
-// after the node containers have been created so that systemd state
-// changes can accelerate readiness probing.
-func (w *Watcher) AddNodes(ctx context.Context, nodes []NodeTarget) {
+// after Start and after the node containers have been created so that
+// systemd state changes can accelerate readiness probing. The monitors run
+// on the context Start was given, until the watcher stops, so that they
+// also serve the waits that follow the caller's own (e.g. for the Slurm
+// daemons). Before a successful Start, AddNodes does nothing.
+func (w *Watcher) AddNodes(nodes []NodeTarget) {
+	if w.ctx == nil {
+		return
+	}
 	for _, node := range nodes {
-		w.startSystemdMonitor(ctx, node)
+		w.startSystemdMonitor(w.ctx, node)
 	}
 }
 

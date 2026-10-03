@@ -364,7 +364,7 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			}
 
 			if watcher != nil {
-				watcher.AddNodes(gctx, []monitor.NodeTarget{{
+				watcher.AddNodes([]monitor.NodeTarget{{
 					ShortName: nc.ShortName,
 					Container: containerName,
 				}})

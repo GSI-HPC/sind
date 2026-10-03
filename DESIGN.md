@@ -70,7 +70,7 @@ There is no barrier between node creation and readiness probing — each node's 
 sind uses two event sources to accelerate readiness detection:
 
 - **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
-- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active)
+- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active or slurmd.service failing). They run until the command ends, through the waits for the Slurm daemons and the accounts
 
 When an event arrives, readiness probes re-evaluate immediately instead of waiting for the next poll tick. If the event sources are unavailable, sind falls back to poll-only mode transparently.
 
