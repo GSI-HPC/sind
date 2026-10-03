@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -129,6 +130,36 @@ func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName str
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	return buildNodeSummaries(ctx, client, realm, containers)
+}
+
+// GetNodeNames returns the nodes of every cluster in the realm as
+// NODE.CLUSTER, ordered by cluster name, then like GetNodes. It lists the
+// realm's containers once and inspects none, for shell completion.
+func GetNodeNames(ctx context.Context, client *docker.Client, realm string) ([]string, error) {
+	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	// Mesh containers carry the realm label but no cluster label.
+	containers = slices.DeleteFunc(containers, func(c docker.ContainerListEntry) bool {
+		return c.Labels[LabelCluster] == ""
+	})
+	sort.Slice(containers, func(i, j int) bool {
+		a, b := containers[i], containers[j]
+		if ca, cb := a.Labels[LabelCluster], b.Labels[LabelCluster]; ca != cb {
+			return ca < cb
+		}
+		if ra, rb := rolePrefix(config.Role(a.Labels[LabelRole])), rolePrefix(config.Role(b.Labels[LabelRole])); ra != rb {
+			return ra < rb
+		}
+		return naturalSortKey(string(a.Name)) < naturalSortKey(string(b.Name))
+	})
+	names := make([]string, len(containers))
+	for i, c := range containers {
+		clusterName := c.Labels[LabelCluster]
+		names[i] = strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, clusterName)) + "." + clusterName
+	}
+	return names, nil
 }
 
 // buildNodeSummaries converts container list entries into node summaries.

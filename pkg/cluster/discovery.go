@@ -150,27 +150,41 @@ func ownedBy(labels docker.Labels, realm, clusterName string) bool {
 //
 // Filters on both the realm and cluster labels so mesh resources (which carry
 // only the realm label) are skipped, and resources from other realms can't
-// match even when names collide.
+// match even when names collide. The network and volume listings run
+// concurrently.
 func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm string) ([]string, error) {
-	seen := make(map[string]struct{})
 	filters := []string{
 		"label=" + LabelRealm + "=" + realm,
 		"label=" + LabelCluster,
 	}
 
-	nets, err := client.ListNetworks(ctx, filters...)
+	var (
+		nets []docker.NetworkListEntry
+		vols []docker.VolumeListEntry
+	)
+	err := concurrently(
+		func() (err error) {
+			if nets, err = client.ListNetworks(ctx, filters...); err != nil {
+				return fmt.Errorf("listing networks: %w", err)
+			}
+			return nil
+		},
+		func() (err error) {
+			if vols, err = client.ListVolumes(ctx, filters...); err != nil {
+				return fmt.Errorf("listing volumes: %w", err)
+			}
+			return nil
+		},
+	)
 	if err != nil {
-		return nil, fmt.Errorf("listing networks: %w", err)
+		return nil, err
 	}
+
+	seen := make(map[string]struct{})
 	for _, n := range nets {
 		if cluster := n.Labels[LabelCluster]; cluster != "" {
 			seen[cluster] = struct{}{}
 		}
-	}
-
-	vols, err := client.ListVolumes(ctx, filters...)
-	if err != nil {
-		return nil, fmt.Errorf("listing volumes: %w", err)
 	}
 	for _, v := range vols {
 		if cluster := v.Labels[LabelCluster]; cluster != "" {

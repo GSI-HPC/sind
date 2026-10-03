@@ -502,6 +502,70 @@ func TestGetAllNodes_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "listing containers")
 }
 
+// --- GetNodeNames ---
+
+func TestGetNodeNames(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-prod-worker-10", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=worker"},
+		testutil.PsEntry{ID: "b", Names: "sind-prod-worker-2", State: "exited", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=worker"},
+		testutil.PsEntry{ID: "c", Names: "sind-dev-10-worker-0", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev-10,sind.role=worker"},
+		testutil.PsEntry{ID: "d", Names: "sind-dns", State: "running", Image: "img",
+			Labels: "sind.realm=sind"},
+		testutil.PsEntry{ID: "e", Names: "sind-dev-2-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev-2,sind.role=controller"},
+		testutil.PsEntry{ID: "f", Names: "sind-prod-db", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=db"},
+		testutil.PsEntry{ID: "g", Names: "sind-prod-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=controller"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	names, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	// Clusters in string order, as the cluster discovery sorted them, then
+	// role and natural name order within each cluster. The mesh DNS
+	// container has no cluster and is left out.
+	assert.Equal(t, []string{
+		"worker-0.dev-10",
+		"controller.dev-2",
+		"controller.prod",
+		"db.prod",
+		"worker-2.prod",
+		"worker-10.prod",
+	}, names)
+
+	// One listing of the realm's containers, no inspect.
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.realm=sind"}, m.Calls[0].Args)
+}
+
+func TestGetNodeNames_Empty(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	names, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Empty(t, names)
+}
+
+func TestGetNodeNames_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing containers")
+}
+
 func TestGetNodes_SkipsEmptyClusterLabel(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
