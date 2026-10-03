@@ -423,6 +423,8 @@ slurmctld   ✓
 sshd        ✓
 ```
 
+A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`primary` or `backup`, with `*` on the controller in control), as in `sind get cluster`.
+
 ### Host Diagnostics
 
 `sind doctor` validates host prerequisites for running sind:
@@ -526,8 +528,8 @@ Freeze/unfreeze uses Docker's cgroup freezer to suspend all processes. The conta
 ### Logs
 
 ```bash
-sind logs NODE [--follow]              # container logs (stdout/stderr)
-sind logs NODE SERVICE [--follow]      # journalctl for specific service
+sind logs NODE [--follow|-f]           # container logs (stdout/stderr)
+sind logs NODE SERVICE [--follow|-f]   # journalctl for specific service
 ```
 
 Examples:
