@@ -2262,17 +2262,19 @@ func TestWriteNodesConfAndReconfigure_Cancelled(t *testing.T) {
 }
 
 func TestWorkerAdd_RollbackNodesConfErrors(t *testing.T) {
-	// A failed revert is logged; the original error is returned.
+	// A failed revert is reported after the original error, as the other
+	// rollback failures are; the containers go anyway.
 	for _, tt := range []struct {
 		name string
 		fail func(args []string) bool
+		want string
 	}{
 		{"write", func(args []string) bool {
 			return args[0] == "exec" && args[1] == "-i" && args[2] == "sind-dev-controller" && strings.Contains(strings.Join(args, " "), "sind-nodes.conf")
-		}},
+		}, "updating sind-nodes.conf: revert failed"},
 		{"reconfigure", func(args []string) bool {
 			return args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "scontrol"
-		}},
+		}, "reconfiguring slurmctld: revert failed"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var m mock.Executor
@@ -2297,6 +2299,7 @@ func TestWorkerAdd_RollbackNodesConfErrors(t *testing.T) {
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "slurmd failed")
+			assert.Contains(t, err.Error(), "\nrolling back: restoring sind-nodes.conf: "+tt.want)
 			assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "containers removed anyway")
 		})
 	}

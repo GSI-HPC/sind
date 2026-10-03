@@ -534,7 +534,7 @@ By default (without `--unmanaged`), sind:
 4. Reconfigures slurmctld (`scontrol reconfigure`)
 5. Starts slurmd on the new node(s)
 
-Steps 3 to 5 run while the new workers are registered with the mesh DNS and known_hosts. If any step fails or the command is interrupted after the first container exists, sind removes the new containers and their mesh entries again and writes back the `sind-nodes.conf` it read in step 1 (and reconfigures slurmctld), so a retry starts from a clean state.
+Steps 3 to 5 run while the new workers are registered with the mesh DNS and known_hosts. If any step fails or the command is interrupted after the first container exists, sind removes the new containers and their mesh entries again and writes back the `sind-nodes.conf` it read in step 1 (and reconfigures slurmctld), so a retry starts from a clean state. A rollback step that fails, such as that write or the reconfigure, is added to the error after the original one.
 
 Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration. On an unmanaged cluster (see Unmanaged Cluster) every new worker is unmanaged, with or without `--unmanaged`. A controller that is stopped or frozen fails the command with an error that says so: start it with `sind power on` or `sind power unfreeze` first.
 

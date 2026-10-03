@@ -253,7 +253,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
 			defer cancel()
 			if confUpdated {
-				revertNodesConf(cleanupCtx, client, controllerName, nodesConf, nodeConfigs)
+				if err := revertNodesConf(cleanupCtx, client, controllerName, nodesConf); err != nil {
+					retErr = errors.Join(retErr, fmt.Errorf("rolling back: %w", err))
+				}
 			}
 			if err := cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs); err != nil {
 				retErr = errors.Join(retErr, fmt.Errorf("rolling back: %w", err))
@@ -457,16 +459,12 @@ func updateNodesConf(ctx context.Context, client *docker.Client, controllerName 
 // phantom node nor, after a retry, a duplicate definition stays behind. It
 // writes back original, the content WorkerAdd read before it added them:
 // the realm lock kept others from changing the file since, and the file
-// itself may hold a write that failed. Errors are logged: this is
-// best-effort cleanup.
-func revertNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, original string, nodeConfigs []RunConfig) {
+// itself may hold a write that failed.
+func revertNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, original string) error {
 	if err := writeNodesConfAndReconfigure(ctx, client, controllerName, original); err != nil {
-		names := make([]string, len(nodeConfigs))
-		for i, nc := range nodeConfigs {
-			names[i] = nc.ShortName
-		}
-		sindlog.From(ctx).ErrorContext(ctx, "cleanup: removing the new nodes from sind-nodes.conf", "nodes", strings.Join(names, ","), "error", err)
+		return fmt.Errorf("restoring sind-nodes.conf: %w", err)
 	}
+	return nil
 }
 
 // writeNodesConfAndReconfigure writes sind-nodes.conf to the controller
