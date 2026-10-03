@@ -423,10 +423,27 @@ slurm:
 	assert.Contains(t, out, added[0].Name)
 
 	// Recovery: the restarted primary takes control back.
-	require.NoError(t, PowerOn(ctx, c, realm, clusterName, []string{"controller"}))
+	require.NoError(t, PowerOn(ctx, c, meshMgr, clusterName, []string{"controller"}))
 	waitInControl(t, c, realm, clusterName, "controller")
 
+	// The new worker may have taken the primary's old address: the mesh
+	// DNS record follows the address the primary has now.
+	assertDNSRecord(t, c, meshMgr, clusterName, "controller")
+
 	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// assertDNSRecord checks that the mesh DNS record of a node points at the
+// node's current address on its cluster network.
+func assertDNSRecord(t *testing.T, c *docker.Client, meshMgr *mesh.Manager, clusterName, shortName string) {
+	t.Helper()
+	info, err := c.InspectContainer(t.Context(), ContainerName(meshMgr.Realm, clusterName, shortName))
+	require.NoError(t, err)
+	ip := info.IPs[NetworkName(meshMgr.Realm, clusterName)]
+	require.NotEmpty(t, ip)
+	records, err := meshMgr.GetDNSRecords(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, records, mesh.DNSRecord{Hostname: DNSName(shortName, clusterName, meshMgr.Realm), IP: ip})
 }
 
 // TestClusterNamesAroundMesh creates two clusters in one realm whose
@@ -434,6 +451,7 @@ slurm:
 // <realm>-mesh < <realm>-test-net). Every node's hostname is also a DNS name
 // on the mesh, so without the cluster network's gateway priority, test's
 // nodes would resolve controller through the mesh, to both controllers.
+// Then it stops the mesh, as a host reboot does, and powers a node on.
 func TestClusterNamesAroundMesh(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
@@ -493,6 +511,23 @@ defaults:
 		}
 		assert.Equal(t, []string{want}, got, "controller in cluster %s", name)
 	}
+
+	// After a host reboot the mesh containers exist but are stopped.
+	// Powering a node on starts them first and re-registers the node.
+	require.NoError(t, PowerShutdown(ctx, c, realm, "test", []string{"worker-0"}))
+	require.NoError(t, c.StopContainer(ctx, meshMgr.SSHContainerName()))
+	require.NoError(t, c.StopContainer(ctx, meshMgr.DNSContainerName()))
+	health, err := GetNetworkHealth(ctx, c, realm, "test")
+	require.NoError(t, err)
+	assert.False(t, health.DNS, "stopped DNS is not healthy")
+	assert.False(t, health.SSH, "stopped relay is not healthy")
+
+	require.NoError(t, PowerOn(ctx, c, meshMgr, "test", []string{"worker-0"}))
+	health, err = GetNetworkHealth(ctx, c, realm, "test")
+	require.NoError(t, err)
+	assert.True(t, health.DNS)
+	assert.True(t, health.SSH)
+	assertDNSRecord(t, c, meshMgr, "test", "worker-0")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

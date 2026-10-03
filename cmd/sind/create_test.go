@@ -428,6 +428,12 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "MESH SERVICES")
 	assert.Contains(t, stdout, "MOUNTS")
 
+	// The mesh DNS and the SSH relay run.
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "cluster", cluster, "-o", "json")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, `"dns_ok": true`)
+	assert.Contains(t, stdout, `"ssh_ok": true`)
+
 	// --- exec ---
 	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", cluster, "--", "hostname")
 	require.NoError(t, err, "exec failed: stdout=%q stderr=%q", stdout, stderr)

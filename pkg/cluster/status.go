@@ -101,8 +101,10 @@ type NetworkHealth struct {
 	MeshDriver     string `json:"mesh_driver"`     // mesh network driver (e.g. "bridge")
 	MeshSubnet     string `json:"mesh_subnet"`     // mesh network subnet
 	MeshGateway    string `json:"mesh_gateway"`    // mesh network gateway
-	DNS            bool   `json:"dns_ok"`          // sind-dns container exists
+	DNS            bool   `json:"dns_ok"`          // sind-dns container running
 	DNSName        string `json:"dns_name"`        // DNS container name (e.g. "sind-dns")
+	SSH            bool   `json:"ssh_ok"`          // sind-ssh relay container running
+	SSHName        string `json:"ssh_name"`        // SSH relay container name (e.g. "sind-ssh")
 	Cluster        bool   `json:"cluster_ok"`      // cluster network exists
 	ClusterName    string `json:"cluster_name"`    // cluster network name (e.g. "sind-dev-net")
 	ClusterDriver  string `json:"cluster_driver"`  // cluster network driver (e.g. "bridge")
@@ -110,7 +112,9 @@ type NetworkHealth struct {
 	ClusterGateway string `json:"cluster_gateway"` // cluster network gateway
 }
 
-// GetNetworkHealth checks the health of mesh, DNS, and cluster networking.
+// GetNetworkHealth checks the health of mesh, DNS, SSH relay, and cluster
+// networking. The DNS and SSH relay containers count as healthy only while
+// they run: after a host reboot they exist but are stopped.
 func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
 	// nil Docker client: only realm-derived names are needed here.
 	meshMgr := mesh.NewManager(nil, realm)
@@ -119,6 +123,7 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 	health := &NetworkHealth{
 		MeshName:    string(meshMgr.NetworkName()),
 		DNSName:     string(meshMgr.DNSContainerName()),
+		SSHName:     string(meshMgr.SSHContainerName()),
 		ClusterName: string(clusterNet),
 	}
 
@@ -132,10 +137,16 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
 
-	if _, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
-		health.DNS = true
+	if info, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
+		health.DNS = info.Status == docker.StateRunning
 	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
+	}
+
+	if info, err := client.InspectContainer(ctx, meshMgr.SSHContainerName()); err == nil {
+		health.SSH = info.Status == docker.StateRunning
+	} else if !docker.IsNotFound(err) {
+		return nil, fmt.Errorf("checking SSH container: %w", err)
 	}
 
 	if info, err := client.InspectNetwork(ctx, clusterNet); err == nil {

@@ -51,7 +51,7 @@ EOF
 
 ### What happens during creation
 
-1. Mesh infrastructure is created if not already present (network, DNS, SSH)
+1. Mesh infrastructure is created if not already present (network, DNS, SSH), or started if it is stopped
 2. Cluster network and volumes are created
 3. Munge key and Slurm configuration are generated
 4. All node containers start in parallel

@@ -17,8 +17,8 @@ sind power <action> NODES
 | `shutdown` | Graceful shutdown | `docker stop` (the image's stop signal, `SIGRTMIN+3` for sind-node, then SIGKILL after 10 s) |
 | `cut` | Hard power off | `docker kill` (immediate SIGKILL) |
 | `on` | Power on | `docker start` |
-| `reboot` | Graceful reboot | `docker stop` + `docker start` |
-| `cycle` | Hard power cycle | `docker kill` + `docker start` |
+| `reboot` | Graceful reboot | `docker stop`, then as `on` |
+| `cycle` | Hard power cycle | `docker kill`, then as `on` |
 | `freeze` | Simulate unresponsive node | `docker pause` (cgroup freezer) |
 | `unfreeze` | Resume frozen node | `docker unpause` |
 
@@ -47,6 +47,18 @@ sind power freeze worker-0
 
 # Resume a frozen node
 sind power unfreeze worker-0
+```
+
+A power command acts on its nodes one after another; `reboot` and `cycle` take every node down before they start any. A node whose Docker call fails does not stop the others: the command reports every failed node and exits non-zero.
+
+## Power on
+
+`on`, `reboot` and `cycle` first start the realm's mesh DNS and SSH relay if they are stopped, then start the nodes, and then point the nodes' DNS records (`<node>.<cluster>.<realm>.sind`, used by `sind ssh` and the host) at their addresses: Docker can give a node another address each time it starts. These three commands take the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}).
+
+After a host reboot or a Docker daemon restart, the mesh and all nodes are stopped; `sind power on` brings them back (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})):
+
+```bash
+sind power on controller,worker-[0-1]
 ```
 
 ## Freeze and unfreeze

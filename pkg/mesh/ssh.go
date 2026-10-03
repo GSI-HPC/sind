@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
 // knownHostsPath is the path to the known_hosts file inside the SSH container.
@@ -22,22 +23,16 @@ const knownHostsPath = "/root/.ssh/known_hosts"
 // Uses the sind-node image which includes an ssh client and bash.
 const SSHImage = "ghcr.io/gsi-hpc/sind-node:latest"
 
-// sshKeygenImage is the container image used as a temporary helper for writing
-// SSH keys into the SSH volume. The container is never started.
-const sshKeygenImage = "busybox:latest"
-
-// EnsureSSHVolume creates the SSH config volume and generates an ed25519
-// keypair if the volume does not already exist. The volume contains
-// id_ed25519 (private key), id_ed25519.pub (public key), and an empty
-// known_hosts file.
-func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
+// ensureSSHVolume creates the SSH config volume if it does not exist yet,
+// and reports whether it did. ensureSSH writes the keys into a new volume.
+func (m *Manager) ensureSSHVolume(ctx context.Context) (bool, error) {
 	volName := m.SSHVolumeName()
 	exists, err := m.Docker.VolumeExists(ctx, volName)
 	if err != nil {
-		return fmt.Errorf("checking SSH volume: %w", err)
+		return false, fmt.Errorf("checking SSH volume: %w", err)
 	}
 	if exists {
-		return nil
+		return false, nil
 	}
 
 	volumeLabels := docker.Labels{
@@ -45,32 +40,65 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeVolumeLabel:  "ssh-config",
 	}
-	err = m.Docker.CreateVolume(ctx, volName, volumeLabels)
+	if err := m.Docker.CreateVolume(ctx, volName, volumeLabels); err != nil {
+		return false, fmt.Errorf("creating SSH volume: %w", err)
+	}
+	return true, nil
+}
+
+// ensureSSH creates the SSH relay container if it does not exist yet, or
+// starts it when it is stopped. The container runs on the mesh network
+// with the SSH volume mounted at /root/.ssh, so that ssh finds the keypair
+// and known_hosts, and resolves names through the mesh DNS at dnsIP.
+//
+// writeKeys generates an ed25519 keypair and writes it, with an empty
+// known_hosts, into the volume through the relay: id_ed25519 (private key),
+// id_ed25519.pub (public key) and known_hosts. A new relay gets them before
+// it starts.
+func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) error {
+	name := m.SSHContainerName()
+	info, err := m.inspectIfExists(ctx, name)
 	if err != nil {
-		return fmt.Errorf("creating SSH volume: %w", err)
+		return fmt.Errorf("checking SSH container: %w", err)
 	}
 
+	if info == nil {
+		sshArgs := []string{
+			"--name", string(name),
+			"--network", string(m.NetworkName()),
+			"--dns", dnsIP,
+			"-v", string(m.SSHVolumeName()) + ":/root/.ssh",
+		}
+		sshArgs = append(sshArgs, composeLabelFlags(m.ComposeProject(), "ssh")...)
+		if m.Pull {
+			sshArgs = append(sshArgs, "--pull", "always")
+		}
+		sshArgs = append(sshArgs, SSHImage, "sleep", "infinity")
+		if _, err := m.Docker.CreateContainer(ctx, sshArgs...); err != nil {
+			return fmt.Errorf("creating SSH container: %w", err)
+		}
+		info = &docker.ContainerInfo{Name: name, Status: docker.StateCreated}
+	}
+
+	if writeKeys {
+		if err := m.writeSSHKeys(ctx); err != nil {
+			return err
+		}
+	}
+
+	if err := m.startSSH(ctx, info); err != nil {
+		return err
+	}
+	m.WarnStaleDNS(ctx, dnsIP, info)
+	return nil
+}
+
+// writeSSHKeys generates the realm's keypair and copies it, with an empty
+// known_hosts, into the SSH volume through the relay container, which may be
+// running or not started yet.
+func (m *Manager) writeSSHKeys(ctx context.Context) error {
 	privKeyPEM, pubKeyLine := generateKeypair()
-
-	// Write keys to the volume using a temporary container. The container
-	// is created (not started) with the volume mounted, files are copied
-	// in via docker cp, then the container is removed.
-	keygenName := m.SSHKeygenName()
-	keygenArgs := []string{
-		"--name", string(keygenName),
-		"-v", string(volName) + ":/ssh",
-	}
-	if m.Pull {
-		keygenArgs = append(keygenArgs, "--pull", "always")
-	}
-	keygenArgs = append(keygenArgs, sshKeygenImage)
-	_, err = m.Docker.CreateContainer(ctx, keygenArgs...)
-	if err != nil {
-		return fmt.Errorf("creating temporary container: %w", err)
-	}
-	defer m.Docker.RemoveContainer(context.WithoutCancel(ctx), keygenName) //nolint:errcheck
-
-	err = m.Docker.CopyFilesToContainer(ctx, keygenName, "/ssh", map[string]docker.File{
+	err := m.Docker.CopyFilesToContainer(ctx, m.SSHContainerName(), "/root/.ssh", map[string]docker.File{
 		"id_ed25519":     {Content: privKeyPEM, Mode: 0600},
 		"id_ed25519.pub": {Content: pubKeyLine, Mode: 0644},
 		"known_hosts":    {Content: nil, Mode: 0644},
@@ -78,52 +106,19 @@ func (m *Manager) EnsureSSHVolume(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("writing SSH keys: %w", err)
 	}
-
 	return nil
 }
 
-// EnsureSSH creates the SSH relay container if it does not already exist.
-// The container runs on the mesh network with the SSH volume mounted at
-// /root/.ssh so that ssh automatically discovers the keypair and known_hosts.
-func (m *Manager) EnsureSSH(ctx context.Context) error {
-	name := m.SSHContainerName()
-	exists, err := m.Docker.ContainerExists(ctx, name)
-	if err != nil {
-		return fmt.Errorf("checking SSH container: %w", err)
-	}
-	if exists {
+// startSSH starts the SSH relay container that info describes unless it is
+// running.
+func (m *Manager) startSSH(ctx context.Context, info *docker.ContainerInfo) error {
+	if info.Status == docker.StateRunning {
 		return nil
 	}
-
-	// Look up DNS container IP so the SSH container can resolve *.<realm>.sind.
-	dnsInfo, err := m.Docker.InspectContainer(ctx, m.DNSContainerName())
-	if err != nil {
-		return fmt.Errorf("inspecting DNS container for IP: %w", err)
-	}
-	netName := m.NetworkName()
-	dnsIP := dnsInfo.IPs[netName]
-
-	sshArgs := []string{
-		"--name", string(name),
-		"--network", string(netName),
-		"--dns", dnsIP,
-		"-v", string(m.SSHVolumeName()) + ":/root/.ssh",
-	}
-	sshArgs = append(sshArgs, composeLabelFlags(m.ComposeProject(), "ssh")...)
-	if m.Pull {
-		sshArgs = append(sshArgs, "--pull", "always")
-	}
-	sshArgs = append(sshArgs, SSHImage, "sleep", "infinity")
-	_, err = m.Docker.CreateContainer(ctx, sshArgs...)
-	if err != nil {
-		return fmt.Errorf("creating SSH container: %w", err)
-	}
-
-	err = m.Docker.StartContainer(ctx, name)
-	if err != nil {
+	sindlog.From(ctx).InfoContext(ctx, "starting SSH relay", "container", string(info.Name), "state", string(info.Status))
+	if err := m.Docker.StartContainer(ctx, info.Name); err != nil {
 		return fmt.Errorf("starting SSH container: %w", err)
 	}
-
 	return nil
 }
 
@@ -226,11 +221,18 @@ func (m *Manager) AddKnownHosts(ctx context.Context, entries []KnownHostEntry) e
 		buf.WriteByte('\n')
 	}
 
-	err = m.Docker.WriteFile(ctx, name, knownHostsPath, buf.String())
+	err = m.writeKnownHosts(ctx, buf.String())
 	if err != nil {
 		return fmt.Errorf("writing known_hosts: %w", err)
 	}
 	return nil
+}
+
+// writeKnownHosts replaces the relay's known_hosts. The write ignores the
+// cancellation of ctx: `cat >` truncates the file first, and a write cut
+// short by Ctrl+C would drop the host keys of every cluster in the realm.
+func (m *Manager) writeKnownHosts(ctx context.Context, content string) error {
+	return m.Docker.WriteFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
 }
 
 // RemoveKnownHosts removes all entries for the given hostnames from the
@@ -268,7 +270,7 @@ func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) erro
 		result = strings.Join(kept, "\n") + "\n"
 	}
 
-	err = m.Docker.WriteFile(ctx, name, knownHostsPath, result)
+	err = m.writeKnownHosts(ctx, result)
 	if err != nil {
 		return fmt.Errorf("writing known_hosts: %w", err)
 	}

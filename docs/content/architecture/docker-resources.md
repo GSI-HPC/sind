@@ -37,9 +37,9 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
 | DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:latest` |
 | SSH container | `<realm>-ssh` | `sind-ssh` | `ghcr.io/gsi-hpc/sind-node:latest` (runs `sleep infinity`) |
-| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | written once by a `busybox:latest` helper, `<realm>-ssh-keygen` |
+| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys written once, through the SSH container before it first starts) |
 
-The mesh images do not follow `defaults.image`: the SSH relay always runs `sind-node:latest`, and CoreDNS and BusyBox come from Docker Hub. `--pull` pulls them too.
+The mesh images do not follow `defaults.image`: the SSH relay always runs `sind-node:latest`, and CoreDNS comes from Docker Hub. `--pull` pulls them too.
 
 ## Volume mounts
 

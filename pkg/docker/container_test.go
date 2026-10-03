@@ -399,6 +399,7 @@ const inspectJSON = `[{
     {"Type": "volume", "Name": "sind-dev-config", "Source": "/var/lib/docker/volumes/sind-dev-config/_data", "Destination": "/etc/slurm", "Driver": "local", "Mode": "rw", "RW": true, "Propagation": ""},
     {"Type": "bind", "Source": "/srv/run,2024", "Destination": "/data", "Mode": "", "RW": true, "Propagation": "rprivate"}
   ],
+  "HostConfig": {"Dns": ["172.19.0.2"]},
   "NetworkSettings": {
     "Networks": {
       "sind-dev-net": {"IPAddress": "172.18.0.2"},
@@ -418,6 +419,7 @@ func TestInspectContainer(t *testing.T) {
 	assert.Equal(t, ContainerID("94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca"), info.ID)
 	assert.Equal(t, testContainerName, info.Name)
 	assert.Equal(t, StateRunning, info.Status)
+	assert.Equal(t, []string{"172.19.0.2"}, info.DNS)
 	assert.Equal(t, Labels{
 		"sind.cluster":       "dev",
 		"sind.role":          "controller",

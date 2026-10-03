@@ -6,6 +6,7 @@ package mesh
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/retry"
+	"golang.org/x/sync/errgroup"
 )
 
 // DefaultRealm is the realm name that produces the standard resource names.
@@ -51,7 +53,23 @@ type Manager struct {
 	Realm   string
 	Pull    bool // force fresh image pull (--pull always)
 	HostDNS bool // configure host DNS resolution via systemd-resolved
-	created bool // set by EnsureMesh when mesh infrastructure is freshly created
+
+	// OnWarning receives warnings meant for the user, such as a mesh DNS
+	// address that containers created earlier no longer use. The sind CLI
+	// prints them to stderr. Without it, Warn logs them at warn level.
+	OnWarning func(msg string)
+
+	created bool // set by EnsureMeshNetwork when this call created the mesh network
+}
+
+// Warn reports a warning for the user through OnWarning, or the context's
+// logger when OnWarning is nil.
+func (m *Manager) Warn(ctx context.Context, msg string) {
+	if m.OnWarning != nil {
+		m.OnWarning(msg)
+		return
+	}
+	sindlog.From(ctx).WarnContext(ctx, msg)
 }
 
 // NewManager returns a Manager that operates on global resources through the
@@ -91,35 +109,158 @@ func (m *Manager) ComposeProject() string {
 	return m.Realm + "-mesh"
 }
 
-// EnsureMesh creates all global infrastructure resources (mesh network, DNS,
-// SSH volume, SSH container) if they do not already exist.
+// EnsureMesh creates the global infrastructure resources (mesh network, DNS,
+// SSH volume, SSH container) that do not exist yet, and starts the DNS and
+// SSH containers when they exist but are stopped, as after a host reboot or
+// a Docker daemon restart.
+//
+//	network ┬→ DNS ────┬→ SSH relay → host DNS
+//	        └→ volume ─┘
+//
+// The DNS container starts before the relay, which resolves through it.
 func (m *Manager) EnsureMesh(ctx context.Context) error {
 	log := sindlog.From(ctx)
 	log.InfoContext(ctx, "ensuring mesh infrastructure", "realm", m.Realm)
 	if err := m.EnsureMeshNetwork(ctx); err != nil {
 		return err
 	}
-	if err := m.EnsureDNS(ctx); err != nil {
+
+	var dnsIP string
+	var volumeCreated bool
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		ip, err := m.ensureDNS(gctx)
+		dnsIP = ip
+		return err
+	})
+	g.Go(func() error {
+		created, err := m.ensureSSHVolume(gctx)
+		volumeCreated = created
+		return err
+	})
+	if err := g.Wait(); err != nil {
 		return err
 	}
-	if err := m.EnsureSSHVolume(ctx); err != nil {
-		return err
-	}
-	if err := m.EnsureSSH(ctx); err != nil {
+	if err := m.ensureSSH(ctx, dnsIP, volumeCreated); err != nil {
 		return err
 	}
 
 	// Best-effort: configure host DNS resolution via systemd-resolved.
 	if m.HostDNS {
-		if ok, err := m.configureHostDNS(ctx); err != nil {
-			log.InfoContext(ctx, "host DNS configuration failed", "error", err)
-		} else if ok {
-			log.InfoContext(ctx, "host DNS resolution enabled")
-		}
+		m.ensureHostDNS(ctx)
 	}
 
 	log.DebugContext(ctx, "mesh infrastructure ready")
 	return nil
+}
+
+// ensureHostDNS configures host DNS resolution and logs the outcome.
+// Failures do not fail the caller: host DNS is best-effort.
+func (m *Manager) ensureHostDNS(ctx context.Context) {
+	log := sindlog.From(ctx)
+	if ok, err := m.configureHostDNS(ctx); err != nil {
+		log.InfoContext(ctx, "host DNS configuration failed", "error", err)
+	} else if ok {
+		log.InfoContext(ctx, "host DNS resolution enabled")
+	}
+}
+
+// StartMesh starts the realm's DNS and SSH relay containers that exist but
+// are not running, as after a host reboot or a Docker daemon restart. It
+// creates nothing: EnsureMesh does. The DNS container starts first, as the
+// relay and the nodes resolve through it, and a restarted DNS container
+// reapplies host DNS (HostDNS), which the host loses with the mesh bridge.
+//
+// It returns the DNS container's address on the mesh network, and whether
+// the realm has a DNS container. A relay created with another DNS address is
+// reported with Warn (see WarnStaleDNS).
+func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err error) {
+	var dns, relay *docker.ContainerInfo
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		info, err := m.inspectIfExists(gctx, m.DNSContainerName())
+		if err != nil {
+			return fmt.Errorf("inspecting DNS container: %w", err)
+		}
+		dns = info
+		return nil
+	})
+	g.Go(func() error {
+		info, err := m.inspectIfExists(gctx, m.SSHContainerName())
+		if err != nil {
+			return fmt.Errorf("inspecting SSH container: %w", err)
+		}
+		relay = info
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return "", false, err
+	}
+
+	if dns != nil {
+		stopped := dns.Status != docker.StateRunning
+		if dns, err = m.startDNS(ctx, dns); err != nil {
+			return "", false, err
+		}
+		dnsIP = dns.IPs[m.NetworkName()]
+		if stopped && m.HostDNS {
+			m.ensureHostDNS(ctx)
+		}
+	}
+	if relay != nil {
+		if err := m.startSSH(ctx, relay); err != nil {
+			return "", false, err
+		}
+		m.WarnStaleDNS(ctx, dnsIP, relay)
+	}
+	return dnsIP, dns != nil, nil
+}
+
+// WarnStaleDNS warns about the containers in infos that were created to
+// resolve through the mesh DNS at another address than dnsIP, the DNS
+// container's current one. Docker fixes a container's DNS servers when it
+// creates the container, so these keep asking the old address: names under
+// <realm>.sind and external names no longer resolve in them. Containers
+// created without --dns, and an empty dnsIP, are not checked.
+func (m *Manager) WarnStaleDNS(ctx context.Context, dnsIP string, infos ...*docker.ContainerInfo) {
+	if dnsIP == "" {
+		return
+	}
+	var names, addrs []string
+	for _, info := range infos {
+		if len(info.DNS) == 0 || slices.Contains(info.DNS, dnsIP) {
+			continue
+		}
+		names = append(names, string(info.Name))
+		for _, a := range info.DNS {
+			if !slices.Contains(addrs, a) {
+				addrs = append(addrs, a)
+			}
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	msg := fmt.Sprintf("mesh DNS %s now has the address %s, but containers created before still use %s (%s): "+
+		"names under %s.sind and external names do not resolve in them. Delete and re-create their clusters to repair this",
+		m.DNSContainerName(), dnsIP, strings.Join(addrs, ", "), strings.Join(names, ", "), m.Realm)
+	if slices.Contains(names, string(m.SSHContainerName())) {
+		msg += "; the SSH relay is re-created once the realm's last cluster is deleted"
+	}
+	m.Warn(ctx, msg)
+}
+
+// inspectIfExists inspects a container, returning nil without error when
+// it does not exist.
+func (m *Manager) inspectIfExists(ctx context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
+	info, err := m.Docker.InspectContainer(ctx, name)
+	if err != nil {
+		if docker.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return info, nil
 }
 
 // CleanupMesh removes all global infrastructure resources. This should only
@@ -157,7 +298,6 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 	return nil
 }
 
-// removeContainerIfExists stops and removes a container if it exists.
 // removeContainerIfExists removes a container, treating "not found" as
 // success so the delete path survives a TOCTOU race or a user-driven manual
 // removal.
@@ -168,7 +308,6 @@ func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.Conta
 	return nil
 }
 
-// removeNetworkIfExists removes a network if it exists.
 // removeNetworkIfExists removes a network, treating "not found" as success.
 func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.NetworkName) error {
 	if err := m.Docker.RemoveNetwork(ctx, name); err != nil && !docker.IsNotFound(err) {
@@ -177,8 +316,6 @@ func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.Network
 	return nil
 }
 
-// removeVolumeIfExists removes a volume if it exists, retrying past the
-// dockerd async-cleanup race that follows `docker rm -f`.
 // removeVolumeIfExists removes a volume, retrying past the dockerd
 // async-cleanup race that follows `docker rm -f`, and treating "not found"
 // as success.
@@ -223,19 +360,30 @@ func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	return nil
 }
 
-// EnsureDNS creates the mesh DNS container if it does not already exist.
-// The container runs CoreDNS on the mesh network, serving <realm>.sind records
-// from inline hosts entries in the Corefile.
-func (m *Manager) EnsureDNS(ctx context.Context) error {
-	name := m.DNSContainerName()
-	exists, err := m.Docker.ContainerExists(ctx, name)
+// ensureDNS creates the mesh DNS container if it does not exist yet, or
+// starts it when it is stopped, and returns its address on the mesh network.
+// The container runs CoreDNS on the mesh network, serving <realm>.sind
+// records from inline hosts entries in the Corefile.
+func (m *Manager) ensureDNS(ctx context.Context) (string, error) {
+	info, err := m.inspectIfExists(ctx, m.DNSContainerName())
 	if err != nil {
-		return fmt.Errorf("checking DNS container: %w", err)
+		return "", fmt.Errorf("checking DNS container: %w", err)
 	}
-	if exists {
-		return nil
+	if info == nil {
+		info, err = m.createDNS(ctx)
+	} else {
+		info, err = m.startDNS(ctx, info)
 	}
+	if err != nil {
+		return "", err
+	}
+	return info.IPs[m.NetworkName()], nil
+}
 
+// createDNS creates and starts the mesh DNS container with an empty
+// Corefile, and returns its details once started.
+func (m *Manager) createDNS(ctx context.Context) (*docker.ContainerInfo, error) {
+	name := m.DNSContainerName()
 	args := []string{
 		"--name", string(name),
 		"--network", string(m.NetworkName()),
@@ -245,24 +393,36 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 		args = append(args, "--pull", "always")
 	}
 	args = append(args, DNSImage)
-	_, err = m.Docker.CreateContainer(ctx, args...)
-	if err != nil {
-		return fmt.Errorf("creating DNS container: %w", err)
+	if _, err := m.Docker.CreateContainer(ctx, args...); err != nil {
+		return nil, fmt.Errorf("creating DNS container: %w", err)
 	}
 
-	err = m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
+	err := m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
 		"Corefile": []byte(generateCorefile(m.Realm, nil)),
 	})
 	if err != nil {
-		return fmt.Errorf("writing DNS configuration: %w", err)
+		return nil, fmt.Errorf("writing DNS configuration: %w", err)
 	}
 
-	err = m.Docker.StartContainer(ctx, name)
+	return m.startDNS(ctx, &docker.ContainerInfo{Name: name, Status: docker.StateCreated})
+}
+
+// startDNS starts the DNS container that info describes unless it is
+// running, and then returns its details again: the started container has a
+// new address on the mesh network.
+func (m *Manager) startDNS(ctx context.Context, info *docker.ContainerInfo) (*docker.ContainerInfo, error) {
+	if info.Status == docker.StateRunning {
+		return info, nil
+	}
+	sindlog.From(ctx).InfoContext(ctx, "starting mesh DNS", "container", string(info.Name), "state", string(info.Status))
+	if err := m.Docker.StartContainer(ctx, info.Name); err != nil {
+		return nil, fmt.Errorf("starting DNS container: %w", err)
+	}
+	started, err := m.Docker.InspectContainer(ctx, info.Name)
 	if err != nil {
-		return fmt.Errorf("starting DNS container: %w", err)
+		return nil, fmt.Errorf("inspecting DNS container: %w", err)
 	}
-
-	return nil
+	return started, nil
 }
 
 // AddDNSRecord adds an A record to the mesh DNS Corefile and reloads CoreDNS.
@@ -286,8 +446,28 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 
 	// Build set of hostnames being added for dedup.
 	newHostnames := make(map[string]bool, len(records))
+	newEntries := make(map[string]bool, len(records))
 	for _, r := range records {
 		newHostnames[r.Hostname] = true
+		newEntries[r.IP+" "+r.Hostname] = true
+	}
+
+	// Leave the Corefile alone when it has exactly these entries for the
+	// hostnames, as when a power on finds the nodes at their old addresses.
+	present, stale := 0, false
+	for _, entry := range entries {
+		fields := strings.Fields(entry)
+		if len(fields) < 2 || !newHostnames[fields[1]] {
+			continue
+		}
+		if newEntries[fields[0]+" "+fields[1]] {
+			present++
+		} else {
+			stale = true
+		}
+	}
+	if !stale && present == len(newEntries) {
+		return nil
 	}
 
 	// Keep existing entries that don't conflict with new ones.
@@ -428,22 +608,17 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 	return parseEntries(string(data)), nil
 }
 
-// writeDNSEntries generates a new Corefile, writes it to the container, and
-// sends SIGHUP to reload CoreDNS.
-// writeDNSEntries generates a new Corefile and writes it to the DNS
-// container. If the container is running, it is restarted to pick up the new
-// configuration; if it is not running, the new Corefile will be loaded when
-// it next starts.
-// writeDNSEntries generates a new Corefile and writes it to the DNS
-// container. A missing DNS container is treated as a no-op (the mesh is
-// being torn down or the user removed it manually). A stopped container
-// has its Corefile updated but no reload kick; CoreDNS will load the new
-// config on next start.
-// writeDNSEntries generates a new Corefile and writes it to the DNS
-// container. If the container is running, it is restarted to pick up the new
-// configuration; if it is not running, the new Corefile will be loaded when
-// it next starts.
+// writeDNSEntries writes a Corefile with the given host entries into the
+// DNS container and has CoreDNS load it. A running CoreDNS reloads it on
+// SIGUSR1 without dropping queries. A stopped DNS container is started,
+// with a stopped relay (see StartMesh), as every node and the relay resolve
+// through it.
+//
+// The write and the reload ignore the cancellation of ctx, so that Ctrl+C
+// cannot leave the DNS container stopped or with a Corefile it has not
+// loaded.
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
+	ctx = context.WithoutCancel(ctx)
 	name := m.DNSContainerName()
 	err := m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
 		"Corefile": []byte(generateCorefile(m.Realm, entries)),
@@ -457,13 +632,13 @@ func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 		return fmt.Errorf("inspecting DNS container: %w", err)
 	}
 	if info.Status != docker.StateRunning {
+		if _, _, err := m.StartMesh(ctx); err != nil {
+			return fmt.Errorf("reloading DNS: %w", err)
+		}
 		return nil
 	}
 
-	if err := m.Docker.KillContainer(ctx, name); err != nil {
-		return fmt.Errorf("reloading DNS: %w", err)
-	}
-	if err := m.Docker.StartContainer(ctx, name); err != nil {
+	if err := m.Docker.SignalContainer(ctx, name, "USR1"); err != nil {
 		return fmt.Errorf("reloading DNS: %w", err)
 	}
 	return nil

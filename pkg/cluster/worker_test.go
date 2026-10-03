@@ -344,7 +344,7 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 			return mock.Result{Stdout: workerContainers("worker-0")}
 
 		// InspectContainer: sind-dns → return mesh IP
-		case args[0] == "inspect" && args[1] == "sind-dns":
+		case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh"):
 			return mock.Result{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
 				"sind-mesh": "10.0.0.2",
 			})}
@@ -1181,7 +1181,7 @@ func TestWorkerRemove_ReconfigureError(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, "reconfiguring slurmctld: slurmctld down", err.Error())
 	assert.Zero(t, countCalls(m.Calls, "rm"))
-	assert.Equal(t, 1, countCalls(m.Calls, "start", "sind-dns"), "CoreDNS restarted")
+	assert.Equal(t, 1, countCalls(m.Calls, "kill", "-s", "USR1", "sind-dns"), "CoreDNS reloaded")
 }
 
 func TestWorkerRemove_UnmanagedCluster(t *testing.T) {
@@ -2372,7 +2372,7 @@ func workerLifecycleOnCall(t *testing.T) func([]string, string) mock.Result {
 			}
 			return mock.Result{Stdout: workerContainers("worker-0")}
 
-		case args[0] == "inspect" && args[1] == "sind-dns":
+		case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh"):
 			return mock.Result{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
 				"sind-mesh": "10.0.0.2",
 			})}

@@ -52,7 +52,19 @@ Within a cluster, short names work via the search domain: a node in the `dev` cl
 
 DNS records use each node's **cluster network IP** (not mesh network IP), so the SSH relay and the host reach the nodes through the cluster's network.
 
+sind writes the records when it creates or deletes nodes, and again when `sind power on`, `reboot` or `cycle` start nodes: Docker can give a node another address each time it starts. CoreDNS reloads its configuration in place on `SIGUSR1`, without dropping queries.
+
 The DNS container is lightweight — no systemd or sshd.
+
+### After a host reboot or a Docker daemon restart
+
+sind sets no restart policy, so the mesh containers and the nodes stay stopped after a host reboot or a Docker daemon restart. `sind get cluster` then shows `dns` and `ssh` with ✗. `sind power on` starts them again: first the realm's DNS container, then the SSH relay, then the nodes, whose DNS records it points at their new addresses. It also applies host DNS again. `sind create cluster` and `sind create worker` start a stopped mesh too.
+
+```bash
+sind power on controller,worker-[0-1]
+```
+
+Docker fixes the DNS server of the nodes and the relay (`--dns`) when it creates them. Starting the DNS container before anything else on the mesh gets it its old address back. If it gets another one, for example after containers were started by hand in another order, sind prints a warning: the containers created before resolve neither `*.<realm>.sind` names nor external names until they are created again. Delete and create the affected clusters to repair them; the SSH relay is created again with the realm's mesh after its last cluster is deleted.
 
 ### Host DNS resolution
 
@@ -71,7 +83,7 @@ ping controller    # → controller.default.sind.sind
 
 This feature is **best-effort**: it is silently skipped when systemd-resolved is not running or when the required polkit authorization is missing. Run `sind doctor` to check prerequisites and get a copyable install command.
 
-Host DNS is configured during every `sind create cluster` (the settings are idempotent) and reverted during `sind delete cluster` (last cluster).
+Host DNS is configured during every `sind create cluster` (the settings are idempotent), when `sind power on` starts a stopped mesh, and reverted during `sind delete cluster` (last cluster).
 
 #### Polkit policy
 

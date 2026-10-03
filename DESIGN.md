@@ -41,9 +41,11 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 
 **Phase 1: Global Infrastructure**
 1. Create `sind-mesh` network (if not exists)
-2. Start `sind-dns` container (if not exists)
-3. Create `sind-ssh-config` volume and generate keypair (if not exists)
-4. Start `sind-ssh` container (if not exists)
+2. Create and start the `sind-dns` container (if not exists), or start it (if stopped), in parallel with step 3
+3. Create the `sind-ssh-config` volume (if not exists)
+4. Create the `sind-ssh` container (if not exists), copy a new keypair into a new volume through it, and start it (or start it, if stopped), after `sind-dns`, whose address it resolves through
+
+A mesh that exists but is stopped, as after a host reboot, is started, the DNS container first (see Host Reboot and Docker Daemon Restart).
 
 **Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
 
@@ -99,7 +101,7 @@ When a check fails for good, or the limit runs out, `sind create cluster` remove
 
 **Phase 4: Mesh Registration, Slurm and Home Directories** (concurrent)
 
-After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network, which nodes join with gateway priority 1 so that it answers before the mesh (see Cluster Network). The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
+After all nodes are ready, sind runs mesh registration (batch DNS ║ known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network, which nodes join with gateway priority 1 so that it answers before the mesh (see Cluster Network). The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
 
 With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmctld registers the cluster with slurmdbd when it starts (see Database Node). With `accounts`, sind then waits until `sacctmgr show cluster` lists the cluster and creates the Slurm accounts and associations (see Slurm Accounts).
 
@@ -404,6 +406,7 @@ sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
 MESH SERVICES
 NAME   CONTAINER   STATUS
 dns    sind-dns    ✓
+ssh    sind-ssh    ✓
 
 MOUNTS
 MOUNT        SOURCE                    TYPE       STATUS
@@ -418,6 +421,8 @@ db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slur
 worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
+
+`MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart).
 
 The data row (`/data`, or the configured mount point) shows what Docker mounts there on the nodes, as `docker inspect` reports it: the bind-mounted host directory or the volume. Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
@@ -549,12 +554,16 @@ sind power unfreeze NODES               # resume frozen node
 | shutdown | `docker stop` (the image's stop signal, `SIGRTMIN+3` for sind-node, then SIGKILL after 10 s) |
 | cut | `docker kill` (immediate SIGKILL) |
 | on | `docker start` |
-| reboot | `docker stop` + `docker start` |
-| cycle | `docker kill` + `docker start` |
+| reboot | `docker stop`, then as `on` |
+| cycle | `docker kill`, then as `on` |
 | freeze | `docker pause` (cgroup freezer) |
 | unfreeze | `docker unpause` |
 
 `docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
+
+A power command runs its Docker calls for one node after another; `reboot` and `cycle` take every node down before they start any. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.
+
+`on`, `reboot` and `cycle` start the realm's mesh DNS and SSH relay first if they are stopped, start the nodes, and then point the started nodes' mesh DNS records at their current cluster network addresses: Docker releases a container's address when it stops and can give it another one on start, for example after `sind create worker` took the address of a node that was powered off. They warn about nodes created with a mesh DNS address the DNS container no longer has. Since they rewrite the realm's Corefile, they take the realm lock.
 
 Freeze/unfreeze uses Docker's cgroup freezer to suspend all processes. The container remains "running" but is completely unresponsive, simulating a hung or unreachable node.
 
@@ -1120,9 +1129,9 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
 | DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:latest` |
 | SSH container | `<realm>-ssh` | `sind-ssh` | `ghcr.io/gsi-hpc/sind-node:latest` (runs `sleep infinity`) |
-| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | written by a `busybox:latest` helper, `<realm>-ssh-keygen` |
+| SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys copied in through `<realm>-ssh` before it first starts) |
 
-The mesh images do not follow `defaults.image`; `--pull` pulls them too.
+The mesh images do not follow `defaults.image`; `--pull` pulls them too. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
 
 ### Defaults
 
@@ -1321,6 +1330,8 @@ Nodes are configured with:
 
 The DNS container is lightweight and does not run systemd/sshd.
 
+sind keeps the records in the Corefile's `hosts` block and writes them when it creates or deletes nodes, and when `sind power on`, `reboot` and `cycle` start nodes, as a node can get another address on each start. A running CoreDNS reloads the Corefile on `SIGUSR1` (`docker kill -s USR1`), without dropping queries; a stopped DNS container is started instead. The write and the reload ignore Ctrl+C, and so does the rewrite of `known_hosts`, whose `cat >` truncates the file first. Each realm-wide file has one writer at a time (the realm lock); the Corefile and `known_hosts` updates run in parallel, as they live in different containers.
+
 #### Host DNS Resolution
 
 When systemd-resolved runs on the host and polkit lets the user change its per-link settings (`org.freedesktop.resolve1.set-dns-servers`, `set-domains` and `revert`), `sind create cluster` makes the mesh bridge (`br-` and the first 12 characters of the mesh network's ID) a resolver link:
@@ -1331,6 +1342,12 @@ resolvectl domain <bridge> ~<realm>.sind default.<realm>.sind
 ```
 
 `~<realm>.sind` is a routing domain: the host sends queries for `*.<realm>.sind` to the realm's CoreDNS, and the link does not become a default route for other queries. `default.<realm>.sind` is a search domain, which systemd-resolved tries for single-label lookups from any process on the host, so a bare `controller` resolves to the `default` cluster's controller; each realm with a mesh adds its own. The setup is best-effort: without systemd-resolved, the polkit authorization or the bridge interface, sind skips it with a debug log line. `sind doctor` checks the polkit policy. Deleting the realm's last cluster runs `resolvectl revert <bridge>` before it removes the mesh network. The CLI turns it on with `mesh.Manager.HostDNS`, which is off by default for library callers.
+
+### Host Reboot and Docker Daemon Restart
+
+sind sets no restart policy: nodes keep the power state `sind power` gave them, and after a host reboot or a Docker daemon restart the mesh containers and the nodes stay stopped. `sind get cluster` shows a stopped DNS container or relay with ✗. `sind power on` starts the realm's DNS container, then the relay, then the nodes, re-registers the nodes' DNS records, and reapplies host DNS; `sind create cluster` and `sind create worker` also start a stopped mesh, DNS first.
+
+The DNS container's address is fixed into every node's and the relay's `--dns` when Docker creates them. Started before anything else on the mesh, the DNS container gets its old address back: it was the first container on the mesh, and Docker hands out the lowest free address. When it gets another one, sind warns (`Warning:` on stderr) and names the containers that still use the old address; they resolve neither `*.<realm>.sind` names nor external names until their clusters are created again (the relay with the realm's mesh, after the last cluster is deleted). A pinned DNS address (`--ip`) would need a mesh network with a user-defined subnet.
 
 ### SSH
 
@@ -1355,7 +1372,7 @@ The `sind-ssh-config` volume contains:
 
 | Event | Result |
 |-------|--------|
-| First cluster created | Creates `sind-ssh-config` volume, generates keypair, starts `sind-ssh` container |
+| First cluster created | Creates `sind-ssh-config` volume and `sind-ssh` container, copies a new keypair into the volume through the container, starts it |
 | Node created | Collects sshd host key, appends to `known_hosts` |
 | Node deleted | Removes entry from `known_hosts` |
 | Last cluster deleted | Removes `sind-ssh` container and `sind-ssh-config` volume |
@@ -1707,8 +1724,9 @@ $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
 - `sind delete cluster` (single and `--all`)
 - `sind create worker`
 - `sind delete worker`
+- `sind power on`, `sind power reboot` and `sind power cycle` (they start a stopped mesh and rewrite DNS records)
 
-Read-only operations (`get`, `logs`, `ssh`, etc.) do not acquire the lock.
+Read-only operations (`get`, `logs`, `ssh`, etc.) and the other `power` commands do not acquire the lock.
 
 ### Library callers
 

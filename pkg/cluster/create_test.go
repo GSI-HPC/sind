@@ -947,6 +947,59 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	assert.GreaterOrEqual(t, meshRm, 1, "mesh cleanup should run on resolveInfra failure")
 }
 
+func TestResolveMeshInfra_NoDNSContainer(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: notFoundErr(t)}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	_, _, err := resolveMeshInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "inspecting DNS container: sind-dns not found")
+}
+
+// TestResolveMeshInfra_StartsStoppedMesh covers a create after a host
+// reboot: the stopped mesh starts, DNS first, and new nodes get the
+// address the DNS container has now.
+func TestResolveMeshInfra_StartsStoppedMesh(t *testing.T) {
+	started := map[string]bool{}
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "inspect" && args[1] == "sind-dns":
+			state, ips := "exited", map[docker.NetworkName]string(nil)
+			if started["sind-dns"] {
+				state, ips = "running", map[docker.NetworkName]string{"sind-mesh": "10.0.0.2"}
+			}
+			return mock.Result{Stdout: inspectJSON(t, "sind-dns", state, ips)}
+		case args[0] == "inspect" && args[1] == "sind-ssh":
+			return mock.Result{Stdout: inspectJSON(t, "sind-ssh", "exited", nil)}
+		case args[0] == "start":
+			if args[1] == "sind-ssh" {
+				assert.True(t, started["sind-dns"], "DNS starts before the relay")
+			}
+			started[args[1]] = true
+			return mock.Result{}
+		case args[0] == "exec" && args[1] == "sind-ssh":
+			return mock.Result{Stdout: "ssh-ed25519 AAAA-key\n"}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	dnsIP, key, err := resolveMeshInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm))
+
+	require.NoError(t, err)
+	assert.Equal(t, "10.0.0.2", dnsIP)
+	assert.Equal(t, "ssh-ed25519 AAAA-key\n", key)
+	assert.True(t, started["sind-ssh"])
+}
+
 func TestCreate_CleanupResourcesError(t *testing.T) {
 	// When Create fails and the cleanup itself fails, the error carries the
 	// original failure and the cleanup's, so the caller learns that
@@ -1152,7 +1205,7 @@ func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
 func TestResolveInfra_SSHKeyError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" && args[1] == "sind-dns" {
+		if args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh") {
 			return mock.Result{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.0.2",
 			})}
@@ -1178,7 +1231,7 @@ func TestResolveInfra_SSHKeyError(t *testing.T) {
 func TestResolveInfra_SlurmVersionError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" && args[1] == "sind-dns" {
+		if args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh") {
 			return mock.Result{Stdout: inspectJSON(t, "sind-dns", "running", map[docker.NetworkName]string{
 				"sind-dev-net": "10.0.0.2",
 			})}

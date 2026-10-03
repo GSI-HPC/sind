@@ -400,10 +400,17 @@ func netInspect(name, subnet, gw string) string {
 	return fmt.Sprintf(`[{"Name":%q,"Driver":"bridge","IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gw)
 }
 
+// meshContainerInspect returns docker inspect output for a mesh container
+// in the given state.
+func meshContainerInspect(name, state string) string {
+	return fmt.Sprintf(`[{"Name":"/%s","State":{"Status":%q}}]`, name, state)
+}
+
 func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)    // InspectNetwork: mesh
-	m.AddResult("[{}]\n", "", nil)                                                  // InspectContainer: sind-dns
+	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)               // InspectContainer: sind-dns
+	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)               // InspectContainer: sind-ssh
 	m.AddResult(netInspect("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // InspectNetwork: cluster
 	c := docker.NewClient(&m)
 
@@ -417,6 +424,8 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	assert.Equal(t, "172.19.0.1", health.MeshGateway)
 	assert.True(t, health.DNS)
 	assert.Equal(t, "sind-dns", health.DNSName)
+	assert.True(t, health.SSH)
+	assert.Equal(t, "sind-ssh", health.SSHName)
 	assert.True(t, health.Cluster)
 	assert.Equal(t, "sind-dev-net", health.ClusterName)
 	assert.Equal(t, "bridge", health.ClusterDriver)
@@ -429,6 +438,7 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 	notFound := testutil.ExitCode1(t)
 	m.AddResult("", "Error: No such network\n", notFound)   // mesh
 	m.AddResult("", "Error: No such container\n", notFound) // dns
+	m.AddResult("", "Error: No such container\n", notFound) // ssh
 	m.AddResult("", "Error: No such network\n", notFound)   // cluster net
 	c := docker.NewClient(&m)
 
@@ -439,6 +449,8 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 	assert.Equal(t, "sind-mesh", health.MeshName)
 	assert.False(t, health.DNS)
 	assert.Equal(t, "sind-dns", health.DNSName)
+	assert.False(t, health.SSH)
+	assert.Equal(t, "sind-ssh", health.SSHName)
 	assert.False(t, health.Cluster)
 	assert.Equal(t, "sind-dev-net", health.ClusterName)
 }
@@ -447,7 +459,8 @@ func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	var m mock.Executor
 	notFound := testutil.ExitCode1(t)
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                               // inspect dns
+	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
+	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)            // inspect ssh
 	m.AddResult("", "Error: No such network\n", notFound)                        // cluster net missing
 	c := docker.NewClient(&m)
 
@@ -456,7 +469,26 @@ func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, health.Mesh)
 	assert.True(t, health.DNS)
+	assert.True(t, health.SSH)
 	assert.False(t, health.Cluster)
+}
+
+// TestGetNetworkHealth_MeshStopped covers a realm after a host reboot: the
+// mesh containers exist but are stopped, which is not healthy.
+func TestGetNetworkHealth_MeshStopped(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)
+	m.AddResult(meshContainerInspect("sind-dns", "exited"), "", nil)
+	m.AddResult(meshContainerInspect("sind-ssh", "exited"), "", nil)
+	m.AddResult(netInspect("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil)
+	c := docker.NewClient(&m)
+
+	health, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	assert.True(t, health.Mesh)
+	assert.False(t, health.DNS)
+	assert.False(t, health.SSH)
 }
 
 func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
@@ -482,10 +514,24 @@ func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
 	assert.Contains(t, err.Error(), "checking DNS container")
 }
 
+func TestGetNetworkHealth_SSHCheckError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
+	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
+	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // ssh error
+	c := docker.NewClient(&m)
+
+	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking SSH container")
+}
+
 func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                               // inspect dns
+	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
+	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)            // inspect ssh
 	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // cluster net error
 	c := docker.NewClient(&m)
 
@@ -498,7 +544,8 @@ func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
 func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)        // inspect mesh
-	m.AddResult("[{}]\n", "", nil)                                                      // inspect dns
+	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)                   // inspect dns
+	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)                   // inspect ssh
 	m.AddResult(netInspect("sind-default-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // inspect cluster
 	c := docker.NewClient(&m)
 
@@ -506,7 +553,7 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 
 	require.NoError(t, err)
 	// Verify cluster network name uses default.
-	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "inspect", "sind-default-net"}, m.Calls[3].Args)
 }
 
 // --- GetMountPoints ---

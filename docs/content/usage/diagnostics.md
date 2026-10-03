@@ -197,6 +197,7 @@ sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
 MESH SERVICES
 NAME   CONTAINER   STATUS
 dns    sind-dns    ✓
+ssh    sind-ssh    ✓
 
 MOUNTS
 MOUNT        SOURCE               TYPE       STATUS
@@ -222,6 +223,8 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 | `mixed`   | Containers are in different states                    |
 | `empty`   | No nodes exist                                        |
 | `unknown` | All containers are in a state sind does not map, e.g. `restarting` |
+
+`MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok` and `ssh_ok` in the JSON output). After a host reboot or a Docker daemon restart they exist but are stopped; `sind power on` starts them again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 

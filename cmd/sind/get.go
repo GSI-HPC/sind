@@ -580,6 +580,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
 	_, _ = fmt.Fprintf(w, "dns\t%s\t%s\n", cell(net.DNSName), checkmark(net.DNS))
+	_, _ = fmt.Fprintf(w, "ssh\t%s\t%s\n", cell(net.SSHName), checkmark(net.SSH))
 	if err := w.Flush(); err != nil {
 		return err
 	}

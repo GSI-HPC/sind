@@ -121,7 +121,8 @@ type ContainerInfo struct {
 	OOMKilled bool
 	Labels    Labels
 	IPs       map[NetworkName]string
-	Mounts    []Mount // bind mounts and volumes; tmpfs mounts are not listed
+	Mounts    []Mount  // bind mounts and volumes; tmpfs mounts are not listed
+	DNS       []string // DNS servers set with --dns
 	// Image is the ID of the image the container runs (sha256:...), which
 	// stays valid when the reference it was created from moves.
 	Image      string
@@ -156,6 +157,7 @@ type HostConfig struct {
 	CapDrop     []string          `json:"CapDrop"`
 	Devices     []DeviceMapping   `json:"Devices"`
 	SecurityOpt []string          `json:"SecurityOpt"`
+	DNS         []string          `json:"Dns"` // --dns
 }
 
 // DeviceMapping is a host device exposed to a container (--device).
@@ -236,6 +238,7 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			Image:      r.Image,
 			HostConfig: r.HostConfig,
 			Mounts:     r.Mounts,
+			DNS:        r.HostConfig.DNS,
 		})
 	}
 	return infos, nil

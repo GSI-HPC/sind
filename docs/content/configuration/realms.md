@@ -57,7 +57,7 @@ With realm `ci-42`, resources are prefixed accordingly:
 
 ## Advisory locking
 
-Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:
+Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:
 
 ```
 $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock

@@ -4,10 +4,16 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 )
+
+// A node whose docker call fails does not stop a power command: it returns
+// the failures of all nodes, joined.
 
 // PowerShutdown gracefully stops the specified nodes (docker stop).
 func PowerShutdown(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error {
@@ -19,21 +25,28 @@ func PowerCut(ctx context.Context, client *docker.Client, realm, clusterName str
 	return forEachTarget(ctx, client, realm, clusterName, shortNames, "killing", client.KillContainer)
 }
 
-// PowerOn starts the specified stopped nodes (docker start).
-func PowerOn(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error {
-	return forEachTarget(ctx, client, realm, clusterName, shortNames, "starting", client.StartContainer)
+// PowerOn starts the specified stopped nodes (docker start). It first starts
+// the realm's mesh DNS and SSH relay if they are stopped, as after a host
+// reboot, and afterwards points the started nodes' mesh DNS records at their
+// addresses: Docker can give a node another address each time it starts.
+func PowerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
+	containers, err := resolveTargets(ctx, client, meshMgr.Realm, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	return powerOn(ctx, client, meshMgr, clusterName, containers)
 }
 
-// PowerReboot gracefully restarts the specified nodes (docker stop + start).
-func PowerReboot(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error {
-	return forEachTargetPair(ctx, client, realm, clusterName, shortNames,
-		"stopping", client.StopContainer, "starting", client.StartContainer)
+// PowerReboot gracefully restarts the specified nodes: it stops them all
+// (docker stop), then starts them as PowerOn does.
+func PowerReboot(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
+	return powerRestart(ctx, client, meshMgr, clusterName, shortNames, "stopping", client.StopContainer)
 }
 
-// PowerCycle hard-restarts the specified nodes (docker kill + start).
-func PowerCycle(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error {
-	return forEachTargetPair(ctx, client, realm, clusterName, shortNames,
-		"killing", client.KillContainer, "starting", client.StartContainer)
+// PowerCycle hard-restarts the specified nodes: it kills them all (docker
+// kill), then starts them as PowerOn does.
+func PowerCycle(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
+	return powerRestart(ctx, client, meshMgr, clusterName, shortNames, "killing", client.KillContainer)
 }
 
 // PowerFreeze suspends all processes in the specified nodes (docker pause).
@@ -53,29 +66,81 @@ func forEachTarget(ctx context.Context, client *docker.Client, realm, clusterNam
 	if err != nil {
 		return err
 	}
-	for _, name := range containers {
-		if err := op(ctx, name); err != nil {
-			return fmt.Errorf("%s %s: %w", verb, name, err)
+	_, err = forEachContainer(ctx, containers, verb, op)
+	return err
+}
+
+// powerRestart takes the specified nodes down with op, then starts the ones
+// it took down as PowerOn does.
+func powerRestart(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string, verb string, op func(context.Context, docker.ContainerName) error) error {
+	containers, err := resolveTargets(ctx, client, meshMgr.Realm, clusterName, shortNames)
+	if err != nil {
+		return err
+	}
+	down, downErr := forEachContainer(ctx, containers, verb, op)
+	return errors.Join(downErr, powerOn(ctx, client, meshMgr, clusterName, down))
+}
+
+// powerOn starts the realm's mesh if needed, then the given containers, and
+// re-registers the mesh DNS records of the ones that started.
+func powerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerName) error {
+	if len(containers) == 0 {
+		return nil
+	}
+	dnsIP, hasDNS, err := meshMgr.StartMesh(ctx)
+	if err != nil {
+		return fmt.Errorf("starting mesh: %w", err)
+	}
+	started, startErr := forEachContainer(ctx, containers, "starting", client.StartContainer)
+	if !hasDNS {
+		return startErr
+	}
+	return errors.Join(startErr, refreshDNSRecords(ctx, client, meshMgr, clusterName, started, dnsIP))
+}
+
+// refreshDNSRecords points the mesh DNS records of the given running nodes
+// at their current cluster network addresses, and warns about nodes that
+// resolve through another mesh DNS address than dnsIP.
+func refreshDNSRecords(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerName, dnsIP string) error {
+	if len(containers) == 0 {
+		return nil
+	}
+	infos, err := client.InspectContainers(ctx, containers...)
+	if err != nil {
+		return fmt.Errorf("inspecting started nodes: %w", err)
+	}
+	meshMgr.WarnStaleDNS(ctx, dnsIP, infos...)
+
+	netName := NetworkName(meshMgr.Realm, clusterName)
+	prefix := ContainerPrefix(meshMgr.Realm, clusterName)
+	var records []mesh.DNSRecord
+	for _, info := range infos {
+		ip := info.IPs[netName]
+		if ip == "" {
+			continue
 		}
+		shortName := strings.TrimPrefix(string(info.Name), prefix)
+		records = append(records, mesh.DNSRecord{Hostname: DNSName(shortName, clusterName, meshMgr.Realm), IP: ip})
+	}
+	if err := meshMgr.AddDNSRecords(ctx, records); err != nil {
+		return fmt.Errorf("updating DNS records: %w", err)
 	}
 	return nil
 }
 
-// forEachTargetPair resolves node names, then applies two operations per container.
-func forEachTargetPair(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string, verb1 string, op1 func(context.Context, docker.ContainerName) error, verb2 string, op2 func(context.Context, docker.ContainerName) error) error {
-	containers, err := resolveTargets(ctx, client, realm, clusterName, shortNames)
-	if err != nil {
-		return err
-	}
+// forEachContainer applies op to every container. It returns the containers
+// op succeeded on, and the failures, joined.
+func forEachContainer(ctx context.Context, containers []docker.ContainerName, verb string, op func(context.Context, docker.ContainerName) error) ([]docker.ContainerName, error) {
+	var done []docker.ContainerName
+	var errs []error
 	for _, name := range containers {
-		if err := op1(ctx, name); err != nil {
-			return fmt.Errorf("%s %s: %w", verb1, name, err)
+		if err := op(ctx, name); err != nil {
+			errs = append(errs, fmt.Errorf("%s %s: %w", verb, name, err))
+			continue
 		}
-		if err := op2(ctx, name); err != nil {
-			return fmt.Errorf("%s %s: %w", verb2, name, err)
-		}
+		done = append(done, name)
 	}
-	return nil
+	return done, errors.Join(errs...)
 }
 
 // resolveTargets validates that all shortNames exist in the cluster and returns

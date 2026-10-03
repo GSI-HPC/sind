@@ -356,28 +356,21 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	return cluster, nil
 }
 
-// resolveMeshInfra fetches DNS IP and SSH public key from mesh infrastructure
-// concurrently.
+// resolveMeshInfra starts the realm's mesh DNS and SSH relay if they are
+// stopped, and returns the DNS IP and the SSH public key.
 func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) (dnsIP, sshPubKey string, err error) {
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		info, err := client.InspectContainer(gctx, meshMgr.DNSContainerName())
-		if err != nil {
-			return fmt.Errorf("inspecting DNS container: %w", err)
-		}
-		dnsIP = info.IPs[meshMgr.NetworkName()]
-		return nil
-	})
-	g.Go(func() error {
-		key, err := client.ReadFile(gctx, meshMgr.SSHContainerName(), "/root/.ssh/id_ed25519.pub")
-		if err != nil {
-			return fmt.Errorf("reading SSH public key: %w", err)
-		}
-		sshPubKey = key
-		return nil
-	})
-	err = g.Wait()
-	return
+	dnsIP, found, err := meshMgr.StartMesh(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	if !found {
+		return "", "", fmt.Errorf("inspecting DNS container: %s not found", meshMgr.DNSContainerName())
+	}
+	key, err := client.ReadFile(ctx, meshMgr.SSHContainerName(), "/root/.ssh/id_ed25519.pub")
+	if err != nil {
+		return "", "", fmt.Errorf("reading SSH public key: %w", err)
+	}
+	return dnsIP, key, nil
 }
 
 // resolveInfra fetches mesh details and the Slurm version concurrently.
@@ -595,11 +588,26 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 		}
 	}
 
-	if err := meshMgr.AddDNSRecords(ctx, dnsRecords); err != nil {
-		return nil, fmt.Errorf("registering DNS: %w", err)
-	}
-	if err := meshMgr.AddKnownHosts(ctx, hostEntries); err != nil {
-		return nil, fmt.Errorf("registering host keys: %w", err)
+	// The Corefile and known_hosts live in different containers: update
+	// them in parallel, each with a single read-modify-write. Neither
+	// update cancels the other, which could cut a write short.
+	var dnsErr, hostsErr error
+	var g errgroup.Group
+	g.Go(func() error {
+		if err := meshMgr.AddDNSRecords(ctx, dnsRecords); err != nil {
+			dnsErr = fmt.Errorf("registering DNS: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if err := meshMgr.AddKnownHosts(ctx, hostEntries); err != nil {
+			hostsErr = fmt.Errorf("registering host keys: %w", err)
+		}
+		return nil
+	})
+	_ = g.Wait() // the goroutines report through dnsErr and hostsErr
+	if err := errors.Join(dnsErr, hostsErr); err != nil {
+		return nil, err
 	}
 
 	return nodes, nil
