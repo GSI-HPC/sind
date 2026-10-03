@@ -890,6 +890,8 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 - lowercase ASCII letters, digits and `-` only; uppercase is rejected, because DNS ignores case and `Dev` and `dev` would share DNS names
 - 1 to 63 characters
 - not beginning or ending with `-`
+- a cluster is not named `ssh`: its config volume, `<realm>-ssh-config`, would be the realm's SSH volume, which `sind delete cluster ssh` would then try to remove
+- with a managed db node, the cluster name has at most 40 characters: slurmdbd names the cluster's MariaDB tables `<cluster>_<table>`, MariaDB allows 64 characters, and Slurm documents the limit of 40. A longer name would keep slurmdbd from registering the cluster
 
 sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. The root command checks `--realm` before any command runs (`checkRealmFlag`), so it is a usage error even for a command that uses no realm, such as `version` or `get realms`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
 

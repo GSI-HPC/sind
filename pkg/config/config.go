@@ -344,6 +344,9 @@ func (c *Cluster) Validate() error {
 	if err := CheckName("cluster", c.Name); err != nil {
 		return err
 	}
+	if c.HasManagedDB() && len(c.Name) > MaxAccountingClusterName {
+		return fmt.Errorf("cluster name %q has %d characters: with a managed db node it may have at most %d, as slurmdbd builds its table names from it", c.Name, len(c.Name), MaxAccountingClusterName)
+	}
 	if c.Realm != "" {
 		if err := CheckName("realm", c.Realm); err != nil {
 			return err
