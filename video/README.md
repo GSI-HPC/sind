@@ -82,27 +82,43 @@ without changing episode scripts.
 ## Run it
 
 While developing an episode, render it locally (a laptop or a Claude Code
-cloud session); the docs workflow renders the published version. Requires
-Node.js 22+, Python 3.10 to 3.13 (kokoro-onnx does not support 3.14 yet) and
-FFmpeg with libx264; HyperFrames downloads its own Chrome, or uses
-`HYPERFRAMES_BROWSER_PATH`. With mise, create the venv from Python 3.12:
-`mise exec python@3.12 -- python -m venv ~/.venvs/sindy`.
+cloud session); the docs workflow renders the published version.
+
+Requirements: Node.js 22+, Python 3.10 to 3.13, FFmpeg with libx264, and Hugo
+0.156 or newer for the docs preview. HyperFrames downloads its own Chrome. If
+any of these get in the way, see [Pitfalls](#pitfalls).
 
 ```bash
 cd video
-npm install
+npm ci
+python3.12 -m venv ~/.venvs/sindy          # or: mise exec python@3.12 -- python -m venv ~/.venvs/sindy
+. ~/.venvs/sindy/bin/activate              # in every new shell
 pip install -r voice/requirements.txt
 npm run voice:setup                        # download Kokoro (about 350 MB) and patch it, once
+npx hyperframes browser ensure             # download chrome-headless-shell, once
+
 npm run episode -- voice quickstart        # narration into episodes/quickstart/assets/voice/
 npm run episode -- render quickstart       # renders/quickstart.mp4 (add --draft for speed)
-npm run episode -- publish quickstart      # docs/static/videos/, docs/data/videos/ for a local Hugo preview
 npm run voice:samples                      # audition pack in renders/voice-samples/
 npm run sheet                              # sindy/sheet.png expression sheet
 ```
 
-`--all` instead of an episode id processes every episode. `npx hyperframes
-preview` inside an episode opens the HyperFrames Studio, and `npx hyperframes
-snapshot --at 5,10` takes stills.
+Preview an episode on its docs page:
+
+```bash
+npm run episode -- publish quickstart      # docs/static/videos/ and docs/data/videos/ (git-ignored)
+cd ../docs
+mkdir -p themes/hugo-geekdoc
+curl -sL https://github.com/thegeeklab/hugo-geekdoc/releases/latest/download/hugo-geekdoc.tar.gz | tar -xz -C themes/hugo-geekdoc
+hugo server                                # http://localhost:1313/sind/getting-started/quickstart/
+```
+
+`--all` instead of an episode id processes every episode. `npm run episode --
+ci <id> --store <dir>` renders only when the episode's hash changed, exactly as
+CI does, and `npm run episode -- hash <id>` prints that hash; it matches CI's
+for the same checkout. `npx hyperframes preview` inside an episode opens the
+HyperFrames Studio (run `npm run vendor` first), and `npx hyperframes snapshot
+--at 5,10` takes stills.
 
 ## Layout
 
@@ -187,6 +203,96 @@ Do this in one sitting, right after merging the workflow into `next`:
    docs change on `main` before then, it pushes a new `gh-pages` branch that
    Pages ignores; delete it again, and run **Deploy docs** on `next` to update
    the release docs.
+
+## Pitfalls
+
+Roadblocks met while building this pipeline, and their fixes.
+
+### Local setup
+
+- **Python 3.14**: `pip install` fails with "No matching distribution found
+  for kokoro-onnx==0.6.1", because kokoro-onnx supports Python 3.10 to 3.13.
+  Create the venv from 3.12, as CI uses.
+- **pip refuses the system Python** ("externally-managed-environment", PEP 668,
+  e.g. Ubuntu 24.04): use the venv. Activate it in every new shell before
+  `episode voice`, `publish` or `ci`, which run `python3`.
+- **FFmpeg without libx264**: HyperFrames and the web encode need it; check
+  with `ffmpeg -hide_banner -encoders | grep libx264`. Fedora's default
+  `ffmpeg-free` lacks it (enable RPM Fusion, then `sudo dnf swap ffmpeg-free
+  ffmpeg --allowerasing`), and mise's `ffmpeg` comes from conda and may lack it
+  too. Pitch-shifted voice presets also need the `rubberband` filter.
+- **`hyperframes doctor` shows ✗** for whisper-cpp, TTS (Kokoro) and MusicGen:
+  optional HyperFrames features this pipeline does not use. The Kokoro check
+  is about `hyperframes tts`, not `voice/`.
+- **Hugo**: distribution packages are often too old for `hugo.Data` (0.156+);
+  use a release binary or `mise use -g hugo@latest` (the standard edition is
+  enough). `hugo server` needs the geekdoc theme in `docs/themes/` and serves
+  under `/sind/`, from the `baseURL`.
+- **No video on the local docs page**: the shortcode renders nothing until
+  `episode publish` or `episode ci` has written the files. That is intended.
+
+### Claude Code cloud sessions
+
+- No Docker daemon and no GPU: renders use software GL at about 2× real time
+  on 4 vCPUs, which is fine for the SVG rig.
+- The egress proxy blocks huggingface.co, jsDelivr and unpkg, hosted TTS APIs
+  (ElevenLabs, OpenAI), hyperframes.heygen.com, gsi-hpc.github.io,
+  api.github.com, docs.github.com and Actions artifact downloads. That is why
+  Kokoro comes from the kokoro-onnx GitHub release, GSAP and the fonts from
+  npm, and deploys are verified from the Actions job logs instead of the live
+  site.
+- `npx hyperframes browser ensure` works there; alternatively point
+  `HYPERFRAMES_BROWSER_PATH` at the preinstalled
+  `/opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell`.
+- Playwright's open-source Chromium cannot decode H.264, so a docs page tested
+  there shows a spinner instead of playing the video. Chrome, Firefox, Safari
+  and Edge play it.
+- The agent cannot listen: voice, pronunciation and pacing need a human ear.
+
+### Authoring episodes
+
+- Nothing may be fetched at render time. HyperFrames' own templates load GSAP
+  from jsDelivr; use `vendor/` (`npm run vendor`) and `assets/voice/lines.js`
+  instead.
+- Outside the HyperFrames runtime `window.__timelines` does not exist, so tools
+  that load a composition directly (`tools/publish.mjs`) define it first.
+- The root has no `data-duration`: the length comes from the GSAP timeline,
+  whose clock tween spans the episode. `<audio>` clips created at setup time
+  are mixed into the render, but each needs an `id`.
+- Named fonts need an `@font-face` with a local file, or `hyperframes lint`
+  complains (`font_family_without_font_face`).
+- Never crossfade stacked features with opacity (the eyes looked ghosted);
+  squash them shut and swap opaque states instead.
+- Lip sync: tune `lipKernel` and `lipGain` with `tools/mouth-stats.mjs`; a
+  median opening of about 0.3 reads well.
+- Terminal output must match the docs page. When the docs change (e.g.
+  `get clusters` gained a db column), update the episode in the same PR.
+- Parallel render workers: if a frame flashes at a worker boundary, re-render
+  with `--workers 1`. A frame-difference scan of the pilot found none.
+
+### Voice
+
+- The upstream Kokoro ONNX export returns audio only; `setup` exposes the
+  duration predictor (`/encoder/Gather_output_0`) as a `duration` output. If a
+  new export renames that tensor, `setup` stops with an error naming it.
+- espeak misreads Slurm and CLI terms (`squeue`, `slurmctld`, `CLI`) and reads
+  a lone "a" as the letter; fix such words in `voice/lexicon.json`. Write
+  numbers and commands in the script the way they should be spoken.
+
+### Docs deployment
+
+- The old `gh-pages` deploy kept every build, so videos would have piled up in
+  its history; hence the artifact deploy. It needs the Pages source "GitHub
+  Actions" and `next` allowed in the `github-pages` environment (see the
+  one-time switch above).
+- Until the next release, `main` still carries the old peaceiris workflow; a
+  docs push to `main` recreates `gh-pages`.
+- The Actions cache evicts entries unused for 7 days; the next run then renders
+  every episode again.
+- GitHub-hosted runners have no FFmpeg and a PEP 668 Python; the workflow
+  installs FFmpeg with apt and Python with `actions/setup-python`.
+- If an episode fails to render, the deploy fails and the previous site stays
+  online.
 
 ## Next: skills
 
