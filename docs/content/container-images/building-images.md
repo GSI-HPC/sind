@@ -33,9 +33,10 @@ defaults:
 Every official image:
 
 - Is based on Rocky Linux 10
-- Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
+- Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
 - Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
 - Slurm is built with PMIx support (`--with-pmix`) for native PMIx job launch
+- Includes nss_slurm, Slurm's NSS module for job users, as `/usr/lib64/libnss_slurm.so.2`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x, and the `serializer/json` plugin they need, built with json-c; and `sackd`, Slurm's authentication daemon for login nodes
 - OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1)
 

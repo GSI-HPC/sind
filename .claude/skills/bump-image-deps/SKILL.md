@@ -1,11 +1,12 @@
 ---
 name: bump-image-deps
-description: Bump Slurm or another source-built component (UCX, PMIx, PRRTE, Open MPI) in the sind-node images, or add or drop a Slurm release line. Updates SLURM_RELEASES or the version ARGs, sha256 checksums, docker-bake.hcl, and every doc and test reference. Use when a new Slurm point release or release line is out or an issue asks to update a node-image component.
+description: Bump Slurm or another source-built component (UCX, PMIx, PRRTE, Open MPI, libjwt) in the sind-node images, or add or drop a Slurm release line. Updates SLURM_RELEASES or the version ARGs, sha256 checksums, docker-bake.hcl, and every doc and test reference. Use when a new Slurm point release or release line is out or an issue asks to update a node-image component.
 ---
 
 # Bump a node-image component
 
-`Dockerfile` builds these from source, each pinned by version and sha256. Slurm's
+`Dockerfile` builds these from source, each pinned by version and sha256, or for
+libjwt, which publishes no release tarballs for 1.x, by version and git commit. Slurm's
 version and checksum are build args without defaults; `SLURM_RELEASES` in
 `docker-bake.hcl` sets them for each image, one entry per supported release line,
 newest line first. The first entry is also tagged `latest`, sind's default image.
@@ -17,6 +18,7 @@ newest line first. The first entry is also tagged `latest`, sind's default image
 | PMIx | `PMIX_VERSION` | `https://github.com/openpmix/openpmix/releases/download/v${V}/pmix-${V}.tar.bz2` |
 | PRRTE | `PRRTE_VERSION` | `https://github.com/openpmix/prrte/releases/download/v${V}/prrte-${V}.tar.bz2` |
 | Open MPI | `OMPI_VERSION` | `https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-${V}.tar.bz2` |
+| libjwt | `LIBJWT_VERSION`, `LIBJWT_COMMIT` | tag `v${V}` of `https://github.com/benmcollins/libjwt.git`; `LIBJWT_COMMIT` is the commit it points to (`git ls-remote https://github.com/benmcollins/libjwt 'v${V}^{}'`). Stay on 1.x: Slurm's auth/slurm uses the 1.x API, which libjwt 3 dropped |
 
 sind discovers the Slurm version from the image at runtime (`scontrol --version`), so a
 bump needs no Go code changes, only the files below.
