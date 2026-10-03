@@ -117,6 +117,40 @@ RUN tar xf prrte.tar.bz2 && \
     DESTDIR=/install make install
 
 # ==============================================================================
+# Stage: libjwt-builder — compile libjwt 1.x from source
+# ==============================================================================
+# Slurm's auth/slurm plugin (and with it cred/slurm and sackd's purpose) is
+# only built with libjwt, through its 1.x API. libjwt publishes no release
+# tarball for 1.18, so the tag is cloned and pinned by its commit.
+FROM builder-base AS libjwt-builder
+
+ARG LIBJWT_VERSION=1.18.4
+ARG LIBJWT_COMMIT=972802a4d4a0f22d2e171c2eb132de6048a3d951
+
+RUN dnf -y install \
+        git \
+        autoconf \
+        automake \
+        libtool \
+        pkgconf-m4 \
+        jansson-devel \
+        openssl-devel \
+    && dnf clean all
+
+WORKDIR /tmp
+RUN git clone --depth 1 --branch v${LIBJWT_VERSION} https://github.com/benmcollins/libjwt.git libjwt && \
+    cd libjwt && \
+    test "$(git rev-parse HEAD)" = "${LIBJWT_COMMIT}" && \
+    autoreconf -fi && \
+    ./configure \
+        --prefix=/usr \
+        --libdir=/usr/lib64 \
+        --disable-static \
+        --without-examples && \
+    make -j$(nproc) && \
+    DESTDIR=/install make install
+
+# ==============================================================================
 # Stage: slurm-builder — compile Slurm from source (with PMIx support)
 # ==============================================================================
 FROM builder-base AS slurm-builder
@@ -126,10 +160,16 @@ FROM builder-base AS slurm-builder
 ARG SLURM_VERSION
 ARG SLURM_SHA256
 
-# PMIx headers and libraries are needed for Slurm's PMIx launch plugin.
+# PMIx headers and libraries are needed for Slurm's PMIx launch plugin, and
+# libjwt's for auth/slurm. auth/slurm also needs the serializer/json plugin,
+# which Slurm builds only with json-c.
 COPY --from=pmix-builder /install/usr /usr
+COPY --from=libjwt-builder /install/usr /usr
 
 RUN dnf -y install \
+        jansson-devel \
+        openssl-devel \
+        json-c-devel \
         munge-devel \
         pam-devel \
         readline-devel \
@@ -145,20 +185,29 @@ ADD --checksum=sha256:${SLURM_SHA256} \
 
 # Configure and install Slurm into a staging root so only the built
 # artifacts are copied into the final image (no compiler toolchain).
+# make install skips contribs/, so nss_slurm, the NSS module that serves
+# the job's user and groups from slurmstepd, is built and installed on its
+# own. Its libnss_slurm.so.2 lands in --libdir, /usr/lib64, where glibc
+# looks for NSS modules.
 WORKDIR /tmp
 RUN tar xf slurm.tar.bz2 && \
     cd slurm-${SLURM_VERSION} && \
     ./configure \
         --prefix=/usr \
+        --libdir=/usr/lib64 \
         --sysconfdir=/etc/slurm \
         --localstatedir=/var \
         --runstatedir=/run \
         --with-munge \
         --with-pmix \
+        --with-jwt \
+        --with-json \
         --with-pam_dir=/usr/lib64/security \
         --with-systemdsystemunitdir=/usr/lib/systemd/system && \
     make -j$(nproc) && \
+    make -j$(nproc) -C contribs/nss_slurm && \
     DESTDIR=/install make install && \
+    DESTDIR=/install make -C contribs/nss_slurm install && \
     mkdir -p /install/etc
 
 # ==============================================================================
@@ -203,6 +252,7 @@ ARG UCX_VERSION=1.20.0
 ARG PMIX_VERSION=6.1.0
 ARG PRRTE_VERSION=4.1.0
 ARG OMPI_VERSION=5.0.10
+ARG LIBJWT_VERSION=1.18.4
 
 RUN dnf -y install epel-release dnf-plugins-core && \
     dnf config-manager --set-enabled crb
@@ -210,7 +260,8 @@ RUN dnf -y install epel-release dnf-plugins-core && \
 # Runtime dependencies.
 # gcc is needed by mpicc (OpenMPI's wrapper compiler).
 # mariadb-server is included for the db role (slurmdbd accounting storage).
-# libevent and hwloc-libs are required by PMIx, PRRTE, and OpenMPI at runtime.
+# libevent and hwloc-libs are required by PMIx, PRRTE, and OpenMPI at runtime,
+# jansson by libjwt, json-c by Slurm's serializer/json.
 RUN dnf -y install \
         systemd \
         munge \
@@ -225,6 +276,8 @@ RUN dnf -y install \
         dbus-libs \
         libevent \
         hwloc-libs \
+        jansson \
+        json-c \
         gcc \
     && dnf clean all
 
@@ -235,6 +288,16 @@ COPY --from=ucx-builder /install/usr /usr
 COPY --from=pmix-builder /install/usr /usr
 COPY --from=prrte-builder /install/usr /usr
 COPY --from=ompi-builder /install/usr /usr
+COPY --from=libjwt-builder /install/usr /usr
+
+# Register the new libraries, and fail the build without nss_slurm, the
+# auth/slurm plugin and the serializer/json plugin it needs, or sackd, which
+# sind's identity modes nssSlurm and clientIds use.
+RUN ldconfig && \
+    test -e /usr/lib64/libnss_slurm.so.2 && \
+    test -e /usr/lib64/slurm/auth_slurm.so && \
+    test -e /usr/lib64/slurm/serializer_json.so && \
+    test -x /usr/sbin/sackd
 
 # Slurm daemons run as the unprivileged slurm user
 RUN useradd -r -s /sbin/nologin slurm
@@ -291,7 +354,8 @@ LABEL org.opencontainers.image.title="sind-node" \
       sind.ucx.version="${UCX_VERSION}" \
       sind.pmix.version="${PMIX_VERSION}" \
       sind.prrte.version="${PRRTE_VERSION}" \
-      sind.ompi.version="${OMPI_VERSION}"
+      sind.ompi.version="${OMPI_VERSION}" \
+      sind.libjwt.version="${LIBJWT_VERSION}"
 
 VOLUME ["/etc/slurm", "/etc/munge", "/data"]
 WORKDIR /data

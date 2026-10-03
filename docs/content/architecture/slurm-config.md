@@ -24,7 +24,8 @@ sind generates a multi-file Slurm configuration and writes it to the `<realm>-<c
 ├── topology.conf           # network topology (if slurm.topology is set)
 ├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
-└── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
+├── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
+└── slurm.key               # auth/slurm key (identity clientIds only)
 ```
 
 ## slurm.conf
@@ -44,11 +45,24 @@ AccountingStorageHost=db
 JobAcctGatherType=jobacct_gather/cgroup
 ```
 
+With [identity]({{< relref "/configuration/cluster-config#identity-section" >}}) `nssSlurm` or `clientIds` it contains the identity parameters, `clientIds` only for the first three, each unless the `main` section sets it:
+
+```
+AuthType=auth/slurm
+CredType=cred/slurm
+AuthInfo=use_client_ids
+LaunchParameters=enable_nss_slurm
+```
+
 sind does not modify `slurm.conf` after initial creation.
 
 ## slurmdbd.conf
 
-Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (`StorageHost=localhost`, `StorageLoc=slurm_acct_db`, `StorageUser=slurm` without a password), keeps the pid file in `/run/slurmdbd` and the log in `/var/log/slurm/slurmdbd.log`, and is owned by `slurm` with mode `0600`, as slurmdbd requires. The `slurmdbd` section extends it like the other sections.
+Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (`StorageHost=localhost`, `StorageLoc=slurm_acct_db`, `StorageUser=slurm` without a password), keeps the pid file in `/run/slurmdbd` and the log in `/var/log/slurm/slurmdbd.log`, and is owned by `slurm` with mode `0600`, as slurmdbd requires. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`. The `slurmdbd` section extends it like the other sections.
+
+## slurm.key
+
+Only generated with identity `clientIds`: 1024 random bytes, owned by `slurm` with mode `0600`, the key of `auth/slurm` and `cred/slurm`. Every node reads it from the config volume; there is no munge key. `sind get auth-key` prints it.
 
 ## sind-nodes.conf
 

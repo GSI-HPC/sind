@@ -30,6 +30,8 @@ const (
 	ServiceSlurmd    Service = "slurmd"
 	ServiceSlurmdbd  Service = "slurmdbd"
 	ServiceMariadb   Service = "mariadb"
+	// ServiceSackd is the auth/slurm token daemon of a login node.
+	ServiceSackd Service = "sackd"
 )
 
 // ServiceForRole returns the Slurm readiness-check service associated with
@@ -75,6 +77,8 @@ func ForService(svc Service) Probe {
 		return Probe{Name: string(svc), Check: SlurmdReady}
 	case ServiceSlurmdbd:
 		return Probe{Name: string(svc), Check: SlurmdbdReady}
+	case ServiceSackd:
+		return Probe{Name: string(svc), Check: SackdReady}
 	default:
 		return Probe{Name: string(svc)}
 	}
@@ -318,6 +322,34 @@ func SlurmdReady(ctx context.Context, client *docker.Client, name docker.Contain
 	_, err := client.Exec(ctx, name, "systemctl", "is-active", "slurmd")
 	if err != nil {
 		return fmt.Errorf("slurmd not ready: %w", err)
+	}
+	return nil
+}
+
+// ClusterRegistered returns a check that passes once slurmdbd lists the
+// cluster, which slurmctld registers when it first starts with accounting.
+// Until then, sacctmgr refuses to add users. The registration can land
+// after slurmctld answers pings.
+func ClusterRegistered(clusterName string) Func {
+	return func(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+		stdout, err := client.Exec(ctx, name, "sacctmgr", "-n", "-P", "show", "cluster", "format=cluster")
+		if err != nil {
+			return fmt.Errorf("listing clusters: %w", err)
+		}
+		for line := range strings.Lines(stdout) {
+			if strings.TrimSpace(line) == clusterName {
+				return nil
+			}
+		}
+		return fmt.Errorf("cluster %s not registered with slurmdbd yet", clusterName)
+	}
+}
+
+// SackdReady verifies that the sackd service is active.
+func SackdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	_, err := client.Exec(ctx, name, "systemctl", "is-active", "sackd")
+	if err != nil {
+		return fmt.Errorf("sackd not ready: %w", err)
 	}
 	return nil
 }

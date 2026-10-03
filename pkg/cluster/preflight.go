@@ -79,7 +79,8 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 
 	// Check the volumes this cluster will create.
 	for _, vtype := range AllVolumeTypes {
-		if vtype == VolumeState && !cfg.HasBackupController() {
+		if vtype == VolumeState && !cfg.HasBackupController() || vtype == VolumeHome && len(cfg.Users) == 0 ||
+			vtype == VolumeMunge && cfg.Identity.Mode == config.IdentityClientIDs {
 			continue
 		}
 		volName := VolumeName(realm, cfg.Name, vtype)

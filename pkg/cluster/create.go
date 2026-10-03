@@ -67,7 +67,7 @@ type nodeResult struct {
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
 //	└ DetectCVMFS (storage.cvmfs only) ─────────────────┘
 //	                        │
-//	              registerMesh ║ enableSlurm
+//	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only)
 //	                        │
 //	                    *Cluster
 //
@@ -175,8 +175,8 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	log.InfoContext(ctx, "nodes ready", "count", len(nodeConfigs))
 
-	// registerMesh and enableSlurm are independent: Slurm uses short
-	// hostnames resolved by Docker embedded DNS on the cluster network.
+	// registerMesh, enableSlurm and createHomes are independent: Slurm uses
+	// short hostnames resolved by Docker embedded DNS on the cluster network.
 	// Mesh DNS records are for SSH relay and host-side resolution only.
 	var cluster *Cluster
 	g, gctx := errgroup.WithContext(ctx)
@@ -195,7 +195,20 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 				return err
 			}
 			log.InfoContext(gctx, "slurm services enabled")
+			if !cfg.UsesAccounts() {
+				return nil
+			}
+			if err := createSlurmAccounts(gctx, client, realm, cfg, readinessInterval, watcher); err != nil {
+				return err
+			}
+			log.InfoContext(gctx, "slurm accounts created", "accounts", len(cfg.Accounts))
 			return nil
+		})
+	}
+	if users := NewLinuxUsers(cfg).Users; len(users) > 0 {
+		g.Go(func() error {
+			controller := ContainerName(realm, cfg.Name, string(config.RoleController))
+			return createHomes(gctx, client, controller, users, sshPubKey)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -265,7 +278,7 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // The config volume of an unmanaged cluster stays empty.
 //
 //	┌─────────┐  ┌─────────┐
-//	network ║ (config vol → write config, managed only) ║ (munge vol → write munge key) ║ data vol ║ state vol (backup pair only)
+//	network ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only)
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
@@ -281,34 +294,39 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 		}
 		return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull)
 	})
-	g.Go(func() error {
-		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
-			return err
-		}
-		return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull)
-	})
+	// auth/slurm (identity clientIds) replaces munge: its slurm.key is on
+	// the config volume.
+	if cfg.Identity.Mode != config.IdentityClientIDs {
+		g.Go(func() error {
+			if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
+				return err
+			}
+			return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull)
+		})
+	}
 	if !cfg.Storage.DataStorage.UsesHostPath() {
 		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeData) })
 	}
 	if cfg.HasBackupController() {
 		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeState) })
 	}
+	if len(cfg.Users) > 0 {
+		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeHome) })
+	}
 	return g.Wait()
 }
 
 // setupNodes creates each node, starts its systemd monitor, waits for base
-// readiness, injects SSH public keys, and collects host keys — all
+// readiness, switches managed workers to nss_slurm (identity nssSlurm and
+// clientIds), adds the cluster users and groups where the identity mode
+// puts them, injects SSH public keys, and collects host keys — all
 // concurrently per node with no barrier between creation and probing.
 //
-//	per node:  create → monitor → wait(container, systemd, sshd, munge) → inspect → SSH → hostkey
+//	per node:  create → monitor → wait(container, systemd, sshd, munge) → inspect → nss_slurm → users → SSH → hostkey
+//
+// With identity clientIds munge is masked, so there is no munge to wait for.
 func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) ([]nodeResult, error) {
 	log := sindlog.From(ctx)
-	baseProbes := []probe.Probe{
-		{Name: "container", Check: probe.ContainerRunning},
-		{Name: "systemd", Check: probe.SystemdReady},
-		{Name: "sshd", Check: probe.SSHDReady},
-		{Name: "munge", Check: probe.MungeReady},
-	}
 	results := make([]nodeResult, len(nodeConfigs))
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -327,6 +345,14 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 				}})
 			}
 
+			baseProbes := []probe.Probe{
+				{Name: "container", Check: probe.ContainerRunning},
+				{Name: "systemd", Check: probe.SystemdReady},
+				{Name: "sshd", Check: probe.SSHDReady},
+			}
+			if nc.Identity != config.IdentityClientIDs {
+				baseProbes = append(baseProbes, probe.Probe{Name: "munge", Check: probe.MungeReady})
+			}
 			log.DebugContext(gctx, "waiting for node", "node", nc.ShortName)
 			if err := waitReady(gctx, client, containerName, baseProbes, interval, watcher); err != nil {
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
@@ -335,6 +361,18 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			info, err := client.InspectContainer(gctx, containerName)
 			if err != nil {
 				return fmt.Errorf("inspecting node %s: %w", nc.ShortName, err)
+			}
+
+			if nc.NSSSlurm {
+				if err := enableNSSSlurm(gctx, client, containerName, nc); err != nil {
+					return fmt.Errorf("node %s: %w", nc.ShortName, err)
+				}
+			}
+
+			if nc.AddUsers && !nc.Users.IsEmpty() {
+				if err := addUsers(gctx, client, containerName, nc.Users); err != nil {
+					return fmt.Errorf("node %s: %w", nc.ShortName, err)
+				}
 			}
 
 			if err := ssh.InjectPublicKey(gctx, client, containerName, sshPubKey); err != nil {
@@ -402,7 +440,9 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 }
 
 // enableSlurm enables the Slurm daemon on each managed node with a Slurm
-// role and waits for the service to become ready — concurrently per node.
+// role, and sackd on the submitter with identity clientIds (see
+// nodeSlurmService), and waits for the service to become ready —
+// concurrently per node.
 // A managed db node goes first: slurmctld registers the cluster with slurmdbd
 // when it starts, so mariadb and slurmdbd must be up by then.
 //
@@ -440,7 +480,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		if !nc.Managed || nc.Role == config.RoleDB {
 			continue
 		}
-		service, ok := probe.ServiceForRole(nc.Role)
+		service, ok := nodeSlurmService(nc)
 		if !ok {
 			continue
 		}

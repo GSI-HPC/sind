@@ -699,9 +699,9 @@ func TestGetVolumes_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "listing volumes")
 }
 
-// --- GetMungeKey ---
+// --- GetAuthKey ---
 
-func TestGetMungeKey(t *testing.T) {
+func TestGetAuthKey(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "c1", Names: "sind-dev-controller", State: "running",
@@ -711,35 +711,37 @@ func TestGetMungeKey(t *testing.T) {
 	m.AddResult(testutil.TarArchive("munge.key", keyData), "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
-	assert.Equal(t, []byte(keyData), key)
+	assert.Equal(t, &AuthKey{Type: AuthMunge, Key: []byte(keyData)}, key)
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"cp", "sind-dev-controller:/etc/munge/munge.key", "-"}, m.Calls[1].Args)
 }
 
-func TestGetMungeKey_NoContainers(t *testing.T) {
+func TestGetAuthKey_NoContainers(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no containers found")
 }
 
-func TestGetMungeKey_ListError(t *testing.T) {
+func TestGetAuthKey_ListError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
 }
 
-func TestGetMungeKey_CopyError(t *testing.T) {
+func TestGetAuthKey_CopyError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(testutil.PsEntry{
 		ID: "c1", Names: "sind-dev-controller", State: "running",
@@ -748,7 +750,7 @@ func TestGetMungeKey_CopyError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("cp failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetMungeKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading munge key")

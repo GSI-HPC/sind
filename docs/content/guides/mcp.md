@@ -53,7 +53,7 @@ Every sind command is exposed as an MCP tool, except:
 - command groups such as `sind get`, which only print help
 - `sind help`, `sind completion` and the `sind mcp` commands
 - `sind enter` and `sind ssh`, which need an interactive terminal
-- `sind get ssh-private-key` and `sind get munge-key`, which print secrets
+- `sind get ssh-private-key` and `sind get auth-key`, which print secrets
 
 The tools take the same arguments and flags as the commands, except `-v` and `sind logs --follow`, which a tool call cannot use. Flags go in the call's `flags` object; a call that puts a flag in `args` is refused, except for the command after `--` in `sind_exec`.
 
@@ -96,4 +96,4 @@ The stream listens on `127.0.0.1` unless `--host` names another address. It has 
 
 ## Security
 
-The MCP server is not a sandbox. Its tools run sind with your Docker access: `sind_exec` runs any command inside a cluster, and `sind_create_cluster` bind-mounts a host directory read-write at `/data`: the one `--data` names or, without it, the MCP server's working directory. Pass `data: "volume"` to keep host files out. Leaving out `sind get ssh-private-key` and `sind get munge-key` keeps those secrets out of routine tool output, but an agent that may call `sind_exec` can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.
+The MCP server is not a sandbox. Its tools run sind with your Docker access: `sind_exec` runs any command inside a cluster, and `sind_create_cluster` bind-mounts a host directory read-write at `/data`: the one `--data` names or, without it, the MCP server's working directory. Pass `data: "volume"` to keep host files out. Leaving out `sind get ssh-private-key` and `sind get auth-key` keeps those secrets out of routine tool output, but an agent that may call `sind_exec` can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.

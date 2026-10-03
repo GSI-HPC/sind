@@ -22,10 +22,13 @@ const (
 	// primary and backup controller. Only clusters with a backup controller
 	// have it.
 	VolumeState VolumeType = "state"
+	// VolumeHome holds the home directories of the cluster users. Only
+	// clusters with users have it.
+	VolumeHome VolumeType = "home"
 )
 
 // AllVolumeTypes lists the cluster volume types in creation order.
-var AllVolumeTypes = []VolumeType{VolumeConfig, VolumeMunge, VolumeData, VolumeState}
+var AllVolumeTypes = []VolumeType{VolumeConfig, VolumeMunge, VolumeData, VolumeState, VolumeHome}
 
 // Resources holds the Docker resources belonging to a cluster.
 type Resources struct {

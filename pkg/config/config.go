@@ -231,13 +231,17 @@ type Slurm struct {
 
 // Cluster represents a sind cluster configuration.
 type Cluster struct {
-	Kind     string   `json:"kind"`
-	Name     string   `json:"name,omitempty"`
-	Realm    string   `json:"realm,omitempty"`
-	Defaults Defaults `json:"defaults,omitempty"`
-	Storage  Storage  `json:"storage,omitempty"`
-	Slurm    Slurm    `json:"slurm,omitempty"`
-	Nodes    []Node   `json:"nodes,omitempty"`
+	Kind     string    `json:"kind"`
+	Name     string    `json:"name,omitempty"`
+	Realm    string    `json:"realm,omitempty"`
+	Defaults Defaults  `json:"defaults,omitempty"`
+	Storage  Storage   `json:"storage,omitempty"`
+	Slurm    Slurm     `json:"slurm,omitempty"`
+	Users    []User    `json:"users,omitempty"`
+	Groups   []Group   `json:"groups,omitempty"`
+	Accounts []Account `json:"accounts,omitempty"`
+	Identity Identity  `json:"identity,omitempty"`
+	Nodes    []Node    `json:"nodes,omitempty"`
 
 	// Pull is a runtime flag (not part of the config file) that forces
 	// fresh image pulls when creating containers.
@@ -256,8 +260,14 @@ const (
 // ApplyDefaults populates missing fields with defaults.
 // If no nodes are defined, creates a minimal cluster (1 controller + 1 worker).
 // Node-level fields inherit from the Defaults section, which in turn falls back
-// to built-in defaults.
+// to built-in defaults. Users without a uid, then groups without a gid, get
+// the lowest free ID from MinUID up. The identity mode defaults to local.
 func (c *Cluster) ApplyDefaults() {
+	assignIDs(c.Users, c.Groups)
+	if c.Identity.Mode == "" {
+		c.Identity.Mode = IdentityLocal
+	}
+
 	if len(c.Nodes) == 0 {
 		c.Nodes = []Node{
 			{Role: RoleController},
@@ -383,6 +393,16 @@ func (c *Cluster) Validate() error {
 	}
 
 	if err := c.Storage.DataStorage.validate(); err != nil {
+		return err
+	}
+
+	if err := validateUsers(c.Users, c.Groups); err != nil {
+		return err
+	}
+	if err := c.validateAccounts(); err != nil {
+		return err
+	}
+	if err := c.Identity.validate(c.Managed()); err != nil {
 		return err
 	}
 

@@ -99,16 +99,24 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// Determine next index from existing containers.
 	startIdx := nextWorkerIndexFromContainers(containers, realm, opts.ClusterName)
 
+	// Inherit the data and CVMFS mounts, the users and the identity mode
+	// from existing cluster containers. A managed worker gets the users
+	// only with identity local; with nssSlurm and clientIds it resolves
+	// them with nss_slurm instead.
+	dataHostPath := controller.Labels[LabelDataHostPath]
+	dataMountPath := DataMountPath(controller.Labels)
+	cvmfs := config.StorageType(controller.Labels[LabelCVMFS])
+	users, err := LinuxUsersFromLabels(controller.Labels)
+	if err != nil {
+		return nil, err
+	}
+	identity := config.Identity{Mode: IdentityFromLabels(controller.Labels)}
+
 	// Resolve infrastructure: DNS IP, SSH pubkey, slurm version.
 	dnsIP, sshPubKey, slurmVersion, err := resolveWorkerInfra(ctx, client, meshMgr, controllerName)
 	if err != nil {
 		return nil, err
 	}
-
-	// Inherit the data and CVMFS mounts from existing cluster containers.
-	dataHostPath := controller.Labels[LabelDataHostPath]
-	dataMountPath := DataMountPath(controller.Labels)
-	cvmfs := config.StorageType(controller.Labels[LabelCVMFS])
 
 	// Resolve image: use opts or fall back to controller's image.
 	image := opts.Image
@@ -158,6 +166,10 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			Devices:         opts.Devices,
 			SecurityOpt:     opts.SecurityOpt,
 			CVMFS:           cvmfs,
+			Users:           users,
+			AddUsers:        nodeGetsUsers(identity, config.RoleWorker, !opts.Unmanaged, false),
+			Identity:        identity.Mode,
+			NSSSlurm:        !opts.Unmanaged && identity.UsesNSSSlurm(),
 		}
 	}
 

@@ -94,7 +94,7 @@ func TestSSH_PassthroughOptions_Multiple(t *testing.T) {
 // --- BuildContainerExecArgs ---
 
 func TestContainerExec_InteractiveShell(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", DefaultDataMountPath, true, nil)
+	args := BuildContainerExecArgs("sind-dev-controller", "", DefaultDataMountPath, true, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-t", "-w", "/data", "sind-dev-controller",
@@ -103,7 +103,7 @@ func TestContainerExec_InteractiveShell(t *testing.T) {
 }
 
 func TestContainerExec_NonInteractiveShell(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", DefaultDataMountPath, false, nil)
+	args := BuildContainerExecArgs("sind-dev-controller", "", DefaultDataMountPath, false, nil)
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-w", "/data", "sind-dev-controller",
@@ -112,7 +112,7 @@ func TestContainerExec_NonInteractiveShell(t *testing.T) {
 }
 
 func TestContainerExec_WithCommand(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", DefaultDataMountPath, false, []string{"sinfo"})
+	args := BuildContainerExecArgs("sind-dev-controller", "", DefaultDataMountPath, false, []string{"sinfo"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-w", "/data", "sind-dev-controller",
@@ -121,7 +121,7 @@ func TestContainerExec_WithCommand(t *testing.T) {
 }
 
 func TestContainerExec_WithMultiWordCommand(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-worker-0", DefaultDataMountPath, false, []string{"srun", "hostname"})
+	args := BuildContainerExecArgs("sind-dev-worker-0", "", DefaultDataMountPath, false, []string{"srun", "hostname"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-w", "/data", "sind-dev-worker-0",
@@ -130,11 +130,31 @@ func TestContainerExec_WithMultiWordCommand(t *testing.T) {
 }
 
 func TestContainerExec_CustomWorkDir(t *testing.T) {
-	args := BuildContainerExecArgs("sind-dev-controller", "/shared", false, []string{"ls"})
+	args := BuildContainerExecArgs("sind-dev-controller", "", "/shared", false, []string{"ls"})
 
 	assert.Equal(t, []string{
 		"exec", "-i", "-w", "/shared", "sind-dev-controller",
 		"ls",
+	}, args)
+}
+
+func TestContainerExec_User(t *testing.T) {
+	// A cluster user starts in its home directory, not the data mount.
+	args := BuildContainerExecArgs("sind-dev-submitter", "alice", DefaultDataMountPath, true, nil)
+
+	assert.Equal(t, []string{
+		"exec", "-i", "-t", "-u", "alice", "-w", "/home/alice", "sind-dev-submitter",
+		"bash", "-l",
+	}, args)
+}
+
+func TestContainerExec_UserRoot(t *testing.T) {
+	// root is the default user; its home is not under /home.
+	args := BuildContainerExecArgs("sind-dev-submitter", "root", DefaultDataMountPath, false, []string{"id"})
+
+	assert.Equal(t, []string{
+		"exec", "-i", "-w", "/data", "sind-dev-submitter",
+		"id",
 	}, args)
 }
 

@@ -302,6 +302,54 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmd not ready")
 }
 
+func TestSackdReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	m.AddResult("", "", fmt.Errorf("exit status 3"))
+	c := docker.NewClient(&m)
+
+	require.NoError(t, SackdReady(t.Context(), c, testContainer))
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "sackd"}, m.Calls[0].Args)
+
+	err := SackdReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Equal(t, "sackd not ready: exit status 3", err.Error())
+
+	p := ForService(ServiceSackd)
+	assert.Equal(t, "sackd", p.Name)
+	assert.NotNil(t, p.Check)
+}
+
+func TestClusterRegistered(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("other\ndev\n", "", nil)
+	c := docker.NewClient(&m)
+
+	require.NoError(t, ClusterRegistered("dev")(t.Context(), c, testContainer))
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", string(testContainer), "sacctmgr", "-n", "-P", "show", "cluster", "format=cluster"}, m.Calls[0].Args)
+}
+
+func TestClusterRegistered_NotYet(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("devel\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := ClusterRegistered("dev")(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Equal(t, "cluster dev not registered with slurmdbd yet", err.Error())
+}
+
+func TestClusterRegistered_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := ClusterRegistered("dev")(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Equal(t, "listing clusters: exit status 1", err.Error())
+}
+
 func TestUnitJournal(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("line 1\nline 2\n", "", nil)

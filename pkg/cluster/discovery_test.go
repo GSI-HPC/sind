@@ -25,7 +25,8 @@ func TestListClusterResources(t *testing.T) {
 	), "", nil)
 	// NetworkExists: sind-dev-net exists
 	m.AddResult("", "", nil)
-	// VolumeExists: config, munge, data, state
+	// VolumeExists: config, munge, data, state, home
+	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult("", "", nil)
@@ -46,14 +47,14 @@ func TestListClusterResources(t *testing.T) {
 	assert.True(t, res.NetworkExists)
 
 	// Volumes
-	assert.Equal(t, []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state"}, res.Volumes)
+	assert.Equal(t, []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state", "sind-dev-home"}, res.Volumes)
 }
 
 func TestListClusterResources_NoResources(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil) // ListContainers: empty
 	addNotFound(t, &m, 1)    // NetworkExists: not found
-	addNotFound(t, &m, 4)    // VolumeExists: config, munge, data, state
+	addNotFound(t, &m, 5)    // VolumeExists: config, munge, data, state, home
 	c := docker.NewClient(&m)
 
 	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "nonexistent")
@@ -72,6 +73,7 @@ func TestListClusterResources_PartialVolumes(t *testing.T) {
 	addNotFound(t, &m, 1)    // VolumeExists: munge missing
 	m.AddResult("", "", nil) // VolumeExists: data exists
 	addNotFound(t, &m, 1)    // VolumeExists: state missing
+	addNotFound(t, &m, 1)    // VolumeExists: home missing
 	c := docker.NewClient(&m)
 
 	res, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -120,13 +122,13 @@ func TestListClusterResources_VolumeCheckError(t *testing.T) {
 func TestListClusterResources_LabelFilter(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil) // ListContainers: empty
-	addNotFound(t, &m, 5)    // network + 4 volumes
+	addNotFound(t, &m, 6)    // network + 5 volumes
 	c := docker.NewClient(&m)
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "myCluster")
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 6)
+	require.Len(t, m.Calls, 7)
 	// First call is docker ps; filter by both realm and cluster so parallel
 	// realms with identically-named clusters are isolated.
 	args := m.Calls[0].Args
@@ -147,6 +149,7 @@ func TestListClusterResources_SkipsAnotherRealmsResources(t *testing.T) {
 	m.AddResult(own, "", nil)   // volume munge
 	m.AddResult("{}", "", nil)  // volume data, unlabelled
 	m.AddResult("", "Error: No such volume: ci-42-dev-state\n", testutil.ExitCode1(t))
+	m.AddResult("", "Error: No such volume: ci-42-dev-home\n", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	res, err := ListClusterResources(t.Context(), c, "ci", "42-dev")

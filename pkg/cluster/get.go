@@ -303,9 +303,28 @@ func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*Vo
 	return result, nil
 }
 
-// GetMungeKey reads the munge key from a cluster's node container.
-// Any container in the cluster can be used since all mount the same munge volume.
-func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string) ([]byte, error) {
+// AuthType is how a cluster's Slurm daemons and commands authenticate, and
+// so which key GetAuthKey returns.
+type AuthType string
+
+// Authentication types.
+const (
+	// AuthMunge is auth/munge: munged on every node, with the munge key.
+	AuthMunge AuthType = "munge"
+	// AuthSlurm is auth/slurm, with slurm.key, under identity clientIds.
+	AuthSlurm AuthType = "slurm"
+)
+
+// AuthKey is the key that authenticates a cluster's Slurm traffic.
+type AuthKey struct {
+	Type AuthType
+	Key  []byte
+}
+
+// GetAuthKey reads the key that authenticates a cluster's Slurm traffic
+// from one of its node containers: the munge key, or slurm.key with
+// identity clientIds.
+func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName string) (*AuthKey, error) {
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
@@ -315,11 +334,15 @@ func GetMungeKey(ctx context.Context, client *docker.Client, realm, clusterName 
 	if len(containers) == 0 {
 		return nil, fmt.Errorf("no containers found in cluster %q", clusterName)
 	}
-	key, err := client.CopyFromContainer(ctx, containers[0].Name, slurm.MungeKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("reading munge key: %w", err)
+	authType, path := AuthMunge, slurm.MungeKeyPath
+	if IdentityFromLabels(containers[0].Labels) == config.IdentityClientIDs {
+		authType, path = AuthSlurm, slurm.SlurmKeyPath
 	}
-	return key, nil
+	key, err := client.CopyFromContainer(ctx, containers[0].Name, path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s key: %w", authType, err)
+	}
+	return &AuthKey{Type: authType, Key: key}, nil
 }
 
 // RealmSummary holds summary information about a sind realm.

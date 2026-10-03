@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -652,6 +653,464 @@ nodes:
 	require.NotNil(t, dbNode, "db node missing from status")
 	assert.False(t, dbNode.Managed)
 	assert.Equal(t, ServiceHealth{probe.ServiceMunge: true, probe.ServiceSSHD: true}, dbNode.Health.Services)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestClusterUsers(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-users")
+	clusterName := "it-users"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+groups:
+  - name: hpc
+    gid: 3000
+users:
+  - name: alice
+    groups: [hpc]
+  - name: bob
+    uid: 2001
+    group: hpc
+nodes:
+  - controller
+  - submitter
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+
+	controller := ContainerName(realm, clusterName, "controller")
+	submitter := ContainerName(realm, clusterName, "submitter")
+	worker := ContainerName(realm, clusterName, "worker-0")
+
+	// Every node has the users and groups, with the same IDs.
+	for _, n := range []docker.ContainerName{controller, submitter, worker} {
+		out, err := c.Exec(ctx, n, "id", "alice")
+		require.NoError(t, err, n)
+		assert.Equal(t, "uid=1000(alice) gid=1000(alice) groups=1000(alice),3000(hpc)", strings.TrimSpace(out), n)
+		out, err = c.Exec(ctx, n, "id", "bob")
+		require.NoError(t, err, n)
+		assert.Equal(t, "uid=2001(bob) gid=3000(hpc) groups=3000(hpc)", strings.TrimSpace(out), n)
+	}
+
+	// The home directories are on the shared home volume and belong to
+	// their users.
+	out, err := c.Exec(ctx, worker, "stat", "-c", "%U:%G %a %n", "/home/alice", "/home/alice/.ssh", "/home/alice/.ssh/authorized_keys")
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"alice:alice 700 /home/alice",
+		"alice:alice 700 /home/alice/.ssh",
+		"alice:alice 600 /home/alice/.ssh/authorized_keys",
+	}, strings.Split(strings.TrimSpace(out), "\n"))
+
+	// The realm's key logs in as a user through the SSH relay.
+	out, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "bob", DNSName("worker-0", clusterName, realm), "id", "-un")
+	require.NoError(t, err)
+	assert.Equal(t, "bob", strings.TrimSpace(out))
+
+	// A job runs as its user, and what it writes to its home directory on
+	// the worker shows up on every node.
+	waitNodeIdle(t, c, submitter, "worker-0")
+	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", DNSName("submitter", clusterName, realm), "srun -N1 sh -c 'id -un > from-job; id -Gn > groups-in-job'")
+	require.NoError(t, err)
+	out, err = c.Exec(ctx, controller, "stat", "-c", "%U", "/home/alice/from-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+	out, err = c.ReadFile(ctx, controller, "/home/alice/from-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+	out, err = c.ReadFile(ctx, controller, "/home/alice/groups-in-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice hpc", strings.TrimSpace(out))
+
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.Contains(t, status.Mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume, OK: true})
+
+	// Workers added later get the users, groups and the shared homes.
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	require.NoError(t, err)
+	require.Len(t, added, 1)
+	newWorker := ContainerName(realm, clusterName, added[0].Name)
+	out, err = c.Exec(ctx, newWorker, "id", "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "uid=1000(alice) gid=1000(alice) groups=1000(alice),3000(hpc)", strings.TrimSpace(out))
+	out, err = c.Exec(ctx, newWorker, "id", "bob")
+	require.NoError(t, err)
+	assert.Equal(t, "uid=2001(bob) gid=3000(hpc) groups=3000(hpc)", strings.TrimSpace(out))
+	out, err = c.ReadFile(ctx, newWorker, "/home/alice/from-job")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+
+	// Deleting the cluster removes the home volume.
+	require.NoError(t, Delete(ctx, c, meshMgr, clusterName))
+	exists, err := c.VolumeExists(ctx, VolumeName(realm, clusterName, VolumeHome))
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestClusterAccounts(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-accounts")
+	clusterName := "it-accounts"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+slurm:
+  main: |
+    AccountingStorageEnforce=associations,limits
+accounts:
+  - name: physics
+    limits:
+      GrpTRES: cpu=4
+  - name: theory
+    parent: physics
+    limits:
+      MaxJobs: 1
+users:
+  - name: alice
+    accounts: [theory]
+  - name: bob
+    accounts: [physics, theory]
+    coordinator: [physics]
+  - name: carol
+    accounts: [physics]
+    adminLevel: operator
+  - dave
+nodes:
+  - controller
+  - db
+  - submitter
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+
+	controller := ContainerName(realm, clusterName, "controller")
+	sacctmgr := func(args ...string) []string {
+		t.Helper()
+		out, err := c.Exec(ctx, controller, append([]string{"sacctmgr", "-n", "-P", "show"}, args...)...)
+		require.NoError(t, err)
+		return strings.Split(strings.TrimSpace(out), "\n")
+	}
+
+	// The account tree, with the limits and the users' associations.
+	assert.Subset(t, sacctmgr("assoc", "format=account,parentname"), []string{"physics|root", "theory|physics"})
+	assert.Subset(t, sacctmgr("assoc", "format=account,user,grptres,maxjobs"), []string{"physics||cpu=4|", "theory|||1"})
+	assert.Subset(t, sacctmgr("assoc", "format=account,user"), []string{"theory|alice", "physics|bob", "theory|bob", "physics|carol"})
+	assert.ElementsMatch(t, []string{
+		"alice|theory|None",
+		"bob|physics|None",
+		"carol|physics|Operator",
+	}, sacctmgr("user", "names=alice,bob,carol", "format=user,defaultaccount,adminlevel"))
+	// A coordinator of physics coordinates its sub-accounts too.
+	assert.Equal(t, []string{"bob|physics,theory"}, sacctmgr("user", "names=bob", "withcoord", "format=user,coordinators"))
+
+	// With enforcement, a user's job runs under their default account, and
+	// a user without an association cannot submit.
+	host := DNSName("submitter", clusterName, realm)
+	waitNodeIdle(t, c, controller, "worker-0")
+	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", host, "srun -N1 true")
+	require.NoError(t, err)
+	assert.Eventually(t, func() bool {
+		out, err := c.Exec(ctx, controller, "sacct", "-a", "-n", "-X", "-P", "-o", "User,Account,State")
+		return err == nil && slices.Contains(strings.Split(strings.TrimSpace(out), "\n"), "alice|theory|COMPLETED")
+	}, time.Minute, time.Second, "alice's job not recorded under theory")
+	out, err := c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "dave", host, "sbatch --wrap true 2>&1; echo rc=$?")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Invalid account or account/partition combination specified")
+	assert.Contains(t, out, "rc=1")
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// slurmConfig returns scontrol show config on a node as a map from
+// parameter to value.
+func slurmConfig(ctx context.Context, t *testing.T, c *docker.Client, node docker.ContainerName) map[string]string {
+	t.Helper()
+	out, err := c.Exec(ctx, node, "scontrol", "show", "config")
+	require.NoError(t, err)
+	params := map[string]string{}
+	for line := range strings.Lines(out) {
+		key, value, ok := strings.Cut(line, "=")
+		if ok {
+			params[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		}
+	}
+	return params
+}
+
+// lookupStatus returns the exit status of getent passwd user on a node: 0
+// when the node resolves the user, 2 when it does not.
+func lookupStatus(ctx context.Context, t *testing.T, c *docker.Client, node docker.ContainerName, user string) string {
+	t.Helper()
+	out, err := c.ExecAllowNonZero(ctx, node, "sh", "-c", "getent passwd "+user+" >/dev/null; echo $?")
+	require.NoError(t, err)
+	return strings.TrimSpace(out)
+}
+
+func TestIdentityNSSSlurm(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-nss")
+	clusterName := "it-nss"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+identity: nssSlurm
+groups:
+  - name: hpc
+    gid: 3000
+users:
+  - name: alice
+    uid: 2001
+    groups: [hpc]
+nodes:
+  - controller
+  - submitter
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+
+	controller := ContainerName(realm, clusterName, "controller")
+	submitter := ContainerName(realm, clusterName, "submitter")
+	worker := ContainerName(realm, clusterName, "worker-0")
+
+	// The controller and the submitter have alice; the worker does not,
+	// and looks users up with nss_slurm first.
+	assert.Equal(t, "0", lookupStatus(ctx, t, c, controller, "alice"))
+	assert.Equal(t, "0", lookupStatus(ctx, t, c, submitter, "alice"))
+	assert.Equal(t, "2", lookupStatus(ctx, t, c, worker, "alice"))
+	out, err := c.Exec(ctx, worker, "grep", "-E", "^(passwd|group):", "/etc/nsswitch.conf")
+	require.NoError(t, err)
+	for line := range strings.Lines(out) {
+		assert.Regexp(t, `^(passwd|group): slurm `, line)
+	}
+	assert.Contains(t, slurmConfig(ctx, t, c, controller)["LaunchParameters"], "enable_nss_slurm")
+
+	// Inside a job step, nss_slurm serves alice and her groups on the
+	// worker, from the job credential.
+	waitNodeIdle(t, c, controller, "worker-0")
+	out, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", DNSName("submitter", clusterName, realm),
+		`srun -N1 sh -c 'id -un; id -Gn; stat -c %U "$HOME"'`)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alice", "alice hpc", "alice"}, strings.Split(strings.TrimSpace(out), "\n"))
+
+	// Outside a job, the worker does not know alice, so she cannot log in.
+	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-o", "BatchMode=yes", "-l", "alice", DNSName("worker-0", clusterName, realm), "true")
+	assert.Error(t, err, "SSH as alice to a worker")
+
+	// Workers added later resolve users the same way.
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	require.NoError(t, err)
+	require.Len(t, added, 1)
+	newWorker := ContainerName(realm, clusterName, added[0].Name)
+	assert.Equal(t, "2", lookupStatus(ctx, t, c, newWorker, "alice"))
+	_, err = c.Exec(ctx, newWorker, "grep", "-q", "^passwd: slurm ", "/etc/nsswitch.conf")
+	assert.NoError(t, err)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestIdentityClientIDs(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-clientids")
+	clusterName := "it-clientids"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+identity: clientIds
+slurm:
+  main: |
+    AccountingStorageEnforce=associations
+accounts:
+  - physics
+users:
+  - name: alice
+    uid: 2001
+    accounts: [physics]
+nodes:
+  - controller
+  - db
+  - submitter
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+
+	controller := ContainerName(realm, clusterName, "controller")
+	db := ContainerName(realm, clusterName, "db")
+	submitter := ContainerName(realm, clusterName, "submitter")
+	worker := ContainerName(realm, clusterName, "worker-0")
+	nodes := []docker.ContainerName{controller, db, submitter, worker}
+
+	// auth/slurm with slurm.key replaces munge, which is masked everywhere.
+	params := slurmConfig(ctx, t, c, controller)
+	assert.Equal(t, "auth/slurm", params["AuthType"])
+	assert.Equal(t, "cred/slurm", params["CredType"])
+	assert.Contains(t, params["AuthInfo"], "use_client_ids")
+	assert.Contains(t, params["LaunchParameters"], "enable_nss_slurm")
+	out, err := c.Exec(ctx, controller, "stat", "-c", "%U:%G %a", "/etc/slurm/slurm.key")
+	require.NoError(t, err)
+	assert.Equal(t, "slurm:slurm 600", strings.TrimSpace(out))
+	for _, n := range nodes {
+		out, err := c.ExecAllowNonZero(ctx, n, "systemctl", "is-enabled", "munge")
+		require.NoError(t, err)
+		assert.Equal(t, "masked", strings.TrimSpace(out), n)
+	}
+
+	// Only the login node has alice. Root's client commands there get
+	// their tokens from sackd.
+	for _, n := range nodes {
+		want := "2"
+		if n == submitter {
+			want = "0"
+		}
+		assert.Equal(t, want, lookupStatus(ctx, t, c, n, "alice"), n)
+	}
+	_, err = c.Exec(ctx, submitter, "squeue")
+	require.NoError(t, err)
+
+	// alice's job runs under her association although neither the
+	// controller nor slurmdbd knows her: her identity comes with her token.
+	// On the worker, nss_slurm serves it to the job.
+	waitNodeIdle(t, c, controller, "worker-0")
+	out, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", DNSName("submitter", clusterName, realm),
+		`srun -N1 sh -c 'id -un; stat -c %U "$HOME"'`)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alice", "alice"}, strings.Split(strings.TrimSpace(out), "\n"))
+	assert.Eventually(t, func() bool {
+		out, err := c.Exec(ctx, controller, "sacct", "-a", "-n", "-X", "-P", "-o", "User,Account,State")
+		return err == nil && slices.Contains(strings.Split(strings.TrimSpace(out), "\n"), "alice|physics|COMPLETED")
+	}, time.Minute, time.Second, "alice's job not recorded under physics")
+
+	// get cluster reports sackd instead of munge, and no munge volume.
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	for _, n := range status.Nodes {
+		assert.NotContains(t, n.Health.Services, probe.ServiceMunge, n.Name)
+		if n.Role == config.RoleSubmitter {
+			assert.Equal(t, ServiceHealth{probe.ServiceSSHD: true, probe.ServiceSackd: true}, n.Health.Services)
+		}
+	}
+	for _, m := range status.Mounts {
+		assert.NotEqual(t, slurm.MungeDir, m.Path)
+	}
+	key, err := GetAuthKey(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.Equal(t, AuthSlurm, key.Type)
+	assert.Len(t, key.Key, slurm.SlurmKeySize)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

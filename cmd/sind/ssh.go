@@ -18,7 +18,7 @@ import (
 
 func newSSHCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:                "ssh [SSH_OPTIONS] NODE [-- COMMAND [ARGS...]]",
+		Use:                "ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]",
 		Short:              "SSH into a cluster node",
 		DisableFlagParsing: true,
 		ValidArgsFunction:  completeSSHNodeArg,
@@ -43,6 +43,15 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// USER@NODE logs in as USER, as ssh -l USER NODE does.
+	if user, host, ok := strings.Cut(node, "@"); ok {
+		if err := config.CheckUserName(user); err != nil {
+			return usage(err)
+		}
+		sshOptions = append(sshOptions, "-l", user)
+		node = host
+	}
+
 	target, err := parseNodeArgs(node)
 	if err != nil {
 		return err
@@ -63,7 +72,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 }
 
 func newEnterCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:               "enter [CLUSTER]",
 		Short:             "Interactive shell on submitter or controller",
 		Args:              optionalCluster,
@@ -76,12 +85,36 @@ func newEnterCommand() *cobra.Command {
 			return runEnter(cmd, name)
 		},
 	}
+	addUserFlag(cmd, "shell")
+	return cmd
+}
+
+// addUserFlag adds the --user flag of enter and exec, which run what (the
+// shell or the command) as a cluster user.
+func addUserFlag(cmd *cobra.Command, what string) {
+	cmd.Flags().StringP("user", "u", "", "run the "+what+" as this cluster user, in its home directory")
+}
+
+// userFlag returns the value of --user, checked to be a user name.
+func userFlag(cmd *cobra.Command) (string, error) {
+	user, _ := cmd.Flags().GetString("user")
+	if user == "" {
+		return "", nil
+	}
+	if err := config.CheckUserName(user); err != nil {
+		return "", usage(err)
+	}
+	return user, nil
 }
 
 func runEnter(cmd *cobra.Command, clusterName string) error {
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	user, err := userFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -93,7 +126,7 @@ func runEnter(cmd *cobra.Command, clusterName string) error {
 
 	containerName := cluster.ContainerName(realm, clusterName, target)
 	isTTY := stdinIsTTY(cmd.InOrStdin())
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, workDir, isTTY, nil)
+	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, isTTY, nil)
 
 	return dockerExec(cmd, dockerArgs)
 }
@@ -110,14 +143,15 @@ func newExecCommand() *cobra.Command {
 			return runExec(cmd, args)
 		},
 	}
+	addUserFlag(cmd, "command")
 
 	return cmd
 }
 
 func runExec(cmd *cobra.Command, args []string) error {
-	// Parse exec's own flags, which end at the --, so that --realm, -v and
-	// --help also work after "exec", as in the "exec --realm R CLUSTER --
-	// COMMAND" the MCP server runs.
+	// Parse exec's own flags, which end at the --, so that --realm, -v,
+	// --user and --help also work after "exec", as in the "exec --realm R
+	// CLUSTER -- COMMAND" the MCP server runs.
 	flags := cmd.Flags()
 	flags.AddFlagSet(cmd.InheritedFlags()) // --realm and -v
 	if err := flags.Parse(args); err != nil {
@@ -129,6 +163,10 @@ func runExec(cmd *cobra.Command, args []string) error {
 	applyVerbosity(cmd)
 
 	clusterName, command, err := parseExecArgs(flags.Args(), flags.ArgsLenAtDash())
+	if err != nil {
+		return err
+	}
+	user, err := userFlag(cmd)
 	if err != nil {
 		return err
 	}
@@ -146,7 +184,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	containerName := cluster.ContainerName(realm, clusterName, target)
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, workDir, false, command)
+	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, false, command)
 
 	return dockerExec(cmd, dockerArgs)
 }

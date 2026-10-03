@@ -33,12 +33,15 @@ import (
 // fails at once when fakeDockerEnv is empty. fakeDockerExitEnv makes it end
 // at once instead, with the exit status it names or killed by the signal
 // it names (fakeDockerSignals), like a docker exec whose command failed.
+// fakeDockerArgsEnv names a file the fake docker writes its arguments to,
+// one per line, before anything else.
 //
 // Adapted from GSI-HPC/clusterctl cmd/clusterctl/signal_test.go.
 const (
 	childEnv          = "SIND_TEST_PROCESS"
 	fakeDockerEnv     = "SIND_TEST_DOCKER_STARTED"
 	fakeDockerExitEnv = "SIND_TEST_DOCKER_EXIT"
+	fakeDockerArgsEnv = "SIND_TEST_DOCKER_ARGS"
 )
 
 // fakeDockerSignals are the signals fakeDockerExitEnv can name.
@@ -77,6 +80,9 @@ func TestMain(m *testing.M) {
 }
 
 func fakeDocker() {
+	if file := os.Getenv(fakeDockerArgsEnv); file != "" {
+		_ = os.WriteFile(file, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
+	}
 	if exit := os.Getenv(fakeDockerExitEnv); exit != "" {
 		if sig, ok := fakeDockerSignals[exit]; ok {
 			_ = syscall.Kill(os.Getpid(), sig)

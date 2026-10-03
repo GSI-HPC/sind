@@ -44,6 +44,10 @@ variable "OMPI_VERSION" {
   default = "5.0.10"
 }
 
+variable "LIBJWT_VERSION" {
+  default = "1.18.4"
+}
+
 # Release line of a Slurm version, e.g. "25.11" for "25.11.8".
 function "release_line" {
   params = [version]

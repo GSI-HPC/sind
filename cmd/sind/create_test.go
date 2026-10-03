@@ -275,8 +275,8 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, realm+"-"+cluster+"-config")
 	assert.Contains(t, stdout, realm+"-"+cluster+"-munge")
 
-	// --- get munge-key ---
-	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "munge-key", cluster)
+	// --- get auth-key ---
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "auth-key", cluster)
 	require.NoError(t, err)
 	assert.NotEmpty(t, stdout)
 	assert.NotContains(t, stdout, "Error")

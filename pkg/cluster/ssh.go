@@ -85,13 +85,18 @@ func enterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 }
 
 // BuildContainerExecArgs builds docker CLI arguments for running a command
-// directly inside a cluster container via docker exec. The working directory
-// is workDir, the node's data mount point (see EnterTarget). When command is
-// nil, an interactive login shell is started.
-func BuildContainerExecArgs(container docker.ContainerName, workDir string, isTTY bool, command []string) []string {
+// directly inside a cluster container via docker exec. The command runs as
+// root in workDir, the node's data mount point (see EnterTarget), or, when
+// user names a cluster user, as that user in its home directory. When
+// command is nil, an interactive login shell is started.
+func BuildContainerExecArgs(container docker.ContainerName, user, workDir string, isTTY bool, command []string) []string {
 	args := []string{"exec", "-i"}
 	if isTTY {
 		args = append(args, "-t")
+	}
+	if user != "" && user != "root" {
+		args = append(args, "-u", user)
+		workDir = HomeDir(user)
 	}
 	args = append(args, "-w", workDir, string(container))
 	if len(command) == 0 {

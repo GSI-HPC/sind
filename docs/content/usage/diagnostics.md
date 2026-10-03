@@ -90,7 +90,7 @@ Log output goes to stderr in structured `key=value` format with timestamps and c
 
 ```bash
 # Capture logs while piping output
-sind -v get munge-key 2>create.log | base64 -d > munge.key
+sind -v get auth-key 2>create.log | base64 -d > munge.key
 
 # Watch creation progress
 sind -vv create cluster --config cluster.yaml
@@ -174,9 +174,9 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
-Nodes where sind does not manage Slurm (unmanaged workers and db nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
+Nodes where sind does not manage Slurm (unmanaged workers and db nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. With [identity `clientIds`]({{< relref "/guides/users#clientids" >}}), no node lists `munge`, as auth/slurm replaces it, and the submitter lists `sackd`; `MOUNTS` has no `/etc/munge`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
 
-With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
+With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), `MOUNTS` lists the home volume at `/home`. With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
 
 Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`. Unmanaged clusters show no `HA` column: sind cannot tell which of their controllers is in control.
 
@@ -219,6 +219,7 @@ sind logs controller --follow
 # Service logs
 sind logs controller slurmctld
 sind logs worker-0 slurmd --follow
+sind logs submitter sackd             # identity clientIds
 sind logs db slurmdbd
 ```
 
@@ -289,13 +290,13 @@ controller.default.sind.sind         172.19.0.2
 worker-0.default.sind.sind           172.19.0.3
 ```
 
-## Munge key
+## Authentication key
 
 ```bash
-sind get munge-key [CLUSTER]
+sind get auth-key [CLUSTER]
 ```
 
-Outputs the cluster's munge key encoded as base64, suitable for injection into external tooling.
+Outputs the key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external tooling: the munge key, or `slurm.key` with [identity `clientIds`]({{< relref "/guides/users#clientids" >}}). `-o json` returns it with its type: `{"type": "munge", "key": "..."}` or `{"type": "slurm", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`.
 
 ## Mesh infrastructure
 
