@@ -12,7 +12,9 @@ variable "IMAGE_NAME" {
 # supported release line, newest line first. Each entry builds the target
 # slurm-<YY>-<MM>, tagged <version> and <YY>.<MM>; the first entry is also
 # tagged latest, the image sind uses by default. sha256 is the checksum of
-# https://download.schedmd.com/slurm/slurm-<version>.tar.bz2.
+# https://download.schedmd.com/slurm/slurm-<version>.tar.bz2. The other
+# components (UCX, PMIx, PRRTE, Open MPI, libjwt) are pinned only in the
+# Dockerfile, by the ARG defaults and checksums of their builder stages.
 variable "SLURM_RELEASES" {
   default = [
     {
@@ -24,28 +26,6 @@ variable "SLURM_RELEASES" {
       sha256  = "34ace13f81011add6094569d13bfc4006ad8868201c2236e2905443c7e526393"
     },
   ]
-}
-
-# Must match the ARG defaults in the Dockerfile. Pinned here because the
-# Dockerfile checksums are coupled to these exact versions.
-variable "UCX_VERSION" {
-  default = "1.20.0"
-}
-
-variable "PMIX_VERSION" {
-  default = "6.1.0"
-}
-
-variable "PRRTE_VERSION" {
-  default = "4.1.0"
-}
-
-variable "OMPI_VERSION" {
-  default = "5.0.10"
-}
-
-variable "LIBJWT_VERSION" {
-  default = "1.18.4"
 }
 
 # Release line of a Slurm version, e.g. "25.11" for "25.11.8".

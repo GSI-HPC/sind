@@ -11,7 +11,7 @@ version and checksum are build args without defaults; `SLURM_RELEASES` in
 `docker-bake.hcl` sets them for each image, one entry per supported release line,
 newest line first. The first entry is also tagged `latest`, sind's default image.
 
-| Component | ARG / bake variable | Tarball URL |
+| Component | ARG | Tarball URL |
 |-----------|---------------------|-------------|
 | Slurm | `SLURM_RELEASES` entry (`version`, `sha256`) | `https://download.schedmd.com/slurm/slurm-${V}.tar.bz2` |
 | UCX | `UCX_VERSION` | `https://github.com/openucx/ucx/releases/download/v${V}/ucx-${V}.tar.gz` |
@@ -44,8 +44,8 @@ bump needs no Go code changes, only the files below.
      in `docker-bake.hcl`, and the tag table under "Official images" in
      `docs/content/container-images/building-images.md`. The Dockerfile needs no change.
    - Other components: both `ARG <NAME>_VERSION=` lines in `Dockerfile` (the builder
-     stage and the final stage that sets the image labels), the component's
-     `ADD --checksum=sha256:` line, and the variable default in `docker-bake.hcl`.
+     stage and the final stage that sets the image labels) and the component's
+     `ADD --checksum=sha256:` line. `docker-bake.hcl` does not list them.
    - every other occurrence of the old version: `grep -rn '<old>' --exclude-dir=.git .`
      For Slurm these are `DESIGN.md`, `docs/content/architecture/{docker-resources,slurm-config}.md`,
      `docs/content/usage/{cluster-lifecycle,diagnostics}.md`,
