@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=1920, height=1080" />
-<title>sind Quickstart: pilot</title>
+<title>sind Quickstart</title>
 <script src="vendor/gsap.min.js"></script>
 <script src="vendor/sindy.js"></script>
 <script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
 <script src="assets/voice/lines.js"></script>
 <link rel="stylesheet" href="vendor/scenes.css" />
 <style>
@@ -15,242 +16,69 @@
   @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
   @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
   @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
-
-  /* Intro */
-  #s-intro .brand { position: absolute; left: 150px; top: 270px; display: flex; flex-direction: column; gap: 40px; }
-  #s-intro .lockup { display: flex; align-items: center; gap: 48px; }
-  #s-intro .logo-grid { width: 250px; }
-  #s-intro .wordmark { font-size: 190px; line-height: 1; }
-  #s-intro .ep { display: flex; flex-direction: column; gap: 14px; margin-top: 30px; }
-  #s-intro .ep .kicker { font-size: 30px; }
-  #s-intro .ep .headline { font-size: 84px; }
-  #s-intro .disclosure { left: 150px; right: auto; }
-
-  /* Outro */
-  #s-outro .card { left: 1000px; top: 230px; width: 820px; }
-  #s-outro .links { display: flex; flex-direction: column; gap: 18px; }
-  #s-outro .link { display: flex; align-items: center; gap: 20px; font-size: 36px; font-weight: 600; color: #fff; }
-  #s-outro .link span { font-size: 26px; color: var(--mint); width: 140px; text-transform: uppercase; letter-spacing: 0.12em; }
-  #s-outro .next { padding: 26px 32px; border-radius: 22px; border: 2px solid var(--teal); background: rgba(20, 184, 166, 0.1); }
-  #s-outro .next .kicker { font-size: 24px; }
-  #s-outro .next .t { font-size: 44px; font-weight: 800; color: #fff; margin-top: 6px; }
-  #blackout { position: absolute; inset: 0; z-index: 50; background: #000; opacity: 0; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080">
-
-  <!-- Scene 1: intro / logo sting -->
-  <section class="scene" id="s-intro">
-    <div class="bg-glow"></div>
-    <div class="bg-grid"></div>
-    <div class="brand">
-      <div class="lockup">
-        <div class="logo-grid" id="intro-grid">
-          <i style="background:#0EA5E9;opacity:.92"></i><i style="background:#0EA5E9;opacity:.70"></i><i style="background:#0EA5E9;opacity:.48"></i>
-          <i style="background:#14B8A6;opacity:.82"></i><i style="background:#0D9488"></i><i style="background:#14B8A6;opacity:.58"></i>
-          <i style="background:#0EA5E9;opacity:.48"></i><i style="background:#0EA5E9;opacity:.34"></i><i style="background:#14B8A6;opacity:.40"></i>
-        </div>
-        <div>
-          <div class="wordmark" id="intro-word">sind</div>
-          <div class="tagline" id="intro-tag">SLURM · IN · DOCKER</div>
-        </div>
-      </div>
-      <div class="ep" id="intro-ep">
-        <div class="kicker">Getting started · Episode 1</div>
-        <div class="headline">Quickstart</div>
-      </div>
-    </div>
-    <div class="disclosure" id="intro-disc">Sindy is an AI-voiced virtual presenter</div>
-  </section>
-
-  <!-- Scene 2: fullscreen talk -->
-  <section class="scene" id="s-talk">
-    <div class="bg-glow"></div>
-    <div class="bg-grid"></div>
-    <div class="card" id="talk-card">
-      <div class="kicker">Getting started</div>
-      <div class="headline">Your first Slurm cluster</div>
-      <div class="sub">One command, about a minute, nothing to install on the host but Docker.</div>
-      <div class="chips"><span class="chip accent">Requires Docker</span><span class="chip">~1 min</span><span class="chip">1 controller + 1 worker</span></div>
-    </div>
-  </section>
-
-  <!-- Scene 3: slide with corner avatar -->
-  <section class="scene" id="s-slide">
-    <div class="bg-glow"></div>
-    <div class="chapter"><span class="dot"></span>Quickstart <b>· What sind does</b></div>
-    <div class="slide-title">One command sets up…</div>
-    <div class="bullets">
-      <div class="bullet" id="b1">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#5eead4" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v4M12 11.5l-5.5 5.5M12 11.5l5.5 5.5"/></svg></div>
-        <div class="txt"><div class="t1">Network, DNS and SSH</div><div class="t2">a shared mesh so nodes find each other by name</div></div>
-      </div>
-      <div class="bullet" id="b2">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#5eead4" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></div>
-        <div class="txt"><div class="t1">Munge key and slurm.conf</div><div class="t2">generated for this cluster's nodes</div></div>
-      </div>
-      <div class="bullet" id="b3">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#5eead4" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></svg></div>
-        <div class="txt"><div class="t1">One container per node</div><div class="t2">systemd inside, just like bare metal</div></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Scene 4: terminal screencast with corner avatar -->
-  <section class="scene" id="s-term">
-    <div class="bg-glow"></div>
-    <div class="chapter"><span class="dot"></span>Quickstart <b>· Create a cluster</b></div>
-    <div class="term" id="term" style="top: 150px">
-      <div class="term-bar"><i style="background:#f87171"></i><i style="background:#fbbf24"></i><i style="background:#34d399"></i><span class="title">~/work — bash</span></div>
-      <div class="term-body"></div>
-      <div class="term-ff"></div>
-    </div>
-  </section>
-
-  <!-- Scene 5: outro -->
-  <section class="scene" id="s-outro">
-    <div class="bg-glow"></div>
-    <div class="bg-grid"></div>
-    <div class="card" id="outro-card">
-      <div class="headline">Thanks for watching!</div>
-      <div class="links">
-        <div class="link"><span>Docs</span>gsi-hpc.github.io/sind</div>
-        <div class="link"><span>Code</span>github.com/GSI-HPC/sind</div>
-      </div>
-      <div class="next">
-        <div class="kicker">Next up</div>
-        <div class="t">Configuring your cluster</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Avatar, captions, fade -->
-  <div id="sindy-frame"><div class="sindy-bg"></div><div class="sindy-stage" id="sindy-stage"></div><div class="sindy-ring"></div></div>
-  <div class="lower-third" id="talk-l3" style="opacity: 0">
-    <div class="name">Sindy</div>
-    <div class="role">your sind guide</div>
-  </div>
-  <div id="captions"></div>
-  <div id="blackout"></div>
-</div>
-
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
 <script>
-  const $ = (s) => document.querySelector(s);
-  const root = $("#root");
+  // Quickstart: docs/content/getting-started/quickstart.md. Terminal output is
+  // copied from that page; keep both in sync.
   const tl = gsap.timeline({ paused: true });
-  const P = Scenes.planner(window.SINDY_LINES);
-  const expressions = [{ t: 0, name: "happy" }];
-  const gaze = [{ t: 0, x: 0, y: 0 }];
-  const gestures = [];
-  const look = (t, x, y) => gaze.push({ t, x, y: y || 0 });
-  const feel = (t, name, blend) => expressions.push({ t, name, blend });
-
-  // ---- 1. Intro: logo sting, Sindy rises in and waves.
-  Scenes.show(tl, "#s-intro", 0);
-  tl.fromTo("#intro-grid i", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2)", stagger: { each: 0.05, from: "center" } }, 0.15);
-  Scenes.enter(tl, "#intro-word", 0.55, { y: 40 });
-  Scenes.enter(tl, "#intro-tag", 0.8, { y: 16 });
-  Scenes.enter(tl, "#intro-ep", 1.1);
-  Scenes.enter(tl, "#intro-disc", 1.3, { y: 0 });
-  Scenes.shot(tl, $("#sindy-frame"), "hidden", 0);
-  Scenes.shot(tl, $("#sindy-frame"), "hero", 0.7, 0.9, "power3.out");
-  P.at(1.5);
-  const intro = P.say("intro", { gap: 0.25 });
-  gestures.push({ t: intro.start - 0.1, name: "wave", dur: 2.2 });
-  feel(intro.start, "joy");
-  feel(intro.word("Welcome"), "happy");
-
-  // ---- 2. Fullscreen talk.
-  const T1 = P.t;
-  Scenes.transition(tl, "iris", "#s-intro", "#s-talk", T1, 0.8, { x: "70%", y: "45%" });
-  Scenes.shot(tl, $("#sindy-frame"), "full", T1, 0.9);
-  Scenes.enter(tl, "#talk-card > *", T1 + 0.5, { stagger: 0.12 });
-  tl.fromTo("#talk-l3", { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, T1 + 0.9);
-  tl.to("#talk-l3", { opacity: 0, x: -60, duration: 0.4, ease: "power2.in" }, T1 + 5.2);
-  P.wait(0.6);
-  const welcome = P.say("welcome", { gap: 0.2 });
-  feel(welcome.start, "neutral");
-  look(welcome.word("complete"), 0.35, -0.1);
-  look(welcome.word("It"), 0, 0);
-  feel(welcome.word("Docker"), "happy");
-
-  // ---- 3. Slide: Sindy moves to the corner, bullets land on their words.
-  const T2 = P.t;
-  Scenes.transition(tl, "push", "#s-talk", "#s-slide", T2, 0.7);
-  Scenes.shot(tl, $("#sindy-frame"), "cornerR", T2, 0.9);
-  Scenes.enter(tl, "#s-slide .slide-title", T2 + 0.5);
-  P.wait(0.6);
-  const what = P.say("what", { gap: 0.2 });
-  feel(what.start, "neutral");
-  for (const [id, word] of [["#b1", "network"], ["#b2", "munge"], ["#b3", "starts"]]) {
-    tl.fromTo(id, { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, what.word(word) - 0.15);
-    look(what.word(word) - 0.15, -0.7, 0.1);
-    look(what.word(word) + 0.8, 0, 0);
-  }
-  tl.set(["#b1", "#b2", "#b3"], { opacity: 0 }, 0);
-
-  // ---- 4. Terminal: real commands and output from the quickstart guide.
-  const T3 = P.t;
-  Scenes.transition(tl, "push", "#s-slide", "#s-term", T3, 0.7);
-  Scenes.enter(tl, "#term", T3 + 0.4, { y: 40 });
-  P.wait(0.6);
-  const create = P.say("create", { gap: 0.2 });
-  feel(create.start, "happy");
-  const typeAt = create.word("Run");
-  const typed = typeAt + "sind create cluster".length / 32;
-  look(typeAt, -0.8, 0.2);
-  look(create.word("you"), 0, 0);
-  const check = P.say("check", { gap: 0.3 });
-  feel(check.start, "smug");
-  feel(check.word("Now"), "neutral");
-  look(check.word("Now"), -0.8, 0.2);
-  feel(check.word("running"), "joy");
-  look(check.word("running"), 0, 0);
-  const term = Scenes.terminal($("#term"), [
-    { at: typeAt, cmd: "sind create cluster" },
-    { at: typed + 0.5, ff: "⏩ ~40 s later", hold: 1.8 },
-    { at: typed + 1.4, prompt: true },
-    { at: check.word("Now"), cmd: "sind get clusters" },
-    { at: check.word("shows"), out: "NAME      NODES (S/C/D/W)   SLURM     STATUS\ndefault   2 (0/1/0/1)       26.05.4   running" },
-    { at: check.word("running") - 0.1, mark: "running" },
-  ]);
-
-  // ---- 5. Outro: blur handoff, wave, fade to black.
-  const T4 = P.t;
-  Scenes.transition(tl, "blur", "#s-term", "#s-outro", T4, 0.9);
-  Scenes.shot(tl, $("#sindy-frame"), "left", T4, 1.0);
-  Scenes.enter(tl, "#outro-card > *", T4 + 0.6, { stagger: 0.15 });
-  P.wait(0.7);
-  const outro = P.say("outro", { gap: 0 });
-  feel(outro.start, "joy");
-  feel(outro.word("Your"), "happy");
-  gestures.push({ t: outro.word("See") - 0.2, name: "wave", dur: 2.4 });
-  feel(outro.word("guide") + 0.4, "wink");
-  const END = P.t + 1.8;
-  tl.to("#blackout", { opacity: 1, duration: 0.8, ease: "power1.in" }, END - 0.8);
-  tl.fromTo(".bg-grid", { backgroundPosition: "0px 0px" }, { backgroundPosition: `${Math.round(END * 6)}px ${Math.round(END * 10)}px`, duration: END, ease: "none" }, 0);
-
-  // ---- Per-frame components, driven by one clock.
-  P.audio(root);
-  const sindy = Sindy.create($("#sindy-stage"), { speech: P.speech(), expressions, gaze, gestures, seed: 11, maxDuration: END + 5 });
-  const renderers = [sindy.render, term];
-  // Docs renders turn burned-in captions off and ship a WebVTT track instead.
-  if (Scenes.vars({ captions: true }).captions) renderers.push(Scenes.captions($("#captions"), P.said));
-  Scenes.clock(tl, END, renderers);
-  Scenes.episode({
-    id: "quickstart",
-    title: "Quickstart: your first Slurm cluster",
-    duration: END,
-    said: P.said,
-    chapters: [
-      { title: "Hi, I'm Sindy", start: 0 },
-      { title: "What you'll build", start: T1 },
-      { title: "What sind sets up", start: T2 },
-      { title: "Create and check a cluster", start: T3 },
-      { title: "Wrap-up", start: T4 },
-    ],
-  });
+  Episode.create({ tl, id: "quickstart", title: "Quickstart: your first Slurm cluster", series: "Quickstart" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Getting started", title: "Quickstart", say: "intro" })
+    .talk({
+      chapter: "What you'll build",
+      kicker: "Getting started",
+      title: "Your first Slurm cluster",
+      sub: "One command, about a minute, nothing to install on the host but Docker.",
+      chips: ["Requires Docker", "~1 min", "1 controller + 1 worker"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "welcome", cues: { Docker: "happy" }, look: { complete: 0.35, It: "camera" } },
+    })
+    .slide({
+      chapter: "What sind sets up",
+      label: "What sind does",
+      title: "One command sets up…",
+      say: "what",
+      bullets: [
+        { icon: "network", title: "Network, DNS and SSH", text: "a shared mesh so nodes find each other by name", at: "what:network" },
+        { icon: "key", title: "Munge key and slurm.conf", text: "generated for this cluster's nodes", at: "what:munge" },
+        { icon: "nodes", title: "One container per node", text: "systemd inside, just like bare metal", at: "what:starts" },
+      ],
+    })
+    .terminal({
+      chapter: "Create and check a cluster",
+      label: "Create a cluster",
+      say: [{ id: "create", mood: "happy" }, { id: "check", mood: "smug", cues: { Now: "neutral", running: "joy" } }],
+      steps: [
+        { cmd: "sind create cluster", at: "create:Run" },
+        { ff: "⏩ ~40 s later", after: 0.5, hold: 1.8 },
+        { prompt: true, after: 0.9 },
+        { cmd: "sind get clusters", at: "check:Now" },
+        { out: "NAME      NODES (S/C/D/W)   SLURM     STATUS\ndefault   2 (0/1/0/1)       26.05.4   running", at: "check:shows" },
+        { mark: "running", at: "check:running", delay: -0.1 },
+      ],
+    })
+    .terminal({
+      wide: true,
+      chapter: "Inspect the nodes",
+      say: { id: "nodes", mood: "neutral", cues: { address: "happy" } },
+      steps: [
+        { cmd: "sind get nodes", at: "nodes:sind" },
+        {
+          out: [
+            "CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS",
+            "sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running",
+            "sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running",
+          ].join("\n"),
+          at: "nodes:lists",
+        },
+        { mark: "controller.default.sind.sind", at: "nodes:host", until: "nodes:IP" },
+        { mark: "172.19.0.2", at: "nodes:IP" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "Cluster Configuration", say: "outro" })
+    .done();
   window.__timelines["main"] = tl;
 </script>
 </body>
