@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -313,6 +315,81 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	}
 	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
 	require.NoError(t, err)
+}
+
+// TestDeregisterMesh_StartsStoppedMesh covers a delete after a host
+// reboot: the stopped DNS container and relay start, DNS first, so the
+// nodes leave known_hosts, which docker exec reads and writes in the
+// relay, as well as the Corefile.
+func TestDeregisterMesh_StartsStoppedMesh(t *testing.T) {
+	started := map[string]bool{}
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh"):
+			state := "exited"
+			if started[args[1]] {
+				state = "running"
+			}
+			return mock.Result{Stdout: inspectJSON(t, args[1], state, nil)}
+		case args[0] == "start":
+			if args[1] == "sind-ssh" {
+				assert.True(t, started["sind-dns"], "DNS starts before the relay")
+			}
+			started[args[1]] = true
+			return mock.Result{}
+		case args[0] == "exec" && !started["sind-ssh"]:
+			t.Errorf("docker exec in the stopped relay: %v", args)
+			return mock.Result{Stderr: "Error response from daemon: container is not running\n", Err: fmt.Errorf("exit status 1")}
+		case args[0] == "exec" && args[1] == "sind-ssh" && args[2] == "cat":
+			return mock.Result{Stdout: "controller.dev.sind.sind ssh-ed25519 K1\ncontroller.other.sind.sind ssh-ed25519 K2\n"}
+		case args[0] == "exec" && args[1] == "-i" && args[2] == "sind-ssh":
+			return mock.Result{}
+		case args[0] == "cp" && args[1] == "sind-dns:/Corefile":
+			return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
+		case args[0] == "cp", args[0] == "kill":
+			return mock.Result{}
+		}
+		t.Errorf("unexpected docker call: %v", args)
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	c := docker.NewClient(&m)
+
+	err := DeregisterMesh(t.Context(), mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
+
+	require.NoError(t, err)
+	assert.True(t, started["sind-ssh"], "relay started")
+	var written []string
+	for _, call := range m.Calls {
+		if call.Args[0] == "exec" && call.Args[1] == "-i" && call.Args[2] == "sind-ssh" {
+			written = append(written, call.Stdin)
+		}
+	}
+	assert.Equal(t, []string{"controller.other.sind.sind ssh-ed25519 K2\n"}, written)
+}
+
+// TestDeregisterMesh_StartMeshError covers a mesh that cannot be inspected:
+// the failure is logged, and the removals are still tried.
+func TestDeregisterMesh_StartMeshError(t *testing.T) {
+	var m mock.Executor
+	base := meshDeregisterOnCall("controller.dev.sind.sind ssh-ed25519 K1\n")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "inspect" && args[1] == "sind-ssh" {
+			return mock.Result{Err: fmt.Errorf("daemon gone")}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+	var logs strings.Builder
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+
+	err := DeregisterMesh(ctx, mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
+
+	require.NoError(t, err)
+	assert.Contains(t, logs.String(), "starting the mesh failed, continuing")
+	assert.Contains(t, logs.String(), "inspecting SSH container: daemon gone")
+	assert.Equal(t, 1, countCalls(m.Calls, "exec", "-i", "sind-ssh"), "known_hosts written")
+	assert.Equal(t, 1, countCalls(m.Calls, "kill", "-s", "USR1", "sind-dns"), "CoreDNS reloaded")
 }
 
 // --- Delete Orchestrator ---
@@ -696,6 +773,8 @@ func (f *realmFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{}
 	case joined == "inspect sind-dns":
 		return mock.Result{Stdout: dnsRunningInspectJSON}
+	case joined == "inspect sind-ssh":
+		return mock.Result{Stdout: sshRunningInspectJSON}
 	case args[0] == "exec":
 		return mock.Result{}
 	}
@@ -848,6 +927,11 @@ func indexOf(slice []string, s string) int {
 // container-state check that gates the DNS reload.
 const dnsRunningInspectJSON = `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
 
+// sshRunningInspectJSON is a mock docker inspect result reporting the
+// sind-ssh relay as running, for the mesh start that precedes
+// deregistration.
+const sshRunningInspectJSON = `[{"Id":"ssh123","Name":"/sind-ssh","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
+
 // meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecord
 // and RemoveKnownHost operations for DeregisterMesh tests.
 func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.Result {
@@ -865,6 +949,9 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.
 		// InspectContainer: docker inspect sind-dns (state check before reload)
 		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
 			return mock.Result{Stdout: dnsRunningInspectJSON}
+		// InspectContainer: docker inspect sind-ssh (mesh start)
+		case args[0] == "inspect" && len(args) >= 2 && args[1] == "sind-ssh":
+			return mock.Result{Stdout: sshRunningInspectJSON}
 		// Signal: docker kill -s HUP sind-dns
 		case args[0] == "kill":
 			return mock.Result{}
@@ -987,6 +1074,10 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 		// docker inspect sind-dns (state check before DNS reload)
 		case args[0] == "inspect" && len(args) >= 2 && strings.Contains(args[1], "sind-dns"):
 			return mock.Result{Stdout: dnsRunningInspectJSON}
+
+		// docker inspect sind-ssh (mesh start before deregistration)
+		case args[0] == "inspect" && len(args) >= 2 && args[1] == "sind-ssh":
+			return mock.Result{Stdout: sshRunningInspectJSON}
 
 		// docker kill -s HUP (DNS reload)
 		case args[0] == "kill":

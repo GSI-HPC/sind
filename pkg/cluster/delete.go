@@ -152,7 +152,7 @@ func realmClusterNames(ctx context.Context, client *docker.Client, realm string)
 //
 //	ListClusterResources
 //	      │
-//	DeregisterMesh        DNS ║ known_hosts (with deregister)
+//	DeregisterMesh        start mesh → DNS ║ known_hosts (with deregister)
 //	      │
 //	DeleteContainers      stop + rm per container
 //	      │
@@ -277,7 +277,8 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 }
 
 // DeregisterMesh removes DNS records and known_hosts entries for all
-// containers in batch. This is the inverse of registerMesh during cluster
+// containers in batch, starting a stopped mesh first (see
+// deregisterHostnames). This is the inverse of registerMesh during cluster
 // creation. Failures are logged and swallowed: the cluster is being torn
 // down, and stale entries in a mesh helper that's already unreachable will
 // be overwritten on next register or cleared when the mesh itself is torn
@@ -299,14 +300,20 @@ func meshHostnames(realm, clusterName string, containers []docker.ContainerListE
 }
 
 // deregisterHostnames removes the DNS records and known_hosts entries of the
-// given mesh host names, logging failures. The Corefile and known_hosts live
-// in different containers, so the two updates run in parallel; each stays a
-// single read-modify-write.
+// given mesh host names, logging failures. It first starts the realm's DNS
+// container and SSH relay if they are stopped, as after a host reboot (see
+// mesh.Manager.StartMesh): known_hosts is read and written with docker
+// exec in the relay, which needs it running. The Corefile and known_hosts
+// live in different containers, so the two updates then run in parallel;
+// each stays a single read-modify-write.
 func deregisterHostnames(ctx context.Context, meshMgr *mesh.Manager, hostnames []string) {
 	if len(hostnames) == 0 {
 		return
 	}
 	log := sindlog.From(ctx)
+	if _, _, err := meshMgr.StartMesh(ctx); err != nil {
+		log.WarnContext(ctx, "starting the mesh failed, continuing", "error", err)
+	}
 	var g errgroup.Group
 	g.Go(func() error {
 		if err := meshMgr.RemoveDNSRecords(ctx, hostnames); err != nil {

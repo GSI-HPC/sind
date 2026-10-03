@@ -961,6 +961,10 @@ func workerRemoveOnCall(t *testing.T, nodesConf string) func([]string, string) m
 		case args[0] == "kill":
 			return mock.Result{}
 
+		// Mesh start before deregistration: the relay runs
+		case args[0] == "inspect" && args[1] == "sind-ssh":
+			return mock.Result{Stdout: sshRunningInspectJSON}
+
 		// Known hosts: exec on sind-ssh
 		case args[0] == "exec" && args[1] == "sind-ssh":
 			return mock.Result{Stdout: "worker-1.dev.sind.sind ssh-ed25519 AAAA\n"}

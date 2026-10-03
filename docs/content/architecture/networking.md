@@ -58,7 +58,7 @@ The DNS container is lightweight — no systemd or sshd.
 
 ### After a host reboot or a Docker daemon restart
 
-sind sets no restart policy, so the mesh containers and the nodes stay stopped after a host reboot or a Docker daemon restart. `sind get cluster` then shows `dns` and `ssh` with ✗. `sind power on` starts them again: first the realm's DNS container, then the SSH relay, then the nodes, whose DNS records it points at their new addresses. It also applies host DNS again. `sind create cluster` and `sind create worker` start a stopped mesh too.
+sind sets no restart policy, so the mesh containers and the nodes stay stopped after a host reboot or a Docker daemon restart. `sind get cluster` then shows `dns` and `ssh` with ✗. `sind power on` starts them again: first the realm's DNS container, then the SSH relay, then the nodes, whose DNS records it points at their new addresses. It also applies host DNS again. `sind create cluster` and `sind create worker` start a stopped mesh too, and so do `sind delete cluster` and `sind delete worker` when they remove nodes from a mesh that other clusters keep, so that the nodes leave the relay's `known_hosts` as well as the DNS records.
 
 ```bash
 sind power on controller,worker-[0-1]
