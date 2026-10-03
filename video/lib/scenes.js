@@ -111,9 +111,13 @@
 
   // ----------------------------------------------------------- captions --
   // Phrase-chunked captions with the spoken words highlighted.
-  function captions(el, said, opts) {
+  // Split spoken lines into caption phrases (shared by on-screen captions and
+  // the WebVTT export, so both show the same cues).
+  // opts.maxWords caps a phrase; a comma only ends one that has commaMin words.
+  function phrasesOf(said, opts) {
     opts = opts || {};
     const maxWords = opts.maxWords || 7;
+    const commaMin = opts.commaMin || 1;
     const phrases = [];
     for (const s of said) {
       let cur = [];
@@ -124,12 +128,18 @@
       };
       for (const w of s.line.words) {
         cur.push({ text: w.text, t0: s.start + w.start, t1: s.start + w.end });
-        if (/[.!?,;:]$/.test(w.text) || cur.length >= maxWords) flush();
+        if (/[.!?;:]$/.test(w.text) || (/,$/.test(w.text) && cur.length >= commaMin) || cur.length >= maxWords) flush();
       }
       flush();
     }
     // A phrase never overlaps the next one.
     for (let i = 0; i + 1 < phrases.length; i++) phrases[i].end = Math.min(phrases[i].end, phrases[i + 1].start);
+    return phrases;
+  }
+
+  function captions(el, said, opts) {
+    opts = opts || {};
+    const phrases = phrasesOf(said, opts);
     let shown = -2;
     let lit = -1;
     const box = document.createElement("div");
@@ -317,5 +327,30 @@
     );
   }
 
-  global.Scenes = { planner, clock, captions, terminal, shot, SHOTS, transition, show, hide, enter };
+  // Publish episode metadata on window.__episode for tools/publish.mjs:
+  // chapters (for the docs player) and caption cues (for WebVTT).
+  function episode(meta) {
+    const r3 = (v) => Math.round(v * 1000) / 1000;
+    global.__episode = {
+      id: meta.id,
+      title: meta.title,
+      duration: r3(meta.duration),
+      chapters: meta.chapters.map((c) => ({ title: c.title, start: r3(c.start) })),
+      cues: phrasesOf(meta.said, { maxWords: 12, commaMin: 5 }).map((p) => ({
+        start: r3(Math.max(0, p.start)),
+        end: r3(p.end),
+        text: p.words.map((w) => w.text).join(" "),
+      })),
+    };
+    return global.__episode;
+  }
+
+  // Composition variables (HyperFrames --variables), with defaults outside the runtime.
+  function vars(defaults) {
+    const hf = global.__hyperframes;
+    const got = hf && hf.getVariables ? hf.getVariables() : {};
+    return Object.assign({}, defaults, got);
+  }
+
+  global.Scenes = { planner, clock, captions, phrasesOf, terminal, shot, SHOTS, transition, show, hide, enter, episode, vars };
 })(typeof window !== "undefined" ? window : globalThis);

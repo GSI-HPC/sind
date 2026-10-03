@@ -4,13 +4,11 @@
   "description": "Sindy: AI-presented tutorial videos for sind, rendered with HyperFrames",
   "license": "LGPL-3.0-or-later",
   "scripts": {
+    "episode": "node tools/episode.mjs",
     "vendor": "node tools/sync-vendor.mjs",
     "voice:setup": "python3 voice/sindy_voice.py setup",
     "voice:samples": "python3 voice/sindy_voice.py samples -o renders/voice-samples",
-    "sheet": "node tools/shot.mjs sindy/sheet.html sindy/sheet.png mode=expr",
-    "pilot:voice": "python3 voice/sindy_voice.py script pilot/script.json -o pilot/assets/voice",
-    "pilot:lint": "npm run vendor -- pilot && cd pilot && hyperframes lint",
-    "pilot:render": "npm run vendor -- pilot && cd pilot && hyperframes render -q standard -o ../renders/pilot.mp4"
+    "sheet": "node tools/shot.mjs sindy/sheet.html sindy/sheet.png mode=expr"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

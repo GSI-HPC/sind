@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=1920, height=1080" />
@@ -234,8 +234,23 @@
   // ---- Per-frame components, driven by one clock.
   P.audio(root);
   const sindy = Sindy.create($("#sindy-stage"), { speech: P.speech(), expressions, gaze, gestures, seed: 11, maxDuration: END + 5 });
-  const caps = Scenes.captions($("#captions"), P.said);
-  Scenes.clock(tl, END, [sindy.render, caps, term]);
+  const renderers = [sindy.render, term];
+  // Docs renders turn burned-in captions off and ship a WebVTT track instead.
+  if (Scenes.vars({ captions: true }).captions) renderers.push(Scenes.captions($("#captions"), P.said));
+  Scenes.clock(tl, END, renderers);
+  Scenes.episode({
+    id: "quickstart",
+    title: "Quickstart: your first Slurm cluster",
+    duration: END,
+    said: P.said,
+    chapters: [
+      { title: "Hi, I'm Sindy", start: 0 },
+      { title: "What you'll build", start: T1 },
+      { title: "What sind sets up", start: T2 },
+      { title: "Create and check a cluster", start: T3 },
+      { title: "Wrap-up", start: T4 },
+    ],
+  });
   window.__timelines["main"] = tl;
 </script>
 </body>
