@@ -110,7 +110,16 @@ Both worker commands rewrite only the `Nodes=` list of the partition line, so ot
 
 ## cgroup.conf
 
-sind generates a `cgroup.conf` for cgroupv2 support, enabling resource isolation and accounting for Slurm jobs.
+sind generates a minimal `cgroup.conf`:
+
+```
+CgroupPlugin=autodetect
+```
+
+With sind's `proctrack/cgroup` and `task/cgroup`, and `jobacct_gather/cgroup` with a db node, Slurm puts every job and step into a cgroup, which tracks its processes and measures its usage, but it constrains nothing. Constraints are opt-in through the `cgroup` section, and both common ones have a catch in sind:
+
+- `ConstrainRAMSpace=yes` limits each job to the memory it was allocated: `--mem`, or `DefMemPerCPU` per CPU. A worker's `RealMemory` is its whole container memory limit, with no reserve for slurmd, the other daemons and `/tmp`, so jobs that together use all of it can make the container's OOM killer hit the daemons. Leave room with a smaller `DefMemPerCPU` or with `MemSpecLimit` on the nodes.
+- `ConstrainCores=yes` confines each job to a cpuset of its allocated CPUs. sind limits a node's CPUs with a CPU quota, not a cpuset, so every worker sees all host CPUs, and Slurm maps a worker's CPU N to host CPU N: the jobs of every worker, of every cluster on the host, run on the same low-numbered host CPUs. Use it to test the setting itself, not for throughput. `task/affinity` binds the same way.
 
 ## plugstack.conf
 
@@ -127,7 +136,7 @@ slurm:
   main: |
     SelectType=select/cons_tres
   cgroup: |
-    ConstrainCores=yes
+    ConstrainRAMSpace=yes
 ```
 
 **Map form** — named fragments in a `.conf.d/` directory, included explicitly:

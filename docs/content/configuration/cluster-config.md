@@ -65,7 +65,7 @@ slurm:
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
   cgroup: |
-    ConstrainCores=yes
+    ConstrainRAMSpace=yes
   slurmdbd: |
     PurgeJobAfter=1month
 
@@ -282,7 +282,7 @@ slurm:
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
   cgroup: |
-    ConstrainCores=yes
+    ConstrainRAMSpace=yes
 ```
 
 **Map form** — named fragments placed in a `.conf.d/` directory:

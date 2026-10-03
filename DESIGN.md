@@ -738,7 +738,7 @@ slurm:
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
   cgroup: |                              # appended to cgroup.conf
-    ConstrainCores=yes
+    ConstrainRAMSpace=yes
   slurmdbd: |                            # appended to slurmdbd.conf (needs a managed db node)
     PurgeJobAfter=1month
 
@@ -787,7 +787,7 @@ slurm:
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
   cgroup: |
-    ConstrainCores=yes
+    ConstrainRAMSpace=yes
 ```
 
 **Map form** — named fragments in a `.conf.d/` directory:
@@ -1598,7 +1598,10 @@ PartitionName=all Nodes=worker-0,worker-1,worker-2 Default=YES
 
 #### cgroup.conf
 
-sind generates a `cgroup.conf` for cgroupv2 support on worker nodes. This enables resource isolation and accounting for jobs.
+sind generates a minimal `cgroup.conf`, `CgroupPlugin=autodetect`, which selects cgroup v2. With `ProctrackType=proctrack/cgroup`, `TaskPlugin=task/cgroup` and `JobAcctGatherType=jobacct_gather/cgroup`, Slurm puts every job and step into a cgroup to track its processes and gather its usage, but it constrains nothing. Constraints are opt-in through the `slurm.cgroup` section:
+
+- `ConstrainRAMSpace=yes` limits each job to the memory it was allocated: `--mem`, or `DefMemPerCPU` per CPU (see slurm.conf). A worker's `RealMemory` is its whole container memory limit, with no reserve for slurmd, the other daemons and `/tmp`, so jobs that together use all of it can make the container's OOM killer hit the daemons. Leave room with a smaller `DefMemPerCPU` or with `MemSpecLimit` on the nodes.
+- `ConstrainCores=yes` confines each job to a cpuset of its allocated CPUs. sind limits workers with a CPU quota, not a cpuset, so every worker sees all host CPUs, and Slurm maps a worker's CPU N to host CPU N: the jobs of every worker, of every cluster on the host, run on the same low-numbered host CPUs. Use it to test the setting, not for throughput. `task/affinity` binds the same way (see slurm.conf).
 
 #### slurmdbd.conf
 
