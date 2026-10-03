@@ -40,10 +40,11 @@
 # holds only the installed files.
 FROM quay.io/rockylinux/rockylinux:10 AS builder-base
 
+# EPEL and CRB are enabled in the same RUN that ends with dnf clean all, so
+# no layer keeps the repository metadata.
 RUN dnf -y install epel-release dnf-plugins-core && \
-    dnf config-manager --set-enabled crb
-
-RUN dnf -y install \
+    dnf config-manager --set-enabled crb && \
+    dnf -y install \
         gcc gcc-c++ make \
         libevent-devel \
         hwloc-devel \
@@ -272,15 +273,15 @@ ARG PRRTE_VERSION=4.1.0
 ARG OMPI_VERSION=5.0.10
 ARG LIBJWT_VERSION=1.18.4
 
-RUN dnf -y install epel-release dnf-plugins-core && \
-    dnf config-manager --set-enabled crb
-
-# Runtime dependencies.
+# Runtime dependencies, installed in the RUN that enables EPEL and CRB and
+# ends with dnf clean all, so no layer keeps the repository metadata.
 # gcc is needed by mpicc (OpenMPI's wrapper compiler).
 # mariadb-server is included for the db role (slurmdbd accounting storage).
 # libevent and hwloc-libs are required by PMIx, PRRTE, and OpenMPI at runtime,
 # jansson by libjwt, json-c by Slurm's serializer/json.
-RUN dnf -y install \
+RUN dnf -y install epel-release dnf-plugins-core && \
+    dnf config-manager --set-enabled crb && \
+    dnf -y install \
         systemd \
         munge \
         mariadb-server \
