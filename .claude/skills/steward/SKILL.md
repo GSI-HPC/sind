@@ -44,6 +44,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Lint | golangci-lint |
 | Unit Test | `make test` under firejail, writing the coverage profile |
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
+| Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |
 | Image Targets | lists the bake targets and platforms the Integration Test jobs run (`docker/bake-action/subaction/matrix`) |
 | Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-24.04-arm` for linux/arm64): `sind doctor`, builds that node image with `docker buildx bake`, then `make test-integration` |
 | Integration Test | passes when every Integration Test (slurm-YY-MM, platform) job passed |
@@ -55,6 +56,9 @@ CI runs for every pull request and every push to `main` and `next`.
   URLs (e.g. `download.schedmd.com ... i/o timeout`) is an upstream outage, not this
   PR's fault. Confirm it by the error naming the download URL, re-run the job once, and
   report it if it fails again.
+- A Vulnerability Check failure on a new advisory in a dependency or the Go toolchain
+  that this PR does not touch is fixed by bumping that module (`go get <module>@<fixed>`,
+  `go mod tidy`) or the toolchain in `go.mod`, in its own commit.
 - A push to a PR cancels the CI run of the commit it replaces. A cancelled run is not a
   failure; look at the run of the PR's head commit.
 - Every other failure is this PR's to root-cause and fix. Never skip, disable or

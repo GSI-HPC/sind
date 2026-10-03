@@ -102,6 +102,23 @@ jobs:
         with:
           config: .testcoverage.yml
 
+  # govulncheck reports known vulnerabilities in the Go dependencies and
+  # the standard library, and fails only on those in code sind calls.
+  govulncheck:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
   image-targets:
     name: Image Targets
     runs-on: ubuntu-latest
