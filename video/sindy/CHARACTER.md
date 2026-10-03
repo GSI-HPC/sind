@@ -1,8 +1,8 @@
 # Sindy: character bible
 
 Sindy is the virtual presenter of the sind tutorial videos. Her name is a pun on
-**sind** and is pronounced like "Cindy". This file is the canon that scripts,
-art and voice must stay consistent with.
+**sind** and is pronounced like "Cindy" (and *sind* like "sinned"). This file
+is the canon that scripts, art and voice must stay consistent with.
 
 ![Sindy expression sheet](sheet.png)
 
@@ -43,12 +43,12 @@ touching episode scripts.
 | `smug` | Small wins, a neat trick |
 | `wink` | Sign-off only |
 
-Gestures: `wave` (intro and outro). Gaze: look at the content (`x < 0` when the
-content is on her left, i.e. screen left) when it appears, then back to camera.
+Gestures: `wave` (intro and outro). Gaze: look at the content when it appears
+(`x < 0` when it is on the left of the screen), then back to the camera.
 
 ## Voice
 
-Preset `sindy` in [`../voice/voices.json`](../voice/voices.json): Kokoro-82M
+Preset `sindy` (chosen) in [`../voice/voices.json`](../voice/voices.json): Kokoro-82M
 blend of 60% `af_heart` and 40% `af_bella`, speed 1.05. Alternatives with a
 higher pitch are `sindy-anime` and `sindy-bright`. Pronunciations of Slurm
 commands and acronyms are fixed in [`../voice/lexicon.json`](../voice/lexicon.json).

@@ -3,7 +3,8 @@
 Can coding agents produce tutorial videos for each sind guide, as a screencast
 and slideshow hybrid presented by an AI anime avatar, cheaply enough to
 re-render whenever the docs change? This directory is the answer so far: **yes,
-on a CPU**. It contains a working pipeline and a 45-second pilot episode.
+on a CPU**. It contains a working pipeline, a 45-second pilot episode for the
+quickstart, and its embedding in the docs.
 
 ![Sindy expression sheet](sindy/sheet.png)
 
@@ -13,11 +14,14 @@ on a CPU**. It contains a working pipeline and a 45-second pilot episode.
 script.json ──► voice/sindy_voice.py ──► line.wav + line.json (words, visemes, loudness)
                  (Kokoro-82M, CPU)                       │
                                                          ▼
-pilot/index.html  ──  lib/scenes.js (planner, captions, terminal, shots, transitions)
-                  ──  lib/sindy.js  (avatar: lip sync, blinks, expressions, gaze, wave)
+episodes/<id>/     ──  lib/scenes.js (planner, captions, terminal, shots, transitions)
+                   ──  lib/sindy.js  (avatar: lip sync, blinks, expressions, gaze, wave)
                                                          │
                                                          ▼
                                    HyperFrames (headless Chrome + FFmpeg) ──► MP4
+                                                         │
+                                         tools/publish.mjs ──► docs: web MP4, poster,
+                                                               WebVTT captions, chapters
 ```
 
 - **Avatar** (`lib/sindy.js`): a vector anime rig drawn in SVG. Every frame is
@@ -39,9 +43,10 @@ pilot/index.html  ──  lib/scenes.js (planner, captions, terminal, shots, tra
   commands and a fast-forward badge, avatar shots (`hero`, `full`, `left`,
   `cornerR`, `cornerL`) that Sindy glides between, and iris, push and blur
   transitions.
-- **Pilot** (`pilot/`): intro with a logo animation and wave, fullscreen talk
-  with name tag, slide with corner avatar, terminal screencast of the
-  quickstart, outro with links and wink, and a fade to black.
+- **Episodes** (`episodes/<id>/`, one per docs page): the pilot
+  `episodes/quickstart/` has an intro with a logo animation and wave,
+  fullscreen talk with name tag, slide with corner avatar, terminal screencast
+  of the quickstart, outro with links and wink, and a fade to black.
 
 ## Results
 
@@ -59,8 +64,6 @@ The renders also showed what doesn't work yet:
   motion is the wave.
 - Kokoro has no emotion control, and the voice can only be chosen from blends
   of its stock voices.
-- No background music or sound effects yet. HyperFrames can mix and duck them.
-- Nobody has judged the voices by ear yet; the audition pack is for that.
 
 ## Avatar options
 
@@ -86,15 +89,17 @@ container, point HyperFrames at the preinstalled browser with
 cd video
 npm install
 pip install -r voice/requirements.txt
-npm run voice:setup        # download Kokoro (about 350 MB) and patch it, once
-npm run pilot:voice        # synthesize pilot narration into pilot/assets/voice/
-npm run pilot:render       # renders/pilot.mp4
-npm run voice:samples      # audition pack in renders/voice-samples/
-npm run sheet              # sindy/sheet.png expression sheet
+npm run voice:setup                        # download Kokoro (about 350 MB) and patch it, once
+npm run episode -- voice quickstart        # narration into episodes/quickstart/assets/voice/
+npm run episode -- render quickstart       # renders/quickstart.mp4 (add --draft for speed)
+npm run episode -- publish quickstart      # docs/static/videos/ and docs/data/videos/
+npm run voice:samples                      # audition pack in renders/voice-samples/
+npm run sheet                              # sindy/sheet.png expression sheet
 ```
 
-`npx hyperframes preview` inside `pilot/` opens the HyperFrames Studio, and
-`npx hyperframes snapshot --at 5,10` takes stills.
+`--all` instead of an episode id processes every episode. `npx hyperframes
+preview` inside an episode opens the HyperFrames Studio, and `npx hyperframes
+snapshot --at 5,10` takes stills.
 
 ## Layout
 
@@ -104,35 +109,79 @@ video/
   lib/scenes.js, .css   planner, captions, terminal, shots, transitions, look
   sindy/                character bible, expression sheet page
   voice/                TTS tool, voice presets, pronunciation lexicon
-  pilot/                HyperFrames project for the pilot episode
-  tools/                vendoring, screenshots, lip-sync statistics
+  episodes/<id>/        one HyperFrames project per docs page (script.json + index.html)
+  tools/                episode CLI, publishing, vendoring, screenshots, lip-sync stats
 ```
 
 Generated files (`vendor/`, `assets/voice/`, `renders/`) are not committed.
 Renders need no network: GSAP and the fonts come from npm, and the voice
 metadata loads from a local script.
 
-## Decisions for the maintainer
+## Decisions
 
-1. **Voice**: which audition sample (`npm run voice:samples`) fits Sindy, or
-   should a hosted voice (ElevenLabs voice design, with timestamps) be used?
-2. **Pronunciation of "sind"**: `/sɪnd/`, rhyming with Sindy (the current
-   lexicon), or `/saɪnd/` by analogy with *kind*?
-3. **Art direction**: keep refining the code-drawn Sindy, or commission
-   layered (Live2D-ready) art for the same rig?
-4. **Music**: license a royalty-free bed, or none.
-5. **Home**: keep `video/` in this repo, close to the docs it follows, or move
-   it to its own repository?
+- Voice: the `sindy` preset (Kokoro `af_heart` 60% + `af_bella` 40%).
+- "sind" is pronounced `/sɪnd/`, like *sinned*, rhyming with Sindy.
+- Art: the code-drawn Sindy.
+- No background music.
+- The pipeline stays in `video/`, next to the docs it follows.
+
+## Videos in the docs
+
+A guide shows its episode with one shortcode under the page title:
+
+```markdown
+{{< video "quickstart" >}}
+```
+
+It renders a 16:9 player with a poster, an English WebVTT caption track
+generated from Sindy's word timings, and a row of chapter buttons that jump to
+each scene. The docs render has no burned-in captions (`--variables
+'{"captions":false}'`), so captions stay toggleable, accessible and
+translatable. If an episode was not published into `docs/static/videos/` (for
+example a local `hugo server`), the shortcode renders nothing, so writing docs
+never needs the video toolchain.
+
+**Size.** The web encode (H.264 CRF 28, `-tune animation`) takes about 4 MB
+per minute; the 45-second pilot is 2.7 MB. Ten 3-minute guides are about
+120 MB per docs version, well under the 1 GB GitHub Pages site limit. The
+100 GB/month soft bandwidth limit allows roughly 8,000 full views a month.
+
+**Hosting (proposal, needs a decision).** Render in CI and serve the MP4s from
+the docs site itself:
+
+- Self-hosted, so no third-party embed, cookies or tracking, and each docs
+  version (`main` at `/`, `next` at `/next/`) carries videos made from the
+  same commit as its text.
+- Nothing binary is committed to `main`/`next`: the rendered episodes are
+  cached in Actions, keyed on a hash of the episode, `lib/`, the voice preset
+  and the lexicon, so a docs push only re-renders changed episodes (about 2×
+  real time on a 4 vCPU runner).
+- The catch: today `peaceiris/actions-gh-pages` commits every build into the
+  `gh-pages` branch with `keep_files`, so every re-render would add megabytes
+  to a branch that each clone downloads. Switch both docs workflows to one
+  artifact-based Pages deployment (`actions/upload-pages-artifact` and
+  `actions/deploy-pages`) that builds `main` and `next` together. That keeps no
+  history and also drops pages deleted from the docs, which `keep_files`
+  currently leaves online. It needs **Settings → Pages → Source: GitHub
+  Actions**.
+
+Alternatives: a separate repository whose Pages site only hosts the video
+files (leaves the current workflows alone, but needs a deploy token and cross-site
+URLs); YouTube (discovery and adaptive streaming, but uploads need OAuth or
+manual work, every re-render gets a new video ID, embeds contact Google, and
+versions drift; better as an extra channel for release episodes); or release
+assets (no home for the `next` preview).
 
 ## Next: skills
 
-Once the look and voice are settled, bake the workflow into
-`.claude/skills/`:
+Bake the workflow into `.claude/skills/`:
 
 - `sindy-episode`: turn a docs guide into a storyboard (intro, talk, slide,
   terminal, outro), a narration `script.json` and an `index.html` built on
   `lib/scenes.js`; then voice, lint, snapshot, render and QA (glitch scan,
-  audio sync, mouth statistics, caption overlap).
+  audio sync, mouth statistics, caption overlap), and add the shortcode to the
+  page. When a guide with an episode changes, its script changes in the same
+  PR.
 - `sindy-voice`: rules for speakable scripts, lexicon upkeep, voice presets.
 - The HyperFrames skills (`npx hyperframes skills update`) as a dependency for
   composition rules.
