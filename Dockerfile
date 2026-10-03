@@ -360,6 +360,12 @@ RUN systemctl mask \
     getty.target \
     console-getty.service
 
+# Initialise MariaDB's data directory with the script mariadb.service runs
+# before its first start, which then finds it initialised: a db node's first
+# start then skips mariadb-install-db and the script's one-second sleep.
+RUN /usr/libexec/mariadb-prepare-db-dir mysql mysql && \
+    test -d /var/lib/mysql/mysql
+
 # Bring in compiled artifacts from each builder stage, Slurm last.
 COPY --from=ucx-builder /install/usr /usr
 COPY --from=pmix-builder /install/usr /usr

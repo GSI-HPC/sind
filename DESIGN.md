@@ -1531,6 +1531,7 @@ The generic image:
 - Based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
 - Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
+- MariaDB's data directory is initialised at build time, so the first `systemctl enable --now mariadb` on a db node skips `mariadb-install-db`
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - sind enables the appropriate services based on node role
 
