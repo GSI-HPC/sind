@@ -163,17 +163,9 @@ RUN git clone --depth 1 --branch v${LIBJWT_VERSION} https://github.com/benmcolli
 # ==============================================================================
 FROM builder-base AS slurm-builder
 
-# Slurm version and the sha256 of its tarball. No defaults: docker-bake.hcl
-# sets both for each image (SLURM_RELEASES).
-ARG SLURM_VERSION
-ARG SLURM_SHA256
-
-# PMIx headers and libraries are needed for Slurm's PMIx launch plugin, and
-# libjwt's for auth/slurm. auth/slurm also needs the serializer/json plugin,
-# which Slurm builds only with json-c.
-COPY --from=pmix-builder /install/usr /usr
-COPY --from=libjwt-builder /install/usr /usr
-
+# Every RUN after an ARG sees it, so a new value invalidates its cache. The
+# packages come first, so they survive Slurm, PMIx and libjwt bumps and
+# install while PMIx and libjwt build.
 RUN dnf -y install \
         jansson-devel \
         openssl-devel \
@@ -186,6 +178,17 @@ RUN dnf -y install \
         dbus-devel \
         libbpf-devel \
     && dnf clean all
+
+# PMIx headers and libraries are needed for Slurm's PMIx launch plugin, and
+# libjwt's for auth/slurm. auth/slurm also needs the serializer/json plugin,
+# which Slurm builds only with json-c.
+COPY --from=pmix-builder /install/usr /usr
+COPY --from=libjwt-builder /install/usr /usr
+
+# Slurm version and the sha256 of its tarball. No defaults: docker-bake.hcl
+# sets both for each image (SLURM_RELEASES).
+ARG SLURM_VERSION
+ARG SLURM_SHA256
 
 # Fetch the Slurm source tarball with integrity verification.
 ADD --checksum=sha256:${SLURM_SHA256} \
@@ -264,14 +267,12 @@ RUN tar xf openmpi.tar.bz2 && \
 # ==============================================================================
 # Stage: runtime — lean image with only the packages needed at run time
 # ==============================================================================
+# The setup that does not depend on the builds comes first and the version
+# ARGs come last, right before the LABEL that uses them: every RUN after an
+# ARG sees it, so a new Slurm version would otherwise rebuild the package
+# layer too. The images of all release lines and Slurm versions then share
+# the layers up to the builder COPYs, and the Slurm layers come last.
 FROM quay.io/rockylinux/rockylinux:10
-
-ARG SLURM_VERSION
-ARG UCX_VERSION=1.20.0
-ARG PMIX_VERSION=6.1.0
-ARG PRRTE_VERSION=4.1.0
-ARG OMPI_VERSION=5.0.10
-ARG LIBJWT_VERSION=1.18.4
 
 # Runtime dependencies, installed in the RUN that enables EPEL and CRB and
 # ends with dnf clean all, so no layer keeps the repository metadata.
@@ -299,24 +300,6 @@ RUN dnf -y install epel-release dnf-plugins-core && \
         json-c \
         gcc \
     && dnf clean all
-
-# Bring in compiled artifacts from each builder stage.
-COPY --from=slurm-builder /install/usr /usr
-COPY --from=slurm-builder /install/etc /etc
-COPY --from=ucx-builder /install/usr /usr
-COPY --from=pmix-builder /install/usr /usr
-COPY --from=prrte-builder /install/usr /usr
-COPY --from=ompi-builder /install/usr /usr
-COPY --from=libjwt-builder /install/usr /usr
-
-# Register the new libraries, and fail the build without nss_slurm, the
-# auth/slurm plugin and the serializer/json plugin it needs, or sackd, which
-# sind's identity modes nssSlurm and clientIds use.
-RUN ldconfig && \
-    test -e /usr/lib64/libnss_slurm.so.2 && \
-    test -e /usr/lib64/slurm/auth_slurm.so && \
-    test -e /usr/lib64/slurm/serializer_json.so && \
-    test -x /usr/sbin/sackd
 
 # Slurm daemons run as the unprivileged slurm user
 RUN useradd -r -s /sbin/nologin slurm
@@ -365,6 +348,31 @@ RUN systemctl mask \
     dev-hugepages.mount \
     getty.target \
     console-getty.service
+
+# Bring in compiled artifacts from each builder stage, Slurm last.
+COPY --from=ucx-builder /install/usr /usr
+COPY --from=pmix-builder /install/usr /usr
+COPY --from=prrte-builder /install/usr /usr
+COPY --from=ompi-builder /install/usr /usr
+COPY --from=libjwt-builder /install/usr /usr
+COPY --from=slurm-builder /install/usr /usr
+COPY --from=slurm-builder /install/etc /etc
+
+# Register the new libraries, and fail the build without nss_slurm, the
+# auth/slurm plugin and the serializer/json plugin it needs, or sackd, which
+# sind's identity modes nssSlurm and clientIds use.
+RUN ldconfig && \
+    test -e /usr/lib64/libnss_slurm.so.2 && \
+    test -e /usr/lib64/slurm/auth_slurm.so && \
+    test -e /usr/lib64/slurm/serializer_json.so && \
+    test -x /usr/sbin/sackd
+
+ARG SLURM_VERSION
+ARG UCX_VERSION=1.20.0
+ARG PMIX_VERSION=6.1.0
+ARG PRRTE_VERSION=4.1.0
+ARG OMPI_VERSION=5.0.10
+ARG LIBJWT_VERSION=1.18.4
 
 LABEL org.opencontainers.image.title="sind-node" \
       org.opencontainers.image.description="Generic Slurm node for sind" \
