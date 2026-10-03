@@ -249,6 +249,8 @@
     left: { frame: { left: 120, top: 120, width: 780, height: 960, borderRadius: 0 }, stage: { width: 780, left: 0, top: 40 }, ring: 0 },
     cornerR: { frame: { left: 1500, top: 640, width: 360, height: 360, borderRadius: 180 }, stage: { width: 450, left: -45, top: -14 }, ring: 1 },
     cornerL: { frame: { left: 60, top: 640, width: 360, height: 360, borderRadius: 180 }, stage: { width: 450, left: -45, top: -14 }, ring: 1 },
+    // Small bubble for the fullscreen terminal.
+    mini: { frame: { left: 1700, top: 860, width: 180, height: 180, borderRadius: 90 }, stage: { width: 225, left: -22, top: -7 }, ring: 1 },
   };
 
   function shot(tl, frame, name, at, dur, ease) {

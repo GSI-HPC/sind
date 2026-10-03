@@ -64,15 +64,16 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .bullet .t2 { font-size: 28px; color: var(--muted); }
 
 /* Terminal window. */
-.term { position: absolute; left: 100px; top: 140px; width: 1340px; height: 700px; border-radius: 22px; background: #0b1220; border: 2px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); overflow: hidden; }
+.term { position: absolute; left: 100px; top: 150px; width: 1340px; height: 700px; border-radius: 22px; background: #0b1220; border: 2px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); overflow: hidden; }
 .term-bar { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 22px; background: #111a2c; border-bottom: 2px solid #1c2740; }
 .term-bar i { width: 16px; height: 16px; border-radius: 50%; display: block; }
 .term-bar .title { margin-left: 18px; font-family: "JetBrains Mono", monospace; font-size: 22px; color: var(--muted); }
 .term-body { padding: 26px 34px; font-family: "JetBrains Mono", monospace; font-size: 34px; line-height: 1.55; color: #e2e8f0; white-space: pre; }
 .term-prompt { color: var(--teal); font-weight: 700; }
 .term-out { color: #a3b3c9; }
-.term-cursor { display: inline-block; width: 16px; height: 34px; margin-left: 2px; vertical-align: -6px; background: var(--mint); }
+.term-cursor { display: inline-block; width: 0.47em; height: 1em; margin-left: 0.06em; vertical-align: -0.18em; background: var(--mint); }
 .term-hl { color: #0b1220; background: var(--mint); border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
+.term.wide { left: 60px; top: 120px; width: 1800px; height: 800px; }
 .term-ff { position: absolute; right: 26px; top: 76px; padding: 8px 18px; border-radius: 999px; background: rgba(14, 165, 233, 0.18); border: 2px solid var(--blue); color: var(--sky); font-family: "Inter", sans-serif; font-size: 24px; font-weight: 700; opacity: 0; }
 
 /* Brand mark. */
@@ -81,3 +82,25 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .wordmark { font-weight: 600; color: #fff; letter-spacing: -0.03em; }
 .tagline { font-size: 22px; letter-spacing: 0.32em; color: var(--muted); font-weight: 600; }
 .disclosure { position: absolute; right: 60px; bottom: 40px; font-size: 20px; color: rgba(148, 163, 184, 0.75); }
+
+/* Intro scene. */
+.scene-intro .brand { position: absolute; left: 150px; top: 270px; display: flex; flex-direction: column; gap: 40px; }
+.scene-intro .lockup { display: flex; align-items: center; gap: 48px; }
+.scene-intro .logo-grid { width: 250px; }
+.scene-intro .wordmark { font-size: 190px; line-height: 1; }
+.scene-intro .ep { display: flex; flex-direction: column; gap: 14px; margin-top: 30px; }
+.scene-intro .ep .kicker { font-size: 30px; }
+.scene-intro .ep .headline { font-size: 84px; }
+.scene-intro .disclosure { left: 150px; right: auto; }
+
+/* Outro scene. */
+.scene-outro .card { left: 1000px; top: 230px; width: 820px; }
+.scene-outro .links { display: flex; flex-direction: column; gap: 18px; }
+.scene-outro .link { display: flex; align-items: center; gap: 20px; font-size: 36px; font-weight: 600; color: #fff; }
+.scene-outro .link span { font-size: 26px; color: var(--mint); width: 140px; text-transform: uppercase; letter-spacing: 0.12em; }
+.scene-outro .next { padding: 26px 32px; border-radius: 22px; border: 2px solid var(--teal); background: rgba(20, 184, 166, 0.1); }
+.scene-outro .next .kicker { font-size: 24px; }
+.scene-outro .next .t { font-size: 44px; font-weight: 800; color: #fff; margin-top: 6px; }
+
+/* Final fade. */
+#blackout { position: absolute; inset: 0; z-index: 50; background: #000; opacity: 0; }
