@@ -712,6 +712,80 @@ func TestUntilReadyWithEvents_ContainerDie(t *testing.T) {
 	assert.Contains(t, err.Error(), "died")
 }
 
+func TestUntilReadyWithEvents_TakesQueuedEventsInOneRound(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+
+	// A burst of unit events triggers one probe round, not one per event.
+	events := make(chan monitor.Event, 3)
+	for range 3 {
+		events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer}
+	}
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Len(t, m.Calls, 2)
+}
+
+func TestUntilReadyWithEvents_QueuedDie(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSON("created"), "", nil)
+	c := docker.NewClient(&m)
+
+	events := make(chan monitor.Event, 2)
+	events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer}
+	events <- monitor.Event{Kind: monitor.EventContainerDie, Container: testContainer, Detail: "exitCode=1"}
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Minute, events)
+	var te *TerminalError
+	require.ErrorAs(t, err, &te)
+	assert.Contains(t, err.Error(), "died: exitCode=1")
+	assert.Len(t, m.Calls, 1)
+}
+
+func TestUntilReadyWithEvents_ClosedWhileTaking(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	events := make(chan monitor.Event, 1)
+	events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer}
+	close(events)
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Minute, events)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 2)
+}
+
+func TestUntilReadyWithEvents_ClosedFallsBackToPolling(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	c := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	// A closed channel is ready at once; the wait goes on with the ticker.
+	events := make(chan monitor.Event)
+	close(events)
+
+	probes := []Probe{{"container", ContainerRunning}}
+	err := UntilReadyWithEvents(ctx, c, testContainer, probes, 20*time.Millisecond, events)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 2)
+}
+
 func TestUntilReadyWithEvents_IgnoresOtherContainerEvents(t *testing.T) {
 	var m mock.Executor
 	// First attempt: not running. Second attempt (after ticker): running.

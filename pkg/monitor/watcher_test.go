@@ -174,6 +174,48 @@ func TestWatcher_MultipleSubscribers(t *testing.T) {
 	w.Wait()
 }
 
+func TestWatcher_SubscribeTo(t *testing.T) {
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	w := NewWatcher(m, "sind-dev-", "dev")
+	worker := w.SubscribeTo("sind-dev-worker-0")
+	all := w.Subscribe()
+	require.NoError(t, w.Start(ctx, nil))
+
+	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1}`+"\n")
+	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-worker-0"}},"time":2}`+"\n")
+
+	for _, want := range []string{"controller", "worker-0"} {
+		select {
+		case ev := <-all:
+			assert.Equal(t, want, ev.Node)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout waiting for the %s event", want)
+		}
+	}
+	// The worker's subscription got the worker's event only.
+	select {
+	case ev := <-worker:
+		assert.Equal(t, "worker-0", ev.Node)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for the worker event")
+	}
+	select {
+	case ev := <-worker:
+		t.Fatalf("unexpected event %+v", ev)
+	default:
+	}
+
+	cancel()
+	pipes.CloseAll()
+	w.Wait()
+}
+
 func TestWatcher_Unsubscribe(t *testing.T) {
 	pipes := &mock.Pipes{}
 	defer pipes.CloseAll()

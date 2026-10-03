@@ -69,7 +69,7 @@ sind waits for each node to become ready before returning success. Probes are ac
 - **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
 - **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active or slurmd.service failing). They run until the command ends, through the waits for the Slurm daemons and the accounts
 
-When an event arrives, probes re-evaluate immediately instead of waiting for the next poll tick. If event sources are unavailable, sind falls back to poll-only mode.
+When an event of the node arrives, its probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. Each node's wait receives only its own container's events. If event sources are unavailable, sind falls back to poll-only mode.
 
 | Check | Description |
 |-------|-------------|

@@ -145,9 +145,13 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 }
 
 // UntilReadyWithEvents is like UntilReady but also listens for events from
-// a monitor. Events trigger immediate probe re-evaluation instead of waiting
-// for the next poll interval, reducing detection latency for event-backed
-// state transitions. Container die events are treated as terminal errors.
+// a monitor. An event of the container triggers immediate probe
+// re-evaluation instead of waiting for the next poll interval, reducing
+// detection latency for event-backed state transitions. The events already
+// queued then are taken with it, so that a burst (systemd activates dozens
+// of units while it boots) costs one probe round, not one per event.
+// Container die events are treated as terminal errors. Once events is
+// closed, the wait goes on polling.
 func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event) error {
 	log := sindlog.From(ctx)
 	ticker := time.NewTicker(interval)
@@ -183,17 +187,40 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 			case <-ctx.Done():
 				return waitEnded(ctx, name, lastErr)
 			case <-ticker.C:
-			case ev := <-events:
-				if ev.Kind == monitor.EventContainerDie && ev.Container == name {
-					return fmt.Errorf("node %s not ready: %w", name, &TerminalError{
-						Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
-					})
+			case ev, ok := <-events:
+				if !ok {
+					events = nil
+					continue
 				}
 				if ev.Container != name {
 					continue
 				}
+				if err := takeQueued(name, ev, events); err != nil {
+					return err
+				}
 			}
 			break
+		}
+	}
+}
+
+// takeQueued takes ev and the events already queued on events. It returns
+// the error for a die event of the container among them.
+func takeQueued(name docker.ContainerName, ev monitor.Event, events <-chan monitor.Event) error {
+	for {
+		if ev.Kind == monitor.EventContainerDie && ev.Container == name {
+			return fmt.Errorf("node %s not ready: %w", name, &TerminalError{
+				Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
+			})
+		}
+		var ok bool
+		select {
+		case ev, ok = <-events:
+			if !ok {
+				return nil
+			}
+		default:
+			return nil
 		}
 	}
 }

@@ -553,7 +553,7 @@ func waitReady(ctx context.Context, client *docker.Client, name docker.Container
 	if watcher == nil {
 		return probe.UntilReady(ctx, client, name, probes, interval)
 	}
-	ch := watcher.Subscribe()
+	ch := watcher.SubscribeTo(name)
 	defer watcher.Unsubscribe(ch)
 	return probe.UntilReadyWithEvents(ctx, client, name, probes, interval, ch)
 }

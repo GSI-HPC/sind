@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -39,7 +40,7 @@ type Watcher struct {
 	ctx context.Context
 
 	mu          sync.Mutex
-	subscribers []chan Event
+	subscribers []subscriber
 
 	wg sync.WaitGroup
 }
@@ -55,13 +56,33 @@ func NewWatcher(executor cmdexec.Executor, containerPrefix, clusterName string) 
 	}
 }
 
+// subscriber is a channel that receives events, of one container or of
+// all (container empty).
+type subscriber struct {
+	ch        chan Event
+	container docker.ContainerName
+}
+
+// wants reports whether the subscriber receives ev.
+func (s subscriber) wants(ev Event) bool {
+	return s.container == "" || ev.Container == s.container
+}
+
 // Subscribe returns a channel that receives a copy of every event.
 // The channel is closed when the Watcher stops. The caller should
 // drain the channel to avoid blocking the broadcast loop.
 func (w *Watcher) Subscribe() <-chan Event {
+	return w.SubscribeTo("")
+}
+
+// SubscribeTo is Subscribe for the events of one container, or of every
+// container when it is empty. A readiness wait for one node subscribes to
+// its container only: while many nodes boot, the other nodes' events would
+// otherwise fill its buffer and crowd out its own.
+func (w *Watcher) SubscribeTo(container docker.ContainerName) <-chan Event {
 	ch := make(chan Event, 64)
 	w.mu.Lock()
-	w.subscribers = append(w.subscribers, ch)
+	w.subscribers = append(w.subscribers, subscriber{ch: ch, container: container})
 	w.mu.Unlock()
 	return ch
 }
@@ -71,9 +92,9 @@ func (w *Watcher) Unsubscribe(ch <-chan Event) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for i, sub := range w.subscribers {
-		if sub == ch {
+		if sub.ch == ch {
 			w.subscribers = append(w.subscribers[:i], w.subscribers[i+1:]...)
-			close(sub)
+			close(sub.ch)
 			return
 		}
 	}
@@ -143,8 +164,8 @@ func (w *Watcher) Wait() {
 	w.wg.Wait()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	for _, ch := range w.subscribers {
-		close(ch)
+	for _, sub := range w.subscribers {
+		close(sub.ch)
 	}
 	w.subscribers = nil
 }
@@ -221,7 +242,8 @@ func (w *Watcher) emit(ctx context.Context, ev Event) {
 }
 
 // broadcastLoop reads events from the internal channel and sends them
-// to all subscribers. It runs until the context is cancelled.
+// to the subscribers that want them. It runs until the context is
+// cancelled.
 func (w *Watcher) broadcastLoop(ctx context.Context) {
 	log := sindlog.From(ctx)
 	for {
@@ -229,9 +251,12 @@ func (w *Watcher) broadcastLoop(ctx context.Context) {
 		case ev := <-w.internalCh:
 			log.Log(ctx, sindlog.LevelTrace, "event", "kind", ev.Kind, "node", ev.Node, "unit", ev.Unit, "detail", ev.Detail)
 			w.mu.Lock()
-			for _, ch := range w.subscribers {
+			for _, sub := range w.subscribers {
+				if !sub.wants(ev) {
+					continue
+				}
 				select {
-				case ch <- ev:
+				case sub.ch <- ev:
 				default:
 					// Subscriber is full — drop event to avoid blocking.
 					log.Log(ctx, sindlog.LevelTrace, "dropped event for full subscriber", "kind", ev.Kind, "node", ev.Node)

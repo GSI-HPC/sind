@@ -108,6 +108,11 @@ func TestDockerEventsArgs(t *testing.T) {
 		"events",
 		"--filter", "type=container",
 		"--filter", "label=sind.cluster=mycluster",
+		"--filter", "event=die",
+		"--filter", "event=oom",
+		"--filter", "event=pause",
+		"--filter", "event=start",
+		"--filter", "event=unpause",
 		"--format", "{{json .}}",
 	}
 	assert.Equal(t, want, args)
