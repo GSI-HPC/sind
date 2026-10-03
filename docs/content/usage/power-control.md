@@ -59,6 +59,18 @@ This is useful for simulating:
 - Network partitions (from the node's perspective)
 - Slurm's node health detection and `SlurmdTimeout` behavior
 
+## Node failure detection
+
+slurmctld learns that a frozen, cut or shut down worker is gone only when the worker stops answering its pings, as slurmd does not sign off. sind keeps Slurm's default `SlurmdTimeout=300`: the node shows as `idle*` once a ping fails and turns `DOWN` about five minutes after it stopped responding. For failure tests, lower the timeout in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}):
+
+```yaml
+slurm:
+  main: |
+    SlurmdTimeout=30
+```
+
+slurmctld pings about every third of the timeout, so a worker is then `DOWN` within about 30 to 40 seconds. A short timeout also marks a slow but healthy node `DOWN`, which kills its jobs, e.g. on an overloaded CI runner. With `ReturnToService=2`, which sind sets, the node returns to service once its slurmd registers again, e.g. after `sind power unfreeze` or `sind power on`.
+
 ## Node arguments
 
 All power commands accept [nodeset notation](../node-arguments/) for targeting multiple nodes:

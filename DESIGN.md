@@ -540,6 +540,8 @@ sind power unfreeze NODES               # resume frozen node
 
 Freeze/unfreeze uses Docker's cgroup freezer to suspend all processes. The container remains "running" but is completely unresponsive, simulating a hung or unreachable node.
 
+slurmctld learns that a frozen, cut or shut down worker is gone only from failed pings, as slurmd does not sign off, and marks it `DOWN` after `SlurmdTimeout`. sind keeps Slurm's default of 300 seconds: unlike `SlurmctldTimeout`, which sind lowers only for a backup controller pair, no feature asks for a shorter one, and a short timeout marks slow but healthy nodes `DOWN` on a loaded host. Failure tests set it in `slurm.main`, e.g. `SlurmdTimeout=30`.
+
 ### Logs
 
 ```bash

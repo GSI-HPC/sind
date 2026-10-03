@@ -37,3 +37,13 @@ The directory is resolved on the Docker host. When the CI job runs in a containe
 ## Untrusted changes
 
 A cluster config is as trusted as a script with the runner's Docker access (see [Trust]({{< relref "/configuration/cluster-config#trust" >}})): do not create clusters from configs that untrusted pull requests can change in a `pull_request_target` or other privileged workflow.
+
+## Node failure tests
+
+Tests that take a worker away with `sind power freeze`, `cut` or `shutdown` wait for slurmctld to mark it `DOWN`, which takes about five minutes with Slurm's default `SlurmdTimeout=300`. Lower it in the cluster config to keep such a job short (see [Node failure detection]({{< relref "/usage/power-control#node-failure-detection" >}})):
+
+```yaml
+slurm:
+  main: |
+    SlurmdTimeout=30
+```
