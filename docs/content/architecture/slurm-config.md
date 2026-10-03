@@ -57,8 +57,8 @@ The first block is fixed: sind's volumes, images and readiness checks depend on 
 - `TaskPlugin=task/cgroup` does not bind tasks to CPUs. A node's CPUs are a CPU quota, not a set of host CPUs, so every worker sees all host CPUs, and `task/affinity` would bind the tasks of every worker, of every cluster on the host, to the same first host CPUs. To test CPU binding, set `TaskPlugin=task/cgroup,task/affinity` in `main`; managed workers then get the `SYS_NICE` capability (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})).
 - `MpiDefault=pmix` makes `srun` launch through PMIx, which needs Slurm's `mpi/pmix` plugin, as the official images have. Set `MpiDefault=none` in `main` for an image without it (see [Custom image requirements]({{< relref "/container-images/building-images#custom-image-requirements" >}})).
 - `ReturnToService=2` returns a `DOWN` worker to service when its slurmd registers with a valid configuration, e.g. after `sind power cut` and `sind power on`.
-- Everything else is Slurm's default, e.g. `SlurmdTimeout=300` (see [Node failure detection]({{< relref "/usage/power-control#node-failure-detection" >}})) and `SelectType=select/cons_tres` with `SelectTypeParameters=CR_Core_Memory`.
 - `DefMemPerCPU` is the smallest memory per CPU of the managed workers (`memory` in MiB divided by `cpus`), so that every CPU of every worker can run a job that does not ask for memory. Slurm's defaults, `SelectType=select/cons_tres` with `SelectTypeParameters=CR_Core_Memory`, make memory a consumable resource, and without a default such a job would get all of a node's memory, one job per worker at a time. It is left out when `main` sets `DefMemPerCPU` or `DefMemPerNode`. sind writes `slurm.conf` once: a worker added later with less memory per CPU runs fewer such jobs at a time than it has CPUs.
+- Everything else is Slurm's default, e.g. `SlurmdTimeout=300` (see [Node failure detection]({{< relref "/usage/power-control#node-failure-detection" >}})).
 
 With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}) it also contains these accounting parameters, each unless the `main` section sets it:
 
@@ -119,7 +119,7 @@ CgroupPlugin=autodetect
 
 With sind's `proctrack/cgroup` and `task/cgroup`, and `jobacct_gather/cgroup` with a db node, Slurm puts every job and step into a cgroup, which tracks its processes and measures its usage, but it constrains nothing. Constraints are opt-in through the `cgroup` section, and both common ones have a catch in sind:
 
-- `ConstrainRAMSpace=yes` limits each job to the memory it was allocated: `--mem`, or `DefMemPerCPU` per CPU. A worker's `RealMemory` is its whole container memory limit, with no reserve for slurmd, the other daemons and `/tmp`, so jobs that together use all of it can make the container's OOM killer hit the daemons. Leave room with a smaller `DefMemPerCPU` or with `MemSpecLimit` on the nodes.
+- `ConstrainRAMSpace=yes` limits each job to the memory it was allocated: `--mem`, or `DefMemPerCPU` per CPU. A worker's `RealMemory` is its whole container memory limit, with no reserve for slurmd, the other daemons and `/tmp`, so jobs that together use all of it can make the container's OOM killer hit the daemons. Leave room with a smaller `DefMemPerCPU` in `main`.
 - `ConstrainCores=yes` confines each job to a cpuset of its allocated CPUs. sind limits a node's CPUs with a CPU quota, not a cpuset, so every worker sees all host CPUs, and Slurm maps a worker's CPU N to host CPU N: the jobs of every worker, of every cluster on the host, run on the same low-numbered host CPUs. Use it to test the setting itself, not for throughput. `task/affinity` binds the same way.
 
 ## plugstack.conf
