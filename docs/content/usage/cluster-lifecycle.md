@@ -16,7 +16,7 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--wait
 |---------------|---------|-------------|
 | `NAME` | `default` | Cluster name (positional, optional) |
 | `--config` | — | Path to YAML configuration file, or `-` to read it from stdin |
-| `--pull` | `false` | Pull images before creating containers |
+| `--pull` | `false` | Pull each image of the cluster once before creating containers |
 | `--data` | `.` | Host directory to mount at `/data` on all nodes, or `volume` to use a Docker volume. Ignored if the config sets `storage.dataStorage.type` or `hostPath`. |
 | `--wait` | `5m` | How long to wait for the nodes and Slurm to become ready, counted from when the node containers have started; `0` for no limit |
 

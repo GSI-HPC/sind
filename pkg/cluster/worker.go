@@ -192,13 +192,11 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 	shape = shape.override(opts)
 
-	pull, err := checkWorkerImage(ctx, client, opts, managed, slurmVersion)
-	if err != nil {
+	if err := checkWorkerImage(ctx, client, opts, managed, slurmVersion); err != nil {
 		return nil, err
 	}
-	// An image docker still pulls is a current one; a local one may be
-	// from before identity modes.
-	if managed && identity.UsesNSSSlurm() && !pull {
+	// A local image may be from before identity modes.
+	if managed && identity.UsesNSSSlurm() {
 		if err := checkIdentityImage(ctx, client, shape.Image, identity.Mode); err != nil {
 			return nil, err
 		}
@@ -224,7 +222,6 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			DataMountPath:   dataMountPath,
 			Managed:         managed,
 			ContainerNumber: startIdx + i + 1,
-			Pull:            pull,
 			CapAdd:          shape.CapAdd,
 			CapDrop:         shape.CapDrop,
 			Devices:         shape.Devices,
@@ -445,24 +442,28 @@ func resolveWorkerInfra(ctx context.Context, client *docker.Client, meshMgr *mes
 	return
 }
 
-// checkWorkerImage checks an image given with --image for managed workers
-// of a cluster whose Slurm version sind knows: it runs slurmctld -V in the
-// image, pulling it first with --pull, and refuses a version other than
-// the cluster's, as slurmd may not be newer than slurmctld and sind labels
-// every node with the cluster's version. It returns whether docker still
-// has to pull the image when it creates the workers.
-func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAddOptions, managed bool, clusterVersion string) (bool, error) {
-	if opts.Image == "" || !managed || clusterVersion == "" {
-		return opts.Pull, nil
+// checkWorkerImage pulls an image given with --image when opts.Pull asks
+// for it, once, and checks it for managed workers of a cluster whose Slurm
+// version sind knows: it runs slurmctld -V in the image and refuses a
+// version other than the cluster's, as slurmd may not be newer than
+// slurmctld and sind labels every node with the cluster's version.
+func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAddOptions, managed bool, clusterVersion string) error {
+	if opts.Pull {
+		if err := pullImages(ctx, client, []string{opts.Image}); err != nil {
+			return err
+		}
 	}
-	version, err := slurm.DiscoverVersion(ctx, client, opts.Image, opts.Pull)
+	if opts.Image == "" || !managed || clusterVersion == "" {
+		return nil
+	}
+	version, err := slurm.DiscoverVersion(ctx, client, opts.Image)
 	if err != nil {
-		return false, fmt.Errorf("discovering the Slurm version of %s: %w", opts.Image, err)
+		return fmt.Errorf("discovering the Slurm version of %s: %w", opts.Image, err)
 	}
 	if version != clusterVersion {
-		return false, fmt.Errorf("image %s has Slurm %s, but cluster %q runs Slurm %s: managed workers need the cluster's version", opts.Image, version, opts.ClusterName, clusterVersion)
+		return fmt.Errorf("image %s has Slurm %s, but cluster %q runs Slurm %s: managed workers need the cluster's version", opts.Image, version, opts.ClusterName, clusterVersion)
 	}
-	return false, nil
+	return nil
 }
 
 // updateNodesConf adds the new node definitions to the sind-nodes.conf

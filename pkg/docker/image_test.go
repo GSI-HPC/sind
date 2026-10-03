@@ -24,7 +24,7 @@ func TestImageLifecycle(t *testing.T) {
 		rec.AddResult("ephemeral-test\n", "", nil) // run ephemeral
 	}
 
-	stdout, err := c.RunEphemeral(ctx, "busybox:latest", false, "echo", "ephemeral-test")
+	stdout, err := c.RunEphemeral(ctx, "busybox:latest", "echo", "ephemeral-test")
 	require.NoError(t, err)
 	assert.Equal(t, "ephemeral-test\n", stdout)
 
@@ -83,7 +83,7 @@ func TestRunEphemeral(t *testing.T) {
 	m.AddResult("slurm 25.11.0\n", "", nil)
 	c := NewClient(&m)
 
-	stdout, err := c.RunEphemeral(t.Context(), testImage, false, "scontrol", "--version")
+	stdout, err := c.RunEphemeral(t.Context(), testImage, "scontrol", "--version")
 	require.NoError(t, err)
 	assert.Equal(t, "slurm 25.11.0\n", stdout)
 
@@ -91,17 +91,18 @@ func TestRunEphemeral(t *testing.T) {
 	assert.Equal(t, []string{"run", "--rm", testImage, "scontrol", "--version"}, m.Calls[0].Args)
 }
 
-func TestRunEphemeral_Pull(t *testing.T) {
+func TestPullImage(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("slurm 25.11.0\n", "", nil)
+	m.AddResult("ghcr.io/gsi-hpc/sind-node:latest\n", "", nil)
+	m.AddResult("", "Error response from daemon: manifest unknown\n", exitError(t, 1, "Error response from daemon: manifest unknown\n"))
 	c := NewClient(&m)
 
-	stdout, err := c.RunEphemeral(t.Context(), testImage, true, "scontrol", "--version")
-	require.NoError(t, err)
-	assert.Equal(t, "slurm 25.11.0\n", stdout)
+	require.NoError(t, c.PullImage(t.Context(), "ghcr.io/gsi-hpc/sind-node:latest"))
+	assert.Equal(t, []string{"pull", "--quiet", "ghcr.io/gsi-hpc/sind-node:latest"}, m.Calls[0].Args)
 
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"run", "--rm", "--pull", "always", testImage, "scontrol", "--version"}, m.Calls[0].Args)
+	err := c.PullImage(t.Context(), "ghcr.io/gsi-hpc/sind-node:nope")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "manifest unknown")
 }
 
 func TestRunEphemeralWith(t *testing.T) {
@@ -109,11 +110,11 @@ func TestRunEphemeralWith(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := NewClient(&m)
 
-	_, err := c.RunEphemeralWith(t.Context(), []string{"--mount", "type=bind,source=/x,target=/x"}, testImage, true, "true")
+	_, err := c.RunEphemeralWith(t.Context(), []string{"--mount", "type=bind,source=/x,target=/x"}, testImage, "true")
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"run", "--rm", "--pull", "always", "--mount", "type=bind,source=/x,target=/x", testImage, "true"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"run", "--rm", "--mount", "type=bind,source=/x,target=/x", testImage, "true"}, m.Calls[0].Args)
 }
 
 func TestRunEphemeral_Error(t *testing.T) {
@@ -121,7 +122,7 @@ func TestRunEphemeral_Error(t *testing.T) {
 	m.AddResult("", "Unable to find image\n", fmt.Errorf("exit status 125"))
 	c := NewClient(&m)
 
-	stdout, err := c.RunEphemeral(t.Context(), testImage, false, "scontrol", "--version")
+	stdout, err := c.RunEphemeral(t.Context(), testImage, "scontrol", "--version")
 	assert.Error(t, err)
 	assert.Empty(t, stdout)
 }

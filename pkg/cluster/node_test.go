@@ -428,20 +428,7 @@ func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 	assert.Equal(t, "private", cgroupns)
 }
 
-func TestBuildRunArgs_Pull(t *testing.T) {
-	cfg := defaultRunConfig()
-	cfg.Pull = true
-	args := BuildRunArgs(cfg)
-
-	pull, ok := testutil.ArgValue(args, "--pull")
-	assert.True(t, ok, "--pull flag present")
-	assert.Equal(t, "always", pull)
-
-	// The image and the entrypoint's arguments still come last
-	assert.Equal(t, []string{cfg.Image, "-c", NodeEntrypoint}, args[len(args)-3:])
-}
-
-func TestBuildRunArgs_NoPull(t *testing.T) {
+func TestBuildRunArgs_NeverPulls(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 

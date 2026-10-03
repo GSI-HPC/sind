@@ -130,7 +130,6 @@ type RunConfig struct {
 	Managed         bool        // sind manages Slurm on the node: its configuration and daemon (see IsManaged)
 	SharedState     bool        // mount the shared slurmctld state volume (controllers of a backup pair)
 	ContainerNumber int         // 1-based compose container instance number
-	Pull            bool        // force fresh image pull (--pull always)
 	CapAdd          []string    // extra Linux capabilities (e.g. "SYS_ADMIN")
 	CapDrop         []string    // dropped Linux capabilities
 	Devices         []string    // host devices to expose (e.g. "/dev/fuse")
@@ -298,11 +297,6 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "--label", k+"="+labels[k])
 	}
 
-	// Pull policy
-	if cfg.Pull {
-		args = append(args, "--pull", "always")
-	}
-
 	// Entrypoint: delegate the cgroup controllers, then start systemd
 	args = append(args, "--entrypoint", "/bin/sh")
 
@@ -423,7 +417,6 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				DataMountPath:   dataMountPath,
 				Managed:         nodeManaged,
 				ContainerNumber: 1,
-				Pull:            cfg.Pull,
 				CapAdd:          n.CapAdd,
 				CapDrop:         n.CapDrop,
 				Devices:         n.Devices,
@@ -469,7 +462,6 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 					DataMountPath:   dataMountPath,
 					Managed:         isManaged,
 					ContainerNumber: workerIdx + 1,
-					Pull:            cfg.Pull,
 					CapAdd:          n.CapAdd,
 					CapDrop:         n.CapDrop,
 					Devices:         n.Devices,

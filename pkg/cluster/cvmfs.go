@@ -41,7 +41,7 @@ func DetectCVMFS(ctx context.Context, client *docker.Client, image string) (conf
 	}
 	// --entrypoint, as custom node images may set one.
 	probeArgs := append(cvmfsMountArgs(config.StorageHostPath), "--entrypoint", "true")
-	if _, err := client.RunEphemeralWith(ctx, probeArgs, image, false); err != nil {
+	if _, err := client.RunEphemeralWith(ctx, probeArgs, image); err != nil {
 		return "", fmt.Errorf("storage.cvmfs: no %q volume plugin is enabled and the Docker host's %s cannot be bind-mounted; "+
 			"install CVMFS on the Docker host or the %q Docker volume plugin: %w", CVMFSVolumeDriver, CVMFSPath, CVMFSVolumeDriver, err)
 	}

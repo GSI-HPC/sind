@@ -57,7 +57,7 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 // cp writes files as root, so the helper then runs (like the munge helper)
 // to give them to SlurmUser with docker exec, and the fragments' directory
 // too, with mode 0700.
-func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string, pull bool) error {
+func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string) error {
 	workers, err := slurm.ManagedWorkers(cfg.Nodes)
 	if err != nil {
 		return fmt.Errorf("generating %s: %w", slurm.NodesConfFile, err)
@@ -87,9 +87,6 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		"--label", LabelRealm + "=" + realm,
 		"--label", LabelCluster + "=" + cfg.Name,
 		"-v", string(volName) + ":" + slurm.ConfDir,
-	}
-	if pull {
-		args = append(args, "--pull", "always")
 	}
 	if len(secrets) > 0 {
 		args = append(args, image, "sleep", "30")
@@ -191,7 +188,7 @@ func confPaths(names []string) []string {
 
 // WriteMungeKey writes the given munge key to the munge volume.
 // Uses a temporary container to access the volume.
-func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string, pull bool) error {
+func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterName string, key []byte, image string) error {
 	helperName := ContainerName(realm, clusterName, "munge-helper")
 	volName := VolumeName(realm, clusterName, VolumeMunge)
 
@@ -200,9 +197,6 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 		"--label", LabelRealm + "=" + realm,
 		"--label", LabelCluster + "=" + clusterName,
 		"-v", string(volName) + ":" + slurm.MungeDir,
-	}
-	if pull {
-		args = append(args, "--pull", "always")
 	}
 	args = append(args, image, "sleep", "30")
 	_, err := client.RunContainer(ctx, args...)

@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,67 @@ func controllerImage(cfg *config.Cluster) string {
 		}
 	}
 	return config.DefaultImage
+}
+
+// clusterImages returns the distinct images of the cluster's nodes, the
+// controller's first: the helper containers, the version check and the
+// CVMFS check run it.
+func clusterImages(cfg *config.Cluster) []string {
+	images := []string{controllerImage(cfg)}
+	for _, n := range cfg.Nodes {
+		if n.Image != "" && !slices.Contains(images, n.Image) {
+			images = append(images, n.Image)
+		}
+	}
+	return images
+}
+
+// pullImages pulls each image once, concurrently.
+func pullImages(ctx context.Context, client *docker.Client, images []string) error {
+	sindlog.From(ctx).InfoContext(ctx, "pulling images", "images", strings.Join(images, ","))
+	g, gctx := errgroup.WithContext(ctx)
+	for _, image := range images {
+		g.Go(func() error {
+			if err := client.PullImage(gctx, image); err != nil {
+				return fmt.Errorf("pulling %s: %w", image, err)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// imagePull is the --pull of a Create: the steps that run an image wait for
+// it, the others run alongside.
+type imagePull struct {
+	done chan struct{}
+	err  error
+}
+
+// startPull pulls images in g. Without images the pull is done at once.
+func startPull(ctx context.Context, g *errgroup.Group, client *docker.Client, images []string) *imagePull {
+	p := &imagePull{done: make(chan struct{})}
+	if len(images) == 0 {
+		close(p.done)
+		return p
+	}
+	g.Go(func() error {
+		p.err = pullImages(ctx, client, images)
+		close(p.done)
+		return p.err
+	})
+	return p
+}
+
+// wait blocks until the pull is done, and returns its error, or until ctx
+// ends.
+func (p *imagePull) wait(ctx context.Context) error {
+	select {
+	case <-p.done:
+		return p.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // logExtraPrivileges emits a notice, at info level, for each node that has
@@ -95,11 +157,16 @@ type nodeResult struct {
 //
 //	┌ PreflightCheck → createResources → ConnectNetwork ┐
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
-//	└ DetectCVMFS (storage.cvmfs only) ─────────────────┘
+//	├ DetectCVMFS (storage.cvmfs only) ─────────────────┤
+//	└ pullImages (cfg.Pull only) ───────────────────────┘
 //	                        │
 //	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only)
 //	                        │
 //	                    *Cluster
+//
+// With cfg.Pull, each distinct image is pulled once, concurrently, and the
+// steps that run one (createResources, the Slurm version, DetectCVMFS)
+// wait for the pull; nothing is created with --pull always.
 //
 // An unmanaged cluster (managed: false on the controller) gets the same
 // containers, volumes and munge key, but sind writes no Slurm configuration,
@@ -142,6 +209,11 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	var dnsIP, sshPubKey, slurmVersion string
 	prepGroup, prepCtx := errgroup.WithContext(ctx)
+	var images []string
+	if cfg.Pull {
+		images = clusterImages(cfg)
+	}
+	pull := startPull(prepCtx, prepGroup, client, images)
 
 	// Branch A: preflight → createResources → SSH relay connect. Serialised
 	// because createResources only makes sense once preflight has passed,
@@ -156,6 +228,9 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return err
 		}
 		log.DebugContext(prepCtx, "preflight check passed")
+		if err := pull.wait(prepCtx); err != nil {
+			return err
+		}
 		resourcesCreated = true
 		if err := createResources(prepCtx, client, realm, cfg); err != nil {
 			return err
@@ -171,7 +246,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// Branch B: resolve mesh DNS/SSH details and Slurm version in parallel
 	// with Branch A's resource work.
 	prepGroup.Go(func() error {
-		ip, key, ver, err := resolveInfra(prepCtx, client, meshMgr, cfg)
+		ip, key, ver, err := resolveInfra(prepCtx, client, meshMgr, cfg, pull)
 		if err != nil {
 			return err
 		}
@@ -184,6 +259,9 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	var cvmfs config.StorageType
 	if cfg.Storage.CVMFS {
 		prepGroup.Go(func() error {
+			if err := pull.wait(prepCtx); err != nil {
+				return err
+			}
 			backend, err := DetectCVMFS(prepCtx, client, controllerImage(cfg))
 			if err != nil {
 				return err
@@ -286,13 +364,13 @@ func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.
 // resolveInfra fetches mesh details and the Slurm version concurrently.
 // The version stays empty for an unmanaged cluster: sind does not know which
 // Slurm it runs, as the provisioning under test may install another one than
-// the image ships.
+// the image ships. The version check waits for pull.
 //
 //	┌──────────┐  ┌──────────┐  ┌──────────────┐
 //	│  DNS IP  │  │ SSH key  │  │Slurm version │
 //	└────┬─────┘  └────┬─────┘  └──────┬───────┘
 //	     └─────────────┼───────────────┘
-func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster) (dnsIP, sshPubKey, slurmVersion string, err error) {
+func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, pull *imagePull) (dnsIP, sshPubKey, slurmVersion string, err error) {
 	image := controllerImage(cfg)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -303,7 +381,10 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	})
 	if cfg.Managed() {
 		g.Go(func() error {
-			ver, err := slurm.DiscoverVersion(gctx, client, image, cfg.Pull)
+			if err := pull.wait(gctx); err != nil {
+				return err
+			}
+			ver, err := slurm.DiscoverVersion(gctx, client, image)
 			if err != nil {
 				return fmt.Errorf("discovering Slurm version: %w", err)
 			}
@@ -333,7 +414,7 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 		if !cfg.Managed() {
 			return nil
 		}
-		return WriteClusterConfig(gctx, client, realm, cfg, image, cfg.Pull)
+		return WriteClusterConfig(gctx, client, realm, cfg, image)
 	})
 	// auth/slurm (identity clientIds) replaces munge: its slurm.key is on
 	// the config volume.
@@ -342,7 +423,7 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 			if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
 				return err
 			}
-			return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image, cfg.Pull)
+			return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image)
 		})
 	}
 	if !cfg.Storage.DataStorage.UsesHostPath() {

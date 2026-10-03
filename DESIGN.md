@@ -46,6 +46,9 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 4. Start `sind-ssh` container (if not exists)
 
 **Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
+
+With `--pull`, sind first pulls each distinct image of the cluster's nodes once (`docker pull`), concurrently with the preflight check and the mesh lookups; the steps that run an image (the helper containers, the Slurm version check, the CVMFS check and the nodes) wait for it and create their containers without `--pull always`, so every node runs the same image and the registry is asked once per image.
+
 1. Create cluster network
 2. Create config volume → write Slurm configuration, and `slurmdbd.conf` for a managed db node (managed clusters only; see Unmanaged Cluster)
 3. Create munge volume → generate and write munge key (not with identity `clientIds`, whose `slurm.key` goes to the config volume)
@@ -485,7 +488,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--memory SIZE` | the newest worker's, else 512m | Memory limit |
 | `--tmp-size SIZE` | the newest worker's, else 256m | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
-| `--pull` | false | Pull the `--image` before creating containers; needs `--image` |
+| `--pull` | false | Pull the `--image` once before creating containers; needs `--image` |
 | `--wait DURATION` | 5m | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit (see Readiness Checks) |
 | `--cap-add CAP` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
 | `--cap-drop CAP` | the newest worker's, else none | Drop Linux capability (repeatable) |

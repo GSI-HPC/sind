@@ -1121,7 +1121,7 @@ func TestResolveInfra_SSHKeyError(t *testing.T) {
 	cfg := createCfg()
 
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, cfg)
+	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, cfg, startPull(t.Context(), nil, client, nil))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading SSH public key")
@@ -1146,7 +1146,7 @@ func TestResolveInfra_SlurmVersionError(t *testing.T) {
 	client := docker.NewClient(&m)
 
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, createCfg())
+	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, createCfg(), startPull(t.Context(), nil, client, nil))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "discovering Slurm version")

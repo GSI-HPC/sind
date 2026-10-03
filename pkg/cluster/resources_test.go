@@ -86,11 +86,11 @@ func TestClusterResourceLifecycle(t *testing.T) {
 			{Role: config.RoleWorker, Count: 1, CPUs: 2, Memory: "2g", Image: helperImage},
 		},
 	}
-	err = WriteClusterConfig(ctx, c, mesh.DefaultRealm, cfg, helperImage, false)
+	err = WriteClusterConfig(ctx, c, mesh.DefaultRealm, cfg, helperImage)
 	require.NoError(t, err)
 
 	// Write munge key.
-	err = WriteMungeKey(ctx, c, mesh.DefaultRealm, clusterName, []byte("test-munge-key-data"), helperImage, false)
+	err = WriteMungeKey(ctx, c, mesh.DefaultRealm, clusterName, []byte("test-munge-key-data"), helperImage)
 	require.NoError(t, err)
 
 	// Verify resources exist.
@@ -187,7 +187,7 @@ func TestWriteClusterConfig(t *testing.T) {
 			{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3)
@@ -224,7 +224,7 @@ func TestWriteClusterConfig_MainStringAppend(t *testing.T) {
 			{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	cpStdin := m.Calls[1].Stdin
@@ -251,7 +251,7 @@ func TestWriteClusterConfig_MainMapFragments(t *testing.T) {
 			{Role: "worker", Count: 2, CPUs: 2, Memory: "2g"},
 		},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	cpStdin := m.Calls[1].Stdin
@@ -273,7 +273,7 @@ func TestWriteClusterConfig_PlugstackAlwaysScaffolded(t *testing.T) {
 		Name:  "dev",
 		Nodes: []config.Node{{Role: "controller"}, {Role: "worker", CPUs: 1, Memory: "512m"}},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	cpStdin := m.Calls[1].Stdin
@@ -295,29 +295,12 @@ func TestWriteClusterConfig_GresSection(t *testing.T) {
 		},
 		Nodes: []config.Node{{Role: "controller"}, {Role: "worker", CPUs: 1, Memory: "512m"}},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	cpStdin := m.Calls[1].Stdin
 	assert.Contains(t, cpStdin, "gres.conf")
 	assert.Contains(t, cpStdin, "Name=gpu Type=tesla")
-}
-
-func TestWriteClusterConfig_Pull(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
-	m.AddResult("", "", nil)         // CopyToContainer
-	m.AddResult("", "", nil)         // RemoveContainer (defer)
-	c := docker.NewClient(&m)
-
-	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", true)
-
-	require.NoError(t, err)
-	createArgs := m.Calls[0].Args
-	pull, ok := testutil.ArgValue(createArgs, "--pull")
-	assert.True(t, ok, "--pull flag present")
-	assert.Equal(t, "always", pull)
 }
 
 func TestWriteClusterConfig_CreateError(t *testing.T) {
@@ -326,7 +309,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating config helper")
@@ -345,7 +328,7 @@ func TestWriteClusterConfig_DefMemPerCPU(t *testing.T) {
 		{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "1g"},
 		{Role: config.RoleWorker, CPUs: 4, Memory: "64m", Managed: testutil.Ptr(false)},
 	}}
-	require.NoError(t, WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false))
+	require.NoError(t, WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest"))
 
 	assert.Contains(t, m.Calls[1].Stdin, "\nDefMemPerCPU=512\n")
 }
@@ -357,7 +340,7 @@ func TestWriteClusterConfig_InvalidMemory(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker, CPUs: 1, Memory: "2x"}}}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `generating sind-nodes.conf: worker-0: invalid memory "2x"`)
@@ -372,7 +355,7 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	cfg := &config.Cluster{Name: "dev"}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing slurm config")
@@ -418,7 +401,7 @@ func TestWriteClusterConfig_WithDB(t *testing.T) {
 			{Role: config.RoleWorker, CPUs: 1, Memory: "512m"},
 		},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 6)
@@ -461,7 +444,7 @@ func TestWriteClusterConfig_WithoutDB(t *testing.T) {
 		Name:  "dev",
 		Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker, CPUs: 1, Memory: "512m"}},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	cpStdin := m.Calls[1].Stdin
@@ -484,7 +467,7 @@ func TestWriteClusterConfig_UnmanagedDB(t *testing.T) {
 			{Role: config.RoleWorker, CPUs: 1, Memory: "512m"},
 		},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 3, "no chown/chmod of a slurmdbd.conf")
@@ -523,7 +506,7 @@ func TestWriteClusterConfig_DBErrors(t *testing.T) {
 			m.AddResult("", "", nil) // RemoveContainer (defer)
 			c := docker.NewClient(&m)
 
-			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, tt.cfg, "busybox:latest", false)
+			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, tt.cfg, "busybox:latest")
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -545,7 +528,7 @@ func TestWriteMungeKey(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	key := []byte("test-munge-key-data")
-	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", key, "busybox:latest", false)
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", key, "busybox:latest")
 
 	require.NoError(t, err)
 
@@ -563,30 +546,12 @@ func TestWriteMungeKey(t *testing.T) {
 	assert.Equal(t, "kill", m.Calls[3].Args[0])
 }
 
-func TestWriteMungeKey_Pull(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("abc123\n", "", nil) // RunContainer (helper)
-	m.AddResult("", "", nil)         // CopyToContainer
-	m.AddResult("", "", nil)         // Exec chown
-	m.AddResult("", "", nil)         // KillContainer (defer)
-	m.AddResult("", "", nil)         // RemoveContainer (defer)
-	c := docker.NewClient(&m)
-
-	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest", true)
-
-	require.NoError(t, err)
-	runArgs := m.Calls[0].Args
-	pull, ok := testutil.ArgValue(runArgs, "--pull")
-	assert.True(t, ok, "--pull flag present")
-	assert.Equal(t, "always", pull)
-}
-
 func TestWriteMungeKey_RunError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("run failed"))
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest", false)
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating munge helper")
@@ -600,7 +565,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 	m.AddResult("", "", nil)                     // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest", false)
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "writing munge key")
@@ -616,7 +581,7 @@ func TestWriteMungeKey_ChownError(t *testing.T) {
 	m.AddResult("", "", nil)                        // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
-	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest", false)
+	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fixing munge key ownership")

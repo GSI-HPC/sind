@@ -354,7 +354,7 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 		Identity: config.Identity{Mode: config.IdentityClientIDs},
 		Nodes:    []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker, CPUs: 1, Memory: "512m"}},
 	}
-	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 5)
@@ -391,7 +391,7 @@ func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
 			m.AddResult("", "", nil) // RemoveContainer (defer)
 			c := docker.NewClient(&m)
 
-			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 			require.Error(t, err)
 			assert.Equal(t, tt.wantErr, err.Error())
@@ -615,8 +615,8 @@ func TestWorkerAdd_IdentityImage(t *testing.T) {
 }
 
 func TestWorkerAdd_IdentityImagePulled(t *testing.T) {
-	// An image docker pulls when it creates the workers is current: with
-	// no Slurm version to check it against, nothing pulls it before.
+	// --pull pulls an explicit image once, before anything checks it; the
+	// pulled image is then checked like a local one.
 	base := psWithLabels(workerAddOnCall(t), "sind.identity=nssSlurm")
 	var m mock.Executor
 	m.OnCall = func(args []string, stdin string) mock.Result {
@@ -632,8 +632,8 @@ func TestWorkerAdd_IdentityImagePulled(t *testing.T) {
 	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "img:2", Pull: true}, time.Millisecond)
 
 	require.NoError(t, err)
-	assert.Zero(t, countCalls(m.Calls, "image"))
-	assert.Zero(t, countCalls(m.Calls, "run"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "img:2"))
+	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "img:2"))
 }
 
 func TestNodeServices(t *testing.T) {

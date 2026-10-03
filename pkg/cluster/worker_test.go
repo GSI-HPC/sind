@@ -616,6 +616,10 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		// RemoveContainer (helper cleanup or worker cleanup)
 		case args[0] == "rm":
 			return mock.Result{}
+
+		// PullImage (--pull)
+		case args[0] == "pull":
+			return mock.Result{}
 		}
 
 		t.Logf("unhandled worker mock call: %v", args)
@@ -1457,7 +1461,8 @@ func TestWorkerAdd_ExplicitImagePull(t *testing.T) {
 	}, time.Millisecond)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "--pull", "always", "custom:v2", "slurmctld", "-V"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "custom:v2"))
+	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "custom:v2", "slurmctld", "-V"))
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
 	assert.NotContains(t, args, "--pull")
@@ -1506,8 +1511,8 @@ func TestWorkerAdd_ExplicitImageVersionError(t *testing.T) {
 }
 
 func TestWorkerAdd_ExplicitImageUnmanaged(t *testing.T) {
-	// Unmanaged workers run no slurmd of sind's: their image is not
-	// checked, and docker pulls it when it creates them.
+	// Unmanaged workers run no slurmd of sind's: their image is pulled but
+	// not checked.
 	var m mock.Executor
 	m.OnCall = workerAddOnCall(t)
 	client := docker.NewClient(&m)
@@ -1521,9 +1526,10 @@ func TestWorkerAdd_ExplicitImageUnmanaged(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Zero(t, countCalls(m.Calls, "run"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "plain:1"))
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
-	assert.Equal(t, []string{"always"}, testutil.ArgValues(args, "--pull"))
+	assert.NotContains(t, args, "--pull")
 }
 
 func TestWorkerAddOptions_Check(t *testing.T) {
