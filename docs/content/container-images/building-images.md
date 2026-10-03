@@ -35,6 +35,20 @@ defaults:
   image: ghcr.io/gsi-hpc/sind-node:25.11
 ```
 
+Every tag can move: a rebuild publishes a new image under it. To run exactly one build, for reproducible CI for example, refer to the image by its digest, which `docker buildx imagetools inspect ghcr.io/gsi-hpc/sind-node:25.11` prints:
+
+```yaml
+defaults:
+  image: ghcr.io/gsi-hpc/sind-node:25.11@sha256:<digest>
+```
+
+Each published image carries a build provenance attestation. Check that sind's image workflow built an image with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify oci://ghcr.io/gsi-hpc/sind-node:25.11 --repo GSI-HPC/sind \
+  --signer-workflow GSI-HPC/sind/.github/workflows/image-build.yml
+```
+
 Every official image:
 
 - Is based on Rocky Linux 10

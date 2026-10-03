@@ -86,6 +86,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/image-build.yml
     with:
       ref: ${{ matrix.ref }}
