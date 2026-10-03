@@ -7,7 +7,7 @@
   shortcode renders nothing.
 */ -}}
 {{- $id := .Get 0 -}}
-{{- $meta := index (site.Data.videos | default dict) $id -}}
+{{- $meta := index (hugo.Data.videos | default dict) $id -}}
 {{- if and $meta (fileExists (printf "static/videos/%s.mp4" $id)) -}}
 {{- $base := printf "videos/%s" $id -}}
 <figure class="sind-video" id="video-{{ $id }}">
