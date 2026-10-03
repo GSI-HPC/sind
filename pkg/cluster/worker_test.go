@@ -2184,6 +2184,7 @@ func TestWorkerAdd_CleanupErrors(t *testing.T) {
 	var m mock.Executor
 	inner := workerAddOnCall(t)
 	inCleanup := false
+	knownHostsWrites := 0
 	m.OnCall = func(args []string, stdin string) mock.Result {
 		// Make enableSlurm fail to trigger cleanup.
 		if args[0] == "exec" && len(args) > 3 &&
@@ -2191,11 +2192,20 @@ func TestWorkerAdd_CleanupErrors(t *testing.T) {
 			inCleanup = true
 			return mock.Result{Err: fmt.Errorf("systemctl failed")}
 		}
+		// Mesh registration runs next to enableSlurm and may write
+		// known_hosts after slurmd failed; only cleanup's writes fail.
+		isWrite := args[0] == "exec" && args[1] == "-i"
+		if isWrite && strings.Contains(strings.Join(args, " "), "known_hosts") {
+			knownHostsWrites++
+			if knownHostsWrites == 1 {
+				return inner(args, stdin)
+			}
+		}
 		if !inCleanup {
 			return inner(args, stdin)
 		}
 		// During cleanup: make RemoveKnownHost and RemoveContainer fail.
-		if args[0] == "exec" && args[1] == "-i" {
+		if isWrite {
 			return mock.Result{Err: fmt.Errorf("write failed")}
 		}
 		if args[0] == "rm" {
