@@ -39,6 +39,7 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 		{[]string{"--count", "0"}, "--count must be at least 1, got 0"},
 		{[]string{"--count", "-3"}, "--count must be at least 1, got -3"},
 		{[]string{"--cpus", "-1"}, "--cpus must not be negative, got -1"},
+		{[]string{"--pull"}, "--pull needs --image"},
 		{[]string{"--cap-add", "BOGUS"}, `unknown capability "BOGUS" in --cap-add`},
 		{[]string{"--cap-drop", "net_raw"}, `unknown capability "net_raw" in --cap-drop`},
 		{[]string{"--device", "relative/dev"}, `device path must be absolute, got "relative/dev"`},
@@ -55,6 +56,17 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 			assert.Empty(t, m.Calls, "no docker call")
 		})
 	}
+}
+
+func TestCreateWorker_FlagHelpNamesDefaults(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"create", "worker"})
+	require.NoError(t, err)
+
+	assert.Equal(t, "CPU limit per node (default: the newest worker's, else 1)", c.Flags().Lookup("cpus").Usage)
+	assert.Equal(t, "memory limit per node (default: the newest worker's, else 512m)", c.Flags().Lookup("memory").Usage)
+	assert.Equal(t, "/tmp tmpfs size (default: the newest worker's, else 256m)", c.Flags().Lookup("tmp-size").Usage)
+	assert.Contains(t, c.Flags().Lookup("image").Usage, "the newest worker's, else the controller's")
 }
 
 func TestCreateWorker_TooManyArgs(t *testing.T) {

@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -429,12 +430,25 @@ func TestCreate_CreateHomesFails(t *testing.T) {
 // with the given extra labels for docker ps and hands every other call to
 // base.
 func psWithLabels(base func([]string, string) mock.Result, labels string) func([]string, string) mock.Result {
+	all := "sind.cluster=dev,sind.role=controller," + labels
+	inspected := docker.Labels{LabelSlurmVersion: "25.11.0"}
+	for pair := range strings.SplitSeq(all, ",") {
+		k, v, _ := strings.Cut(pair, "=")
+		inspected[k] = v
+	}
 	return func(args []string, stdin string) mock.Result {
-		if len(args) > 0 && args[0] == "ps" {
+		switch {
+		case len(args) > 0 && args[0] == "ps":
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{
 				ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-				Labels: "sind.cluster=dev,sind.role=controller," + labels,
+				Labels: all,
 			})}
+		case len(args) > 1 && args[0] == "inspect" && args[1] == "sind-dev-controller":
+			data, _ := json.Marshal([]map[string]any{{
+				"Name": "/sind-dev-controller", "Image": testControllerImageID,
+				"State": map[string]string{"Status": "running"}, "Config": map[string]any{"Labels": inspected},
+			}})
+			return mock.Result{Stdout: string(data)}
 		}
 		return base(args, stdin)
 	}
@@ -465,7 +479,7 @@ func TestWorkerAdd_InheritsUsers(t *testing.T) {
 
 func TestWorkerAdd_InvalidUsersLabel(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = psWithLabels(func([]string, string) mock.Result { return mock.Result{} }, "sind.managed=false,sind.users=alice")
+	m.OnCall = psWithLabels(workerAddOnCall(t), "sind.managed=false,sind.users=alice")
 	client := docker.NewClient(&m)
 
 	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)

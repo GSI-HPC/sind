@@ -126,6 +126,8 @@ Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node 
 
 `memory` covers everything in a node: the jobs, the node's own services (systemd, munge, sshd, the Slurm daemon; also mariadb and slurmdbd on a db node) and files in `/tmp`, `/run` and `/dev/shm`. Slurm is told the whole limit (`RealMemory`), so raise `memory` for jobs that need much memory or `/tmp`.
 
+Workers added later with `sind create worker` do not read the config: they take these settings from the cluster's newest worker (see [Worker Management]({{< relref "/usage/worker-management#defaults-from-the-newest-worker" >}})).
+
 ## Storage section
 
 ```yaml

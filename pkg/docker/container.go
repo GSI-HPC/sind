@@ -122,6 +122,10 @@ type ContainerInfo struct {
 	Labels    Labels
 	IPs       map[NetworkName]string
 	Mounts    []Mount // bind mounts and volumes; tmpfs mounts are not listed
+	// Image is the ID of the image the container runs (sha256:...), which
+	// stays valid when the reference it was created from moves.
+	Image      string
+	HostConfig HostConfig
 }
 
 // MountType is the kind of a container mount.
@@ -142,10 +146,30 @@ type Mount struct {
 	Destination string     `json:"Destination"` // the mount point in the container
 }
 
+// HostConfig is the part of a container's host configuration that sind
+// reads back: its resource limits and privileges.
+type HostConfig struct {
+	NanoCPUs    int64             `json:"NanoCpus"` // --cpus, in billionths of a CPU
+	Memory      int64             `json:"Memory"`   // --memory, in bytes
+	Tmpfs       map[string]string `json:"Tmpfs"`    // mount point → --tmpfs options
+	CapAdd      []string          `json:"CapAdd"`   // as the docker CLI normalizes them, e.g. CAP_SYS_ADMIN
+	CapDrop     []string          `json:"CapDrop"`
+	Devices     []DeviceMapping   `json:"Devices"`
+	SecurityOpt []string          `json:"SecurityOpt"`
+}
+
+// DeviceMapping is a host device exposed to a container (--device).
+type DeviceMapping struct {
+	PathOnHost        string `json:"PathOnHost"`
+	PathInContainer   string `json:"PathInContainer"`
+	CgroupPermissions string `json:"CgroupPermissions"`
+}
+
 // inspectResult maps the subset of docker inspect JSON we care about.
 type inspectResult struct {
 	ID    string `json:"Id"`
 	Name  string `json:"Name"`
+	Image string `json:"Image"`
 	State struct {
 		Status    string `json:"Status"`
 		ExitCode  int    `json:"ExitCode"`
@@ -154,7 +178,8 @@ type inspectResult struct {
 	Config struct {
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
-	Mounts          []Mount `json:"Mounts"`
+	Mounts          []Mount    `json:"Mounts"`
+	HostConfig      HostConfig `json:"HostConfig"`
 	NetworkSettings struct {
 		Networks map[string]struct {
 			IPAddress string `json:"IPAddress"`
@@ -201,14 +226,16 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			ips[NetworkName(net)] = info.IPAddress
 		}
 		infos = append(infos, &ContainerInfo{
-			ID:        ContainerID(r.ID),
-			Name:      ContainerName(strings.TrimPrefix(r.Name, "/")),
-			Status:    ContainerState(r.State.Status),
-			ExitCode:  r.State.ExitCode,
-			OOMKilled: r.State.OOMKilled,
-			Labels:    r.Config.Labels,
-			IPs:       ips,
-			Mounts:    r.Mounts,
+			ID:         ContainerID(r.ID),
+			Name:       ContainerName(strings.TrimPrefix(r.Name, "/")),
+			Status:     ContainerState(r.State.Status),
+			ExitCode:   r.State.ExitCode,
+			OOMKilled:  r.State.OOMKilled,
+			Labels:     r.Config.Labels,
+			IPs:        ips,
+			Image:      r.Image,
+			HostConfig: r.HostConfig,
+			Mounts:     r.Mounts,
 		})
 	}
 	return infos, nil

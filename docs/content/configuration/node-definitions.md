@@ -185,11 +185,13 @@ With `-v`, `sind create cluster` and `sind create worker` log an `extra privileg
 
 One capability sind adds itself: workers of a cluster with [users]({{< relref "/configuration/cluster-config#users-section" >}}) get `SYS_NICE`. slurmstepd binds each task to its CPUs (`task/affinity`) after the task has become the job's user, and setting the CPU affinity of another user's process needs `CAP_SYS_NICE`, which Docker drops by default. Without it, every job of a user other than root fails with `task_g_set_affinity` and "Slurmd could not execve job".
 
-Workers created via `sind create worker` also support these fields:
+Workers created via `sind create worker` take these fields from the cluster's newest worker, and the flags replace them:
 
 ```bash
 sind create worker --cap-add SYS_ADMIN --device /dev/fuse
 ```
+
+See [Worker Management]({{< relref "/usage/worker-management#defaults-from-the-newest-worker" >}}) for what new workers inherit.
 
 ## Default nodes
 

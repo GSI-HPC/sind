@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/termtext"
@@ -28,16 +29,16 @@ func newCreateWorkerCommand() *cobra.Command {
 	}
 
 	cmd.Flags().Int("count", 1, "number of nodes to add")
-	cmd.Flags().String("image", "", "container image")
-	cmd.Flags().Int("cpus", 0, "CPU limit per node")
-	cmd.Flags().String("memory", "", "memory limit")
-	cmd.Flags().String("tmp-size", "", "/tmp tmpfs size")
+	cmd.Flags().String("image", "", "container image (default: the newest worker's, else the controller's)")
+	cmd.Flags().Int("cpus", 0, fmt.Sprintf("CPU limit per node (default: the newest worker's, else %d)", config.DefaultCPUs))
+	cmd.Flags().String("memory", "", fmt.Sprintf("memory limit per node (default: the newest worker's, else %s)", config.DefaultMemory))
+	cmd.Flags().String("tmp-size", "", fmt.Sprintf("/tmp tmpfs size (default: the newest worker's, else %s)", config.DefaultTmpSize))
 	cmd.Flags().Bool("unmanaged", false, "don't start slurmd, don't add to slurm.conf")
-	cmd.Flags().Bool("pull", false, "pull images before creating containers")
-	cmd.Flags().StringSlice("cap-add", nil, "add Linux capabilities (e.g. SYS_ADMIN)")
-	cmd.Flags().StringSlice("cap-drop", nil, "drop Linux capabilities")
-	cmd.Flags().StringSlice("device", nil, "host devices to expose (e.g. /dev/fuse)")
-	cmd.Flags().StringSlice("security-opt", nil, "security options")
+	cmd.Flags().Bool("pull", false, "pull the --image before creating containers")
+	cmd.Flags().StringSlice("cap-add", nil, "add Linux capabilities, e.g. SYS_ADMIN (default: the newest worker's)")
+	cmd.Flags().StringSlice("cap-drop", nil, "drop Linux capabilities (default: the newest worker's)")
+	cmd.Flags().StringSlice("device", nil, "host devices to expose, e.g. /dev/fuse (default: the newest worker's)")
+	cmd.Flags().StringSlice("security-opt", nil, "security options (default: the newest worker's)")
 
 	return cmd
 }

@@ -436,6 +436,41 @@ func TestInspectContainer(t *testing.T) {
 	assert.Equal(t, []string{"inspect", string(testContainerName)}, m.Calls[0].Args)
 }
 
+func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{
+  "Id": "abc",
+  "Name": "/sind-dev-worker-0",
+  "Image": "sha256:f00d",
+  "State": {"Status": "exited"},
+  "Config": {"Image": "ghcr.io/gsi-hpc/sind-node:latest", "Labels": {}},
+  "HostConfig": {
+    "NanoCpus": 2000000000,
+    "Memory": 2147483648,
+    "Tmpfs": {"/tmp": "rw,nosuid,nodev,size=1g"},
+    "CapAdd": ["CAP_SYS_ADMIN"],
+    "CapDrop": null,
+    "Devices": [{"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"}],
+    "SecurityOpt": ["writable-cgroups=true", "label=disable"]
+  },
+  "NetworkSettings": {"Networks": {}}
+}]`, "", nil)
+	c := NewClient(&m)
+
+	info, err := c.InspectContainer(t.Context(), "sind-dev-worker-0")
+	require.NoError(t, err)
+
+	assert.Equal(t, "sha256:f00d", info.Image)
+	assert.Equal(t, HostConfig{
+		NanoCPUs:    2e9,
+		Memory:      2 << 30,
+		Tmpfs:       map[string]string{"/tmp": "rw,nosuid,nodev,size=1g"},
+		CapAdd:      []string{"CAP_SYS_ADMIN"},
+		Devices:     []DeviceMapping{{PathOnHost: "/dev/fuse", PathInContainer: "/dev/fuse", CgroupPermissions: "rwm"}},
+		SecurityOpt: []string{"writable-cgroups=true", "label=disable"},
+	}, info.HostConfig)
+}
+
 func TestInspectContainer_Error(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error: No such object: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))

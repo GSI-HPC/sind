@@ -124,7 +124,7 @@ docker run --rm <controller image> slurmctld -V
 # Output: "slurm 26.05.4"
 ```
 
-The version is stored as the `sind.slurm.version` label on each node container and shown in the `SLURM` column of `sind get clusters` and `sind get cluster`. It does not change the generated configuration. Workers added with `sind create worker` copy the controller's label, and nodes with a different `image` carry the controller's version too: sind does not compare versions across images.
+The version is stored as the `sind.slurm.version` label on each node container and shown in the `SLURM` column of `sind get clusters` and `sind get cluster`. It does not change the generated configuration. Workers added with `sind create worker` copy the controller's label. Without `--image` they run an image the cluster already runs; with `--image`, sind discovers that image's version and refuses managed workers whose version differs from the cluster's. At cluster creation, nodes with a different `image` carry the controller's version too: `sind create cluster` does not compare versions across images.
 
 sind skips the discovery for unmanaged clusters, where the Slurm you provision may differ from the one in the image. Their `SLURM` column shows `-`.
 

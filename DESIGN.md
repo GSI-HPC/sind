@@ -470,25 +470,29 @@ sind delete worker NODES               # remove worker nodes from cluster
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--count N` | 1 | Number of nodes to add |
-| `--image IMAGE` | the controller's image | Container image |
-| `--cpus N` | 1 | CPU limit per node |
-| `--memory SIZE` | 512m | Memory limit |
-| `--tmp-size SIZE` | 256m | /tmp tmpfs size |
+| `--image IMAGE` | the newest worker's image, else the controller's | Container image |
+| `--cpus N` | the newest worker's, else 1 | CPU limit per node |
+| `--memory SIZE` | the newest worker's, else 512m | Memory limit |
+| `--tmp-size SIZE` | the newest worker's, else 256m | /tmp tmpfs size |
 | `--unmanaged` | false | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
-| `--pull` | false | Pull images before creating containers |
-| `--cap-add CAP` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
-| `--cap-drop CAP` | none | Drop Linux capability (repeatable) |
-| `--device PATH` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
-| `--security-opt OPT` | none | Security option (repeatable) |
+| `--pull` | false | Pull the `--image` before creating containers; needs `--image` |
+| `--cap-add CAP` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
+| `--cap-drop CAP` | the newest worker's, else none | Drop Linux capability (repeatable) |
+| `--device PATH` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`) |
+| `--security-opt OPT` | the newest worker's, else none | Security option (repeatable) |
 
-`--count` must be at least 1 and `--cpus` must not be negative. These, and `--cap-add`, `--cap-drop`, `--device` and `--security-opt`, which are checked like the config's `capAdd`, `capDrop`, `devices` and `securityOpt`, are usage errors that sind reports before it takes the realm lock or creates any container.
+New workers take the shape of the cluster's newest worker, the one with the highest index among those managed like the new ones (or among all workers if none is): sind reads its image ID, CPU and memory limits, `/tmp` size, capabilities, devices and security options from `docker inspect`, so a bare `sind create worker` adds nodes like the ones the cluster has, whatever its `defaults` were. Two things are left out because sind decides them for each new worker: the `SYS_NICE` capability it adds by itself, and the security options every node gets; a seccomp profile is not inherited either, as docker reports its content rather than its file (pass it again with `--security-opt`). A cluster without workers gets the controller's image and 1 CPU, 512m and 256m. Each flag that is given replaces the inherited value; a repeatable flag replaces the whole inherited list. The cluster-wide settings, the data and CVMFS mounts, the users and the identity mode, come from the controller's labels as `docker inspect` reports them, a map (`docker ps` joins all labels with commas, which cuts a path with a comma short); a `sind.data.hostpath` that is not an absolute path is refused rather than bind-mounted.
+
+Without `--image`, the workers run the newest worker's (or controller's) image by its ID, not by the tag it was created from, which may have moved to another image since; `--pull` therefore needs `--image`. With `--image`, sind runs `slurmctld -V` in the image (pulling it first with `--pull`) and refuses one whose Slurm version is not the cluster's (`sind.slurm.version`), as slurmd must not be newer than slurmctld; unmanaged workers and clusters without a recorded version skip this check.
+
+`--count` must be at least 1 and `--cpus` must not be negative. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device` and `--security-opt`, which are checked like the config's `capAdd`, `capDrop`, `devices` and `securityOpt`, are usage errors that sind reports before it takes the realm lock or creates any container.
 
 With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: mutations stay silent by default.
 
 Examples:
 
 ```bash
-sind create worker                           # 1 managed node with default resources
+sind create worker                           # 1 managed node like the newest worker
 sind create worker --count 3                 # 3 managed nodes
 sind create worker --count 2 --unmanaged     # 2 unmanaged nodes (slurmd not started)
 sind create worker --cpus 2 --memory 1g      # 1 managed node with resource limits
@@ -1596,7 +1600,7 @@ The discovered version is stored as a label on each node container:
 --label sind.slurm.version=26.05.4
 ```
 
-Workers added with `sind create worker` copy the controller's label. Nodes whose `image` differs from the controller's carry the controller's version too: sind does not discover versions per image or compare them.
+Workers added with `sind create worker` copy the controller's label. Without `--image` they run an image the cluster already runs, by ID. With `--image`, sind discovers the image's version the same way and refuses managed workers whose version differs from the label. At cluster creation, nodes whose `image` differs from the controller's carry the controller's version too: `sind create cluster` does not discover versions per image or compare them.
 
 ## DNS Naming Convention
 

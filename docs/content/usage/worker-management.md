@@ -15,25 +15,42 @@ sind create worker [CLUSTER] [FLAGS]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--count` | `1` | Number of nodes to add |
-| `--image` | the controller's image | Container image |
-| `--cpus` | `1` | CPU limit per node |
-| `--memory` | `512m` | Memory limit, without swap; it covers the node's services and `/tmp` files too |
-| `--tmp-size` | `256m` | `/tmp` tmpfs size, part of `--memory` |
+| `--image` | the newest worker's image, else the controller's | Container image |
+| `--cpus` | the newest worker's, else `1` | CPU limit per node |
+| `--memory` | the newest worker's, else `512m` | Memory limit, without swap; it covers the node's services and `/tmp` files too |
+| `--tmp-size` | the newest worker's, else `256m` | `/tmp` tmpfs size, part of `--memory` |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
-| `--pull` | `false` | Pull images before creating containers |
-| `--cap-add` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
-| `--cap-drop` | none | Drop Linux capability (repeatable) |
-| `--device` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
-| `--security-opt` | none | Security option (repeatable) |
+| `--pull` | `false` | Pull the `--image` before creating containers; needs `--image` |
+| `--cap-add` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
+| `--cap-drop` | the newest worker's, else none | Drop Linux capability (repeatable) |
+| `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`) |
+| `--security-opt` | the newest worker's, else none | Security option (repeatable) |
+
+### Defaults from the newest worker
+
+New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list.
+
+Not inherited:
+
+- the `SYS_NICE` capability and the security options that sind gives nodes by itself, as it decides them for each new worker;
+- a seccomp profile, which Docker reports by content rather than by file: pass it again with `--security-opt seccomp=FILE`.
+
+A cluster without workers gets the controller's image and 1 CPU, `512m` memory and a `256m` `/tmp`.
+
+### Image and Slurm version
+
+Without `--image`, new workers run the image the newest worker (or the controller) runs, by its ID: the tag it was created from may since point to another image, even another Slurm release. `--pull` therefore needs `--image`.
+
+With `--image`, sind runs `slurmctld -V` in the image, after pulling it with `--pull`, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.8`.
 
 ### Checks
 
-`--count` must be at least 1 and `--cpus` must not be negative. `--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, `--device` needs an absolute host path, as `devices` does, and `--security-opt` an option Docker knows, as `securityOpt` does. sind rejects these with exit status 2 before it creates any container. With `-v`, it logs the extra privileges of the new nodes, as `sind create cluster` does.
+`--count` must be at least 1 and `--cpus` must not be negative. `--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, `--device` needs an absolute host path, as `devices` does, and `--security-opt` an option Docker knows, as `securityOpt` does. sind rejects these, and `--pull` without `--image`, with exit status 2 before it creates any container. With `-v`, it logs the extra privileges of the new nodes, as `sind create cluster` does.
 
 ### Examples
 
 ```bash
-# 1 managed worker with default resources
+# 1 managed worker like the newest worker
 sind create worker
 
 # 3 managed workers
