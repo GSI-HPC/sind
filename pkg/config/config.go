@@ -7,9 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -177,23 +175,6 @@ func (s Section) FragmentNames() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// SetsParameter reports whether any line of the section (string form or
-// any fragment) assigns the given slurm.conf-style parameter. Keys are
-// matched case-insensitively, as Slurm does; comments are ignored.
-func (s Section) SetsParameter(key string) bool {
-	prefix := strings.ToLower(key) + "="
-	contents := slices.AppendSeq([]string{s.Content}, maps.Values(s.Fragments))
-	for _, content := range contents {
-		for line := range strings.Lines(content) {
-			line, _, _ = strings.Cut(line, "#")
-			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), prefix) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // UnmarshalJSON supports two YAML/JSON forms:
@@ -409,7 +390,7 @@ func (c *Cluster) Validate() error {
 	if err := c.validateAccounts(); err != nil {
 		return err
 	}
-	if err := c.Identity.validate(c.Managed()); err != nil {
+	if err := c.Identity.validate(c.Managed(), c.Slurm.Main); err != nil {
 		return err
 	}
 

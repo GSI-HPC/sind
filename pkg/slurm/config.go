@@ -3,7 +3,6 @@
 package slurm
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 
@@ -52,22 +51,6 @@ type ConfOptions struct {
 	Identity config.IdentityMode
 }
 
-// nssSlurmDefaults are the slurm.conf parameters sind sets with identity
-// nssSlurm or clientIds: slurmctld puts the job's user and groups into the
-// job credential, and slurmstepd serves them to nss_slurm on the workers.
-var nssSlurmDefaults = []parameter{
-	{"LaunchParameters", "enable_nss_slurm"},
-}
-
-// clientIDsDefaults are the slurm.conf parameters sind sets with identity
-// clientIds, in output order: auth/slurm and cred/slurm with slurm.key
-// instead of munge, and the users' identities in their tokens.
-var clientIDsDefaults = []parameter{
-	{"AuthType", "auth/slurm"},
-	{"CredType", "cred/slurm"},
-	{"AuthInfo", "use_client_ids"},
-}
-
 // parameter is a slurm.conf parameter sind sets unless the main section
 // sets it.
 type parameter struct{ key, value string }
@@ -80,16 +63,14 @@ var accountingDefaults = []parameter{
 	{"JobAcctGatherType", "jobacct_gather/cgroup"},
 }
 
-// identityDefaults returns the slurm.conf parameters of an identity mode.
+// identityDefaults returns the slurm.conf parameters of an identity mode
+// (see config.IdentityMode.SlurmParameters).
 func identityDefaults(mode config.IdentityMode) []parameter {
-	switch mode {
-	case config.IdentityNSSSlurm:
-		return nssSlurmDefaults
-	case config.IdentityClientIDs:
-		return slices.Concat(clientIDsDefaults, nssSlurmDefaults)
-	default:
-		return nil
+	var defaults []parameter
+	for _, p := range mode.SlurmParameters() {
+		defaults = append(defaults, parameter{p.Key, p.Value})
 	}
+	return defaults
 }
 
 // writeDefaults writes a blank line and each parameter that the main

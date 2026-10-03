@@ -61,10 +61,38 @@ func (i Identity) UsesNSSSlurm() bool {
 	return i.Mode == IdentityNSSSlurm || i.Mode == IdentityClientIDs
 }
 
+// SlurmParameter is a slurm.conf parameter and the value sind gives it.
+type SlurmParameter struct{ Key, Value string }
+
+// SlurmParameters returns the slurm.conf parameters an identity mode
+// needs, in the order sind writes them: with clientIds, auth/slurm and
+// cred/slurm with slurm.key instead of munge, and the users' identities in
+// their tokens; with nssSlurm and clientIds, nss_slurm on the workers,
+// served from the job credential. sind writes each parameter unless
+// slurm.main sets it, and slurm.main's value must then list sind's.
+func (m IdentityMode) SlurmParameters() []SlurmParameter {
+	nssSlurm := SlurmParameter{"LaunchParameters", "enable_nss_slurm"}
+	switch m {
+	case IdentityNSSSlurm:
+		return []SlurmParameter{nssSlurm}
+	case IdentityClientIDs:
+		return []SlurmParameter{
+			{"AuthType", "auth/slurm"},
+			{"CredType", "cred/slurm"},
+			{"AuthInfo", "use_client_ids"},
+			nssSlurm,
+		}
+	default:
+		return nil
+	}
+}
+
 // validate checks the mode, empty for local, and that controllerUsers goes
 // with clientIds. Both modes other than local change the Slurm
-// configuration, which sind writes only for a managed cluster.
-func (i Identity) validate(managed bool) error {
+// configuration, which sind writes only for a managed cluster, and a
+// parameter of the mode (see SlurmParameters) that the main section sets
+// must list sind's value: sind writes no value of its own then.
+func (i Identity) validate(managed bool, main Section) error {
 	switch i.Mode {
 	case "", IdentityLocal:
 		return i.validateControllerUsers()
@@ -74,6 +102,11 @@ func (i Identity) validate(managed bool) error {
 	}
 	if !managed {
 		return fmt.Errorf("identity %s requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", i.Mode)
+	}
+	for _, p := range i.Mode.SlurmParameters() {
+		if value, ok := main.Parameter(p.Key); ok && !ListsValue(value, p.Value) {
+			return fmt.Errorf("slurm main sets %s=%s: identity %s needs %s in it", p.Key, value, i.Mode, p.Value)
+		}
 	}
 	return i.validateControllerUsers()
 }

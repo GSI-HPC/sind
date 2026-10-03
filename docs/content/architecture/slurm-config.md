@@ -45,7 +45,7 @@ AccountingStorageHost=db
 JobAcctGatherType=jobacct_gather/cgroup
 ```
 
-With [identity]({{< relref "/configuration/cluster-config#identity-section" >}}) `nssSlurm` or `clientIds` it contains the identity parameters, `clientIds` only for the first three, each unless the `main` section sets it:
+With [identity]({{< relref "/configuration/cluster-config#identity-section" >}}) `nssSlurm` or `clientIds` it contains the identity parameters, `clientIds` only for the first three, each unless the `main` section sets it, in which case its value must list sind's (validation checks it):
 
 ```
 AuthType=auth/slurm
