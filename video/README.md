@@ -81,9 +81,10 @@ without changing episode scripts.
 
 ## Run it
 
-Requires Node.js 22+, Python 3.10+, FFmpeg, and Chrome. In a cloud
-container, point HyperFrames at the preinstalled browser with
-`HYPERFRAMES_BROWSER_PATH`.
+While developing an episode, render it locally (a laptop or a Claude Code
+cloud session); the docs workflow renders the published version. Requires
+Node.js 22+, Python 3.10+ and FFmpeg; HyperFrames downloads its own Chrome, or
+uses `HYPERFRAMES_BROWSER_PATH`.
 
 ```bash
 cd video
@@ -92,7 +93,7 @@ pip install -r voice/requirements.txt
 npm run voice:setup                        # download Kokoro (about 350 MB) and patch it, once
 npm run episode -- voice quickstart        # narration into episodes/quickstart/assets/voice/
 npm run episode -- render quickstart       # renders/quickstart.mp4 (add --draft for speed)
-npm run episode -- publish quickstart      # docs/static/videos/ and docs/data/videos/
+npm run episode -- publish quickstart      # docs/static/videos/, docs/data/videos/ for a local Hugo preview
 npm run voice:samples                      # audition pack in renders/voice-samples/
 npm run sheet                              # sindy/sheet.png expression sheet
 ```
@@ -124,6 +125,9 @@ metadata loads from a local script.
 - Art: the code-drawn Sindy.
 - No background music.
 - The pipeline stays in `video/`, next to the docs it follows.
+- The docs workflow renders the episodes and the docs site serves them; no
+  rendered files are committed. Move to YouTube only if GitHub Pages turns out
+  too small.
 
 ## Videos in the docs
 
@@ -141,36 +145,41 @@ translatable. If an episode was not published into `docs/static/videos/` (for
 example a local `hugo server`), the shortcode renders nothing, so writing docs
 never needs the video toolchain.
 
+**Deployment.** `.github/workflows/docs.yml` builds `main` (at `/`) and `next`
+(at `/next/`) together on every push to either branch that touches `docs/` or
+`video/`, and deploys one Pages artifact. No `gh-pages` branch and no deploy
+history; pages removed from the docs disappear from the site.
+
+**Rendering in CI.** Before Hugo runs, the workflow calls `episode.mjs ci` for
+each branch. Every episode has a hash over its own files and everything shared
+that changes its pixels or sound (`lib/`, voice presets, lexicon, tools,
+lockfile). Renders live in a store kept in the Actions cache under that hash,
+so a docs-only push renders nothing, and changing one episode renders only that
+one (about 2-3× real time on a 4 vCPU runner). Changing `lib/` re-renders every
+episode, and so does a run after the cache was evicted (7 days unused).
+Rendered files are never committed; locally they are git-ignored.
+
 **Size.** The web encode (H.264 CRF 28, `-tune animation`) takes about 4 MB
 per minute; the 45-second pilot is 2.7 MB. Ten 3-minute guides are about
 120 MB per docs version, well under the 1 GB GitHub Pages site limit. The
 100 GB/month soft bandwidth limit allows roughly 8,000 full views a month.
 
-**Hosting (proposal, needs a decision).** Render in CI and serve the MP4s from
-the docs site itself:
+**Fallback.** If Pages turns out too small, upload release episodes to
+YouTube and point the shortcode at a privacy-enhanced embed. Note that every
+re-render gets a new YouTube video ID.
 
-- Self-hosted, so no third-party embed, cookies or tracking, and each docs
-  version (`main` at `/`, `next` at `/next/`) carries videos made from the
-  same commit as its text.
-- Nothing binary is committed to `main`/`next`: the rendered episodes are
-  cached in Actions, keyed on a hash of the episode, `lib/`, the voice preset
-  and the lexicon, so a docs push only re-renders changed episodes (about 2×
-  real time on a 4 vCPU runner).
-- The catch: today `peaceiris/actions-gh-pages` commits every build into the
-  `gh-pages` branch with `keep_files`, so every re-render would add megabytes
-  to a branch that each clone downloads. Switch both docs workflows to one
-  artifact-based Pages deployment (`actions/upload-pages-artifact` and
-  `actions/deploy-pages`) that builds `main` and `next` together. That keeps no
-  history and also drops pages deleted from the docs, which `keep_files`
-  currently leaves online. It needs **Settings → Pages → Source: GitHub
-  Actions**.
+### One-time switch from the gh-pages branch
 
-Alternatives: a separate repository whose Pages site only hosts the video
-files (leaves the current workflows alone, but needs a deploy token and cross-site
-URLs); YouTube (discovery and adaptive streaming, but uploads need OAuth or
-manual work, every re-render gets a new video ID, embeds contact Google, and
-versions drift; better as an extra channel for release episodes); or release
-assets (no home for the `next` preview).
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+2. **Settings → Environments → `github-pages`**: if deployments are limited to
+   selected branches, allow `next` as well as `main`.
+3. Merge the workflow into `next` (or run **Deploy docs** manually on `next`);
+   it publishes both versions.
+4. Delete the `gh-pages` branch.
+5. Until the next release, `main` still carries the old peaceiris workflow. If
+   docs change on `main` before then, it pushes a new `gh-pages` branch that
+   Pages ignores; delete it again, and run **Deploy docs** on `next` to update
+   the release docs.
 
 ## Next: skills
 
@@ -185,8 +194,8 @@ Bake the workflow into `.claude/skills/`:
 - `sindy-voice`: rules for speakable scripts, lexicon upkeep, voice presets.
 - The HyperFrames skills (`npx hyperframes skills update`) as a dependency for
   composition rules.
-- Real terminal output: record asciinema casts of the documented commands in
-  CI, where Docker is available, and play them back in the terminal scene.
+- Real terminal output: record asciinema casts of the documented commands
+  against a real cluster and play them back in the terminal scene.
 
 ## Sources
 

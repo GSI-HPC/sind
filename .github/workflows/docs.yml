@@ -1,28 +1,95 @@
 name: Deploy docs
 
+# Builds the release docs (main, at /) and the preview docs (next, at /next/)
+# together and deploys them as one Pages artifact, so no gh-pages branch
+# accumulates history. Video episodes (video/README.md) are rendered here into
+# each checkout's docs/ before Hugo runs. Renders are cached by a hash of their
+# inputs, so only new or changed episodes are rendered.
+
 on:
   push:
-    branches: [main]
-    paths: [docs/**]
+    branches: [main, next]
+    paths:
+      - docs/**
+      - video/**
+      - .github/workflows/docs.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: pages-main
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: docs
+    timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out main
+        uses: actions/checkout@v7
         with:
+          ref: main
+          path: main
           fetch-depth: 0
+
+      - name: Check out next
+        uses: actions/checkout@v7
+        with:
+          ref: next
+          path: next
+          fetch-depth: 0
+
+      - name: Restore rendered episodes
+        id: episodes
+        uses: actions/cache@v6
+        with:
+          path: video-store
+          key: video-episodes-${{ hashFiles('main/video/episodes/**', 'main/video/lib/**', 'main/video/voice/**', 'main/video/tools/**', 'main/video/package-lock.json', 'next/video/episodes/**', 'next/video/lib/**', 'next/video/voice/**', 'next/video/tools/**', 'next/video/package-lock.json') }}
+          restore-keys: video-episodes-
+
+      - name: Install FFmpeg
+        if: steps.episodes.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+
+      - name: Set up Python
+        if: steps.episodes.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Restore voice model
+        if: steps.episodes.outputs.cache-hit != 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/sindy-voice
+          key: sindy-voice-kokoro-v1.0
+
+      - name: Render video episodes
+        env:
+          CACHE_HIT: ${{ steps.episodes.outputs.cache-hit }}
+          HYPERFRAMES_NO_TELEMETRY: "1"
+        run: |
+          mkdir -p video-store
+          : > video-used.txt
+          for branch in main next; do
+            [ -d "$branch/video/episodes" ] || continue
+            if [ "$CACHE_HIT" != "true" ]; then
+              (cd "$branch/video" && npm ci --no-audit --no-fund)
+              pip install --quiet -r "$branch/video/voice/requirements.txt"
+              python3 "$branch/video/voice/sindy_voice.py" setup
+            fi
+            node "$branch/video/tools/episode.mjs" ci --all \
+              --store "$GITHUB_WORKSPACE/video-store" --used "$GITHUB_WORKSPACE/video-used.txt"
+          done
+          # Keep only the renders that main or next still use.
+          for entry in video-store/*; do
+            [ -e "$entry" ] || continue
+            grep -qx "$(basename "$entry")" video-used.txt || rm -rf "$entry"
+          done
 
       - name: Install Hugo
         uses: peaceiris/actions-hugo@v3
@@ -35,11 +102,27 @@ jobs:
           curl -sL https://github.com/thegeeklab/hugo-geekdoc/releases/latest/download/hugo-geekdoc.tar.gz | tar -xz -C themes/hugo-geekdoc/
 
       - name: Build
-        run: hugo --baseURL "https://gsi-hpc.github.io/sind/"
+        run: |
+          hugo --source main/docs --themesDir "$GITHUB_WORKSPACE/themes" \
+            --baseURL "https://gsi-hpc.github.io/sind/" --destination "$GITHUB_WORKSPACE/site"
+          hugo --source next/docs --themesDir "$GITHUB_WORKSPACE/themes" \
+            --baseURL "https://gsi-hpc.github.io/sind/next/" --destination "$GITHUB_WORKSPACE/site/next"
 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/public
-          keep_files: true
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

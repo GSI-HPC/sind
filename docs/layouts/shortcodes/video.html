@@ -1,10 +1,10 @@
 {{- /*
   Embed a Sindy video episode: {{< video "quickstart" >}}
 
-  The files come from the video pipeline (video/tools/publish.mjs), which
-  writes static/videos/<id>.{mp4,jpg,vtt} and data/videos/<id>.json. When an
-  episode has not been published (e.g. a local build without the pipeline),
-  the shortcode renders nothing.
+  The docs workflow renders the episode (video/tools/episode.mjs ci) into
+  static/videos/<id>.{mp4,jpg,vtt} and data/videos/<id>.json before building.
+  Without those files (e.g. a local build without the video pipeline), the
+  shortcode renders nothing.
 */ -}}
 {{- $id := .Get 0 -}}
 {{- $meta := index (site.Data.videos | default dict) $id -}}
