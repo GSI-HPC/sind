@@ -36,10 +36,10 @@ sind ssh -L 8080:localhost:80 controller
 Internally, `sind ssh` executes SSH via the mesh SSH container:
 
 ```bash
-docker exec -i -t sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND...]
+docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [COMMAND...]
 ```
 
-The relay container is `<realm>-ssh`, and `-t` is only passed when stdin is a terminal.
+The relay container is `<realm>-ssh`. `-t` is only passed when both stdin and stdout are terminals: through a pseudo-terminal, the output would get CRLF line endings and the remote stderr would arrive on stdout. Output that you capture or redirect, as in `v=$(sind ssh worker-0 -- hostname)` or `sind ssh worker-0 -- cat /etc/hosts > hosts`, therefore comes through unchanged, also in an interactive shell.
 
 Shell completion is available for both `sind ssh` and `sind exec` — press Tab to complete node and cluster names. Load it with `source <(sind completion bash)`, or the `zsh`, `fish` or `powershell` variant; `sind completion <shell> --help` shows how to install it permanently.
 

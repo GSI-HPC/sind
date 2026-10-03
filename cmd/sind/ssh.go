@@ -60,7 +60,11 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return usagef("ssh requires exactly one node, got %d", len(target))
 	}
 
-	isTTY := stdinIsTTY(cmd.InOrStdin())
+	// Through a pseudo-terminal, the remote output would come back with CRLF
+	// line endings and with stderr in stdout, so -t is only for a terminal
+	// at both ends: a script that captures or redirects the output gets it
+	// unchanged even when it runs in an interactive shell.
+	isTTY := stdinIsTTY(cmd.InOrStdin()) && stdoutIsTTY(cmd.OutOrStdout())
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err
@@ -192,7 +196,18 @@ func runExec(cmd *cobra.Command, args []string) error {
 // stdinIsTTY reports whether stdin, the command's input, is a terminal. A
 // reader that is not a file, as set with cmd.SetIn, is not.
 func stdinIsTTY(stdin io.Reader) bool {
-	f, ok := stdin.(*os.File)
+	return isTerminal(stdin)
+}
+
+// stdoutIsTTY reports whether stdout, the command's output, is a terminal.
+// A writer that is not a file, as set with cmd.SetOut, is not.
+func stdoutIsTTY(stdout io.Writer) bool {
+	return isTerminal(stdout)
+}
+
+// isTerminal reports whether stream is a file open on a terminal.
+func isTerminal(stream any) bool {
+	f, ok := stream.(*os.File)
 	if !ok {
 		return false
 	}
