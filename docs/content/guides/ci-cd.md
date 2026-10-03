@@ -28,6 +28,8 @@ On 64-bit ARM, download `sind-linux-arm64` instead.
 
 sind requires Docker Engine 28.0+, running rootful and without `userns-remap`, and a Linux host with cgroupv2 and `nsdelegate`. Most modern CI runners meet these requirements out of the box. Rootless Docker and `userns-remap` do not work: Docker refuses the writable cgroups of sind's nodes there, which `sind doctor` and `sind create cluster` report before anything is pulled.
 
+Jobs that share a Docker daemon, such as jobs on one self-hosted runner or jobs that mount the host's Docker socket, must each use their own realm (`SIND_REALM`): sind's realm lock does not reach across them. Each realm's mesh and each cluster take one network from the daemon's default address pools, which a stock daemon fills at about 30 networks; a runner that hosts many such jobs at once needs smaller pools (see [Limits]({{< relref "/architecture/networking#limits" >}})).
+
 ## Data directory
 
 By default every node mounts the job's working directory, usually the checked-out workspace, read-write at `/data` (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})). Files that root writes there from a node belong to root on the runner, so a later step that cleans the workspace may need `sudo`. `--data volume`, or `storage.dataStorage.type: volume` in the config, keeps the workspace out of the cluster.

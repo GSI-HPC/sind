@@ -82,7 +82,7 @@ A cluster with [users]({{< relref "/configuration/cluster-config#users-section" 
 sind enter --user alice               # shell as alice, in /home/alice
 sind exec -u alice -- sbatch job.sh   # command as alice, in /home/alice
 sind ssh alice@worker-0               # SSH as alice (ssh -l alice)
-ssh -l alice controller               # with the exported ssh_config
+ssh -l alice controller               # with the exported ssh_config and host DNS
 ```
 
 `--user`, or `-u`, runs `docker exec -u USER` in the user's home directory, `/home/USER`, which every node shares. `USER@NODE` passes `-l USER` to SSH. `--user root` is the default. A user name that is not valid exits `2`; one that the cluster does not have fails in docker.
@@ -187,3 +187,5 @@ The `Include` relies on these OpenSSH behaviours:
 {{< hint warning >}}
 While a node of that name exists, `ssh controller`, `ssh db` or `ssh db.lab` (with a cluster named `lab`) connect to the sind node, as root, even when your network has a host of that name. Reach such a host by its full name, or include the default realm's `ssh_config` only while you need it.
 {{< /hint >}}
+
+Short names also need [host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}}) of `*.<realm>.sind`: OpenSSH keeps a canonical name only if the host's resolver finds it, and otherwise falls back to the bare name, which no `Host` block of the exported config matches (`Could not resolve hostname controller`). sind sets up host DNS only with systemd-resolved and the polkit authorization that `sind doctor` checks. Without it, use full names such as `controller.default.sind.sind`, which the relay resolves, or `sind ssh`.

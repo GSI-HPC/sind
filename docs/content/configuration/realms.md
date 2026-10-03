@@ -20,6 +20,8 @@ Because names join realm and cluster with `-`, realm `ci` with cluster `42-dev` 
 - **Multiple environments** — run separate sets of clusters that don't interfere
 - **Testing sind itself** — integration tests use random realms for isolation
 
+Each realm's mesh and each cluster take one Docker network from the daemon's default address pools, which a stock daemon fills at about 30 networks. Hosts that run many realms in parallel need more, smaller pools; see [Limits]({{< relref "/architecture/networking#limits" >}}).
+
 ## Setting the realm
 
 Realm is determined by the following precedence (highest first):

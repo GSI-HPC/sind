@@ -130,6 +130,22 @@ RULES
 {{< /tab >}}
 {{< /tabs >}}
 
+## Limits
+
+- **Address pools.** Each cluster network and each realm's mesh take one network from Docker's default address pools. A stock daemon has room for about 30 such networks (`172.17.0.0/16` to `172.31.0.0/16`, and `192.168.0.0/16` in `/20` steps), shared with Compose projects and every other network on the host. When they run out, `sind create cluster` fails with Docker's `all predefined address pools have been fully subnetted`. Hosts that run many clusters or realms at once can give Docker more, smaller pools in `/etc/docker/daemon.json` and restart the daemon:
+
+  ```json
+  {
+    "default-address-pools": [
+      {"base": "10.200.0.0/16", "size": 24}
+    ]
+  }
+  ```
+
+  This yields 256 networks of 254 addresses each.
+- **Bridge ports.** A Linux bridge has 1,024 ports, so a Docker bridge network holds at most about 1,023 containers. The mesh holds the DNS container, the SSH relay and every node of every cluster in the realm. Host limits such as `fs.inotify.max_user_instances` and memory usually bind long before (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})).
+- **Clients sharing a Docker daemon.** The realm lock lives in each client's state directory (see [Realms]({{< relref "/configuration/realms" >}})). sind clients that share one daemon, such as several users of a host or CI jobs that share the host's Docker socket, are not serialized against each other and must use separate realms.
+
 ## SSH infrastructure
 
 ### Global resources
