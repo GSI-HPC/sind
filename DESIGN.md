@@ -508,11 +508,11 @@ By default (without `--unmanaged`), sind:
 4. Reconfigures slurmctld (`scontrol reconfigure`)
 5. Starts slurmd on the new node(s)
 
-If any step fails or the command is interrupted after the first container exists, sind removes the new containers, their mesh entries and their `sind-nodes.conf` definitions again (and reconfigures slurmctld), so a retry starts from a clean state.
+Steps 3 to 5 run while the new workers are registered with the mesh DNS and known_hosts. If any step fails or the command is interrupted after the first container exists, sind removes the new containers, their mesh entries and their `sind-nodes.conf` definitions again (and reconfigures slurmctld), so a retry starts from a clean state.
 
 Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration. On an unmanaged cluster (see Unmanaged Cluster) every new worker is unmanaged, with or without `--unmanaged`. A controller that is stopped or frozen fails the command with an error that says so: start it with `sind power on` or `sind power unfreeze` first.
 
-**delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. sind needs a running controller for this: with the controller stopped or frozen, deleting a managed worker fails and removes nothing, as the node would otherwise stay in the Slurm configuration without a container. Unmanaged workers need no controller. When none of the managed workers is in `sind-nodes.conf`, sind leaves the file alone and does not reconfigure. On an unmanaged cluster, or one without `sind-nodes.conf`, it never edits the Slurm configuration or runs `scontrol`.
+**delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container, while it removes their mesh DNS and known_hosts entries. sind needs a running controller for this: with the controller stopped or frozen, deleting a managed worker fails and removes nothing, as the node would otherwise stay in the Slurm configuration without a container. Unmanaged workers need no controller. When none of the managed workers is in `sind-nodes.conf`, sind leaves the file alone and does not reconfigure. On an unmanaged cluster, or one without `sind-nodes.conf`, it never edits the Slurm configuration or runs `scontrol`.
 
 ### Power Control
 

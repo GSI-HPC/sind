@@ -78,10 +78,8 @@ func (o WorkerAddOptions) Check() error {
 //  3. Check an explicit image's Slurm version
 //  4. Create worker container(s)
 //  5. Wait for readiness, inject SSH keys, collect host keys
-//  6. Register DNS + known_hosts
-//  7. Update sind-nodes.conf with new node definitions
-//  8. Reconfigure slurmctld
-//  9. Enable slurmd on new nodes
+//  6. Register DNS + known_hosts, while sind-nodes.conf gets the new nodes,
+//     slurmctld is reconfigured and slurmd starts on the new nodes
 //
 // For unmanaged workers (Unmanaged=true), the Slurm steps are skipped.
 // Workers added to an unmanaged cluster are always unmanaged. A failure
@@ -138,9 +136,12 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 	managed := !opts.Unmanaged
 
-	// Validate sind-nodes.conf for managed workers.
+	// Read sind-nodes.conf for managed workers: it has to be there, and
+	// updateNodesConf adds the new nodes to it.
+	var nodesConf string
 	if managed {
-		if _, err := readNodesConf(ctx, client, controller); err != nil {
+		nodesConf, err = readNodesConf(ctx, client, controller)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -238,21 +239,29 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return nil, err
 	}
 
-	// Register DNS + known_hosts and build result.
-	nodes, err := registerNodes(ctx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
-	if err != nil {
-		return nil, err
-	}
-
-	// For managed workers: update sind-nodes.conf + reconfigure slurmctld.
+	// Register DNS + known_hosts while the Slurm side is updated: Slurm
+	// uses short hostnames resolved by Docker embedded DNS on the cluster
+	// network, as in Create. The group has no shared context, so a failure
+	// on one side does not cancel the other halfway, such as in the middle
+	// of a CoreDNS restart; the rollback undoes both.
+	var nodes []*Node
+	var g errgroup.Group
+	g.Go(func() error {
+		var err error
+		nodes, err = registerNodes(ctx, meshMgr, opts.ClusterName, nodeConfigs, nodeResults)
+		return err
+	})
 	if managed {
 		confUpdated = true
-		if err := updateNodesConf(ctx, client, controllerName, nodeConfigs); err != nil {
-			return nil, err
-		}
-		if err := enableSlurm(ctx, client, realm, opts.ClusterName, nodeConfigs, readinessInterval, watcher); err != nil {
-			return nil, err
-		}
+		g.Go(func() error {
+			if err := updateNodesConf(ctx, client, controllerName, nodesConf, nodeConfigs); err != nil {
+				return err
+			}
+			return enableSlurm(ctx, client, realm, opts.ClusterName, nodeConfigs, readinessInterval, watcher)
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	needsCleanup = false
@@ -423,14 +432,10 @@ func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAdd
 	return false, nil
 }
 
-// updateNodesConf reads the current sind-nodes.conf from the controller,
-// adds the new node definitions, writes it back, and reconfigures slurmctld.
-func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, nodeConfigs []RunConfig) error {
-	current, err := client.ReadFile(ctx, controllerName, slurm.NodesConfPath)
-	if err != nil {
-		return fmt.Errorf("reading sind-nodes.conf: %w", err)
-	}
-
+// updateNodesConf adds the new node definitions to the sind-nodes.conf
+// content read before (see readNodesConf), writes it back, and
+// reconfigures slurmctld.
+func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, current string, nodeConfigs []RunConfig) error {
 	var entries []slurm.NodeEntry
 	for _, nc := range nodeConfigs {
 		memMB, err := slurm.ParseMemoryMB(nc.Memory)
