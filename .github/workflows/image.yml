@@ -1,8 +1,16 @@
 name: Image
 
+# Publishes the sind-node images (docker-bake.hcl) to ghcr.io/gsi-hpc/sind-node:
+# - a push to main that changes the image build publishes <version>,
+#   <YY>.<MM> and latest, which development builds of sind use by default
+# - a release tag vX.Y.Z publishes vX.Y.Z-<YY>.<MM> and vX.Y.Z, which the
+#   release's binaries use by default (.goreleaser.yaml); GitHub does not
+#   apply path filters to tag pushes
+# Nothing else publishes: a run on any other ref fails.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "Dockerfile"
       - "docker-bake.hcl"
@@ -11,130 +19,41 @@ on:
 permissions:
   contents: read
 
-env:
-  IMAGE: ghcr.io/gsi-hpc/sind-node
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  targets:
+  plan:
     runs-on: ubuntu-latest
     outputs:
-      targets: ${{ steps.targets.outputs.matrix }}
-      builds: ${{ steps.builds.outputs.matrix }}
+      builds: ${{ steps.plan.outputs.builds }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - name: Plan the builds
+        id: plan
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/main) release="" ;;
+            refs/tags/v*) release="$GITHUB_REF_NAME" ;;
+            *)
+              echo "::error::Images are published from main and release tags only, not from $GITHUB_REF"
+              exit 1
+              ;;
+          esac
+          jq -cnr --arg ref "$GITHUB_SHA" --arg release "$release" \
+            '"builds=\([{ref: $ref, release: $release}] | tojson)"' >> "$GITHUB_OUTPUT"
 
-      # One bake target per Slurm release line (SLURM_RELEASES in
-      # docker-bake.hcl). The bake file also sets the tags, including
-      # latest on the newest release line.
-      - name: List node image targets
-        id: targets
-        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
-
-      # Each target once per platform, built on a native runner: compiling
-      # the image under emulation would take hours.
-      - name: List builds per platform
-        id: builds
-        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
-        with:
-          fields: platforms
-
-  build:
-    name: build (${{ matrix.target }}, ${{ matrix.platforms }})
-    needs: targets
-    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
-    permissions:
-      contents: read
-      packages: write
+  publish:
+    name: publish (${{ matrix.release || 'main' }})
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.targets.outputs.builds) }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Push untagged; the merge job tags the multi-platform image.
-      - name: Build and push by digest
-        id: bake
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
-        with:
-          targets: ${{ matrix.target }}
-          allow: network.host
-          set: |
-            *.platform=${{ matrix.platforms }}
-            *.tags=${{ env.IMAGE }}
-            *.output=type=image,push-by-digest=true,name-canonical=true,push=true
-            *.cache-from=type=gha,scope=${{ matrix.target }}-${{ runner.arch }}
-            *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}-${{ runner.arch }}
-
-      - name: Export digest
-        env:
-          DIGEST: ${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['containerimage.digest'] }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/digests"
-          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: digests-${{ matrix.target }}-${{ runner.arch }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    name: merge (${{ matrix.target }})
-    needs: [targets, build]
-    runs-on: ubuntu-latest
+        include: ${{ fromJSON(needs.plan.outputs.builds) }}
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.targets.outputs.targets) }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: digests-${{ matrix.target }}-*
-          path: ${{ runner.temp }}/digests
-          merge-multiple: true
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tag the multi-platform image
-        env:
-          TARGET: ${{ matrix.target }}
-        run: |
-          mapfile -t tags < <(docker buildx bake --print "$TARGET" | jq -r --arg t "$TARGET" '.target[$t].tags[]')
-          args=()
-          for tag in "${tags[@]}"; do
-            args+=(--tag "$tag")
-          done
-          for digest in "$RUNNER_TEMP"/digests/*; do
-            args+=("$IMAGE@sha256:$(basename "$digest")")
-          done
-          docker buildx imagetools create "${args[@]}"
-          docker buildx imagetools inspect "${tags[0]}"
+    uses: ./.github/workflows/image-build.yml
+    with:
+      ref: ${{ matrix.ref }}
+      release: ${{ matrix.release }}

@@ -11,7 +11,8 @@ variable "IMAGE_NAME" {
 # Slurm releases with an official node image: the newest release of each
 # supported release line, newest line first. Each entry builds the target
 # slurm-<YY>-<MM>, tagged <version> and <YY>.<MM>; the first entry is also
-# tagged latest, the image sind uses by default. sha256 is the checksum of
+# tagged latest, the image development builds of sind use by default.
+# sha256 is the checksum of
 # https://download.schedmd.com/slurm/slurm-<version>.tar.bz2. The other
 # components (UCX, PMIx, PRRTE, Open MPI, libjwt) are pinned only in the
 # Dockerfile, by the ARG defaults and checksums of their builder stages.
@@ -26,6 +27,18 @@ variable "SLURM_RELEASES" {
       sha256  = "34ace13f81011add6094569d13bfc4006ad8868201c2236e2905443c7e526393"
     },
   ]
+}
+
+# sind release (vX.Y.Z) to tag the images for instead. The image workflow
+# sets it when it builds a release tag: each target is then tagged
+# vX.Y.Z-<YY>.<MM>, and the first one also vX.Y.Z, the image the release's
+# binaries use by default (.goreleaser.yaml).
+variable "SIND_RELEASE" {
+  default = ""
+  validation {
+    condition     = SIND_RELEASE == "" || can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+", SIND_RELEASE))
+    error_message = "SIND_RELEASE must be empty or a sind release tag such as v1.2.3."
+  }
 }
 
 # Release line of a Slurm version, e.g. "25.11" for "25.11.8".
@@ -52,11 +65,17 @@ target "slurm" {
     SLURM_VERSION = r.version
     SLURM_SHA256  = r.sha256
   }
-  tags = concat(
-    [
-      "${REGISTRY}/${IMAGE_NAME}:${r.version}",
-      "${REGISTRY}/${IMAGE_NAME}:${release_line(r.version)}",
-    ],
-    r.version == SLURM_RELEASES[0].version ? ["${REGISTRY}/${IMAGE_NAME}:latest"] : [],
+  tags = (SIND_RELEASE == ""
+    ? concat(
+      [
+        "${REGISTRY}/${IMAGE_NAME}:${r.version}",
+        "${REGISTRY}/${IMAGE_NAME}:${release_line(r.version)}",
+      ],
+      r.version == SLURM_RELEASES[0].version ? ["${REGISTRY}/${IMAGE_NAME}:latest"] : [],
+    )
+    : concat(
+      ["${REGISTRY}/${IMAGE_NAME}:${SIND_RELEASE}-${release_line(r.version)}"],
+      r.version == SLURM_RELEASES[0].version ? ["${REGISTRY}/${IMAGE_NAME}:${SIND_RELEASE}"] : [],
+    )
   )
 }

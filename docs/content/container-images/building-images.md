@@ -15,9 +15,14 @@ sind publishes a multi-role node image for each supported Slurm release line to 
 | 26.05 | `latest`, `26.05`, `26.05.4` |
 | 25.11 | `25.11`, `25.11.8` |
 
-- `latest` is the newest release line. sind uses it when `defaults.image` is not specified.
+- `latest` is the newest release line. Builds of sind from source (`make build`, `go install`) use it when `defaults.image` is not specified.
 - `<YY>.<MM>` (e.g. `25.11`) follows the newest patch release of that line. Use it to stay on one Slurm release line.
 - `<YY>.<MM>.<patch>` (e.g. `25.11.8`) pins a patch release.
+
+Each sind release also publishes the images it was released with:
+
+- `vX.Y.Z` (e.g. `v0.11.0`) is the newest release line's image of sind vX.Y.Z. The release binaries of vX.Y.Z use it when `defaults.image` is not specified, so upgrading sind also brings the node image it was released with, and a pinned sind version keeps its Slurm version.
+- `vX.Y.Z-<YY>.<MM>` (e.g. `v0.11.0-25.11`) is the image of each supported release line at sind vX.Y.Z.
 
 Every tag is a multi-platform image for linux/amd64 and linux/arm64; Docker pulls the variant that matches the host.
 

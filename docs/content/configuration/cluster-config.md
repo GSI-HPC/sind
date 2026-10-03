@@ -20,7 +20,7 @@ This is equivalent to the fully expanded form:
 kind: Cluster
 name: default
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:latest
+  image: ghcr.io/gsi-hpc/sind-node:v0.11.0  # the image of your sind release
   cpus: 1
   memory: 512m
   tmpSize: 256m
@@ -113,7 +113,7 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `image` | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
+| `image` | the image of the sind release, e.g. `ghcr.io/gsi-hpc/sind-node:v0.11.0` ([details]({{< relref "/container-images/building-images#official-images" >}})) | Container image |
 | `cpus` | `1` | CPU limit per container; a managed worker's Slurm `CPUs` |
 | `memory` | `"512m"` | Memory limit per container, without swap, in Docker's size syntax (see below); a managed worker's Slurm `RealMemory`; `/dev/shm` gets half of it |
 | `tmpSize` | `"256m"` | tmpfs size for `/tmp`; files there count against `memory` |

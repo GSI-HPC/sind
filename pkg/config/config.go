@@ -237,11 +237,17 @@ type Cluster struct {
 // Default resource values for cluster nodes.
 const (
 	DefaultClusterName = "default"
-	DefaultImage       = "ghcr.io/gsi-hpc/sind-node:latest"
 	DefaultCPUs        = 1
 	DefaultMemory      = "512m"
 	DefaultTmpSize     = "256m"
 )
+
+// DefaultImage is the node image of nodes that set none. Release builds
+// set it with -ldflags "-X" to the image the image workflow publishes for
+// their release, ghcr.io/gsi-hpc/sind-node:vX.Y.Z (.goreleaser.yaml), so a
+// release keeps the node image it was built with. Other builds use latest,
+// the newest Slurm release line.
+var DefaultImage = "ghcr.io/gsi-hpc/sind-node:latest"
 
 // ApplyDefaults populates missing fields with defaults.
 // If no nodes are defined, creates a minimal cluster (1 controller + 1 worker).

@@ -691,13 +691,13 @@ This is equivalent to:
 kind: Cluster
 name: default
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:latest
+  image: ghcr.io/gsi-hpc/sind-node:vX.Y.Z  # the sind release; latest for other builds
 nodes:
   - role: controller
   - role: worker
 ```
 
-When `defaults.image` is omitted, sind uses the generic image `ghcr.io/gsi-hpc/sind-node:latest`.
+When `defaults.image` is omitted, sind uses the generic image published for its own release, `ghcr.io/gsi-hpc/sind-node:vX.Y.Z` for sind vX.Y.Z, or `ghcr.io/gsi-hpc/sind-node:latest` when it is not a release build (see Generic Image).
 
 ### Shorthand Node Syntax
 
@@ -730,7 +730,7 @@ name: test-cluster                       # default: "default"
 realm: sind                              # default: "sind"; --realm and SIND_REALM win
 
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:25.11 # default: sind-node:latest
+  image: ghcr.io/gsi-hpc/sind-node:25.11 # default: sind-node:<sind release>
   tmpSize: 256m                          # per-node /tmp tmpfs size
   cpus: 1                                # container CPU limit
   memory: 512m                           # container memory limit
@@ -869,7 +869,7 @@ Validation rules:
 
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
-| `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
+| `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:vX.Y.Z` (the sind release; `latest` for other builds) | Container image |
 | `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp, in the kernel's tmpfs syntax: a whole number with an optional `k`, `m`, `g`, `t`, `p` or `e`, or a percentage of the memory; files there count against `memory` |
 | `cpus` | global + per-node | `1` | CPU limit; a managed worker's Slurm `CPUs` |
 | `memory` | global + per-node | `512m` | Memory limit, without swap, in Docker's size syntax (`512m`, `2g`, `2gb`, `1.5GiB`, plain bytes); a managed worker's Slurm `RealMemory`, in MiB; `/dev/shm` gets half of it |
@@ -1522,9 +1522,11 @@ sind provides a generic multi-role image that works for all node types, built fo
 ghcr.io/gsi-hpc/sind-node:latest                # newest release line
 ghcr.io/gsi-hpc/sind-node:<YY>.<MM>             # newest patch release of a line, e.g. 25.11
 ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.8
+ghcr.io/gsi-hpc/sind-node:vX.Y.Z                # newest release line at sind release vX.Y.Z
+ghcr.io/gsi-hpc/sind-node:vX.Y.Z-<YY>.<MM>      # a release line at sind release vX.Y.Z
 ```
 
-`latest` is the default image when `defaults.image` is not specified in the cluster configuration.
+The default image when `defaults.image` is not specified is `config.DefaultImage`. Release builds set it with `-ldflags -X` (`.goreleaser.yaml`) to `vX.Y.Z`, the image published for their own tag, so a sind upgrade switches to the image it was released with, which Docker then pulls, and a pinned sind version keeps its Slurm version. Builds from source (`make build`, `go install`) keep `latest`. The image workflow (`.github/workflows/image.yml`) publishes `latest`, `<YY>.<MM>` and `<YY>.<MM>.<patch>` from `main` when the image build changes, and `vX.Y.Z` and `vX.Y.Z-<YY>.<MM>` for each release tag; it publishes from no other ref. The maintainer publishes a release once the image workflow of its tag has finished, since its binaries refer to these tags.
 
 The generic image:
 - Published for linux/amd64 and linux/arm64

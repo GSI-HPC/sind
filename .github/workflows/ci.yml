@@ -177,8 +177,9 @@ jobs:
             *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}-${{ runner.arch }}
             *.tags=local/sind-node:ci
 
-      # The mesh's SSH relay runs sind-node:latest, which Docker only pulls
-      # when missing. Use the image under test so it matches this platform.
+      # The mesh's SSH relay runs sind's default node image, which is
+      # sind-node:latest for the test binaries. Tag the image under test as
+      # it, so the relay runs that image and nothing is pulled.
       - name: Use the image under test for the SSH relay
         run: docker tag local/sind-node:ci ghcr.io/gsi-hpc/sind-node:latest
 

@@ -19,7 +19,7 @@ toc: true
 
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
-| `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
+| `image` | global + per-node | the image of the sind release, e.g. `ghcr.io/gsi-hpc/sind-node:v0.11.0` ([details]({{< relref "/container-images/building-images#official-images" >}})) | Container image |
 | `cpus` | global + per-node | `1` | CPU limit; a managed worker's Slurm `CPUs` |
 | `memory` | global + per-node | `"512m"` | Memory limit, without swap, in Docker's size syntax (`2g`, `2gb`, `1.5GiB`, ...), for the jobs, the node's own services and its `/tmp`, `/run` and `/dev/shm` files; `/dev/shm` gets half of it; a managed worker's Slurm `RealMemory` |
 | `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp`, a whole number with an optional unit or a percentage; files there count against `memory` |
