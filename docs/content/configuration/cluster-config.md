@@ -219,7 +219,7 @@ users:
 |---------------|---------|-------------|
 | `name` | — | Account name: lowercase letters, digits, `_` and `-`, not starting with `-`, at most 64 characters, not `root` |
 | `parent` | `root` | Parent account: `root` or an account declared before this one |
-| `limits` | none | Further `sacctmgr add account` options, passed as `key=value`, e.g. `GrpTRES: cpu=4`, `MaxJobs: 1`, `Fairshare: 10` |
+| `limits` | none | Further `sacctmgr add account` options, passed as `key=value`, e.g. `GrpTRES: cpu=4`, `MaxJobs: 1`, `Fairshare: 10`. The keys are among the options listed below |
 
 Once slurmctld has registered the cluster with slurmdbd, sind runs `sacctmgr -i` on the controller: `add account` for each account, in list order; `add user` for each user with accounts, with `defaultaccount` set to the first and `adminlevel` if set; then `add coordinator`. The example runs:
 
@@ -230,6 +230,8 @@ sacctmgr -i add user alice account=theory defaultaccount=theory
 sacctmgr -i add user bob account=physics,theory defaultaccount=physics
 sacctmgr -i add coordinator account=physics names=bob
 ```
+
+`limits` keys are these options, in any case: `Description`, `Organization` and `Flags` of the account, and `Comment`, `DefaultQOS`, `Fairshare` (or `Shares`), `GrpJobs`, `GrpJobsAccrue`, `GrpSubmitJobs`, `GrpTRES`, `GrpTRESMins`, `GrpTRESRunMins`, `GrpWall`, `MaxJobs`, `MaxJobsAccrue`, `MaxSubmitJobs`, `MaxTRES` (or `MaxTRESPerJob`), `MaxTRESMins` (or `MaxTRESMinsPerJob`), `MaxTRESPerNode`, `MaxTRESRunMins`, `MaxWall` (or `MaxWallDurationPerJob`), `MinPrioThresh`, `Priority` and `QOS` (or `QosLevel`) of its association. sacctmgr accepts abbreviations, but sind takes only these full names, so that no key reaches the name, parent or cluster options sind sets.
 
 Every account a user names must be declared, so a typo fails validation instead of creating a new account. See [Users and Identity]({{< relref "/guides/users" >}}) for a worked example with limits and roles. The associations are in place when `sind create cluster` returns. sind does not enforce them: set `AccountingStorageEnforce=associations,limits` in the [`main` section](#slurm-section) to reject jobs without an association and apply the limits. Slurm accounts and Linux groups are unrelated, even when they share a name.
 
@@ -330,7 +332,7 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `devices` paths must be absolute (start with `/`)
 - `securityOpt` entries must name an option Docker knows, with a value: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges` (value optional), `writable-cgroups=` or `systempaths=`
 - `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute
-- User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647, not 65534 or 65535, and unique, private groups included; a user's `group` and `groups` must be declared in `groups`
+- User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647, not 65534 or 65535, and unique, private groups included; a user's `group` and `groups` must be declared in `groups`, and `groups` must not repeat an entry or the primary `group`
 - `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`
-- `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; every account a user names must be declared; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
+- `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; `limits` keys must be among the options in the [Accounts section](#accounts-section), with non-empty values; every account a user names must be declared, at most once in each of `accounts` and `coordinator`; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - Unknown keys are rejected
