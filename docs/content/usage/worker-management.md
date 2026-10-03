@@ -78,7 +78,7 @@ For managed workers (the default), sind:
 
 This requires a running controller and `sind-nodes.conf` in `/etc/slurm`. If you replaced the generated Slurm configuration, use `--unmanaged` instead. If the controller is stopped or frozen, sind fails with an error that says so: run `sind power on` or `sind power unfreeze` on it first.
 
-If a step fails, or you interrupt the command, sind removes the new containers and their `sind-nodes.conf` definitions again, so you can simply retry.
+If a step fails, or you interrupt the command, sind removes the new containers again and writes back `sind-nodes.conf` as it found it, so you can simply retry.
 
 On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), every new worker is unmanaged, with or without `--unmanaged`.
 

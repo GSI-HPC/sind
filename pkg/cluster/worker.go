@@ -253,7 +253,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
 			defer cancel()
 			if confUpdated {
-				revertNodesConf(cleanupCtx, client, controllerName, nodeConfigs)
+				revertNodesConf(cleanupCtx, client, controllerName, nodesConf, nodeConfigs)
 			}
 			if err := cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs); err != nil {
 				retErr = errors.Join(retErr, fmt.Errorf("rolling back: %w", err))
@@ -452,28 +452,31 @@ func updateNodesConf(ctx context.Context, client *docker.Client, controllerName 
 	return writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
 }
 
-// revertNodesConf removes the nodes of a failed WorkerAdd from
+// revertNodesConf takes the nodes of a failed WorkerAdd out of
 // sind-nodes.conf again, and reconfigures slurmctld, so that neither a
-// phantom node nor, after a retry, a duplicate definition stays behind.
-// Errors are logged: this is best-effort cleanup.
-func revertNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, nodeConfigs []RunConfig) {
-	names := make([]string, len(nodeConfigs))
-	for i, nc := range nodeConfigs {
-		names[i] = nc.ShortName
-	}
-	current, err := client.ReadFile(ctx, controllerName, slurm.NodesConfPath)
-	if err == nil {
-		err = removeNodesConf(ctx, client, controllerName, current, names)
-	}
-	if err != nil {
+// phantom node nor, after a retry, a duplicate definition stays behind. It
+// writes back original, the content WorkerAdd read before it added them:
+// the realm lock kept others from changing the file since, and the file
+// itself may hold a write that failed. Errors are logged: this is
+// best-effort cleanup.
+func revertNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, original string, nodeConfigs []RunConfig) {
+	if err := writeNodesConfAndReconfigure(ctx, client, controllerName, original); err != nil {
+		names := make([]string, len(nodeConfigs))
+		for i, nc := range nodeConfigs {
+			names[i] = nc.ShortName
+		}
 		sindlog.From(ctx).ErrorContext(ctx, "cleanup: removing the new nodes from sind-nodes.conf", "nodes", strings.Join(names, ","), "error", err)
 	}
 }
 
 // writeNodesConfAndReconfigure writes sind-nodes.conf to the controller
-// and triggers slurmctld to reload.
+// and triggers slurmctld to reload. sind-nodes.conf defines every managed
+// worker, so the write replaces the file in one step (see
+// docker.Client.ReplaceFile), and it ignores the cancellation of ctx, as
+// the --wait deadline or Ctrl+C would otherwise kill the docker CLI
+// halfway.
 func writeNodesConfAndReconfigure(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, content string) error {
-	if err := client.WriteFile(ctx, controllerName, slurm.NodesConfPath, content); err != nil {
+	if err := client.ReplaceFile(context.WithoutCancel(ctx), controllerName, slurm.NodesConfPath, content); err != nil {
 		return fmt.Errorf("updating sind-nodes.conf: %w", err)
 	}
 	if _, err := client.Exec(ctx, controllerName, "scontrol", "reconfigure"); err != nil {

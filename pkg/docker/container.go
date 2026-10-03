@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -373,6 +374,23 @@ func (c *Client) WriteFile(ctx context.Context, container ContainerName, path, c
 	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
 		"sh", "-c", "cat > "+path)
 }
+
+// ReplaceFile replaces a file in a running container via docker exec in
+// one step, unlike WriteFile, whose `cat >` truncates it first: the
+// content goes to a temporary file next to path, which takes path's place
+// (rename(2)) only once it holds all of content. A reader sees the old or
+// the new content, never a part of it, even when the docker CLI dies
+// mid-write and the shell in the container reads an early end of input.
+// The file is a new one, owned by the exec user, with its umask's mode.
+func (c *Client) ReplaceFile(ctx context.Context, container ContainerName, path, content string) error {
+	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
+		"sh", "-c", replaceFileScript, "sh", path, strconv.Itoa(len(content)))
+}
+
+// replaceFileScript writes its input to a temporary file next to $1, named
+// after the shell's PID, and moves it over $1 if it holds $2 bytes, or
+// removes it and fails.
+const replaceFileScript = `tmp="$1.tmp.$$"; cat > "$tmp" && [ $(wc -c < "$tmp") -eq "$2" ] && mv -f "$tmp" "$1" || { rm -f "$tmp"; exit 1; }`
 
 // AppendFile appends content to a file in a running container via docker exec.
 func (c *Client) AppendFile(ctx context.Context, container ContainerName, path, content string) error {

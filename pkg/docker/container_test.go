@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -111,15 +112,19 @@ func TestContainerExecAndFiles(t *testing.T) {
 	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)               // run
-		rec.AddResult("hello\n", "", nil)                // exec echo
-		rec.AddResult("", "", nil)                       // write
-		rec.AddResult("", "", nil)                       // append
-		rec.AddResult("line1\nline2\n", "", nil)         // read
-		rec.AddResult("", "", nil)                       // copy to
-		rec.AddResult(copyFromTar("content-a"), "", nil) // copy from
-		rec.AddResult(n+"\n", "", nil)                   // kill (cleanup)
-		rec.AddResult(n+"\n", "", nil)                   // rm (cleanup)
+		rec.AddResult("abc123\n", "", nil)                 // run
+		rec.AddResult("hello\n", "", nil)                  // exec echo
+		rec.AddResult("", "", nil)                         // write
+		rec.AddResult("", "", nil)                         // append
+		rec.AddResult("line1\nline2\n", "", nil)           // read
+		rec.AddResult("", "", nil)                         // replace
+		rec.AddResult("", "", errors.New("exit status 1")) // short replace
+		rec.AddResult("new\n", "", nil)                    // read
+		rec.AddResult("/tmp/test.txt\n", "", nil)          // ls
+		rec.AddResult("", "", nil)                         // copy to
+		rec.AddResult(copyFromTar("content-a"), "", nil)   // copy from
+		rec.AddResult(n+"\n", "", nil)                     // kill (cleanup)
+		rec.AddResult(n+"\n", "", nil)                     // rm (cleanup)
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
@@ -145,6 +150,21 @@ func TestContainerExecAndFiles(t *testing.T) {
 	content, err := c.ReadFile(ctx, name, "/tmp/test.txt")
 	require.NoError(t, err)
 	assert.Equal(t, "line1\nline2\n", content)
+
+	// Replace, and a replace whose input ends early, as when the docker
+	// CLI dies mid-write: the file and its directory stay as they were.
+	err = c.ReplaceFile(ctx, name, "/tmp/test.txt", "new\n")
+	require.NoError(t, err)
+
+	err = c.ExecWithStdin(ctx, name, strings.NewReader("par"), "sh", "-c", replaceFileScript, "sh", "/tmp/test.txt", "7")
+	require.Error(t, err)
+
+	content, err = c.ReadFile(ctx, name, "/tmp/test.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "new\n", content)
+	files, err := c.Exec(ctx, name, "sh", "-c", "ls /tmp/test.txt*")
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/test.txt\n", files, "no temporary file left")
 
 	// CopyTo + CopyFrom.
 	err = c.CopyToContainer(ctx, name, "/tmp", FileContents{
@@ -841,6 +861,28 @@ func TestWriteFile_Error(t *testing.T) {
 	c := NewClient(&m)
 
 	err := c.WriteFile(t.Context(), testContainerName, "/tmp/out", "data")
+	assert.Error(t, err)
+}
+
+func TestReplaceFile(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.ReplaceFile(t.Context(), testContainerName, "/etc/slurm/sind-nodes.conf", "hello\n")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", replaceFileScript, "sh", "/etc/slurm/sind-nodes.conf", "6"}, m.Calls[0].Args)
+	assert.Equal(t, "hello\n", m.Calls[0].Stdin)
+}
+
+func TestReplaceFile_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.ReplaceFile(t.Context(), testContainerName, "/tmp/out", "data")
 	assert.Error(t, err)
 }
 

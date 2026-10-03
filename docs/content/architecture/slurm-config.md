@@ -107,7 +107,7 @@ Partition `all` holds every managed worker and is the default partition. It sets
 - `sind create worker` adds new managed nodes, replacing a definition of the same name, and removes them again when it fails
 - `sind delete worker` removes managed nodes
 
-Both worker commands rewrite only the `Nodes=` list of the partition line, so other edits to the file survive, but prefer `NodeName=DEFAULT` and `PartitionName=DEFAULT` lines in `main`. To add node definitions of your own, put them in `main` or in a separate file included from `slurm.conf`.
+Both worker commands rewrite only the `Nodes=` list of the partition line, so other edits to the file survive, but prefer `NodeName=DEFAULT` and `PartitionName=DEFAULT` lines in `main`. They replace the file in one step, through a temporary file in `/etc/slurm`, so that a command interrupted by Ctrl-C or its `--wait` limit never leaves it cut short, and a failed `sind create worker` writes back the file it found. To add node definitions of your own, put them in `main` or in a separate file included from `slurm.conf`.
 
 ## cgroup.conf
 
