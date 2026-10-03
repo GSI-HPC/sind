@@ -78,6 +78,8 @@ Custom images must provide the following:
 
 sind enables Slurm services based on the node's role (`systemctl enable --now`) once every node is ready. Services must be installed but **not** enabled in the image.
 
+With [identity]({{< relref "/configuration/cluster-config#identity-section" >}}) `nssSlurm` or `clientIds`, the image of managed workers needs nss_slurm: `libnss_slurm.so.2` where glibc finds it (in the `ldconfig` cache or `/usr/lib64`), built from Slurm's `contribs/nss_slurm`, which `make install` skips. sind checks for it before it changes `/etc/nsswitch.conf`. With `clientIds` every node needs Slurm's `auth/slurm` plugin (`auth_slurm.so`), which Slurm builds only with libjwt 1.x (`--with-jwt`), and the `serializer/json` plugin it loads (`serializer_json.so`, built only with json-c, `--with-json`), the submitter also needs `sackd` with its systemd unit, installed but not enabled, and since sind masks `munge.service` on every node, no other unit may require it.
+
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), so its image may leave Slurm for the provisioning under test to install.
 
 ### Container settings

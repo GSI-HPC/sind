@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -36,7 +37,19 @@ const (
 	// (users, groups), as space-separated entries (see LinuxUsers.Labels).
 	LabelUsers  = "sind.users"
 	LabelGroups = "sind.groups"
+	// LabelIdentity records the identity mode (identity) of a cluster
+	// whose mode is not local: nssSlurm or clientIds.
+	LabelIdentity = "sind.identity"
 )
+
+// IdentityFromLabels returns the identity mode a node container's
+// LabelIdentity records, local without one.
+func IdentityFromLabels(labels docker.Labels) config.IdentityMode {
+	if mode := labels[LabelIdentity]; mode != "" {
+		return config.IdentityMode(mode)
+	}
+	return config.IdentityLocal
+}
 
 // DataMountPath returns where a node container mounts the cluster's data:
 // its LabelDataMountPath, or DefaultDataMountPath.
@@ -109,10 +122,19 @@ type RunConfig struct {
 	// for none (see DetectCVMFS).
 	CVMFS config.StorageType
 
-	// Users are the cluster users and groups. The node gets their accounts
-	// and records them in its labels, and with users it mounts the home
-	// volume at HomeMountPath.
+	// Users are the cluster users and groups. The node records them in its
+	// labels, and with users it mounts the home volume at HomeMountPath.
 	Users LinuxUsers
+	// AddUsers creates the users and groups on the node (see
+	// nodeGetsUsers).
+	AddUsers bool
+
+	// Identity is the cluster's identity mode. With clientIds, munge is
+	// masked and the node mounts no munge volume.
+	Identity config.IdentityMode
+	// NSSSlurm switches the node's passwd and group lookups to nss_slurm
+	// first: managed workers with identity nssSlurm or clientIds.
+	NSSSlurm bool
 }
 
 // UserJobCapability is the capability workers of a cluster with users get,
@@ -143,10 +165,10 @@ func BuildRunArgs(cfg RunConfig) []string {
 	if cfg.Role == config.RoleController {
 		configMode = "rw"
 	}
-	args = append(args,
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeConfig))+":"+slurm.ConfDir+":"+configMode,
-		"-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeMunge))+":"+slurm.MungeDir+":ro",
-	)
+	args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeConfig))+":"+slurm.ConfDir+":"+configMode)
+	if cfg.Identity != config.IdentityClientIDs {
+		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeMunge))+":"+slurm.MungeDir+":ro")
+	}
 
 	// Data volume
 	dataMountPath := cfg.DataMountPath
@@ -225,6 +247,9 @@ func BuildRunArgs(cfg RunConfig) []string {
 		labels[LabelCVMFS] = string(cfg.CVMFS)
 	}
 	maps.Copy(labels, cfg.Users.Labels())
+	if cfg.Identity != "" && cfg.Identity != config.IdentityLocal {
+		labels[LabelIdentity] = string(cfg.Identity)
+	}
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
@@ -243,10 +268,19 @@ func BuildRunArgs(cfg RunConfig) []string {
 	args = append(args, "--entrypoint", "/bin/sh")
 
 	// Image, followed by the entrypoint's arguments
-	args = append(args, cfg.Image, "-c", NodeEntrypoint)
+	entrypoint := NodeEntrypoint
+	if cfg.Identity == config.IdentityClientIDs {
+		entrypoint = MaskMunge + entrypoint
+	}
+	args = append(args, cfg.Image, "-c", entrypoint)
 
 	return args
 }
+
+// MaskMunge is the line the node entrypoint starts with under identity
+// clientIds: it masks munge.service before systemd starts, as auth/slurm
+// replaces munge and the node has no munge key.
+const MaskMunge = "ln -sf /dev/null /etc/systemd/system/munge.service\n"
 
 // NodeEntrypoint is the shell script every node container starts with, as
 // PID 1, before it execs systemd. It moves itself into init.scope and enables
@@ -293,11 +327,13 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // Worker nodes are indexed sequentially across all worker groups. In an
 // unmanaged cluster every node is unmanaged; otherwise only workers and db
 // nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
-// with (see DetectCVMFS), empty for none. Every node gets the cluster users
-// and groups.
+// with (see DetectCVMFS), empty for none. The identity mode decides which
+// nodes get the cluster users and groups (see nodeGetsUsers) and which
+// resolve them with nss_slurm.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
 	users := NewLinuxUsers(cfg)
+	hasSubmitter := slices.ContainsFunc(cfg.Nodes, func(n config.Node) bool { return n.Role == config.RoleSubmitter })
 	workerIdx := 0
 	clusterManaged := cfg.Managed()
 
@@ -339,6 +375,8 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				SecurityOpt:     n.SecurityOpt,
 				CVMFS:           cvmfs,
 				Users:           users,
+				AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, nodeManaged, hasSubmitter),
+				Identity:        cfg.Identity.Mode,
 			}
 			if n.Role != config.RoleController || !n.BackupController {
 				configs = append(configs, base)
@@ -380,12 +418,47 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 					SecurityOpt:     n.SecurityOpt,
 					CVMFS:           cvmfs,
 					Users:           users,
+					AddUsers:        nodeGetsUsers(cfg.Identity, config.RoleWorker, isManaged, hasSubmitter),
+					Identity:        cfg.Identity.Mode,
+					NSSSlurm:        isManaged && cfg.Identity.UsesNSSSlurm(),
 				})
 				workerIdx++
 			}
 		}
 	}
 	return configs
+}
+
+// nodeGetsUsers reports whether a node gets the cluster's Linux users and
+// groups under an identity mode:
+//
+//   - local, and every unmanaged node (sind does not manage its Slurm):
+//     yes.
+//   - nssSlurm: every node but the workers, which resolve the job's user
+//     with nss_slurm. The db node needs them for slurmdbd's own checks
+//     (admin levels, coordinators).
+//   - clientIds: the login node only, the submitter, or the controllers
+//     without one, and the controllers too with controllerUsers. slurmctld
+//     and slurmdbd learn the users from their tokens.
+func nodeGetsUsers(identity config.Identity, role config.Role, managed, hasSubmitter bool) bool {
+	if !managed {
+		return true
+	}
+	switch identity.Mode {
+	case config.IdentityNSSSlurm:
+		return role != config.RoleWorker
+	case config.IdentityClientIDs:
+		switch role {
+		case config.RoleSubmitter:
+			return true
+		case config.RoleController:
+			return identity.ControllerUsers || !hasSubmitter
+		default:
+			return false
+		}
+	default:
+		return true
+	}
 }
 
 // CreateClusterNodes creates all node containers for the cluster.

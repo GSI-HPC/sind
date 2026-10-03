@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -30,7 +31,7 @@ type ServiceHealth map[probe.Service]bool
 type NodeHealth struct {
 	State    docker.ContainerState `json:"status"`       // container state from Docker (e.g. "running", "exited")
 	IP       string                `json:"ip"`           // container IP address
-	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge, sshd, and on managed nodes the role's slurmctld/slurmd, or mariadb and slurmdbd)
+	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge unless identity clientIds, sshd, and on managed nodes the role's slurmctld/slurmd, mariadb and slurmdbd, or sackd)
 	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
@@ -66,7 +67,7 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 		Services: make(ServiceHealth),
 	}
 
-	services := nodeServices(role, IsManaged(info.Labels))
+	services := nodeServices(role, info.Labels)
 
 	// If container is not running, skip all service checks.
 	if info.Status != docker.StateRunning {
@@ -164,7 +165,8 @@ type MountPoint struct {
 // a host-path bind mount, otherwise it is a Docker volume. Its mount point
 // is the sind.data.mountpath label, or /data. The sind.users label adds
 // the home volume at /home, and the sind.cvmfs label /cvmfs from the cvmfs
-// plugin volume or the host's /cvmfs.
+// plugin volume or the host's /cvmfs. With identity clientIds (the
+// sind.identity label) there is no munge volume.
 func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []docker.ContainerListEntry) ([]MountPoint, error) {
 	// Determine data mount source and mount point from container labels.
 	dataHostPath := ""
@@ -182,10 +184,15 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 		}
 	}
 
-	// Config and munge are always Docker volumes.
+	// Config is always a Docker volume, and so is munge, which identity
+	// clientIds does without.
 	mounts := []MountPoint{
 		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: config.StorageVolume},
-		{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: config.StorageVolume},
+	}
+	if !slices.ContainsFunc(containers, func(c docker.ContainerListEntry) bool {
+		return IdentityFromLabels(c.Labels) == config.IdentityClientIDs
+	}) {
+		mounts = append(mounts, MountPoint{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: config.StorageVolume})
 	}
 
 	if dataHostPath != "" {
@@ -380,18 +387,25 @@ func nodeStatusOrder(n *NodeStatus) string {
 	return rolePrefix(n.Role) + naturalSortKey(shortName)
 }
 
-// nodeServices returns the services checked on a node: munge and sshd, plus
-// the role's Slurm daemon when sind manages Slurm on the node. A managed db
-// node reports mariadb next to slurmdbd.
-func nodeServices(role config.Role, managed bool) []probe.Service {
-	services := []probe.Service{probe.ServiceMunge, probe.ServiceSSHD}
-	if !managed {
+// nodeServices returns the services checked on a node, from its labels:
+// munge, except with identity clientIds, and sshd, plus the role's Slurm
+// daemon when sind manages Slurm on the node. A managed db node reports
+// mariadb next to slurmdbd, and a managed submitter with identity clientIds
+// sackd.
+func nodeServices(role config.Role, labels docker.Labels) []probe.Service {
+	identity := IdentityFromLabels(labels)
+	var services []probe.Service
+	if identity != config.IdentityClientIDs {
+		services = append(services, probe.ServiceMunge)
+	}
+	services = append(services, probe.ServiceSSHD)
+	if !IsManaged(labels) {
 		return services
 	}
 	if role == config.RoleDB {
 		return append(services, probe.ServiceMariadb, probe.ServiceSlurmdbd)
 	}
-	if svc, ok := probe.ServiceForRole(role); ok {
+	if svc, ok := nodeSlurmService(RunConfig{Role: role, Identity: identity}); ok {
 		services = append(services, svc)
 	}
 	return services

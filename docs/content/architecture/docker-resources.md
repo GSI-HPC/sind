@@ -17,7 +17,7 @@ toc: true
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
-| Munge volume | `<realm>-<cluster>-munge` | `sind-dev-munge` |
+| Munge volume (not with identity `clientIds`) | `<realm>-<cluster>-munge` | `sind-dev-munge` |
 | Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
 | State volume (backup controller only) | `<realm>-<cluster>-state` | `sind-dev-state` |
 | Home volume (`users` only) | `<realm>-<cluster>-home` | `sind-dev-home` |
@@ -40,7 +40,7 @@ The mesh images do not follow `defaults.image`: the SSH relay always runs `sind-
 | Volume | Mount point | Controller | Db | Worker | Submitter |
 |--------|------------|------------|----|--------|-----------|
 | `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro |
-| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro (not with identity `clientIds`) |
 | `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw |
 | `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — |
 | `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw (`users` only) |
@@ -98,6 +98,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cvmfs` | `hostPath` | How the node mounts CVMFS, with `storage.cvmfs`: `volume` (plugin) or `hostPath` (host `/cvmfs`) |
 | `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, as space-separated `name:uid:gid` entries, with `users` |
 | `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, as space-separated `name:gid` entries with `:member+member...` for supplementary members, with `users` or `groups` |
+| `sind.identity` | `clientIds` | The identity mode, when not `local`: `nssSlurm` or `clientIds` |
 
 A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network and the SSH volume carry `sind.realm` only. `sind get networks`, `sind get volumes` and `sind delete cluster --all` find resources by these labels.
 

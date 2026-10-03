@@ -30,6 +30,8 @@ const (
 	ServiceSlurmd    Service = "slurmd"
 	ServiceSlurmdbd  Service = "slurmdbd"
 	ServiceMariadb   Service = "mariadb"
+	// ServiceSackd is the auth/slurm token daemon of a login node.
+	ServiceSackd Service = "sackd"
 )
 
 // ServiceForRole returns the Slurm readiness-check service associated with
@@ -75,6 +77,8 @@ func ForService(svc Service) Probe {
 		return Probe{Name: string(svc), Check: SlurmdReady}
 	case ServiceSlurmdbd:
 		return Probe{Name: string(svc), Check: SlurmdbdReady}
+	case ServiceSackd:
+		return Probe{Name: string(svc), Check: SackdReady}
 	default:
 		return Probe{Name: string(svc)}
 	}
@@ -339,6 +343,15 @@ func ClusterRegistered(clusterName string) Func {
 		}
 		return fmt.Errorf("cluster %s not registered with slurmdbd yet", clusterName)
 	}
+}
+
+// SackdReady verifies that the sackd service is active.
+func SackdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	_, err := client.Exec(ctx, name, "systemctl", "is-active", "sackd")
+	if err != nil {
+		return fmt.Errorf("sackd not ready: %w", err)
+	}
+	return nil
 }
 
 // journalLines is the number of journal lines UnitJournal returns.

@@ -302,6 +302,24 @@ func TestSlurmdReady_NotReady(t *testing.T) {
 	assert.Contains(t, err.Error(), "slurmd not ready")
 }
 
+func TestSackdReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	m.AddResult("", "", fmt.Errorf("exit status 3"))
+	c := docker.NewClient(&m)
+
+	require.NoError(t, SackdReady(t.Context(), c, testContainer))
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "sackd"}, m.Calls[0].Args)
+
+	err := SackdReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Equal(t, "sackd not ready: exit status 3", err.Error())
+
+	p := ForService(ServiceSackd)
+	assert.Equal(t, "sackd", p.Name)
+	assert.NotNil(t, p.Check)
+}
+
 func TestClusterRegistered(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("other\ndev\n", "", nil)

@@ -46,7 +46,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 **Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
 1. Create cluster network
 2. Create config volume → write Slurm configuration, and `slurmdbd.conf` for a managed db node (managed clusters only; see Unmanaged Cluster)
-3. Create munge volume → generate and write munge key
+3. Create munge volume → generate and write munge key (not with identity `clientIds`, whose `slurm.key` goes to the config volume)
 4. Create data volume (if needed)
 5. Create state volume (backup controller only)
 6. Create home volume (`users` only)
@@ -55,7 +55,8 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 1. Create and start each node container in parallel
 2. Start per-node systemd D-Bus monitor immediately after each container starts
 3. Wait for each node to become ready, accelerated by events
-4. Add the cluster users and groups (`users` and `groups` only; see Users)
+4. On managed workers with identity `nssSlurm` or `clientIds`, check for nss_slurm and put it first in `/etc/nsswitch.conf` (see Identity Modes)
+5. Add the cluster users and groups where the identity mode puts them (`users` and `groups` only; see Users)
 
 Every node container starts with a short `/bin/sh` entrypoint instead of the image's own entrypoint or command. As PID 1, it moves itself into `init.scope`, enables each controller of the container's root cgroup in its `cgroup.subtree_control`, and execs `/sbin/init`. `docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and a process there makes systemd's own attempt to enable them fail (cgroup v2's no internal processes rule). An exec of sind's that landed before systemd had enabled controllers would otherwise leave every unit without them, including `Delegate=yes` daemons such as slurmd.
 
@@ -396,7 +397,7 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 
 Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
-`SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, or mariadb and slurmdbd on a db node, where sind manages Slurm. Unmanaged nodes (unmanaged workers and db nodes, and every node of an unmanaged cluster) list only munge and sshd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
+`SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, or mariadb and slurmdbd on a db node, where sind manages Slurm. Unmanaged nodes (unmanaged workers and db nodes, and every node of an unmanaged cluster) list only munge and sshd. With identity `clientIds` no node lists munge, and the submitter lists sackd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
 Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Other nodes leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
 
@@ -552,7 +553,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
-`sind get auth-key` outputs the key that authenticates the cluster's Slurm traffic, the munge key, encoded as base64, suitable for injection into external management tooling. `-o json` returns `{"type": "munge", "key": "<base64>"}`. It replaces `sind get munge-key`.
+`sind get auth-key` outputs the key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external management tooling: the munge key, or `slurm.key` with identity `clientIds`. `-o json` returns `{"type": "munge"|"slurm", "key": "<base64>"}`. It replaces `sind get munge-key`.
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
@@ -705,6 +706,8 @@ users:                                   # Linux accounts on every node (default
     coordinator: [physics]               # accounts the user coordinates
     adminLevel: operator                 # operator | admin (default: none)
 
+identity: local                          # local | nssSlurm | clientIds, or {mode, controllerUsers} (see Identity Modes)
+
 accounts:                                # Slurm accounts (needs a managed db node, default: none)
   - name: physics
     parent: root                         # default: root; any account declared before
@@ -845,6 +848,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `devices` - absolute paths
 - `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute
 - `users`, `groups` - a name or an object; user and group names start with a lowercase letter or `_`, hold only lowercase letters, digits, `_` and `-`, and have at most 32 characters; `uid` and `gid` are between 1000 and 2147483647; no two users share a name or `uid`, no two groups (private ones included) a name or `gid`; a user's `group` and `groups` are declared in `groups`, and `groups` repeats neither an entry nor `group`
+- `identity` - `local`, `nssSlurm` or `clientIds`, or an object with `mode` and `controllerUsers`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` only with `clientIds`
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
 
@@ -935,6 +939,8 @@ users:
     coordinator: [physics]               # accounts the user coordinates
     adminLevel: operator                 # operator | admin (default: none)
 
+identity: local                          # local | nssSlurm | clientIds, or {mode, controllerUsers} (see Identity Modes)
+
 accounts:                                # Slurm accounts (needs a managed db node, default: none)
   - name: physics
     parent: root                         # default: root; any account declared before
@@ -942,12 +948,12 @@ accounts:                                # Slurm accounts (needs a managed db no
       GrpTRES: cpu=4
 ```
 
-- Every node gets each group and user with the same IDs (`groupadd --gid GID`, then `useradd --uid UID --gid GID --groups ... --shell /bin/bash`), so that a user has the same UID and GIDs across the cluster, as munge and Slurm require.
+- Every node gets each group and user with the same IDs (`groupadd --gid GID`, then `useradd --uid UID --gid GID --groups ... --shell /bin/bash`), so that a user has the same UID and GIDs across the cluster, as munge and Slurm require. The identity modes `nssSlurm` and `clientIds` keep them off some nodes (see Identity Modes).
 - A user without `group` gets a private group of its own name with gid = uid; a user with `group` gets none. `groups` adds supplementary groups. Both name groups declared in `groups`.
 - A user without `uid` gets the lowest ID from 1000 up that no user has and no group has as an explicit `gid`, in list order. Then each group without `gid` gets the lowest ID from 1000 up that no user or group has. IDs below 1000 belong to the image's system accounts. Explicit IDs keep file ownership stable across re-creates, e.g. on a host path `/data`.
 - The home directories, `/home/<user>`, are on the cluster's home volume, `<realm>-<cluster>-home`, which every node mounts at `/home`, so a job's working directory and output under a home directory are the same on every node. sind creates them once, on `controller`, from `/etc/skel`, owned by the user's uid and primary gid, and puts the realm's SSH public key in each user's `~/.ssh/authorized_keys`: `sind ssh USER@NODE` and the exported `ssh_config` (`ssh -l USER`) work for users as for root.
 - Workers get `--cap-add SYS_NICE`: slurmstepd sets each task's CPU affinity (`task/affinity`) after the task has switched to the job's user, and root needs `CAP_SYS_NICE`, which Docker drops by default, to change the affinity of another user's process. Without it, every job of a user other than root fails with `task_g_set_affinity` ("Slurmd could not execve job").
-- `sind enter --user USER` and `sind exec --user USER` run as the user in its home directory.
+- `sind enter --user USER` and `sind exec --user USER` run as the user in its home directory, on the submitter or the controller.
 - The users and groups are stored on each container as the `sind.users` and `sind.groups` labels, so `sind create worker` adds them to new workers. The home volume only exists for clusters with users.
 - A user or group name that already exists in the image (`root`, `slurm`, `munge`, `wheel`, ...) fails `sind create cluster` with the `groupadd` or `useradd` error.
 
@@ -995,6 +1001,39 @@ sacctmgr -i add coordinator account=physics names=bob
 - A failing `sacctmgr` fails `sind create cluster` with its error.
 - Accounts need a managed db node, as `slurm.slurmdbd` does: without one, or with `managed: false` on it or the controller, they fail validation.
 
+### Identity Modes
+
+`identity` selects which nodes get the Linux accounts, to mirror how a site resolves its users, and with that how Slurm authenticates them:
+
+```yaml
+identity: nssSlurm                       # local (default) | nssSlurm | clientIds
+```
+
+```yaml
+identity:
+  mode: clientIds
+  controllerUsers: true                  # also create the users and groups on the controllers, for AllowGroups
+```
+
+| | `local` (default) | `nssSlurm` | `clientIds` |
+|---|---|---|---|
+| Slurm settings | munge | munge + `LaunchParameters=enable_nss_slurm` | `AuthType=auth/slurm` + `CredType=cred/slurm` + `AuthInfo=use_client_ids` + `enable_nss_slurm` |
+| Linux accounts on | every node | controllers, submitter, db | login node: the submitter, or the controllers without one; the controllers too with `controllerUsers` |
+| Secret sind distributes | munge key | munge key | `slurm.key` |
+| munge | on every node | on every node | masked on every node; `sackd` on the submitter |
+| Image needs | nothing new | `libnss_slurm.so.2` on managed workers | `libnss_slurm.so.2` on managed workers, `auth/slurm` and `serializer/json` (Slurm built `--with-jwt --with-json`) everywhere, `sackd` on the submitter |
+| SSH as a user to | every node | controllers, submitter, db | login node |
+| Mirrors a site where | every node has LDAP/SSSD | compute nodes have no directory | only login nodes have a directory |
+
+- **Controller:** with `local` and `nssSlurm`, slurmctld resolves each job's user and groups, and the uids of Slurm users, from its own passwd and group files; for an unknown user it retries only once an hour, which is why the controller gets the users before sind creates the Slurm accounts. With `clientIds` it takes the identity from the user's token: `sackd` on the login node puts the caller's passwd and group entries into it, and slurmctld sets the uid on the user's associations before it processes the request.
+- **db:** slurmdbd resolves user names itself only for its own checks (admin levels, coordinators, a user changing their default account); with `clientIds` it learns the uids from tokens. sind gives the db node the accounts in `local` and `nssSlurm`.
+- **Workers:** with `nssSlurm` and `clientIds`, a managed worker has no Linux accounts. sind first checks that the image has nss_slurm (`ldconfig -p`, or `/usr/lib64/libnss_slurm.so.2`) and fails `sind create cluster` or `sind create worker` with the image name if not, then puts `slurm` first on the `passwd` and `group` lines of `/etc/nsswitch.conf`. nss_slurm answers only for the job's user and groups, from the job credential, and only to processes inside a job step; sshd, prolog, epilog and health checks run outside one, so SSH as a user to a worker fails by design. No `/etc/nss_slurm.conf` is needed: the hostname is the Slurm node name and the spool directory is the default.
+- **clientIds:** sind writes `slurm.key` (1024 random bytes, `slurm`-owned, mode `0600`) to the config volume, creates no munge volume or key, masks `munge.service` from the node entrypoint (`ln -sf /dev/null /etc/systemd/system/munge.service` before systemd starts) and waits for no munge, and enables `sackd` on the submitter like a Slurm daemon. `slurmdbd.conf` gets `AuthType=auth/slurm` and `AuthInfo=use_client_ids`. Root's client commands on the other nodes get their tokens from the SACK service of slurmctld, slurmdbd or slurmd.
+- **Every node, every mode:** root and SlurmUser stay local; the `slurm` user needs the same uid on every node, which the image ensures. Unmanaged nodes (unmanaged workers and db nodes) get the Linux accounts as with `local`, as sind does not manage their Slurm. `nssSlurm` and `clientIds` need a managed cluster.
+- The `slurm.conf` parameters are each set unless `slurm.main` sets it; a `LaunchParameters` or `AuthInfo` there must keep `enable_nss_slurm` or `use_client_ids`.
+- The mode is stored as the `sind.identity` label, so `sind create worker` sets up new workers the same way.
+- slurmctld checks a partition's `AllowGroups` with local lookups only: with `clientIds`, `controllerUsers: true` gives the controllers the users and groups for it. sind does not parse `slurm.main` for `AllowGroups`.
+
 ## Docker Resources
 
 ### Per-Cluster Resources
@@ -1008,7 +1047,7 @@ sacctmgr -i add coordinator account=physics names=bob
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
-| Munge volume | `<realm>-<cluster>-munge` | `sind-dev-munge` |
+| Munge volume (not with identity `clientIds`) | `<realm>-<cluster>-munge` | `sind-dev-munge` |
 | Data volume | `<realm>-<cluster>-data` | `sind-dev-data` |
 | State volume (backup controller only) | `<realm>-<cluster>-state` | `sind-dev-state` |
 | Home volume (`users` only) | `<realm>-<cluster>-home` | `sind-dev-home` |
@@ -1033,7 +1072,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | Volume | Mount Point | Controller | Db | Worker | Submitter |
 |--------|-------------|------------|----|---------|-----------|
 | `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro |
-| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro (not with identity `clientIds`) |
 | `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw |
 | `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — |
 | `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw (`users` only) |
@@ -1134,6 +1173,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cvmfs` | `hostPath` | How the node mounts CVMFS: `volume` (plugin) or `hostPath` (host `/cvmfs`); only with `storage.cvmfs` |
 | `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, space-separated `name:uid:gid` entries (gid of the primary group); only with `users` |
 | `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, space-separated `name:gid` entries with `:member+member...` for supplementary members; only with `users` or `groups` |
+| `sind.identity` | `clientIds` | The identity mode, `nssSlurm` or `clientIds`; not set for `local` |
 
 ### Enter and Exec
 
