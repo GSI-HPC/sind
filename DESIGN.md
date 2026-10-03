@@ -1562,6 +1562,7 @@ ProctrackType=proctrack/cgroup
 TaskPlugin=task/cgroup
 MpiDefault=pmix
 ReturnToService=2
+DefMemPerCPU=<the smallest RealMemory/CPUs of the managed workers>
 
 <identity parameters: identity nssSlurm and clientIds (see Identity Modes)>
 <accounting parameters: a managed db node (see Database Node)>
@@ -1575,6 +1576,7 @@ include /etc/slurm/sind-nodes.conf
 - `TaskPlugin=task/cgroup` leaves out `task/affinity`. A node's CPUs are a CPU quota (`--cpus`), not a cpuset, so every worker sees all host CPUs, and `task/affinity` would bind the tasks of every worker, of every cluster on the host, to the same first host CPUs. To test CPU binding (`--cpu-bind`), set `TaskPlugin=task/cgroup,task/affinity` in `slurm.main`. Managed workers then get `--cap-add SYS_NICE`, unless their `capDrop` lists `SYS_NICE` or `ALL`: slurmstepd sets each task's CPU affinity after the task has switched to the job's user, and root needs `CAP_SYS_NICE`, which Docker drops by default, to change the affinity of another user's process; without it, every job of a user other than root fails with `task_g_set_affinity` ("Slurmd could not execve job"). `sind create worker` reads the `TaskPlugin` from `slurm.conf` and the files it includes on the config volume, so workers added later match. Nothing else adds `SYS_NICE`.
 - `MpiDefault=pmix` makes `srun` launch through PMIx, which needs Slurm's `mpi/pmix` plugin (see Custom Images); set `MpiDefault=none` in `slurm.main` for an image without it.
 - `ReturnToService=2` returns a `DOWN` worker to service when its slurmd registers with a valid configuration, e.g. after `sind power cut` and `sind power on`.
+- `DefMemPerCPU` is the smallest `RealMemory`/`CPUs` over the managed workers, in MB, rounded down, and is left out when `slurm.main` sets `DefMemPerCPU` or `DefMemPerNode`. Slurm's defaults, `SelectType=select/cons_tres` with `SelectTypeParameters=CR_Core_Memory`, make memory a consumable resource, and without a default a job that does not ask for memory gets all of a node's memory: a worker would run one such job at a time, whatever its `cpus`. With it, each CPU of every worker can run such a job. A worker's `RealMemory` is its whole container memory limit, without a reserve for its daemons or its `/tmp`, which is a tmpfs and counts against the limit. sind writes `slurm.conf` once, so a worker added later with less memory per CPU runs fewer jobs without `--mem` at a time than it has CPUs.
 
 #### sind-nodes.conf
 

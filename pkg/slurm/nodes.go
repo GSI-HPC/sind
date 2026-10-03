@@ -38,6 +38,24 @@ func ManagedWorkers(nodes []config.Node) ([]NodeEntry, error) {
 	return workers, nil
 }
 
+// DefMemPerCPU returns the default memory per allocated CPU, in MB, that
+// lets every managed worker run a job on each of its CPUs: the smallest
+// RealMemory/CPUs over the workers, rounded down. Slurm's default
+// select/cons_tres treats memory as a consumable resource, and without a
+// default a job that does not ask for memory gets all of a node's memory,
+// so a worker would run one such job at a time whatever its CPUs. It
+// returns 0, for none, without workers or with a worker that has less
+// than 1 MB per CPU.
+func DefMemPerCPU(workers []NodeEntry) int {
+	perCPU, found := 0, false
+	for _, w := range workers {
+		if m := w.MemoryMB / max(w.CPUs, 1); !found || m < perCPU {
+			perCPU, found = m, true
+		}
+	}
+	return perCPU
+}
+
 // GenerateNodesConf generates the sind-nodes.conf content with a NodeName
 // line for each managed worker (see ManagedWorkers) and the partition all
 // with every one of them.

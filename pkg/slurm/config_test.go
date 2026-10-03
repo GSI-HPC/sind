@@ -46,6 +46,21 @@ func TestGenerateSlurmConf_BaseOverrides(t *testing.T) {
 	}
 }
 
+func TestGenerateSlurmConf_DefMemPerCPU(t *testing.T) {
+	conf := GenerateSlurmConf("dev", config.Section{}, ConfOptions{DefMemPerCPU: 512})
+	assert.Contains(t, conf, "\nReturnToService=2\nDefMemPerCPU=512\n")
+
+	// slurm.main's DefMemPerCPU replaces it, and Slurm ignores
+	// DefMemPerCPU next to DefMemPerNode.
+	for _, main := range []string{"DefMemPerCPU=100\n", "DefMemPerNode=1024\n"} {
+		conf = GenerateSlurmConf("dev", config.Section{Content: main}, ConfOptions{DefMemPerCPU: 512})
+		assert.NotContains(t, conf, "DefMemPerCPU=512", main)
+	}
+
+	// None without workers.
+	assert.NotContains(t, GenerateSlurmConf("dev", config.Section{}, ConfOptions{}), "DefMemPerCPU")
+}
+
 func TestTaskAffinity(t *testing.T) {
 	assert.False(t, TaskAffinity(config.Section{}))
 	assert.False(t, TaskAffinity(config.Section{Content: "TaskPlugin=task/cgroup\n"}))

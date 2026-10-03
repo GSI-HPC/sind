@@ -329,6 +329,26 @@ func TestManagedWorkers_InvalidMemory(t *testing.T) {
 	require.ErrorContains(t, err, `worker-2: invalid memory "2x"`)
 }
 
+// --- DefMemPerCPU ---
+
+func TestDefMemPerCPU(t *testing.T) {
+	assert.Equal(t, 0, DefMemPerCPU(nil))
+	assert.Equal(t, 512, DefMemPerCPU([]NodeEntry{{Name: "worker-0", CPUs: 1, MemoryMB: 512}}))
+	// The smallest memory per CPU of all workers, rounded down.
+	assert.Equal(t, 341, DefMemPerCPU([]NodeEntry{
+		{Name: "worker-0", CPUs: 2, MemoryMB: 2048},
+		{Name: "worker-1", CPUs: 3, MemoryMB: 1024},
+		{Name: "worker-2", CPUs: 1, MemoryMB: 512},
+	}))
+	// No default when a worker has less than 1 MB per CPU.
+	assert.Equal(t, 0, DefMemPerCPU([]NodeEntry{
+		{Name: "worker-0", CPUs: 8, MemoryMB: 6},
+		{Name: "worker-1", CPUs: 1, MemoryMB: 512},
+	}))
+	// A worker without CPUs (no ApplyDefaults) counts as one CPU.
+	assert.Equal(t, 512, DefMemPerCPU([]NodeEntry{{Name: "worker-0", MemoryMB: 512}}))
+}
+
 // --- ParseMemoryMB ---
 
 func TestParseMemoryMB(t *testing.T) {

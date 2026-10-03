@@ -332,6 +332,24 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating config helper")
 }
 
+func TestWriteClusterConfig_DefMemPerCPU(t *testing.T) {
+	// slurm.conf gets the smallest memory per CPU of the managed workers.
+	var m mock.Executor
+	m.AddResult("abc123\n", "", nil) // CreateContainer (helper)
+	m.AddResult("", "", nil)         // CopyToContainer
+	m.AddResult("", "", nil)         // RemoveContainer (defer)
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{
+		{Role: config.RoleController, CPUs: 1, Memory: "64m"},
+		{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "1g"},
+		{Role: config.RoleWorker, CPUs: 4, Memory: "64m", Managed: testutil.Ptr(false)},
+	}}
+	require.NoError(t, WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false))
+
+	assert.Contains(t, m.Calls[1].Stdin, "\nDefMemPerCPU=512\n")
+}
+
 func TestWriteClusterConfig_InvalidMemory(t *testing.T) {
 	// A memory limit sind cannot convert fails before the helper exists,
 	// instead of becoming RealMemory=0.

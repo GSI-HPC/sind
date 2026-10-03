@@ -202,6 +202,8 @@ slurm:
 	assert.Contains(t, out, "SelectType              = select/cons_tres")
 	assert.Contains(t, out, "SelectTypeParameters    = CR_CORE_MEMORY")
 	assert.Contains(t, out, "ConstrainCores          = yes")
+	// A job without --mem gets 512 MB per CPU, not the whole node.
+	assert.Contains(t, out, fmt.Sprintf("%-23s = %s", "DefMemPerCPU", "512"))
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

@@ -5,6 +5,7 @@ package slurm
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -53,6 +54,9 @@ type ConfOptions struct {
 	// Identity adds the settings of the identity modes other than local:
 	// nss_slurm for both, and auth/slurm with client IDs for clientIds.
 	Identity config.IdentityMode
+	// DefMemPerCPU is the default memory of a job per allocated CPU, in
+	// MB, 0 for none (see DefMemPerCPU).
+	DefMemPerCPU int
 }
 
 // parameter is a slurm.conf parameter sind sets unless the main section
@@ -205,7 +209,9 @@ func includePath(line, clusterName string) (string, bool) {
 //
 // The cluster name, the controller, SlurmUser, the spool directories and
 // PlugStackConfig are fixed: sind's volumes and images depend on them. The
-// parameters in baseDefaults follow, each unless the main section sets it.
+// parameters in baseDefaults follow, each unless the main section sets it,
+// and opts.DefMemPerCPU unless it sets DefMemPerCPU or DefMemPerNode, which
+// Slurm does not take together.
 // With opts.BackupController, controller-backup is configured as the backup
 // controller and SlurmctldTimeout defaults to DefaultSlurmctldTimeout unless
 // the main section sets it. With opts.Accounting, the accounting parameters
@@ -226,7 +232,11 @@ func GenerateSlurmConf(clusterName string, main config.Section, opts ConfOptions
 	b.WriteString("StateSaveLocation=" + StateSaveLocation + "\n")
 	b.WriteString("SlurmdSpoolDir=/var/spool/slurmd\n")
 	b.WriteString("PlugStackConfig=" + ConfDir + "/plugstack.conf\n")
-	writeDefaults(&b, main, baseDefaults)
+	base := baseDefaults
+	if opts.DefMemPerCPU > 0 && !main.SetsParameter("DefMemPerNode") {
+		base = append(slices.Clip(base), parameter{"DefMemPerCPU", strconv.Itoa(opts.DefMemPerCPU)})
+	}
+	writeDefaults(&b, main, base)
 	writeDefaults(&b, main, identityDefaults(opts.Identity))
 	if opts.Accounting {
 		writeDefaults(&b, main, accountingDefaults)
