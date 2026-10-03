@@ -415,7 +415,7 @@ controller-backup.dev   controller  backup*    172.19.0.3    running   munge ✓
 worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
 ```
 
-`sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (defaults to cluster "default"). Passing a full DNS FQDN ending in `.sind` is rejected — use the bare short name or the `NODE.CLUSTER` form:
+`sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (defaults to cluster "default"). Passing a full DNS FQDN (`NODE.CLUSTER.REALM.sind`) is rejected — use the bare short name or the `NODE.CLUSTER` form:
 
 ```
 $ sind get node controller.dev

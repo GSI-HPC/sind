@@ -173,7 +173,11 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
-	if strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
+	// An FQDN is NODE.CLUSTER.REALM.sind. Neither node short names nor
+	// cluster names contain dots, so only the dot count tells it apart
+	// from NODE.CLUSTER: the suffix alone also matches a cluster named
+	// "sind" (controller.sind).
+	if strings.Count(arg, ".") >= 2 && strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
 		return usagef("use NODE[.CLUSTER], not the FQDN %q", arg)
 	}
 	// Parse shortName.cluster on the first dot (neither node short names

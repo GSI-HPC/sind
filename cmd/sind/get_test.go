@@ -743,6 +743,18 @@ func TestGetNode_RejectsFQDN(t *testing.T) {
 	assert.Contains(t, err.Error(), "worker-0.dev.sind.sind")
 }
 
+// TestGetNode_ClusterNamedSind checks that NODE.CLUSTER for a cluster named
+// "sind" is not taken for an FQDN, although it ends in ".sind".
+func TestGetNode_ClusterNamedSind(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such container: sind-sind-controller\n", testutil.ExitCode1(t))
+
+	_, _, err := executeWithMock(&m, "get", "node", "controller.sind")
+	require.EqualError(t, err, `node "controller" not found in cluster "sind"`)
+	require.Len(t, m.Calls, 1)
+	assert.Contains(t, m.Calls[0].Args, "sind-sind-controller")
+}
+
 // TestGetNode_NotFound covers the typo/unknown-node case: docker inspect
 // fails with exit status 1. The command must surface a clean
 // "node %q not found in cluster %q" error rather than leak the raw docker
