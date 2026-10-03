@@ -38,6 +38,9 @@ type WorkerAddOptions struct {
 
 // WorkerAdd adds worker nodes to an existing cluster.
 //
+// The caller holds the realm lock (state.LockRealm) until WorkerAdd
+// returns.
+//
 // For managed workers (default), the flow is:
 //  1. Validate: controller exists, sind-nodes.conf present
 //  2. Create worker container(s)

@@ -15,7 +15,7 @@ cmd/sind/          CLI commands (cobra)
   ├── context.go   Dependency injection via context
   ├── exitcode.go  Exit statuses, usage errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
-  ├── lock.go      Per-realm advisory locking (flock)
+  ├── lock.go      Realm lock for mutating commands (pkg/state)
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing
   ├── sshexport.go SSH config export to ~/.local/state/sind/
@@ -79,7 +79,7 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
-pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, DNS policy)
+pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, inotify, DNS policy)
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
@@ -89,6 +89,7 @@ pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
                    discovery, munge key and slurm.key generation, sacctmgr account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
+pkg/state/         sind's state directory and the realm lock (flock) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
 ```
 
 ## Dependency flow

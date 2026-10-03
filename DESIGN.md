@@ -1637,6 +1637,10 @@ $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
 
 Read-only operations (`get`, `logs`, `ssh`, etc.) do not acquire the lock.
 
+### Library callers
+
+The lock is `state.LockRealm` in `pkg/state`, which also resolves the state directory (`state.Dir`, `state.RealmDir`). `cluster.Create`, `cluster.Delete`, `cluster.WorkerAdd` and `cluster.WorkerRemove` take no lock themselves: their caller holds the realm lock for the whole operation, for `Create` from before `mesh.Manager.EnsureMesh`, as the CLI does. Without it, concurrent calls in one realm lose each other's DNS records, `known_hosts` entries and `sind-nodes.conf` lines, or remove each other's resources. The lock is a `flock(2)` on a file in the user's state directory, so it serializes the goroutines of one process and the sind commands of one user, but not two users, or two `XDG_STATE_HOME`s, that share one Docker daemon: such clients use separate realms.
+
 ### Behavior
 
 - Lock is attempted non-blocking first; if free, the operation proceeds immediately

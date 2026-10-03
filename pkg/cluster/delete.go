@@ -19,6 +19,8 @@ import (
 
 // Delete orchestrates the full cluster deletion flow.
 //
+// The caller holds the realm lock (state.LockRealm) until Delete returns.
+//
 // Deleting a non-existent cluster is not an error. The function handles
 // partial clusters (e.g., from a failed creation) by removing whatever
 // resources exist.

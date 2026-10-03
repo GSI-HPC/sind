@@ -75,6 +75,10 @@ type nodeResult struct {
 
 // Create orchestrates the full cluster creation flow.
 //
+// The caller holds the realm lock (state.LockRealm) from before
+// mesh.Manager.EnsureMesh until Create returns, and checks the daemon with
+// CheckDaemon before either.
+//
 // The caller must ensure mesh infrastructure exists (via mesh.Manager.EnsureMesh)
 // before calling Create. The context deadline controls the overall timeout;
 // readinessInterval controls the polling interval for readiness probes.

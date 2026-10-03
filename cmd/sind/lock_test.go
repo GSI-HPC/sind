@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAcquireRealmLock covers the CLI's use of state.LockRealm; the lock
+// itself is tested in pkg/state.
 func TestAcquireRealmLock(t *testing.T) {
 	t.Parallel()
 
@@ -58,45 +60,5 @@ func TestAcquireRealmLock(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("second lock not acquired after first was released")
 		}
-	})
-
-	t.Run("context cancellation unblocks", func(t *testing.T) {
-		t.Parallel()
-		stateHome := t.TempDir()
-
-		unlock1, err := acquireRealmLock(context.Background(), "cancel", stateHome)
-		require.NoError(t, err)
-		defer unlock1()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan error, 1)
-		go func() {
-			_, err := acquireRealmLock(ctx, "cancel", stateHome)
-			done <- err
-		}()
-
-		// Give the goroutine time to start blocking.
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-
-		select {
-		case err := <-done:
-			assert.ErrorIs(t, err, context.Canceled)
-		case <-time.After(5 * time.Second):
-			t.Fatal("context cancellation did not unblock lock acquisition")
-		}
-	})
-
-	t.Run("different realms do not contend", func(t *testing.T) {
-		t.Parallel()
-		stateHome := t.TempDir()
-
-		unlock1, err := acquireRealmLock(context.Background(), "realm-a", stateHome)
-		require.NoError(t, err)
-		defer unlock1()
-
-		unlock2, err := acquireRealmLock(context.Background(), "realm-b", stateHome)
-		require.NoError(t, err)
-		defer unlock2()
 	})
 }

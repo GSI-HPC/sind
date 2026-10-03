@@ -16,6 +16,9 @@ import (
 
 // WorkerRemove removes worker nodes from a cluster.
 //
+// The caller holds the realm lock (state.LockRealm) until WorkerRemove
+// returns.
+//
 // For managed nodes (those present in sind-nodes.conf), the flow is:
 //  1. Update sind-nodes.conf to remove the node definitions
 //  2. Reconfigure slurmctld

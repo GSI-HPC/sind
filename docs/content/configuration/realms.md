@@ -67,6 +67,8 @@ If another operation already holds the lock, sind waits until it completes. Read
 
 Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs.
 
+Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.WorkerAdd` and `cluster.WorkerRemove`, which do not lock themselves.
+
 ## Example
 
 ```bash
