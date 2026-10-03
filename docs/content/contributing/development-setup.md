@@ -41,7 +41,7 @@ All common tasks are available via `make`:
 | `make test` | Run unit tests with race detector, sandboxed with firejail |
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
-| `make check-coverage` | Check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
+| `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
 | `make lint` | Run golangci-lint |
 | `make lint-docs` | Lint documentation markdown files |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
