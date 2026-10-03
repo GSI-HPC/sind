@@ -693,6 +693,41 @@ func TestExecAllowNonZero_NonZeroExitReturnsStdout(t *testing.T) {
 	assert.Equal(t, "active\ninactive\n", stdout)
 }
 
+// TestExecAllowNonZero_DockerFailurePropagates checks that docker's own
+// failures, which the docker CLI also reports with exit status 1, are not
+// taken for the inner command's exit status.
+func TestExecAllowNonZero_DockerFailurePropagates(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: container 0123abcd is not running\n",
+		"Error response from daemon: No such container: sind-dev-controller\n",
+		"Error response from daemon: container 0123abcd is paused, unpause the container before exec\n",
+		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
+		"error during connect: Get \"http://docker.example:2375/v1.47/containers/x/json\": dial tcp: connection refused\n",
+	} {
+		t.Run(stderr, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", stderr, &exec.ExitError{ProcessState: exitCode1(t)})
+			c := NewClient(&m)
+
+			_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), strings.TrimSpace(stderr))
+		})
+	}
+}
+
+// TestExecAllowNonZero_InnerStderr checks that what the inner command writes
+// to stderr does not turn its non-zero exit into an error.
+func TestExecAllowNonZero_InnerStderr(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("failed\n", "Unit slurmdbd.service could not be found.\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
+	require.NoError(t, err)
+	assert.Equal(t, "failed\n", stdout)
+}
+
 func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))

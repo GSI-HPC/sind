@@ -296,18 +296,31 @@ func (c *Client) Exec(ctx context.Context, container ContainerName, command ...s
 
 // ExecAllowNonZero is like Exec but returns stdout even when the inner
 // command exits non-zero. The returned error is non-nil iff the exec itself
-// failed (daemon unreachable, container gone); command-level non-zero exits
-// are surfaced via the stdout return. Intended for commands whose stdout is
-// meaningful on failure (e.g. systemctl is-active, which exits non-zero
-// whenever any listed unit is inactive but still prints the unit states).
+// failed (daemon unreachable, container missing, stopped or paused);
+// command-level non-zero exits are surfaced via the stdout return. Intended
+// for commands whose stdout is meaningful on failure (e.g. systemctl
+// is-active, which exits non-zero whenever any listed unit is inactive but
+// still prints the unit states).
 func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, command ...string) (string, error) {
 	args := append([]string{"exec", string(container)}, command...)
-	stdout, _, err := c.run(ctx, args...)
+	stdout, stderr, err := c.run(ctx, args...)
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if errors.As(err, &exitErr) && !execFailed(stderr) {
 		return stdout, nil
 	}
 	return stdout, err
+}
+
+// execFailed reports whether a non-zero exit of docker exec, given its
+// stderr, is docker's own failure rather than the inner command's: the
+// docker CLI exits 1 too when the daemon refuses the exec (the container is
+// missing, stopped or paused) or cannot be reached, and says so on stderr,
+// where the inner command has written nothing by then.
+func execFailed(stderr string) bool {
+	msg := strings.TrimSpace(stderr)
+	return strings.HasPrefix(msg, "Error response from daemon:") ||
+		strings.HasPrefix(msg, "Cannot connect to the Docker daemon") ||
+		strings.HasPrefix(msg, "error during connect:")
 }
 
 // ExecWithStdin runs a command inside a container, piping stdin to it.
