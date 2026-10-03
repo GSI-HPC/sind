@@ -41,6 +41,13 @@ variable "SIND_RELEASE" {
   }
 }
 
+# Build the runtime stage without the cache, so its packages are current;
+# the compiled components still come from the cache. The image workflow's
+# weekly rebuild sets it.
+variable "REFRESH_PACKAGES" {
+  default = false
+}
+
 # Release line of a Slurm version, e.g. "25.11" for "25.11.8".
 function "release_line" {
   params = [version]
@@ -61,6 +68,8 @@ target "slurm" {
   dockerfile = "Dockerfile"
   network    = "host"
   platforms  = ["linux/amd64", "linux/arm64"]
+  # A variable, not --set: buildx up to v0.37 ignores --set *.no-cache-filter.
+  no-cache-filter = REFRESH_PACKAGES ? ["runtime"] : []
   args = {
     SLURM_VERSION = r.version
     SLURM_SHA256  = r.sha256

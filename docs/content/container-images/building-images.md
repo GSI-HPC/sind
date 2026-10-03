@@ -26,7 +26,7 @@ Each sind release also publishes the images it was released with:
 
 Every tag is a multi-platform image for linux/amd64 and linux/arm64; Docker pulls the variant that matches the host.
 
-The images are rebuilt when the image build changes, so the tags above pick up image fixes. Tags of superseded patch releases and of release lines that are no longer supported stay available but are not updated.
+The images are rebuilt when the image build changes, so the tags above pick up image fixes. They are also rebuilt every week with the current Rocky Linux packages, together with the tags of the newest sind release, so they pick up security updates. Tags of superseded patch releases, of older sind releases and of release lines that are no longer supported stay available but are not updated.
 
 To run a cluster on a specific release line, set its image in the [cluster configuration](../../configuration/cluster-config/):
 

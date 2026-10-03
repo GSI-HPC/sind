@@ -6,6 +6,9 @@ name: Image
 # - a release tag vX.Y.Z publishes vX.Y.Z-<YY>.<MM> and vX.Y.Z, which the
 #   release's binaries use by default (.goreleaser.yaml); GitHub does not
 #   apply path filters to tag pushes
+# - the weekly schedule, or a manual run on main, rebuilds both the images
+#   of main and those of the newest release with the current Rocky Linux
+#   packages; a manual run on a release tag rebuilds that release's images
 # Nothing else publishes: a run on any other ref fails.
 on:
   push:
@@ -14,6 +17,8 @@ on:
     paths:
       - "Dockerfile"
       - "docker-bake.hcl"
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -29,19 +34,47 @@ jobs:
     outputs:
       builds: ${{ steps.plan.outputs.builds }}
     steps:
+      # Each build is {ref, release, refresh}; refresh rebuilds the runtime
+      # stage without the cache, so its packages are current.
       - name: Plan the builds
         id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          refresh=false
+          if [[ "$GITHUB_EVENT_NAME" == schedule || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            refresh=true
+          fi
+          build() {
+            jq -cn --arg ref "$1" --arg release "$2" --argjson refresh "$refresh" \
+              '{ref: $ref, release: $release, refresh: $refresh}'
+          }
           case "$GITHUB_REF" in
-            refs/heads/main) release="" ;;
-            refs/tags/v*) release="$GITHUB_REF_NAME" ;;
+            refs/heads/main)
+              builds=("$(build "$GITHUB_SHA" "")")
+              # A rebuild of main also rebuilds the newest release's images,
+              # which its binaries use, unless the release predates them.
+              if [[ "$refresh" == true ]]; then
+                tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName) || tag=""
+                if [[ -n "$tag" ]]; then
+                  config=$(gh api "repos/$GITHUB_REPOSITORY/contents/.goreleaser.yaml?ref=$tag" --jq .content | base64 -d) || config=""
+                  if grep -q 'pkg/config\.DefaultImage=' <<<"$config"; then
+                    builds+=("$(build "$tag" "$tag")")
+                  else
+                    echo "::notice::Release $tag predates release images and is not rebuilt"
+                  fi
+                fi
+              fi
+              ;;
+            refs/tags/v*)
+              builds=("$(build "$GITHUB_SHA" "$GITHUB_REF_NAME")")
+              ;;
             *)
               echo "::error::Images are published from main and release tags only, not from $GITHUB_REF"
               exit 1
               ;;
           esac
-          jq -cnr --arg ref "$GITHUB_SHA" --arg release "$release" \
-            '"builds=\([{ref: $ref, release: $release}] | tojson)"' >> "$GITHUB_OUTPUT"
+          echo "builds=$(jq -cs . <<<"${builds[*]}")" >> "$GITHUB_OUTPUT"
 
   publish:
     name: publish (${{ matrix.release || 'main' }})
@@ -57,3 +90,4 @@ jobs:
     with:
       ref: ${{ matrix.ref }}
       release: ${{ matrix.release }}
+      refresh: ${{ matrix.refresh }}
