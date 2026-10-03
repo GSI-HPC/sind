@@ -12,7 +12,9 @@ sind runs everything as root unless the cluster config declares users. With [`us
 
 ```yaml
 kind: Cluster
-nodes: [controller, db, submitter, worker: 2]
+defaults:
+  cpus: 2
+nodes: [controller, db, submitter, worker: 3]
 slurm:
   main: |
     AccountingStorageEnforce=associations,limits
@@ -58,7 +60,7 @@ root
         └── bob
 ```
 
-With the enforcement in `slurm.main`, this tests that alice can have one job at a time, that all of physics shares 4 CPUs, that bob can manage limits and users below physics, that carol can run operator commands, and that dave's `sbatch` is rejected with "Invalid account or account/partition combination specified". The Linux group `physics` and the Slurm account `physics` are unrelated; they only share a name, as they often do at real sites.
+With the enforcement in `slurm.main`, this tests that alice can have one job at a time, that all of physics shares 4 of the cluster's 6 CPUs (three workers with two each), so that a fifth CPU requested under physics stays pending with the reason `AssocGrpCpuLimit` in `squeue`, that bob can manage limits and users below physics, that carol can run operator commands, and that dave's `sbatch` is rejected with "Invalid account or account/partition combination specified". The Linux group `physics` and the Slurm account `physics` are unrelated; they only share a name, as they often do at real sites.
 
 Run commands as a user:
 
