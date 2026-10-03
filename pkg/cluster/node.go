@@ -180,6 +180,14 @@ func clusterNetworkSpec(realm, clusterName string) string {
 // than root fails with task_g_set_affinity.
 const TaskAffinityCapability = "SYS_NICE"
 
+// getsTaskAffinityCapability reports whether BuildRunArgs gives a worker
+// TaskAffinityCapability: when its cluster's slurm.conf enables
+// task/affinity, unless capDrop lists the capability or ALL, as a
+// --cap-drop does not undo a --cap-add.
+func getsTaskAffinityCapability(taskAffinity bool, capDrop []string) bool {
+	return taskAffinity && !slices.Contains(capDrop, TaskAffinityCapability) && !slices.Contains(capDrop, "ALL")
+}
+
 // BuildRunArgs returns the docker arguments for creating a node container.
 // The returned slice does not include "create" or "run -d" — the caller
 // passes these args to Client.CreateContainer or Client.RunContainer.
@@ -273,8 +281,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// Workers that bind tasks with task/affinity may set the CPU affinity of
 	// other users' processes, unless the node drops the capability: a
 	// --cap-drop does not undo a --cap-add.
-	if cfg.Role == config.RoleWorker && cfg.TaskAffinity &&
-		!slices.Contains(cfg.CapDrop, TaskAffinityCapability) && !slices.Contains(cfg.CapDrop, "ALL") {
+	if cfg.Role == config.RoleWorker && getsTaskAffinityCapability(cfg.TaskAffinity, cfg.CapDrop) {
 		args = append(args, "--cap-add", TaskAffinityCapability)
 	}
 

@@ -33,7 +33,7 @@ New workers look like the cluster's newest worker: the one with the highest inde
 
 Not inherited:
 
-- the `SYS_NICE` capability and the security options that sind gives nodes by itself, as it decides them for each new worker;
+- the security options that sind gives every node, and the `SYS_NICE` capability where sind gave it to a managed worker for `task/affinity` (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})), as sind decides them for each new worker. A `SYS_NICE` you asked for yourself, with sind's default `TaskPlugin` or on unmanaged workers, is inherited;
 - a seccomp profile, which Docker reports by content rather than by file: pass it again with `--security-opt seccomp=FILE`.
 
 A cluster without workers gets the controller's image and 1 CPU, `512m` memory and a `256m` `/tmp`.

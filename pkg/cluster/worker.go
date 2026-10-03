@@ -190,7 +190,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// on top.
 	shape := defaultWorkerShape(infra.controller.Image)
 	if infra.worker != nil {
-		shape = existingWorkerShape(ctx, infra.worker, shape)
+		shape = existingWorkerShape(ctx, infra.worker, shape, taskAffinity)
 	}
 	shape = shape.override(opts)
 
@@ -564,19 +564,28 @@ func defaultWorkerShape(controllerImage string) workerShape {
 // existingWorkerShape returns the shape of an existing worker container as
 // docker inspect reports it. The image is the container's image ID: its
 // tag may since have moved to another image, even another Slurm release.
-// A resource docker reports none for keeps fallback's value. The
-// capability sind adds by itself (TaskAffinityCapability) and the security
+// A resource docker reports none for keeps fallback's value. The security
 // options every node gets are left out, as sind decides on them for each
-// new worker.
-func existingWorkerShape(ctx context.Context, info *docker.ContainerInfo, fallback workerShape) workerShape {
+// new worker, and so is TaskAffinityCapability where sind gave it to this
+// worker by itself: on a managed worker of a cluster whose slurm.conf
+// enables task/affinity, as taskAffinity says (see
+// getsTaskAffinityCapability). A SYS_NICE the user asked for stays.
+// WorkerAdd reads slurm.conf for managed new workers only, so unmanaged
+// ones modelled on a managed worker keep its SYS_NICE.
+func existingWorkerShape(ctx context.Context, info *docker.ContainerInfo, fallback workerShape, taskAffinity bool) workerShape {
 	hc := info.HostConfig
+	capDrop := capabilityNames(hc.CapDrop)
+	var own []string
+	if IsManaged(info.Labels) && getsTaskAffinityCapability(taskAffinity, capDrop) {
+		own = append(own, TaskAffinityCapability)
+	}
 	shape := workerShape{
 		Image:       cmp.Or(info.Image, fallback.Image),
 		CPUs:        fallback.CPUs,
 		Memory:      fallback.Memory,
 		TmpSize:     cmp.Or(tmpfsSize(hc.Tmpfs["/tmp"]), fallback.TmpSize),
-		CapAdd:      capabilityNames(hc.CapAdd, TaskAffinityCapability),
-		CapDrop:     capabilityNames(hc.CapDrop),
+		CapAdd:      capabilityNames(hc.CapAdd, own...),
+		CapDrop:     capDrop,
 		Devices:     deviceArgs(hc.Devices),
 		SecurityOpt: extraSecurityOpts(ctx, info.Name, hc.SecurityOpt),
 	}

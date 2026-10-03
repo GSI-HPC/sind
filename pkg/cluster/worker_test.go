@@ -569,7 +569,9 @@ func TestWorkerAdd_UsesNewestWorkerImageID(t *testing.T) {
 
 func TestWorkerAdd_InheritsShape(t *testing.T) {
 	// New workers get the newest worker's resources and privileges, but
-	// not the capability and security options sind adds by itself.
+	// not the security options sind adds by itself. Its SYS_NICE is the
+	// user's: slurm.conf does not enable task/affinity, so sind did not add
+	// it.
 	hostConfig := testWorkerHostConfig()
 	hostConfig.CapAdd = []string{"CAP_SYS_ADMIN", "CAP_SYS_NICE"}
 	hostConfig.CapDrop = []string{"CAP_NET_RAW"}
@@ -605,13 +607,43 @@ func TestWorkerAdd_InheritsShape(t *testing.T) {
 	assert.Equal(t, []string{"2"}, testutil.ArgValues(args, "--cpus"))
 	assert.Equal(t, []string{"2g"}, testutil.ArgValues(args, "--memory"))
 	assert.Contains(t, testutil.ArgValues(args, "--tmpfs"), "/tmp:rw,nosuid,nodev,size=1g")
-	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(args, "--cap-add"))
+	assert.Equal(t, []string{"SYS_ADMIN", "SYS_NICE"}, testutil.ArgValues(args, "--cap-add"))
 	assert.Equal(t, []string{"NET_RAW"}, testutil.ArgValues(args, "--cap-drop"))
 	assert.Equal(t, []string{"/dev/fuse", "/dev/sda:/dev/xvdc:r"}, testutil.ArgValues(args, "--device"))
 	assert.Equal(t, []string{"writable-cgroups=true", "label=disable", "apparmor=unconfined"}, testutil.ArgValues(args, "--security-opt"))
 	writes := nodesConfWrites(m.Calls)
 	require.Len(t, writes, 1)
 	assert.Contains(t, writes[0], "NodeName=worker-4 CPUs=2 RealMemory=2048 State=UNKNOWN")
+}
+
+func TestWorkerAdd_InheritsShapeWithTaskAffinity(t *testing.T) {
+	// With task/affinity in slurm.conf, sind gave the newest worker its
+	// SYS_NICE: the new worker gets it from sind, once, and the rest of
+	// the newest worker's capabilities.
+	hostConfig := testWorkerHostConfig()
+	hostConfig.CapAdd = []string{"CAP_SYS_NICE", "CAP_SYS_ADMIN"}
+	base := workerAddOnCall(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		switch {
+		case args[0] == "inspect" && args[1] == "sind-dev-worker-0":
+			return mock.Result{Stdout: nodeInspectJSON(t, args[1], nodeInspect{Image: testWorkerImageID, HostConfig: hostConfig})}
+		case slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}):
+			return mock.Result{Stdout: "ClusterName=dev\nTaskPlugin=task/cgroup,task/affinity\ninclude /etc/slurm/sind-nodes.conf\n"}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	require.NoError(t, err)
+
+	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
+	require.True(t, ok)
+	assert.Equal(t, []string{"SYS_NICE", "SYS_ADMIN"}, testutil.ArgValues(args, "--cap-add"))
 }
 
 func TestWorkerAdd_OptionsOverrideShape(t *testing.T) {
@@ -2709,9 +2741,38 @@ func TestExistingWorkerShape_Fallback(t *testing.T) {
 	// A worker docker reports no limits for keeps the fallback's.
 	fallback := defaultWorkerShape("sha256:ctrl")
 
-	shape := existingWorkerShape(t.Context(), &docker.ContainerInfo{}, fallback)
+	shape := existingWorkerShape(t.Context(), &docker.ContainerInfo{}, fallback, false)
 
 	assert.Equal(t, fallback, shape)
+}
+
+func TestExistingWorkerShape_TaskAffinityCapability(t *testing.T) {
+	// SYS_NICE is left out only where sind added it itself: on a managed
+	// worker of a cluster whose slurm.conf enables task/affinity, unless the
+	// worker drops the capability.
+	for _, tt := range []struct {
+		name         string
+		labels       docker.Labels
+		capDrop      []string
+		taskAffinity bool
+		want         []string
+	}{
+		{"added by sind", nil, nil, true, []string{"SYS_ADMIN"}},
+		{"no task/affinity", nil, nil, false, []string{"SYS_ADMIN", "SYS_NICE"}},
+		{"unmanaged worker", docker.Labels{LabelManaged: "false"}, nil, true, []string{"SYS_ADMIN", "SYS_NICE"}},
+		{"all dropped", nil, []string{"ALL"}, true, []string{"SYS_ADMIN", "SYS_NICE"}},
+		{"dropped", nil, []string{"CAP_SYS_NICE"}, true, []string{"SYS_ADMIN", "SYS_NICE"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &docker.ContainerInfo{Labels: tt.labels, HostConfig: docker.HostConfig{
+				CapAdd: []string{"CAP_SYS_ADMIN", "CAP_SYS_NICE"}, CapDrop: tt.capDrop,
+			}}
+
+			shape := existingWorkerShape(t.Context(), info, defaultWorkerShape("sha256:ctrl"), tt.taskAffinity)
+
+			assert.Equal(t, tt.want, shape.CapAdd)
+		})
+	}
 }
 
 func TestMemoryArg(t *testing.T) {
