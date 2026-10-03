@@ -230,7 +230,7 @@ Rules:
 Rules:
 - Mutations are silent — `exit 0` is the confirmation; use `-v` for progress
 - Errors are always visible (slog error level is always enabled, even without `-v`), except that `ssh`, `exec`, `enter` and `logs` add none when the program they run fails: it writes its own
-- The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
+- The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. The cells of `get` tables (`cell`), whose text comes from labels, containers and docker, and the details of `doctor` checks are escaped the same way; a table cell also shows tab and newline as `\t` and `\n`, which would otherwise start a column or a row. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗) only in `get cluster`, `get node` and `doctor` output
@@ -1585,6 +1585,8 @@ While it creates the cluster network and volumes, sind runs an ephemeral contain
 docker run --rm <controller image> slurmctld -V
 # Output: "slurm 26.05.4"
 ```
+
+The version must have the form `X.Y.Z`, optionally with a pre-release suffix such as `-0rc1` (`[0-9A-Za-z.]`); any other output, such as a version followed by a terminal control sequence from an untrusted image, fails the create.
 
 The discovered version is stored as a label on each node container:
 

@@ -116,6 +116,30 @@ func TestGetClusters_UnknownSlurmVersion(t *testing.T) {
 	assert.Equal(t, []string{"dev", "1", "(0/1/0/0)", "-", "running"}, strings.Fields(lines[1]))
 }
 
+// TestGetClusters_EscapesLabels checks that a label holding a terminal
+// control sequence, as an untrusted image can set it, is printed escaped.
+func TestGetClusters_EscapesLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "evil",
+			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0\x1b]52;c;cm0gLXJmIH4K\x07",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "clusters")
+	require.NoError(t, err)
+	assert.NotContains(t, stdout, "\x1b")
+	assert.NotContains(t, stdout, "\x07")
+	assert.Contains(t, stdout, `25.11.0\x1b]52;c;cm0gLXJmIH4K\x07`)
+}
+
+func TestCell(t *testing.T) {
+	assert.Equal(t, "plain", cell("plain"))
+	assert.Equal(t, `a\tb\nc\x1b[2J\u202e`, cell("a\tb\nc\x1b[2J\u202e"))
+	assert.Equal(t, "worker", cell(config.RoleWorker))
+}
+
 func TestGetNodes_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"get", "nodes"})

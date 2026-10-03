@@ -57,6 +57,28 @@ func TestParseVersion(t *testing.T) {
 			input:   "slurm\n",
 			wantErr: "unexpected slurmctld -V output",
 		},
+		{
+			name:  "pre-release",
+			input: "slurm 26.05.0-0rc1\n",
+			want:  "26.05.0-0rc1",
+		},
+		{
+			name:    "two numbers",
+			input:   "slurm 25.11\n",
+			wantErr: "unexpected slurmctld -V output",
+		},
+		{
+			name:    "trailing words",
+			input:   "slurm 25.11.0 (patched)\n",
+			wantErr: "unexpected slurmctld -V output",
+		},
+		{
+			// An image that writes the clipboard (OSC 52) through the
+			// version sind prints in get clusters.
+			name:    "control sequence",
+			input:   "slurm 25.11.0\x1b]52;c;cm0gLXJmIH4K\x07\n",
+			wantErr: "unexpected slurmctld -V output",
+		},
 	}
 
 	for _, tt := range tests {
