@@ -1051,7 +1051,7 @@ sacctmgr -i add coordinator account=physics names=bob
 - The Linux users exist on the controller before `sacctmgr` runs (setupNodes), so slurmctld resolves the uids of the new associations right away; it would otherwise retry only once an hour. slurmdbd pushes the associations to slurmctld before `sacctmgr` returns, so jobs can use them as soon as `sind create cluster` returns.
 - sind sets no `AccountingStorageEnforce`: jobs run without associations unless `slurm.main` enforces them, e.g. `AccountingStorageEnforce=associations,limits`. Enforcement changes which jobs run, so sind keeps Slurm's default, but `sind create cluster` prints a `Warning:` to stderr when an account sets a `Max*` or `Grp*` limit and `slurm.main`'s `AccountingStorageEnforce` lists none of `limits`, `safe` and `all`, as Slurm then ignores the limit.
 - The Slurm accounts and the Linux groups are unrelated, even when they share a name.
-- A failing `sacctmgr` fails `sind create cluster` with its error.
+- The commands run in one `docker exec` (a script with each argument shell-quoted), which stops at the first failing command: a failing `sacctmgr` fails `sind create cluster` with the command and its output. A `docker exec` that has not finished after 2 minutes fails it too, as does `--wait` running out.
 - Accounts need a managed db node, as `slurm.slurmdbd` does: without one, or with `managed: false` on it or the controller, they fail validation.
 
 ### Identity Modes
