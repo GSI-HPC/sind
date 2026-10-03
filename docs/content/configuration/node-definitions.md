@@ -12,7 +12,7 @@ toc: true
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
 | `db` | 0–1 | no | mariadb, slurmdbd | Accounting database (see below) |
-| `submitter` | 0–1 | no | none (clients only) | Job submission node |
+| `submitter` | 0–1 | no | none (clients only; `sackd` with identity `clientIds`) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
 ## Node parameters

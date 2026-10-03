@@ -76,7 +76,7 @@ When an event arrives, probes re-evaluate immediately instead of waiting for the
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
-| munge ready | munge service active (not with identity `clientIds`) |
+| munge ready | munge service active (not with identity `clientIds`, which masks munge) |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (managed workers only) |
 | sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |

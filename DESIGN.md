@@ -17,6 +17,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 - Slurm 26.05 and 25.11 (one node image per release line)
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.20)
+- libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
 
 ## Overview
 
@@ -80,7 +81,7 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
-| munge ready | munge service active (not with identity `clientIds`) |
+| munge ready | munge service active (not with identity `clientIds`, which masks munge) |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (managed workers only) |
 | sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
@@ -832,7 +833,7 @@ Validation rules:
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
 | `db` | 0-1 | no | mariadb, slurmdbd | Accounting database (see Database Node) |
-| `submitter` | 0-1 | no | none (clients only) | Job submission node |
+| `submitter` | 0-1 | no | none (clients only; `sackd` with identity `clientIds`) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
 ### Node Parameters
@@ -1481,12 +1482,12 @@ ghcr.io/gsi-hpc/sind-node:<YY>.<MM>.<patch>     # a patch release, e.g. 25.11.8
 The generic image:
 - Published for linux/amd64 and linux/arm64
 - Based on Rocky Linux 10
-- Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source
+- Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
 - Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - sind enables the appropriate services based on node role
 
-The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. UCX, PMIx, PRRTE and OpenMPI versions are pinned as `ARG` defaults in the Dockerfile and mirrored in `docker-bake.hcl`. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`. Targets build for linux/amd64 and linux/arm64; CI builds each platform on a native runner and merges them into one multi-platform image per tag, while `make image` builds for the host platform only.
+The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. UCX, PMIx, PRRTE, OpenMPI and libjwt versions are pinned as `ARG` defaults in the Dockerfile and mirrored in `docker-bake.hcl`. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`. Targets build for linux/amd64 and linux/arm64; CI builds each platform on a native runner and merges them into one multi-platform image per tag, while `make image` builds for the host platform only.
 
 ### Custom Images
 
@@ -1520,7 +1521,7 @@ The repository's `Dockerfile`, which builds the official images, serves as the r
 
 ### Munge
 
-During `sind create cluster`, before starting any containers, sind generates a random munge key and writes it to the `<realm>-<cluster>-munge` volume. This ensures all nodes share the same key from first boot.
+During `sind create cluster`, before starting any containers, sind generates a random munge key and writes it to the `<realm>-<cluster>-munge` volume. This ensures all nodes share the same key from first boot. With identity `clientIds` there is no munge volume or key: sind writes `slurm.key`, the key of `auth/slurm` and `cred/slurm`, to the config volume instead (see Identity Modes).
 
 ### Slurm Configuration
 
@@ -1544,7 +1545,8 @@ sind generates a multi-file configuration structure:
 ├── topology.conf           # network topology (if slurm.topology is set)
 ├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
-└── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
+├── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
+└── slurm.key               # auth/slurm key (identity clientIds only)
 ```
 
 #### slurm.conf
@@ -1607,7 +1609,7 @@ sind generates a minimal `cgroup.conf`, `CgroupPlugin=autodetect`, which selects
 
 #### slurmdbd.conf
 
-Only generated for a cluster with a managed db node (not with `managed: false`), together with the accounting parameters in `slurm.conf`; see Database Node.
+Only generated for a cluster with a managed db node (not with `managed: false`), together with the accounting parameters in `slurm.conf`; see Database Node. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`; `CredType` is a `slurm.conf` parameter only.
 
 #### User Customization
 

@@ -26,6 +26,8 @@ toc: true
 
 The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, using the controller's image, and are removed once the files are written. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
 
+With identity `clientIds` there is no munge volume: the authentication secret, `slurm.key`, is on the config volume (see [Slurm Configuration]({{< relref "/architecture/slurm-config#slurmkey" >}})).
+
 The default realm is `sind` and the default cluster name is `default`, resulting in prefixes like `sind-default-*`. See [Realms](../../configuration/realms/) for custom realm naming.
 
 ## Global resources (mesh)
