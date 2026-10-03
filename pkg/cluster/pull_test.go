@@ -99,9 +99,11 @@ func TestCreate_PullFails(t *testing.T) {
 	cfg.Storage.CVMFS = true
 	_, err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
+	// The network and volumes may exist (and are rolled back), but nothing
+	// ran the image.
 	for _, c := range m.Calls {
 		a := c.Args
-		assert.False(t, a[0] == "run" || a[0] == "create" || a[1] == "create" || a[0] == "plugin", "%v", a)
+		assert.False(t, a[0] == "run" || a[0] == "create" || a[0] == "plugin", "%v", a)
 	}
 }
 

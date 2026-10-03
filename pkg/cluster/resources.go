@@ -93,10 +93,8 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		if _, err := client.RunContainer(ctx, args...); err != nil {
 			return fmt.Errorf("creating config helper container: %w", err)
 		}
-		defer func() {
-			_ = client.KillContainer(ctx, helperName)
-			_ = client.RemoveContainer(ctx, helperName)
-		}()
+		// docker rm -f kills the helper's sleep first.
+		defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 	} else {
 		args = append(args, image)
 		if _, err := client.CreateContainer(ctx, args...); err != nil {
@@ -203,10 +201,8 @@ func WriteMungeKey(ctx context.Context, client *docker.Client, realm, clusterNam
 	if err != nil {
 		return fmt.Errorf("creating munge helper container: %w", err)
 	}
-	defer func() {
-		_ = client.KillContainer(ctx, helperName)
-		_ = client.RemoveContainer(ctx, helperName)
-	}()
+	// docker rm -f kills the helper's sleep first.
+	defer client.RemoveContainer(ctx, helperName) //nolint:errcheck
 
 	// Mode 0400 from the start, so that the key is never readable by others.
 	err = client.CopyFilesToContainer(ctx, helperName, slurm.MungeDir, map[string]docker.File{

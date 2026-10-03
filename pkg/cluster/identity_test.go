@@ -345,7 +345,6 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper with sleep)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // chown slurmdbd.conf and slurm.key
-	m.AddResult("", "", nil)         // KillContainer (defer)
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
 	c := docker.NewClient(&m)
 
@@ -357,7 +356,7 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 5)
+	require.Len(t, m.Calls, 4)
 	cpStdin := m.Calls[1].Stdin
 	assert.Contains(t, cpStdin, "slurm.key")
 	assert.Contains(t, cpStdin, "AuthType=auth/slurm\nCredType=cred/slurm\nAuthInfo=use_client_ids\nLaunchParameters=enable_nss_slurm\n")
@@ -387,7 +386,6 @@ func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
 			for _, err := range tt.results {
 				m.AddResult("", "", err)
 			}
-			m.AddResult("", "", nil) // KillContainer (defer)
 			m.AddResult("", "", nil) // RemoveContainer (defer)
 			c := docker.NewClient(&m)
 

@@ -155,7 +155,7 @@ type nodeResult struct {
 // after the last node container started. When the limit is reached, Create
 // rolls back and returns an error that wraps ErrNotReady.
 //
-//	┌ PreflightCheck → createResources → ConnectNetwork ┐
+//	┌ PreflightCheck → createResources ─────────────────┐
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
 //	├ DetectCVMFS (storage.cvmfs only) ─────────────────┤
 //	└ pullImages (cfg.Pull only) ───────────────────────┘
@@ -165,8 +165,8 @@ type nodeResult struct {
 //	                    *Cluster
 //
 // With cfg.Pull, each distinct image is pulled once, concurrently, and the
-// steps that run one (createResources, the Slurm version, DetectCVMFS)
-// wait for the pull; nothing is created with --pull always.
+// steps that run one (the helpers of createResources, the Slurm version,
+// DetectCVMFS) wait for the pull; nothing is created with --pull always.
 //
 // An unmanaged cluster (managed: false on the controller) gets the same
 // containers, volumes and munge key, but sind writes no Slurm configuration,
@@ -215,11 +215,11 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	pull := startPull(prepCtx, prepGroup, client, images)
 
-	// Branch A: preflight → createResources → SSH relay connect. Serialised
-	// because createResources only makes sense once preflight has passed,
-	// and the relay hop depends on the cluster network existing. Preflight
-	// includes refusing cached sind-node images from before identity modes
-	// (checkIdentityImages, identity nssSlurm and clientIds only).
+	// Branch A: preflight → createResources, which connects the SSH relay
+	// to the cluster network. Serialised because createResources only makes
+	// sense once preflight has passed. Preflight includes refusing cached
+	// sind-node images from before identity modes (checkIdentityImages,
+	// identity nssSlurm and clientIds only).
 	prepGroup.Go(func() error {
 		if err := checkIdentityImages(prepCtx, client, cfg); err != nil {
 			return err
@@ -228,16 +228,9 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return err
 		}
 		log.DebugContext(prepCtx, "preflight check passed")
-		if err := pull.wait(prepCtx); err != nil {
-			return err
-		}
 		resourcesCreated = true
-		if err := createResources(prepCtx, client, realm, cfg); err != nil {
+		if err := createResources(prepCtx, client, realm, cfg, meshMgr.SSHContainerName(), pull); err != nil {
 			return err
-		}
-		clusterNet := NetworkName(realm, cfg.Name)
-		if err := client.ConnectNetwork(prepCtx, clusterNet, meshMgr.SSHContainerName()); err != nil {
-			return fmt.Errorf("connecting SSH relay to cluster network: %w", err)
 		}
 		log.DebugContext(prepCtx, "cluster resources created")
 		return nil
@@ -396,23 +389,36 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	return
 }
 
-// createResources creates cluster network, volumes, config, and munge key.
-// The config volume of an unmanaged cluster stays empty.
+// createResources creates cluster network, volumes, config, and munge key,
+// and connects the SSH relay container to the network, which it needs to
+// reach the nodes. The config volume of an unmanaged cluster stays empty.
+// The helpers that write the config and the munge key run the controller's
+// image, so they wait for pull.
 //
-//	┌─────────┐  ┌─────────┐
-//	network ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only)
-func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster) error {
+//	(network → relay connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only)
+func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, relay docker.ContainerName, pull *imagePull) error {
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return CreateClusterNetwork(gctx, client, realm, cfg.Name) })
+	g.Go(func() error {
+		if err := CreateClusterNetwork(gctx, client, realm, cfg.Name); err != nil {
+			return err
+		}
+		if err := client.ConnectNetwork(gctx, NetworkName(realm, cfg.Name), relay); err != nil {
+			return fmt.Errorf("connecting SSH relay to cluster network: %w", err)
+		}
+		return nil
+	})
 	g.Go(func() error {
 		if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeConfig); err != nil {
 			return err
 		}
 		if !cfg.Managed() {
 			return nil
+		}
+		if err := pull.wait(gctx); err != nil {
+			return err
 		}
 		return WriteClusterConfig(gctx, client, realm, cfg, image)
 	})
@@ -421,6 +427,9 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 	if cfg.Identity.Mode != config.IdentityClientIDs {
 		g.Go(func() error {
 			if err := CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeMunge); err != nil {
+				return err
+			}
+			if err := pull.wait(gctx); err != nil {
 				return err
 			}
 			return WriteMungeKey(gctx, client, realm, cfg.Name, mungeKey, image)

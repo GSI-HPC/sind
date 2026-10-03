@@ -258,7 +258,7 @@ func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
 
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	require.NoError(t, createResources(t.Context(), client, mesh.DefaultRealm, cfg))
+	require.NoError(t, createResources(t.Context(), client, mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, client, nil)))
 
 	var created []string
 	for _, c := range m.Calls {
@@ -275,7 +275,7 @@ func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	t.Helper()
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg))
+	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, docker.NewClient(&m), nil)))
 
 	var created []string
 	for _, c := range m.Calls {

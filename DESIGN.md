@@ -47,9 +47,9 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 
 **Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
 
-With `--pull`, sind first pulls each distinct image of the cluster's nodes once (`docker pull`), concurrently with the preflight check and the mesh lookups; the steps that run an image (the helper containers, the Slurm version check, the CVMFS check and the nodes) wait for it and create their containers without `--pull always`, so every node runs the same image and the registry is asked once per image.
+With `--pull`, sind pulls each distinct image of the cluster's nodes once (`docker pull`), concurrently with the preflight check, the mesh lookups and the creation of the network and volumes; the steps that run an image (the helper containers, the Slurm version check, the CVMFS check and the nodes) wait for it and create their containers without `--pull always`, so every node runs the same image and the registry is asked once per image.
 
-1. Create cluster network
+1. Create cluster network → connect the realm's SSH relay container to it
 2. Create config volume → write Slurm configuration, and `slurmdbd.conf` for a managed db node (managed clusters only; see Unmanaged Cluster)
 3. Create munge volume → generate and write munge key (not with identity `clientIds`, whose `slurm.key` goes to the config volume)
 4. Create data volume (if needed)
