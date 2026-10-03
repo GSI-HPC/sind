@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // Print mouth-open statistics for a voice line: node tools/mouth-stats.mjs <line.json>
-import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-const require = createRequire(import.meta.url);
-let playwright;
-try { playwright = require("playwright"); } catch { playwright = require("/opt/node22/lib/node_modules/playwright"); }
+import { launch } from "./browser.mjs";
+
 const line = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const browser = await playwright.chromium.launch();
+const browser = await launch();
 const page = await browser.newPage();
 await page.setContent("<div id=a style='width:300px;height:400px'></div>");
 await page.addScriptTag({ path: path.resolve("lib/sindy.js") });

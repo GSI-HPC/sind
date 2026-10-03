@@ -64,6 +64,8 @@ def setup(_args):
     CACHE.mkdir(parents=True, exist_ok=True)
     raw = CACHE / "kokoro-v1.0.onnx"
     for path in (raw, VOICES):
+        if path == raw and MODEL.exists():
+            continue
         if not path.exists():
             print(f"downloading {path.name} ...")
             urllib.request.urlretrieve(f"{RELEASE}/{path.name}", path)
@@ -80,6 +82,7 @@ def setup(_args):
         m.graph.node.append(helper.make_node("Identity", [src], ["duration"], name="expose_duration"))
         m.graph.output.append(helper.make_tensor_value_info("duration", TensorProto.INT64, ["sequence_length"]))
         onnx.save(m, str(MODEL))
+    raw.unlink(missing_ok=True)  # only the patched model is used
     print(f"ready: {MODEL}")
 
 

@@ -6,20 +6,12 @@
 //
 // The episode composition must call Scenes.episode(...), which publishes
 // window.__episode (id, title, duration, chapters, caption cues).
-import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-
-const require = createRequire(import.meta.url);
-let playwright;
-try {
-  playwright = require("playwright");
-} catch {
-  playwright = require("/opt/node22/lib/node_modules/playwright");
-}
+import { launch } from "./browser.mjs";
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,9 +30,9 @@ if (!values.static || !values.data) {
 }
 
 // 1. Episode metadata, read from the composition outside the render runtime.
-const browser = await playwright.chromium.launch();
+const browser = await launch();
 const page = await browser.newPage();
-await page.addInitScript(() => {
+await page.evaluateOnNewDocument(() => {
   window.__timelines = {};
 });
 const errors = [];
