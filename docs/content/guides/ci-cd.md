@@ -14,17 +14,19 @@ See the [sind-action documentation](https://github.com/GSI-HPC/sind-action#readm
 
 ## Other CI systems
 
-sind works in any CI environment that provides a rootful Docker daemon. Install the binary from a [GitHub release](https://github.com/GSI-HPC/sind/releases) and run `sind doctor` to verify prerequisites:
+sind works in any CI environment that provides a rootful Docker daemon. Install the binary from a [GitHub release](https://github.com/GSI-HPC/sind/releases), check its build provenance before running it, and run `sind doctor` to verify prerequisites:
 
 ```bash
-curl -fsSL -o sind \
+curl -fsSL -o sind-linux-amd64 \
   "https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64"
-chmod +x sind
+gh attestation verify sind-linux-amd64 --repo GSI-HPC/sind \
+  --signer-workflow GSI-HPC/sind/.github/workflows/release.yml
+install -m 755 sind-linux-amd64 ./sind
 ./sind doctor
 ./sind create cluster --config cluster.yml
 ```
 
-On 64-bit ARM, download `sind-linux-arm64` instead.
+On 64-bit ARM, download `sind-linux-arm64` instead. `gh attestation verify` needs the [GitHub CLI](https://cli.github.com/) and a token in `GH_TOKEN`; see [Installation]({{< relref "/getting-started/installation" >}}) for the checksum alternative.
 
 sind requires Docker Engine 28.0+, running rootful and without `userns-remap`, and a Linux host with cgroupv2 and `nsdelegate`. Most modern CI runners meet these requirements out of the box. Rootless Docker and `userns-remap` do not work: Docker refuses the writable cgroups of sind's nodes there, which `sind doctor` and `sind create cluster` report before anything is pulled.
 

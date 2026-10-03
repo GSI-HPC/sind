@@ -11,32 +11,39 @@ toc: true
 {{< tabs "install" >}}
 {{< tab "Pre-built binary (Linux)" >}}
 
-Releases include binaries for linux/amd64 and linux/arm64. The commands below install the amd64 one; on 64-bit ARM, download `sind-linux-arm64` instead.
+Releases include binaries for linux/amd64 and linux/arm64. The commands below install the amd64 one; on 64-bit ARM, use `sind-linux-arm64` instead.
+
+Download the binary and check it before you install it:
+
+```bash
+curl -fLO https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
+gh attestation verify sind-linux-amd64 --repo GSI-HPC/sind \
+  --signer-workflow GSI-HPC/sind/.github/workflows/release.yml
+```
+
+Each release publishes a build provenance attestation for its binaries, and the [GitHub CLI](https://cli.github.com/) checks with it that sind's release workflow built the download. `--signer-workflow` matters: with `--repo` alone, any workflow of the repository would pass. Without the GitHub CLI, compare the download with the release's `checksums.txt`. That only detects a corrupted download, as the checksums come from the same release:
+
+```bash
+curl -fLO https://github.com/GSI-HPC/sind/releases/latest/download/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+```
 
 System-wide installation into `/usr/local/bin`:
 
 ```bash
-curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
 # install sets mode 755 and copies to the target directory
-sudo install ./sind /usr/local/bin/sind
+sudo install ./sind-linux-amd64 /usr/local/bin/sind
 ```
 
 Per-user installation into `~/.local/bin`:
 
 ```bash
-curl -Lo ./sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
-install -D ./sind ~/.local/bin/sind
+install -D ./sind-linux-amd64 ~/.local/bin/sind
 ```
 
 > Most distributions include `~/.local/bin` in `$PATH` by default, but only
 > if the directory exists at login time. You may need to log out and back in
 > after creating it.
-
-Each release publishes a `checksums.txt` and a build provenance attestation for its binaries. Check where a download came from with the [GitHub CLI](https://cli.github.com/):
-
-```bash
-gh attestation verify ./sind --repo GSI-HPC/sind
-```
 
 {{< /tab >}}
 {{< tab "mise" >}}
@@ -80,7 +87,7 @@ sind requires a container image with systemd, munge, sshd, and Slurm installed. 
 ghcr.io/gsi-hpc/sind-node:v0.11.0
 ```
 
-It carries the newest Slurm release line that release supports and is published for linux/amd64 and linux/arm64. sind built from source (`go install`, `make build`) defaults to `ghcr.io/gsi-hpc/sind-node:latest` instead, the newest supported release line. To stay on a specific release line, set `defaults.image` in the cluster configuration to its tag, e.g. `ghcr.io/gsi-hpc/sind-node:25.11`. See [Official images](../../container-images/building-images/#official-images) for the available tags.
+It carries the newest Slurm release line that release supports and is published for linux/amd64 and linux/arm64. sind built from source (`go install`, `make build`) defaults to `ghcr.io/gsi-hpc/sind-node:latest` instead, the newest supported release line. To stay on a specific release line, set `defaults.image` in the cluster configuration to its tag, e.g. `ghcr.io/gsi-hpc/sind-node:25.11`. See [Official images]({{< relref "/container-images/building-images#official-images" >}}) for the available tags.
 
 Docker pulls the image automatically when creating your first cluster, and after a sind upgrade, whose default image has a new tag. Subsequent creates reuse the cached image — use `--pull` to force a fresh pull:
 
