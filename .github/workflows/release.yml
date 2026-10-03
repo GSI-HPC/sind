@@ -7,25 +7,29 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
-  # Mint a Sigstore signing certificate and store the attestation.
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      # Create the draft release and upload its assets.
+      contents: write
+      # Mint a Sigstore signing certificate and store the attestation.
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # GoReleaser finds the previous release among the tags.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: "~> v2"
           args: release --clean
@@ -37,6 +41,6 @@ jobs:
       # before the release is published. mise's github: backend verifies it
       # on install; `gh attestation verify` does the same by hand.
       - name: Attest release assets
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: dist/checksums.txt

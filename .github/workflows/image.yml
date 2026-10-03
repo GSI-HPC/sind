@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE: ghcr.io/gsi-hpc/sind-node
@@ -22,20 +21,22 @@ jobs:
       targets: ${{ steps.targets.outputs.matrix }}
       builds: ${{ steps.builds.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # One bake target per Slurm release line (SLURM_RELEASES in
       # docker-bake.hcl). The bake file also sets the tags, including
       # latest on the newest release line.
       - name: List node image targets
         id: targets
-        uses: docker/bake-action/subaction/matrix@v7
+        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
 
       # Each target once per platform, built on a native runner: compiling
       # the image under emulation would take hours.
       - name: List builds per platform
         id: builds
-        uses: docker/bake-action/subaction/matrix@v7
+        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           fields: platforms
 
@@ -43,17 +44,22 @@ jobs:
     name: build (${{ matrix.target }}, ${{ matrix.platforms }})
     needs: targets
     runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.targets.outputs.builds) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -62,7 +68,7 @@ jobs:
       # Push untagged; the merge job tags the multi-platform image.
       - name: Build and push by digest
         id: bake
-        uses: docker/bake-action@v7
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           targets: ${{ matrix.target }}
           allow: network.host
@@ -80,7 +86,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/digests"
           touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: digests-${{ matrix.target }}-${{ runner.arch }}
           path: ${{ runner.temp }}/digests/*
@@ -91,23 +97,28 @@ jobs:
     name: merge (${{ matrix.target }})
     needs: [targets, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.targets.outputs.targets) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: digests-${{ matrix.target }}-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
