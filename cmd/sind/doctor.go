@@ -3,11 +3,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/cobra"
@@ -45,6 +47,21 @@ func nsdelegateRemediation(mountPath string) string {
 		"  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf\n" +
 		"sudo systemctl daemon-reload"
 }
+
+// rootlessRemediation is shown for a Docker daemon in rootless mode.
+const rootlessRemediation = `sind starts its nodes with --security-opt writable-cgroups=true, which
+Docker refuses in rootless mode. Point the docker CLI at a rootful daemon,
+such as the system one:
+
+unset DOCKER_HOST
+docker context use default`
+
+// usernsRemediation is shown for a Docker daemon with userns-remap.
+const usernsRemediation = `sind starts its nodes with --security-opt writable-cgroups=true, which
+Docker refuses with userns-remap. Remove "userns-remap" from
+/etc/docker/daemon.json and restart the daemon:
+
+sudo systemctl restart docker`
 
 // dnsPolicyRemediation is shown when polkit does not allow docker group
 // members to configure host DNS resolution through systemd-resolved.
@@ -126,6 +143,24 @@ func runDoctor(cmd *cobra.Command) error {
 		failures = append(failures, "docker")
 	}
 	checks = append(checks, engine)
+
+	// Check that the daemon can start sind's nodes: not rootless and
+	// without userns-remap, which refuse writable cgroups.
+	if info != nil {
+		daemon := doctorCheck{Name: "Docker daemon", Status: checkOK, Detail: "rootful, no userns-remap"}
+		switch err := cluster.DaemonSupport(info); {
+		case errors.Is(err, cluster.ErrRootlessDaemon):
+			daemon = doctorCheck{Name: "Docker daemon", Status: checkFailed,
+				Detail: "rootless mode (sind needs a rootful daemon)", Remediation: rootlessRemediation}
+		case errors.Is(err, cluster.ErrUsernsRemap):
+			daemon = doctorCheck{Name: "Docker daemon", Status: checkFailed,
+				Detail: "userns-remap enabled (sind needs a daemon without it)", Remediation: usernsRemediation}
+		}
+		if daemon.Status == checkFailed {
+			failures = append(failures, "docker-daemon")
+		}
+		checks = append(checks, daemon)
+	}
 
 	// Check cgroup2 with nsdelegate.
 	log := sindlog.From(ctx)

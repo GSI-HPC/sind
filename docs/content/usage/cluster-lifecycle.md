@@ -60,6 +60,8 @@ Ctrl-C (SIGINT) or SIGTERM, as sent by `timeout` or `docker stop`, stops the cre
 
 ### Preflight checks
 
+Before it sets up the mesh or pulls an image, sind asks the Docker daemon whether it can start sind's nodes: a daemon in rootless mode or with `userns-remap` refuses their writable cgroups, so creation fails at once with an error that says so.
+
 Before creating resources, sind checks for conflicts — containers, networks, or volumes with matching names that already exist. If conflicts are found, creation fails with an error.
 
 ## List clusters

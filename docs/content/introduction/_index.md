@@ -30,7 +30,7 @@ Unlike typical Docker containers that run a single application process, sind nod
 
 ### Designed for CI/CD
 
-sind runs rootless on standard GitHub Actions runners — no privileged containers, no custom runner images. The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in a single workflow step. Use realms to isolate parallel matrix jobs on the same runner.
+sind runs on standard GitHub Actions runners with the runner's Docker daemon — no sudo, no privileged containers, no custom runner images. The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in a single workflow step. Use realms to isolate parallel matrix jobs on the same runner.
 
 ### Multiple Slurm versions
 

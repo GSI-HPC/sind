@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,42 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"golang.org/x/sync/errgroup"
 )
+
+// The errors DaemonSupport wraps for a Docker daemon that cannot run sind
+// nodes.
+var (
+	// ErrRootlessDaemon is a daemon in rootless mode.
+	ErrRootlessDaemon = errors.New("the Docker daemon runs in rootless mode")
+	// ErrUsernsRemap is a daemon that remaps user namespaces.
+	ErrUsernsRemap = errors.New("the Docker daemon runs with userns-remap")
+)
+
+// CheckDaemon asks the Docker daemon what it is and returns DaemonSupport's
+// verdict. Call it before mesh.Manager.EnsureMesh and Create, so that an
+// unsupported daemon fails before anything is pulled or created.
+func CheckDaemon(ctx context.Context, client *docker.Client) error {
+	info, err := client.Info(ctx)
+	if err != nil {
+		return fmt.Errorf("querying the Docker daemon: %w", err)
+	}
+	return DaemonSupport(info)
+}
+
+// DaemonSupport returns nil when the daemon that info describes can run
+// sind nodes. Every node starts with --security-opt writable-cgroups=true,
+// which Docker refuses on a daemon in rootless mode or with userns-remap,
+// and only at `docker start`: after the images are pulled and the
+// cluster's network and volumes created.
+func DaemonSupport(info *docker.DaemonInfo) error {
+	const need = "sind needs a rootful Docker daemon without userns-remap, because Docker refuses the writable cgroups of sind's nodes otherwise"
+	switch {
+	case info.HasSecurityOption("rootless"):
+		return fmt.Errorf("%w; %s", ErrRootlessDaemon, need)
+	case info.HasSecurityOption("userns"):
+		return fmt.Errorf("%w; %s", ErrUsernsRemap, need)
+	}
+	return nil
+}
 
 // NodeShortNames returns the short hostname for each node defined in the config,
 // including the backup controller when enabled. Worker nodes are indexed sequentially across all worker groups, matching

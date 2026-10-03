@@ -10,6 +10,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 - Linux host with cgroupv2 and `nsdelegate` mount option (`mount -o remount,nsdelegate /sys/fs/cgroup`)
 - Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true`)
+- A rootful Docker daemon without `userns-remap`: Docker refuses `writable-cgroups` in rootless mode and with `userns-remap`, at `docker start`. `sind doctor` checks `docker info`'s `SecurityOptions` for `name=rootless` and `name=userns`, and `sind create cluster` does the same (`cluster.CheckDaemon`) before the mesh is set up or an image pulled
 - For clusters with 10+ nodes: `fs.inotify.max_user_instances >= 1024` (default 128 is too low)
 
 ## Supported Versions
@@ -97,7 +98,7 @@ With a managed db node, Slurm enablement starts on the db node: mariadb, the acc
 ### Design Goals
 
 - Familiar UX for kind users
-- No root/admin privileges required
+- No root/admin privileges (sudo) or privileged containers required; the Docker daemon itself must be rootful (see Prerequisites)
 - SELinux compatible: clusters work on hosts whose Docker daemon labels containers, without host
   policy changes (the nodes then run unconfined, see Mount Options)
 - Support for both static and dynamic Slurm node configurations
@@ -436,12 +437,12 @@ A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`pr
 `sind doctor` validates host prerequisites for running sind:
 
 ```bash
-sind doctor [-o json]                    # check Docker version, cgroupv2, DNS policy
+sind doctor [-o json]                    # check Docker version and mode, cgroupv2, DNS policy
 ```
 
-Checks the Docker Engine version (from `docker info`), that cgroupv2 is mounted with `nsdelegate`, and that polkit allows host DNS resolution via systemd-resolved. The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr. When Docker is not reachable, the Docker Engine detail is `not reachable: ` and the first line of docker's error (`doctor.DockerUnreachable`), with a remediation for a missing `docker` CLI, a user outside the docker group and a daemon that is not running. Details are escaped in the human output like the final error line, since they can quote docker.
+Checks the Docker Engine version (from `docker info`), that the daemon is rootful and has no `userns-remap` (`cluster.DaemonSupport`; skipped when Docker is not reachable), that cgroupv2 is mounted with `nsdelegate`, and that polkit allows host DNS resolution via systemd-resolved. The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr. When Docker is not reachable, the Docker Engine detail is `not reachable: ` and the first line of docker's error (`doctor.DockerUnreachable`), with a remediation for a missing `docker` CLI, a user outside the docker group and a daemon that is not running. Details are escaped in the human output like the final error line, since they can quote docker.
 
-`-o json` prints the checks as a JSON array in clusterctl's check model: each entry has `name` (`Docker Engine`, `cgroupv2`, `DNS policy`), `status` (`ok`, `failed`, or `warning` for the advisory DNS policy check), `detail`, and, for a check that did not pass and has a fix, `remediation` with the commands.
+`-o json` prints the checks as a JSON array in clusterctl's check model: each entry has `name` (`Docker Engine`, `Docker daemon`, `cgroupv2`, `DNS policy`), `status` (`ok`, `failed`, or `warning` for the advisory DNS policy check), `detail`, and, for a check that did not pass and has a fix, `remediation` with the commands.
 
 ### Node Access
 

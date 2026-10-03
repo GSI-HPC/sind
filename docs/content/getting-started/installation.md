@@ -68,7 +68,9 @@ Check that sind is installed and your system meets all prerequisites:
 sind doctor
 ```
 
-This verifies Docker Engine version and cgroup configuration, and prints fix instructions if anything is missing.
+This verifies Docker Engine version, Docker daemon mode and cgroup configuration, and prints fix instructions if anything is missing.
+
+sind needs a rootful Docker daemon. Rootless Docker and a daemon with `userns-remap` are not supported: Docker refuses the `--security-opt writable-cgroups=true` that every sind node runs with. `sind doctor` reports both, and `sind create cluster` refuses them before it pulls an image. "No sudo" means that sind itself needs no root privileges and starts no privileged containers; it uses the Docker daemon your user can reach.
 
 ## Container image
 

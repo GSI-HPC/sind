@@ -260,7 +260,7 @@ func TestDoctorCommand_WritesToStdout(t *testing.T) {
 		code = run(hermeticDoctorCtx(t, &m, nil), []string{"doctor"}, &stderr)
 	})
 	assert.Equal(t, 0, code)
-	assert.Equal(t, "✓ Docker Engine: 29.0.0 (>= 28.0)\n✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)\n", stdout)
+	assert.Equal(t, "✓ Docker Engine: 29.0.0 (>= 28.0)\n✓ Docker daemon: rootful, no userns-remap\n✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)\n", stdout)
 	assert.Empty(t, stderr.String())
 
 	m = mock.Executor{}
@@ -283,6 +283,7 @@ func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
 	out, err := executeDoctor(ctx, t)
 	require.EqualError(t, err, "checks failed: cgroup-nsdelegate")
 	assert.Equal(t, `✓ Docker Engine: 29.0.0 (>= 28.0)
+✓ Docker daemon: rootful, no userns-remap
 ✗ cgroupv2: nsdelegate not found
 
 Enable nsdelegate temporarily:
@@ -322,6 +323,7 @@ func TestDoctorCommand_JSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
 	assert.Equal(t, []doctorCheck{
 		{Name: "Docker Engine", Status: checkOK, Detail: "29.0.0 (>= 28.0)"},
+		{Name: "Docker daemon", Status: checkOK, Detail: "rootful, no userns-remap"},
 		{Name: "cgroupv2", Status: checkOK, Detail: "nsdelegate enabled (/sys/fs/cgroup)"},
 		{Name: "DNS policy", Status: checkOK, Detail: "host resolution available"},
 	}, checks)
@@ -338,15 +340,42 @@ func TestDoctorCommand_JSONFailures(t *testing.T) {
 
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks), "stdout holds only the JSON document")
-	require.Len(t, checks, 3)
+	require.Len(t, checks, 4)
 	assert.Equal(t, doctorCheck{Name: "Docker Engine", Status: checkFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
-	assert.Equal(t, "cgroupv2", checks[1].Name)
-	assert.Equal(t, checkFailed, checks[1].Status)
-	assert.Equal(t, "nsdelegate not found", checks[1].Detail)
-	assert.Equal(t, nsdelegateRemediation("/sys/fs/cgroup"), checks[1].Remediation)
-	assert.Contains(t, checks[1].Remediation, "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
+	assert.Equal(t, doctorCheck{Name: "Docker daemon", Status: checkOK, Detail: "rootful, no userns-remap"}, checks[1])
+	assert.Equal(t, "cgroupv2", checks[2].Name)
+	assert.Equal(t, checkFailed, checks[2].Status)
+	assert.Equal(t, "nsdelegate not found", checks[2].Detail)
+	assert.Equal(t, nsdelegateRemediation("/sys/fs/cgroup"), checks[2].Remediation)
+	assert.Contains(t, checks[2].Remediation, "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
 	assert.Equal(t, doctorCheck{Name: "DNS policy", Status: checkWarning, Detail: "not authorized (optional)",
-		Remediation: dnsPolicyRemediation}, checks[2])
+		Remediation: dnsPolicyRemediation}, checks[3])
+}
+
+// TestDoctorCommand_DaemonMode checks that doctor fails a daemon in
+// rootless mode or with userns-remap, which refuse sind's writable cgroups.
+func TestDoctorCommand_DaemonMode(t *testing.T) {
+	tests := []struct {
+		option      string
+		detail      string
+		remediation string
+	}{
+		{"name=rootless", "rootless mode (sind needs a rootful daemon)", rootlessRemediation},
+		{"name=userns", "userns-remap enabled (sind needs a daemon without it)", usernsRemediation},
+	}
+	for _, tt := range tests {
+		t.Run(tt.option, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(`{"ServerVersion":"29.0.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","`+tt.option+`"]}`, "", nil)
+
+			out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t, "-o", "json")
+			require.EqualError(t, err, "checks failed: docker-daemon")
+			var checks []doctorCheck
+			require.NoError(t, json.Unmarshal([]byte(out), &checks))
+			require.Len(t, checks, 3)
+			assert.Equal(t, doctorCheck{Name: "Docker daemon", Status: checkFailed, Detail: tt.detail, Remediation: tt.remediation}, checks[1])
+		})
+	}
 }
 
 func TestDoctorCommand_JSONDockerNotReachable(t *testing.T) {

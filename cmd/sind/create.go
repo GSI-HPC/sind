@@ -91,6 +91,11 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
+	// Refuse a daemon that cannot start the nodes before anything is pulled.
+	if err := cluster.CheckDaemon(ctx, client); err != nil {
+		return err
+	}
+
 	unlock, err := acquireRealmLock(ctx, realm, "")
 	if err != nil {
 		return err

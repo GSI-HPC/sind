@@ -16,6 +16,7 @@ Checks system prerequisites and reports pass/fail for each:
 
 ```
 ✓ Docker Engine: 28.1.1 (>= 28.0)
+✓ Docker daemon: rootful, no userns-remap
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
 ✓ DNS policy: host resolution available
 ```
@@ -23,6 +24,7 @@ Checks system prerequisites and reports pass/fail for each:
 | Check | Required | Description |
 |-------|----------|-------------|
 | Docker Engine | yes | Docker >= 28.0 reachable (`docker info`) |
+| Docker daemon | yes | rootful, without `userns-remap`: Docker refuses the writable cgroups of sind's nodes in rootless mode and with `userns-remap` |
 | cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
@@ -36,7 +38,7 @@ Add your user to the docker group, then log in again (or run newgrp docker):
 sudo usermod -aG docker $USER
 ```
 
-A missing `docker` CLI and a daemon that is not running get their own hint. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+A missing `docker` CLI and a daemon that is not running get their own hint. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
@@ -57,7 +59,7 @@ sudo systemctl daemon-reload
 
 ### Machine-readable output
 
-`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name`, a `status` (`ok`, `failed`, or `warning` when the advisory DNS policy check does not pass) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
+`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `cgroupv2`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when the advisory DNS policy check does not pass) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
 
 ```bash
 sind doctor -o json
@@ -69,6 +71,11 @@ sind doctor -o json
     "name": "Docker Engine",
     "status": "ok",
     "detail": "28.1.1 (>= 28.0)"
+  },
+  {
+    "name": "Docker daemon",
+    "status": "ok",
+    "detail": "rootful, no userns-remap"
   },
   {
     "name": "cgroupv2",
