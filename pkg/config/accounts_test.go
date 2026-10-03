@@ -205,3 +205,31 @@ func TestValidate_Accounts(t *testing.T) {
 		})
 	}
 }
+
+func TestCluster_Warnings(t *testing.T) {
+	limited := []Account{
+		{Name: "physics", Limits: Limits{"GrpTRES": "cpu=4", "Fairshare": "10"}},
+		{Name: "theory", Parent: "physics", Limits: Limits{"maxjobs": "1", "Description": "Theory"}},
+		{Name: "ops"},
+	}
+	for _, tt := range []struct {
+		name     string
+		accounts []Account
+		main     Section
+		want     []string
+	}{
+		{name: "no accounts"},
+		{name: "no limits Slurm enforces", accounts: []Account{{Name: "physics", Limits: Limits{"Fairshare": "10", "QOS": "normal"}}}},
+		{name: "not enforced", accounts: limited, want: []string{
+			"Slurm does not enforce the accounts' limits (physics: GrpTRES; theory: maxjobs): slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it"}},
+		{name: "associations only", accounts: limited, main: Section{Content: "AccountingStorageEnforce=associations,qos\n"}, want: []string{
+			"Slurm does not enforce the accounts' limits (physics: GrpTRES; theory: maxjobs): slurm.main sets AccountingStorageEnforce=associations,qos; add limits to it"}},
+		{name: "limits", accounts: limited, main: Section{Content: "AccountingStorageEnforce=associations,limits\n"}},
+		{name: "safe", accounts: limited, main: Section{Fragments: map[string]string{"acct": "AccountingStorageEnforce=Safe\n"}}},
+		{name: "all", accounts: limited, main: Section{Content: "AccountingStorageEnforce = all\n"}},
+		{name: "numeric", accounts: limited, main: Section{Content: "AccountingStorageEnforce=1,2\n"}},
+	} {
+		cfg := &Cluster{Accounts: tt.accounts, Slurm: Slurm{Main: tt.main}}
+		assert.Equal(t, tt.want, cfg.Warnings(), tt.name)
+	}
+}

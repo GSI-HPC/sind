@@ -83,6 +83,9 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	for _, w := range cfg.Warnings() {
+		cmd.PrintErrln("Warning:", w)
+	}
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)

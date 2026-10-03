@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,6 +208,29 @@ func TestCreateCluster_WarnsAboutRootDataPath(t *testing.T) {
 
 	_, stderr, _ = executeWithMock(&m, "create", "cluster", "--config", cfgPath, "--data", "volume")
 	assert.NotContains(t, stderr, "Warning")
+}
+
+func TestCreateCluster_WarnsAboutUnenforcedLimits(t *testing.T) {
+	// The warning comes right after validation, before sind touches
+	// docker.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SIND_REALM", "")
+	path := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`kind: Cluster
+nodes: [controller, db, worker]
+accounts:
+  - name: physics
+    limits:
+      MaxJobs: 1
+`), 0o644))
+	m := &mock.Executor{OnCall: func([]string, string) mock.Result {
+		return mock.Result{Err: errors.New("no docker")}
+	}}
+
+	_, stderr, err := executeWithMock(m, "create", "cluster", "--config", path)
+
+	require.Error(t, err)
+	assert.Contains(t, stderr, "Warning: Slurm does not enforce the accounts' limits (physics: MaxJobs): slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it\n")
 }
 
 func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {

@@ -119,6 +119,44 @@ func isLimitKey(key string) bool {
 	return slices.ContainsFunc(LimitKeys, func(k string) bool { return strings.EqualFold(k, key) })
 }
 
+// enforcingValues are the AccountingStorageEnforce values that make
+// slurmctld enforce association limits, in lowercase.
+var enforcingValues = []string{"2", "limits", "safe", "all"}
+
+// Warnings returns what is likely a mistake in a valid config, for sind
+// create cluster to print: account limits (Max* and Grp*) that Slurm does
+// not enforce, as slurm.main's AccountingStorageEnforce does not include
+// limits. sind keeps Slurm's default of no enforcement, which changes which
+// jobs run.
+func (c *Cluster) Warnings() []string {
+	var limited []string
+	for _, a := range c.Accounts {
+		var keys []string
+		for _, key := range a.Limits.Keys() {
+			if k := strings.ToLower(key); strings.HasPrefix(k, "max") || strings.HasPrefix(k, "grp") {
+				keys = append(keys, key)
+			}
+		}
+		if len(keys) > 0 {
+			limited = append(limited, a.Name+": "+strings.Join(keys, ", "))
+		}
+	}
+	if len(limited) == 0 {
+		return nil
+	}
+	enforce, set := c.Slurm.Main.Parameter("AccountingStorageEnforce")
+	for v := range strings.SplitSeq(enforce, ",") {
+		if slices.Contains(enforcingValues, strings.ToLower(strings.TrimSpace(v))) {
+			return nil
+		}
+	}
+	fix := "slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it"
+	if set {
+		fix = "slurm.main sets AccountingStorageEnforce=" + enforce + "; add limits to it"
+	}
+	return []string{fmt.Sprintf("Slurm does not enforce the accounts' limits (%s): %s", strings.Join(limited, "; "), fix)}
+}
+
 // UsesAccounts reports whether the config asks for Slurm accounts:
 // accounts, or a user with accounts, coordinator or adminLevel.
 func (c *Cluster) UsesAccounts() bool {
