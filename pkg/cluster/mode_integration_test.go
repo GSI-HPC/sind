@@ -534,8 +534,9 @@ name: %s
 defaults:
   image: %s
 slurm:
-  slurmdbd: |
-    DebugLevel=info
+  slurmdbd:
+    debug: |
+      DebugLevel=info
 nodes:
   - controller
   - db
@@ -550,15 +551,19 @@ nodes:
 	assert.Equal(t, StateRunning, result.State)
 	require.Len(t, result.Nodes, 3)
 
-	// slurmdbd.conf carries the slurmdbd section and the ownership and mode
-	// slurmdbd insists on.
+	// slurmdbd.conf includes the slurmdbd section's fragments. It has the
+	// ownership and mode slurmdbd insists on, and the fragments, which may
+	// hold secrets such as a StoragePass, get the same protection.
 	db := ContainerName(realm, clusterName, "db")
-	out, err := c.Exec(ctx, db, "stat", "-c", "%U:%G %a", slurm.SlurmdbdConfPath)
+	out, err := c.Exec(ctx, db, "stat", "-c", "%U:%G %a %n", slurm.SlurmdbdConfPath,
+		slurm.ConfDir+"/slurmdbd.conf.d", slurm.ConfDir+"/slurmdbd.conf.d/debug.conf")
 	require.NoError(t, err)
-	assert.Equal(t, "slurm:slurm 600", strings.TrimSpace(out))
+	assert.Equal(t, "slurm:slurm 600 /etc/slurm/slurmdbd.conf\n"+
+		"slurm:slurm 700 /etc/slurm/slurmdbd.conf.d\n"+
+		"slurm:slurm 600 /etc/slurm/slurmdbd.conf.d/debug.conf", strings.TrimSpace(out))
 	out, err = c.Exec(ctx, db, "cat", slurm.SlurmdbdConfPath)
 	require.NoError(t, err)
-	assert.Contains(t, out, "DebugLevel=info")
+	assert.Contains(t, out, "include /etc/slurm/slurmdbd.conf.d/debug.conf")
 
 	// The controller sends accounting data to slurmdbd on the db node.
 	controller := ContainerName(realm, clusterName, "controller")

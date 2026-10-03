@@ -115,7 +115,7 @@ nodes:
 ```
 
 - The container is `<realm>-<cluster>-db`, reachable as `db` inside the cluster. `count` and `backupController` are not valid on it.
-- sind writes `slurmdbd.conf` (owned by `slurm`, mode `0600`) and adds `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup` to `slurm.conf`, each unless the `main` section sets it. Extra slurmdbd settings go in the [`slurmdbd` section]({{< relref "/configuration/cluster-config#slurm-section" >}}).
+- sind writes `slurmdbd.conf` (owned by `slurm`, mode `0600`) and adds `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup` to `slurm.conf`, each unless the `main` section sets it. Extra slurmdbd settings go in the [`slurmdbd` section]({{< relref "/configuration/cluster-config#slurm-section" >}}); in its map form, the `slurmdbd.conf.d` fragments are protected the same way.
 - At creation, sind starts MariaDB, creates the `slurm_acct_db` database and the `slurm` database user, and starts slurmdbd before slurmctld and slurmd, so the controller registers the cluster on startup: `sind exec dev -- sacctmgr show cluster` lists it, and `sacct` shows finished jobs.
 - Accounting is not enforced: jobs run without users, accounts or associations. Declare them in the [`accounts` section]({{< relref "/configuration/cluster-config#accounts-section" >}}), or add them with `sacctmgr`, and set `AccountingStorageEnforce` in the `main` section to test limits.
 - `sind get cluster` and `sind get node` report `mariadb` and `slurmdbd` for the db node.

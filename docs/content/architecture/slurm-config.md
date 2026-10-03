@@ -58,7 +58,7 @@ sind does not modify `slurm.conf` after initial creation.
 
 ## slurmdbd.conf
 
-Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (`StorageHost=localhost`, `StorageLoc=slurm_acct_db`, `StorageUser=slurm` without a password), keeps the pid file in `/run/slurmdbd` and the log in `/var/log/slurm/slurmdbd.log`, and is owned by `slurm` with mode `0600`, as slurmdbd requires. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`. The `slurmdbd` section extends it like the other sections.
+Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (`StorageHost=localhost`, `StorageLoc=slurm_acct_db`, `StorageUser=slurm` without a password), keeps the pid file in `/run/slurmdbd` and the log in `/var/log/slurm/slurmdbd.log`, and is owned by `slurm` with mode `0600`, as slurmdbd requires. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`. The `slurmdbd` section extends it like the other sections. The fragments of its map form, in `slurmdbd.conf.d/`, get the same protection, as they can hold secrets such as a `StoragePass`: owned by `slurm` with mode `0600`, in a directory only `slurm` can read.
 
 ## slurm.key
 

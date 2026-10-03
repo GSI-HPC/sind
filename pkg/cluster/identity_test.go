@@ -247,10 +247,7 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper with sleep)
 	m.AddResult("", "", nil)         // CopyToContainer
-	m.AddResult("", "", nil)         // chown slurmdbd.conf
-	m.AddResult("", "", nil)         // chmod slurmdbd.conf
-	m.AddResult("", "", nil)         // chown slurm.key
-	m.AddResult("", "", nil)         // chmod slurm.key
+	m.AddResult("", "", nil)         // chown slurmdbd.conf and slurm.key
 	m.AddResult("", "", nil)         // KillContainer (defer)
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
 	c := docker.NewClient(&m)
@@ -263,13 +260,15 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
 
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 8)
+	require.Len(t, m.Calls, 5)
 	cpStdin := m.Calls[1].Stdin
 	assert.Contains(t, cpStdin, "slurm.key")
 	assert.Contains(t, cpStdin, "AuthType=auth/slurm\nCredType=cred/slurm\nAuthInfo=use_client_ids\nLaunchParameters=enable_nss_slurm\n")
 	assert.Contains(t, cpStdin, "AuthType=auth/slurm\nAuthInfo=use_client_ids\nDbdHost=db\n")
-	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chown", "slurm:slurm", "/etc/slurm/slurm.key"}, m.Calls[4].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chmod", "0600", "/etc/slurm/slurm.key"}, m.Calls[5].Args)
+	modes := tarModes(t, cpStdin)
+	assert.Equal(t, int64(0o600), modes["slurm.key"])
+	assert.Equal(t, int64(0o600), modes["slurmdbd.conf"])
+	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chown", "slurm:slurm", "/etc/slurm/slurmdbd.conf", "/etc/slurm/slurm.key"}, m.Calls[2].Args)
 }
 
 func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
@@ -281,11 +280,10 @@ func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
 	}
 	for _, tt := range []struct {
 		name    string
-		results []error // RunContainer, CopyToContainer, chown, chmod
+		results []error // RunContainer, CopyToContainer, chown
 		wantErr string
 	}{
-		{"chown", []error{nil, nil, fmt.Errorf("chown failed")}, "fixing slurm.key ownership: chown failed"},
-		{"chmod", []error{nil, nil, nil, fmt.Errorf("chmod failed")}, "fixing slurm.key permissions: chmod failed"},
+		{"chown", []error{nil, nil, fmt.Errorf("chown failed")}, "fixing ownership of slurm.key: chown failed"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var m mock.Executor

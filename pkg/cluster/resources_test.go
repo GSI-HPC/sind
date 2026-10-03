@@ -3,8 +3,11 @@
 package cluster
 
 import (
+	"archive/tar"
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -346,12 +349,28 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 
 // --- WriteMungeKey ---
 
+// tarModes returns the mode of each file in a tar archive, as docker cp
+// receives it on stdin.
+func tarModes(t *testing.T, archive string) map[string]int64 {
+	t.Helper()
+	modes := map[string]int64{}
+	tr := tar.NewReader(strings.NewReader(archive))
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return modes
+		}
+		require.NoError(t, err)
+		modes[hdr.Name] = hdr.Mode
+	}
+}
+
 func TestWriteClusterConfig_WithDB(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper with sleep)
 	m.AddResult("", "", nil)         // CopyToContainer
-	m.AddResult("", "", nil)         // chown slurmdbd.conf
-	m.AddResult("", "", nil)         // chmod slurmdbd.conf
+	m.AddResult("", "", nil)         // chown slurmdbd.conf and fragments
+	m.AddResult("", "", nil)         // chmod slurmdbd.conf.d
 	m.AddResult("", "", nil)         // KillContainer (defer)
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
 	c := docker.NewClient(&m)
@@ -385,8 +404,16 @@ func TestWriteClusterConfig_WithDB(t *testing.T) {
 	assert.Contains(t, cpStdin, "ArchiveEvents=yes")
 	assert.Contains(t, cpStdin, "AccountingStorageType=accounting_storage/slurmdbd")
 
-	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chown", "slurm:slurm", "/etc/slurm/slurmdbd.conf"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chmod", "0600", "/etc/slurm/slurmdbd.conf"}, m.Calls[3].Args)
+	// slurmdbd.conf and its fragments, which may hold a StoragePass, are
+	// written 0600, never readable by others, and given to slurm with
+	// their directory.
+	modes := tarModes(t, cpStdin)
+	assert.Equal(t, int64(0o600), modes["slurmdbd.conf"])
+	assert.Equal(t, int64(0o600), modes["slurmdbd.conf.d/archive.conf"])
+	assert.Equal(t, int64(0o644), modes["slurm.conf"])
+	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chown", "slurm:slurm",
+		"/etc/slurm/slurmdbd.conf.d", "/etc/slurm/slurmdbd.conf", "/etc/slurm/slurmdbd.conf.d/archive.conf"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chmod", "0700", "/etc/slurm/slurmdbd.conf.d"}, m.Calls[3].Args)
 	assert.Equal(t, "kill", m.Calls[4].Args[0])
 	assert.Equal(t, []string{"rm", "-f", "-v", "sind-dev-config-helper"}, m.Calls[5].Args)
 }
@@ -441,15 +468,18 @@ func TestWriteClusterConfig_DBErrors(t *testing.T) {
 		Name:  "dev",
 		Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker}},
 	}
+	fragments := *cfg
+	fragments.Slurm.Slurmdbd = config.Section{Fragments: map[string]string{"archive": "ArchiveEvents=yes\n"}}
 	tests := []struct {
 		name    string
+		cfg     *config.Cluster
 		results []error // RunContainer, CopyToContainer, chown, chmod
 		wantErr string
 	}{
-		{"run", []error{fmt.Errorf("run failed")}, "creating config helper container: "},
-		{"copy", []error{nil, fmt.Errorf("cp failed")}, "writing slurm config: "},
-		{"chown", []error{nil, nil, fmt.Errorf("chown failed")}, "fixing slurmdbd.conf ownership: "},
-		{"chmod", []error{nil, nil, nil, fmt.Errorf("chmod failed")}, "fixing slurmdbd.conf permissions: "},
+		{"run", cfg, []error{fmt.Errorf("run failed")}, "creating config helper container: "},
+		{"copy", cfg, []error{nil, fmt.Errorf("cp failed")}, "writing slurm config: "},
+		{"chown", cfg, []error{nil, nil, fmt.Errorf("chown failed")}, "fixing ownership of slurmdbd.conf: chown failed"},
+		{"chmod", &fragments, []error{nil, nil, nil, fmt.Errorf("chmod failed")}, "fixing permissions of slurmdbd.conf.d: chmod failed"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -461,7 +491,7 @@ func TestWriteClusterConfig_DBErrors(t *testing.T) {
 			m.AddResult("", "", nil) // RemoveContainer (defer)
 			c := docker.NewClient(&m)
 
-			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, tt.cfg, "busybox:latest", false)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -493,10 +523,12 @@ func TestWriteMungeKey(t *testing.T) {
 	assert.Contains(t, m.Calls[0].Args, LabelRealm+"=sind")
 	assert.Contains(t, m.Calls[0].Args, LabelCluster+"=dev")
 
-	// CopyToContainer + chown + chmod
+	// CopyToContainer with mode 0400, so that the key is never readable by
+	// others, then chown
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
+	assert.Equal(t, map[string]int64{"munge.key": 0o400}, tarModes(t, m.Calls[1].Stdin))
 	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chown", "munge:munge", "/etc/munge/munge.key"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chmod", "0400", "/etc/munge/munge.key"}, m.Calls[3].Args)
+	assert.Equal(t, "kill", m.Calls[3].Args[0])
 }
 
 func TestWriteMungeKey_Pull(t *testing.T) {
@@ -504,7 +536,6 @@ func TestWriteMungeKey_Pull(t *testing.T) {
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper)
 	m.AddResult("", "", nil)         // CopyToContainer
 	m.AddResult("", "", nil)         // Exec chown
-	m.AddResult("", "", nil)         // Exec chmod
 	m.AddResult("", "", nil)         // KillContainer (defer)
 	m.AddResult("", "", nil)         // RemoveContainer (defer)
 	c := docker.NewClient(&m)
@@ -557,20 +588,4 @@ func TestWriteMungeKey_ChownError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fixing munge key ownership")
-}
-
-func TestWriteMungeKey_ChmodError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("abc123\n", "", nil)                // RunContainer
-	m.AddResult("", "", nil)                        // CopyToContainer
-	m.AddResult("", "", nil)                        // Exec chown
-	m.AddResult("", "", fmt.Errorf("chmod failed")) // Exec chmod
-	m.AddResult("", "", nil)                        // KillContainer (defer)
-	m.AddResult("", "", nil)                        // RemoveContainer (defer)
-	c := docker.NewClient(&m)
-
-	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest", false)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "fixing munge key permissions")
 }
