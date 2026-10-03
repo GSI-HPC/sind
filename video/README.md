@@ -170,13 +170,18 @@ re-render gets a new YouTube video ID.
 
 ### One-time switch from the gh-pages branch
 
-1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-2. **Settings → Environments → `github-pages`**: if deployments are limited to
+Do this in one sitting, right after merging the workflow into `next`:
+
+1. Merge the PR into `next` while Pages still serves `gh-pages`. Its first
+   **Deploy docs** run builds both versions; its deploy job most likely fails
+   because Pages does not accept Actions deployments yet. The live site is
+   unaffected.
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+3. **Settings → Environments → `github-pages`**: if deployments are limited to
    selected branches, allow `next` as well as `main`.
-3. Merge the workflow into `next` (or run **Deploy docs** manually on `next`);
-   it publishes both versions.
-4. Delete the `gh-pages` branch.
-5. Until the next release, `main` still carries the old peaceiris workflow. If
+4. Re-run the failed deploy job; the build artifact is reused.
+5. Check `/sind/` and `/sind/next/`, then delete the `gh-pages` branch.
+6. Until the next release, `main` still carries the old peaceiris workflow. If
    docs change on `main` before then, it pushes a new `gh-pages` branch that
    Pages ignores; delete it again, and run **Deploy docs** on `next` to update
    the release docs.
