@@ -83,7 +83,7 @@ ssh -l alice controller               # with the exported ssh_config
 
 `--user`, or `-u`, runs `docker exec -u USER` in the user's home directory, `/home/USER`, which every node shares. `USER@NODE` passes `-l USER` to SSH. `--user root` is the default. A user name that is not valid exits `2`; one that the cluster does not have fails in docker.
 
-With [identity]({{< relref "/configuration/cluster-config#identity-section" >}}) `nssSlurm`, managed workers do not have the users, and with `clientIds` only the submitter (or, without one, the controller) has them: SSH as a user works only to the nodes that have the user. `enter` and `exec` run on the submitter or the controller, which have the users in every mode.
+With [identity]({{< relref "/configuration/cluster-config#identity-section" >}}) `nssSlurm`, managed workers do not have the users, and with `clientIds` only the submitter (or, without one, the controller) has them, plus the controllers with `controllerUsers`. Unmanaged nodes have them in every mode. SSH as a user works only to the nodes that have the user. `enter` and `exec` run on the submitter or the controller, which have the users in every mode.
 
 ## Exit status
 
