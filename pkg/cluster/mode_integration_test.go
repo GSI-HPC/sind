@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -774,6 +775,108 @@ nodes:
 	exists, err := c.VolumeExists(ctx, VolumeName(realm, clusterName, VolumeHome))
 	require.NoError(t, err)
 	assert.False(t, exists)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestClusterAccounts(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-accounts")
+	clusterName := "it-accounts"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+slurm:
+  main: |
+    AccountingStorageEnforce=associations,limits
+accounts:
+  - name: physics
+    limits:
+      GrpTRES: cpu=4
+  - name: theory
+    parent: physics
+    limits:
+      MaxJobs: 1
+users:
+  - name: alice
+    accounts: [theory]
+  - name: bob
+    accounts: [physics, theory]
+    coordinator: [physics]
+  - name: carol
+    accounts: [physics]
+    adminLevel: operator
+  - dave
+nodes:
+  - controller
+  - db
+  - submitter
+  - worker
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.NoError(t, err)
+
+	controller := ContainerName(realm, clusterName, "controller")
+	sacctmgr := func(args ...string) []string {
+		t.Helper()
+		out, err := c.Exec(ctx, controller, append([]string{"sacctmgr", "-n", "-P", "show"}, args...)...)
+		require.NoError(t, err)
+		return strings.Split(strings.TrimSpace(out), "\n")
+	}
+
+	// The account tree, with the limits and the users' associations.
+	assert.Subset(t, sacctmgr("assoc", "format=account,parentname"), []string{"physics|root", "theory|physics"})
+	assert.Subset(t, sacctmgr("assoc", "format=account,user,grptres,maxjobs"), []string{"physics||cpu=4|", "theory|||1"})
+	assert.Subset(t, sacctmgr("assoc", "format=account,user"), []string{"theory|alice", "physics|bob", "theory|bob", "physics|carol"})
+	assert.ElementsMatch(t, []string{
+		"alice|theory|None",
+		"bob|physics|None",
+		"carol|physics|Operator",
+	}, sacctmgr("user", "names=alice,bob,carol", "format=user,defaultaccount,adminlevel"))
+	// A coordinator of physics coordinates its sub-accounts too.
+	assert.Equal(t, []string{"bob|physics,theory"}, sacctmgr("user", "names=bob", "withcoord", "format=user,coordinators"))
+
+	// With enforcement, a user's job runs under their default account, and
+	// a user without an association cannot submit.
+	host := DNSName("submitter", clusterName, realm)
+	waitNodeIdle(t, c, controller, "worker-0")
+	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", host, "srun -N1 true")
+	require.NoError(t, err)
+	assert.Eventually(t, func() bool {
+		out, err := c.Exec(ctx, controller, "sacct", "-a", "-n", "-X", "-P", "-o", "User,Account,State")
+		return err == nil && slices.Contains(strings.Split(strings.TrimSpace(out), "\n"), "alice|theory|COMPLETED")
+	}, time.Minute, time.Second, "alice's job not recorded under theory")
+	out, err := c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "dave", host, "sbatch --wrap true 2>&1; echo rc=$?")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Invalid account or account/partition combination specified")
+	assert.Contains(t, out, "rc=1")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

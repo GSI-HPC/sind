@@ -322,6 +322,25 @@ func SlurmdReady(ctx context.Context, client *docker.Client, name docker.Contain
 	return nil
 }
 
+// ClusterRegistered returns a check that passes once slurmdbd lists the
+// cluster, which slurmctld registers when it first starts with accounting.
+// Until then, sacctmgr refuses to add users. The registration can land
+// after slurmctld answers pings.
+func ClusterRegistered(clusterName string) Func {
+	return func(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+		stdout, err := client.Exec(ctx, name, "sacctmgr", "-n", "-P", "show", "cluster", "format=cluster")
+		if err != nil {
+			return fmt.Errorf("listing clusters: %w", err)
+		}
+		for line := range strings.Lines(stdout) {
+			if strings.TrimSpace(line) == clusterName {
+				return nil
+			}
+		}
+		return fmt.Errorf("cluster %s not registered with slurmdbd yet", clusterName)
+	}
+}
+
 // journalLines is the number of journal lines UnitJournal returns.
 const journalLines = "20"
 

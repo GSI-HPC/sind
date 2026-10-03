@@ -231,15 +231,16 @@ type Slurm struct {
 
 // Cluster represents a sind cluster configuration.
 type Cluster struct {
-	Kind     string   `json:"kind"`
-	Name     string   `json:"name,omitempty"`
-	Realm    string   `json:"realm,omitempty"`
-	Defaults Defaults `json:"defaults,omitempty"`
-	Storage  Storage  `json:"storage,omitempty"`
-	Slurm    Slurm    `json:"slurm,omitempty"`
-	Users    []User   `json:"users,omitempty"`
-	Groups   []Group  `json:"groups,omitempty"`
-	Nodes    []Node   `json:"nodes,omitempty"`
+	Kind     string    `json:"kind"`
+	Name     string    `json:"name,omitempty"`
+	Realm    string    `json:"realm,omitempty"`
+	Defaults Defaults  `json:"defaults,omitempty"`
+	Storage  Storage   `json:"storage,omitempty"`
+	Slurm    Slurm     `json:"slurm,omitempty"`
+	Users    []User    `json:"users,omitempty"`
+	Groups   []Group   `json:"groups,omitempty"`
+	Accounts []Account `json:"accounts,omitempty"`
+	Nodes    []Node    `json:"nodes,omitempty"`
 
 	// Pull is a runtime flag (not part of the config file) that forces
 	// fresh image pulls when creating containers.
@@ -392,6 +393,9 @@ func (c *Cluster) Validate() error {
 	}
 
 	if err := validateUsers(c.Users, c.Groups); err != nil {
+		return err
+	}
+	if err := c.validateAccounts(); err != nil {
 		return err
 	}
 

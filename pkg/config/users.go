@@ -31,6 +31,14 @@ type User struct {
 	// Groups are the user's supplementary groups, all among the cluster's
 	// groups.
 	Groups []string `json:"groups,omitempty"`
+	// Accounts are the Slurm accounts the user gets associations with,
+	// all among the cluster's accounts. The first is the default account.
+	Accounts []string `json:"accounts,omitempty"`
+	// Coordinator are the accounts the user coordinates: the user may
+	// manage them and their sub-accounts.
+	Coordinator []string `json:"coordinator,omitempty"`
+	// AdminLevel is the user's Slurm admin level, none by default.
+	AdminLevel AdminLevel `json:"adminLevel,omitempty"`
 }
 
 // UnmarshalJSON supports two YAML forms:

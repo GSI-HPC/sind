@@ -55,6 +55,10 @@ users:
   - name: bob
     uid: 2001
     group: hpc
+    accounts: [physics]
+
+accounts:
+  - physics
 
 slurm:
   main: |
@@ -97,6 +101,7 @@ nodes:
 | `slurm` | no | — | Slurm configuration extension |
 | `users` | no | — | Linux user accounts on every node |
 | `groups` | no | — | Linux groups for the users |
+| `accounts` | no | — | Slurm accounts, with a managed db node |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
 Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`.
@@ -168,6 +173,9 @@ users:
 | `uid` | lowest free from `1000` | ID of the user, between 1000 and 2147483647 |
 | `group` | private group | Primary group, from `groups`. Without it, the user gets a private group of its own name with gid = uid |
 | `groups` | none | Supplementary groups, from `groups` |
+| `accounts` | none | Slurm accounts the user gets associations with, from `accounts`; the first is the default account |
+| `coordinator` | none | Slurm accounts the user coordinates, from `accounts` |
+| `adminLevel` | none | Slurm admin level: `operator` or `admin`. Needs `accounts` |
 
 | Group field | Default | Description |
 |-------------|---------|-------------|
@@ -178,7 +186,45 @@ Users without `uid` get their IDs first, in list order, skipping the explicit `g
 
 Every node, including workers added later with `sind create worker`, gets each group and user with the same IDs, as munge and Slurm require. Workers also get the `SYS_NICE` capability, which slurmstepd needs to bind the tasks of users other than root (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})). The home directories, `/home/<user>`, are on the Docker volume `<realm>-<cluster>-home`, which every node mounts at `/home`, so job output written there is the same on every node. The realm's SSH key may log in as each user, as it may as root. See [Node access]({{< relref "/usage/node-access#cluster-users" >}}) for running commands as a user.
 
-A user or group name that already exists in the image, such as `root`, `slurm` or `wheel`, makes `sind create cluster` fail. sind does not create Slurm accounts or associations for the users yet, not even with a [db node]({{< relref "/configuration/node-definitions#database-node" >}}).
+A user or group name that already exists in the image, such as `root`, `slurm` or `wheel`, makes `sind create cluster` fail.
+
+## Accounts section
+
+With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), `accounts` declares Slurm accounts, and the users' `accounts`, `coordinator` and `adminLevel` fields give them associations and roles:
+
+```yaml
+nodes: [controller, db, submitter, worker: 2]
+accounts:
+  - physics          # bare name, parent root
+  - name: theory
+    parent: physics
+    limits:
+      MaxJobs: 1
+users:
+  - name: alice
+    accounts: [theory]
+  - name: bob
+    accounts: [physics, theory]   # the first is the default account
+    coordinator: [physics]
+```
+
+| Account field | Default | Description |
+|---------------|---------|-------------|
+| `name` | — | Account name: lowercase letters, digits, `_` and `-`, not starting with `-`, at most 64 characters, not `root` |
+| `parent` | `root` | Parent account: `root` or an account declared before this one |
+| `limits` | none | Further `sacctmgr add account` options, passed as `key=value`, e.g. `GrpTRES: cpu=4`, `MaxJobs: 1`, `Fairshare: 10` |
+
+Once slurmctld has registered the cluster with slurmdbd, sind runs `sacctmgr -i` on the controller: `add account` for each account, in list order; `add user` for each user with accounts, with `defaultaccount` set to the first and `adminlevel` if set; then `add coordinator`. The example runs:
+
+```bash
+sacctmgr -i add account physics
+sacctmgr -i add account theory parent=physics MaxJobs=1
+sacctmgr -i add user alice account=theory defaultaccount=theory
+sacctmgr -i add user bob account=physics,theory defaultaccount=physics
+sacctmgr -i add coordinator account=physics names=bob
+```
+
+Every account a user names must be declared, so a typo fails validation instead of creating a new account. The associations are in place when `sind create cluster` returns. sind does not enforce them: set `AccountingStorageEnforce=associations,limits` in the [`main` section](#slurm-section) to reject jobs without an association and apply the limits. Slurm accounts and Linux groups are unrelated, even when they share a name.
 
 ## Slurm section
 
@@ -243,4 +289,5 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - `devices` paths must be absolute (start with `/`)
 - `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute
 - User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647 and unique, private groups included; a user's `group` and `groups` must be declared in `groups`
+- `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; every account a user names must be declared; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - Unknown keys are rejected

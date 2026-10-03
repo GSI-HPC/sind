@@ -88,7 +88,7 @@ If any node fails to become ready within the timeout, `sind create cluster` fail
 
 After all nodes are ready, sind runs mesh registration (batch DNS + known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network. The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
 
-With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmctld registers the cluster with slurmdbd when it starts (see Database Node).
+With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmctld registers the cluster with slurmdbd when it starts (see Database Node). With `accounts`, sind then waits until `sacctmgr show cluster` lists the cluster and creates the Slurm accounts and associations (see Slurm Accounts).
 
 ### Design Goals
 
@@ -701,6 +701,15 @@ users:                                   # Linux accounts on every node (default
     group: hpc                           # primary group (default: private group bob)
   - name: carol
     groups: [hpc]                        # supplementary groups
+    accounts: [physics]                  # Slurm associations, the first is the default (needs a managed db node)
+    coordinator: [physics]               # accounts the user coordinates
+    adminLevel: operator                 # operator | admin (default: none)
+
+accounts:                                # Slurm accounts (needs a managed db node, default: none)
+  - name: physics
+    parent: root                         # default: root; any account declared before
+    limits:                              # passed to sacctmgr as key=value
+      GrpTRES: cpu=4
 
 slurm:
   main: |                                # appended to slurm.conf
@@ -831,6 +840,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `managed` - only valid for controller, db and worker roles; with `managed: false` on the controller, no worker or db node may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `slurm.slurmdbd` - requires a managed `db` node
+- `accounts`, and the users' `accounts`, `coordinator` and `adminLevel` - require a managed `db` node; account names hold only lowercase letters, digits, `_` and `-`, do not start with `-`, have at most 64 characters, are unique and are not `root`; a `parent` is `root` or an account declared before; `limits` keys are sacctmgr options other than `name`, `parent` and `cluster`, with non-empty values; every account a user names is declared, at most once per list; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - `capAdd`, `capDrop` - recognized Linux capability names (e.g. `SYS_ADMIN`, `ALL`)
 - `devices` - absolute paths
 - `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute
@@ -898,7 +908,7 @@ nodes:
 
 - The container is `<realm>-<cluster>-db` with hostname `db`; it gets the defaults and per-node parameters like any node, but not `count` or `backupController`.
 - sind writes `slurmdbd.conf` to the config volume, owned by `slurm` with mode `0600` as slurmdbd requires: `DbdHost=db`, `SlurmUser=slurm`, the log in `/var/log/slurm/slurmdbd.log`, the pid file in `/run/slurmdbd`, and MariaDB storage on `localhost` (database `slurm_acct_db`, user `slurm` without a password). `slurm.slurmdbd` extends it like the other sections.
-- `slurm.conf` gets `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup`, each unless `slurm.main` sets it. sind sets no `AccountingStorageEnforce`: jobs run without users, accounts or associations, and `sacct` reports them.
+- `slurm.conf` gets `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup`, each unless `slurm.main` sets it. sind sets no `AccountingStorageEnforce`: jobs run without users, accounts or associations, and `sacct` reports them. `accounts` declares accounts and associations (see Slurm Accounts).
 - At creation, sind enables mariadb, creates the database and the `slurm` database user, enables slurmdbd and waits for it before enabling slurmctld and slurmd. slurmdbd creates its schema and slurmctld registers the cluster (`sacctmgr show cluster`) on their first start. A failed slurmdbd fails `sind create cluster` with the unit's journal tail.
 - `sind get cluster` and `sind get node` report mariadb and slurmdbd for the db node, and `sind get clusters` counts it in `NODES (S/C/D/W)`.
 - `managed: false` on the db node of a managed cluster makes it a bare node, labelled `sind.managed=false`, for testing your own slurmdbd provisioning while sind runs slurmctld and slurmd. sind then configures no accounting at all: no `slurmdbd.conf` (a `slurm.slurmdbd` section is rejected), no database, and none of the accounting parameters in `slurm.conf`; add them to `slurm.main` to point slurmctld at your slurmdbd. `slurmctld` starts without waiting for the db node, and `sind get cluster` lists only munge and sshd for it.
@@ -921,6 +931,15 @@ users:
     group: hpc                           # primary group instead of a private one
   - name: carol
     groups: [hpc]                        # supplementary groups
+    accounts: [physics]                  # Slurm associations, the first is the default (needs a managed db node)
+    coordinator: [physics]               # accounts the user coordinates
+    adminLevel: operator                 # operator | admin (default: none)
+
+accounts:                                # Slurm accounts (needs a managed db node, default: none)
+  - name: physics
+    parent: root                         # default: root; any account declared before
+    limits:                              # passed to sacctmgr as key=value
+      GrpTRES: cpu=4
 ```
 
 - Every node gets each group and user with the same IDs (`groupadd --gid GID`, then `useradd --uid UID --gid GID --groups ... --shell /bin/bash`), so that a user has the same UID and GIDs across the cluster, as munge and Slurm require.
@@ -932,7 +951,49 @@ users:
 - The users and groups are stored on each container as the `sind.users` and `sind.groups` labels, so `sind create worker` adds them to new workers. The home volume only exists for clusters with users.
 - A user or group name that already exists in the image (`root`, `slurm`, `munge`, `wheel`, ...) fails `sind create cluster` with the `groupadd` or `useradd` error.
 
-Users exist on unmanaged clusters too. sind does not create Slurm accounts or associations for them yet, not even with a db node (see Database Node).
+Users exist on unmanaged clusters too.
+
+### Slurm Accounts
+
+With a managed db node, `accounts` declares Slurm accounts, and the users' `accounts`, `coordinator` and `adminLevel` give them associations and roles:
+
+```yaml
+nodes: [controller, db, submitter, worker: 2]
+accounts:
+  - physics                              # bare name, parent root
+  - name: theory
+    parent: physics
+    limits:
+      MaxJobs: 1
+users:
+  - name: alice
+    accounts: [theory]
+  - name: bob
+    accounts: [physics, theory]          # the first is the default account
+    coordinator: [physics]
+  - name: carol
+    accounts: [physics]
+    adminLevel: operator
+```
+
+Once slurmctld has registered the cluster (`sacctmgr show cluster` lists it; before that, `sacctmgr` refuses to add users), sind runs `sacctmgr -i` as root on `controller`, in this order:
+
+```bash
+sacctmgr -i add account physics
+sacctmgr -i add account theory parent=physics MaxJobs=1
+sacctmgr -i add user alice account=theory defaultaccount=theory
+sacctmgr -i add user bob account=physics,theory defaultaccount=physics
+sacctmgr -i add user carol account=physics defaultaccount=physics adminlevel=operator
+sacctmgr -i add coordinator account=physics names=bob
+```
+
+- Accounts are created in list order, so a parent is declared before its children. `limits` are passed as `key=value`, in key order; YAML numbers are kept as written.
+- Every account a user names must be declared in `accounts`: a typo fails validation instead of creating a new account.
+- The Linux users exist on the controller before `sacctmgr` runs (setupNodes), so slurmctld resolves the uids of the new associations right away; it would otherwise retry only once an hour. slurmdbd pushes the associations to slurmctld before `sacctmgr` returns, so jobs can use them as soon as `sind create cluster` returns.
+- sind sets no `AccountingStorageEnforce`: jobs run without associations unless `slurm.main` enforces them, e.g. `AccountingStorageEnforce=associations,limits`.
+- The Slurm accounts and the Linux groups are unrelated, even when they share a name.
+- A failing `sacctmgr` fails `sind create cluster` with its error.
+- Accounts need a managed db node, as `slurm.slurmdbd` does: without one, or with `managed: false` on it or the controller, they fail validation.
 
 ## Docker Resources
 

@@ -44,7 +44,7 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 ┤                                                      ├→ setupNodes
 └ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┘
                            │
-       registerMesh ║ enableSlurm ║ createHomes
+  registerMesh ║ enableSlurm → createSlurmAccounts ║ createHomes
                            │
                        *Cluster
 ```
@@ -53,6 +53,7 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 - `resolveInfra` looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
 - `setupNodes` creates, waits for, and sets up the cluster users and groups, SSH and host keys on every node.
 - `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd.
+- `createSlurmAccounts` (`accounts` only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users' associations and the coordinators with `sacctmgr -i` on `controller`.
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
 - If any step fails, `sind create cluster` removes what it created.
 

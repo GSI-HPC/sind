@@ -67,7 +67,7 @@ type nodeResult struct {
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
 //	└ DetectCVMFS (storage.cvmfs only) ─────────────────┘
 //	                        │
-//	        registerMesh ║ enableSlurm ║ createHomes (users only)
+//	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only)
 //	                        │
 //	                    *Cluster
 //
@@ -195,6 +195,13 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 				return err
 			}
 			log.InfoContext(gctx, "slurm services enabled")
+			if !cfg.UsesAccounts() {
+				return nil
+			}
+			if err := createSlurmAccounts(gctx, client, realm, cfg, readinessInterval, watcher); err != nil {
+				return err
+			}
+			log.InfoContext(gctx, "slurm accounts created", "accounts", len(cfg.Accounts))
 			return nil
 		})
 	}
