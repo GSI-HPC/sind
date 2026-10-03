@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:42:56+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/node-definitions/",
       "headline": "Node Definitions",
       "description": "Node roles, shorthand syntax, managed vs unmanaged workers, database nodes, and unmanaged clusters",
-      "wordCount": "1010",
+      "wordCount": "1081",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:42:56.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2489,7 +2533,10 @@
   href="/sind/next/configuration/cluster-config/#slurm-section"
 ><code>slurmdbd</code> section</a>.</li>
 <li>At creation, sind starts MariaDB, creates the <code>slurm_acct_db</code> database and the <code>slurm</code> database user, and starts slurmdbd before slurmctld and slurmd, so the controller registers the cluster on startup: <code>sind exec dev -- sacctmgr show cluster</code> lists it, and <code>sacct</code> shows finished jobs.</li>
-<li>Accounting is not enforced: jobs run without users, accounts or associations. Add them with <code>sacctmgr</code> and set <code>AccountingStorageEnforce</code> in the <code>main</code> section to test limits.</li>
+<li>Accounting is not enforced: jobs run without users, accounts or associations. Declare them in the <a
+  class="gdoc-markdown__link--code"
+  href="/sind/next/configuration/cluster-config/#accounts-section"
+><code>accounts</code> section</a>, or add them with <code>sacctmgr</code>, and set <code>AccountingStorageEnforce</code> in the <code>main</code> section to test limits.</li>
 <li><code>sind get cluster</code> and <code>sind get node</code> report <code>mariadb</code> and <code>slurmdbd</code> for the db node.</li>
 <li><code>managed: false</code> on the db node makes it a bare node in an otherwise managed cluster, to test your own slurmdbd provisioning while sind runs slurmctld and slurmd. sind then configures no accounting: no <code>slurmdbd.conf</code> (the <code>slurmdbd</code> section is rejected), no database, and no accounting parameters in <code>slurm.conf</code>. Point slurmctld at your slurmdbd through the <code>main</code> section, for example <code>AccountingStorageType=accounting_storage/slurmdbd</code> and <code>AccountingStorageHost=db</code>.</li>
 <li>In an unmanaged cluster the db node is a bare node: sind starts neither MariaDB nor slurmdbd and writes no <code>slurmdbd.conf</code>.</li>
@@ -2555,6 +2602,10 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">capAdd</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">      </span>- <span class="l">NET_ADMIN   </span><span class="w"> </span><span class="c"># workers get both SYS_ADMIN and NET_ADMIN</span><span class="w">
 </span></span></span></code></pre></div><p>sind logs a notice at cluster creation when extra privileges are configured, making the escalation visible.</p>
+<p>One capability sind adds itself: workers of a cluster with <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/cluster-config/#users-section"
+>users</a> get <code>SYS_NICE</code>. slurmstepd binds each task to its CPUs (<code>task/affinity</code>) after the task has become the job&rsquo;s user, and setting the CPU affinity of another user&rsquo;s process needs <code>CAP_SYS_NICE</code>, which Docker drops by default. Without it, every job of a user other than root fails with <code>task_g_set_affinity</code> and &ldquo;Slurmd could not execve job&rdquo;.</p>
 <p>Workers created via <code>sind create worker</code> also support these fields:</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind create worker --cap-add SYS_ADMIN --device /dev/fuse
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
@@ -3187,6 +3238,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

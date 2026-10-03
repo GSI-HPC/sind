@@ -45,7 +45,7 @@
 <meta property="article:section" content="Configuration" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/configuration/cluster-config/",
       "headline": "Cluster Configuration",
       "description": "YAML configuration schema reference",
-      "wordCount": "816",
+      "wordCount": "1839",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2300,6 +2344,20 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l">volume</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l">/data</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">groups</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">hpc</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">gid</span><span class="p">:</span><span class="w"> </span><span class="m">3000</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">users</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">alice</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">bob</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2001</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l">hpc</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">accounts</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">accounts</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">physics</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">slurm</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">main</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
 </span></span></span><span class="line"><span class="cl"><span class="sd">    SelectType=select/cons_tres
@@ -2381,6 +2439,30 @@
 					<td>no</td>
 					<td>—</td>
 					<td>Slurm configuration extension</td>
+			</tr>
+			<tr>
+					<td><code>users</code></td>
+					<td>no</td>
+					<td>—</td>
+					<td>Linux user accounts on every node</td>
+			</tr>
+			<tr>
+					<td><code>groups</code></td>
+					<td>no</td>
+					<td>—</td>
+					<td>Linux groups for the users</td>
+			</tr>
+			<tr>
+					<td><code>accounts</code></td>
+					<td>no</td>
+					<td>—</td>
+					<td>Slurm accounts, with a managed db node</td>
+			</tr>
+			<tr>
+					<td><code>identity</code></td>
+					<td>no</td>
+					<td><code>local</code></td>
+					<td>Which nodes get the users, and how Slurm authenticates them</td>
 			</tr>
 			<tr>
 					<td><code>nodes</code></td>
@@ -2522,6 +2604,217 @@
   href="/sind/next/guides/cvmfs/"
 >Using CVMFS</a> for the requirements of each.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="users-section"
+    >
+        Users section
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#users-section" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Users section" aria-label="Anchor to: Users section" href="#users-section">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>sind configures root on every node. <code>users</code> adds Linux user accounts, e.g. to run jobs as someone other than root, and <code>groups</code> Linux groups for them:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">groups</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">hpc</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">gid</span><span class="p">:</span><span class="w"> </span><span class="m">3000</span><span class="w">      </span><span class="c"># default: lowest free gid from 1000</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">users</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">alice         </span><span class="w"> </span><span class="c"># bare name</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">bob</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2001</span><span class="w">      </span><span class="c"># default: lowest free uid from 1000</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l">hpc    </span><span class="w"> </span><span class="c"># primary group instead of a private one</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">carol</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">groups</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">hpc] </span><span class="w"> </span><span class="c"># supplementary groups</span><span class="w">
+</span></span></span></code></pre></div><div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>User field</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>name</code></td>
+					<td>—</td>
+					<td>User name: a lowercase letter or <code>_</code>, then lowercase letters, digits, <code>_</code> and <code>-</code>, at most 32 characters</td>
+			</tr>
+			<tr>
+					<td><code>uid</code></td>
+					<td>lowest free from <code>1000</code></td>
+					<td>ID of the user, between 1000 and 2147483647</td>
+			</tr>
+			<tr>
+					<td><code>group</code></td>
+					<td>private group</td>
+					<td>Primary group, from <code>groups</code>. Without it, the user gets a private group of its own name with gid = uid</td>
+			</tr>
+			<tr>
+					<td><code>groups</code></td>
+					<td>none</td>
+					<td>Supplementary groups, from <code>groups</code></td>
+			</tr>
+			<tr>
+					<td><code>accounts</code></td>
+					<td>none</td>
+					<td>Slurm accounts the user gets associations with, from <code>accounts</code>; the first is the default account</td>
+			</tr>
+			<tr>
+					<td><code>coordinator</code></td>
+					<td>none</td>
+					<td>Slurm accounts the user coordinates, from <code>accounts</code></td>
+			</tr>
+			<tr>
+					<td><code>adminLevel</code></td>
+					<td>none</td>
+					<td>Slurm admin level: <code>operator</code> or <code>admin</code>. Needs <code>accounts</code></td>
+			</tr>
+	</tbody>
+</table> </div>
+<div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>Group field</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>name</code></td>
+					<td>—</td>
+					<td>Group name, with the same rules as user names. It must not be the name of a user with a private group</td>
+			</tr>
+			<tr>
+					<td><code>gid</code></td>
+					<td>lowest free from <code>1000</code></td>
+					<td>ID of the group, between 1000 and 2147483647</td>
+			</tr>
+	</tbody>
+</table> </div>
+<p>Users without <code>uid</code> get their IDs first, in list order, skipping the explicit <code>gid</code>s; then groups without <code>gid</code> get the lowest IDs no user or group has. Set the IDs explicitly to keep file ownership stable across re-creates, e.g. on a <code>hostPath</code> data directory.</p>
+<p>Every node, including workers added later with <code>sind create worker</code>, gets each group and user with the same IDs, as munge and Slurm require. Workers also get the <code>SYS_NICE</code> capability, which slurmstepd needs to bind the tasks of users other than root (see <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/node-definitions/#capabilities-and-devices"
+>Capabilities and devices</a>). The <a
+  class="gdoc-markdown__link"
+  href="#identity-section"
+>identity mode</a> can keep them off some nodes. The home directories, <code>/home/&lt;user&gt;</code>, are on the Docker volume <code>&lt;realm&gt;-&lt;cluster&gt;-home</code>, which every node mounts at <code>/home</code>, so job output written there is the same on every node. The realm&rsquo;s SSH key may log in as each user, as it may as root. See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/usage/node-access/#cluster-users"
+>Node access</a> for running commands as a user.</p>
+<p>A user or group name that already exists in the image, such as <code>root</code>, <code>slurm</code> or <code>wheel</code>, makes <code>sind create cluster</code> fail.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="accounts-section"
+    >
+        Accounts section
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#accounts-section" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Accounts section" aria-label="Anchor to: Accounts section" href="#accounts-section">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>With a managed <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/node-definitions/#database-node"
+>db node</a>, <code>accounts</code> declares Slurm accounts, and the users&rsquo; <code>accounts</code>, <code>coordinator</code> and <code>adminLevel</code> fields give them associations and roles:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w"> </span><span class="nt">[controller, db, submitter, worker</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="p">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">accounts</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">physics         </span><span class="w"> </span><span class="c"># bare name, parent root</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">theory</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">parent</span><span class="p">:</span><span class="w"> </span><span class="l">physics</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">limits</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">MaxJobs</span><span class="p">:</span><span class="w"> </span><span class="m">1</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">users</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alice</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">accounts</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">theory]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">bob</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">accounts</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics, theory]  </span><span class="w"> </span><span class="c"># the first is the default account</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">coordinator</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics]</span><span class="w">
+</span></span></span></code></pre></div><div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>Account field</th>
+					<th>Default</th>
+					<th>Description</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>name</code></td>
+					<td>—</td>
+					<td>Account name: lowercase letters, digits, <code>_</code> and <code>-</code>, not starting with <code>-</code>, at most 64 characters, not <code>root</code></td>
+			</tr>
+			<tr>
+					<td><code>parent</code></td>
+					<td><code>root</code></td>
+					<td>Parent account: <code>root</code> or an account declared before this one</td>
+			</tr>
+			<tr>
+					<td><code>limits</code></td>
+					<td>none</td>
+					<td>Further <code>sacctmgr add account</code> options, passed as <code>key=value</code>, e.g. <code>GrpTRES: cpu=4</code>, <code>MaxJobs: 1</code>, <code>Fairshare: 10</code></td>
+			</tr>
+	</tbody>
+</table> </div>
+<p>Once slurmctld has registered the cluster with slurmdbd, sind runs <code>sacctmgr -i</code> on the controller: <code>add account</code> for each account, in list order; <code>add user</code> for each user with accounts, with <code>defaultaccount</code> set to the first and <code>adminlevel</code> if set; then <code>add coordinator</code>. The example runs:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sacctmgr -i add account physics
+</span></span><span class="line"><span class="cl">sacctmgr -i add account theory <span class="nv">parent</span><span class="o">=</span>physics <span class="nv">MaxJobs</span><span class="o">=</span><span class="m">1</span>
+</span></span><span class="line"><span class="cl">sacctmgr -i add user alice <span class="nv">account</span><span class="o">=</span>theory <span class="nv">defaultaccount</span><span class="o">=</span>theory
+</span></span><span class="line"><span class="cl">sacctmgr -i add user bob <span class="nv">account</span><span class="o">=</span>physics,theory <span class="nv">defaultaccount</span><span class="o">=</span>physics
+</span></span><span class="line"><span class="cl">sacctmgr -i add coordinator <span class="nv">account</span><span class="o">=</span>physics <span class="nv">names</span><span class="o">=</span>bob
+</span></span></code></pre></div><p>Every account a user names must be declared, so a typo fails validation instead of creating a new account. See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/users/"
+>Users and Identity</a> for a worked example with limits and roles. The associations are in place when <code>sind create cluster</code> returns. sind does not enforce them: set <code>AccountingStorageEnforce=associations,limits</code> in the <a
+  class="gdoc-markdown__link--code"
+  href="#slurm-section"
+><code>main</code> section</a> to reject jobs without an association and apply the limits. Slurm accounts and Linux groups are unrelated, even when they share a name.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="identity-section"
+    >
+        Identity section
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/configuration/cluster-config/#identity-section" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Identity section" aria-label="Anchor to: Identity section" href="#identity-section">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p><code>identity</code> selects where the nodes look up the users, and how Slurm authenticates them. It is a mode, or an object with <code>mode</code> and <code>controllerUsers</code>:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">identity</span><span class="p">:</span><span class="w"> </span><span class="l">nssSlurm         </span><span class="w"> </span><span class="c"># local (default) | nssSlurm | clientIds</span><span class="w">
+</span></span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">identity</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l">clientIds</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">controllerUsers</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">     </span><span class="c"># also give the controllers the users, for AllowGroups</span><span class="w">
+</span></span></span></code></pre></div><div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>Mode</th>
+					<th>Linux accounts on</th>
+					<th>What sind sets up</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>local</code></td>
+					<td>every node</td>
+					<td>munge</td>
+			</tr>
+			<tr>
+					<td><code>nssSlurm</code></td>
+					<td>every node but the managed workers</td>
+					<td>munge; <code>LaunchParameters=enable_nss_slurm</code>; <code>slurm</code> first for <code>passwd</code> and <code>group</code> in the workers&rsquo; <code>/etc/nsswitch.conf</code></td>
+			</tr>
+			<tr>
+					<td><code>clientIds</code></td>
+					<td>the submitter, or the controllers without one; the controllers too with <code>controllerUsers</code></td>
+					<td>as <code>nssSlurm</code>, plus <code>AuthType=auth/slurm</code>, <code>CredType=cred/slurm</code> and <code>AuthInfo=use_client_ids</code> in <code>slurm.conf</code> and <code>slurmdbd.conf</code>, a <code>slurm.key</code> instead of a munge key, munge masked on every node and <code>sackd</code> on the submitter</td>
+			</tr>
+	</tbody>
+</table> </div>
+<p>The <code>slurm.conf</code> parameters are set unless the <a
+  class="gdoc-markdown__link--code"
+  href="#slurm-section"
+><code>main</code> section</a> sets them; a <code>LaunchParameters</code> or <code>AuthInfo</code> there must keep <code>enable_nss_slurm</code> or <code>use_client_ids</code>. Unmanaged nodes, such as <code>managed: false</code> workers, get the Linux accounts in every mode. <code>nssSlurm</code> and <code>clientIds</code> need a managed cluster, and managed workers whose image has nss_slurm (<code>libnss_slurm.so.2</code>), as the official images do. See <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/users/"
+>Users and Identity</a> for how each mode resolves users, and how to choose one.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurm-section"
     >
         Slurm section
@@ -2625,6 +2918,15 @@
 <li><code>capAdd</code>/<code>capDrop</code> values must be recognized Linux capability names (e.g. <code>SYS_ADMIN</code>, <code>NET_ADMIN</code>, <code>ALL</code>)</li>
 <li><code>devices</code> paths must be absolute (start with <code>/</code>)</li>
 <li><code>storage.dataStorage.type</code> must be <code>volume</code> or <code>hostPath</code>; <code>hostPath</code> requires a <code>hostPath</code>, and <code>mountPath</code> must be absolute</li>
+<li>User and group names must be valid (see <a
+  class="gdoc-markdown__link"
+  href="#users-section"
+>Users section</a>) and unique; <code>uid</code> and <code>gid</code> must be between 1000 and 2147483647 and unique, private groups included; a user&rsquo;s <code>group</code> and <code>groups</code> must be declared in <code>groups</code></li>
+<li><code>identity</code> must be <code>local</code>, <code>nssSlurm</code> or <code>clientIds</code>; <code>nssSlurm</code> and <code>clientIds</code> require a managed cluster; <code>controllerUsers</code> is only valid with <code>clientIds</code></li>
+<li><code>accounts</code>, and the users&rsquo; <code>accounts</code>, <code>coordinator</code> and <code>adminLevel</code>, require a managed db node; account names must be valid and unique (see <a
+  class="gdoc-markdown__link"
+  href="#accounts-section"
+>Accounts section</a>); a <code>parent</code> must be <code>root</code> or declared before; every account a user names must be declared; <code>adminLevel</code> is <code>operator</code> or <code>admin</code>; <code>coordinator</code> and <code>adminLevel</code> need <code>accounts</code></li>
 <li>Unknown keys are rejected</li>
 </ul>
 
@@ -3244,6 +3546,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

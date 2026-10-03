@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-09-29T22:40:16+00:00"
+      content="2026-10-03T08:44:26+00:00"
     />
 
 
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-29T22:40:16.00Z",
+      "dateModified": "2026-10-03T08:44:26.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2314,7 +2358,7 @@
 <li>command groups such as <code>sind get</code>, which only print help</li>
 <li><code>sind help</code>, <code>sind completion</code> and the <code>sind mcp</code> commands</li>
 <li><code>sind enter</code> and <code>sind ssh</code>, which need an interactive terminal</li>
-<li><code>sind get ssh-private-key</code> and <code>sind get munge-key</code>, which print secrets</li>
+<li><code>sind get ssh-private-key</code> and <code>sind get auth-key</code>, which print secrets</li>
 </ul>
 <p>The tools take the same arguments and flags as the commands, except <code>-v</code> and <code>sind logs --follow</code>, which a tool call cannot use. Flags go in the call&rsquo;s <code>flags</code> object; a call that puts a flag in <code>args</code> is refused, except for the command after <code>--</code> in <code>sind_exec</code>.</p>
 <p>Each tool tells the client what it does, so that the client can decide when to ask before calling it: the <code>get</code> tools, <code>sind_logs</code>, <code>sind_doctor</code> and <code>sind_version</code> are marked read-only; <code>sind_create_*</code>, <code>sind_power_on</code> and <code>sind_power_unfreeze</code> only add or restore; <code>sind_delete_*</code>, <code>sind_exec</code> and the other <code>sind_power_*</code> tools are marked destructive.</p>
@@ -2397,7 +2441,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>The MCP server is not a sandbox. Its tools run sind with your Docker access: <code>sind_exec</code> runs any command inside a cluster, and <code>sind_create_cluster</code> bind-mounts a host directory read-write at <code>/data</code>: the one <code>--data</code> names or, without it, the MCP server&rsquo;s working directory. Pass <code>data: &quot;volume&quot;</code> to keep host files out. Leaving out <code>sind get ssh-private-key</code> and <code>sind get munge-key</code> keeps those secrets out of routine tool output, but an agent that may call <code>sind_exec</code> can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.</p>
+<p>The MCP server is not a sandbox. Its tools run sind with your Docker access: <code>sind_exec</code> runs any command inside a cluster, and <code>sind_create_cluster</code> bind-mounts a host directory read-write at <code>/data</code>: the one <code>--data</code> names or, without it, the MCP server&rsquo;s working directory. Pass <code>data: &quot;volume&quot;</code> to keep host files out. Leaving out <code>sind get ssh-private-key</code> and <code>sind get auth-key</code> keeps those secrets out of routine tool output, but an agent that may call <code>sind_exec</code> can still read them from the nodes. Give an agent the sind tools only where you would let it run sind yourself.</p>
 
   </article>
 
@@ -3101,6 +3145,39 @@
             
             
           
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         

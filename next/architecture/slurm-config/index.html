@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/slurm-config/",
       "headline": "Slurm Configuration",
       "description": "Generated configuration files and version discovery",
-      "wordCount": "649",
+      "wordCount": "735",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2281,7 +2325,8 @@
 ├── topology.conf           # network topology (if slurm.topology is set)
 ├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
-└── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
+├── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
+└── slurm.key               # auth/slurm key (identity clientIds only)
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurmconf"
     >
@@ -2301,6 +2346,14 @@ PlugStackConfig=/etc/slurm/plugstack.conf
 <pre tabindex="0"><code>AccountingStorageType=accounting_storage/slurmdbd
 AccountingStorageHost=db
 JobAcctGatherType=jobacct_gather/cgroup
+</code></pre><p>With <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/cluster-config/#identity-section"
+>identity</a> <code>nssSlurm</code> or <code>clientIds</code> it contains the identity parameters, <code>clientIds</code> only for the first three, each unless the <code>main</code> section sets it:</p>
+<pre tabindex="0"><code>AuthType=auth/slurm
+CredType=cred/slurm
+AuthInfo=use_client_ids
+LaunchParameters=enable_nss_slurm
 </code></pre><p>sind does not modify <code>slurm.conf</code> after initial creation.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="slurmdbdconf"
@@ -2311,7 +2364,17 @@ JobAcctGatherType=jobacct_gather/cgroup
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (<code>StorageHost=localhost</code>, <code>StorageLoc=slurm_acct_db</code>, <code>StorageUser=slurm</code> without a password), keeps the pid file in <code>/run/slurmdbd</code> and the log in <code>/var/log/slurm/slurmdbd.log</code>, and is owned by <code>slurm</code> with mode <code>0600</code>, as slurmdbd requires. The <code>slurmdbd</code> section extends it like the other sections.</p>
+<p>Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (<code>StorageHost=localhost</code>, <code>StorageLoc=slurm_acct_db</code>, <code>StorageUser=slurm</code> without a password), keeps the pid file in <code>/run/slurmdbd</code> and the log in <code>/var/log/slurm/slurmdbd.log</code>, and is owned by <code>slurm</code> with mode <code>0600</code>, as slurmdbd requires. It authenticates with <code>AuthType=auth/munge</code>, or with identity <code>clientIds</code> with <code>AuthType=auth/slurm</code> and <code>AuthInfo=use_client_ids</code>. The <code>slurmdbd</code> section extends it like the other sections.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="slurmkey"
+    >
+        slurm.key
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/architecture/slurm-config/#slurmkey" class="gdoc-page__anchor clip flex align-center" title="Anchor to: slurm.key" aria-label="Anchor to: slurm.key" href="#slurmkey">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>Only generated with identity <code>clientIds</code>: 1024 random bytes, owned by <code>slurm</code> with mode <code>0600</code>, the key of <code>auth/slurm</code> and <code>cred/slurm</code>. Every node reads it from the config volume; there is no munge key. <code>sind get auth-key</code> prints it.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="sind-nodesconf"
     >
@@ -3016,6 +3079,39 @@ JobAcctGatherType=jobacct_gather/cgroup
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

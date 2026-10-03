@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/docker-resources/",
       "headline": "Docker Resources",
       "description": "Resource naming conventions, volumes, and labels",
-      "wordCount": "561",
+      "wordCount": "635",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2309,7 +2353,7 @@
 					<td><code>sind-dev-config</code></td>
 			</tr>
 			<tr>
-					<td>Munge volume</td>
+					<td>Munge volume (not with identity <code>clientIds</code>)</td>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-munge</code></td>
 					<td><code>sind-dev-munge</code></td>
 			</tr>
@@ -2322,6 +2366,11 @@
 					<td>State volume (backup controller only)</td>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-state</code></td>
 					<td><code>sind-dev-state</code></td>
+			</tr>
+			<tr>
+					<td>Home volume (<code>users</code> only)</td>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-home</code></td>
+					<td><code>sind-dev-home</code></td>
 			</tr>
 	</tbody>
 </table> </div>
@@ -2410,7 +2459,7 @@
 					<td>ro</td>
 					<td>ro</td>
 					<td>ro</td>
-					<td>ro</td>
+					<td>ro (not with identity <code>clientIds</code>)</td>
 			</tr>
 			<tr>
 					<td><code>&lt;realm&gt;-&lt;cluster&gt;-data</code></td>
@@ -2427,6 +2476,14 @@
 					<td>—</td>
 					<td>—</td>
 					<td>—</td>
+			</tr>
+			<tr>
+					<td><code>&lt;realm&gt;-&lt;cluster&gt;-home</code></td>
+					<td><code>/home</code></td>
+					<td>rw</td>
+					<td>rw</td>
+					<td>rw</td>
+					<td>rw (<code>users</code> only)</td>
 			</tr>
 			<tr>
 					<td><code>cvmfs</code> plugin volume or host <code>/cvmfs</code></td>
@@ -2469,6 +2526,7 @@
 -v sind-dev-munge:/etc/munge:ro       # all nodes
 -v sind-dev-data:/data:rw             # all nodes
 -v sind-dev-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
+-v sind-dev-home:/home:rw             # all nodes, with users
 --tmpfs /tmp:rw,nosuid,nodev,size=256m  # configurable size
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
     <h3 id="host-path-storage"
@@ -2555,6 +2613,21 @@
 					<td><code>sind.cvmfs</code></td>
 					<td><code>hostPath</code></td>
 					<td>How the node mounts CVMFS, with <code>storage.cvmfs</code>: <code>volume</code> (plugin) or <code>hostPath</code> (host <code>/cvmfs</code>)</td>
+			</tr>
+			<tr>
+					<td><code>sind.users</code></td>
+					<td><code>alice:1000:1000 bob:2001:3000</code></td>
+					<td>The cluster users, as space-separated <code>name:uid:gid</code> entries, with <code>users</code></td>
+			</tr>
+			<tr>
+					<td><code>sind.groups</code></td>
+					<td><code>alice:1000 hpc:3000:carol</code></td>
+					<td>The cluster groups, private groups included, as space-separated <code>name:gid</code> entries with <code>:member+member...</code> for supplementary members, with <code>users</code> or <code>groups</code></td>
+			</tr>
+			<tr>
+					<td><code>sind.identity</code></td>
+					<td><code>clientIds</code></td>
+					<td>The identity mode, when not <code>local</code>: <code>nssSlurm</code> or <code>clientIds</code></td>
 			</tr>
 	</tbody>
 </table> </div>
@@ -3169,6 +3242,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

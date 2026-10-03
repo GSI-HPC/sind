@@ -45,7 +45,7 @@
 <meta property="article:section" content="Container Images" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/container-images/building-images/",
       "headline": "Building Images",
       "description": "Official images and custom image requirements",
-      "wordCount": "854",
+      "wordCount": "986",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2299,9 +2343,10 @@
 </span></span></span></code></pre></div><p>Every official image:</p>
 <ul>
 <li>Is based on Rocky Linux 10</li>
-<li>Builds Slurm, OpenMPI, PMIx, PRRTE, and UCX from source</li>
+<li>Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source</li>
 <li>Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack</li>
 <li>Slurm is built with PMIx support (<code>--with-pmix</code>) for native PMIx job launch</li>
+<li>Includes nss_slurm, Slurm&rsquo;s NSS module for job users, as <code>/usr/lib64/libnss_slurm.so.2</code>; Slurm&rsquo;s <code>auth/slurm</code> and <code>cred/slurm</code> plugins, built with libjwt 1.x, and the <code>serializer/json</code> plugin they need, built with json-c; and <code>sackd</code>, Slurm&rsquo;s authentication daemon for login nodes</li>
 <li>OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent</li>
 <li>Uses systemd as init (PID 1)</li>
 </ul>
@@ -2385,6 +2430,10 @@
 	</tbody>
 </table> </div>
 <p>sind enables Slurm services based on the node&rsquo;s role (<code>systemctl enable --now</code>) once every node is ready. Services must be installed but <strong>not</strong> enabled in the image.</p>
+<p>With <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/cluster-config/#identity-section"
+>identity</a> <code>nssSlurm</code> or <code>clientIds</code>, the image of managed workers needs nss_slurm: <code>libnss_slurm.so.2</code> where glibc finds it (in the <code>ldconfig</code> cache or <code>/usr/lib64</code>), built from Slurm&rsquo;s <code>contribs/nss_slurm</code>, which <code>make install</code> skips. sind checks for it before it changes <code>/etc/nsswitch.conf</code>. With <code>clientIds</code> every node needs Slurm&rsquo;s <code>auth/slurm</code> plugin (<code>auth_slurm.so</code>), which Slurm builds only with libjwt 1.x (<code>--with-jwt</code>), and the <code>serializer/json</code> plugin it loads (<code>serializer_json.so</code>, built only with json-c, <code>--with-json</code>), the submitter also needs <code>sackd</code> with its systemd unit, installed but not enabled, and since sind masks <code>munge.service</code> on every node, no other unit may require it.</p>
 <p>The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an <a
   class="gdoc-markdown__link"
   href="/sind/next/guides/unmanaged-cluster/"
@@ -3065,6 +3114,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

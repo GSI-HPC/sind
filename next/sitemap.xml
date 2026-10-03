@@ -21,10 +21,10 @@
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/cluster-config/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/node-definitions/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:42:56+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/configuration/realms/</loc>
     <lastmod>2026-09-27T22:42:55+00:00</lastmod>
@@ -36,7 +36,7 @@
     <lastmod>2026-10-01T22:57:02+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-access/</loc>
-    <lastmod>2026-09-29T22:40:16+00:00</lastmod>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/worker-management/</loc>
     <lastmod>2026-09-27T22:44:37+00:00</lastmod>
@@ -45,7 +45,7 @@
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/diagnostics/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/</loc>
     <lastmod>2026-04-09T16:23:27+02:00</lastmod>
@@ -54,7 +54,7 @@
     <lastmod>2026-04-09T16:23:27+02:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/mcp/</loc>
-    <lastmod>2026-09-29T22:40:16+00:00</lastmod>
+    <lastmod>2026-10-03T08:44:26+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/ci-cd/</loc>
     <lastmod>2026-09-27T22:09:59+00:00</lastmod>
@@ -63,10 +63,13 @@
     <lastmod>2026-09-27T22:14:08+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/unmanaged-cluster/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:44:26+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/guides/cvmfs/</loc>
     <lastmod>2026-09-29T23:04:44+00:00</lastmod>
+  </url><url>
+    <loc>https://gsi-hpc.github.io/sind/next/guides/users/</loc>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/usage/node-arguments/</loc>
     <lastmod>2026-09-27T18:24:06+00:00</lastmod>
@@ -78,22 +81,22 @@
     <lastmod>2026-03-27T11:26:56+01:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/overview/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/networking/</loc>
-    <lastmod>2026-09-27T22:18:18+00:00</lastmod>
+    <lastmod>2026-09-30T21:18:29+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/docker-resources/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/architecture/slurm-config/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/container-images/</loc>
     <lastmod>2026-09-26T19:53:48+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/container-images/building-images/</loc>
-    <lastmod>2026-10-01T22:57:14+00:00</lastmod>
+    <lastmod>2026-10-03T08:55:33+00:00</lastmod>
   </url><url>
     <loc>https://gsi-hpc.github.io/sind/next/troubleshooting/</loc>
     <lastmod>2026-04-12T19:20:08+02:00</lastmod>

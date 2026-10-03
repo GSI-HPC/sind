@@ -45,7 +45,7 @@
 <meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:44:26+00:00"
     />
 
 
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:44:26.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2386,7 +2430,7 @@
 </span></span></code></pre></div><p>Keep in mind:</p>
 <ul>
 <li>Write Slurm files on a controller. On the other nodes <code>/etc/slurm</code> is read-only, and every node reads the same files. slurmdbd insists on a <code>slurmdbd.conf</code> owned by its <code>SlurmUser</code> with mode <code>0600</code>.</li>
-<li>munge is sind&rsquo;s. <code>/etc/munge</code> is read-only, so recipes that manage the munge key must leave it as it is. <code>sind get munge-key dev</code> prints the key base64-encoded if your tooling needs it.</li>
+<li>munge is sind&rsquo;s. <code>/etc/munge</code> is read-only, so recipes that manage the munge key must leave it as it is. <code>sind get auth-key dev</code> prints the key base64-encoded if your tooling needs it.</li>
 <li><code>sind get cluster dev</code> reports munge and sshd only. Check Slurm itself with <code>sind exec dev -- sinfo</code> and <code>sind logs controller.dev slurmctld</code>.</li>
 </ul>
 <div class="flex align-center gdoc-page__anchorwrap">
@@ -3230,6 +3274,39 @@ StateSaveLocation=/var/spool/slurmctld
             
             
           
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         

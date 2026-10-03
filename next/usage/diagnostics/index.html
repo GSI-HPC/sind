@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/diagnostics/",
       "headline": "Diagnostics",
       "description": "Cluster health, logs, and resource inspection",
-      "wordCount": "1430",
+      "wordCount": "1501",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2382,7 +2426,7 @@ sudo systemctl daemon-reload
 </table> </div>
 <p>Log output goes to stderr in structured <code>key=value</code> format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Capture logs while piping output</span>
-</span></span><span class="line"><span class="cl">sind -v get munge-key 2&gt;create.log <span class="p">|</span> base64 -d &gt; munge.key
+</span></span><span class="line"><span class="cl">sind -v get auth-key 2&gt;create.log <span class="p">|</span> base64 -d &gt; munge.key
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># Watch creation progress</span>
 </span></span><span class="line"><span class="cl">sind -vv create cluster --config cluster.yaml
@@ -2491,8 +2535,14 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 <p>Nodes where sind does not manage Slurm (unmanaged workers and db nodes, and every node of an <a
   class="gdoc-markdown__link"
   href="/sind/next/guides/unmanaged-cluster/"
->unmanaged cluster</a>) list only <code>munge</code> and <code>sshd</code>. The JSON output marks each node with <code>&quot;managed&quot;: true|false</code>, as does <code>sind get node -o json</code>.</p>
+>unmanaged cluster</a>) list only <code>munge</code> and <code>sshd</code>. With <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/users/#clientids"
+>identity <code>clientIds</code></a>, no node lists <code>munge</code>, as auth/slurm replaces it, and the submitter lists <code>sackd</code>; <code>MOUNTS</code> has no <code>/etc/munge</code>. The JSON output marks each node with <code>&quot;managed&quot;: true|false</code>, as does <code>sind get node -o json</code>.</p>
 <p>With <a
+  class="gdoc-markdown__link--code"
+  href="/sind/next/configuration/cluster-config/#users-section"
+><code>users</code></a>, <code>MOUNTS</code> lists the home volume at <code>/home</code>. With <a
   class="gdoc-markdown__link--code"
   href="/sind/next/guides/cvmfs/"
 ><code>storage.cvmfs</code></a>, <code>MOUNTS</code> lists <code>/cvmfs</code> too: source <code>cvmfs</code> of type <code>volume</code> from the volume plugin, or source <code>/cvmfs</code> of type <code>hostPath</code> from the Docker host.</p>
@@ -2541,6 +2591,7 @@ sshd        ✓
 </span></span><span class="line"><span class="cl"><span class="c1"># Service logs</span>
 </span></span><span class="line"><span class="cl">sind logs controller slurmctld
 </span></span><span class="line"><span class="cl">sind logs worker-0 slurmd --follow
+</span></span><span class="line"><span class="cl">sind logs submitter sackd             <span class="c1"># identity clientIds</span>
 </span></span><span class="line"><span class="cl">sind logs db slurmdbd
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="list-nodes"
@@ -2613,16 +2664,19 @@ sind-ssh-config       local
 controller.default.sind.sind         172.19.0.2
 worker-0.default.sind.sind           172.19.0.3
 </code></pre><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="munge-key"
+    <h2 id="authentication-key"
     >
-        Munge key
+        Authentication key
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#munge-key" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Munge key" aria-label="Anchor to: Munge key" href="#munge-key">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/diagnostics/#authentication-key" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Authentication key" aria-label="Anchor to: Authentication key" href="#authentication-key">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get munge-key <span class="o">[</span>CLUSTER<span class="o">]</span>
-</span></span></code></pre></div><p>Outputs the cluster&rsquo;s munge key encoded as base64, suitable for injection into external tooling.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind get auth-key <span class="o">[</span>CLUSTER<span class="o">]</span>
+</span></span></code></pre></div><p>Outputs the key that authenticates the cluster&rsquo;s Slurm traffic, encoded as base64, suitable for injection into external tooling: the munge key, or <code>slurm.key</code> with <a
+  class="gdoc-markdown__link"
+  href="/sind/next/guides/users/#clientids"
+>identity <code>clientIds</code></a>. <code>-o json</code> returns it with its type: <code>{&quot;type&quot;: &quot;munge&quot;, &quot;key&quot;: &quot;...&quot;}</code> or <code>{&quot;type&quot;: &quot;slurm&quot;, &quot;key&quot;: &quot;...&quot;}</code>. <code>sind get auth-key</code> replaces <code>sind get munge-key</code>.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="mesh-infrastructure"
     >
@@ -3279,6 +3333,39 @@ worker-0.default.sind.sind           172.19.0.3
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

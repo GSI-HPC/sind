@@ -45,7 +45,7 @@
 <meta property="article:section" content="Architecture" />
     <meta
       property="article:modified_time"
-      content="2026-10-01T22:57:14+00:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/architecture/overview/",
       "headline": "Design Overview",
       "description": "Operational model and design philosophy",
-      "wordCount": "771",
+      "wordCount": "860",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-10-01T22:57:14.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2318,18 +2362,20 @@
 ┤                                                      ├→ setupNodes
 └ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┘
                            │
-                 registerMesh ║ enableSlurm
+  registerMesh ║ enableSlurm → createSlurmAccounts ║ createHomes
                            │
                        *Cluster
 </code></pre><ul>
-<li><code>createResources</code> creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key, the data volume (unless the data is a host path) and, for a backup controller pair, the state volume, all in parallel.</li>
+<li><code>createResources</code> creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key (with identity <code>clientIds</code>, <code>slurm.key</code> on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with <code>users</code>, the home volume, all in parallel.</li>
 <li><code>resolveInfra</code> looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller&rsquo;s image, while the resources are created.</li>
-<li><code>setupNodes</code> creates, waits for, and sets up SSH and host keys on every node.</li>
-<li><code>enableSlurm</code> (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd.</li>
+<li><code>setupNodes</code> creates, waits for, and sets up every node: nss_slurm on managed workers with identity <code>nssSlurm</code> or <code>clientIds</code>, the cluster users and groups where the identity mode puts them, SSH and host keys.</li>
+<li><code>enableSlurm</code> (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, and <code>sackd</code> on the submitter with identity <code>clientIds</code>.</li>
+<li><code>createSlurmAccounts</code> (<code>accounts</code> only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users&rsquo; associations and the coordinators with <code>sacctmgr -i</code> on <code>controller</code>.</li>
+<li><code>createHomes</code> creates the users&rsquo; home directories on the shared home volume, once, on <code>controller</code> (<code>users</code> only).</li>
 <li>If any step fails, <code>sind create cluster</code> removes what it created.</li>
 </ul>
 <p>Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.</p>
-<p>Mesh registration (batch DNS + known_hosts) and Slurm enablement run concurrently after all nodes are ready.</p>
+<p>Mesh registration (batch DNS + known_hosts), Slurm enablement and the home directories run concurrently after all nodes are ready.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="readiness-probes"
     >
@@ -3027,6 +3073,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

@@ -45,7 +45,7 @@
 <meta property="article:section" content="Usage" />
     <meta
       property="article:modified_time"
-      content="2026-09-29T22:40:16+00:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
@@ -63,7 +63,7 @@
       "url": "https://gsi-hpc.github.io/sind/next/usage/node-access/",
       "headline": "Node Access",
       "description": "SSH, interactive shells, and command execution",
-      "wordCount": "728",
+      "wordCount": "909",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
@@ -74,7 +74,7 @@
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-09-29T22:40:16.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -1345,6 +1345,50 @@
         
       
     
+      
+
+      
+        
+      
+
+      
+        
+          
+          
+          
+          
+          
+          
+
+
+          <li>
+            <input
+              type="checkbox"
+              
+                class="hidden"
+              
+            />
+            <label
+              
+            >
+              
+                <span class="flex">
+                  <a
+                    href="/sind/next/guides/users/"
+                    class="gdoc-nav__entry"
+                  >
+                    Users and Identity
+                  </a>
+                </span>
+              
+              
+            </label>
+
+            
+          </li>
+        
+      
+    
   </ul>
 
             
@@ -2264,7 +2308,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh <span class="o">[</span>SSH_OPTIONS<span class="o">]</span> NODE <span class="o">[</span>-- COMMAND <span class="o">[</span>ARGS...<span class="o">]]</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh <span class="o">[</span>SSH_OPTIONS<span class="o">]</span> <span class="o">[</span>USER@<span class="o">]</span>NODE <span class="o">[</span>-- COMMAND <span class="o">[</span>ARGS...<span class="o">]]</span>
 </span></span></code></pre></div><p>SSH into a specific node. All SSH options and arguments are passed through to the underlying SSH command.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Interactive shell</span>
 </span></span><span class="line"><span class="cl">sind ssh controller
@@ -2276,6 +2320,9 @@
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># Verbose SSH</span>
 </span></span><span class="line"><span class="cl">sind ssh -v worker-0
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># As a cluster user</span>
+</span></span><span class="line"><span class="cl">sind ssh alice@worker-0
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># Port forwarding</span>
 </span></span><span class="line"><span class="cl">sind ssh -L 8080:localhost:80 controller
@@ -2292,7 +2339,7 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter <span class="o">[</span>CLUSTER<span class="o">]</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter <span class="o">[</span>CLUSTER<span class="o">]</span> <span class="o">[</span>--user USER<span class="o">]</span>
 </span></span></code></pre></div><p>Opens an interactive shell on the cluster&rsquo;s submitter node. If no submitter is configured, it connects to the controller instead. The working directory inside the container is the data mount, <code>/data</code> unless the cluster config sets another <code>mountPath</code>.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter          <span class="c1"># default cluster</span>
 </span></span><span class="line"><span class="cl">sind enter dev      <span class="c1"># dev cluster</span>
@@ -2305,12 +2352,34 @@
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> <span class="o">[</span>CLUSTER<span class="o">]</span> -- COMMAND <span class="o">[</span>ARGS...<span class="o">]</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> <span class="o">[</span>CLUSTER<span class="o">]</span> <span class="o">[</span>--user USER<span class="o">]</span> -- COMMAND <span class="o">[</span>ARGS...<span class="o">]</span>
 </span></span></code></pre></div><p>Runs a one-shot command on the submitter (or controller). The <code>--</code> separator is required. The working directory inside the container is the data mount, as for <code>enter</code>.</p>
 <div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind <span class="nb">exec</span> -- sinfo
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> -- srun hostname
 </span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> dev -- sbatch job.sh
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
+    <h2 id="cluster-users"
+    >
+        Cluster users
+    </h2>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/usage/node-access/#cluster-users" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Cluster users" aria-label="Anchor to: Cluster users" href="#cluster-users">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<p>A cluster with <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/cluster-config/#users-section"
+>users</a> can be used as any of them instead of root:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind enter --user alice               <span class="c1"># shell as alice, in /home/alice</span>
+</span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> -u alice -- sbatch job.sh   <span class="c1"># command as alice, in /home/alice</span>
+</span></span><span class="line"><span class="cl">sind ssh alice@worker-0               <span class="c1"># SSH as alice (ssh -l alice)</span>
+</span></span><span class="line"><span class="cl">ssh -l alice controller               <span class="c1"># with the exported ssh_config</span>
+</span></span></code></pre></div><p><code>--user</code>, or <code>-u</code>, runs <code>docker exec -u USER</code> in the user&rsquo;s home directory, <code>/home/USER</code>, which every node shares. <code>USER@NODE</code> passes <code>-l USER</code> to SSH. <code>--user root</code> is the default. A user name that is not valid exits <code>2</code>; one that the cluster does not have fails in docker.</p>
+<p>With <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/cluster-config/#identity-section"
+>identity</a> <code>nssSlurm</code>, managed workers do not have the users, and with <code>clientIds</code> only the submitter (or, without one, the controller) has them: SSH as a user works only to the nodes that have the user. <code>enter</code> and <code>exec</code> run on the submitter or the controller, which have the users in every mode.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
     <h2 id="exit-status"
     >
         Exit status
@@ -2370,7 +2439,7 @@
 <blockquote class="gdoc-hint note">
   <div class="gdoc-hint__title flex gap-8 align-center"><i class="fa note"></i>
       <span>Note</span></div>
-  <div class="gdoc-hint__text"><code>sind ssh</code> connects via SSH and starts in the user&rsquo;s home directory, not <code>/data</code>. The data mount is still accessible — just <code>cd /data</code>. Use <code>sind enter</code> or <code>sind exec</code> to land in <code>/data</code> directly.</div>
+  <div class="gdoc-hint__text"><code>sind ssh</code> connects via SSH and starts in the user&rsquo;s home directory, not <code>/data</code>. The data mount is still accessible — just <code>cd /data</code>. Use <code>sind enter</code> or <code>sind exec</code> to land in <code>/data</code> directly. With <code>--user</code>, they start in the user&rsquo;s home directory instead.</div>
 </blockquote>
 
 <div class="flex align-center gdoc-page__anchorwrap">
@@ -3082,6 +3151,39 @@
   
 
   
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
   
     
 

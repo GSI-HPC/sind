@@ -12,11 +12,9 @@
 <meta name="generator" content="Hugo 0.167.0">
 
 
-  <meta name="description" content=" Symptom Cluster creation fails with containers exiting immediately:
-waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8&#43;). Some containers start successfully while others crash within the first second.
-Cause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low." />
+  <meta name="description" content="Run jobs as regular users with Slurm accounts, and test where your site resolves them" />
 
-    <title>Container exits with code 255 | sind</title>
+    <title>Users and Identity | sind</title>
 
     <link rel="icon" type="image/svg+xml" href="/sind/next/favicon/favicon.svg" />
 <link
@@ -37,50 +35,46 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
     
   <meta
     property="og:title"
-    content="Container exits with code 255"
+    content="Users and Identity"
   />
   <meta property="og:site_name" content="sind" />
-  <meta property="og:description" content=" Symptom Cluster creation fails with containers exiting immediately:
-waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8&#43;). Some containers start successfully while others crash within the first second.
-Cause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low." />
+  <meta property="og:description" content="Run jobs as regular users with Slurm accounts, and test where your site resolves them" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/" />
+<meta property="og:url" content="https://gsi-hpc.github.io/sind/next/guides/users/" />
 
-<meta property="article:section" content="Troubleshooting" />
+<meta property="article:section" content="Guides" />
     <meta
       property="article:modified_time"
-      content="2026-04-12T19:20:08+02:00"
+      content="2026-10-03T08:55:33+00:00"
     />
 
 
   <meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Container exits with code 255" />
-  <meta name="twitter:description" content=" Symptom Cluster creation fails with containers exiting immediately:
-waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8&#43;). Some containers start successfully while others crash within the first second.
-Cause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low." />
+<meta name="twitter:title" content="Users and Identity" />
+  <meta name="twitter:description" content="Run jobs as regular users with Slurm accounts, and test where your site resolves them" />
 
 
   <script type="application/ld+json">
   {
       "@context": "http://schema.org",
       "@type": "TechArticle",
-      "articleSection": "Troubleshooting",
-      "name": "Container exits with code 255",
-      "url": "https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/",
-      "headline": "Container exits with code 255",
-      "description": " Symptom Cluster creation fails with containers exiting immediately:\nwaiting for worker-5: container sind-dev-worker-5 is exited (exit code 255) This typically happens when creating clusters with many nodes (8\u002b). Some containers start successfully while others crash within the first second.\nCause Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux inotify instance limit being too low.",
-      "wordCount": "230",
+      "articleSection": "Guides",
+      "name": "Users and Identity",
+      "url": "https://gsi-hpc.github.io/sind/next/guides/users/",
+      "headline": "Users and Identity",
+      "description": "Run jobs as regular users with Slurm accounts, and test where your site resolves them",
+      "wordCount": "954",
       "inLanguage": "en",
       "isFamilyFriendly": "true",
       "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": "https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/"
+          "@id": "https://gsi-hpc.github.io/sind/next/guides/users/"
       },
       "copyrightHolder": "sind",
       "copyrightYear": "0001",
       "dateCreated": "0001-01-01T00:00:00.00Z",
       "datePublished": "0001-01-01T00:00:00.00Z",
-      "dateModified": "2026-04-12T19:20:08.00Z",
+      "dateModified": "2026-10-03T08:55:33.00Z",
       "publisher":{
           "@type":"Organization",
           "name": "sind",
@@ -158,7 +152,7 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
   href="/sind/next/custom.css"
   media="all"
 />
-  <link href="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/" rel="canonical" type="text/html" />
+  <link href="https://gsi-hpc.github.io/sind/next/guides/users/" rel="canonical" type="text/html" />
 
 <!-- Made with Geekdoc theme https://github.com/thegeeklab/hugo-geekdoc -->
 
@@ -1381,7 +1375,7 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
                 <span class="flex">
                   <a
                     href="/sind/next/guides/users/"
-                    class="gdoc-nav__entry"
+                    class="gdoc-nav__entry is-active"
                   >
                     Users and Identity
                   </a>
@@ -1807,7 +1801,7 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
                 <span class="flex">
                   <a
                     href="/sind/next/troubleshooting/container-exit-255/"
-                    class="gdoc-nav__entry is-active"
+                    class="gdoc-nav__entry"
                   >
                     Container exits with code 255
                   </a>
@@ -2284,7 +2278,7 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
     
   
   
-    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/troubleshooting/' href='/sind/next/troubleshooting/'><span itemprop='name'>Troubleshooting</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Container exits with code 255</span><meta itemprop='position' content='5' /></li>
+    <li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/' href='/sind/next/'><span itemprop='name'>sind</span></a><meta itemprop='position' content='3' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><a itemscope itemtype='https://schema.org/WebPage' itemprop='item' itemid='/sind/next/guides/' href='/sind/next/guides/'><span itemprop='name'>Guides</span></a><meta itemprop='position' content='4' /></li><li> / </li><li itemprop='itemListElement' itemscope itemtype='https://schema.org/ListItem'><span itemprop='name'>Users and Identity</span><meta itemprop='position' content='5' /></li>
   
 
   
@@ -2303,66 +2297,245 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
     class="gdoc-markdown gdoc-markdown__align--left"
     id="main-content" tabindex="-1"
   >
-    <h1>Container exits with code 255</h1>
+    <h1>Users and Identity</h1>
     
-    <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="symptom"
-    >
-        Symptom
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#symptom" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Symptom" aria-label="Anchor to: Symptom" href="#symptom">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>Cluster creation fails with containers exiting immediately:</p>
-<pre tabindex="0"><code>waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255)
-</code></pre><p>This typically happens when creating clusters with many nodes (8+). Some containers start successfully while others crash within the first second.</p>
+    <p>sind runs everything as root unless the cluster config declares users. With <a
+  class="gdoc-markdown__link--code"
+  href="/sind/next/configuration/cluster-config/#users-section"
+><code>users</code>, <code>groups</code></a> and <a
+  class="gdoc-markdown__link--code"
+  href="/sind/next/configuration/cluster-config/#accounts-section"
+><code>accounts</code></a>, a cluster gets Linux user accounts, Slurm accounts and associations. The <a
+  class="gdoc-markdown__link"
+  href="/sind/next/configuration/cluster-config/#identity-section"
+>identity mode</a> decides which nodes have the Linux accounts, to mirror how a site resolves its users.</p>
 <div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="cause"
+    <h2 id="users-and-accounts"
     >
-        Cause
+        Users and accounts
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#cause" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Cause" aria-label="Anchor to: Cause" href="#cause">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/users/#users-and-accounts" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Users and accounts" aria-label="Anchor to: Users and accounts" href="#users-and-accounts">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Exit code 255 means systemd (PID 1 inside the container) failed during early initialization. The most common cause is the Linux <code>inotify</code> instance limit being too low.</p>
-<p>Each Docker container consumes several <code>inotify</code> file descriptors through containerd&rsquo;s cgroup event monitoring. systemd inside the container also requires inotify for service management. When the per-user limit is exhausted, new containers cannot initialize systemd and exit immediately with code 255.</p>
-<p>The default on many distributions (Fedora, Ubuntu) is 128 instances, which supports roughly 10-13 concurrent systemd containers depending on the workload.</p>
-<div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="diagnosis"
-    >
-        Diagnosis
-    </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#diagnosis" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Diagnosis" aria-label="Anchor to: Diagnosis" href="#diagnosis">
-        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
-    </a>
-</div>
-<p>Check the current limit and whether containerd is hitting it:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Current limit</span>
-</span></span><span class="line"><span class="cl">cat /proc/sys/fs/inotify/max_user_instances
-</span></span><span class="line"><span class="cl"><span class="c1"># 128</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Check containerd logs for inotify errors</span>
-</span></span><span class="line"><span class="cl">journalctl -u docker --since <span class="s2">&#34;5 minutes ago&#34;</span> <span class="p">|</span> grep inotify
-</span></span><span class="line"><span class="cl"><span class="c1"># error from *cgroupsv2.Manager.EventChan: failed to create inotify fd: too many open files</span>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Cluster</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w"> </span><span class="nt">[controller, db, submitter, worker</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="p">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">slurm</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">main</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
+</span></span></span><span class="line"><span class="cl"><span class="sd">    AccountingStorageEnforce=associations,limits</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">groups</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">physics</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">gid</span><span class="p">:</span><span class="w"> </span><span class="m">3000</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">accounts</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">physics</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">limits</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">GrpTRES</span><span class="p">:</span><span class="w"> </span><span class="l">cpu=4</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">theory</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">parent</span><span class="p">:</span><span class="w"> </span><span class="l">physics</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">limits</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">MaxJobs</span><span class="p">:</span><span class="w"> </span><span class="m">1</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">users</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alice</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2001</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">groups</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">accounts</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">theory]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">bob</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2002</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">groups</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">accounts</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics, theory]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">coordinator</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">carol</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2003</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">accounts</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">adminLevel</span><span class="p">:</span><span class="w"> </span><span class="l">operator</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">dave</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2004</span><span class="w">
+</span></span></span></code></pre></div><p>Every node gets the users and groups with the same IDs, and each user a home directory on the shared home volume, <code>/home/&lt;user&gt;</code>. Once slurmctld has registered the cluster, sind creates the account tree with <code>sacctmgr</code>:</p>
+<pre tabindex="0"><code>root
+├── root          user root
+└── physics       GrpTRES=cpu=4
+    ├── bob       default · coordinator of physics
+    ├── carol     default · AdminLevel=Operator
+    └── theory    MaxJobs=1
+        ├── alice default
+        └── bob
+</code></pre><p>With the enforcement in <code>slurm.main</code>, this tests that alice can have one job at a time, that all of physics shares 4 CPUs, that bob can manage limits and users below physics, that carol can run operator commands, and that dave&rsquo;s <code>sbatch</code> is rejected with &ldquo;Invalid account or account/partition combination specified&rdquo;. The Linux group <code>physics</code> and the Slurm account <code>physics</code> are unrelated; they only share a name, as they often do at real sites.</p>
+<p>Run commands as a user:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">sind ssh alice@submitter -- sbatch --wrap hostname
+</span></span><span class="line"><span class="cl">sind <span class="nb">exec</span> --user alice -- squeue
+</span></span><span class="line"><span class="cl">sind enter --user bob
 </span></span></code></pre></div><div class="flex align-center gdoc-page__anchorwrap">
-    <h2 id="fix"
+    <h2 id="identity-modes"
     >
-        Fix
+        Identity modes
     </h2>
-    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/troubleshooting/container-exit-255/#fix" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Fix" aria-label="Anchor to: Fix" href="#fix">
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/users/#identity-modes" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Identity modes" aria-label="Anchor to: Identity modes" href="#identity-modes">
         <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
     </a>
 </div>
-<p>Increase the inotify instance limit. A value of 1024 supports approximately 100 concurrent containers:</p>
-<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># Temporary (resets on reboot)</span>
-</span></span><span class="line"><span class="cl">sudo sysctl fs.inotify.max_user_instances<span class="o">=</span><span class="m">1024</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="c1"># Persistent</span>
-</span></span><span class="line"><span class="cl"><span class="nb">echo</span> <span class="s2">&#34;fs.inotify.max_user_instances = 1024&#34;</span> <span class="p">|</span> sudo tee /etc/sysctl.d/99-sind.conf
-</span></span><span class="line"><span class="cl">sudo sysctl --system
-</span></span></code></pre></div><p>No restart of Docker or running containers is required. The new limit takes effect immediately for new containers.</p>
+<p>Slurm needs a user&rsquo;s uid and groups on the nodes that run its daemons and jobs. Sites provide them in different ways, and sind can mirror three of them:</p>
+<div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th></th>
+					<th><code>local</code> (default)</th>
+					<th><code>nssSlurm</code></th>
+					<th><code>clientIds</code></th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Slurm settings</td>
+					<td>munge</td>
+					<td>munge, <code>LaunchParameters=enable_nss_slurm</code></td>
+					<td><code>AuthType=auth/slurm</code>, <code>CredType=cred/slurm</code>, <code>AuthInfo=use_client_ids</code>, <code>enable_nss_slurm</code></td>
+			</tr>
+			<tr>
+					<td>Linux accounts on</td>
+					<td>every node</td>
+					<td>controllers, submitter, db</td>
+					<td>the login node: the submitter, or the controllers without one</td>
+			</tr>
+			<tr>
+					<td>Authentication key</td>
+					<td>munge key</td>
+					<td>munge key</td>
+					<td><code>slurm.key</code>; munge is masked, <code>sackd</code> runs on the submitter</td>
+			</tr>
+			<tr>
+					<td>SSH as a user to</td>
+					<td>every node</td>
+					<td>controllers, submitter, db</td>
+					<td>login node</td>
+			</tr>
+			<tr>
+					<td>Prolog, epilog and health checks know user names</td>
+					<td>yes</td>
+					<td>not on workers</td>
+					<td>not on workers</td>
+			</tr>
+			<tr>
+					<td>A job sees other users&rsquo; names (<code>ls -l</code>, <code>id bob</code>)</td>
+					<td>yes</td>
+					<td>no</td>
+					<td>no</td>
+			</tr>
+			<tr>
+					<td>Mirrors a site where</td>
+					<td>every node has LDAP or SSSD</td>
+					<td>compute nodes have no directory service</td>
+					<td>only login nodes have a directory service</td>
+			</tr>
+	</tbody>
+</table> </div>
+<p>How each mode resolves a user:</p>
+<ul>
+<li><strong>Controller:</strong> with <code>local</code> and <code>nssSlurm</code>, slurmctld looks up each job&rsquo;s user and groups, and the uids of Slurm users, in its own passwd and group files. With <code>clientIds</code> it takes them from the user&rsquo;s token, which <code>sackd</code> on the login node creates with the caller&rsquo;s passwd and group entries. slurmctld then fills in the uid on the user&rsquo;s associations, before it handles the request, so even the first <code>sbatch</code> under <code>AccountingStorageEnforce</code> finds the association.</li>
+<li><strong>Submitter:</strong> users run <code>sbatch</code> and <code>srun</code> there in every mode.</li>
+<li><strong>db:</strong> slurmdbd checks admin levels, coordinators and default-account changes against its own lookups, or, with <code>clientIds</code>, the uids it learns from tokens.</li>
+<li><strong>Workers:</strong> with <code>nssSlurm</code> and <code>clientIds</code>, sind puts <code>slurm</code> first on the <code>passwd</code> and <code>group</code> lines of <code>/etc/nsswitch.conf</code>. nss_slurm answers only for the job&rsquo;s own user and groups, from the job credential, and only to processes inside a job step. sshd, prolog, epilog and health checks run outside a step, so SSH as a user to a worker fails by design.</li>
+<li><strong>Every node:</strong> root and the <code>slurm</code> user stay local. Unmanaged nodes, such as <code>managed: false</code> workers, get the Linux accounts as with <code>local</code>, since sind does not manage their Slurm.</li>
+</ul>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="choosing-a-mode"
+    >
+        Choosing a mode
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/users/#choosing-a-mode" class="gdoc-page__anchor clip flex align-center" title="Anchor to: Choosing a mode" aria-label="Anchor to: Choosing a mode" href="#choosing-a-mode">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<ol>
+<li><strong>No users other than root?</strong> Leave out <code>users</code>. The same goes for testing your own account provisioning: leave out <code>users</code> and let it create the accounts.</li>
+<li><strong>Need SSH as a user to workers, or prolog and epilog scripts that look up users?</strong> Use <code>local</code>.</li>
+<li><strong>Mirroring a site?</strong> Pick the mode it runs: <code>clientIds</code> for <code>auth/slurm</code> with <code>use_client_ids</code>, <code>nssSlurm</code> for nss_slurm with munge, <code>local</code> otherwise.</li>
+<li><strong>Making sure job scripts and tools don&rsquo;t depend on lookups on compute nodes?</strong> Use <code>nssSlurm</code>, even if the site runs <code>local</code>. It is the stricter test.</li>
+</ol>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="nssslurm"
+    >
+        nssSlurm
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/users/#nssslurm" class="gdoc-page__anchor clip flex align-center" title="Anchor to: nssSlurm" aria-label="Anchor to: nssSlurm" href="#nssslurm">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">identity</span><span class="p">:</span><span class="w"> </span><span class="l">nssSlurm</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w"> </span><span class="nt">[controller, db, submitter, worker</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="p">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">users</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alice</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2001</span><span class="w">
+</span></span></span></code></pre></div><div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>Node</th>
+					<th>alice in <code>/etc/passwd</code></th>
+					<th>How alice resolves</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>controller, submitter, db</td>
+					<td>yes</td>
+					<td><code>files</code></td>
+			</tr>
+			<tr>
+					<td>worker-0, worker-1</td>
+					<td>no</td>
+					<td>inside job steps: nss_slurm; outside: not at all</td>
+			</tr>
+	</tbody>
+</table> </div>
+<p><code>srun</code> and <code>sbatch</code> work as before; inside a job, <code>id</code>, <code>ls -l ~</code> and <code>getent passwd alice</code> see alice. <code>sind ssh alice@worker-0</code> fails. sind checks that each managed worker&rsquo;s image has <code>libnss_slurm.so.2</code> and fails <code>sind create cluster</code> and <code>sind create worker</code> with the image&rsquo;s name if not.</p>
+<div class="flex align-center gdoc-page__anchorwrap">
+    <h3 id="clientids"
+    >
+        clientIds
+    </h3>
+    <a data-clipboard-text="https://gsi-hpc.github.io/sind/next/guides/users/#clientids" class="gdoc-page__anchor clip flex align-center" title="Anchor to: clientIds" aria-label="Anchor to: clientIds" href="#clientids">
+        <svg class="gdoc-icon gdoc_link"><use xlink:href="#gdoc_link"></use></svg>
+    </a>
+</div>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">identity</span><span class="p">:</span><span class="w"> </span><span class="l">clientIds</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">nodes</span><span class="p">:</span><span class="w"> </span><span class="nt">[controller, db, submitter, worker</span><span class="p">:</span><span class="w"> </span><span class="m">2</span><span class="p">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">users</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alice</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">uid</span><span class="p">:</span><span class="w"> </span><span class="m">2001</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">accounts</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">physics]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">accounts</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span>- <span class="l">physics</span><span class="w">
+</span></span></span></code></pre></div><div class="table-wrap"> <table>
+	<thead>
+			<tr>
+					<th>Node</th>
+					<th>alice in <code>/etc/passwd</code></th>
+					<th>How alice resolves</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>submitter</td>
+					<td>yes</td>
+					<td><code>files</code>; <code>sackd</code> puts her entries into each token</td>
+			</tr>
+			<tr>
+					<td>controller, db</td>
+					<td>no</td>
+					<td>from her signed tokens, learned on her first request</td>
+			</tr>
+			<tr>
+					<td>worker-0, worker-1</td>
+					<td>no</td>
+					<td>inside job steps: nss_slurm; outside: not at all</td>
+			</tr>
+	</tbody>
+</table> </div>
+<p>sind generates <code>/etc/slurm/slurm.key</code>, readable only by <code>slurm</code>, instead of a munge key, masks <code>munge.service</code> on every node and enables <code>sackd</code> on the submitter. <code>sind get cluster</code> lists <code>sackd</code> on the submitter and munge nowhere, and <code>sind get auth-key</code> prints <code>slurm.key</code>. Root&rsquo;s client commands on the controller, db node and workers get their tokens from slurmctld, slurmdbd and slurmd.</p>
+<p>slurmctld checks a partition&rsquo;s <code>AllowGroups</code> with local lookups only. With such a partition, give the controllers the users and groups too:</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">identity</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l">clientIds</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">controllerUsers</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span></code></pre></div><p>Without a submitter, the controller is the login node and gets the accounts anyway.</p>
 
   </article>
 
@@ -3193,327 +3366,6 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
         
 
         
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-      
-    
-
-  
-
-        
-      
-    
-
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
-
-        
-          
-        
-
-        
-        
-          
-  
-  
-
-  
-  
-    
-
-    
-      
-    
-
-    
-      
-      
-
-      
-        
-        
-        
-        
-
-        
-        
-
-        
-
-        
           
           
         
@@ -3558,6 +3410,327 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
             
             
           
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+          
+  
+  
+
+  
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
+        
+
+        
+
+        
+          
+        
+
+        
+        
+      
+    
+
+  
+
+        
+      
+    
+
+  
+    
+
+    
+      
+    
+
+    
+      
+      
+
+      
+        
+        
+        
+        
+
+        
+        
+
         
 
         
@@ -3720,11 +3893,11 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
   
     <a
       class="gdoc-page__nav--prev flex align-center"
-      href="/sind/next/troubleshooting/"
-      title="Troubleshooting"
+      href="/sind/next/guides/cvmfs/"
+      title="Using CVMFS"
     >
       <i class="gdoc-icon">gdoc_arrow_left_alt</i>
-      Troubleshooting
+      Using CVMFS
     </a>
   
 </span>
@@ -3732,10 +3905,10 @@ Cause Exit code 255 means systemd (PID 1 inside the container) failed during ear
   
     <a
       class="gdoc-page__nav--next flex align-center"
-      href="/sind/next/contributing/"
-      title="Contributing"
+      href="/sind/next/architecture/"
+      title="Architecture"
     >
-      Contributing
+      Architecture
       <i class="gdoc-icon">gdoc_arrow_right_alt</i>
     </a>
   
