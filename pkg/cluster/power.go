@@ -10,10 +10,15 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"golang.org/x/sync/errgroup"
 )
 
-// A node whose docker call fails does not stop a power command: it returns
-// the failures of all nodes, joined.
+// powerConcurrency bounds the docker calls a power command runs at once.
+const powerConcurrency = 8
+
+// Power commands act on all their nodes in parallel. A node whose docker
+// call fails does not stop the others: the command returns the failures of
+// all nodes, joined.
 
 // PowerShutdown gracefully stops the specified nodes (docker stop).
 func PowerShutdown(ctx context.Context, client *docker.Client, realm, clusterName string, shortNames []string) error {
@@ -128,17 +133,27 @@ func refreshDNSRecords(ctx context.Context, client *docker.Client, meshMgr *mesh
 	return nil
 }
 
-// forEachContainer applies op to every container. It returns the containers
-// op succeeded on, and the failures, joined.
+// forEachContainer applies op to every container in parallel, at most
+// powerConcurrency at a time. It returns the containers op succeeded on,
+// and the failures, joined.
 func forEachContainer(ctx context.Context, containers []docker.ContainerName, verb string, op func(context.Context, docker.ContainerName) error) ([]docker.ContainerName, error) {
+	errs := make([]error, len(containers))
+	var g errgroup.Group
+	g.SetLimit(powerConcurrency)
+	for i, name := range containers {
+		g.Go(func() error {
+			if err := op(ctx, name); err != nil {
+				errs[i] = fmt.Errorf("%s %s: %w", verb, name, err)
+			}
+			return nil
+		})
+	}
+	_ = g.Wait() // the goroutines report through errs
 	var done []docker.ContainerName
-	var errs []error
-	for _, name := range containers {
-		if err := op(ctx, name); err != nil {
-			errs = append(errs, fmt.Errorf("%s %s: %w", verb, name, err))
-			continue
+	for i, name := range containers {
+		if errs[i] == nil {
+			done = append(done, name)
 		}
-		done = append(done, name)
 	}
 	return done, errors.Join(errs...)
 }

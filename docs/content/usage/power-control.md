@@ -49,7 +49,7 @@ sind power freeze worker-0
 sind power unfreeze worker-0
 ```
 
-A power command acts on its nodes one after another; `reboot` and `cycle` take every node down before they start any. A node whose Docker call fails does not stop the others: the command reports every failed node and exits non-zero.
+A power command acts on all its nodes in parallel; `reboot` and `cycle` take every node down before they start any. A node whose Docker call fails does not stop the others: the command reports every failed node and exits non-zero.
 
 ## Power on
 

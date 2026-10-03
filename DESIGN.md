@@ -561,7 +561,7 @@ sind power unfreeze NODES               # resume frozen node
 
 `docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
 
-A power command runs its Docker calls for one node after another; `reboot` and `cycle` take every node down before they start any. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.
+A power command runs its Docker calls for all nodes in parallel (at most 8 at a time); `reboot` and `cycle` take every node down before they start any. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.
 
 `on`, `reboot` and `cycle` start the realm's mesh DNS and SSH relay first if they are stopped, start the nodes, and then point the started nodes' mesh DNS records at their current cluster network addresses: Docker releases a container's address when it stops and can give it another one on start, for example after `sind create worker` took the address of a node that was powered off. They warn about nodes created with a mesh DNS address the DNS container no longer has. Since they rewrite the realm's Corefile, they take the realm lock.
 
