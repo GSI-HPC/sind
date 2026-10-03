@@ -3,8 +3,11 @@
 package doctor
 
 import (
+	"errors"
+	"os/exec"
 	"testing"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,4 +110,41 @@ func TestParseCgroupInfo_Empty(t *testing.T) {
 	assert.Empty(t, path)
 	assert.False(t, hasV2)
 	assert.False(t, hasNsd)
+}
+
+// exitError returns the error of a docker command that exited 1 after
+// writing stderr.
+func exitError(t *testing.T, stderr string) error {
+	t.Helper()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, exec.Command("sh", "-c", "exit 1").Run(), &exitErr)
+	return &cmdexec.ExitError{Err: exitErr, Stderr: stderr}
+}
+
+func TestDockerUnreachable(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		detail      string
+		remediation string
+	}{
+		{"no docker CLI", &exec.Error{Name: "docker", Err: exec.ErrNotFound},
+			"not reachable: docker CLI not found in PATH", dockerInstallRemediation},
+		{"permission denied", exitError(t, "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: connect: permission denied\n"),
+			"not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: connect: permission denied",
+			dockerPermissionRemediation},
+		{"daemon down", errors.New("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"),
+			"not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+			dockerStartRemediation},
+		{"first line only", exitError(t, "\n  error during connect: Get \"http://x/v1.47/info\": EOF\nmore\n"),
+			`not reachable: error during connect: Get "http://x/v1.47/info": EOF`, ""},
+		{"no stderr", exitError(t, " \n"), "not reachable: exit status 1", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detail, remediation := DockerUnreachable(tt.err)
+			assert.Equal(t, tt.detail, detail)
+			assert.Equal(t, tt.remediation, remediation)
+		})
+	}
 }

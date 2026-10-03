@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/cobra"
@@ -112,14 +113,14 @@ func runDoctor(cmd *cobra.Command) error {
 
 	// Check Docker Engine version.
 	engine := doctorCheck{Name: "Docker Engine", Status: checkFailed}
-	version, err := client.ServerVersion(ctx)
+	info, err := client.Info(ctx)
 	if err != nil {
-		engine.Detail = "not reachable"
-	} else if vErr := doctor.CheckDockerVersion(version); vErr != nil {
+		engine.Detail, engine.Remediation = doctor.DockerUnreachable(err)
+	} else if vErr := doctor.CheckDockerVersion(info.ServerVersion); vErr != nil {
 		engine.Detail = vErr.Error()
 	} else {
 		engine.Status = checkOK
-		engine.Detail = fmt.Sprintf("%s (>= %d.0)", version, doctor.MinDockerMajor)
+		engine.Detail = fmt.Sprintf("%s (>= %d.0)", info.ServerVersion, doctor.MinDockerMajor)
 	}
 	if engine.Status == checkFailed {
 		failures = append(failures, "docker")
@@ -170,10 +171,11 @@ func runDoctor(cmd *cobra.Command) error {
 }
 
 // printChecks writes one line per check, each failed or warning check
-// followed by its remediation between blank lines.
+// followed by its remediation between blank lines. A detail can quote what
+// docker wrote, so it is escaped.
 func printChecks(w io.Writer, checks []doctorCheck) {
 	for _, c := range checks {
-		_, _ = fmt.Fprintf(w, "%s %s: %s\n", checkmark(c.Status == checkOK), c.Name, c.Detail)
+		_, _ = fmt.Fprintf(w, "%s %s: %s\n", checkmark(c.Status == checkOK), c.Name, termtext.EscapeText(c.Detail))
 		if c.Remediation != "" {
 			_, _ = fmt.Fprintf(w, "\n%s\n\n", c.Remediation)
 		}

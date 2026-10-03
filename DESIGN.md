@@ -439,7 +439,7 @@ A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`pr
 sind doctor [-o json]                    # check Docker version, cgroupv2, DNS policy
 ```
 
-Checks the Docker Engine version, that cgroupv2 is mounted with `nsdelegate`, and that polkit allows host DNS resolution via systemd-resolved. The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr.
+Checks the Docker Engine version (from `docker info`), that cgroupv2 is mounted with `nsdelegate`, and that polkit allows host DNS resolution via systemd-resolved. The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr. When Docker is not reachable, the Docker Engine detail is `not reachable: ` and the first line of docker's error (`doctor.DockerUnreachable`), with a remediation for a missing `docker` CLI, a user outside the docker group and a daemon that is not running. Details are escaped in the human output like the final error line, since they can quote docker.
 
 `-o json` prints the checks as a JSON array in clusterctl's check model: each entry has `name` (`Docker Engine`, `cgroupv2`, `DNS policy`), `status` (`ok`, `failed`, or `warning` for the advisory DNS policy check), `detail`, and, for a check that did not pass and has a fix, `remediation` with the commands.
 

@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
@@ -20,6 +22,12 @@ import (
 )
 
 const validCgroupMounts = "cgroup2 /sys/fs/cgroup cgroup2 rw,nsdelegate 0 0\n"
+
+// dockerInfo returns the `docker info --format '{{json .}}'` output of a
+// rootful cgroup v2 daemon with the given version.
+func dockerInfo(version string) string {
+	return fmt.Sprintf(`{"ServerVersion":%q,"CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","name=cgroupns"]}`, version)
+}
 
 // errMeshDisabled stubs out DNS-advisory checks in doctor unit tests that do
 // not care about the mesh path — ResolvedActive returns false and the branch
@@ -65,7 +73,7 @@ func hermeticDoctorCtxWithMounts(
 
 func TestDoctorCommand_AllPass(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
 	cmd := NewRootCommand()
 	out := new(bytes.Buffer)
@@ -84,7 +92,7 @@ func TestDoctorCommand_AllPass(t *testing.T) {
 
 func TestDoctorCommand_DockerTooOld(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("27.5.0", "", nil) // docker version
+	m.AddResult(dockerInfo("27.5.0"), "", nil) // docker info
 
 	cmd := NewRootCommand()
 	out := new(bytes.Buffer)
@@ -124,7 +132,7 @@ func TestDoctorCommand_DockerNotReachable(t *testing.T) {
 
 func TestDoctorCommand_UnparseableVersion(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("bogus", "", nil)
+	m.AddResult(dockerInfo("bogus"), "", nil)
 
 	cmd := NewRootCommand()
 	out := new(bytes.Buffer)
@@ -140,7 +148,7 @@ func TestDoctorCommand_UnparseableVersion(t *testing.T) {
 
 func TestDoctorCommand_CgroupMissing(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
 	cmd := NewRootCommand()
 	out := new(bytes.Buffer)
@@ -156,7 +164,7 @@ func TestDoctorCommand_CgroupMissing(t *testing.T) {
 
 func TestDoctorCommand_CgroupNsdelegateMissing(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
 	cmd := NewRootCommand()
 	out := new(bytes.Buffer)
@@ -179,7 +187,7 @@ func TestDoctorCommand_DNSPolicyShown(t *testing.T) {
 	sys.AddResult("", "", nil)
 
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
 	cmd := NewRootCommand()
 	out := new(bytes.Buffer)
@@ -245,7 +253,7 @@ func captureStdout(t *testing.T, fn func()) string {
 // so `sind doctor 2>/dev/null` used to print nothing.
 func TestDoctorCommand_WritesToStdout(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 	var stderr bytes.Buffer
 	var code int
 	stdout := captureStdout(t, func() {
@@ -256,7 +264,7 @@ func TestDoctorCommand_WritesToStdout(t *testing.T) {
 	assert.Empty(t, stderr.String())
 
 	m = mock.Executor{}
-	m.AddResult("27.5.0", "", nil) // docker version
+	m.AddResult(dockerInfo("27.5.0"), "", nil) // docker info
 	stderr.Reset()
 	stdout = captureStdout(t, func() {
 		code = run(hermeticDoctorCtx(t, &m, nil), []string{"doctor"}, &stderr)
@@ -269,7 +277,7 @@ func TestDoctorCommand_WritesToStdout(t *testing.T) {
 
 func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
 	ctx := hermeticDoctorCtxWithMounts(t, &m, resolvedWithPolkit(true), "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n")
 	out, err := executeDoctor(ctx, t)
@@ -294,7 +302,7 @@ sudo systemctl daemon-reload
 
 func TestDoctorCommand_DNSPolicyNotAuthorized(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, resolvedWithPolkit(false)), t)
 	require.NoError(t, err, "the DNS policy check is advisory")
@@ -305,7 +313,7 @@ func TestDoctorCommand_DNSPolicyNotAuthorized(t *testing.T) {
 
 func TestDoctorCommand_JSON(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("29.0.0", "", nil) // docker version
+	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, resolvedWithPolkit(true)), t, "-o", "json")
 	require.NoError(t, err)
@@ -322,7 +330,7 @@ func TestDoctorCommand_JSON(t *testing.T) {
 
 func TestDoctorCommand_JSONFailures(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("27.5.0", "", nil) // docker version
+	m.AddResult(dockerInfo("27.5.0"), "", nil) // docker info
 
 	ctx := hermeticDoctorCtxWithMounts(t, &m, resolvedWithPolkit(false), "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n")
 	out, err := executeDoctor(ctx, t, "--output", "json")
@@ -343,7 +351,7 @@ func TestDoctorCommand_JSONFailures(t *testing.T) {
 
 func TestDoctorCommand_JSONDockerNotReachable(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Cannot connect to the Docker daemon", assert.AnError)
+	m.AddResult("", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n", testutil.ExitCode1(t))
 
 	ctx := hermeticDoctorCtxWithMounts(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n")
 	out, err := executeDoctor(ctx, t, "-o", "json")
@@ -352,9 +360,23 @@ func TestDoctorCommand_JSONDockerNotReachable(t *testing.T) {
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
 	assert.Equal(t, []doctorCheck{
-		{Name: "Docker Engine", Status: checkFailed, Detail: "not reachable"},
+		{Name: "Docker Engine", Status: checkFailed,
+			Detail:      "not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+			Remediation: "Start the Docker daemon:\n\nsudo systemctl start docker"},
 		{Name: "cgroupv2", Status: checkFailed, Detail: "not mounted (sind requires cgroupv2)"},
 	}, checks)
+}
+
+// TestDoctorCommand_DockerPermissionDenied checks that doctor says why it
+// cannot reach Docker, escaped, and how to fix it.
+func TestDoctorCommand_DockerPermissionDenied(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "permission denied while trying to connect to the Docker daemon socket\x1b]0;x\x07\n", testutil.ExitCode1(t))
+
+	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
+	require.EqualError(t, err, "checks failed: docker")
+	assert.Contains(t, out, "✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket\\x1b]0;x\\x07\n"+
+		"\nAdd your user to the docker group, then log in again (or run newgrp docker):\n\nsudo usermod -aG docker $USER\n\n")
 }
 
 func TestDoctorCommand_InvalidOutput(t *testing.T) {

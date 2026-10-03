@@ -4,15 +4,55 @@
 package doctor
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/spf13/afero"
 )
 
 // MinDockerMajor is the minimum required Docker Engine major version.
 const MinDockerMajor = 28
+
+// The remediations for the common reasons the docker CLI cannot reach the
+// daemon.
+const (
+	dockerInstallRemediation = "Install Docker Engine 28 or later: https://docs.docker.com/engine/install/"
+
+	dockerPermissionRemediation = "Add your user to the docker group, then log in again (or run newgrp docker):\n" +
+		"\n" +
+		"sudo usermod -aG docker $USER"
+
+	dockerStartRemediation = "Start the Docker daemon:\n" +
+		"\n" +
+		"sudo systemctl start docker"
+)
+
+// DockerUnreachable describes why the docker CLI could not reach the
+// daemon: the detail "not reachable: " followed by the first line of the
+// error, and the commands that fix it when the cause is a missing docker
+// CLI, a user outside the docker group or a daemon that is not running.
+func DockerUnreachable(err error) (detail, remediation string) {
+	if errors.Is(err, exec.ErrNotFound) {
+		return "not reachable: docker CLI not found in PATH", dockerInstallRemediation
+	}
+	msg := err.Error()
+	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
+		msg = exitErr.Stderr
+	}
+	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
+	lower := strings.ToLower(msg)
+	switch {
+	case strings.Contains(lower, "permission denied"):
+		remediation = dockerPermissionRemediation
+	case strings.Contains(lower, "cannot connect to the docker daemon"):
+		remediation = dockerStartRemediation
+	}
+	return "not reachable: " + strings.TrimSpace(msg), remediation
+}
 
 // ParseVersion extracts the major and minor version numbers from a Docker
 // version string such as "28.0.0" or "29.3.1-beta.1".

@@ -22,11 +22,21 @@ Checks system prerequisites and reports pass/fail for each:
 
 | Check | Required | Description |
 |-------|----------|-------------|
-| Docker Engine | yes | Docker >= 28.0 reachable |
+| Docker Engine | yes | Docker >= 28.0 reachable (`docker info`) |
 | cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
+
+```
+✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ...
+
+Add your user to the docker group, then log in again (or run newgrp docker):
+
+sudo usermod -aG docker $USER
+```
+
+A missing `docker` CLI and a daemon that is not running get their own hint. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
