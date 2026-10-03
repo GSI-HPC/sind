@@ -13,6 +13,7 @@ cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
   ├── root.go      Root command, persistent --realm and -v flags, TraverseChildren
   ├── context.go   Dependency injection via context
+  ├── exitcode.go  Exit statuses, usage errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
   ├── lock.go      Per-realm advisory locking (flock)
   ├── completion.go Shell completion for cluster/node names
@@ -49,6 +50,7 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
+  ├── plugin.go    Volume plugin queries (CVMFS)
   └── labels.go    Docker Compose compatibility labels
 
 pkg/cluster/       Cluster operations (orchestration)
@@ -59,6 +61,10 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
+  ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
+  ├── users.go     Linux users and groups, their labels, home directories
+  ├── identity.go  Identity modes: nss_slurm on workers, sackd on the submitter
+  ├── cvmfs.go     CVMFS backend detection and mount arguments
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
@@ -80,7 +86,8 @@ pkg/monitor/       Event-driven Docker and systemd watchers for readiness
 pkg/nodeset/       Nodeset expansion (worker-[0-3])
 pkg/probe/         Node readiness probes
 pkg/retry/         Bounded exponential-backoff helper
-pkg/slurm/         Slurm config generation and version discovery
+pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
+                   discovery, munge key and slurm.key generation, sacctmgr account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
 ```
 
@@ -96,9 +103,11 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
                        → pkg/probe   → pkg/docker
+                                     → pkg/config
                                      → pkg/monitor
                        → pkg/retry
                        → pkg/slurm   → pkg/docker
+                                     → pkg/config
                        → pkg/ssh     → pkg/docker
          → pkg/nodeset
 ```
