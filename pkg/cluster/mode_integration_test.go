@@ -112,6 +112,17 @@ defaults:
 		assert.Equal(t, "0", strings.TrimSpace(out))
 	}
 
+	// A managed worker stays while the controller is frozen: sind could
+	// not take it out of sind-nodes.conf.
+	require.NoError(t, PowerFreeze(ctx, c, realm, clusterName, []string{"controller"}))
+	err = WorkerRemove(ctx, c, meshMgr, clusterName, []string{"worker-0"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not running (paused)")
+	exists, err := c.ContainerExists(ctx, ContainerName(realm, clusterName, "worker-0"))
+	require.NoError(t, err)
+	assert.True(t, exists)
+	require.NoError(t, PowerUnfreeze(ctx, c, realm, clusterName, []string{"controller"}))
+
 	// Delete.
 	err = Delete(ctx, c, meshMgr, clusterName)
 	require.NoError(t, err)

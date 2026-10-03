@@ -4,7 +4,9 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -20,14 +22,16 @@ import (
 // returns.
 //
 // For managed nodes (those present in sind-nodes.conf), the flow is:
-//  1. Update sind-nodes.conf to remove the node definitions
-//  2. Reconfigure slurmctld
-//  3. Deregister DNS + known_hosts
-//  4. Stop + remove containers
+//  1. Read sind-nodes.conf through the controller, which has to run
+//  2. Update sind-nodes.conf to remove the node definitions
+//  3. Reconfigure slurmctld
+//  4. Deregister DNS + known_hosts
+//  5. Stop + remove containers
 //
 // For unmanaged nodes, and every node of an unmanaged cluster, only steps
-// 3–4 are performed: the Slurm configuration of an unmanaged cluster is the
-// user's, even if it contains a sind-nodes.conf.
+// 4–5 are performed: the Slurm configuration of an unmanaged cluster is the
+// user's, even if it contains a sind-nodes.conf. So is a configuration
+// without sind-nodes.conf.
 func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -71,16 +75,22 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		targets = append(targets, c)
 	}
 
-	// For managed nodes: check if sind-nodes.conf exists and update it.
-	if hasController && IsManaged(controller.Labels) {
-		nodesConf, err := client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
-		if err == nil {
-			// sind-nodes.conf exists → remove managed nodes from it.
+	// Managed workers leave sind-nodes.conf first. Without a running
+	// controller sind cannot edit it, and removing the containers anyway
+	// would leave nodes in the Slurm configuration that no container backs.
+	// A cluster whose controller is gone has no Slurm to tell.
+	if hasController && IsManaged(controller.Labels) && slices.ContainsFunc(targets, isManagedContainer) {
+		nodesConf, err := readNodesConf(ctx, client, controller)
+		switch {
+		case errors.Is(err, errSindNodesConfMissing):
+			log.DebugContext(ctx, "no sind-nodes.conf, leaving the Slurm configuration alone", "cluster", clusterName)
+		case err != nil:
+			return err
+		default:
 			if err := removeNodesConf(ctx, client, controller.Name, nodesConf, shortNames); err != nil {
 				return err
 			}
 		}
-		// If ReadFile fails, sind-nodes.conf doesn't exist → treat as unmanaged.
 	}
 
 	// Deregister DNS + known_hosts. Failures are logged inside DeregisterMesh;
@@ -91,9 +101,19 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	return DeleteContainers(ctx, client, targets)
 }
 
+// isManagedContainer reports whether sind manages Slurm on a node container
+// (see IsManaged).
+func isManagedContainer(c docker.ContainerListEntry) bool {
+	return IsManaged(c.Labels)
+}
+
 // removeNodesConf removes node definitions from sind-nodes.conf and
-// reconfigures slurmctld.
+// reconfigures slurmctld. With none of the nodes in the file, it changes
+// nothing and does not reconfigure.
 func removeNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, currentConf string, shortNames []string) error {
 	updated := slurm.RemoveNodesFromConf(currentConf, shortNames)
+	if updated == currentConf {
+		return nil
+	}
 	return writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// nodesConfMissing is the result of reading a sind-nodes.conf that is not
+// there: cat fails inside the running controller.
+func nodesConfMissing(t *testing.T) mock.Result {
+	t.Helper()
+	return mock.Result{Stderr: "cat: /etc/slurm/sind-nodes.conf: No such file or directory\n", Err: notFoundErr(t)}
+}
 
 // workerContainers returns a standard set of cluster containers for worker tests.
 func workerContainers(computes ...string) string {
@@ -50,7 +58,7 @@ func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 		}
 		// ReadFile (docker exec controller cat /etc/slurm/sind-nodes.conf) fails
 		if args[0] == "exec" && len(args) >= 4 && args[2] == "cat" {
-			return mock.Result{Err: fmt.Errorf("cat: /etc/slurm/sind-nodes.conf: No such file or directory")}
+			return nodesConfMissing(t)
 		}
 		return mock.Result{}
 	}
@@ -61,8 +69,47 @@ func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 		Count:       1,
 	})
 
+	require.ErrorIs(t, err, errSindNodesConfMissing)
+}
+
+func TestValidateWorkerAdd_ControllerNotRunning(t *testing.T) {
+	// A stopped controller is not a missing sind-nodes.conf: the remedy is
+	// to start it, not --unmanaged.
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "exited", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+			)}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}
+	client := docker.NewClient(&m)
+
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{ClusterName: "dev", Count: 1})
+
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sind-nodes.conf")
+	assert.Equal(t, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first", err.Error())
+	assert.Len(t, m.Calls, 1, "no docker exec")
+}
+
+func TestValidateWorkerAdd_ReadError(t *testing.T) {
+	// Only a missing file means that the user replaced the configuration.
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: workerContainers()}
+		}
+		return mock.Result{Stderr: "Error response from daemon: OCI runtime exec failed\n", Err: notFoundErr(t)}
+	}
+	client := docker.NewClient(&m)
+
+	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{ClusterName: "dev", Count: 1})
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errSindNodesConfMissing)
+	assert.Equal(t, "reading sind-nodes.conf: exit status 1: Error response from daemon: OCI runtime exec failed", err.Error())
 }
 
 func TestWorkerAdd_RequiresSindNodes_Present(t *testing.T) {
@@ -486,6 +533,29 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 	}
 }
 
+// nodesConfWrites returns what was written to sind-nodes.conf, in order.
+func nodesConfWrites(calls []mock.Call) []string {
+	var writes []string
+	for _, c := range calls {
+		if c.Args[0] == "exec" && c.Args[1] == "-i" && c.Args[2] == "sind-dev-controller" &&
+			strings.Contains(strings.Join(c.Args, " "), "sind-nodes.conf") {
+			writes = append(writes, c.Stdin)
+		}
+	}
+	return writes
+}
+
+// countCalls counts the calls whose arguments start with prefix.
+func countCalls(calls []mock.Call, prefix ...string) int {
+	n := 0
+	for _, c := range calls {
+		if len(c.Args) >= len(prefix) && slices.Equal(c.Args[:len(prefix)], prefix) {
+			n++
+		}
+	}
+	return n
+}
+
 func TestWorkerAdd_Managed(t *testing.T) {
 	pipes := &mock.Pipes{}
 	defer pipes.CloseAll()
@@ -790,7 +860,7 @@ func workerRemoveOnCall(t *testing.T, nodesConf string) func([]string, string) m
 		// ReadFile: sind-nodes.conf
 		case args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat":
 			if nodesConf == "" {
-				return mock.Result{Err: fmt.Errorf("No such file")}
+				return nodesConfMissing(t)
 			}
 			return mock.Result{Stdout: nodesConf}
 
@@ -922,6 +992,98 @@ func TestWorkerRemove_Unmanaged(t *testing.T) {
 	assert.True(t, removed, "container should be removed")
 }
 
+func TestWorkerRemove_ControllerNotRunning(t *testing.T) {
+	// Without a running controller sind cannot take managed workers out of
+	// sind-nodes.conf, so it removes nothing rather than leave Slurm nodes
+	// without containers.
+	for _, state := range []string{"exited", "paused"} {
+		t.Run(state, func(t *testing.T) {
+			var m mock.Executor
+			base := workerRemoveOnCall(t, "NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n")
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				if args[0] == "ps" {
+					return mock.Result{Stdout: testutil.NDJSON(
+						testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: state, Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=controller"},
+						testutil.PsEntry{ID: "c1", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=worker"},
+					)}
+				}
+				return base(args, stdin)
+			}
+			client := docker.NewClient(&m)
+
+			err := WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "controller sind-dev-controller is not running ("+state+")")
+			assert.Len(t, m.Calls, 1, "nothing but the listing")
+		})
+	}
+}
+
+func TestWorkerRemove_UnmanagedWorkerWithStoppedController(t *testing.T) {
+	// Unmanaged workers are not in sind-nodes.conf: removing them needs no
+	// controller.
+	var m mock.Executor
+	base := workerRemoveOnCall(t, "")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "exited", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+				testutil.PsEntry{ID: "c1", Names: "sind-dev-worker-1", State: "running", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=worker,sind.managed=false"},
+			)}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	err := WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"})
+
+	require.NoError(t, err)
+	assertNoSlurmChanges(t, m.Calls)
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
+}
+
+func TestWorkerRemove_ReadError(t *testing.T) {
+	// Only a missing file means that the user replaced the configuration;
+	// another read failure stops the removal.
+	var m mock.Executor
+	base := workerRemoveOnCall(t, "")
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "cat" {
+			return mock.Result{Err: fmt.Errorf("daemon gone")}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	err := WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"})
+
+	require.Error(t, err)
+	assert.Equal(t, "reading sind-nodes.conf: daemon gone", err.Error())
+	assert.Zero(t, countCalls(m.Calls, "rm"))
+}
+
+func TestWorkerRemove_NodeNotInConf(t *testing.T) {
+	// A managed worker missing from sind-nodes.conf changes nothing there,
+	// and needs no reconfigure, which would fail with slurmctld down.
+	var m mock.Executor
+	m.OnCall = workerRemoveOnCall(t, "# Generated by sind\n"+
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n"+
+		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n")
+	client := docker.NewClient(&m)
+
+	err := WorkerRemove(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-1"})
+
+	require.NoError(t, err)
+	assert.Empty(t, nodesConfWrites(m.Calls))
+	assert.Zero(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"))
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
+}
+
 func TestWorkerRemove_UnmanagedCluster(t *testing.T) {
 	// The user's configuration of an unmanaged cluster is never edited, even
 	// if it has a sind-nodes.conf.
@@ -1039,7 +1201,7 @@ func TestWorkerAdd_SindNodesConfMissing(t *testing.T) {
 	m.OnCall = func(args []string, stdin string) mock.Result {
 		// Make ReadFile for sind-nodes.conf fail
 		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat" {
-			return mock.Result{Err: fmt.Errorf("No such file")}
+			return nodesConfMissing(t)
 		}
 		return inner(args, stdin)
 	}
@@ -1054,8 +1216,64 @@ func TestWorkerAdd_SindNodesConfMissing(t *testing.T) {
 		TmpSize:     "1g",
 	}, time.Millisecond)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sind-nodes.conf")
+	require.ErrorIs(t, err, errSindNodesConfMissing)
+	assert.Zero(t, countCalls(m.Calls, "create"))
+}
+
+func TestWorkerAdd_ControllerNotRunning(t *testing.T) {
+	// Managed workers need the controller to update sind-nodes.conf; a
+	// stopped one is not reported as a missing file.
+	for _, state := range []string{"exited", "paused"} {
+		t.Run(state, func(t *testing.T) {
+			base := workerAddOnCall(t)
+			var m mock.Executor
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				if args[0] == "ps" {
+					return mock.Result{Stdout: testutil.NDJSON(
+						testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: state, Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=controller"},
+						testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+							Labels: "sind.cluster=dev,sind.role=worker"},
+					)}
+				}
+				return base(args, stdin)
+			}
+			client := docker.NewClient(&m)
+
+			_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "controller sind-dev-controller is not running ("+state+")")
+			assert.Zero(t, countCalls(m.Calls, "exec", "sind-dev-controller"))
+			assert.Zero(t, countCalls(m.Calls, "create"))
+		})
+	}
+}
+
+func TestWorkerAdd_UnmanagedWithStoppedController(t *testing.T) {
+	// Unmanaged workers leave Slurm alone and do not need the controller
+	// to run.
+	base := workerAddOnCall(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "exited", Image: "img:1",
+					Labels: "sind.cluster=dev,sind.role=controller"},
+			)}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	nodes, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Unmanaged: true}, time.Millisecond)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	assertNoSlurmChanges(t, m.Calls)
 }
 
 func TestWorkerAdd_InvalidMemory(t *testing.T) {
@@ -1649,6 +1867,158 @@ func TestWorkerAdd_UpdateNodesConfReadError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading sind-nodes.conf")
+}
+
+func TestWorkerAdd_ReadNodesConfError(t *testing.T) {
+	// A read that fails for another reason than a missing file is
+	// reported as it is, before any container exists.
+	var m mock.Executor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat" {
+			return mock.Result{Err: fmt.Errorf("daemon gone")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+
+	require.Error(t, err)
+	assert.Equal(t, "reading sind-nodes.conf: daemon gone", err.Error())
+	assert.Zero(t, countCalls(m.Calls, "create"))
+}
+
+// statefulNodesConf serves sind-nodes.conf from memory on top of base, so
+// that each read returns the last write.
+func statefulNodesConf(base func([]string, string) mock.Result, content string) func([]string, string) mock.Result {
+	var mu sync.Mutex
+	return func(args []string, stdin string) mock.Result {
+		joined := strings.Join(args, " ")
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "cat":
+			return mock.Result{Stdout: content}
+		case args[0] == "exec" && args[1] == "-i" && args[2] == "sind-dev-controller" && strings.Contains(joined, "sind-nodes.conf"):
+			content = stdin
+			return mock.Result{}
+		}
+		return base(args, stdin)
+	}
+}
+
+func TestWorkerAdd_RollbackRemovesNodesFromConf(t *testing.T) {
+	// A failure after sind-nodes.conf got the new nodes takes them out
+	// again, so a retry does not define them twice.
+	original := "# Generated by sind\n" +
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP\n"
+	for _, tt := range []struct {
+		name string
+		fail func(args []string) bool
+	}{
+		{"slurmd fails", func(args []string) bool {
+			return args[0] == "exec" && len(args) > 3 && args[1] == "sind-dev-worker-1" && args[2] == "systemctl" && args[3] == "enable"
+		}},
+		{"reconfigure fails", func(args []string) bool {
+			return args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "scontrol"
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			failed := false
+			base := statefulNodesConf(workerAddOnCall(t), original)
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				if !failed && tt.fail(args) {
+					failed = true
+					return mock.Result{Err: fmt.Errorf("boom")}
+				}
+				return base(args, stdin)
+			}
+			client := docker.NewClient(&m)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+
+			_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+
+			require.Error(t, err)
+			writes := nodesConfWrites(m.Calls)
+			require.Len(t, writes, 2, "added, then removed")
+			assert.Contains(t, writes[0], "NodeName=worker-1")
+			assert.Equal(t, original, writes[1])
+			assert.Equal(t, 2, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol", "reconfigure"))
+			assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
+		})
+	}
+}
+
+func TestWorkerAdd_RollbackNodesConfErrors(t *testing.T) {
+	// A failed revert is logged; the original error is returned.
+	for _, tt := range []struct {
+		name string
+		fail func(args []string, reads int) bool
+	}{
+		{"read", func(args []string, reads int) bool { return args[0] == "exec" && args[2] == "cat" && reads > 1 }},
+		{"write", func(args []string, _ int) bool {
+			return args[0] == "exec" && args[1] == "-i" && args[2] == "sind-dev-controller" && strings.Contains(strings.Join(args, " "), "sind-nodes.conf")
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			base := workerAddOnCall(t)
+			reads, slurmdFailed := 0, false
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				if args[0] == "exec" && args[1] == "sind-dev-controller" && args[2] == "cat" {
+					reads++
+				}
+				if args[0] == "exec" && len(args) > 3 && args[1] == "sind-dev-worker-1" && args[2] == "systemctl" && args[3] == "enable" {
+					slurmdFailed = true
+					return mock.Result{Err: fmt.Errorf("slurmd failed")}
+				}
+				if slurmdFailed && tt.fail(args, reads) {
+					return mock.Result{Err: fmt.Errorf("revert failed")}
+				}
+				return base(args, stdin)
+			}
+			client := docker.NewClient(&m)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+
+			_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "slurmd failed")
+			assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "containers removed anyway")
+		})
+	}
+}
+
+func TestWorkerAdd_RetryReplacesLeftoverNode(t *testing.T) {
+	// A NodeName line an older sind left behind for the name the new worker
+	// gets is replaced, not defined a second time.
+	leftover := "# Generated by sind\n" +
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n" +
+		"NodeName=worker-1 CPUs=1 RealMemory=512 State=UNKNOWN\n" +
+		"PartitionName=all Nodes=worker-0,worker-1 Default=YES MaxTime=INFINITE State=UP\n"
+	var m mock.Executor
+	m.OnCall = statefulNodesConf(workerAddOnCall(t), leftover)
+	client := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g"}, time.Millisecond)
+	require.NoError(t, err)
+
+	writes := nodesConfWrites(m.Calls)
+	require.Len(t, writes, 1)
+	assert.Equal(t, "# Generated by sind\n"+
+		"NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n"+
+		"NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN\n"+
+		"PartitionName=all Nodes=worker-0,worker-1 Default=YES MaxTime=INFINITE State=UP\n", writes[0])
 }
 
 func TestWorkerAdd_WriteNodesConfError(t *testing.T) {

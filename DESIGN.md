@@ -498,15 +498,17 @@ sind create worker dev --count 2             # 2 managed nodes in dev cluster
 **Managed node workflow:**
 
 By default (without `--unmanaged`), sind:
-1. Verifies `sind-nodes.conf` exists in `/etc/slurm` (fails if not present)
+1. Reads `sind-nodes.conf` from `/etc/slurm` through the controller (fails if the controller does not run or the file is not present)
 2. Creates the worker container(s)
-3. Appends node definition(s) to `sind-nodes.conf`
+3. Adds node definition(s) to `sind-nodes.conf`, replacing a definition of the same name
 4. Reconfigures slurmctld (`scontrol reconfigure`)
 5. Starts slurmd on the new node(s)
 
-Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration. On an unmanaged cluster (see Unmanaged Cluster) every new worker is unmanaged, with or without `--unmanaged`.
+If any step fails or the command is interrupted after the first container exists, sind removes the new containers, their mesh entries and their `sind-nodes.conf` definitions again (and reconfigures slurmctld), so a retry starts from a clean state.
 
-**delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. On an unmanaged cluster it never edits the Slurm configuration or runs `scontrol`.
+Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration. On an unmanaged cluster (see Unmanaged Cluster) every new worker is unmanaged, with or without `--unmanaged`. A controller that is stopped or frozen fails the command with an error that says so: start it with `sind power on` or `sind power unfreeze` first.
+
+**delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. sind needs a running controller for this: with the controller stopped or frozen, deleting a managed worker fails and removes nothing, as the node would otherwise stay in the Slurm configuration without a container. Unmanaged workers need no controller. When none of the managed workers is in `sind-nodes.conf`, sind leaves the file alone and does not reconfigure. On an unmanaged cluster, or one without `sind-nodes.conf`, it never edits the Slurm configuration or runs `scontrol`.
 
 ### Power Control
 
@@ -1546,7 +1548,7 @@ PlugStackConfig=/etc/slurm/plugstack.conf
 This file contains node and partition definitions for sind-managed nodes. sind assumes exclusive ownership of this file:
 
 - `sind create cluster` generates initial node definitions here
-- `sind create worker` appends new nodes (unless `--unmanaged`)
+- `sind create worker` adds new nodes (unless `--unmanaged`), replacing a definition of the same name, and removes them again when it fails
 - `sind delete worker` removes nodes (for managed nodes)
 
 Users should not edit `sind-nodes.conf` directly. To add custom node definitions, create a separate file and add an include directive to `slurm.conf`.

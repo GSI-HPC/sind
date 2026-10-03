@@ -52,11 +52,13 @@ sind create worker --count 2 --unmanaged
 For managed workers (the default), sind:
 
 1. Creates the worker container(s)
-2. Appends node definitions to `sind-nodes.conf`
+2. Adds node definitions to `sind-nodes.conf`
 3. Reconfigures slurmctld (`scontrol reconfigure`)
 4. Starts slurmd on the new node(s)
 
-This requires `sind-nodes.conf` to exist in `/etc/slurm`. If you replaced the generated Slurm configuration, use `--unmanaged` instead.
+This requires a running controller and `sind-nodes.conf` in `/etc/slurm`. If you replaced the generated Slurm configuration, use `--unmanaged` instead. If the controller is stopped or frozen, sind fails with an error that says so: run `sind power on` or `sind power unfreeze` on it first.
+
+If a step fails, or you interrupt the command, sind removes the new containers and their `sind-nodes.conf` definitions again, so you can simply retry.
 
 On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), every new worker is unmanaged, with or without `--unmanaged`.
 
@@ -67,6 +69,8 @@ sind delete worker NODES
 ```
 
 For managed workers, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes. On an unmanaged cluster, sind never edits the Slurm configuration.
+
+Deleting a managed worker needs a running controller: with the controller stopped or frozen, `sind delete worker` fails and removes nothing, as the node would otherwise stay in Slurm's configuration without a container. Unmanaged workers can be deleted at any time.
 
 ```bash
 # Remove a single worker

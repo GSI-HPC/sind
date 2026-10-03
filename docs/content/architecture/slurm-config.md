@@ -69,7 +69,7 @@ Only generated with identity `clientIds`: 1024 random bytes, owned by `slurm` wi
 This file contains node and partition definitions for sind-managed nodes. sind owns this file exclusively:
 
 - `sind create cluster` generates initial node definitions
-- `sind create worker` appends new managed nodes
+- `sind create worker` adds new managed nodes, replacing a definition of the same name, and removes them again when it fails
 - `sind delete worker` removes managed nodes
 
 Nodes with `managed: false` are excluded from this file.

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -51,7 +52,9 @@ type WorkerAddOptions struct {
 //  7. Enable slurmd on new nodes
 //
 // For unmanaged workers (Unmanaged=true), steps 5–7 are skipped. Workers
-// added to an unmanaged cluster are always unmanaged.
+// added to an unmanaged cluster are always unmanaged. A failure after the
+// first container exists removes the new containers, mesh entries and
+// NodeName lines again.
 func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (result []*Node, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -96,9 +99,8 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	// Validate sind-nodes.conf for managed workers.
 	if !opts.Unmanaged {
-		_, err := client.ReadFile(ctx, controllerName, slurm.NodesConfPath)
-		if err != nil {
-			return nil, errSindNodesConfMissing
+		if _, err := readNodesConf(ctx, client, controller); err != nil {
+			return nil, err
 		}
 	}
 
@@ -180,13 +182,19 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	}
 	logExtraPrivileges(ctx, nodeConfigs)
 
-	// From this point on, worker containers may exist. Clean them up on failure
-	// so the user does not have to remove them manually before retrying.
+	// From this point on, worker containers, and their NodeName lines in
+	// sind-nodes.conf, may exist. Clean them up on failure so the user does
+	// not have to remove them manually before retrying: a retry picks the
+	// same names.
 	needsCleanup := true
+	confUpdated := false
 	defer func() {
 		if retErr != nil && needsCleanup {
 			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
 			cleanupCtx := context.WithoutCancel(ctx)
+			if confUpdated {
+				revertNodesConf(cleanupCtx, client, controllerName, nodeConfigs)
+			}
 			cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs)
 		}
 	}()
@@ -210,6 +218,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	// For managed workers: update sind-nodes.conf + reconfigure slurmctld.
 	if !opts.Unmanaged {
+		confUpdated = true
 		if err := updateNodesConf(ctx, client, controllerName, nodeConfigs); err != nil {
 			return nil, err
 		}
@@ -223,10 +232,10 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 }
 
 // ValidateWorkerAdd checks prerequisites for adding workers to a cluster.
-// For managed workers, it verifies that sind-nodes.conf exists on the
-// controller (indicating sind-generated Slurm configuration is in use).
-// Unmanaged workers, and every worker of an unmanaged cluster, bypass the
-// sind-nodes.conf check.
+// For managed workers, it verifies that the controller runs and that
+// sind-nodes.conf exists on it (indicating sind-generated Slurm
+// configuration is in use). Unmanaged workers, and every worker of an
+// unmanaged cluster, bypass the sind-nodes.conf check.
 func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string, opts WorkerAddOptions) error {
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
@@ -244,12 +253,8 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string,
 		return nil
 	}
 
-	_, err = client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
-	if err != nil {
-		return errSindNodesConfMissing
-	}
-
-	return nil
+	_, err = readNodesConf(ctx, client, controller)
+	return err
 }
 
 // NextComputeIndex determines the next worker node index by examining
@@ -305,6 +310,26 @@ func clusterManaged(containers []docker.ContainerListEntry, realm, clusterName s
 
 var errSindNodesConfMissing = errors.New("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
 
+// readNodesConf reads sind-nodes.conf through the controller, which has to
+// run: docker exec cannot reach a stopped or paused container, and sind
+// would otherwise add or remove containers without telling Slurm. A file
+// that is not there, because the user replaced sind's configuration, is
+// errSindNodesConfMissing; any other failure is returned as it is.
+func readNodesConf(ctx context.Context, client *docker.Client, controller docker.ContainerListEntry) (string, error) {
+	if controller.State != docker.StateRunning {
+		return "", fmt.Errorf("controller %s is not running (%s): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first", controller.Name, controller.State)
+	}
+	content, err := client.ReadFile(ctx, controller.Name, slurm.NodesConfPath)
+	if err == nil {
+		return content, nil
+	}
+	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok &&
+		strings.Contains(exitErr.Stderr, slurm.NodesConfPath+": No such file or directory") {
+		return "", errSindNodesConfMissing
+	}
+	return "", fmt.Errorf("reading sind-nodes.conf: %w", err)
+}
+
 // resolveWorkerInfra fetches DNS IP, SSH public key, and slurm version
 // concurrently. The Slurm version is read from the controller's labels
 // (unlike resolveInfra, which discovers it from the image).
@@ -333,7 +358,7 @@ func resolveWorkerInfra(ctx context.Context, client *docker.Client, meshMgr *mes
 }
 
 // updateNodesConf reads the current sind-nodes.conf from the controller,
-// appends the new node definitions, writes it back, and reconfigures slurmctld.
+// adds the new node definitions, writes it back, and reconfigures slurmctld.
 func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, nodeConfigs []RunConfig) error {
 	current, err := client.ReadFile(ctx, controllerName, slurm.NodesConfPath)
 	if err != nil {
@@ -355,6 +380,24 @@ func updateNodesConf(ctx context.Context, client *docker.Client, controllerName 
 	updated := slurm.AddNodesToConf(current, entries)
 
 	return writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
+}
+
+// revertNodesConf removes the nodes of a failed WorkerAdd from
+// sind-nodes.conf again, and reconfigures slurmctld, so that neither a
+// phantom node nor, after a retry, a duplicate definition stays behind.
+// Errors are logged: this is best-effort cleanup.
+func revertNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, nodeConfigs []RunConfig) {
+	names := make([]string, len(nodeConfigs))
+	for i, nc := range nodeConfigs {
+		names[i] = nc.ShortName
+	}
+	current, err := client.ReadFile(ctx, controllerName, slurm.NodesConfPath)
+	if err == nil {
+		err = removeNodesConf(ctx, client, controllerName, current, names)
+	}
+	if err != nil {
+		sindlog.From(ctx).ErrorContext(ctx, "cleanup: removing the new nodes from sind-nodes.conf", "nodes", strings.Join(names, ","), "error", err)
+	}
 }
 
 // writeNodesConfAndReconfigure writes sind-nodes.conf to the controller

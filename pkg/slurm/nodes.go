@@ -62,31 +62,50 @@ type NodeEntry struct {
 }
 
 // AddNodesToConf adds node definitions to existing sind-nodes.conf content.
-// New NodeName lines are inserted and the PartitionName Nodes= list is
-// updated to include both existing and new nodes.
+// A node that already has a NodeName line, such as one a failed
+// `sind create worker` left behind, gets its line replaced, as Slurm
+// refuses to start with a node defined twice; the other nodes get new
+// lines. The PartitionName Nodes= list is updated to include both existing
+// and new nodes, each once.
 func AddNodesToConf(existing string, nodes []NodeEntry) string {
 	lines := strings.Split(strings.TrimRight(existing, "\n"), "\n")
 
+	added := make(map[string]string, len(nodes))
+	for _, n := range nodes {
+		added[n.Name] = fmt.Sprintf("NodeName=%s CPUs=%d RealMemory=%d State=UNKNOWN",
+			n.Name, n.CPUs, n.MemoryMB)
+	}
+
 	var managed []string
 	var kept []string
+	listed := make(map[string]bool)
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "PartitionName=") {
 			continue // will be regenerated
 		}
-		kept = append(kept, line)
-		if strings.HasPrefix(line, "NodeName=") {
-			fields := strings.Fields(line)
-			if len(fields) > 0 {
-				name := strings.TrimPrefix(fields[0], "NodeName=")
-				managed = append(managed, name)
-			}
+		name, isNode := nodeName(line)
+		if !isNode {
+			kept = append(kept, line)
+			continue
 		}
+		if listed[name] {
+			continue // a duplicate definition
+		}
+		listed[name] = true
+		managed = append(managed, name)
+		if def, ok := added[name]; ok {
+			line = def
+		}
+		kept = append(kept, line)
 	}
 
 	for _, n := range nodes {
-		kept = append(kept, fmt.Sprintf("NodeName=%s CPUs=%d RealMemory=%d State=UNKNOWN",
-			n.Name, n.CPUs, n.MemoryMB))
+		if listed[n.Name] {
+			continue
+		}
+		listed[n.Name] = true
+		kept = append(kept, added[n.Name])
 		managed = append(managed, n.Name)
 	}
 
@@ -96,6 +115,15 @@ func AddNodesToConf(existing string, nodes []NodeEntry) string {
 	}
 
 	return strings.Join(kept, "\n") + "\n"
+}
+
+// nodeName returns the node a NodeName line defines, and whether line is
+// one.
+func nodeName(line string) (string, bool) {
+	if !strings.HasPrefix(line, "NodeName=") {
+		return "", false
+	}
+	return strings.TrimPrefix(strings.Fields(line)[0], "NodeName="), true
 }
 
 // RemoveNodesFromConf removes the named nodes from existing sind-nodes.conf
@@ -116,15 +144,11 @@ func RemoveNodesFromConf(existing string, names []string) string {
 		if strings.HasPrefix(line, "PartitionName=") {
 			continue // will be regenerated
 		}
-		if strings.HasPrefix(line, "NodeName=") {
-			fields := strings.Fields(line)
-			if len(fields) > 0 {
-				name := strings.TrimPrefix(fields[0], "NodeName=")
-				if remove[name] {
-					continue // skip removed node
-				}
-				managed = append(managed, name)
+		if name, isNode := nodeName(line); isNode {
+			if remove[name] {
+				continue // skip removed node
 			}
+			managed = append(managed, name)
 		}
 		kept = append(kept, line)
 	}
