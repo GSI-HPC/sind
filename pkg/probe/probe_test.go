@@ -672,6 +672,23 @@ func TestUntilReady_EmptyProbes(t *testing.T) {
 	assert.Empty(t, m.Calls)
 }
 
+func TestUntilReady_NonPositiveInterval(t *testing.T) {
+	// time.NewTicker panics on a non-positive interval; the waits use
+	// DefaultInterval instead.
+	for _, interval := range []time.Duration{0, -time.Second} {
+		var m mock.Executor
+		m.AddResult(inspectJSON("running"), "", nil)
+		m.AddResult(inspectJSON("running"), "", nil)
+		c := docker.NewClient(&m)
+		probes := []Probe{{"container", ContainerRunning}}
+		require.NoError(t, UntilReady(t.Context(), c, testContainer, probes, interval))
+		require.NoError(t, UntilReadyWithEvents(t.Context(), c, testContainer, probes, interval, nil))
+	}
+	assert.Equal(t, DefaultInterval, orDefault(0))
+	assert.Equal(t, DefaultInterval, orDefault(-time.Second))
+	assert.Equal(t, time.Second, orDefault(time.Second))
+}
+
 func TestUntilReady_ContextCanceled(t *testing.T) {
 	var m mock.Executor
 	for i := 0; i < 100; i++ {

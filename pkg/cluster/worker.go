@@ -91,7 +91,8 @@ func (o WorkerAddOptions) Check() error {
 // For unmanaged workers (Unmanaged=true), the Slurm steps are skipped.
 // Workers added to an unmanaged cluster are always unmanaged. A failure
 // after the first container exists removes the new containers, mesh
-// entries and NodeName lines again.
+// entries and NodeName lines again. readinessInterval is the delay
+// between readiness probe rounds, as for Create.
 func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, opts WorkerAddOptions, readinessInterval time.Duration) (result []*Node, retErr error) {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm

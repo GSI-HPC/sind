@@ -98,7 +98,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	_, err = cluster.WorkerAdd(ctx, client, meshMgr, opts, defaultReadinessInterval)
+	_, err = cluster.WorkerAdd(ctx, client, meshMgr, opts, cluster.DefaultReadinessInterval)
 	if err != nil {
 		return err
 	}

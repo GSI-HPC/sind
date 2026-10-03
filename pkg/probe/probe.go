@@ -102,13 +102,17 @@ func NodeProbes(role config.Role) []Probe {
 	return probes
 }
 
+// DefaultInterval is the delay between readiness probe rounds that
+// UntilReady and UntilReadyWithEvents use for an interval of zero or less.
+const DefaultInterval = 500 * time.Millisecond
+
 // UntilReady polls the given probes until they all pass or the context expires.
 // The caller controls the deadline via the context. The interval controls the
-// delay between polling attempts. On timeout, the error includes the name and
-// message of the last failing probe.
+// delay between polling attempts; zero or less means DefaultInterval. On
+// timeout, the error includes the name and message of the last failing probe.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	log := sindlog.From(ctx)
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(orDefault(interval))
 	defer ticker.Stop()
 
 	probeNames := make([]string, len(probes))
@@ -154,7 +158,7 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 // closed, the wait goes on polling.
 func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event) error {
 	log := sindlog.From(ctx)
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(orDefault(interval))
 	defer ticker.Stop()
 
 	probeNames := make([]string, len(probes))
@@ -223,6 +227,15 @@ func takeQueued(name docker.ContainerName, ev monitor.Event, events <-chan monit
 			return nil
 		}
 	}
+}
+
+// orDefault returns interval, or DefaultInterval when it is not positive
+// (time.NewTicker panics on that).
+func orDefault(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return DefaultInterval
+	}
+	return interval
 }
 
 // waitEnded is the error of a readiness wait that its context ended: an

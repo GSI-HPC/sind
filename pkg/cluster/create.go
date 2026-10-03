@@ -67,6 +67,10 @@ func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 	}
 }
 
+// DefaultReadinessInterval is the delay between readiness probe rounds
+// that Create and WorkerAdd use for a readinessInterval of zero or less.
+const DefaultReadinessInterval = probe.DefaultInterval
+
 // nodeResult holds per-node data collected during concurrent setup.
 type nodeResult struct {
 	info    *docker.ContainerInfo
@@ -81,7 +85,8 @@ type nodeResult struct {
 //
 // The caller must ensure mesh infrastructure exists (via mesh.Manager.EnsureMesh)
 // before calling Create. The context deadline controls the overall timeout;
-// readinessInterval controls the polling interval for readiness probes.
+// readinessInterval controls the polling interval for readiness probes, and
+// zero or less means DefaultReadinessInterval.
 //
 //	┌ PreflightCheck → createResources → ConnectNetwork ┐
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes

@@ -345,6 +345,26 @@ func TestCreate_FullCluster(t *testing.T) {
 	assert.Equal(t, StateRunning, cluster.Nodes[1].State)
 }
 
+func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
+	// A zero interval, Go's usual "default", polls every
+	// DefaultReadinessInterval instead of panicking in time.NewTicker.
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnStart = pipes.OnStart
+
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := Create(ctx, client, meshMgr, createCfg(), 0)
+	require.NoError(t, err)
+	assert.Equal(t, probe.DefaultInterval, DefaultReadinessInterval)
+}
+
 func TestCreate_BackupController(t *testing.T) {
 	exitErr := notFoundErr(t)
 

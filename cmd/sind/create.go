@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -17,8 +16,6 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
-
-const defaultReadinessInterval = 500 * time.Millisecond
 
 func newCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -119,7 +116,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return fmt.Errorf("setting up mesh: %w", err)
 	}
 
-	_, err = cluster.Create(ctx, client, meshMgr, cfg, defaultReadinessInterval)
+	_, err = cluster.Create(ctx, client, meshMgr, cfg, cluster.DefaultReadinessInterval)
 	if err != nil {
 		return err
 	}
