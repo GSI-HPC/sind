@@ -325,9 +325,15 @@ RUN mkdir -p /etc/munge /var/lib/munge /var/log/munge /run/munge && \
     chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge && \
     chmod 700 /etc/munge /var/lib/munge /var/log/munge /run/munge
 
-# Pre-generate SSH host keys and allow root login via pubkey only
-# (sind injects authorized_keys at container start for inter-node SSH)
-RUN ssh-keygen -A && \
+# Allow root login via pubkey only (sind injects authorized_keys at
+# container start for inter-node SSH). The image ships no SSH host keys:
+# sshd-keygen@.service, which sshd.service pulls in, generates them on each
+# container's first boot, before sshd starts, so no two nodes share a key.
+# sind pins only the ed25519 key, so sshd serves only that one and the RSA
+# and ECDSA key generation is masked.
+RUN rm -f /etc/ssh/ssh_host_* && \
+    echo 'HostKey /etc/ssh/ssh_host_ed25519_key' > /etc/ssh/sshd_config.d/40-sind-hostkey.conf && \
+    systemctl mask sshd-keygen@rsa.service sshd-keygen@ecdsa.service && \
     mkdir -p /run/sshd && \
     sed -i 's/#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \

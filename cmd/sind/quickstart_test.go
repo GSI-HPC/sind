@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,6 +121,18 @@ func TestQuickstart(t *testing.T) {
 	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "worker-0", "--", "hostname")
 	require.NoError(t, err, "ssh worker-0: stdout=%q stderr=%q", stdout, stderr)
 	assert.Contains(t, stdout, "worker-0")
+
+	// Not part of the guide: each node has its own SSH host key, generated
+	// on its first boot instead of baked into the image.
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "ssh-known-hosts")
+	require.NoError(t, err)
+	hostKeys := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+		if f := strings.Fields(line); len(f) == 3 {
+			hostKeys[f[2]] = f[0]
+		}
+	}
+	assert.Len(t, hostKeys, 2, "known_hosts should hold a different key for each node: %q", stdout)
 
 	// ## Scale up
 	// sind create worker --count 3

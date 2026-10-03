@@ -1388,7 +1388,7 @@ The `sind-ssh-config` volume contains:
 
 #### Public Key Injection and Host Key Collection
 
-When sind creates a node, it waits for sshd to start, then appends the public key from `sind-ssh-config` to root's `authorized_keys` and collects the host key that sshd serves, in one `docker exec`, as the cluster's setup waits for its slowest node:
+When sind creates a node, it waits for sshd to start, then appends the public key from `sind-ssh-config` to root's `authorized_keys` and collects the host key that sshd serves, in one `docker exec`, as the cluster's setup waits for its slowest node. The node image ships no host keys, so each container generates its own on first boot and the pinned key identifies that node:
 
 ```bash
 docker exec <node> sh -c 'mkdir -p /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost' sh "$pubkey"
@@ -1543,7 +1543,7 @@ Custom images must provide:
 **All roles:**
 - systemd as init at `/sbin/init`, and `/bin/sh`: sind starts each node with its own `/bin/sh` entrypoint, which execs `/sbin/init` (see Container Startup), so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
 - `STOPSIGNAL SIGRTMIN+3`, systemd's shutdown request, so that `sind power shutdown` and `sind power reboot` shut the node down cleanly
-- sshd service (enabled, sind injects authorized_keys at runtime)
+- sshd service (enabled, sind injects authorized_keys at runtime), with no host keys in the image: each container generates its ed25519 host key on first boot (on RHEL-family images `sshd-keygen@.service` does), so nodes do not share the key sind pins
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (e.g. `0400 root:root`; Rocky's default `0000` is not). On nodes with `apparmor=unconfined`, the host's `unix-chkpwd` AppArmor profile (e.g. Ubuntu 24.04) denies that capability, and sshd's `pam_unix` account check would refuse root
 - munge service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)

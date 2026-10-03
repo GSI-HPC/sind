@@ -62,7 +62,7 @@ Custom images must provide the following:
 ### All roles
 
 - **systemd** as init at `/sbin/init`, and `/bin/sh`: sind starts each node with a short `/bin/sh` entrypoint that sets up the cgroup controllers and execs `/sbin/init`, so node containers do not use the image's `ENTRYPOINT` and `CMD`. sind's helper containers run commands in the image directly, so it should not set an `ENTRYPOINT` that wraps them
-- **sshd** service (enabled) — sind injects authorized_keys at runtime
+- **sshd** service (enabled) — sind injects authorized_keys at runtime. The image contains no SSH host keys: each container generates its ed25519 host key on its first boot (see [SSH setup](#ssh-setup))
 - `/etc/shadow` readable by root without `CAP_DAC_OVERRIDE` (see [Shadow file permissions](#shadow-file-permissions))
 - **munge** service (enabled)
 - Slurm client tools (srun, sbatch, squeue, etc.)
@@ -105,14 +105,18 @@ RUN mkdir -p /etc/munge /var/lib/munge /var/log/munge /run/munge && \
 
 ### SSH setup
 
-SSH host keys should be pre-generated and root login configured:
+Root logs in with the public key sind injects. sind collects each node's ed25519 host key once sshd is up and pins it in the realm's `known_hosts`, so the image must not contain SSH host keys: keys baked into an image are shared by every node of every cluster, and by anyone who pulls the image. Each container generates its own on its first boot instead, before sshd starts. RHEL-family images such as Rocky Linux do that with `sshd-keygen@.service`, which `sshd.service` pulls in. The official image keeps only the ed25519 key:
 
 ```dockerfile
-RUN ssh-keygen -A && \
+RUN rm -f /etc/ssh/ssh_host_* && \
+    echo 'HostKey /etc/ssh/ssh_host_ed25519_key' > /etc/ssh/sshd_config.d/40-sind-hostkey.conf && \
+    systemctl mask sshd-keygen@rsa.service sshd-keygen@ecdsa.service && \
     sed -i 's/#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
 ```
+
+Debian and Ubuntu generate the host keys when `openssh-server` is installed and do not create missing ones at boot: delete them in the image and run `ssh-keygen -A` from a oneshot unit ordered before `ssh.service`.
 
 ### Shadow file permissions
 
