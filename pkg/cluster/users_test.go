@@ -482,7 +482,7 @@ func TestGetMountPoints_Home(t *testing.T) {
 	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data") // no home volume
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller", LabelUsers: "alice:1000:1000"}},
 		{Name: "sind-dev-worker-0", Labels: docker.Labels{"sind.role": "worker", LabelUsers: "alice:1000:1000"}},
 	}

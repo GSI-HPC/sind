@@ -159,46 +159,33 @@ type MountPoint struct {
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
-// existence for Docker volumes. The data mount source is determined from
-// the sind.data.hostpath label on cluster containers: when present it is
-// a host-path bind mount, otherwise it is a Docker volume. Its mount point
-// is the sind.data.mountpath label, or /data. The sind.users label adds
-// the home volume at /home, and the sind.cvmfs label /cvmfs from the cvmfs
-// plugin volume or the host's /cvmfs. With identity clientIds (the
-// sind.identity label) there is no munge volume.
-func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []docker.ContainerListEntry) ([]MountPoint, error) {
-	// Determine data mount source and mount point from container labels.
-	dataHostPath := ""
-	for _, c := range containers {
-		if hp := c.Labels[LabelDataHostPath]; hp != "" {
-			dataHostPath = hp
-			break
-		}
-	}
-	dataMountPath := DefaultDataMountPath
-	for _, c := range containers {
-		if c.Labels[LabelDataMountPath] != "" {
-			dataMountPath = DataMountPath(c.Labels)
-			break
-		}
-	}
-
+// existence for Docker volumes. containers are the cluster's node
+// containers as docker inspect reports them, whose labels, unlike those
+// docker ps lists, keep values with commas (see docker.ContainerInfo).
+//
+// The data mount is what Docker mounts at a node's data mount point (the
+// sind.data.mountpath label, or /data): a host-path bind mount or a Docker
+// volume, the cluster's data volume when no node has one. The sind.users
+// label adds the home volume at /home, and the sind.cvmfs label /cvmfs from
+// the cvmfs plugin volume or the host's /cvmfs. With identity clientIds
+// (the sind.identity label) there is no munge volume.
+func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []*docker.ContainerInfo) ([]MountPoint, error) {
 	// Config is always a Docker volume, and so is munge, which identity
 	// clientIds does without.
 	mounts := []MountPoint{
 		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: config.StorageVolume},
 	}
-	if !slices.ContainsFunc(containers, func(c docker.ContainerListEntry) bool {
+	if !slices.ContainsFunc(containers, func(c *docker.ContainerInfo) bool {
 		return IdentityFromLabels(c.Labels) == config.IdentityClientIDs
 	}) {
 		mounts = append(mounts, MountPoint{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: config.StorageVolume})
 	}
 
-	if dataHostPath != "" {
-		mounts = append(mounts, MountPoint{Path: dataMountPath, Source: dataHostPath, Type: config.StorageHostPath, OK: true})
-	} else {
-		mounts = append(mounts, MountPoint{Path: dataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume})
+	data, ok := dataMount(containers)
+	if !ok {
+		data = MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume}
 	}
+	mounts = append(mounts, data)
 
 	// Primary/backup controller pairs share the slurmctld state volume.
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
@@ -248,6 +235,27 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 	return mounts, nil
 }
 
+// dataMount returns the data mount of the first node that has one: the
+// bind mount or volume Docker reports at the node's data mount point. It
+// reads the source from the mount itself rather than from the
+// sind.data.hostpath label, which nodes of older sind versions may have
+// taken from their image.
+func dataMount(containers []*docker.ContainerInfo) (MountPoint, bool) {
+	for _, c := range containers {
+		path := DataMountPath(c.Labels)
+		for _, m := range c.Mounts {
+			if m.Destination != path {
+				continue
+			}
+			if m.Type == docker.MountBind {
+				return MountPoint{Path: path, Source: m.Source, Type: config.StorageHostPath, OK: true}, true
+			}
+			return MountPoint{Path: path, Source: string(m.Name), Type: config.StorageVolume}, true
+		}
+	}
+	return MountPoint{}, false
+}
+
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
 	Name    string      `json:"name"`    // DNS-style name: "controller.dev"
@@ -295,12 +303,13 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	// per-node probe loop below has status + IP without additional round
 	// trips. One docker CLI fork instead of one per node.
 	infoByName := make(map[docker.ContainerName]*docker.ContainerInfo, len(containers))
+	var infos []*docker.ContainerInfo
 	if len(containers) > 0 {
 		names := make([]docker.ContainerName, len(containers))
 		for i, c := range containers {
 			names[i] = c.Name
 		}
-		infos, err := client.InspectContainers(ctx, names...)
+		infos, err = client.InspectContainers(ctx, names...)
 		if err != nil {
 			return nil, fmt.Errorf("inspecting cluster containers: %w", err)
 		}
@@ -327,7 +336,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		netErr, mountErr error
 	)
 	checks.Go(func() { network, netErr = GetNetworkHealth(ctx, client, realm, clusterName) })
-	checks.Go(func() { mounts, mountErr = GetMountPoints(ctx, client, realm, clusterName, containers) })
+	checks.Go(func() { mounts, mountErr = GetMountPoints(ctx, client, realm, clusterName, infos) })
 
 	// Probe nodes in parallel with a bounded worker pool. Each goroutine
 	// writes to its own pre-allocated index so no mutex is needed; the

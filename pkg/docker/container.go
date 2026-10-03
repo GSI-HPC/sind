@@ -121,6 +121,25 @@ type ContainerInfo struct {
 	OOMKilled bool
 	Labels    Labels
 	IPs       map[NetworkName]string
+	Mounts    []Mount // bind mounts and volumes; tmpfs mounts are not listed
+}
+
+// MountType is the kind of a container mount.
+type MountType string
+
+// Mount types docker inspect reports.
+const (
+	MountBind   MountType = "bind"
+	MountVolume MountType = "volume"
+)
+
+// Mount is a bind mount or volume of a container, as docker inspect
+// reports it.
+type Mount struct {
+	Type        MountType  `json:"Type"`
+	Name        VolumeName `json:"Name"`        // the volume, for MountVolume
+	Source      string     `json:"Source"`      // the host path
+	Destination string     `json:"Destination"` // the mount point in the container
 }
 
 // inspectResult maps the subset of docker inspect JSON we care about.
@@ -135,6 +154,7 @@ type inspectResult struct {
 	Config struct {
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
+	Mounts          []Mount `json:"Mounts"`
 	NetworkSettings struct {
 		Networks map[string]struct {
 			IPAddress string `json:"IPAddress"`
@@ -188,6 +208,7 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			OOMKilled: r.State.OOMKilled,
 			Labels:    r.Config.Labels,
 			IPs:       ips,
+			Mounts:    r.Mounts,
 		})
 	}
 	return infos, nil
@@ -243,7 +264,14 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 	return entries, nil
 }
 
-// parseLabels parses the comma-separated key=value label string from docker ps JSON output.
+// parseLabels parses the comma-separated key=value label string from the
+// JSON output of docker ps, docker network ls and docker volume ls.
+//
+// docker joins the labels with commas and escapes nothing, in no fixed
+// order, so a label value that contains a comma cannot be recovered: what
+// follows the comma reads as a label of its own, which may even replace
+// another label. Read labels whose values are free-form, such as paths,
+// from InspectContainer(s), which returns them as a JSON map.
 func parseLabels(s string) Labels {
 	if s == "" {
 		return nil

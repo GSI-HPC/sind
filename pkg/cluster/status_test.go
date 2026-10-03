@@ -521,7 +521,7 @@ func TestGetMountPoints_AllVolumes(t *testing.T) {
 	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data")
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller"}},
 	}
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
@@ -549,7 +549,7 @@ func TestGetMountPoints_BackupControllerState(t *testing.T) {
 	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state")
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller"}},
 		{Name: "sind-dev-controller-backup", Labels: docker.Labels{"sind.role": "controller"}},
 	}
@@ -565,10 +565,13 @@ func TestGetMountPoints_HostPath(t *testing.T) {
 	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge")
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{
 			"sind.role":          "controller",
 			"sind.data.hostpath": "/home/user/project",
+		}, Mounts: []docker.Mount{
+			{Type: docker.MountVolume, Name: "sind-dev-config", Destination: "/etc/slurm"},
+			{Type: docker.MountBind, Source: "/home/user/project", Destination: "/data"},
 		}},
 	}
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
@@ -588,7 +591,7 @@ func TestGetMountPoints_CVMFSHostPath(t *testing.T) {
 	// no check for the host's /cvmfs
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller", "sind.cvmfs": "hostPath"}},
 		{Name: "sind-dev-worker-0", Labels: docker.Labels{"sind.role": "worker", "sind.cvmfs": "hostPath"}},
 	}
@@ -619,7 +622,7 @@ func TestGetMountPoints_CVMFSVolume(t *testing.T) {
 			m.AddResult(tt.result.Stdout, tt.result.Stderr, tt.result.Err)
 			c := docker.NewClient(&m)
 
-			containers := []docker.ContainerListEntry{
+			containers := []*docker.ContainerInfo{
 				{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller", "sind.cvmfs": "volume"}},
 			}
 			mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
@@ -637,10 +640,12 @@ func TestGetMountPoints_CustomMountPath(t *testing.T) {
 	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data")
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{
 			"sind.role":           "controller",
 			"sind.data.mountpath": "/shared",
+		}, Mounts: []docker.Mount{
+			{Type: docker.MountVolume, Name: "sind-dev-data", Destination: "/shared"},
 		}},
 	}
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
@@ -689,6 +694,45 @@ func TestGetMountPoints_CheckError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, "checking volumes: docker daemon error", err.Error())
+}
+
+func TestGetMountPoints_HostPathWithComma(t *testing.T) {
+	var m mock.Executor
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge")
+	c := docker.NewClient(&m)
+
+	containers := []*docker.ContainerInfo{
+		{Name: "sind-dev-controller", Labels: docker.Labels{
+			LabelDataHostPath:  "/srv/run,2024",
+			LabelDataMountPath: "/data",
+		}, Mounts: []docker.Mount{{Type: docker.MountBind, Source: "/srv/run,2024", Destination: "/data"}}},
+	}
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
+
+	require.NoError(t, err)
+	assert.Equal(t, MountPoint{Path: "/data", Source: "/srv/run,2024", Type: config.StorageHostPath, OK: true}, mounts[2])
+}
+
+// TestGetMountPoints_DataFromMountsNotLabels checks that the data mount
+// comes from what Docker mounts, not from a sind.data.hostpath label, which
+// a node of an older sind version could have taken from its image.
+func TestGetMountPoints_DataFromMountsNotLabels(t *testing.T) {
+	var m mock.Executor
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data")
+	c := docker.NewClient(&m)
+
+	containers := []*docker.ContainerInfo{
+		// A node without the data mount is skipped.
+		{Name: "sind-dev-other", Labels: docker.Labels{LabelDataHostPath: "/"}},
+		{Name: "sind-dev-controller", Labels: docker.Labels{LabelDataHostPath: "/"}, Mounts: []docker.Mount{
+			{Type: docker.MountVolume, Name: "sind-dev-data", Destination: "/data"},
+		}},
+	}
+	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)
+
+	require.NoError(t, err)
+	assert.Equal(t, MountPoint{Path: "/data", Source: "sind-dev-data", Type: config.StorageVolume, OK: true}, mounts[2])
+	assert.Len(t, m.Calls, 1)
 }
 
 // --- GetStatus ---
@@ -838,6 +882,34 @@ func TestGetStatus_Full(t *testing.T) {
 	assert.True(t, status.Mounts[1].OK)
 	assert.Equal(t, "/data", status.Mounts[2].Path)
 	assert.True(t, status.Mounts[2].OK)
+}
+
+// TestGetStatus_MountsFromInspect checks that the mounts come from docker
+// inspect: docker ps cuts a label value at its first comma.
+func TestGetStatus_MountsFromInspect(t *testing.T) {
+	var m mock.Executor
+	base := fullStatusOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		switch args[0] {
+		case "ps":
+			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{
+				ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
+				Labels: "sind.cluster=dev,sind.role=controller,sind.data.hostpath=/srv/run,2024",
+			})}
+		case "inspect":
+			return mock.Result{Stdout: `[{"Name": "/sind-dev-controller", "State": {"Status": "running"},
+  "Config": {"Labels": {"sind.role": "controller", "sind.data.hostpath": "/srv/run,2024", "sind.data.mountpath": "/data"}},
+  "Mounts": [{"Type": "bind", "Source": "/srv/run,2024", "Destination": "/data"}]}]`}
+		}
+		return base(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.NoError(t, err)
+	require.Len(t, status.Mounts, 3)
+	assert.Equal(t, MountPoint{Path: "/data", Source: "/srv/run,2024", Type: config.StorageHostPath, OK: true}, status.Mounts[2])
 }
 
 // TestGetStatus_EmptyButClusterNetworkExists covers the partial-teardown case:

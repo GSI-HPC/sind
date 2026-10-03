@@ -481,7 +481,7 @@ func TestGetMountPoints_ClientIDs(t *testing.T) {
 	addVolumeLs(&m, "sind-dev-config", "sind-dev-data")
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller", LabelIdentity: "clientIds"}},
 	}
 	mounts, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", containers)

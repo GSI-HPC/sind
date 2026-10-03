@@ -394,7 +394,11 @@ const inspectJSON = `[{
   "Id": "94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca",
   "Name": "/sind-dev-controller",
   "State": {"Status": "running", "Running": true, "Paused": false},
-  "Config": {"Labels": {"sind.cluster": "dev", "sind.role": "controller"}},
+  "Config": {"Labels": {"sind.cluster": "dev", "sind.role": "controller", "sind.data.hostpath": "/srv/run,2024"}},
+  "Mounts": [
+    {"Type": "volume", "Name": "sind-dev-config", "Source": "/var/lib/docker/volumes/sind-dev-config/_data", "Destination": "/etc/slurm", "Driver": "local", "Mode": "rw", "RW": true, "Propagation": ""},
+    {"Type": "bind", "Source": "/srv/run,2024", "Destination": "/data", "Mode": "", "RW": true, "Propagation": "rprivate"}
+  ],
   "NetworkSettings": {
     "Networks": {
       "sind-dev-net": {"IPAddress": "172.18.0.2"},
@@ -415,13 +419,18 @@ func TestInspectContainer(t *testing.T) {
 	assert.Equal(t, testContainerName, info.Name)
 	assert.Equal(t, StateRunning, info.Status)
 	assert.Equal(t, Labels{
-		"sind.cluster": "dev",
-		"sind.role":    "controller",
-	}, info.Labels)
+		"sind.cluster":       "dev",
+		"sind.role":          "controller",
+		"sind.data.hostpath": "/srv/run,2024",
+	}, info.Labels, "a label value with a comma is kept whole")
 	assert.Equal(t, map[NetworkName]string{
 		"sind-dev-net": "172.18.0.2",
 		"sind-mesh":    "172.19.0.3",
 	}, info.IPs)
+	assert.Equal(t, []Mount{
+		{Type: MountVolume, Name: "sind-dev-config", Source: "/var/lib/docker/volumes/sind-dev-config/_data", Destination: "/etc/slurm"},
+		{Type: MountBind, Source: "/srv/run,2024", Destination: "/data"},
+	}, info.Mounts)
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"inspect", string(testContainerName)}, m.Calls[0].Args)
@@ -578,6 +587,21 @@ func TestListContainers_NoLabels(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Nil(t, entries[0].Labels)
+}
+
+// TestListContainers_LabelValueWithComma pins down the limit parseLabels
+// documents: docker ps joins labels with unescaped commas, so a value with a
+// comma is cut there, and the rest reads as a label of its own.
+func TestListContainers_LabelValueWithComma(t *testing.T) {
+	const psComma = `{"ID":"abc123","Names":"sind-dev-controller","State":"running","Image":"img","Labels":"sind.cluster=dev,sind.data.hostpath=/srv/run,2024"}`
+	var m mock.Executor
+	m.AddResult(psComma, "", nil)
+	c := NewClient(&m)
+
+	entries, err := c.ListContainers(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, Labels{"sind.cluster": "dev", "sind.data.hostpath": "/srv/run", "2024": ""}, entries[0].Labels)
 }
 
 func TestListContainers_Empty(t *testing.T) {
