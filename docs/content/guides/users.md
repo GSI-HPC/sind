@@ -113,7 +113,7 @@ users:
 | controller, submitter, db | yes | `files` |
 | worker-0, worker-1 | no | inside job steps: nss_slurm; outside: not at all |
 
-`srun` and `sbatch` work as before; inside a job, `id`, `ls -l ~` and `getent passwd alice` see alice. `sind ssh alice@worker-0` fails. sind checks that each managed worker's image has `libnss_slurm.so.2` and fails `sind create cluster` and `sind create worker` with the image's name if not.
+`srun` and `sbatch` work as before; inside a job, `id`, `ls -l ~` and `getent passwd alice` see alice. `sind ssh alice@worker-0` fails. sind checks that each managed worker's image has `libnss_slurm.so.2` and fails `sind create cluster` and `sind create worker` with the image's name if not. If you used sind before identity modes existed, Docker may still have the official image of that time cached under the same tag: sind refuses it before it creates anything and tells you to pull a current one with `--pull`.
 
 ### clientIds
 

@@ -568,6 +568,10 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		case args[0] == "run" && args[1] == "--rm":
 			return mock.Result{Stdout: "slurm 25.11.0\n"}
 
+		// ImageLabels: the image is not local
+		case args[0] == "image" && args[1] == "inspect":
+			return mock.Result{Stderr: "Error: No such image: " + args[2] + "\n", Err: notFoundErr(t)}
+
 		// ConnectNetwork (mesh)
 		case args[0] == "network" && args[1] == "connect":
 			return mock.Result{}

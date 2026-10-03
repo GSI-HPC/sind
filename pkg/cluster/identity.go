@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -30,10 +31,70 @@ grep -q '^group: slurm ' /etc/nsswitch.conf`
 // module, which custom and older images may lack.
 func enableNSSSlurm(ctx context.Context, client *docker.Client, container docker.ContainerName, nc RunConfig) error {
 	if _, err := client.Exec(ctx, container, "sh", "-c", nssSlurmCheck); err != nil {
-		return fmt.Errorf("image %s has no libnss_slurm.so.2, which identity %s needs on managed workers; build the image with contribs/nss_slurm: %w", nc.Image, nc.Identity, err)
+		return fmt.Errorf("image %s has no libnss_slurm.so.2, which identity %s needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: %w", nc.Image, nc.Identity, err)
 	}
 	if _, err := client.Exec(ctx, container, "sh", "-ec", nssSlurmSwitch); err != nil {
 		return fmt.Errorf("switching passwd and group lookups to nss_slurm: %w", err)
+	}
+	return nil
+}
+
+// Image labels that tell sind-node images apart.
+const (
+	// imageTitleLabel is the OCI title label, "sind-node" on sind's images.
+	imageTitleLabel = "org.opencontainers.image.title"
+	sindNodeTitle   = "sind-node"
+	// identityImageLabel is on the sind-node images that have nss_slurm,
+	// auth/slurm and sackd, which the identity modes other than local
+	// need: it came with them.
+	identityImageLabel = "sind.libjwt.version"
+)
+
+// officialImageRepo is the repository of the official sind-node images, of
+// which config.DefaultImage is a tag.
+const officialImageRepo = "ghcr.io/gsi-hpc/sind-node"
+
+// checkIdentityImage refuses a local sind-node image from before identity
+// modes, which lacks nss_slurm and auth/slurm, before sind creates nodes
+// with it: enableNSSSlurm would only fail once they have booted. The usual
+// cause is a cached image of an official tag after a sind upgrade, as
+// docker reuses it without --pull. An image that is not local passes, as
+// docker pulls a current one, and so does any image but sind-node's, which
+// enableNSSSlurm checks.
+func checkIdentityImage(ctx context.Context, client *docker.Client, image string, mode config.IdentityMode) error {
+	labels, local, err := client.ImageLabels(ctx, image)
+	if err != nil {
+		return fmt.Errorf("inspecting image %s: %w", image, err)
+	}
+	if !local || labels[imageTitleLabel] != sindNodeTitle || labels[identityImageLabel] != "" {
+		return nil
+	}
+	remedy := "rebuild it from the current sind-node Dockerfile"
+	if strings.HasPrefix(image, officialImageRepo+":") || strings.HasPrefix(image, officialImageRepo+"@") {
+		remedy = "pull a current one with --pull"
+	}
+	return fmt.Errorf("image %s is a sind-node image from before identity modes, without the nss_slurm and auth/slurm that identity %s needs; %s", image, mode, remedy)
+}
+
+// checkIdentityImages runs checkIdentityImage on the images of the nodes
+// that need what the cluster's identity mode needs: the managed workers
+// with nssSlurm, every managed node with clientIds. With --pull docker
+// fetches current images, so there is nothing to check.
+func checkIdentityImages(ctx context.Context, client *docker.Client, cfg *config.Cluster) error {
+	if cfg.Pull || !cfg.Managed() || !cfg.Identity.UsesNSSSlurm() {
+		return nil
+	}
+	checked := make(map[string]bool)
+	for _, n := range cfg.Nodes {
+		managed := n.Managed == nil || *n.Managed
+		needs := n.Role == config.RoleWorker || cfg.Identity.Mode == config.IdentityClientIDs
+		if !managed || !needs || n.Image == "" || checked[n.Image] {
+			continue
+		}
+		checked[n.Image] = true
+		if err := checkIdentityImage(ctx, client, n.Image, cfg.Identity.Mode); err != nil {
+			return err
+		}
 	}
 	return nil
 }

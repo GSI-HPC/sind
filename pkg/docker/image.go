@@ -16,6 +16,12 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 	return strings.TrimSpace(stdout), nil
 }
 
+// ImageLabels returns the labels of a local image, and whether the image is
+// there: false, with no error, when it has not been pulled or built.
+func (c *Client) ImageLabels(ctx context.Context, image string) (Labels, bool, error) {
+	return c.labels(ctx, "image", "inspect", image, "--format", "{{json .Config.Labels}}")
+}
+
 // RunEphemeral runs a command in a temporary container and returns its stdout.
 // The container is removed after the command completes (docker run --rm).
 // When pull is true, --pull always is added to force a fresh image pull.

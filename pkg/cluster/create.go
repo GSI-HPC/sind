@@ -131,8 +131,13 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	// Branch A: preflight → createResources → SSH relay connect. Serialised
 	// because createResources only makes sense once preflight has passed,
-	// and the relay hop depends on the cluster network existing.
+	// and the relay hop depends on the cluster network existing. Preflight
+	// includes refusing cached sind-node images from before identity modes
+	// (checkIdentityImages, identity nssSlurm and clientIds only).
 	prepGroup.Go(func() error {
+		if err := checkIdentityImages(prepCtx, client, cfg); err != nil {
+			return err
+		}
 		if err := PreflightCheck(prepCtx, client, realm, cfg); err != nil {
 			return err
 		}

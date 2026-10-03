@@ -31,6 +31,31 @@ func TestImageLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+func TestImageLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"org.opencontainers.image.title":"sind-node"}`+"\n", "", nil)
+	c := NewClient(&m)
+
+	labels, exists, err := c.ImageLabels(t.Context(), testImage)
+
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, Labels{"org.opencontainers.image.title": "sind-node"}, labels)
+	assert.Equal(t, []string{"image", "inspect", testImage, "--format", "{{json .Config.Labels}}"}, m.Calls[0].Args)
+}
+
+func TestImageLabels_NotFound(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such image: "+testImage+"\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	labels, exists, err := c.ImageLabels(t.Context(), testImage)
+
+	require.NoError(t, err)
+	assert.False(t, exists)
+	assert.Nil(t, labels)
+}
+
 func TestServerVersion(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("29.3.0\n", "", nil)

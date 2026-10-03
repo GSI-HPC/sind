@@ -75,7 +75,7 @@ func (o WorkerAddOptions) Check() error {
 //  1. Validate: options, controller exists, sind-nodes.conf present
 //  2. Inspect the controller and the newest worker, for the cluster's
 //     settings and the new workers' shape
-//  3. Check an explicit image's Slurm version
+//  3. Check an explicit image: its Slurm version, its identity support
 //  4. Create worker container(s)
 //  5. Wait for readiness, inject SSH keys, collect host keys
 //  6. Register DNS + known_hosts, while sind-nodes.conf gets the new nodes,
@@ -175,6 +175,13 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	pull, err := checkWorkerImage(ctx, client, opts, managed, slurmVersion)
 	if err != nil {
 		return nil, err
+	}
+	// An image docker still pulls is a current one; a local one may be
+	// from before identity modes.
+	if managed && identity.UsesNSSSlurm() && !pull {
+		if err := checkIdentityImage(ctx, client, shape.Image, identity.Mode); err != nil {
+			return nil, err
+		}
 	}
 
 	// Build RunConfig entries for new nodes.
