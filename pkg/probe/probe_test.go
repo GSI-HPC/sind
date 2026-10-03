@@ -207,11 +207,42 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "slurm_persist_conn_open_without_init: failed to open persistent connection\n",
 		fmt.Errorf("exit status 1"))
+	m.AddResult("activating\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
 	c := docker.NewClient(&m)
 
 	err := SlurmctldReady(t.Context(), c, testContainer)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "slurmctld not ready")
+	var te *TerminalError
+	assert.NotErrorAs(t, err, &te)
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmctld"}, m.Calls[1].Args)
+}
+
+func TestSlurmctldReady_UnitStateUnknown(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	m.AddResult("", "", fmt.Errorf("daemon unreachable"))
+	c := docker.NewClient(&m)
+
+	err := SlurmctldReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Equal(t, "slurmctld not ready: exit status 1", err.Error())
+}
+
+func TestSlurmctldReady_Failed(t *testing.T) {
+	// slurmctld exited after systemctl enable --now returned, e.g. on a
+	// slurm.conf line it rejects: the wait ends at once with its journal.
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("slurmctld: fatal: Unable to process configuration file\n", "", nil)
+	c := docker.NewClient(&m)
+
+	err := SlurmctldReady(t.Context(), c, testContainer)
+	var te *TerminalError
+	require.ErrorAs(t, err, &te)
+	assert.Equal(t, "slurmctld failed:\nslurmctld: fatal: Unable to process configuration file", te.Msg)
 }
 
 func TestSlurmctldReady_BackupController(t *testing.T) {
@@ -228,6 +259,7 @@ func TestSlurmctldReady_BackupController(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var m mock.Executor
 			m.AddResult(pingOut, "", nil)
+			m.AddResult("active\n", "", nil)
 			c := docker.NewClient(&m)
 
 			err := SlurmctldReady(t.Context(), c, tt.container)
@@ -360,6 +392,46 @@ func TestUnitJournal(t *testing.T) {
 	assert.Equal(t,
 		[]string{"exec", string(testContainer), "journalctl", "-u", "slurmd", "-n", "20", "--no-pager", "-o", "cat"},
 		m.Calls[0].Args)
+}
+
+func TestUnitProbes_Failed(t *testing.T) {
+	for _, tt := range []struct {
+		unit  string
+		check Func
+	}{
+		{"munge", MungeReady},
+		{"slurmd", SlurmdReady},
+		{"sackd", SackdReady},
+		{"slurmdbd", SlurmdbdReady},
+	} {
+		t.Run(tt.unit, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+			m.AddResult("fatal: something\n", "", nil)
+			c := docker.NewClient(&m)
+
+			err := tt.check(t.Context(), c, testContainer)
+			var te *TerminalError
+			require.ErrorAs(t, err, &te)
+			assert.Equal(t, tt.unit+" failed:\nfatal: something", te.Msg)
+			require.Len(t, m.Calls, 2)
+			assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", tt.unit}, m.Calls[0].Args)
+			assert.Equal(t,
+				[]string{"exec", string(testContainer), "journalctl", "-u", tt.unit, "-n", "20", "--no-pager", "-o", "cat"},
+				m.Calls[1].Args)
+		})
+	}
+}
+
+func TestUnitActive_Inactive(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("inactive\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := docker.NewClient(&m)
+
+	err := UnitActive(t.Context(), c, testContainer, "munge")
+	require.EqualError(t, err, "munge not ready: inactive")
+	var te *TerminalError
+	assert.NotErrorAs(t, err, &te)
 }
 
 func TestSlurmdbdReady(t *testing.T) {

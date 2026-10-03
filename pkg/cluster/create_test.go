@@ -1148,6 +1148,9 @@ func TestSetupNodes_InspectError(t *testing.T) {
 			if strings.Contains(joined, "/dev/tcp") {
 				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
 			}
+			if strings.Contains(joined, "is-active") {
+				return mock.Result{Stdout: "active\n"}
+			}
 		}
 		return mock.Result{}
 	}
@@ -1224,6 +1227,8 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 				return mock.Result{Stdout: "running\n"}
 			case strings.Contains(joined, "/dev/tcp"):
 				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+			case strings.Contains(joined, "is-active"):
+				return mock.Result{Stdout: "active\n"}
 			case strings.Contains(joined, "ssh-keyscan"):
 				return mock.Result{Err: fmt.Errorf("permission denied")}
 			}
@@ -1261,6 +1266,8 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 				return mock.Result{Stdout: "running\n"}
 			case strings.Contains(joined, "/dev/tcp"):
 				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
+			case strings.Contains(joined, "is-active"):
+				return mock.Result{Stdout: "active\n"}
 			case strings.Contains(joined, "ssh-keyscan"):
 				return mock.Result{Stdout: "# localhost:22 SSH-2.0-OpenSSH_9.0\n"}
 			}

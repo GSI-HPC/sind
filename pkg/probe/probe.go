@@ -292,17 +292,16 @@ func SSHDReady(ctx context.Context, client *docker.Client, name docker.Container
 	return nil
 }
 
-// MungeReady verifies that the munge authentication service is active.
+// MungeReady verifies that the munge authentication service is active. A
+// failed unit is a TerminalError (see UnitActive).
 func MungeReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	_, err := client.Exec(ctx, name, "systemctl", "is-active", "munge")
-	if err != nil {
-		return fmt.Errorf("munge not ready: %w", err)
-	}
-	return nil
+	return UnitActive(ctx, client, name, string(ServiceMunge))
 }
 
 // SlurmctldReady verifies that the slurmctld on the given controller node is
-// responding to RPC requests.
+// responding to RPC requests. While it does not, a failed slurmctld unit
+// (e.g. a slurm.conf line slurmctld rejects) is a TerminalError carrying the
+// tail of the unit's journal.
 //
 // scontrol ping exits zero as soon as any configured controller answers, so
 // with a backup controller the exit code alone cannot tell which one is up.
@@ -312,6 +311,18 @@ func MungeReady(ctx context.Context, client *docker.Client, name docker.Containe
 // name's suffix belongs to this node. When no line matches (e.g. a
 // user-supplied slurm.conf with other hostnames) the exit code decides.
 func SlurmctldReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	err := slurmctldPing(ctx, client, name)
+	if err == nil {
+		return nil
+	}
+	if failed := unitFailed(ctx, client, name, string(ServiceSlurmctld)); failed != nil {
+		return failed
+	}
+	return err
+}
+
+// slurmctldPing is the scontrol ping check of SlurmctldReady.
+func slurmctldPing(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	stdout, err := client.Exec(ctx, name, "scontrol", "ping")
 	if err != nil {
 		return fmt.Errorf("slurmctld not ready: %w", err)
@@ -344,13 +355,10 @@ func ParseSlurmctldPing(stdout string) map[string]bool {
 	return result
 }
 
-// SlurmdReady verifies that the slurmd service is active.
+// SlurmdReady verifies that the slurmd service is active. A failed unit is
+// a TerminalError (see UnitActive).
 func SlurmdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	_, err := client.Exec(ctx, name, "systemctl", "is-active", "slurmd")
-	if err != nil {
-		return fmt.Errorf("slurmd not ready: %w", err)
-	}
-	return nil
+	return UnitActive(ctx, client, name, string(ServiceSlurmd))
 }
 
 // ClusterRegistered returns a check that passes once slurmdbd lists the
@@ -372,13 +380,10 @@ func ClusterRegistered(clusterName string) Func {
 	}
 }
 
-// SackdReady verifies that the sackd service is active.
+// SackdReady verifies that the sackd service is active. A failed unit is a
+// TerminalError (see UnitActive).
 func SackdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	_, err := client.Exec(ctx, name, "systemctl", "is-active", "sackd")
-	if err != nil {
-		return fmt.Errorf("sackd not ready: %w", err)
-	}
-	return nil
+	return UnitActive(ctx, client, name, string(ServiceSackd))
 }
 
 // journalLines is the number of journal lines UnitJournal returns.
@@ -394,21 +399,43 @@ func UnitJournal(ctx context.Context, client *docker.Client, name docker.Contain
 }
 
 // SlurmdbdReady verifies that the slurmdbd service is active. A failed unit
-// does not recover on its own, so it is reported as a TerminalError carrying
-// the tail of the unit's journal to show why slurmdbd stopped.
+// is a TerminalError (see UnitActive).
 func SlurmdbdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	stdout, err := client.ExecAllowNonZero(ctx, name, "systemctl", "is-active", "slurmdbd")
+	return UnitActive(ctx, client, name, string(ServiceSlurmdbd))
+}
+
+// UnitActive verifies that a systemd unit on the node is active. A failed
+// unit does not recover on its own (a unit that systemd restarts is
+// "activating" meanwhile), so it is reported as a TerminalError carrying
+// the tail of the unit's journal to show why the unit stopped.
+func UnitActive(ctx context.Context, client *docker.Client, name docker.ContainerName, unit string) error {
+	stdout, err := client.ExecAllowNonZero(ctx, name, "systemctl", "is-active", unit)
 	if err != nil {
-		return fmt.Errorf("slurmdbd not ready: %w", err)
+		return fmt.Errorf("%s not ready: %w", unit, err)
 	}
 	switch state := strings.TrimSpace(stdout); state {
 	case "active":
 		return nil
 	case "failed":
-		return &TerminalError{Msg: "slurmdbd failed:\n" + UnitJournal(ctx, client, name, "slurmdbd")}
+		return failedUnit(ctx, client, name, unit)
 	default:
-		return fmt.Errorf("slurmdbd not ready: %s", state)
+		return fmt.Errorf("%s not ready: %s", unit, state)
 	}
+}
+
+// unitFailed returns the TerminalError for a failed unit, or nil when the
+// unit has not failed or its state cannot be read.
+func unitFailed(ctx context.Context, client *docker.Client, name docker.ContainerName, unit string) error {
+	stdout, err := client.ExecAllowNonZero(ctx, name, "systemctl", "is-active", unit)
+	if err != nil || strings.TrimSpace(stdout) != "failed" {
+		return nil
+	}
+	return failedUnit(ctx, client, name, unit)
+}
+
+// failedUnit is the TerminalError for a failed unit, with its journal tail.
+func failedUnit(ctx context.Context, client *docker.Client, name docker.ContainerName, unit string) error {
+	return &TerminalError{Msg: unit + " failed:\n" + UnitJournal(ctx, client, name, unit)}
 }
 
 // Snapshot returns a one-shot readiness snapshot of the given services on a
@@ -457,7 +484,7 @@ func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerN
 	}
 
 	if slurmctld {
-		result[ServiceSlurmctld] = SlurmctldReady(ctx, client, name) == nil
+		result[ServiceSlurmctld] = slurmctldPing(ctx, client, name) == nil
 	}
 
 	return result, nil
