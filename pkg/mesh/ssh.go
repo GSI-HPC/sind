@@ -172,16 +172,12 @@ func (m *Manager) GetSSHKnownHosts(ctx context.Context) (string, error) {
 	return content, nil
 }
 
-// AddKnownHost appends a host key entry to the known_hosts file in the SSH
-// container. The hostKey should be the full key type and data (e.g.
+// AddKnownHost adds a host key entry to the known_hosts file in the SSH
+// container, replacing an existing entry for the hostname, as AddKnownHosts
+// does. The hostKey should be the full key type and data (e.g.
 // "ssh-ed25519 AAAA...").
 func (m *Manager) AddKnownHost(ctx context.Context, hostname, hostKey string) error {
-	entry := hostname + " " + hostKey + "\n"
-	err := m.Docker.AppendFile(ctx, m.SSHContainerName(), knownHostsPath, entry)
-	if err != nil {
-		return fmt.Errorf("adding known host %s: %w", hostname, err)
-	}
-	return nil
+	return m.AddKnownHosts(ctx, []KnownHostEntry{{Hostname: hostname, HostKey: hostKey}})
 }
 
 // KnownHostEntry holds a hostname and its SSH host key for batch registration.
@@ -283,36 +279,7 @@ func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) erro
 // RemoveKnownHost removes all entries for the given hostname from the
 // known_hosts file in the SSH container.
 func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {
-	name := m.SSHContainerName()
-	content, err := m.Docker.ReadFile(ctx, name, knownHostsPath)
-	if err != nil {
-		return fmt.Errorf("reading known_hosts: %w", err)
-	}
-
-	lines := strings.Split(content, "\n")
-	kept := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 1 && fields[0] == hostname {
-			continue
-		}
-		kept = append(kept, line)
-	}
-
-	var result string
-	if len(kept) > 0 {
-		result = strings.Join(kept, "\n") + "\n"
-	}
-
-	err = m.Docker.WriteFile(ctx, name, knownHostsPath, result)
-	if err != nil {
-		return fmt.Errorf("writing known_hosts: %w", err)
-	}
-
-	return nil
+	return m.RemoveKnownHosts(ctx, []string{hostname})
 }
 
 // generateKeypair creates a new ed25519 keypair and returns the private key

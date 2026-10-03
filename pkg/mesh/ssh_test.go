@@ -370,9 +370,10 @@ func TestEnsureSSH_Pull(t *testing.T) {
 // --- AddKnownHost ---
 
 func TestAddKnownHost(t *testing.T) {
+	// An existing entry for the host is replaced, not duplicated.
 	var m mock.Executor
-	// AppendFile → success
-	m.AddResult("", "", nil)
+	m.AddResult("controller.dev.sind.sind ssh-ed25519 OLD\nworker-0.dev.sind.sind ssh-ed25519 W\n", "", nil) // ReadFile
+	m.AddResult("", "", nil)                                                                                 // WriteFile
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -380,12 +381,12 @@ func TestAddKnownHost(t *testing.T) {
 		"controller.dev.sind.sind", "ssh-ed25519 AAAA...")
 	require.NoError(t, err)
 
-	require.Len(t, m.Calls, 1)
+	require.Len(t, m.Calls, 2)
 	assert.Equal(t, []string{
 		"exec", "-i", string(SSHContainerName),
-		"sh", "-c", "cat >> " + knownHostsPath,
-	}, m.Calls[0].Args)
-	assert.Equal(t, "controller.dev.sind.sind ssh-ed25519 AAAA...\n", m.Calls[0].Stdin)
+		"sh", "-c", "cat > " + knownHostsPath,
+	}, m.Calls[1].Args)
+	assert.Equal(t, "worker-0.dev.sind.sind ssh-ed25519 W\ncontroller.dev.sind.sind ssh-ed25519 AAAA...\n", m.Calls[1].Stdin)
 }
 
 func TestAddKnownHost_Error(t *testing.T) {
@@ -397,7 +398,7 @@ func TestAddKnownHost_Error(t *testing.T) {
 	err := mgr.AddKnownHost(t.Context(),
 		"controller.dev.sind.sind", "ssh-ed25519 AAAA...")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "adding known host controller.dev.sind.sind")
+	assert.Contains(t, err.Error(), "reading known_hosts")
 }
 
 // --- AddKnownHosts (batch) ---

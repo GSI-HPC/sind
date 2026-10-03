@@ -545,15 +545,3 @@ func nodeGetsUsers(identity config.Identity, role config.Role, managed, hasSubmi
 		return true
 	}
 }
-
-// CreateClusterNodes creates all node containers for the cluster.
-// Each node is created, connected to the mesh network, and started.
-func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, configs []RunConfig) error {
-	for _, cfg := range configs {
-		_, err := CreateNode(ctx, client, meshMgr, cfg)
-		if err != nil {
-			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
-		}
-	}
-	return nil
-}

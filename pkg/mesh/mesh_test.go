@@ -662,6 +662,27 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
 }
 
+func TestAddDNSRecord_ReplacesExisting(t *testing.T) {
+	// Re-registering a host at a new IP leaves one record, not two.
+	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
+
+	var m mock.Executor
+	m.AddResult(corefileTar(t, existing), "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
+	m.AddResult("sind-dns\n", "", nil)
+	m.AddResult("sind-dns\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.9")
+	require.NoError(t, err)
+
+	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
+	assert.Contains(t, corefile, "172.18.0.9 controller.dev.sind.sind")
+	assert.NotContains(t, corefile, "172.18.0.2")
+}
+
 func TestAddDNSRecord_ReadError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))

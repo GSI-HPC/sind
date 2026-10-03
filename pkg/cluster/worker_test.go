@@ -116,143 +116,111 @@ func workerContainers(computes ...string) string {
 	return testutil.NDJSON(entries...)
 }
 
-// --- ValidateWorkerAdd ---
+// --- WorkerAdd checks ---
+
+// nextIndex returns the next worker index for the containers that docker
+// ps reports as ps.
+func nextIndex(t *testing.T, ps string) int {
+	t.Helper()
+	var m mock.Executor
+	m.AddResult(ps, "", nil)
+	containers, err := docker.NewClient(&m).ListContainers(t.Context())
+	require.NoError(t, err)
+	return nextWorkerIndexFromContainers(containers, mesh.DefaultRealm, "dev")
+}
+
+func TestNextWorkerIndex(t *testing.T) {
+	controller := testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+		Labels: "sind.cluster=dev,sind.role=controller"}
+	submitter := testutil.PsEntry{ID: "def", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+		Labels: "sind.cluster=dev,sind.role=submitter"}
+	nonNumeric := testutil.PsEntry{ID: "cx", Names: "sind-dev-worker-abc", State: "running", Image: "img:1",
+		Labels: "sind.cluster=dev,sind.role=worker"}
+
+	// No worker containers: the next index is 0.
+	assert.Equal(t, 0, nextIndex(t, testutil.NDJSON(controller)))
+	// Controller and submitter don't affect the worker index.
+	assert.Equal(t, 0, nextIndex(t, testutil.NDJSON(controller, submitter)))
+	// worker-0 and worker-1: 2.
+	assert.Equal(t, 2, nextIndex(t, workerContainers("worker-0", "worker-1")))
+	// worker-0 and worker-3: 4, after the highest.
+	assert.Equal(t, 4, nextIndex(t, workerContainers("worker-0", "worker-3")))
+	// A non-numeric suffix (worker-abc) is ignored.
+	worker0 := testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+		Labels: "sind.cluster=dev,sind.role=worker"}
+	assert.Equal(t, 1, nextIndex(t, testutil.NDJSON(controller, worker0, nonNumeric)))
+}
+
+// TestWorkerAdd_LabelFilter asserts the container list is scoped by both
+// realm and cluster labels so parallel realms do not cross-match.
+func TestWorkerAdd_LabelFilter(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func([]string, string) mock.Result {
+		return mock.Result{Err: fmt.Errorf("docker daemon not running")}
+	}
+	client := docker.NewClient(&m)
+
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev"}, time.Millisecond)
+	require.Error(t, err)
+
+	require.NotEmpty(t, m.Calls)
+	psArgs := m.Calls[0].Args
+	assert.Equal(t, "ps", psArgs[0])
+	assert.Contains(t, psArgs, "label=sind.realm="+mesh.DefaultRealm)
+	assert.Contains(t, psArgs, "label=sind.cluster=dev")
+}
 
 func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 	// When sind-nodes.conf is missing on the controller,
 	// managed worker add must fail.
+	base := workerAddOnCall(t)
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		// ListContainers: controller exists
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-			)}
-		}
+	m.OnCall = func(args []string, stdin string) mock.Result {
 		// ReadFile (docker exec controller cat /etc/slurm/sind-nodes.conf) fails
-		if args[0] == "exec" && len(args) >= 4 && args[2] == "cat" {
+		if args[0] == "exec" && len(args) >= 4 && args[2] == "cat" && strings.HasSuffix(args[3], "sind-nodes.conf") {
 			return nodesConfMissing(t)
 		}
-		return mock.Result{}
+		return base(args, stdin)
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
-	})
+	}, time.Millisecond)
 
 	require.ErrorIs(t, err, ErrNodesConfMissing)
+	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
-func TestValidateWorkerAdd_ControllerNotRunning(t *testing.T) {
+func TestReadNodesConf_ControllerNotRunning(t *testing.T) {
 	// A stopped controller is not a missing sind-nodes.conf: the remedy is
 	// to start it, not --unmanaged.
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "exited", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-			)}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
 	client := docker.NewClient(&m)
+	controller := docker.ContainerListEntry{Name: "sind-dev-controller", State: docker.StateExited}
 
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{ClusterName: "dev", Count: 1})
+	_, err := readNodesConf(t.Context(), client, controller)
 
 	require.Error(t, err)
 	assert.Equal(t, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first", err.Error())
-	assert.Len(t, m.Calls, 1, "no docker exec")
+	assert.Empty(t, m.Calls, "no docker exec")
 }
 
-func TestValidateWorkerAdd_ReadError(t *testing.T) {
+func TestReadNodesConf_ReadError(t *testing.T) {
 	// Only a missing file means that the user replaced the configuration.
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: workerContainers()}
-		}
+	m.OnCall = func([]string, string) mock.Result {
 		return mock.Result{Stderr: "Error response from daemon: OCI runtime exec failed\n", Err: notFoundErr(t)}
 	}
 	client := docker.NewClient(&m)
+	controller := docker.ContainerListEntry{Name: "sind-dev-controller", State: docker.StateRunning}
 
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{ClusterName: "dev", Count: 1})
+	_, err := readNodesConf(t.Context(), client, controller)
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrNodesConfMissing)
 	assert.Equal(t, "reading sind-nodes.conf: exit status 1: Error response from daemon: OCI runtime exec failed", err.Error())
-}
-
-func TestWorkerAdd_RequiresSindNodes_Present(t *testing.T) {
-	// When sind-nodes.conf exists, validation passes for managed workers.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-			)}
-		}
-		if args[0] == "exec" && len(args) >= 4 && args[2] == "cat" {
-			return mock.Result{Stdout: "# Generated by sind\nNodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN\n"}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       1,
-	})
-
-	require.NoError(t, err)
-}
-
-func TestWorkerAdd_AllowsUnmanaged(t *testing.T) {
-	// Unmanaged worker add bypasses sind-nodes.conf check.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-			)}
-		}
-		// Should never reach ReadFile for unmanaged
-		if args[0] == "exec" {
-			return mock.Result{Err: fmt.Errorf("should not be called")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       1,
-		Unmanaged:   true,
-	})
-
-	require.NoError(t, err)
-}
-
-func TestValidateWorkerAdd_UnmanagedCluster(t *testing.T) {
-	// Workers of an unmanaged cluster are unmanaged without --unmanaged.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: unmanagedClusterContainers("worker-0")}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
-	}
-	client := docker.NewClient(&m)
-
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{ClusterName: "dev", Count: 1})
-
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 1, "no sind-nodes.conf read")
 }
 
 func TestWorkerAdd_ClusterNotFound(t *testing.T) {
@@ -266,10 +234,10 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
-	})
+	}, time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controller not found")
@@ -287,11 +255,11 @@ func TestWorkerAdd_ClusterNotFound_Unmanaged(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		Unmanaged:   true,
-	})
+	}, time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controller not found")
@@ -308,158 +276,13 @@ func TestWorkerAdd_ListContainersError(t *testing.T) {
 	}
 	client := docker.NewClient(&m)
 
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
-	})
+	}, time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
-}
-
-// TestValidateWorkerAdd_LabelFilter asserts the container list is scoped by
-// both realm and cluster labels so parallel realms do not cross-match.
-func TestValidateWorkerAdd_LabelFilter(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-			)}
-		}
-		if args[0] == "exec" && len(args) >= 4 && args[2] == "cat" {
-			return mock.Result{Stdout: "# Generated by sind\n"}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       1,
-	})
-	require.NoError(t, err)
-
-	require.NotEmpty(t, m.Calls)
-	psArgs := m.Calls[0].Args
-	assert.Contains(t, psArgs, "label=sind.realm="+mesh.DefaultRealm)
-	assert.Contains(t, psArgs, "label=sind.cluster=dev")
-}
-
-// --- NextComputeIndex ---
-
-func TestNextComputeIndex_Empty(t *testing.T) {
-	// No worker containers → next index is 0.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-			)}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.Equal(t, 0, idx)
-}
-
-func TestNextComputeIndex_Sequential(t *testing.T) {
-	// worker-0 and worker-1 exist → next index is 2.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: workerContainers("worker-0", "worker-1")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, idx)
-}
-
-func TestNextComputeIndex_Gap(t *testing.T) {
-	// worker-0 and worker-3 exist → next index is 4 (fills after max).
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: workerContainers("worker-0", "worker-3")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.Equal(t, 4, idx)
-}
-
-func TestNextComputeIndex_NonComputeIgnored(t *testing.T) {
-	// Controller and submitter don't affect worker index.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-				testutil.PsEntry{ID: "def", Names: "sind-dev-submitter", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=submitter"},
-			)}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.Equal(t, 0, idx)
-}
-
-func TestNextComputeIndex_ListError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Err: fmt.Errorf("docker daemon not running")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	_, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
-}
-
-// TestNextComputeIndex_LabelFilter asserts the container list is scoped by
-// both realm and cluster labels so parallel realms do not cross-match.
-func TestNextComputeIndex_LabelFilter(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: workerContainers("worker-0")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	_, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
-	require.NoError(t, err)
-
-	require.NotEmpty(t, m.Calls)
-	psArgs := m.Calls[0].Args
-	assert.Contains(t, psArgs, "label=sind.realm="+mesh.DefaultRealm)
-	assert.Contains(t, psArgs, "label=sind.cluster=dev")
 }
 
 // unmanagedClusterContainers returns the containers of an unmanaged cluster:
@@ -1911,30 +1734,6 @@ func TestWorkerRemove_NoController(t *testing.T) {
 		}
 	}
 	assert.True(t, removed, "container should be removed even without controller")
-}
-
-func TestNextComputeIndex_NonNumericSuffix(t *testing.T) {
-	// Containers with non-numeric suffixes (e.g. worker-abc) are ignored.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=worker"},
-				testutil.PsEntry{ID: "cx", Names: "sind-dev-worker-abc", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=worker"},
-			)}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	idx, err := NextComputeIndex(t.Context(), client, mesh.DefaultRealm, "dev")
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, idx)
 }
 
 func TestWorkerRemove_RejectsController(t *testing.T) {

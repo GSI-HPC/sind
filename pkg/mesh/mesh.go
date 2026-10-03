@@ -267,15 +267,9 @@ func (m *Manager) EnsureDNS(ctx context.Context) error {
 
 // AddDNSRecord adds an A record to the mesh DNS Corefile and reloads CoreDNS.
 // The hostname should be a fully qualified sind DNS name (e.g. "controller.dev.sind.sind").
+// An existing entry for the hostname is replaced, as AddDNSRecords does.
 func (m *Manager) AddDNSRecord(ctx context.Context, hostname, ip string) error {
-	entries, err := m.readDNSEntries(ctx)
-	if err != nil {
-		return err
-	}
-
-	entries = append(entries, ip+" "+hostname)
-
-	return m.writeDNSEntries(ctx, entries)
+	return m.AddDNSRecords(ctx, []DNSRecord{{Hostname: hostname, IP: ip}})
 }
 
 // AddDNSRecords adds multiple A records to the mesh DNS Corefile and reloads
@@ -315,21 +309,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 // RemoveDNSRecord removes all A records for the given hostname from the mesh DNS
 // Corefile and reloads CoreDNS.
 func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
-	entries, err := m.readDNSEntries(ctx)
-	if err != nil {
-		return err
-	}
-
-	kept := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		fields := strings.Fields(entry)
-		if len(fields) >= 2 && fields[1] == hostname {
-			continue
-		}
-		kept = append(kept, entry)
-	}
-
-	return m.writeDNSEntries(ctx, kept)
+	return m.RemoveDNSRecords(ctx, []string{hostname})
 }
 
 // RemoveDNSRecords removes all A records for the given hostnames from the

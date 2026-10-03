@@ -301,45 +301,6 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	return nodes, nil
 }
 
-// ValidateWorkerAdd checks prerequisites for adding workers to a cluster.
-// For managed workers, it verifies that the controller runs and that
-// sind-nodes.conf exists on it (indicating sind-generated Slurm
-// configuration is in use). Unmanaged workers, and every worker of an
-// unmanaged cluster, bypass the sind-nodes.conf check.
-func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string, opts WorkerAddOptions) error {
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+opts.ClusterName)
-	if err != nil {
-		return fmt.Errorf("listing containers: %w", err)
-	}
-
-	controller, ok := findController(containers, realm, opts.ClusterName)
-	if !ok {
-		return errorWith(ErrClusterNotFound, "controller not found for cluster %q", opts.ClusterName)
-	}
-
-	if opts.Unmanaged || !IsManaged(controller.Labels) {
-		return nil
-	}
-
-	_, err = readNodesConf(ctx, client, controller)
-	return err
-}
-
-// NextComputeIndex determines the next worker node index by examining
-// existing containers in the cluster. Returns max(existing indices) + 1,
-// or 0 if no worker containers exist.
-func NextComputeIndex(ctx context.Context, client *docker.Client, realm, clusterName string) (int, error) {
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
-	if err != nil {
-		return 0, fmt.Errorf("listing containers: %w", err)
-	}
-	return nextWorkerIndexFromContainers(containers, realm, clusterName), nil
-}
-
 // --- Unexported helpers ---
 
 // findController returns the controller container sind uses to edit the
@@ -530,7 +491,8 @@ func workerIndex(name docker.ContainerName, prefix string) (int, bool) {
 }
 
 // nextWorkerIndexFromContainers computes the next worker node index from
-// a pre-fetched container list.
+// a pre-fetched container list: one more than the highest index of the
+// cluster's worker containers, or 0 without any.
 func nextWorkerIndexFromContainers(containers []docker.ContainerListEntry, realm, clusterName string) int {
 	prefix := string(ContainerName(realm, clusterName, "worker-"))
 	maxIdx := -1
