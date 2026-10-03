@@ -147,6 +147,11 @@ type RunConfig struct {
 	// NSSSlurm switches the node's passwd and group lookups to nss_slurm
 	// first: managed workers with identity nssSlurm or clientIds.
 	NSSSlurm bool
+
+	// StoragePass is, on a managed db node, the StoragePass the slurmdbd
+	// section sets: the password of slurmdbd's MariaDB account, which
+	// authenticates with unix_socket without one (see accountingSQL).
+	StoragePass string
 }
 
 // UserJobCapability is the capability workers of a cluster with users get,
@@ -401,6 +406,9 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				Users:           users,
 				AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, nodeManaged, hasSubmitter),
 				Identity:        cfg.Identity.Mode,
+			}
+			if n.Role == config.RoleDB && nodeManaged {
+				base.StoragePass = slurmdbdStoragePass(cfg.Slurm.Slurmdbd)
 			}
 			if n.Role != config.RoleController || !n.BackupController {
 				configs = append(configs, base)

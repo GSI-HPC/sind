@@ -565,6 +565,14 @@ nodes:
 	require.NoError(t, err)
 	assert.Contains(t, out, "include /etc/slurm/slurmdbd.conf.d/debug.conf")
 
+	// MariaDB's slurm account authenticates with unix_socket: the OS user
+	// slurm, which slurmdbd runs as, logs in as it; no other user does,
+	// not even root.
+	_, err = c.Exec(ctx, db, "runuser", "-u", "slurm", "--", "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, db, "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
+	assert.Error(t, err, "root logged in as slurm")
+
 	// The controller sends accounting data to slurmdbd on the db node.
 	controller := ContainerName(realm, clusterName, "controller")
 	out, err = c.Exec(ctx, controller, "scontrol", "show", "config")

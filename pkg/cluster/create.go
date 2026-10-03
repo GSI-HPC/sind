@@ -462,7 +462,7 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		}
 		containerName := ContainerName(realm, clusterName, nc.ShortName)
 		log.DebugContext(ctx, "enabling accounting services", "node", nc.ShortName)
-		if err := enableDBNode(ctx, client, containerName, nc.ShortName); err != nil {
+		if err := enableDBNode(ctx, client, containerName, nc.ShortName, nc.StoragePass); err != nil {
 			return err
 		}
 		slurmdbdProbe := probe.ForService(probe.ServiceSlurmdbd)
