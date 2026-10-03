@@ -24,7 +24,13 @@ func newSSHCommand() *cobra.Command {
 		Long: `SSH into a cluster node.
 
 SSH options, before or after NODE, are passed through to ssh. A remote
-command must follow --: NODE is the only other argument before it.`,
+command must follow --: NODE is the only other argument before it.
+
+ssh runs in the realm's SSH relay container, so the ports and files that
+options such as -L and -i name are the relay's. To forward a port to this
+machine, use your own ssh with the exported config:
+
+  ssh -F "$(sind get ssh-config)" -L 8080:localhost:80 controller.default.sind.sind`,
 		DisableFlagParsing: true,
 		ValidArgsFunction:  completeSSHNodeArg,
 		RunE: func(cmd *cobra.Command, args []string) error {

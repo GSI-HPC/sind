@@ -28,9 +28,6 @@ sind ssh -v worker-0
 
 # As a cluster user
 sind ssh alice@worker-0
-
-# Port forwarding
-sind ssh -L 8080:localhost:80 controller
 ```
 
 Internally, `sind ssh` executes SSH via the mesh SSH container:
@@ -40,6 +37,13 @@ docker exec -i [-t] sind-ssh ssh [SSH_OPTIONS] <node>.<cluster>.<realm>.sind [CO
 ```
 
 The relay container is `<realm>-ssh`. `-t` is only passed when both stdin and stdout are terminals: through a pseudo-terminal, the output would get CRLF line endings and the remote stderr would arrive on stdout. Output that you capture or redirect, as in `v=$(sind ssh worker-0 -- hostname)` or `sind ssh worker-0 -- cat /etc/hosts > hosts`, therefore comes through unchanged, also in an interactive shell.
+
+Since `ssh` runs in the relay container, the ports and files that SSH options name are the relay's: `-L`, `-R` and `-D` forward ports of the relay container, which your machine cannot reach, and `-i`, `-F` or `-E` name files in it. To forward a port to your machine, run your own `ssh` with the [exported SSH config](#user-ssh-client-integration):
+
+```bash
+# localhost:8080 on your machine to port 80 of the controller
+ssh -F "$(sind get ssh-config)" -L 8080:localhost:80 controller.default.sind.sind
+```
 
 Shell completion is available for both `sind ssh` and `sind exec` — press Tab to complete node and cluster names. Load it with `source <(sind completion bash)`, or the `zsh`, `fish` or `powershell` variant; `sind completion <shell> --help` shows how to install it permanently.
 
@@ -168,6 +172,7 @@ ssh controller                        # → controller.default.sind.sind
 ssh controller.dev                    # → controller.dev.sind.sind
 ssh controller.default.sind.sind      # full FQDN
 scp file.txt worker-0.dev.sind.sind:/tmp/
+ssh -L 8080:localhost:80 controller   # port forwarding to your machine
 ```
 
 {{< hint info >}}

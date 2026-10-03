@@ -1198,7 +1198,7 @@ with the working directory set to the data mount point (`/data` by default). Thi
 With `--user USER` they run as that cluster user (`docker exec -u USER`) in its home directory,
 `/home/USER`, which is shared too (see Users).
 
-`sind ssh` continues to use the SSH relay container for full SSH access (port forwarding, etc.).
+`sind ssh` continues to use the SSH relay container, for a login through the node's sshd. Its ssh client runs in the relay container, so port forwarding (`-L`, `-R`, `-D`) and the files that options name (`-i`, `-F`) are the relay's; forwarding to the host goes through the exported `ssh_config` (see User SSH Client Integration).
 
 ## Networking
 
@@ -1334,8 +1334,9 @@ sind ssh worker-0.dev                       # node in dev cluster
 sind ssh -v worker-0                        # verbose SSH
 sind ssh worker-0 -- hostname               # run command
 sind ssh -t worker-0 -- top                 # force TTY allocation
-sind ssh -L 8080:localhost:80 controller     # port forwarding
 ```
+
+ssh runs in the relay container, so `-L`, `-R` and `-D` forward ports of the relay, which the host cannot reach, and `-i`, `-F` or `-E` name files in the relay. Port forwarding to the host uses the exported `ssh_config` instead (`ssh -F "$(sind get ssh-config)" -L 8080:localhost:80 controller.default.sind.sind`).
 
 #### User SSH Client Integration
 
@@ -1383,6 +1384,7 @@ This allows direct use of standard SSH tools:
 ssh controller.default.sind.sind
 ssh worker-0.dev.sind.sind hostname
 scp file.txt controller.dev.sind.sind:/tmp/
+ssh -L 8080:localhost:80 controller.default.sind.sind   # port forwarding to the host
 ```
 
 sind updates these files automatically when clusters or nodes are created/deleted. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file.
