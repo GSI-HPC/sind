@@ -605,7 +605,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
-`sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. Useful for external consumers that need to connect to sind networks.
+`sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. The images are the ones the mesh containers run, which can be older than the ones a new mesh gets. Useful for external consumers that need to connect to sind networks.
 
 `sind get ssh-private-key`, `sind get ssh-public-key`, and `sind get ssh-known-hosts` dump SSH credentials to stdout. This replaces the need to extract files from Docker volumes.
 
@@ -1127,11 +1127,11 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 | Type | Name Pattern | Example | Image |
 |------|-------------|---------|-------|
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
-| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:latest` |
-| SSH container | `<realm>-ssh` | `sind-ssh` | `ghcr.io/gsi-hpc/sind-node:latest` (runs `sleep infinity`) |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.14.7` |
+| SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys copied in through `<realm>-ssh` before it first starts) |
 
-The mesh images do not follow `defaults.image`; `--pull` pulls them too. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
+The mesh images do not follow `defaults.image`: the relay needs the `ssh` client and `bash` of sind's own node image, which custom images need not have. CoreDNS is pinned to a release; bump `DNSImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
 
 ### Defaults
 
@@ -1159,7 +1159,7 @@ Container mount flags:
 ```
 -v <realm>-<cluster>-config:/etc/slurm:rw     # controller
 -v <realm>-<cluster>-config:/etc/slurm:ro     # all others
--v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes
+-v <realm>-<cluster>-munge:/etc/munge:ro      # all nodes, not with identity clientIds
 -v <realm>-<cluster>-data:/data:rw            # all nodes, data volume
 --mount type=bind,source=/host/dir,target=/data  # all nodes, data on a host directory
 -v <realm>-<cluster>-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
@@ -1351,7 +1351,7 @@ The DNS container's address is fixed into every node's and the relay's `--dns` w
 
 ### SSH
 
-The `sind-ssh` container provides SSH access to all cluster nodes. It runs the `sind-node:latest` image with `sleep infinity` instead of systemd, on the mesh network, and joins each cluster network.
+The `sind-ssh` container provides SSH access to all cluster nodes. It runs sind's default node image with `sleep infinity` instead of systemd, on the mesh network, and joins each cluster network.
 
 #### Global SSH Resources
 

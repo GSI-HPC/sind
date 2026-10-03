@@ -17,6 +17,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,9 +102,13 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	create := m.Calls[indexOf(t, m, "create")].Args
 	assert.Equal(t, []string{"create", "--name", string(SSHContainerName), "--network", string(NetworkName), "--dns", "10.0.0.2",
 		"-v", string(SSHVolumeName) + ":/root/.ssh"}, create[:9])
-	assert.Equal(t, []string{SSHImage, "sleep", "infinity"}, create[len(create)-3:])
+	assert.Equal(t, []string{SSHImage(), "sleep", "infinity"}, create[len(create)-3:])
 	assert.Empty(t, calls(m, "cp"), "no keys without writeKeys")
 	assert.Equal(t, []string{"start sind-ssh"}, calls(m, "start"))
+}
+
+func TestSSHImage_DefaultNodeImage(t *testing.T) {
+	assert.Equal(t, config.DefaultImage, SSHImage())
 }
 
 // tarModes returns the mode of each file in a tar archive.

@@ -35,11 +35,11 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | Type | Name pattern | Example | Image |
 |------|-------------|---------|-------|
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
-| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:latest` |
-| SSH container | `<realm>-ssh` | `sind-ssh` | `ghcr.io/gsi-hpc/sind-node:latest` (runs `sleep infinity`) |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.14.7` |
+| SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys written once, through the SSH container before it first starts) |
 
-The mesh images do not follow `defaults.image`: the SSH relay always runs `sind-node:latest`, and CoreDNS comes from Docker Hub. `--pull` pulls them too.
+The mesh images do not follow `defaults.image`: the SSH relay runs sind's default node image, which has the `ssh` client and `bash` it needs (custom node images need not), and CoreDNS comes from Docker Hub. `sind get mesh` shows the images the mesh containers run. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers. An existing mesh keeps its containers and images until the realm's last cluster is deleted.
 
 ## Volume mounts
 
@@ -65,7 +65,7 @@ SELinux relabeling (`:z`) is not used because containers run with `--security-op
 ```
 -v sind-dev-config:/etc/slurm:rw      # controller
 -v sind-dev-config:/etc/slurm:ro      # all others
--v sind-dev-munge:/etc/munge:ro       # all nodes
+-v sind-dev-munge:/etc/munge:ro       # all nodes, not with identity clientIds
 -v sind-dev-data:/data:rw             # all nodes
 -v sind-dev-state:/var/spool/slurmctld:rw  # both controllers of a backup pair
 -v sind-dev-home:/home:rw             # all nodes, with users

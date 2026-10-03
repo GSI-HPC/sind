@@ -394,7 +394,7 @@ const inspectJSON = `[{
   "Id": "94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca",
   "Name": "/sind-dev-controller",
   "State": {"Status": "running", "Running": true, "Paused": false},
-  "Config": {"Labels": {"sind.cluster": "dev", "sind.role": "controller", "sind.data.hostpath": "/srv/run,2024"}},
+  "Config": {"Image": "ghcr.io/gsi-hpc/sind-node:latest", "Labels": {"sind.cluster": "dev", "sind.role": "controller", "sind.data.hostpath": "/srv/run,2024"}},
   "Mounts": [
     {"Type": "volume", "Name": "sind-dev-config", "Source": "/var/lib/docker/volumes/sind-dev-config/_data", "Destination": "/etc/slurm", "Driver": "local", "Mode": "rw", "RW": true, "Propagation": ""},
     {"Type": "bind", "Source": "/srv/run,2024", "Destination": "/data", "Mode": "", "RW": true, "Propagation": "rprivate"}
@@ -418,6 +418,7 @@ func TestInspectContainer(t *testing.T) {
 
 	assert.Equal(t, ContainerID("94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca"), info.ID)
 	assert.Equal(t, testContainerName, info.Name)
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", info.ImageRef)
 	assert.Equal(t, StateRunning, info.Status)
 	assert.Equal(t, []string{"172.19.0.2"}, info.DNS)
 	assert.Equal(t, Labels{

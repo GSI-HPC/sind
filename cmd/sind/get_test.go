@@ -522,10 +522,20 @@ func TestGetMesh_RejectsArgs(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// meshInspectCall answers the inspects of get mesh for a running mesh.
+func meshInspectCall(args []string, _ string) mock.Result {
+	switch {
+	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-dns":
+		return mock.Result{Stdout: `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Image":"coredns/coredns:1.14.7","Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`}
+	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-ssh":
+		return mock.Result{Stdout: `[{"Id":"ssh1","Name":"/sind-ssh","State":{"Status":"running"},"Config":{"Image":"ghcr.io/gsi-hpc/sind-node:latest","Labels":{}}}]`}
+	}
+	return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+}
+
 func TestGetMesh_Output(t *testing.T) {
-	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 	var m mock.Executor
-	m.AddResult(inspectJSON, "", nil)
+	m.OnCall = meshInspectCall
 
 	stdout, _, err := executeWithMock(&m, "get", "mesh")
 	require.NoError(t, err)
@@ -534,14 +544,15 @@ func TestGetMesh_Output(t *testing.T) {
 	assert.Contains(t, stdout, "sind-dns")
 	assert.Contains(t, stdout, "10.0.0.2")
 	assert.Contains(t, stdout, "sind.sind")
+	assert.Contains(t, stdout, "coredns/coredns:1.14.7")
 	assert.Contains(t, stdout, "sind-ssh")
 	assert.Contains(t, stdout, "sind-ssh-config")
+	assert.Contains(t, stdout, "ghcr.io/gsi-hpc/sind-node:latest")
 }
 
 func TestGetMesh_JSON(t *testing.T) {
-	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 	var m mock.Executor
-	m.AddResult(inspectJSON, "", nil)
+	m.OnCall = meshInspectCall
 
 	stdout, _, err := executeWithMock(&m, "get", "mesh", "--output", "json")
 	require.NoError(t, err)
@@ -552,13 +563,16 @@ func TestGetMesh_JSON(t *testing.T) {
 	assert.Equal(t, "sind-dns", got.DNSContainer)
 	assert.Equal(t, "10.0.0.2", got.DNSIP)
 	assert.Equal(t, "sind.sind", got.DNSZone)
+	assert.Equal(t, "coredns/coredns:1.14.7", got.DNSImage)
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", got.SSHImage)
 }
 
 func TestGetMesh_Error(t *testing.T) {
 	var m mock.Executor
-	// The DNS container inspect fails with a non-exit-code-1 error (daemon
-	// unreachable).
-	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+	// The inspects fail with a non-exit-code-1 error (daemon unreachable).
+	m.OnCall = func([]string, string) mock.Result {
+		return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
+	}
 
 	_, _, err := executeWithMock(&m, "get", "mesh")
 	assert.Error(t, err)

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
@@ -19,9 +20,12 @@ import (
 // knownHostsPath is the path to the known_hosts file inside the SSH container.
 const knownHostsPath = "/root/.ssh/known_hosts"
 
-// SSHImage is the container image used for the SSH relay container.
-// Uses the sind-node image which includes an ssh client and bash.
-const SSHImage = "ghcr.io/gsi-hpc/sind-node:latest"
+// SSHImage returns the container image of the SSH relay: sind's default
+// node image, which has an ssh client and bash, and which the default
+// cluster pulls anyway. Custom node images need not have an ssh client.
+func SSHImage() string {
+	return config.DefaultImage
+}
 
 // ensureSSHVolume creates the SSH config volume if it does not exist yet,
 // and reports whether it did. ensureSSH writes the keys into a new volume.
@@ -73,7 +77,7 @@ func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) e
 		if m.Pull {
 			sshArgs = append(sshArgs, "--pull", "always")
 		}
-		sshArgs = append(sshArgs, SSHImage, "sleep", "infinity")
+		sshArgs = append(sshArgs, SSHImage(), "sleep", "infinity")
 		if _, err := m.Docker.CreateContainer(ctx, sshArgs...); err != nil {
 			return fmt.Errorf("creating SSH container: %w", err)
 		}

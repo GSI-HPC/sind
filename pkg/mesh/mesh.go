@@ -40,8 +40,9 @@ func composeLabelFlags(project, service string) []string {
 	return docker.SortedLabelFlags(docker.ComposeLabels(project, service, 1))
 }
 
-// DNSImage is the container image used for the mesh DNS server.
-const DNSImage = "coredns/coredns:latest"
+// DNSImage is the container image used for the mesh DNS server, a pinned
+// CoreDNS release.
+const DNSImage = "coredns/coredns:1.14.7"
 
 // corefilePath is the path to the Corefile inside the DNS container.
 const corefilePath = "/Corefile"
@@ -541,37 +542,63 @@ func (m *Manager) requireMeshContainer(ctx context.Context, name docker.Containe
 		return fmt.Errorf("checking %s: %w", name, err)
 	}
 	if !exists {
-		return fmt.Errorf("no mesh found for realm %q", m.Realm)
+		return m.errNoMesh()
 	}
 	return nil
 }
 
-// GetInfo returns information about the mesh infrastructure for this realm.
-// The mesh must exist (DNS container must be running to resolve the DNS IP).
-// Returns an error containing "no mesh found for realm" if the DNS container
-// does not exist yet.
+// errNoMesh returns the error for a realm without mesh.
+func (m *Manager) errNoMesh() error {
+	return fmt.Errorf("no mesh found for realm %q", m.Realm)
+}
+
+// GetInfo returns information about the mesh infrastructure for this realm:
+// the DNS container's address (empty while it is stopped) and the images the
+// DNS and SSH containers run (empty without an SSH container). Returns an
+// error containing "no mesh found for realm" if the DNS container does not
+// exist.
 func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	dnsName := m.DNSContainerName()
 	netName := m.NetworkName()
 
-	dnsInfo, err := m.Docker.InspectContainer(ctx, dnsName)
-	if docker.IsNotFound(err) {
-		return nil, fmt.Errorf("no mesh found for realm %q", m.Realm)
+	var dnsInfo, sshInfo *docker.ContainerInfo
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		info, err := m.inspectIfExists(gctx, dnsName)
+		if err != nil {
+			return fmt.Errorf("inspecting DNS container: %w", err)
+		}
+		dnsInfo = info
+		return nil
+	})
+	g.Go(func() error {
+		info, err := m.inspectIfExists(gctx, m.SSHContainerName())
+		if err != nil {
+			return fmt.Errorf("inspecting SSH container: %w", err)
+		}
+		sshInfo = info
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
-	if err != nil {
-		return nil, fmt.Errorf("inspecting DNS container: %w", err)
+	if dnsInfo == nil {
+		return nil, m.errNoMesh()
 	}
 
-	return &Info{
+	info := &Info{
 		Network:      string(netName),
 		DNSContainer: string(dnsName),
 		DNSIP:        dnsInfo.IPs[netName],
 		DNSZone:      m.Realm + ".sind",
-		DNSImage:     DNSImage,
+		DNSImage:     dnsInfo.ImageRef,
 		SSHContainer: string(m.SSHContainerName()),
 		SSHVolume:    string(m.SSHVolumeName()),
-		SSHImage:     SSHImage,
-	}, nil
+	}
+	if sshInfo != nil {
+		info.SSHImage = sshInfo.ImageRef
+	}
+	return info, nil
 }
 
 // DNSRecord represents a single A record in the mesh DNS.

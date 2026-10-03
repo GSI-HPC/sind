@@ -92,7 +92,7 @@ func TestMeshLifecycle(t *testing.T) {
 	info, err := mgr.GetInfo(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, DNSImage, info.DNSImage)
-	assert.Equal(t, SSHImage, info.SSHImage)
+	assert.Equal(t, SSHImage(), info.SSHImage)
 	assert.NotEmpty(t, info.DNSIP)
 
 	// CleanupMesh removes everything.
@@ -179,7 +179,7 @@ func TestEnsureMesh(t *testing.T) {
 	relay := f.containers["sind-ssh"]
 	require.NotNil(t, relay)
 	assert.Equal(t, docker.StateRunning, relay.state)
-	assert.Equal(t, SSHImage, relay.image)
+	assert.Equal(t, SSHImage(), relay.image)
 	assert.Equal(t, []string{"10.0.0.2"}, relay.dns)
 	assert.Contains(t, relay.files["/root/.ssh/id_ed25519"], "OPENSSH PRIVATE KEY")
 	assert.True(t, strings.HasPrefix(relay.files["/root/.ssh/id_ed25519.pub"], "ssh-ed25519 "))
@@ -1195,7 +1195,7 @@ func TestCustomRealm_EnsureMesh(t *testing.T) {
 	relay := m.Calls[indexOf(t, m, "create --name myrealm-ssh")].Args
 	vol, _ := testutil.ArgValue(relay, "-v")
 	assert.Equal(t, "myrealm-ssh-config:/root/.ssh", vol)
-	assert.Equal(t, []string{SSHImage, "sleep", "infinity"}, relay[len(relay)-3:])
+	assert.Equal(t, []string{SSHImage(), "sleep", "infinity"}, relay[len(relay)-3:])
 }
 
 func TestCustomRealm_CleanupMesh(t *testing.T) {
@@ -1238,47 +1238,51 @@ func dnsInspectExitedJSON() string {
 // --- GetInfo ---
 
 func TestGetInfo(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(dnsInspectJSON(), "", nil) // InspectContainer(DNS)
-
-	c := docker.NewClient(&m)
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	// A relay made by an older sind runs another image.
+	f.containers["sind-ssh"].image = "ghcr.io/gsi-hpc/sind-node:latest-old"
 	mgr := NewManager(c, DefaultRealm)
 
 	info, err := mgr.GetInfo(t.Context())
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 1, "one inspect of the DNS container")
-	assert.Equal(t, []string{"inspect", "sind-dns"}, m.Calls[0].Args)
 	assert.Equal(t, "sind-mesh", info.Network)
 	assert.Equal(t, "sind-dns", info.DNSContainer)
 	assert.Equal(t, "10.0.0.2", info.DNSIP)
 	assert.Equal(t, "sind.sind", info.DNSZone)
-	assert.Equal(t, string(DNSImage), info.DNSImage)
+	assert.Equal(t, DNSImage, info.DNSImage)
 	assert.Equal(t, "sind-ssh", info.SSHContainer)
 	assert.Equal(t, "sind-ssh-config", info.SSHVolume)
-	assert.Equal(t, SSHImage, info.SSHImage)
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest-old", info.SSHImage, "the image the relay runs")
 }
 
 func TestGetInfo_CustomRealm(t *testing.T) {
-	inspectJSON := `[{"Id":"dns1","Name":"/ci-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"ci-mesh":{"IPAddress":"10.1.0.5"}}}}]`
-	var m mock.Executor
-	m.AddResult(inspectJSON, "", nil)
-
-	c := docker.NewClient(&m)
+	f, c, _ := newFakeDocker(t)
+	f.withMesh("ci", docker.StateRunning)
 	mgr := NewManager(c, "ci")
 
 	info, err := mgr.GetInfo(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "ci-mesh", info.Network)
 	assert.Equal(t, "ci-dns", info.DNSContainer)
-	assert.Equal(t, "10.1.0.5", info.DNSIP)
+	assert.Equal(t, "10.0.0.2", info.DNSIP)
 	assert.Equal(t, "ci.sind", info.DNSZone)
 }
 
-func TestGetInfo_NoMesh(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such object: sind-dns\n", &exec.ExitError{ProcessState: exitCode1(t)})
+func TestGetInfo_Stopped(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	delete(f.containers, "sind-ssh")
+	mgr := NewManager(c, DefaultRealm)
 
-	c := docker.NewClient(&m)
+	info, err := mgr.GetInfo(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, info.DNSIP, "a stopped DNS container has no address")
+	assert.Empty(t, info.SSHImage, "no relay")
+}
+
+func TestGetInfo_NoMesh(t *testing.T) {
+	_, c, _ := newFakeDocker(t)
 	mgr := NewManager(c, DefaultRealm)
 
 	_, err := mgr.GetInfo(t.Context())
@@ -1287,19 +1291,22 @@ func TestGetInfo_NoMesh(t *testing.T) {
 	assert.Contains(t, err.Error(), DefaultRealm)
 }
 
-func TestGetInfo_InspectError(t *testing.T) {
-	// An inspect failing for another reason than a missing container (e.g.
-	// daemon unreachable) is not taken for a missing mesh.
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+func TestGetInfo_InspectErrors(t *testing.T) {
+	for _, tt := range []struct{ fail, match string }{
+		{"inspect sind-dns", "inspecting DNS container"},
+		{"inspect sind-ssh", "inspecting SSH container"},
+	} {
+		t.Run(tt.fail, func(t *testing.T) {
+			f, c, _ := newFakeDocker(t)
+			f.withMesh(DefaultRealm, docker.StateRunning)
+			f.fail[tt.fail] = failure()
+			mgr := NewManager(c, DefaultRealm)
 
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	_, err := mgr.GetInfo(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container: docker daemon unreachable")
-	assert.NotContains(t, err.Error(), "no mesh found")
+			_, err := mgr.GetInfo(t.Context())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.match)
+		})
+	}
 }
 
 // --- GetDNSRecords ---
@@ -1345,6 +1352,9 @@ func TestGetDNSRecords_ReadError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestGetDNSRecords_CheckError covers a DNS container check that fails for
+// another reason than a missing container (daemon unreachable): the error
+// names the container.
 // TestGetDNSRecords_NoMesh covers the typo/empty-realm case: DNS container is
 // absent so GetDNSRecords must surface a clean "no mesh found" error instead
 // of leaking the raw docker exec failure.

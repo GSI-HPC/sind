@@ -116,6 +116,7 @@ const (
 type ContainerInfo struct {
 	ID        ContainerID
 	Name      ContainerName
+	ImageRef  string // image reference the container was created from
 	Status    ContainerState
 	ExitCode  int
 	OOMKilled bool
@@ -178,6 +179,7 @@ type inspectResult struct {
 		OOMKilled bool   `json:"OOMKilled"`
 	} `json:"State"`
 	Config struct {
+		Image  string            `json:"Image"`
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
 	Mounts          []Mount    `json:"Mounts"`
@@ -236,6 +238,7 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			Labels:     r.Config.Labels,
 			IPs:        ips,
 			Image:      r.Image,
+			ImageRef:   r.Config.Image,
 			HostConfig: r.HostConfig,
 			Mounts:     r.Mounts,
 			DNS:        r.HostConfig.DNS,

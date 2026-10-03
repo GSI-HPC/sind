@@ -75,7 +75,7 @@ func (f *fakeDocker) withMesh(realm string, state docker.ContainerState) *fakeDo
 	f.start(string(mgr.DNSContainerName()))
 	dnsIP := f.containers[string(mgr.DNSContainerName())].ips[mesh]
 	f.containers[string(mgr.SSHContainerName())] = &fakeContainer{
-		image: SSHImage, state: docker.StateCreated, networks: []string{mesh}, dns: []string{dnsIP},
+		image: SSHImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dnsIP},
 		files: map[string]string{knownHostsPath: ""},
 	}
 	f.start(string(mgr.SSHContainerName()))
