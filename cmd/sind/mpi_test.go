@@ -40,7 +40,7 @@ func TestMPI(t *testing.T) {
 
 	// Create a cluster with 3 workers for multi-node MPI.
 	cfg := "kind: Cluster\ndefaults:\n  image: " + image + "\nnodes:\n  - controller\n  - worker: 3\n"
-	_, stderr, err := executeWithRealmStdin(ctx, realm, cfg, "create", "cluster", "--data", dataDir)
+	_, stderr, err := executeWithRealmStdin(ctx, realm, cfg, "create", "cluster", "--config", "-", "--data", dataDir)
 	require.NoError(t, err, "create cluster: stderr=%q", stderr)
 
 	// Verify the MPI stack is functional via ompi_info.

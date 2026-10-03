@@ -27,7 +27,7 @@ sind creates and manages containerized Slurm clusters for development, testing, 
 
 While the cluster configuration file resembles a Kubernetes manifest, sind is **not** a reconciling controller. The configuration is a one-shot, one-way input for cluster creation:
 
-- `sind create cluster` interprets the manifest once to generate the cluster (via `--config FILE` or piped to stdin)
+- `sind create cluster` interprets the manifest once to generate the cluster (via `--config FILE`, or `--config -` for stdin)
 - sind does not continuously watch or reconcile cluster state
 - sind does not automatically repair drift or failures
 
@@ -336,6 +336,8 @@ sind get auth-key [CLUSTER]
 All `get` subcommands accept `--output|-o {human,json}`. The default is `human` (tabular text); `json` emits a machine-readable document.
 
 NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which then lists the nodes of every cluster.
+
+`sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. Without `--config` it creates the default cluster (1 controller + 1 worker). For one release, a stdin that is not a terminal is still read without `--config -`: sind first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
 
 `sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist.
 

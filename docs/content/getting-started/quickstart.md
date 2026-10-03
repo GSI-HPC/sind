@@ -156,10 +156,10 @@ When the last cluster is deleted, sind automatically cleans up the shared mesh i
 
 ### Named clusters with custom configuration
 
-Pipe a configuration directly into `sind create cluster`:
+Pipe a configuration directly into `sind create cluster --config -`:
 
 ```bash
-sind create cluster << 'EOF'
+sind create cluster --config - << 'EOF'
 kind: Cluster
 name: dev
 defaults:

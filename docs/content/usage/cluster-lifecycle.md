@@ -15,12 +15,14 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--wait
 | Argument/Flag | Default | Description |
 |---------------|---------|-------------|
 | `NAME` | `default` | Cluster name (positional, optional) |
-| `--config` | — | Path to YAML configuration file |
+| `--config` | — | Path to YAML configuration file, or `-` to read it from stdin |
 | `--pull` | `false` | Pull images before creating containers |
 | `--data` | `.` | Host directory to mount at `/data` on all nodes, or `volume` to use a Docker volume. Ignored if the config sets `storage.dataStorage.type` or `hostPath`. |
 | `--wait` | `5m` | How long to wait for the nodes and Slurm to become ready, counted from when the node containers have started; `0` for no limit |
 
-Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image. Configuration can also be piped via stdin instead of using `--config`.
+Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image. `--config -` reads the configuration from stdin; empty input is then an error.
+
+Reading a stdin that is not a terminal without `--config -` is deprecated and will be removed: sind still does it for now, but first prints a `Warning:`, and empty input creates the minimal cluster. A script that runs sind with a pipe it does not mean as the configuration, such as `ssh HOST sind create cluster` or a `while read` loop, should redirect stdin from `/dev/null`.
 
 When both a positional `NAME` and a config file with a `name:` field are provided, the positional argument takes precedence.
 
@@ -38,7 +40,7 @@ sind create cluster --config cluster.yaml
 sind create cluster staging --config cluster.yaml
 
 # Pipe config from stdin
-sind create cluster << 'EOF'
+sind create cluster --config - << 'EOF'
 kind: Cluster
 name: dev
 nodes:

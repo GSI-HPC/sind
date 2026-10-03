@@ -13,7 +13,7 @@ The default sind-node image ships with a full MPI stack (OpenMPI, PMIx, PRRTE, U
 Create a cluster with 3 workers:
 
 ```bash
-sind create cluster <<'EOF'
+sind create cluster --config - <<'EOF'
 kind: Cluster
 nodes:
   - controller

@@ -3,8 +3,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +33,7 @@ func noStdin(t *testing.T) *os.File {
 
 func TestLoadConfig_FromReader(t *testing.T) {
 	// A reader set with cmd.SetIn is read as piped input.
-	cfg, err := loadConfig(strings.NewReader("kind: Cluster\nname: from-reader\n"), "")
+	cfg, err := loadConfig(strings.NewReader("kind: Cluster\nname: from-reader\n"), io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "from-reader", cfg.Name)
 }
@@ -39,7 +41,7 @@ func TestLoadConfig_FromReader(t *testing.T) {
 func TestLoadConfig_FromCommandInput(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetIn(strings.NewReader("kind: Cluster\nname: from-cmd\n"))
-	cfg, err := loadConfig(cmd.InOrStdin(), "")
+	cfg, err := loadConfig(cmd.InOrStdin(), io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "from-cmd", cfg.Name)
 }
@@ -52,7 +54,7 @@ func TestStdinHasData_ClosedFile(t *testing.T) {
 }
 
 func TestLoadConfig_Default(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "Cluster", cfg.Kind)
 	assert.Equal(t, "default", cfg.Name)
@@ -64,13 +66,13 @@ func TestLoadConfig_FromFile(t *testing.T) {
 	data := []byte("kind: Cluster\nname: test\n")
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	cfg, err := loadConfig(noStdin(t), path)
+	cfg, err := loadConfig(noStdin(t), io.Discard, path)
 	require.NoError(t, err)
 	assert.Equal(t, "test", cfg.Name)
 }
 
 func TestLoadConfig_FileNotFound(t *testing.T) {
-	_, err := loadConfig(noStdin(t), "/nonexistent/config.yaml")
+	_, err := loadConfig(noStdin(t), io.Discard, "/nonexistent/config.yaml")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading config")
 }
@@ -80,7 +82,7 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("not: valid: yaml: ["), 0o644))
 
-	_, err := loadConfig(noStdin(t), path)
+	_, err := loadConfig(noStdin(t), io.Discard, path)
 	assert.Error(t, err)
 }
 
@@ -92,9 +94,83 @@ func TestLoadConfig_FromStdin(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	cfg, err := loadConfig(r, "")
+	cfg, err := loadConfig(r, io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "from-stdin", cfg.Name)
+}
+
+// pipeWith returns the read end of a pipe holding data, as a shell gives
+// sind for `cmd | sind create cluster`.
+func pipeWith(t *testing.T, data string) *os.File {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close() })
+	_, err = w.WriteString(data)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	return r
+}
+
+func TestLoadConfig_ImplicitStdinWarns(t *testing.T) {
+	var stderr bytes.Buffer
+	cfg, err := loadConfig(pipeWith(t, "kind: Cluster\nname: piped\n"), &stderr, "")
+	require.NoError(t, err)
+	assert.Equal(t, "piped", cfg.Name)
+	assert.Equal(t, stdinDeprecation+"\n", stderr.String())
+	assert.True(t, strings.HasPrefix(stderr.String(), "Warning: "))
+}
+
+func TestLoadConfig_ImplicitEmptyStdinIsDefault(t *testing.T) {
+	// An empty pipe, as a CI runner or `true | sind create cluster` gives,
+	// creates the default cluster instead of failing.
+	for _, input := range []string{"", " \n\t\n"} {
+		var stderr bytes.Buffer
+		cfg, err := loadConfig(pipeWith(t, input), &stderr, "")
+		require.NoError(t, err)
+		assert.Equal(t, "default", cfg.Name)
+		assert.Equal(t, stdinDeprecation+"\n", stderr.String())
+	}
+}
+
+func TestLoadConfig_TerminalStdinDoesNotWarn(t *testing.T) {
+	var stderr bytes.Buffer
+	cfg, err := loadConfig(noStdin(t), &stderr, "")
+	require.NoError(t, err)
+	assert.Equal(t, "default", cfg.Name)
+	assert.Empty(t, stderr.String())
+}
+
+func TestLoadConfig_ExplicitStdin(t *testing.T) {
+	var stderr bytes.Buffer
+	cfg, err := loadConfig(pipeWith(t, "kind: Cluster\nname: explicit\n"), &stderr, "-")
+	require.NoError(t, err)
+	assert.Equal(t, "explicit", cfg.Name)
+	assert.Empty(t, stderr.String())
+
+	// --config - reads stdin whatever it is.
+	cfg, err = loadConfig(strings.NewReader("kind: Cluster\nname: reader\n"), &stderr, "-")
+	require.NoError(t, err)
+	assert.Equal(t, "reader", cfg.Name)
+}
+
+func TestLoadConfig_ExplicitEmptyStdin(t *testing.T) {
+	for _, input := range []string{"", "\n  \n"} {
+		_, err := loadConfig(pipeWith(t, input), io.Discard, "-")
+		require.EqualError(t, err, "reading config from stdin: empty configuration")
+	}
+}
+
+// failingReader fails every read.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("read failed") }
+
+func TestLoadConfig_StdinReadError(t *testing.T) {
+	for _, path := range []string{"", "-"} {
+		_, err := loadConfig(failingReader{}, io.Discard, path)
+		require.EqualError(t, err, "reading config from stdin: read failed")
+	}
 }
 
 func TestLoadConfig_StdinInvalidYAML(t *testing.T) {
@@ -104,7 +180,7 @@ func TestLoadConfig_StdinInvalidYAML(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	_, err = loadConfig(r, "")
+	_, err = loadConfig(r, io.Discard, "")
 	assert.Error(t, err)
 }
 
@@ -140,7 +216,7 @@ func TestCreate_WaitFlag(t *testing.T) {
 }
 
 func TestApplyDataFlag_HostPath(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "/tmp/my-project"))
@@ -150,7 +226,7 @@ func TestApplyDataFlag_HostPath(t *testing.T) {
 }
 
 func TestApplyDataFlag_RelativePath(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "."))
@@ -160,7 +236,7 @@ func TestApplyDataFlag_RelativePath(t *testing.T) {
 }
 
 func TestApplyDataFlag_Volume(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "volume"))
@@ -262,7 +338,7 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 	data := []byte("kind: Cluster\nname: from-file\n")
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	cfg, err := loadConfig(noStdin(t), path)
+	cfg, err := loadConfig(noStdin(t), io.Discard, path)
 	require.NoError(t, err)
 	assert.Equal(t, "from-file", cfg.Name)
 }

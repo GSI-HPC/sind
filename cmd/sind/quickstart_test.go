@@ -140,7 +140,7 @@ func TestQuickstart(t *testing.T) {
 	// ## Going further — named clusters with custom configuration
 	devYAML := "kind: Cluster\nname: dev\ndefaults:\n  image: " + image + "\n  cpus: 2\n  memory: 1g\nnodes:\n  - controller\n  - submitter\n  - worker: 3\n"
 
-	_, stderr, err = executeWithRealmStdin(ctx, realm, devYAML, "create", "cluster", "--data", dataDir)
+	_, stderr, err = executeWithRealmStdin(ctx, realm, devYAML, "create", "cluster", "--config", "-", "--data", dataDir)
 	require.NoError(t, err, "create dev cluster: stderr=%q", stderr)
 
 	// Verify submitter is present and exec routes to it.

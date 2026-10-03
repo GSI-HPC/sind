@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -65,7 +67,7 @@ func newCreateClusterCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&configFile, "config", "", "path to cluster configuration file")
+	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
 	cmd.Flags().String("data", ".", `host directory to mount as /data (use "volume" for Docker volume)`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
 	addWaitFlag(cmd)
@@ -79,7 +81,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	cfg, err := loadConfig(cmd.InOrStdin(), configFile)
+	cfg, err := loadConfig(cmd.InOrStdin(), cmd.ErrOrStderr(), configFile)
 	if err != nil {
 		return err
 	}
@@ -193,12 +195,39 @@ func applyDataFlag(cfg *config.Cluster, value string) error {
 	return nil
 }
 
-// loadConfig reads the cluster configuration from path, from stdin when it
-// holds data, or else returns the default configuration. stdin is the
+// configStdin is the --config value that reads the configuration from
+// stdin.
+const configStdin = "-"
+
+// stdinDeprecation is the warning printed before sind reads the
+// configuration from a stdin that is not a terminal without --config -.
+const stdinDeprecation = "Warning: reading the cluster configuration from stdin without --config - is deprecated; " +
+	"pass --config - to read it, or redirect stdin from /dev/null for the default cluster"
+
+// loadConfig reads the cluster configuration from path, from stdin when
+// path is "-", or else returns the default configuration. stdin is the
 // command's input (cmd.InOrStdin()), so that tests can set it with
 // cmd.SetIn instead of replacing the process-wide os.Stdin.
-func loadConfig(stdin io.Reader, path string) (*config.Cluster, error) {
-	if path != "" {
+//
+// Without a path, a stdin that is not a terminal is still read, for one
+// release: sind writes a deprecation warning to stderr first, since it
+// waits for the end of the input, and takes empty input for the default
+// configuration. An inherited pipe, as with ssh HOST sind create cluster,
+// or a read loop's input, would otherwise hang sind or be taken for the
+// configuration. With --config -, empty input is an error.
+func loadConfig(stdin io.Reader, stderr io.Writer, path string) (*config.Cluster, error) {
+	switch path {
+	case "":
+	case configStdin:
+		data, err := io.ReadAll(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("reading config from stdin: %w", err)
+		}
+		if len(bytes.TrimSpace(data)) == 0 {
+			return nil, errors.New("reading config from stdin: empty configuration")
+		}
+		return config.Parse(data)
+	default:
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("reading config: %w", err)
@@ -207,11 +236,14 @@ func loadConfig(stdin io.Reader, path string) (*config.Cluster, error) {
 	}
 
 	if stdinHasData(stdin) {
+		_, _ = fmt.Fprintln(stderr, stdinDeprecation)
 		data, err := io.ReadAll(stdin)
 		if err != nil {
 			return nil, fmt.Errorf("reading config from stdin: %w", err)
 		}
-		return config.Parse(data)
+		if len(bytes.TrimSpace(data)) > 0 {
+			return config.Parse(data)
+		}
 	}
 
 	return config.Parse([]byte("kind: Cluster\n"))
