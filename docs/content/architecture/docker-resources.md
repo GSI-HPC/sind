@@ -58,7 +58,7 @@ Files in the tmpfs mounts and `/dev/shm` count against the node's `memory` limit
 
 Unmanaged clusters use the same mounts; their config volume starts empty.
 
-SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories.
+SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories, and lets systemd manage its cgroups without host policy changes. On a Docker daemon with SELinux labelling enabled, the nodes therefore run unconfined (`spc_t` instead of `container_t`): SELinux does not separate them from the host. A `securityOpt` such as `label=type:...` cannot change that, as Docker gives `disable` precedence.
 
 ```
 -v sind-dev-config:/etc/slurm:rw      # controller

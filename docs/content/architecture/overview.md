@@ -26,7 +26,7 @@ Containers require specific security options for systemd:
 
 - `--security-opt writable-cgroups=true` — allows systemd to manage cgroups
 - `--cgroupns=private` — private cgroup namespace
-- `--security-opt label=disable` — SELinux compatibility
+- `--security-opt label=disable` — lets systemd manage its cgroups, and the nodes use host bind mounts, on Docker daemons with SELinux labelling enabled, without host policy changes. The nodes then run unconfined (`spc_t` instead of `container_t`), so SELinux does not separate them from the host
 - `--tmpfs /run:exec,mode=755,size=64m` — systemd runtime directory, sized so that a volatile journal cannot grow into the node's memory
 - `--tmpfs /run/lock` — systemd lock files
 - `--entrypoint /bin/sh` with a short script — PID 1 moves itself into `init.scope`, enables every available cgroup controller in the root cgroup's `cgroup.subtree_control`, then execs `/sbin/init`

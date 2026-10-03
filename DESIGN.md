@@ -98,7 +98,8 @@ With a managed db node, Slurm enablement starts on the db node: mariadb, the acc
 
 - Familiar UX for kind users
 - No root/admin privileges required
-- SELinux compatible
+- SELinux compatible: clusters work on hosts whose Docker daemon labels containers, without host
+  policy changes (the nodes then run unconfined, see Mount Options)
 - Support for both static and dynamic Slurm node configurations
 
 ### Implementation
@@ -1100,7 +1101,9 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 
 ### Mount Options
 
-SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories.
+SELinux relabeling (`:z`) is not used because containers run with `--security-opt label=disable`. This avoids expensive recursive relabeling of bind-mounted host directories, and lets systemd (PID 1) write to its cgroups, which SELinux denies a `container_t` process unless a host admin turns on the `container_manage_cgroup` boolean.
+
+The cost: on a Docker daemon with SELinux labelling enabled (`selinux-enabled`, the default of Fedora's moby-engine), every node runs unconfined, as `spc_t` instead of `container_t`, whatever its data backend, so SELinux no longer separates the nodes from the host. A daemon without labelling confines no container either way. A `securityOpt` such as `label=type:...` cannot restore the labelling: Docker gives `disable` precedence.
 
 Container mount flags:
 ```
