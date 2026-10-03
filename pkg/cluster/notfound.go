@@ -18,7 +18,7 @@ import (
 // commands after it look in another realm unless they are given the same
 // one. Failing to list them only drops the hint.
 func clusterNotFound(ctx context.Context, client *docker.Client, realm, clusterName string) error {
-	err := fmt.Errorf("cluster %q not found in realm %q", clusterName, realm)
+	err := errorWith(ErrClusterNotFound, "cluster %q not found in realm %q", clusterName, realm)
 	others, lerr := OtherRealms(ctx, client, realm, clusterName)
 	if lerr != nil || len(others) == 0 {
 		return err

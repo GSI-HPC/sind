@@ -101,7 +101,7 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 	for _, name := range shortNames {
 		cn := ContainerName(realm, clusterName, name)
 		if !existing[cn] {
-			return nil, fmt.Errorf("node %q not found in cluster %q", name, clusterName)
+			return nil, errorWith(ErrNodeNotFound, "node %q not found in cluster %q", name, clusterName)
 		}
 		targets = append(targets, cn)
 	}

@@ -120,7 +120,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	controller, ok := findController(containers, realm, opts.ClusterName)
 	if !ok {
-		return nil, fmt.Errorf("controller not found for cluster %q", opts.ClusterName)
+		return nil, errorWith(ErrClusterNotFound, "controller not found for cluster %q", opts.ClusterName)
 	}
 	controllerName := controller.Name
 
@@ -248,11 +248,14 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}
 		if retErr != nil && needsCleanup {
 			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
-			cleanupCtx := context.WithoutCancel(ctx)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+			defer cancel()
 			if confUpdated {
 				revertNodesConf(cleanupCtx, client, controllerName, nodeConfigs)
 			}
-			cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs)
+			if err := cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs); err != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("rolling back: %w", err))
+			}
 		}
 	}()
 
@@ -313,7 +316,7 @@ func ValidateWorkerAdd(ctx context.Context, client *docker.Client, realm string,
 
 	controller, ok := findController(containers, realm, opts.ClusterName)
 	if !ok {
-		return fmt.Errorf("controller not found for cluster %q", opts.ClusterName)
+		return errorWith(ErrClusterNotFound, "controller not found for cluster %q", opts.ClusterName)
 	}
 
 	if opts.Unmanaged || !IsManaged(controller.Labels) {
@@ -375,13 +378,11 @@ func clusterManaged(containers []docker.ContainerListEntry, realm, clusterName s
 	return !ok || IsManaged(controller.Labels)
 }
 
-var errSindNodesConfMissing = errors.New("sind-nodes.conf not found on controller: managed workers require sind-generated Slurm configuration; use --unmanaged to add nodes without modifying Slurm config")
-
 // readNodesConf reads sind-nodes.conf through the controller, which has to
 // run: docker exec cannot reach a stopped or paused container, and sind
 // would otherwise add or remove containers without telling Slurm. A file
 // that is not there, because the user replaced sind's configuration, is
-// errSindNodesConfMissing; any other failure is returned as it is.
+// ErrNodesConfMissing; any other failure is returned as it is.
 func readNodesConf(ctx context.Context, client *docker.Client, controller docker.ContainerListEntry) (string, error) {
 	if controller.State != docker.StateRunning {
 		return "", fmt.Errorf("controller %s is not running (%s): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first", controller.Name, controller.State)
@@ -392,7 +393,7 @@ func readNodesConf(ctx context.Context, client *docker.Client, controller docker
 	}
 	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok &&
 		strings.Contains(exitErr.Stderr, slurm.NodesConfPath+": No such file or directory") {
-		return "", errSindNodesConfMissing
+		return "", ErrNodesConfMissing
 	}
 	return "", fmt.Errorf("reading sind-nodes.conf: %w", err)
 }
@@ -732,10 +733,12 @@ func nodeSecurityOpts() []string {
 }
 
 // cleanupWorkers removes containers and mesh registrations for the given
-// worker node configs. Used to roll back a failed WorkerAdd. Errors are
-// logged but not returned — this is best-effort cleanup.
-func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName string, nodeConfigs []RunConfig) {
+// worker node configs. Used to roll back a failed WorkerAdd. It goes on past
+// a failure, a container that is already gone is no failure, and it
+// returns the failures joined.
+func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName string, nodeConfigs []RunConfig) error {
 	log := sindlog.From(ctx)
+	var errs []error
 
 	dnsNames := make([]string, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
@@ -743,16 +746,20 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 	}
 	if err := meshMgr.RemoveDNSRecords(ctx, dnsNames); err != nil {
 		log.DebugContext(ctx, "cleanup: removing DNS records", "error", err)
+		errs = append(errs, fmt.Errorf("removing DNS records: %w", err))
 	}
 	if err := meshMgr.RemoveKnownHosts(ctx, dnsNames); err != nil {
 		log.DebugContext(ctx, "cleanup: removing known hosts", "error", err)
+		errs = append(errs, fmt.Errorf("removing known hosts: %w", err))
 	}
 
 	for _, nc := range nodeConfigs {
 		containerName := ContainerName(realm, clusterName, nc.ShortName)
 		logContainerDiagnostics(ctx, client, containerName)
-		if err := client.RemoveContainer(ctx, containerName); err != nil {
+		if err := client.RemoveContainer(ctx, containerName); err != nil && !docker.IsNotFound(err) {
 			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
+			errs = append(errs, fmt.Errorf("removing container %s: %w", containerName, err))
 		}
 	}
+	return errors.Join(errs...)
 }

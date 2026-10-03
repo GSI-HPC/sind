@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// ErrNotReady reports that the nodes or Slurm of a Create or WorkerAdd did
-// not become ready within its wait limit (config.Cluster.Wait,
-// WorkerAddOptions.Wait).
-var ErrNotReady = errors.New("not ready")
-
 // errWaitExpired is the cause of a readiness context that its wait limit
 // ended.
 var errWaitExpired = errors.New("readiness wait limit reached")

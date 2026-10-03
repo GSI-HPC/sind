@@ -67,7 +67,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		cn := ContainerName(realm, clusterName, name)
 		c, ok := containerMap[cn]
 		if !ok {
-			return fmt.Errorf("node %q not found in cluster %q", name, clusterName)
+			return errorWith(ErrNodeNotFound, "node %q not found in cluster %q", name, clusterName)
 		}
 		if config.Role(c.Labels[LabelRole]) != config.RoleWorker {
 			return fmt.Errorf("node %q has role %q: only worker nodes can be removed", name, c.Labels[LabelRole])
@@ -84,7 +84,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	if hasController && IsManaged(controller.Labels) && slices.ContainsFunc(targets, isManagedContainer) {
 		nodesConf, err = readNodesConf(ctx, client, controller)
 		switch {
-		case errors.Is(err, errSindNodesConfMissing):
+		case errors.Is(err, ErrNodesConfMissing):
 			log.DebugContext(ctx, "no sind-nodes.conf, leaving the Slurm configuration alone", "cluster", clusterName)
 		case err != nil:
 			return err

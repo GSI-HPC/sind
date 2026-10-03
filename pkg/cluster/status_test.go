@@ -963,7 +963,7 @@ func TestGetStatus_ClusterNotFound(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrClusterNotFound)
 	assert.Contains(t, err.Error(), `cluster "dev" not found`)
 	assert.Contains(t, err.Error(), `realm "sind"`)
 }

@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -190,7 +191,8 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// Register cleanup before any fallible operation. Mesh cleanup runs
 	// whenever this invocation created the mesh. Cluster resource cleanup
 	// runs only after createResources starts. WithoutCancel keeps the
-	// cleanup running when the parent context is cancelled (e.g. Ctrl+C).
+	// cleanup running when the parent context is cancelled (e.g. Ctrl+C),
+	// and rollbackTimeout bounds it. Its failures are joined to the error.
 	resourcesCreated := false
 	defer func() {
 		if retErr == nil {
@@ -203,19 +205,24 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return
 		}
 		log.ErrorContext(ctx, "cleaning up partial resources, please wait")
-		cleanupCtx := context.WithoutCancel(ctx)
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+		defer cancel()
+		errs := []error{retErr}
 		if resourcesCreated {
 			logClusterDiagnostics(cleanupCtx, client, realm, cfg.Name)
 			log.DebugContext(ctx, "removing cluster resources", "name", cfg.Name)
 			if err := deleteClusterResources(cleanupCtx, client, meshMgr, cfg.Name); err != nil {
-				log.ErrorContext(ctx, "cleanup failed", "error", err)
+				errs = append(errs, fmt.Errorf("rolling back: removing cluster resources (sind delete cluster removes what is left): %w", err))
 			}
 		}
 		if meshMgr.Created() {
 			log.DebugContext(ctx, "removing mesh created by this invocation")
 			if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
-				log.ErrorContext(ctx, "mesh cleanup failed", "error", err)
+				errs = append(errs, fmt.Errorf("rolling back: removing the mesh: %w", err))
 			}
+		}
+		if len(errs) > 1 {
+			retErr = errors.Join(errs...)
 		}
 	}()
 

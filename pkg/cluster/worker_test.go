@@ -143,7 +143,7 @@ func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
 		Count:       1,
 	})
 
-	require.ErrorIs(t, err, errSindNodesConfMissing)
+	require.ErrorIs(t, err, ErrNodesConfMissing)
 }
 
 func TestValidateWorkerAdd_ControllerNotRunning(t *testing.T) {
@@ -182,7 +182,7 @@ func TestValidateWorkerAdd_ReadError(t *testing.T) {
 	err := ValidateWorkerAdd(t.Context(), client, mesh.DefaultRealm, WorkerAddOptions{ClusterName: "dev", Count: 1})
 
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, errSindNodesConfMissing)
+	assert.NotErrorIs(t, err, ErrNodesConfMissing)
 	assert.Equal(t, "reading sind-nodes.conf: exit status 1: Error response from daemon: OCI runtime exec failed", err.Error())
 }
 
@@ -273,6 +273,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controller not found")
+	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
 func TestWorkerAdd_ClusterNotFound_Unmanaged(t *testing.T) {
@@ -294,6 +295,7 @@ func TestWorkerAdd_ClusterNotFound_Unmanaged(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controller not found")
+	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
 func TestWorkerAdd_ListContainersError(t *testing.T) {
@@ -1007,6 +1009,7 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controller not found")
+	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
 // --- WorkerAdd (unmanaged) ---
@@ -1205,7 +1208,7 @@ func TestWorkerRemove_NodeNotFound(t *testing.T) {
 
 	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-99"})
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrNodeNotFound)
 	assert.Contains(t, err.Error(), "not found")
 }
 
@@ -1603,7 +1606,7 @@ func TestWorkerAdd_SindNodesConfMissing(t *testing.T) {
 		TmpSize:     "1g",
 	}, time.Millisecond)
 
-	require.ErrorIs(t, err, errSindNodesConfMissing)
+	require.ErrorIs(t, err, ErrNodesConfMissing)
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 

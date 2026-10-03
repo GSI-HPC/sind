@@ -602,7 +602,7 @@ func TestCreate_PreflightFails(t *testing.T) {
 
 	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrClusterExists)
 	assert.Contains(t, err.Error(), "conflicting resources")
 	assert.Nil(t, cluster)
 }
@@ -948,8 +948,9 @@ func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 }
 
 func TestCreate_CleanupResourcesError(t *testing.T) {
-	// When Create fails and the cleanup itself fails, the error from Create
-	// should still be the original failure (cleanup errors are logged, not returned).
+	// When Create fails and the cleanup itself fails, the error carries the
+	// original failure and the cleanup's, so the caller learns that
+	// resources were left behind.
 	exitErr := notFoundErr(t)
 	inCleanup := false
 	var m mock.Executor
@@ -975,11 +976,13 @@ func TestCreate_CleanupResourcesError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "systemctl failed")
+	assert.Contains(t, err.Error(), "\nrolling back: removing cluster resources (sind delete cluster removes what is left): ")
+	assert.Contains(t, err.Error(), "docker daemon unavailable")
 }
 
 func TestCreate_CleanupMeshError(t *testing.T) {
 	// When Create fails with freshly-created mesh and mesh cleanup also fails,
-	// the original error should still be returned.
+	// the error carries the original failure and the mesh cleanup's.
 	exitErr := notFoundErr(t)
 	inCleanup := false
 	var m mock.Executor
@@ -1010,6 +1013,7 @@ func TestCreate_CleanupMeshError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "systemctl failed")
+	assert.Contains(t, err.Error(), "\nrolling back: removing the mesh: ")
 }
 
 func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {

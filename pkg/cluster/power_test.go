@@ -77,7 +77,7 @@ func TestPower_Shutdown_NodeNotFound(t *testing.T) {
 
 	err := PowerShutdown(t.Context(), client, mesh.DefaultRealm, "dev", []string{"worker-99"})
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrNodeNotFound)
 	assert.Contains(t, err.Error(), "worker-99")
 	assert.Contains(t, err.Error(), "not found")
 }

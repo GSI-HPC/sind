@@ -162,7 +162,7 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 
 	if len(conflicts) > 0 {
 		sort.Strings(conflicts)
-		return fmt.Errorf("conflicting resources already exist: %s", strings.Join(conflicts, ", "))
+		return errorWith(ErrClusterExists, "conflicting resources already exist: %s", strings.Join(conflicts, ", "))
 	}
 
 	return nil

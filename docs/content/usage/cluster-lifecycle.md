@@ -65,7 +65,7 @@ If a node is not ready within `--wait`, or a check fails for good, the command f
 ERRO cluster dev not ready within 5m0s: waiting for worker-0: node sind-dev-worker-0 not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
 ```
 
-sind then removes the resources it created, including a mesh that this invocation set up. If that cleanup fails too, use `sind delete cluster` to remove what is left. On a slow host or CI runner, raise the limit, e.g. `--wait 15m`, or use `--wait 0` to wait until interrupted.
+sind then removes the resources it created, including a mesh that this invocation set up. If that cleanup fails too, the error says so after the original one; use `sind delete cluster` to remove what is left. On a slow host or CI runner, raise the limit, e.g. `--wait 15m`, or use `--wait 0` to wait until interrupted.
 
 Ctrl-C (SIGINT) or SIGTERM, as sent by `timeout` or `docker stop`, stops the creation and runs the same cleanup; sind then exits with status 130 (see [Exit Status]({{< relref "/usage/exit-status" >}})). A second signal ends sind at once, without waiting for the cleanup to finish.
 
