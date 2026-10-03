@@ -14,8 +14,9 @@ quickstart, and its embedding in the docs.
 script.json ──► voice/sindy_voice.py ──► line.wav + line.json (words, visemes, loudness)
                  (Kokoro-82M, CPU)                       │
                                                          ▼
-episodes/<id>/     ──  lib/scenes.js (planner, captions, terminal, shots, transitions)
-                   ──  lib/sindy.js  (avatar: lip sync, blinks, expressions, gaze, wave)
+episodes/<id>/     ──  lib/episode.js (scene builders: intro, talk, slide, terminal, outro)
+                   ──  lib/scenes.js  (planner, captions, terminal, shots, transitions)
+                   ──  lib/sindy.js   (avatar: lip sync, blinks, expressions, gaze, wave)
                                                          │
                                                          ▼
                                    HyperFrames (headless Chrome + FFmpeg) ──► MP4
@@ -41,12 +42,65 @@ episodes/<id>/     ──  lib/scenes.js (planner, captions, terminal, shots, tr
   lays narration lines on the timeline and resolves cue words ("show bullet 2
   when she says *munge*"), karaoke captions, a seekable terminal with typed
   commands and a fast-forward badge, avatar shots (`hero`, `full`, `left`,
-  `cornerR`, `cornerL`) that Sindy glides between, and iris, push and blur
-  transitions.
+  `cornerR`, `cornerL`, `mini`) that Sindy glides between, and iris, push and
+  blur transitions.
+- **Episode builder** (`lib/episode.js`): an episode is a chain of scene calls
+  (see [Writing an episode](#writing-an-episode)); each builds its scene,
+  places its narration, moves Sindy and adds the transition.
 - **Episodes** (`episodes/<id>/`, one per docs page): the pilot
   `episodes/quickstart/` has an intro with a logo animation and wave,
-  fullscreen talk with name tag, slide with corner avatar, terminal screencast
-  of the quickstart, outro with links and wink, and a fade to black.
+  fullscreen talk with name tag, slide with corner avatar, two terminal
+  screencasts (regular and fullscreen), outro with links and wink, and a fade
+  to black.
+
+## Writing an episode
+
+An episode is `script.json` (the narration, one line per id) plus an
+`index.html` that chains scene calls. `episodes/quickstart/index.html` is the
+reference; copy it to start a new one.
+
+```js
+const tl = gsap.timeline({ paused: true });
+Episode.create({ tl, id: "quickstart", title: "Quickstart: your first Slurm cluster", series: "Quickstart" })
+  .intro({ chapter: "Hi, I'm Sindy", kicker: "Getting started", title: "Quickstart", say: "intro" })
+  .talk({ chapter: "What you'll build", title: "…", sub: "…", chips: ["…"], nameTag: {}, say: "welcome" })
+  .slide({ chapter: "…", title: "…", say: "what", bullets: [{ icon: "network", title: "…", text: "…", at: "what:network" }] })
+  .terminal({ chapter: "…", say: ["create", "check"], steps: [{ cmd: "sind create cluster", at: "create:Run" }] })
+  .terminal({ wide: true, chapter: "…", say: "nodes", steps: [/* … */] })
+  .outro({ chapter: "Wrap-up", next: "…", say: "outro" })
+  .done();
+window.__timelines["main"] = tl; // in the page, so HyperFrames' lint sees it
+```
+
+| Scene | Sindy | Default transition in | Use for |
+| --- | --- | --- | --- |
+| `intro` | rises in on the right, waves | — | logo sting, episode title, disclosure |
+| `talk` | fullscreen on the left | iris after the intro, else push | framing the topic: title card, chips, optional name tag |
+| `slide` | corner bubble | push | a title and up to four bullets that land on their cue words |
+| `terminal` | corner bubble | push | commands and output; full-size font up to 62 columns, shrinks to fit 96 |
+| `terminal` with `wide: true` | small bubble (or `avatar: "none"`) | push | long lines, e.g. `sind get nodes`: 96 columns at full size, shrinks to fit 160 |
+| `outro` | fullscreen on the left, waves, winks | blur | links and the next episode, then fade to black |
+| `custom(kind, opts)` | unchanged | push | anything else: returns `{ el, t }` to fill by hand |
+
+Every scene takes `chapter` (listed under the docs player and shown on screen),
+`label` (on-screen text if it should differ), `transition`, `shot` and `lead`
+(seconds before the narration starts). Terminals fit their font to the longest
+line and log a console warning when a line does not fit even at the smallest
+size.
+
+**Narration and acting.** `say` is a line id, `{ id, mood, cues, look, gap }`
+or a list of those. `mood` is the expression for the line, `cues` change it at
+a word (`{ running: "joy" }`) and `look` turns her eyes at a word
+(`{ complete: 0.35, It: "camera" }`). Slides and terminals make her glance at
+their content automatically.
+
+**Times** are written `"line:word"` (the first word in that line starting with
+`word`), `"line:word#1"` for the second match, `"line:word-0.1"` with an
+offset, or plain seconds. Terminal steps take `at` (absolute) or `after`
+(seconds after the previous step; a typed command ends when its last character
+is typed): `{ cmd }`, `{ out }`, `{ prompt: true }` (a fresh prompt after a
+silent command), `{ ff: "⏩ ~40 s later", hold }`, `{ mark: "text", until }`
+(highlight), `{ clear: true }`.
 
 ## Results
 
@@ -125,6 +179,7 @@ HyperFrames Studio (run `npm run vendor` first), and `npx hyperframes snapshot
 ```text
 video/
   lib/sindy.js          avatar rig
+  lib/episode.js        scene builders (an episode is a chain of scene calls)
   lib/scenes.js, .css   planner, captions, terminal, shots, transitions, look
   sindy/                character bible, expression sheet page
   voice/                TTS tool, voice presets, pronunciation lexicon
@@ -261,6 +316,10 @@ Roadblocks met while building this pipeline, and their fixes.
   are mixed into the render, but each needs an `id`.
 - Named fonts need an `@font-face` with a local file, or `hyperframes lint`
   complains (`font_family_without_font_face`).
+- HyperFrames' lint reads only inline scripts, so each episode page creates the
+  paused GSAP timeline, passes it to `Episode.create({ tl })` and registers it
+  on `window.__timelines` itself; otherwise lint reports a missing timeline and
+  no duration source.
 - Never crossfade stacked features with opacity (the eyes looked ghosted);
   squash them shut and swap opaque states instead.
 - Lip sync: tune `lipKernel` and `lipGain` with `tools/mouth-stats.mjs`; a
