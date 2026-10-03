@@ -212,7 +212,7 @@
     { at: typed + 0.5, ff: "⏩ ~40 s later", hold: 1.8 },
     { at: typed + 1.4, prompt: true },
     { at: check.word("Now"), cmd: "sind get clusters" },
-    { at: check.word("shows"), out: "NAME      NODES (S/C/W)   SLURM     STATUS\ndefault   2 (0/1/1)       26.05.4   running" },
+    { at: check.word("shows"), out: "NAME      NODES (S/C/D/W)   SLURM     STATUS\ndefault   2 (0/1/0/1)       26.05.4   running" },
     { at: check.word("running") - 0.1, mark: "running" },
   ]);
 
