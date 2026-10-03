@@ -95,8 +95,13 @@ func TestLinuxUsers_IsEmpty(t *testing.T) {
 
 func TestLinuxUsers_Labels(t *testing.T) {
 	assert.Equal(t, testUsersLabels, testUsers.Labels())
-	assert.Empty(t, LinuxUsers{}.Labels())
-	assert.Equal(t, docker.Labels{LabelGroups: "hpc:3000"}, LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}.Labels())
+	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: ""}, LinuxUsers{}.Labels(),
+		"both set, empty, so that image labels cannot show through")
+	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: "hpc:3000"}, LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}.Labels())
+
+	users, err := LinuxUsersFromLabels(LinuxUsers{}.Labels())
+	require.NoError(t, err)
+	assert.True(t, users.IsEmpty(), "empty labels record no users")
 }
 
 func TestLinuxUsersFromLabels(t *testing.T) {
@@ -231,10 +236,9 @@ func TestBuildRunArgs_NoUsers(t *testing.T) {
 	for _, v := range testutil.ArgValues(args, "-v") {
 		assert.NotContains(t, v, ":/home:")
 	}
-	for _, l := range testutil.ArgValues(args, "--label") {
-		assert.NotContains(t, l, LabelUsers)
-		assert.NotContains(t, l, LabelGroups)
-	}
+	labels := testutil.ArgValues(args, "--label")
+	assert.Contains(t, labels, LabelUsers+"=")
+	assert.Contains(t, labels, LabelGroups+"=")
 }
 
 func TestNodeRunConfigs_Users(t *testing.T) {
@@ -376,7 +380,10 @@ func TestCreate_NoUsers(t *testing.T) {
 	assert.Empty(t, uc.added)
 	assert.Empty(t, uc.homes)
 	assert.Empty(t, uc.mounts)
-	assert.Empty(t, uc.labels)
+	assert.Equal(t, map[string][]string{
+		"sind-dev-controller": {"sind.groups=", "sind.users="},
+		"sind-dev-worker-0":   {"sind.groups=", "sind.users="},
+	}, uc.labels, "empty, so that image labels cannot show through")
 	assert.Empty(t, uc.caps)
 }
 

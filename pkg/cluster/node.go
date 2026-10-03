@@ -20,25 +20,35 @@ import (
 const DefaultDataMountPath = "/data"
 
 // Label keys used on sind containers.
+//
+// Docker merges the image's labels into a container's, so a label sind
+// leaves out can come from the image. Every node container therefore gets
+// each of these labels, with an empty value where there is nothing to
+// record, and readers treat an empty or missing label alike, as nodes
+// created by earlier sind versions lack some of them.
 const (
 	LabelRealm        = "sind.realm"
 	LabelCluster      = "sind.cluster"
 	LabelRole         = "sind.role"
 	LabelManaged      = "sind.managed"
 	LabelSlurmVersion = "sind.slurm.version"
+	// LabelDataHostPath records the host directory the node bind-mounts as
+	// its data (storage.dataStorage.hostPath), empty for the cluster's data
+	// volume.
 	LabelDataHostPath = "sind.data.hostpath"
-	// LabelDataMountPath records a data mount point other than
-	// DefaultDataMountPath (storage.dataStorage.mountPath).
+	// LabelDataMountPath records the data mount point
+	// (storage.dataStorage.mountPath, DefaultDataMountPath by default).
 	LabelDataMountPath = "sind.data.mountpath"
 	// LabelCVMFS records how the node mounts CVMFS (storage.cvmfs): "volume"
-	// for the cvmfs volume plugin, "hostPath" for the Docker host's /cvmfs.
+	// for the cvmfs volume plugin, "hostPath" for the Docker host's /cvmfs,
+	// empty for none.
 	LabelCVMFS = "sind.cvmfs"
 	// LabelUsers and LabelGroups record the cluster users and groups
 	// (users, groups), as space-separated entries (see LinuxUsers.Labels).
 	LabelUsers  = "sind.users"
 	LabelGroups = "sind.groups"
-	// LabelIdentity records the identity mode (identity) of a cluster
-	// whose mode is not local: nssSlurm or clientIds.
+	// LabelIdentity records the identity mode (identity) of the cluster:
+	// local, nssSlurm or clientIds.
 	LabelIdentity = "sind.identity"
 )
 
@@ -52,7 +62,7 @@ func IdentityFromLabels(labels docker.Labels) config.IdentityMode {
 }
 
 // DataMountPath returns where a node container mounts the cluster's data:
-// its LabelDataMountPath, or DefaultDataMountPath.
+// its LabelDataMountPath, or DefaultDataMountPath without one.
 func DataMountPath(labels docker.Labels) string {
 	if p := labels[LabelDataMountPath]; p != "" {
 		return p
@@ -69,9 +79,9 @@ func ComposeProject(realm, clusterName string) string {
 // managed records whether sind manages Slurm on the node (see IsManaged).
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is always set, empty when sind does not know the
-// version (unmanaged clusters): the sind-node image carries a label of the
-// same name, which would otherwise show through on the container.
-// The data host path label is omitted when dataHostPath is empty (Docker volume mode).
+// version (unmanaged clusters), and so is the data host path label, empty in
+// Docker volume mode: the image's labels would otherwise show through on the
+// container, and the sind-node image carries a slurm version label.
 func NodeLabels(realm, clusterName string, role config.Role, managed bool, slurmVersion, dataHostPath string, containerNumber int) docker.Labels {
 	labels := docker.ComposeLabels(ComposeProject(realm, clusterName), string(role), containerNumber)
 	labels[LabelRealm] = realm
@@ -79,9 +89,7 @@ func NodeLabels(realm, clusterName string, role config.Role, managed bool, slurm
 	labels[LabelRole] = string(role)
 	labels[LabelManaged] = strconv.FormatBool(managed)
 	labels[LabelSlurmVersion] = slurmVersion
-	if dataHostPath != "" {
-		labels[LabelDataHostPath] = dataHostPath
-	}
+	labels[LabelDataHostPath] = dataHostPath
 	return labels
 }
 
@@ -238,18 +246,16 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "--security-opt", opt)
 	}
 
-	// Labels
+	// Labels, each one set even when empty (see the label keys)
 	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.Managed, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
-	if dataMountPath != DefaultDataMountPath {
-		labels[LabelDataMountPath] = dataMountPath
-	}
-	if cfg.CVMFS != "" {
-		labels[LabelCVMFS] = string(cfg.CVMFS)
-	}
+	labels[LabelDataMountPath] = dataMountPath
+	labels[LabelCVMFS] = string(cfg.CVMFS)
 	maps.Copy(labels, cfg.Users.Labels())
-	if cfg.Identity != "" && cfg.Identity != config.IdentityLocal {
-		labels[LabelIdentity] = string(cfg.Identity)
+	identity := cfg.Identity
+	if identity == "" {
+		identity = config.IdentityLocal
 	}
+	labels[LabelIdentity] = string(identity)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)

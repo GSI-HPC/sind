@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -24,6 +25,7 @@ func TestNodeLabels(t *testing.T) {
 		"sind.role":                               "controller",
 		"sind.managed":                            "true",
 		"sind.slurm.version":                      "25.11.0",
+		"sind.data.hostpath":                      "",
 		"com.docker.compose.project":              "sind-dev",
 		"com.docker.compose.service":              "controller",
 		"com.docker.compose.container-number":     "1",
@@ -42,6 +44,7 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 		"sind.role":                               "worker",
 		"sind.managed":                            "false",
 		"sind.slurm.version":                      "",
+		"sind.data.hostpath":                      "",
 		"com.docker.compose.project":              "sind-dev",
 		"com.docker.compose.service":              "worker",
 		"com.docker.compose.container-number":     "3",
@@ -60,8 +63,9 @@ func TestNodeLabels_WithDataHostPath(t *testing.T) {
 func TestNodeLabels_NoDataHostPath(t *testing.T) {
 	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
 
-	_, ok := labels[LabelDataHostPath]
-	assert.False(t, ok, "data host path label absent when empty")
+	hostPath, ok := labels[LabelDataHostPath]
+	assert.True(t, ok, "set empty in volume mode, so that an image label cannot show through")
+	assert.Empty(t, hostPath)
 }
 
 func TestIsManaged(t *testing.T) {
@@ -274,13 +278,40 @@ func TestBuildRunArgs_DataMountPathLabel(t *testing.T) {
 	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/shared")
 }
 
-func TestBuildRunArgs_NoDataMountPathLabelForDefault(t *testing.T) {
+func TestBuildRunArgs_DataMountPathLabelForDefault(t *testing.T) {
 	for _, mountPath := range []string{"", DefaultDataMountPath} {
 		cfg := defaultRunConfig()
 		cfg.DataMountPath = mountPath
 
-		for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
-			assert.NotContains(t, l, LabelDataMountPath)
+		assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/data")
+	}
+}
+
+// TestBuildRunArgs_ReadBackLabelsAlwaysSet checks that a node of a cluster
+// that records nothing in them (volume mode, no CVMFS, no users, identity
+// local) still gets every label sind reads back: Docker merges the image's
+// labels into the container's, so a label left out could come from the
+// image, e.g. sind.data.hostpath=/ for sind create worker to bind-mount.
+func TestBuildRunArgs_ReadBackLabelsAlwaysSet(t *testing.T) {
+	cfg := defaultRunConfig()
+	labels := map[string]string{}
+	for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
+		k, v, _ := strings.Cut(l, "=")
+		labels[k] = v
+	}
+
+	for key, want := range map[string]string{
+		LabelSlurmVersion:  "25.11.0",
+		LabelDataHostPath:  "",
+		LabelDataMountPath: DefaultDataMountPath,
+		LabelCVMFS:         "",
+		LabelUsers:         "",
+		LabelGroups:        "",
+		LabelIdentity:      string(config.IdentityLocal),
+	} {
+		got, ok := labels[key]
+		if assert.True(t, ok, "label %s set", key) {
+			assert.Equal(t, want, got, key)
 		}
 	}
 }
@@ -309,9 +340,7 @@ func TestBuildRunArgs_NoCVMFS(t *testing.T) {
 	args := BuildRunArgs(defaultRunConfig())
 
 	assert.Empty(t, testutil.ArgValues(args, "--mount"))
-	for _, l := range testutil.ArgValues(args, "--label") {
-		assert.NotContains(t, l, LabelCVMFS)
-	}
+	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"=")
 }
 
 func TestDataMountPath(t *testing.T) {

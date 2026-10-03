@@ -101,13 +101,11 @@ func TestBuildRunArgs_NSSSlurm(t *testing.T) {
 }
 
 func TestBuildRunArgs_LocalIdentity(t *testing.T) {
-	// local, like no mode at all, adds no label.
+	// local, like no mode at all, is recorded as local.
 	for _, mode := range []config.IdentityMode{"", config.IdentityLocal} {
 		cfg := defaultRunConfig()
 		cfg.Identity = mode
-		for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
-			assert.NotContains(t, l, LabelIdentity)
-		}
+		assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), "sind.identity=local")
 	}
 }
 

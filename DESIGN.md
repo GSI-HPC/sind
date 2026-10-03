@@ -1126,8 +1126,8 @@ The `--data` flag controls the mount source:
 
 When a YAML config specifies `storage.dataStorage`, the config takes precedence over `--data`.
 
-The resolved host path is stored on each container as the `sind.data.hostpath` label, and a
-`storage.dataStorage.mountPath` other than `/data` as the `sind.data.mountpath` label, so that
+The resolved host path is stored on each container as the `sind.data.hostpath` label (empty with
+the data volume), and the mount point as the `sind.data.mountpath` label, so that
 dynamically added workers (`sind create worker`) inherit the same mount, and `sind get cluster`,
 `enter` and `exec` use the same mount point. A relative `hostPath` from the config is resolved
 against the directory `sind create cluster` runs in.
@@ -1181,13 +1181,19 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and db nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
-| `sind.slurm.version` | `25.11.8` | Slurm version |
-| `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
-| `sind.data.mountpath` | `/shared` | Data mount point, when not `/data` |
-| `sind.cvmfs` | `hostPath` | How the node mounts CVMFS: `volume` (plugin) or `hostPath` (host `/cvmfs`); only with `storage.cvmfs` |
-| `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, space-separated `name:uid:gid` entries (gid of the primary group); only with `users` |
-| `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, space-separated `name:gid` entries with `:member+member...` for supplementary members; only with `users` or `groups` |
-| `sind.identity` | `clientIds` | The identity mode, `nssSlurm` or `clientIds`; not set for `local` |
+| `sind.slurm.version` | `25.11.8` | Slurm version; empty for an unmanaged cluster |
+| `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path; empty with the data volume |
+| `sind.data.mountpath` | `/shared` | Data mount point, `/data` by default |
+| `sind.cvmfs` | `hostPath` | How the node mounts CVMFS: `volume` (plugin) or `hostPath` (host `/cvmfs`); empty without `storage.cvmfs` |
+| `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, space-separated `name:uid:gid` entries (gid of the primary group); empty without `users` |
+| `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, space-separated `name:gid` entries with `:member+member...` for supplementary members; empty without `users` and `groups` |
+| `sind.identity` | `clientIds` | The identity mode: `local`, `nssSlurm` or `clientIds` |
+
+Every node container gets each of these labels, with an empty value where there is nothing to
+record. Docker merges the image's labels into the container's, so a label sind left out could come
+from the image: an image labelled `sind.data.hostpath=/` would otherwise make `sind create worker`
+bind-mount the host's root directory on a cluster that uses the data volume. Nodes created by
+earlier sind versions lack some of the labels; sind reads a missing label like an empty one.
 
 Every node container, the mesh's DNS and SSH containers, and every network and volume also carry Docker Compose labels (`com.docker.compose.*`), so Compose-aware tools group them. The project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh). A container's service is its role (`dns` or `ssh` in the mesh) and its container number is 1, N+1 for `worker-N` and 2 for `controller-backup`; networks and volumes name themselves `net`, `mesh`, the volume type (`config`, `munge`, `data`, `state`, `home`) or `ssh-config`.
 

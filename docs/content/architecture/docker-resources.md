@@ -96,13 +96,15 @@ sind applies labels to containers for filtering and metadata:
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
 | `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and db nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
-| `sind.slurm.version` | `25.11.8` | Slurm version |
-| `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path |
-| `sind.data.mountpath` | `/shared` | Data mount point, when `storage.dataStorage.mountPath` is not `/data` |
-| `sind.cvmfs` | `hostPath` | How the node mounts CVMFS, with `storage.cvmfs`: `volume` (plugin) or `hostPath` (host `/cvmfs`) |
-| `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, as space-separated `name:uid:gid` entries, with `users` |
-| `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, as space-separated `name:gid` entries with `:member+member...` for supplementary members, with `users` or `groups` |
-| `sind.identity` | `clientIds` | The identity mode, when not `local`: `nssSlurm` or `clientIds` |
+| `sind.slurm.version` | `25.11.8` | Slurm version, empty for an unmanaged cluster |
+| `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path, empty with the data volume |
+| `sind.data.mountpath` | `/shared` | Data mount point (`storage.dataStorage.mountPath`, `/data` by default) |
+| `sind.cvmfs` | `hostPath` | How the node mounts CVMFS, with `storage.cvmfs`: `volume` (plugin) or `hostPath` (host `/cvmfs`); empty without it |
+| `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, as space-separated `name:uid:gid` entries; empty without `users` |
+| `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, as space-separated `name:gid` entries with `:member+member...` for supplementary members; empty without `users` and `groups` |
+| `sind.identity` | `clientIds` | The identity mode: `local`, `nssSlurm` or `clientIds` |
+
+Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image.
 
 A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network and the SSH volume carry `sind.realm` only. `sind get networks`, `sind get volumes` and `sind delete cluster --all` find resources by these labels.
 
