@@ -419,7 +419,16 @@ func TestSSHAccess(t *testing.T) {
 	sshConfigPath := filepath.Join(sshConfigDir, "ssh_config")
 
 	if _, statErr := os.Stat(sshConfigPath); statErr == nil {
-		// ssh_config was exported — test direct SSH access.
+		// ssh_config was exported, with a ProxyCommand for each node that
+		// has the node's name in it rather than ssh's %h.
+		data, readErr := os.ReadFile(sshConfigPath)
+		require.NoError(t, readErr)
+		for _, node := range []string{"controller", "submitter", "worker-0"} {
+			assert.Contains(t, string(data), "\nHost "+node+"."+cluster+"."+realm+".sind\n")
+		}
+		assert.NotContains(t, string(data), "%h")
+
+		// Test direct SSH access.
 		sshCmd := exec.CommandContext(ctx, "ssh",
 			"-F", sshConfigPath,
 			"-o", "BatchMode=yes",

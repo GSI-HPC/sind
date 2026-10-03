@@ -178,31 +178,82 @@ func TestCollectHostKey_ExecError(t *testing.T) {
 // --- GenerateSSHConfig ---
 
 func TestGenerateSSHConfig_DefaultRealm(t *testing.T) {
-	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind", "sind")
+	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind", "sind",
+		[]string{"controller.default.sind.sind", "worker-0.dev.sind.sind"})
 
-	assert.Contains(t, config, "Host *.sind.sind")
-	assert.Contains(t, config, `ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/%h/22; cat <&3 & cat >&3; kill $!'`)
-	assert.Contains(t, config, "IdentityFile /home/user/.sind/id_ed25519")
-	assert.Contains(t, config, "UserKnownHostsFile /home/user/.sind/known_hosts")
-	assert.Contains(t, config, "User root")
-	assert.Contains(t, config, "StrictHostKeyChecking yes")
-	assert.Contains(t, config, "CanonicalizeHostname yes")
-	assert.Contains(t, config, "CanonicalDomains default.sind.sind sind.sind")
-	assert.Contains(t, config, "CanonicalizeMaxDots 2")
+	assert.Equal(t, `Host controller controller.* controller-backup controller-backup.* db db.* submitter submitter.* worker-*
+    CanonicalizeHostname yes
+    CanonicalDomains default.sind.sind sind.sind
 
-	// Canonicalize directives must appear before the Host block so OpenSSH
-	// processes them before matching host patterns.
-	canonIdx := strings.Index(config, "CanonicalizeHostname")
-	hostIdx := strings.Index(config, "Host ")
-	assert.Less(t, canonIdx, hostIdx, "Canonicalize directives must precede Host block")
+Host *.sind.sind
+    IdentityFile /home/user/.sind/id_ed25519
+    UserKnownHostsFile /home/user/.sind/known_hosts
+    User root
+    StrictHostKeyChecking yes
+
+Host controller.default.sind.sind
+    ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/controller.default.sind.sind/22; cat <&3 & cat >&3; kill $!'
+
+Host worker-0.dev.sind.sind
+    ProxyCommand docker exec -i sind-ssh bash -c 'exec 3<>/dev/tcp/worker-0.dev.sind.sind/22; cat <&3 & cat >&3; kill $!'
+`, config)
 }
 
 func TestGenerateSSHConfig_NamedRealm(t *testing.T) {
-	config := GenerateSSHConfig(docker.ContainerName("ci42-ssh"), "/home/user/.sind", "ci42")
+	config := GenerateSSHConfig(docker.ContainerName("ci42-ssh"), "/home/user/.sind", "ci42",
+		[]string{"controller.dev.ci42.sind"})
 
-	assert.Contains(t, config, "Host *.ci42.sind")
-	assert.NotContains(t, config, "CanonicalizeHostname")
-	assert.NotContains(t, config, "CanonicalDomains")
+	assert.Equal(t, `Host *.ci42.sind
+    IdentityFile /home/user/.sind/id_ed25519
+    UserKnownHostsFile /home/user/.sind/known_hosts
+    User root
+    StrictHostKeyChecking yes
+
+Host controller.dev.ci42.sind
+    ProxyCommand docker exec -i ci42-ssh bash -c 'exec 3<>/dev/tcp/controller.dev.ci42.sind/22; cat <&3 & cat >&3; kill $!'
+`, config)
+}
+
+func TestGenerateSSHConfig_NoNodes(t *testing.T) {
+	config := GenerateSSHConfig(docker.ContainerName("ci42-ssh"), "/home/user/.sind", "ci42", nil)
+
+	assert.Contains(t, config, "Host *.ci42.sind\n")
+	assert.NotContains(t, config, "ProxyCommand")
+}
+
+// TestGenerateSSHConfig_OnlyNodeNames checks that only node DNS names of
+// the realm get a ProxyCommand, once each, and that ssh's %h appears in
+// none: ssh puts it into the command unquoted, so a host name such as one
+// from a git submodule URL ran as a command in the user's shell and in the
+// relay's bash (CVE-2023-51385).
+func TestGenerateSSHConfig_OnlyNodeNames(t *testing.T) {
+	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind", "sind", []string{
+		"worker-0.dev.sind.sind",
+		"worker-0.dev.sind.sind",
+		"x'$(touch p)'.sind.sind",
+		"x$(touch\tp).dev.sind.sind",
+		"a.b.dev.sind.sind",
+		"dev.sind.sind",
+		"controller.dev.ci.sind",
+		"Controller.dev.sind.sind",
+		"-o.dev.sind.sind",
+		"controller..sind.sind",
+		"[controller.dev.sind.sind]:22",
+		"|1|aGFzaA==|aGFzaA==",
+		"",
+	})
+
+	assert.Equal(t, 1, strings.Count(config, "ProxyCommand"), config)
+	assert.Contains(t, config, "\nHost worker-0.dev.sind.sind\n")
+	assert.NotContains(t, config, "%h")
+	assert.NotContains(t, config, "touch")
+}
+
+func TestKnownHostNames(t *testing.T) {
+	names := knownHostNames("# comment\n\ncontroller.dev.sind.sind ssh-ed25519 AAAA\n" +
+		"worker-0.dev.sind.sind,10.0.0.3 ssh-ed25519 BBBB\n  \n")
+
+	assert.Equal(t, []string{"#", "controller.dev.sind.sind", "worker-0.dev.sind.sind", "10.0.0.3"}, names)
 }
 
 // --- ExportConfig ---
@@ -219,7 +270,7 @@ func exportDockerMock() (*mock.Executor, *docker.Client) {
 func TestExportConfig(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("PRIVATE-KEY-DATA", "", nil)
-	m.AddResult("host1 ssh-ed25519 AAAA...\n", "", nil)
+	m.AddResult("controller.dev.sind.sind ssh-ed25519 AAAA...\n", "", nil)
 	c := docker.NewClient(&m)
 
 	fs := afero.NewMemMapFs()
@@ -227,11 +278,13 @@ func TestExportConfig(t *testing.T) {
 	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
 	require.NoError(t, err)
 
-	// Verify ssh_config was written with correct paths.
+	// Verify ssh_config was written with correct paths, and with a
+	// ProxyCommand for the node in known_hosts.
 	sshConfig, err := afero.ReadFile(fs, testExportDir+"/ssh_config")
 	require.NoError(t, err)
 	assert.Contains(t, string(sshConfig), "IdentityFile "+testExportDir+"/id_ed25519")
 	assert.Contains(t, string(sshConfig), "UserKnownHostsFile "+testExportDir+"/known_hosts")
+	assert.Contains(t, string(sshConfig), "\nHost controller.dev.sind.sind\n    ProxyCommand docker exec -i sind-ssh ")
 
 	// Verify private key was written.
 	privKey, err := afero.ReadFile(fs, testExportDir+"/id_ed25519")
@@ -241,7 +294,7 @@ func TestExportConfig(t *testing.T) {
 	// Verify known_hosts was written.
 	knownHosts, err := afero.ReadFile(fs, testExportDir+"/known_hosts")
 	require.NoError(t, err)
-	assert.Equal(t, "host1 ssh-ed25519 AAAA...\n", string(knownHosts))
+	assert.Equal(t, "controller.dev.sind.sind ssh-ed25519 AAAA...\n", string(knownHosts))
 
 	// Verify docker calls read from SSH container.
 	require.Len(t, m.Calls, 2)

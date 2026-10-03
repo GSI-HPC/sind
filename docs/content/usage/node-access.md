@@ -140,7 +140,7 @@ sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/
 
 | File | Description |
 |------|-------------|
-| `ssh_config` | SSH config snippet |
+| `ssh_config` | SSH config snippet, with a `Host` block for each node of the realm |
 | `id_ed25519` | Private key |
 | `known_hosts` | Host keys |
 | `lock` | Advisory lock that serializes creating and deleting clusters and workers in the realm |
@@ -165,7 +165,7 @@ Or include all realms at once using a wildcard:
 Include ~/.local/state/sind/*/ssh_config
 ```
 
-For the default realm `sind`, the generated SSH config includes `CanonicalizeHostname` directives that expand short names automatically. Other realms get no such directives; use full names such as `controller.dev.ci.sind` there.
+For the default realm `sind`, the generated SSH config also expands the short names of nodes, `<node>` in the `default` cluster and `<node>.<cluster>`, with hostname canonicalization. Other realms get no such directives; use full names such as `controller.dev.ci.sind` there.
 
 ```bash
 ssh controller                        # → controller.default.sind.sind
@@ -175,6 +175,13 @@ scp file.txt worker-0.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller   # port forwarding to your machine
 ```
 
-{{< hint info >}}
-Short-name canonicalization (`ssh controller`, `ssh controller.dev`) requires the `Include` line to appear **before** any `Host` or `Match` blocks in your `~/.ssh/config`. OpenSSH processes `CanonicalizeHostname` directives in order — if a `Host *` block appears first, canonicalization is skipped.
+The `Include` relies on these OpenSSH behaviours:
+
+- An `Include` after a `Host` or `Match` line belongs to that block and applies only to the hosts it matches, hence its place at the top.
+- ssh uses the first value it gets for each option, so the settings for the nodes take precedence over later ones, such as those of a `Host *` block.
+- Short names use hostname canonicalization (`CanonicalizeHostname`), only for names shaped like a node's: `controller`, `controller-backup`, `db`, `submitter` and `worker-*`, alone or followed by `.<cluster>`. For them, ssh looks up `<name>.default.sind.sind` and then `<name>.sind.sind` in the host's DNS, which needs [host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}}), and reads the config again for the name it found. Other host names are not looked up. Without host DNS resolution, use full names.
+- ssh puts a host name into a `ProxyCommand` as it was given, and runs the command in a shell. The relay's `ProxyCommand` is therefore set only in the `Host` block of each node, with the node's name written into it, so a host name with shell syntax in it, such as one from a git submodule URL, never reaches a shell (the pattern of CVE-2023-51385; OpenSSH 9.6 and later also refuse such names on the command line). sind rewrites the file whenever it creates or deletes a cluster or a worker in the realm.
+
+{{< hint warning >}}
+While a node of that name exists, `ssh controller`, `ssh db` or `ssh db.lab` (with a cluster named `lab`) connect to the sind node, as root, even when your network has a host of that name. Reach such a host by its full name, or include the default realm's `ssh_config` only while you need it.
 {{< /hint >}}

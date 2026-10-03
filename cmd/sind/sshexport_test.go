@@ -75,7 +75,7 @@ func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
 	// ExportConfig: ReadFile private key
 	mock.AddResult("PRIVATE-KEY", "", nil)
 	// ExportConfig: ReadFile known_hosts
-	mock.AddResult("host1 ssh-ed25519 AAAA\n", "", nil)
+	mock.AddResult("controller.default.sind.sind ssh-ed25519 AAAA\n", "", nil)
 
 	client := docker.NewClient(mock)
 	meshMgr := mesh.NewManager(client, "sind")
@@ -92,12 +92,12 @@ func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
 
 	data, err = afero.ReadFile(fs, filepath.Join(dir, "known_hosts"))
 	require.NoError(t, err)
-	assert.Equal(t, "host1 ssh-ed25519 AAAA\n", string(data))
+	assert.Equal(t, "controller.default.sind.sind ssh-ed25519 AAAA\n", string(data))
 
 	data, err = afero.ReadFile(fs, filepath.Join(dir, "ssh_config"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "Host *.sind.sind")
-	assert.Contains(t, string(data), "ProxyCommand docker exec -i sind-ssh")
+	assert.Contains(t, string(data), "Host controller.default.sind.sind\n    ProxyCommand docker exec -i sind-ssh ")
 }
 
 func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
