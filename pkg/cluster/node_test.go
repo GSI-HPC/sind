@@ -398,7 +398,7 @@ func TestBuildRunArgs_Resources(t *testing.T) {
 }
 
 func TestBuildRunArgs_ShmSize(t *testing.T) {
-	for memory, want := range map[string]string{"512m": "256m", "1g": "512m", "3m": "1m"} {
+	for memory, want := range map[string]string{"512m": "256m", "1g": "512m", "7m": "3m"} {
 		cfg := defaultRunConfig()
 		cfg.Memory = memory
 		shm, ok := testutil.ArgValue(BuildRunArgs(cfg), "--shm-size")

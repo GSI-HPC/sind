@@ -368,9 +368,6 @@ func (c *Cluster) Validate() error {
 		if n.Count < 0 {
 			return fmt.Errorf("count must not be negative, got %d", n.Count)
 		}
-		if n.CPUs < 0 {
-			return fmt.Errorf("cpus must not be negative, got %d", n.CPUs)
-		}
 		if n.Count > 0 && n.Role != RoleWorker {
 			return fmt.Errorf("count is only valid for worker nodes, not %q", n.Role)
 		}
@@ -393,6 +390,10 @@ func (c *Cluster) Validate() error {
 	}
 	if workers < 1 {
 		return fmt.Errorf("at least one worker node required, got %d", workers)
+	}
+
+	if err := c.validateResources(); err != nil {
+		return err
 	}
 
 	if err := c.Storage.DataStorage.validate(); err != nil {

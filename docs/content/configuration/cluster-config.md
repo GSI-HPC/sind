@@ -114,8 +114,8 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 | Field | Default | Description |
 |-------|---------|-------------|
 | `image` | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `cpus` | `1` | CPU limit per container |
-| `memory` | `"512m"` | Memory limit per container, without swap; `/dev/shm` gets half of it |
+| `cpus` | `1` | CPU limit per container; a managed worker's Slurm `CPUs` |
+| `memory` | `"512m"` | Memory limit per container, without swap, in Docker's size syntax (see below); a managed worker's Slurm `RealMemory`; `/dev/shm` gets half of it |
 | `tmpSize` | `"256m"` | tmpfs size for `/tmp`; files there count against `memory` |
 | `capAdd` | none | Extra Linux capabilities |
 | `capDrop` | none | Dropped Linux capabilities |
@@ -123,6 +123,8 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 | `securityOpt` | none | Extra security options |
 
 Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node values. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are merged with per-node values.
+
+`memory` takes Docker's size syntax: a number, optionally with a fraction, and an optional unit `b`, `k`, `m`, `g`, `t` or `p`, in either case, which may be followed by `b` or `ib`. All units are powers of 1024 and a number without a unit counts bytes, so `512m`, `2g`, `2GB`, `2GiB`, `1.5g` and `1073741824` are valid. It must be at least `6m`, Docker's minimum. A managed worker's Slurm `RealMemory` is its `memory` in MiB, rounded down. `tmpSize` is passed to the kernel as the tmpfs size: a whole number with an optional unit `k`, `m`, `g`, `t`, `p` or `e`, or a percentage of the memory, such as `50%`. `cpus` must not be negative; `0` means the default.
 
 `memory` covers everything in a node: the jobs, the node's own services (systemd, munge, sshd, the Slurm daemon; also mariadb and slurmdbd on a db node) and files in `/tmp`, `/run` and `/dev/shm`. Slurm is told the whole limit (`RealMemory`), so raise `memory` for jobs that need much memory or `/tmp`.
 
@@ -323,7 +325,7 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - The `slurmdbd` section requires a managed `db` node
 - With `backupController`, `slurm.main` must not set `SlurmctldHost` (or its deprecated forms `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `count` must not be negative; `0` means the default, 1
-- `cpus` must not be negative; `0` means the default
+- `cpus` must not be negative; `memory` and `tmpSize` must be valid sizes (see [Defaults section](#defaults-section)), in `defaults` too
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
 - `securityOpt` entries must name an option Docker knows, with a value: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges` (value optional), `writable-cgroups=` or `systempaths=`

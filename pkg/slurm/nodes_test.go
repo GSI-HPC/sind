@@ -9,6 +9,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateNodesConf_Minimal(t *testing.T) {
@@ -17,7 +18,7 @@ func TestGenerateNodesConf_Minimal(t *testing.T) {
 		{Role: "worker", CPUs: 2, Memory: "2g"},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.Contains(t, conf, "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
 	assert.Contains(t, conf, "PartitionName=all Nodes=worker-0 Default=YES MaxTime=INFINITE State=UP")
@@ -29,7 +30,7 @@ func TestGenerateNodesConf_MultiCompute(t *testing.T) {
 		{Role: "worker", Count: 3, CPUs: 4, Memory: "8g"},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.Contains(t, conf, "NodeName=worker-0 CPUs=4 RealMemory=8192 State=UNKNOWN")
 	assert.Contains(t, conf, "NodeName=worker-1 CPUs=4 RealMemory=8192 State=UNKNOWN")
@@ -44,7 +45,7 @@ func TestGenerateNodesConf_MultipleGroups(t *testing.T) {
 		{Role: "worker", Count: 2, CPUs: 4, Memory: "8g"},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.Contains(t, conf, "NodeName=worker-0 CPUs=2 RealMemory=2048 State=UNKNOWN")
 	assert.Contains(t, conf, "NodeName=worker-1 CPUs=2 RealMemory=2048 State=UNKNOWN")
@@ -60,7 +61,7 @@ func TestGenerateNodesConf_SkipsUnmanaged(t *testing.T) {
 		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: testutil.Ptr(false)},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.Contains(t, conf, "NodeName=worker-0")
 	assert.Contains(t, conf, "NodeName=worker-1")
@@ -76,7 +77,7 @@ func TestGenerateNodesConf_SkipsNonCompute(t *testing.T) {
 		{Role: "worker", CPUs: 2, Memory: "2g"},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.NotContains(t, conf, "controller")
 	assert.NotContains(t, conf, "submitter")
@@ -89,7 +90,7 @@ func TestGenerateNodesConf_AllUnmanaged(t *testing.T) {
 		{Role: "worker", Count: 2, CPUs: 2, Memory: "2g", Managed: testutil.Ptr(false)},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.NotContains(t, conf, "NodeName=")
 	assert.NotContains(t, conf, "PartitionName=")
@@ -101,14 +102,14 @@ func TestGenerateNodesConf_ExplicitManaged(t *testing.T) {
 		{Role: "worker", CPUs: 2, Memory: "2g", Managed: testutil.Ptr(true)},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.Contains(t, conf, "NodeName=worker-0")
 	assert.Contains(t, conf, "PartitionName=all Nodes=worker-0")
 }
 
 func TestGenerateNodesConf_EmptyInput(t *testing.T) {
-	conf := GenerateNodesConf(nil)
+	conf := generateNodesConf(t, nil)
 
 	assert.NotContains(t, conf, "NodeName=")
 	assert.NotContains(t, conf, "PartitionName=")
@@ -120,7 +121,7 @@ func TestGenerateNodesConf_MemoryMB(t *testing.T) {
 		{Role: "worker", CPUs: 2, Memory: "512m"},
 	}
 
-	conf := GenerateNodesConf(nodes)
+	conf := generateNodesConf(t, nodes)
 
 	assert.Contains(t, conf, "RealMemory=512")
 }
@@ -291,55 +292,48 @@ func TestRemoveNodesFromConf_PreservesOthers(t *testing.T) {
 	assert.Contains(t, result, "Nodes=worker-0,worker-2")
 }
 
-// --- ParseMemoryMB (exported) ---
-
-func TestParseMemoryMB_Exported(t *testing.T) {
-	got, err := ParseMemoryMB("2g")
-	assert.NoError(t, err)
-	assert.Equal(t, 2048, got)
+// generateNodesConf generates sind-nodes.conf for the managed workers of
+// nodes.
+func generateNodesConf(t *testing.T, nodes []config.Node) string {
+	t.Helper()
+	workers, err := ManagedWorkers(nodes)
+	require.NoError(t, err)
+	return GenerateNodesConf(workers)
 }
 
-// --- parseMemoryMB ---
+// --- ManagedWorkers ---
+
+func TestManagedWorkers(t *testing.T) {
+	workers, err := ManagedWorkers([]config.Node{
+		{Role: "controller", CPUs: 1, Memory: "bogus"},
+		{Role: "worker", Count: 2, CPUs: 2, Memory: "1.5g"},
+		{Role: "worker", CPUs: 1, Memory: "bogus", Managed: testutil.Ptr(false)},
+		{Role: "worker", CPUs: 4, Memory: "2GiB"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []NodeEntry{
+		{Name: "worker-0", CPUs: 2, MemoryMB: 1536},
+		{Name: "worker-1", CPUs: 2, MemoryMB: 1536},
+		{Name: "worker-3", CPUs: 4, MemoryMB: 2048},
+	}, workers)
+}
+
+func TestManagedWorkers_InvalidMemory(t *testing.T) {
+	// A memory limit sind cannot convert is an error, never RealMemory=0.
+	_, err := ManagedWorkers([]config.Node{
+		{Role: "worker", Count: 2, CPUs: 1, Memory: "512m"},
+		{Role: "worker", CPUs: 1, Memory: "2x"},
+	})
+	require.ErrorContains(t, err, `worker-2: invalid memory "2x"`)
+}
+
+// --- ParseMemoryMB ---
 
 func TestParseMemoryMB(t *testing.T) {
-	tests := []struct {
-		input string
-		want  int
-	}{
-		{"2g", 2048},
-		{"4g", 4096},
-		{"512m", 512},
-		{"1024m", 1024},
-		{"2G", 2048},
-		{"512M", 512},
-	}
+	got, err := ParseMemoryMB("2gb")
+	require.NoError(t, err)
+	assert.Equal(t, 2048, got)
 
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got, err := parseMemoryMB(tt.input)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestParseMemoryMB_Zero(t *testing.T) {
-	got, err := parseMemoryMB("0g")
-	assert.NoError(t, err)
-	assert.Equal(t, 0, got)
-
-	got, err = parseMemoryMB("0m")
-	assert.NoError(t, err)
-	assert.Equal(t, 0, got)
-}
-
-func TestParseMemoryMB_Invalid(t *testing.T) {
-	tests := []string{"", "abc", "2x", "g", "xm"}
-
-	for _, input := range tests {
-		t.Run(input, func(t *testing.T) {
-			_, err := parseMemoryMB(input)
-			assert.Error(t, err)
-		})
-	}
+	_, err = ParseMemoryMB("2x")
+	assert.Error(t, err)
 }

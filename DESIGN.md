@@ -485,7 +485,7 @@ New workers take the shape of the cluster's newest worker, the one with the high
 
 Without `--image`, the workers run the newest worker's (or controller's) image by its ID, not by the tag it was created from, which may have moved to another image since; `--pull` therefore needs `--image`. With `--image`, sind runs `slurmctld -V` in the image (pulling it first with `--pull`) and refuses one whose Slurm version is not the cluster's (`sind.slurm.version`), as slurmd must not be newer than slurmctld; unmanaged workers and clusters without a recorded version skip this check.
 
-`--count` must be at least 1 and `--cpus` must not be negative. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device` and `--security-opt`, which are checked like the config's `capAdd`, `capDrop`, `devices` and `securityOpt`, are usage errors that sind reports before it takes the realm lock or creates any container.
+`--count` must be at least 1 and `--cpus` must not be negative. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device`, `--security-opt`, `--memory` and `--tmp-size`, which are checked like the config's `capAdd`, `capDrop`, `devices`, `securityOpt`, `memory` and `tmpSize`, are usage errors that sind reports before it takes the realm lock or creates any container.
 
 With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: mutations stay silent by default.
 
@@ -838,9 +838,9 @@ Validation rules:
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
 | `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp; files there count against `memory` |
-| `cpus` | global + per-node | `1` | CPU limit |
-| `memory` | global + per-node | `512m` | Memory limit, without swap; `/dev/shm` gets half of it |
+| `tmpSize` | global + per-node | `256m` | tmpfs size for /tmp, in the kernel's tmpfs syntax: a whole number with an optional `k`, `m`, `g`, `t`, `p` or `e`, or a percentage of the memory; files there count against `memory` |
+| `cpus` | global + per-node | `1` | CPU limit; a managed worker's Slurm `CPUs` |
+| `memory` | global + per-node | `512m` | Memory limit, without swap, in Docker's size syntax (`512m`, `2g`, `2gb`, `1.5GiB`, plain bytes); a managed worker's Slurm `RealMemory`, in MiB; `/dev/shm` gets half of it |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
 | `capDrop` | global + per-node | none | Dropped Linux capabilities |
 | `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
@@ -861,7 +861,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
 - `count` - only valid for worker role; must not be negative, and `0` means the default, 1
-- `cpus` - must not be negative; `0` means the default
+- `cpus` - must not be negative, and `0` means the default; `memory` - Docker's size syntax: a number, optionally with a fraction, and an optional unit `b`, `k`, `m`, `g`, `t` or `p` (powers of 1024, either case, the last five optionally followed by `b` or `ib`), at least `6m`, Docker's minimum; `tmpSize` - a whole number with an optional unit `k`, `m`, `g`, `t`, `p` or `e`, or a percentage. These apply to `defaults` too
 - `managed` - only valid for controller, db and worker roles; with `managed: false` on the controller, no worker or db node may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `slurm.slurmdbd` - requires a managed `db` node

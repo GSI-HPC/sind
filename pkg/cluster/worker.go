@@ -42,12 +42,19 @@ type WorkerAddOptions struct {
 }
 
 // Check reports the first option WorkerAdd cannot act on: a negative CPU
-// count, Pull without Image, an unknown capability or a device path that is
-// not absolute. It calls docker for none of them, so that the CLI can
+// count, a memory or /tmp size sind cannot read, Pull without Image, an
+// unknown capability, a device path that is not absolute or an unknown
+// security option. It calls docker for none of them, so that the CLI can
 // reject them as usage errors before it takes the realm lock.
 func (o WorkerAddOptions) Check() error {
-	if o.CPUs < 0 {
-		return fmt.Errorf("--cpus must not be negative, got %d", o.CPUs)
+	if err := config.CheckCPUs("--cpus", o.CPUs); err != nil {
+		return err
+	}
+	if err := config.CheckMemory("--memory", o.Memory); err != nil {
+		return err
+	}
+	if err := config.CheckTmpSize("--tmp-size", o.TmpSize); err != nil {
+		return err
 	}
 	if o.Pull && o.Image == "" {
 		return errors.New("--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID")

@@ -352,7 +352,7 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 	cfg := &config.Cluster{
 		Name:     "dev",
 		Identity: config.Identity{Mode: config.IdentityClientIDs},
-		Nodes:    []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker}},
+		Nodes:    []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker, CPUs: 1, Memory: "512m"}},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
 
@@ -373,7 +373,7 @@ func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
 	cfg := &config.Cluster{
 		Name:     "dev",
 		Identity: config.Identity{Mode: config.IdentityClientIDs},
-		Nodes:    []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker}},
+		Nodes:    []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker, CPUs: 1, Memory: "512m"}},
 	}
 	for _, tt := range []struct {
 		name    string

@@ -58,6 +58,11 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 // to give them to SlurmUser with docker exec, and the fragments' directory
 // too, with mode 0700.
 func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, image string, pull bool) error {
+	workers, err := slurm.ManagedWorkers(cfg.Nodes)
+	if err != nil {
+		return fmt.Errorf("generating %s: %w", slurm.NodesConfFile, err)
+	}
+
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
 	volName := VolumeName(realm, cfg.Name, VolumeConfig)
 	hasDB := cfg.HasManagedDB()
@@ -110,7 +115,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	}
 	files := docker.FileContents{
 		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, confOpts)),
-		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(cfg.Nodes)),
+		slurm.NodesConfFile: []byte(slurm.GenerateNodesConf(workers)),
 		"cgroup.conf":       []byte(slurm.GenerateCgroupConf(cfg.Slurm.Cgroup)),
 		"plugstack.conf":    []byte(slurm.GeneratePlugstackConf(cfg.Slurm.Plugstack)),
 	}

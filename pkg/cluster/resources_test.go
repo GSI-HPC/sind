@@ -271,7 +271,7 @@ func TestWriteClusterConfig_PlugstackAlwaysScaffolded(t *testing.T) {
 
 	cfg := &config.Cluster{
 		Name:  "dev",
-		Nodes: []config.Node{{Role: "controller"}, {Role: "worker"}},
+		Nodes: []config.Node{{Role: "controller"}, {Role: "worker", CPUs: 1, Memory: "512m"}},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
 
@@ -293,7 +293,7 @@ func TestWriteClusterConfig_GresSection(t *testing.T) {
 		Slurm: config.Slurm{
 			Gres: config.Section{Content: "Name=gpu Type=tesla\n"},
 		},
-		Nodes: []config.Node{{Role: "controller"}, {Role: "worker"}},
+		Nodes: []config.Node{{Role: "controller"}, {Role: "worker", CPUs: 1, Memory: "512m"}},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
 
@@ -330,6 +330,20 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating config helper")
+}
+
+func TestWriteClusterConfig_InvalidMemory(t *testing.T) {
+	// A memory limit sind cannot convert fails before the helper exists,
+	// instead of becoming RealMemory=0.
+	var m mock.Executor
+	c := docker.NewClient(&m)
+
+	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker, CPUs: 1, Memory: "2x"}}}
+	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `generating sind-nodes.conf: worker-0: invalid memory "2x"`)
+	assert.Empty(t, m.Calls)
 }
 
 func TestWriteClusterConfig_CopyError(t *testing.T) {
@@ -383,7 +397,7 @@ func TestWriteClusterConfig_WithDB(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: config.RoleController},
 			{Role: config.RoleDB},
-			{Role: config.RoleWorker},
+			{Role: config.RoleWorker, CPUs: 1, Memory: "512m"},
 		},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
@@ -427,7 +441,7 @@ func TestWriteClusterConfig_WithoutDB(t *testing.T) {
 
 	cfg := &config.Cluster{
 		Name:  "dev",
-		Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker}},
+		Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker, CPUs: 1, Memory: "512m"}},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
 
@@ -449,7 +463,7 @@ func TestWriteClusterConfig_UnmanagedDB(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: config.RoleController},
 			{Role: config.RoleDB, Managed: testutil.Ptr(false)},
-			{Role: config.RoleWorker},
+			{Role: config.RoleWorker, CPUs: 1, Memory: "512m"},
 		},
 	}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest", false)
@@ -466,7 +480,7 @@ func TestWriteClusterConfig_UnmanagedDB(t *testing.T) {
 func TestWriteClusterConfig_DBErrors(t *testing.T) {
 	cfg := &config.Cluster{
 		Name:  "dev",
-		Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker}},
+		Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleDB}, {Role: config.RoleWorker, CPUs: 1, Memory: "512m"}},
 	}
 	fragments := *cfg
 	fragments.Slurm.Slurmdbd = config.Section{Fragments: map[string]string{"archive": "ArchiveEvents=yes\n"}}

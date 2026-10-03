@@ -45,7 +45,7 @@ With `--image`, sind runs `slurmctld -V` in the image, after pulling it with `--
 
 ### Checks
 
-`--count` must be at least 1 and `--cpus` must not be negative. `--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, `--device` needs an absolute host path, as `devices` does, and `--security-opt` an option Docker knows, as `securityOpt` does. sind rejects these, and `--pull` without `--image`, with exit status 2 before it creates any container. With `-v`, it logs the extra privileges of the new nodes, as `sind create cluster` does.
+`--count` must be at least 1 and `--cpus` must not be negative. `--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, `--device` needs an absolute host path, as `devices` does, `--security-opt` an option Docker knows, as `securityOpt` does, and `--memory` and `--tmp-size` take the sizes `memory` and `tmpSize` take (see [Defaults section]({{< relref "/configuration/cluster-config#defaults-section" >}})). sind rejects these, and `--pull` without `--image`, with exit status 2 before it creates any container. With `-v`, it logs the extra privileges of the new nodes, as `sind create cluster` does.
 
 ### Examples
 

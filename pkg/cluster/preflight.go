@@ -58,7 +58,7 @@ func DaemonSupport(info *docker.DaemonInfo) error {
 
 // NodeShortNames returns the short hostname for each node defined in the config,
 // including the backup controller when enabled. Worker nodes are indexed sequentially across all worker groups, matching
-// the indexing used in slurm.GenerateNodesConf.
+// the indexing used in slurm.ManagedWorkers.
 func NodeShortNames(nodes []config.Node) []string {
 	var names []string
 	workerIdx := 0

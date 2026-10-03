@@ -20,9 +20,9 @@ toc: true
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
 | `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `cpus` | global + per-node | `1` | CPU limit |
-| `memory` | global + per-node | `"512m"` | Memory limit, without swap, for the jobs, the node's own services and its `/tmp`, `/run` and `/dev/shm` files; `/dev/shm` gets half of it |
-| `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp`; files there count against `memory` |
+| `cpus` | global + per-node | `1` | CPU limit; a managed worker's Slurm `CPUs` |
+| `memory` | global + per-node | `"512m"` | Memory limit, without swap, in Docker's size syntax (`2g`, `2gb`, `1.5GiB`, ...), for the jobs, the node's own services and its `/tmp`, `/run` and `/dev/shm` files; `/dev/shm` gets half of it; a managed worker's Slurm `RealMemory` |
+| `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp`, a whole number with an optional unit or a percentage; files there count against `memory` |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | controller + db + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see below). Controller: `false` makes the whole cluster unmanaged (see below) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` (see below) |
