@@ -1171,6 +1171,9 @@ func TestSetupNodes_InspectError(t *testing.T) {
 			if strings.Contains(joined, "is-active") {
 				return mock.Result{Stdout: "active\n"}
 			}
+			if strings.Contains(joined, "ssh-keyscan") {
+				return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey\n"}
+			}
 		}
 		return mock.Result{}
 	}

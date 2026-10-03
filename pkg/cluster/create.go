@@ -133,6 +133,12 @@ func logExtraPrivileges(ctx context.Context, configs []RunConfig) {
 // that Create and WorkerAdd use for a readinessInterval of zero or less.
 const DefaultReadinessInterval = probe.DefaultInterval
 
+// inspectResult is the result of a docker inspect run in a goroutine.
+type inspectResult struct {
+	info *docker.ContainerInfo
+	err  error
+}
+
 // nodeResult holds per-node data collected during concurrent setup.
 type nodeResult struct {
 	info    *docker.ContainerInfo
@@ -453,7 +459,7 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 // puts them, injects SSH public keys, and collects host keys — all
 // concurrently per node with no barrier between creation and probing.
 //
-//	per node:  create → monitor → wait(container, systemd, sshd, munge) → inspect → nss_slurm → users → SSH → hostkey
+//	per node:  create → monitor → wait(container, systemd, sshd, munge) → (inspect ║ nss_slurm → users → SSH → hostkey)
 //
 // With identity clientIds munge is masked, so there is no munge to wait for.
 // rd bounds each node's steps after its container has started.
@@ -494,10 +500,13 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
 			}
 
-			info, err := client.InspectContainer(nctx, containerName)
-			if err != nil {
-				return fmt.Errorf("inspecting node %s: %w", nc.ShortName, err)
-			}
+			// The node's IPs and ID do not depend on the steps below, so
+			// the inspect runs alongside them, off the critical path.
+			inspected := make(chan inspectResult, 1)
+			go func() {
+				info, err := client.InspectContainer(nctx, containerName)
+				inspected <- inspectResult{info: info, err: err}
+			}()
 
 			if nc.NSSSlurm {
 				if err := enableNSSSlurm(nctx, client, containerName, nc); err != nil {
@@ -516,7 +525,12 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 				return fmt.Errorf("setting up SSH on %s: %w", nc.ShortName, err)
 			}
 
-			results[i] = nodeResult{info: info, hostKey: hostKey}
+			ir := <-inspected
+			if ir.err != nil {
+				return fmt.Errorf("inspecting node %s: %w", nc.ShortName, ir.err)
+			}
+
+			results[i] = nodeResult{info: ir.info, hostKey: hostKey}
 			return nil
 		})
 	}
