@@ -1535,9 +1535,12 @@ The generic image:
 - Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
 - MariaDB's data directory is initialised at build time, so the first `systemctl enable --now mariadb` on a db node skips `mariadb-install-db`
 - Slurm is built with `--with-pmix` for native PMIx job launch support
+- Ships what the identity modes need (see Identity Modes): nss_slurm as `/usr/lib64/libnss_slurm.so.2`, built from Slurm's `contribs/nss_slurm`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x (`--with-jwt`), and the `serializer/json` plugin they load (`--with-json`); and `sackd`. The build fails without them
+- Ships no SSH host keys: each container generates its ed25519 key on first boot
+- Caps the systemd journal at 32 MB in `/run`, which counts against the node's memory limit, and 64 MB on disk
 - sind enables the appropriate services based on node role
 
-The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX and PMIx build in parallel, PRRTE and Slurm depend on PMIx, and OpenMPI depends on all three. UCX, PMIx, PRRTE, OpenMPI and libjwt are pinned only in the Dockerfile: their versions are `ARG` defaults, the tarballs are checked with `ADD --checksum`, and libjwt, which publishes no 1.x release tarballs, is cloned by tag and checked against `LIBJWT_COMMIT`. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`. Targets build for linux/amd64 and linux/arm64; CI builds each platform on a native runner and merges them into one multi-platform image per tag, while `make image` builds for the host platform only. The image workflow builds all targets of a platform in one build, so the release lines share every layer up to the Slurm one: the Dockerfile copies Slurm last and declares the version `ARG`s right before the `LABEL`.
+The `Dockerfile` uses a multi-stage build with a shared `builder-base` stage. UCX, PMIx and libjwt build in parallel; PRRTE depends on PMIx, Slurm on PMIx and libjwt, and OpenMPI on UCX, PMIx and PRRTE. UCX, PMIx, PRRTE, OpenMPI and libjwt are pinned only in the Dockerfile: their versions are `ARG` defaults, the tarballs are checked with `ADD --checksum`, and libjwt, which publishes no 1.x release tarballs, is cloned by tag and checked against `LIBJWT_COMMIT`. The Slurm version and tarball checksum are build arguments without defaults: `SLURM_RELEASES` in `docker-bake.hcl` lists one Slurm release per supported release line, newest first, and each becomes a bake target `slurm-<YY>-<MM>` tagged `<version>` and `<YY>.<MM>`, the first one also `latest`. Targets build for linux/amd64 and linux/arm64; CI builds each platform on a native runner and merges them into one multi-platform image per tag, while `make image` builds for the host platform only. The image workflow builds all targets of a platform in one build, so the release lines share every layer up to the Slurm one: the Dockerfile copies Slurm last and declares the version `ARG`s right before the `LABEL`.
 
 ### Custom Images
 
@@ -1563,6 +1566,8 @@ Custom images must provide:
 | submitter | Slurm client tools only |
 
 sind enables Slurm services based on the node's role once every node is ready (`systemctl enable --now`). Services should be installed but not enabled in the image.
+
+The identity modes `nssSlurm` and `clientIds` need more from the image: see the "Image needs" row under Identity Modes.
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an unmanaged cluster, so its image may leave Slurm for the provisioning under test to install.
 
