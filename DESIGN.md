@@ -50,6 +50,7 @@ sind creates cluster resources in a specific order to ensure dependencies are av
 4. Create data volume (if needed)
 5. Create state volume (backup controller only)
 6. Create home volume (`users` only)
+7. Detect the CVMFS backend (`storage.cvmfs` only; see CVMFS Mount)
 
 **Phase 3: Node Containers**
 1. Create and start each node container in parallel
@@ -78,10 +79,12 @@ When an event arrives, readiness probes re-evaluate immediately instead of waiti
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
-| munge ready | munge service active |
+| munge ready | munge service active (not with identity `clientIds`) |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (managed workers only) |
+| sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
 | slurmdbd ready | slurmdbd service active (managed db nodes); a failed unit fails `sind create cluster` at once with the unit's journal tail. mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
+| cluster registered | `sacctmgr show cluster` on `controller` lists the cluster (`accounts` only, before the accounts are created) |
 
 If any node fails to become ready within the timeout, `sind create cluster` fails, reports which nodes/checks failed and removes the resources it created, and the mesh if this invocation set it up. If that cleanup fails too, `sind delete cluster` removes what is left.
 

@@ -41,8 +41,8 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 
 ```
 ┌ PreflightCheck → createResources → connect SSH relay ┐
-┤                                                      ├→ setupNodes
-└ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┘
+├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┼→ setupNodes
+└ DetectCVMFS (storage.cvmfs only) ────────────────────┘
                            │
   registerMesh ║ enableSlurm → createSlurmAccounts ║ createHomes
                            │
@@ -51,6 +51,7 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 
 - `createResources` creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
 - `resolveInfra` looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
+- `DetectCVMFS` (`storage.cvmfs` only) picks how the nodes [mount CVMFS]({{< relref "/guides/cvmfs" >}}), also while the resources are created: the `cvmfs` Docker volume plugin if one is enabled, otherwise a bind mount of the host's `/cvmfs`, first tried in a throwaway container of the controller's image.
 - `setupNodes` creates, waits for, and sets up every node: nss_slurm on managed workers with identity `nssSlurm` or `clientIds`, the cluster users and groups where the identity mode puts them, SSH and host keys.
 - `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, and `sackd` on the submitter with identity `clientIds`.
 - `createSlurmAccounts` (`accounts` only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users' associations and the coordinators with `sacctmgr -i` on `controller`.
@@ -75,10 +76,12 @@ When an event arrives, probes re-evaluate immediately instead of waiting for the
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
-| munge ready | munge service active |
+| munge ready | munge service active (not with identity `clientIds`) |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
 | slurmd ready | slurmd service active (managed workers only) |
+| sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
 | slurmdbd ready | slurmdbd service active (managed db nodes); a failed unit fails `sind create cluster` at once with the unit's journal tail. mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
+| cluster registered | `sacctmgr show cluster` on `controller` lists the cluster (`accounts` only, before the accounts are created) |
 
 With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), mariadb and slurmdbd are started and slurmdbd must be ready before slurmctld and slurmd are enabled.
 
