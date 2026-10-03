@@ -272,16 +272,21 @@ RUN tar xf openmpi.tar.bz2 && \
 # ARG sees it, so a new Slurm version would otherwise rebuild the package
 # layer too. The images of all release lines and Slurm versions then share
 # the layers up to the builder COPYs, and the Slurm layers come last.
-FROM quay.io/rockylinux/rockylinux:10
+FROM quay.io/rockylinux/rockylinux:10 AS runtime
 
 # Runtime dependencies, installed in the RUN that enables EPEL and CRB and
 # ends with dnf clean all, so no layer keeps the repository metadata.
+# Rocky retags its base image only at minor releases, so the RUN first
+# upgrades the base image's packages (glibc, openssl, ...). Building the
+# runtime stage without the cache (--no-cache-filter runtime) picks up the
+# current errata.
 # gcc is needed by mpicc (OpenMPI's wrapper compiler).
 # mariadb-server is included for the db role (slurmdbd accounting storage).
 # libevent and hwloc-libs are required by PMIx, PRRTE, and OpenMPI at runtime,
 # jansson by libjwt, json-c by Slurm's serializer/json.
 RUN dnf -y install epel-release dnf-plugins-core && \
     dnf config-manager --set-enabled crb && \
+    dnf -y upgrade && \
     dnf -y install \
         systemd \
         munge \
