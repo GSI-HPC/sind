@@ -1,8 +1,11 @@
 name: CI
 
+# Pushes to main and next test the merged result and write the image build
+# cache that pull requests read: a pull request run restores caches only
+# from its own ref, its base branch and the default branch.
 on:
   push:
-    branches: [main]
+    branches: [main, next]
   pull_request:
 
 permissions:

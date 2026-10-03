@@ -37,6 +37,8 @@ description: Drive a sind pull request to a mergeable state. Covers choosing the
 
 ## CI (`.github/workflows/ci.yml`)
 
+CI runs for every pull request and every push to `main` and `next`.
+
 | Job | Runs |
 |-----|------|
 | Lint | golangci-lint |

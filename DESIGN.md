@@ -316,7 +316,7 @@ Development follows Test-Driven Development (TDD) style:
 
 - High unit test coverage for all packages
 - Integration tests for CLI commands and cluster operations
-- Tests run in CI for every pull request and every push to `main`
+- Tests run in CI for every pull request and every push to `main` and `next`
 
 ## CLI Commands
 
