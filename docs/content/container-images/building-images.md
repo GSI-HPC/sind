@@ -53,10 +53,11 @@ Every official image:
 
 - Is based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
-- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
+- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd, and from Slurm 26.05 on slurmrestd), munge, sshd, MariaDB and a full MPI stack
 - Ships MariaDB's data directory initialised, so the first start of MariaDB on a db node skips `mariadb-install-db`
 - Slurm is built with PMIx support (`--with-pmix`) for native PMIx job launch
 - Includes nss_slurm, Slurm's NSS module for job users, as `/usr/lib64/libnss_slurm.so.2`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x, and the `serializer/json` plugin they need, built with json-c; and `sackd`, Slurm's authentication daemon for login nodes
+- From Slurm 26.05 on, includes slurmrestd, Slurm's REST API daemon, built with Rocky Linux's llhttp, with its JWT plugin and a `slurmrestd` user to run it as. Slurm 25.11 builds slurmrestd only with the archived nodejs http-parser, which Rocky Linux 10 does not package, so the 25.11 images have none
 - OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1), with the journal capped at 32 MB in `/run`, which counts against the node's memory limit, and 64 MB on disk
 

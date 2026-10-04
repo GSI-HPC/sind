@@ -18,6 +18,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 - Slurm 26.05 and 25.11 (one node image per release line)
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.20)
 - libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
+- llhttp (Rocky Linux 10), for slurmrestd on the `api` node (Slurm 26.05 and later)
 
 ## Overview
 
@@ -1573,10 +1574,11 @@ The generic image:
 - Published for linux/amd64 and linux/arm64
 - Based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
-- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
+- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd, and from Slurm 26.05 on slurmrestd), munge, sshd, MariaDB and a full MPI stack
 - MariaDB's data directory is initialised at build time, so the first `systemctl enable --now mariadb` on a db node skips `mariadb-install-db`
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - Ships what the identity modes need (see Identity Modes): nss_slurm as `/usr/lib64/libnss_slurm.so.2`, built from Slurm's `contribs/nss_slurm`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x (`--with-jwt`), and the `serializer/json` plugin they load (`--with-json`); and `sackd`. The build fails without them
+- Ships slurmrestd from Slurm 26.05 on, built with Rocky Linux's llhttp (`llhttp-devel` from CRB at build time, `llhttp` at run time), with its JWT plugin (`rest_auth_jwt.so`), its systemd unit and a `slurmrestd` system user, created after `slurm` so that `slurm` keeps its uid. Slurm 25.11's configure knows only the nodejs http-parser, which upstream archived and Rocky Linux 10 does not package, so the 25.11 images have no slurmrestd; one Dockerfile builds both, and its build check requires slurmrestd unless `slurmctld -V` reports 25.x
 - Ships no SSH host keys: each container generates its ed25519 key on first boot
 - Caps the systemd journal at 32 MB in `/run`, which counts against the node's memory limit, and 64 MB on disk
 - sind enables the appropriate services based on node role

@@ -11,6 +11,7 @@
 #   worker     — munge, sshd, slurmd
 #   submitter  — munge, sshd
 #   db         — munge, sshd, mariadb, slurmdbd
+#   api        — munge, sshd, slurmrestd (Slurm 26.05 and later)
 #
 # The image uses systemd as PID 1 and requires Docker Engine 28+ with
 # writable cgroups (no --privileged needed):
@@ -166,10 +167,14 @@ FROM builder-base AS slurm-builder
 # Every RUN after an ARG sees it, so a new value invalidates its cache. The
 # packages come first, so they survive Slurm, PMIx and libjwt bumps and
 # install while PMIx and libjwt build.
+# llhttp (CRB) is the HTTP parser slurmrestd needs. Slurm 26.05 builds
+# slurmrestd with it; 25.11 only knows the archived nodejs http-parser,
+# which Rocky 10 does not package, so its images have no slurmrestd.
 RUN dnf -y install \
         jansson-devel \
         openssl-devel \
         json-c-devel \
+        llhttp-devel \
         munge-devel \
         pam-devel \
         readline-devel \
@@ -283,7 +288,7 @@ FROM quay.io/rockylinux/rockylinux:10 AS runtime
 # gcc is needed by mpicc (OpenMPI's wrapper compiler).
 # mariadb-server is included for the db role (slurmdbd accounting storage).
 # libevent and hwloc-libs are required by PMIx, PRRTE, and OpenMPI at runtime,
-# jansson by libjwt, json-c by Slurm's serializer/json.
+# jansson by libjwt, json-c by Slurm's serializer/json, llhttp by slurmrestd.
 RUN dnf -y install epel-release dnf-plugins-core && \
     dnf config-manager --set-enabled crb && \
     dnf -y upgrade && \
@@ -303,11 +308,15 @@ RUN dnf -y install epel-release dnf-plugins-core && \
         hwloc-libs \
         jansson \
         json-c \
+        llhttp \
         gcc \
     && dnf clean all
 
-# Slurm daemons run as the unprivileged slurm user
-RUN useradd -r -s /sbin/nologin slurm
+# Slurm daemons run as the unprivileged slurm user. slurmrestd refuses to
+# run as root or SlurmUser, and its unit runs it as slurmrestd. slurm is
+# created first, so that its uid stays the same as in older images.
+RUN useradd -r -s /sbin/nologin slurm && \
+    useradd -r -M -s /sbin/nologin slurmrestd
 
 # State directories for slurmctld and slurmd, plus the shared /data volume
 RUN mkdir -p \
@@ -347,8 +356,8 @@ RUN rm -f /etc/ssh/ssh_host_* && \
 RUN chmod 0400 /etc/shadow /etc/gshadow
 
 # Only munge and sshd are enabled unconditionally — Slurm services
-# (slurmctld, slurmdbd, slurmd) and MariaDB are enabled by sind once the
-# cluster's nodes are up, depending on the node's role.
+# (slurmctld, slurmdbd, slurmd, slurmrestd) and MariaDB are enabled by sind
+# once the cluster's nodes are up, depending on the node's role.
 RUN systemctl enable munge sshd
 
 # Mask units that are unnecessary or problematic inside a container.
@@ -383,12 +392,20 @@ COPY --from=slurm-builder /install/etc /etc
 
 # Register the new libraries, and fail the build without nss_slurm, the
 # auth/slurm plugin and the serializer/json plugin it needs, or sackd, which
-# sind's identity modes nssSlurm and clientIds use.
+# sind's identity modes nssSlurm and clientIds use, or, from Slurm 26.05 on,
+# without slurmrestd and its JWT plugin, which sind's api node runs.
 RUN ldconfig && \
     test -e /usr/lib64/libnss_slurm.so.2 && \
     test -e /usr/lib64/slurm/auth_slurm.so && \
     test -e /usr/lib64/slurm/serializer_json.so && \
-    test -x /usr/sbin/sackd
+    test -x /usr/sbin/sackd && \
+    case "$(slurmctld -V)" in \
+        "slurm 25."*) ;; \
+        *) test -x /usr/sbin/slurmrestd && \
+           test -e /usr/lib64/slurm/rest_auth_jwt.so && \
+           test -e /usr/lib64/slurm/http_parser_llhttp_parser.so && \
+           test -e /usr/lib/systemd/system/slurmrestd.service ;; \
+    esac
 
 ARG SLURM_VERSION
 ARG UCX_VERSION=1.20.0
