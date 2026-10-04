@@ -103,8 +103,15 @@ defaults:
 		VolumeName(realm, clusterName, VolumeData),
 	}, res.Volumes)
 
-	// The default 512m node has a 256m /dev/shm, a 64m /run and no swap.
+	// docker create attached each node to its cluster network and the
+	// realm's mesh.
 	worker := ContainerName(realm, clusterName, "worker-0")
+	info, err := c.InspectContainer(ctx, worker)
+	require.NoError(t, err)
+	assert.NotEmpty(t, info.IPs[NetworkName(realm, clusterName)], "cluster network address")
+	assert.NotEmpty(t, info.IPs[meshMgr.NetworkName()], "mesh address")
+
+	// The default 512m node has a 256m /dev/shm, a 64m /run and no swap.
 	out, err := c.Exec(ctx, worker, "df", "--output=size", "-BM", "/dev/shm", "/run")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1M-blocks", "256M", "64M"}, strings.Fields(out))

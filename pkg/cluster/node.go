@@ -140,6 +140,10 @@ type RunConfig struct {
 	// for none (see DetectCVMFS).
 	CVMFS config.StorageType
 
+	// MeshNetwork is the realm's mesh network, which the node joins next to
+	// its cluster network; CreateNode sets it from its mesh.Manager.
+	MeshNetwork docker.NetworkName
+
 	// Users are the cluster users and groups. The node records them in its
 	// labels, and with users it mounts the home volume at HomeMountPath.
 	Users LinuxUsers
@@ -202,13 +206,19 @@ func BuildRunArgs(cfg RunConfig) []string {
 
 	// Network. Docker's embedded DNS answers a name from the first of the
 	// container's networks that knows it, ordered by gateway priority and
-	// then by network name. CreateNode also attaches the node to the realm's
-	// mesh, where the nodes of every cluster register their hostnames, so
-	// the cluster network gets priority 1 (the mesh keeps 0): controller,
-	// db and worker-N then resolve to this cluster's nodes whatever the
-	// cluster is called. It also makes the cluster network the default
-	// gateway.
+	// then by network name. The node also joins the realm's mesh, where the
+	// nodes of every cluster register their hostnames, so the cluster
+	// network gets priority 1 (the mesh keeps 0): controller, db and
+	// worker-N then resolve to this cluster's nodes whatever the cluster is
+	// called. It also makes the cluster network the default gateway. The
+	// cluster network comes first, as the container's network mode. Docker
+	// attaches both when the container starts, as it would a network
+	// connected between create and start; a second --network on create
+	// needs API 1.44 (Engine 25), and sind requires Engine 28.
 	args = append(args, "--network", clusterNetworkSpec(cfg.Realm, cfg.ClusterName))
+	if cfg.MeshNetwork != "" {
+		args = append(args, "--network", string(cfg.MeshNetwork))
+	}
 	if cfg.DNSIP != "" {
 		args = append(args, "--dns", cfg.DNSIP)
 	}
@@ -369,9 +379,10 @@ mkdir -p $cg/init.scope && echo $$ > $cg/init.scope/cgroup.procs
 for c in $(cat $cg/cgroup.controllers); do echo +$c > $cg/cgroup.subtree_control; done 2>/dev/null
 exec /sbin/init`
 
-// CreateNode creates a node container, connects it to the mesh network,
-// and starts it. Returns the container ID.
+// CreateNode creates a node container on its cluster network and the mesh
+// network, and starts it. Returns the container ID.
 func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg RunConfig) (docker.ContainerID, error) {
+	cfg.MeshNetwork = meshMgr.NetworkName()
 	args := BuildRunArgs(cfg)
 
 	id, err := client.CreateContainer(ctx, args...)
@@ -380,10 +391,6 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 	}
 
 	containerName := ContainerName(cfg.Realm, cfg.ClusterName, cfg.ShortName)
-	if err := client.ConnectNetwork(ctx, meshMgr.NetworkName(), containerName); err != nil {
-		return "", fmt.Errorf("connecting %s to mesh: %w", cfg.ShortName, err)
-	}
-
 	if err := client.StartContainer(ctx, containerName); err != nil {
 		return "", fmt.Errorf("starting container %s: %w", cfg.ShortName, err)
 	}
