@@ -51,7 +51,8 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
-  ├── info.go      docker info (daemon version, cgroup version, security options)
+  ├── info.go      docker info (daemon version, cgroup version, security options, OS and kernel)
+  ├── endpoint.go  Daemon endpoint the docker CLI uses (DOCKER_HOST, docker context)
   ├── plugin.go    Volume plugin queries (CVMFS)
   └── labels.go    Docker Compose compatibility labels
 
@@ -84,7 +85,8 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
-pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2 and the nsdelegate probe, inotify)
+pkg/doctor/        Host prerequisite checks (Docker version, where the daemon runs, cgroupv2 and the
+                   nsdelegate probe, inotify)
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness

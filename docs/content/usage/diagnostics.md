@@ -17,6 +17,7 @@ Checks system prerequisites and reports pass/fail for each:
 ```
 ✓ Docker Engine: 28.1.1 (>= 28.0)
 ✓ Docker daemon: rootful, no userns-remap
+✓ Docker host: this machine (unix:///var/run/docker.sock)
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
 ✓ inotify: max_user_instances 8192 (>= 1024)
 ✓ DNS policy: host resolution available
@@ -26,11 +27,10 @@ Checks system prerequisites and reports pass/fail for each:
 |-------|----------|-------------|
 | Docker Engine | yes | Docker >= 28.0 reachable (`docker info`) |
 | Docker daemon | yes | rootful, without `userns-remap`: Docker refuses the writable cgroups of sind's nodes in rootless mode and with `userns-remap` |
-| cgroupv2 | yes | Docker runs containers on cgroup v2 (`docker info`), and this host mounts the unified cgroup2 hierarchy at `/sys/fs/cgroup` with the `nsdelegate` option |
+| Docker host | no | the daemon runs on this machine, not in Docker Desktop's VM or on another host |
+| cgroupv2 | yes | Docker runs containers on cgroup v2 (`docker info`), and the Docker host mounts the unified cgroup2 hierarchy at `/sys/fs/cgroup` with the `nsdelegate` option |
 | inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
-
-The Docker checks ask the daemon. The cgroup mount, inotify and DNS policy checks look at the machine sind runs on, which has to be the Docker host: sind does not support Docker Desktop or a remote `DOCKER_HOST`.
 
 The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
 
@@ -42,7 +42,7 @@ Add your user to the docker group, then log in again (or run newgrp docker):
 sudo usermod -aG docker $USER
 ```
 
-A missing `docker` CLI and a daemon that is not running get their own hint. A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The inotify and DNS policy checks are advisory: a warning does not affect the exit status. The inotify check prints the `sysctl` commands that raise the limit; it is left out when the limit cannot be read or `DOCKER_HOST` names a daemon that is not reached through a local socket. The DNS policy check only appears when systemd-resolved is running; when `DOCKER_HOST` names a daemon on another host it reports host resolution as not available, since the mesh bridge that the host resolver would use is on that host. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+A missing `docker` CLI and a daemon that is not running get their own hint. A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The Docker host, inotify and DNS policy checks are advisory: a warning does not affect the exit status. The inotify check prints the `sysctl` commands that raise the limit; it is left out when the limit cannot be read or the daemon does not run on this machine. The DNS policy check only appears when systemd-resolved is running; when the daemon does not run on this machine it reports host resolution as not available, since the mesh bridge that the host resolver would use is on the daemon's host. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
@@ -63,9 +63,29 @@ sudo systemctl daemon-reload
 
 `sind create cluster` and `sind create worker` check `nsdelegate` too, before they create a node container, and fail with the same commands. They read it in a throwaway container of the node image, which shows the option of the kernel the Docker daemon runs on, wherever that is.
 
+### Docker host
+
+sind runs on the Docker host itself. Docker Desktop, whose daemon runs in a VM, and a daemon on another host, reached through `DOCKER_HOST`, `DOCKER_CONTEXT` or `docker context use`, are not supported: `--data` paths name directories on the daemon's host, host DNS cannot reach the mesh bridge there, and the inotify check would read this machine's limit. The Docker host check tells where the daemon runs, from the endpoint the docker CLI uses and from `docker info`; a daemon that runs another kernel than this machine counts as elsewhere too. A CI job in a container that uses the host's Docker socket shares the host's kernel and counts as local.
+
+For a daemon elsewhere, the check is a warning that says why, with the way back to a local daemon:
+
+```
+✗ Docker host: not this machine: docker context "build" connects to ssh://ci@build-host, not a unix socket (unsupported)
+
+sind expects to run on the Docker host: --data paths, host DNS for the
+*.sind names and the inotify check refer to this machine, the nodes to the
+daemon's. Run sind on the Docker host, or point the docker CLI at a daemon
+on this machine:
+
+unset DOCKER_HOST DOCKER_CONTEXT
+docker context use default
+```
+
+It does not fail `sind doctor`: the detection can be wrong both ways, as a socket can be forwarded from another host and a TCP endpoint can be this machine's own daemon, and the required checks still hold, as they ask the daemon. The cgroupv2 check then reads `nsdelegate` in a throwaway container of the default node image, if the daemon has that image; `sind doctor` pulls none, and without it the check is a warning, `nsdelegate not checked`, with the `docker pull` that lets it check.
+
 ### Machine-readable output
 
-`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `cgroupv2`, `inotify`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when an advisory check does not pass) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
+`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `Docker host`, `cgroupv2`, `inotify`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when an advisory check does not pass or the cgroupv2 check could not read `nsdelegate`) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
 
 ```bash
 sind doctor -o json
@@ -82,6 +102,11 @@ sind doctor -o json
     "name": "Docker daemon",
     "status": "ok",
     "detail": "rootful, no userns-remap"
+  },
+  {
+    "name": "Docker host",
+    "status": "ok",
+    "detail": "this machine (unix:///var/run/docker.sock)"
   },
   {
     "name": "cgroupv2",

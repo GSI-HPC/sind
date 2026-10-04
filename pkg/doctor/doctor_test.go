@@ -195,6 +195,15 @@ func TestDockerUnreachable(t *testing.T) {
 	}
 }
 
+// TestErrorLine checks that a wrapped docker error gives the first line
+// docker wrote, and any other error its message.
+func TestErrorLine(t *testing.T) {
+	wrapped := fmt.Errorf("reading the mount table in a container of img:1: %w",
+		exitError(t, "docker: Error response from daemon: No such image: img:1\n\nRun 'docker run --help' for more information\n"))
+	assert.Equal(t, "docker: Error response from daemon: No such image: img:1", ErrorLine(wrapped))
+	assert.Equal(t, "context canceled", ErrorLine(fmt.Errorf("%s\n%s", "context canceled", "second line")))
+}
+
 // probeImage is the image the probe tests run: the image under test in CI.
 func probeImage() string {
 	if image := os.Getenv("SIND_TEST_IMAGE"); image != "" {

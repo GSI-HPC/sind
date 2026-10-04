@@ -3,16 +3,19 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/doctor"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -51,13 +54,15 @@ Keep it across reboots:
 
 echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/99-sind.conf`
 
-// remoteDockerHost reports whether DOCKER_HOST names a daemon that is not
-// reached through a local socket: its host's limits and its mesh bridges
-// are not on this machine. A remote `docker context` goes unnoticed.
-func remoteDockerHost() bool {
-	host := os.Getenv("DOCKER_HOST")
-	return host != "" && !strings.HasPrefix(host, "unix://")
-}
+// elsewhereRemediation is shown when the Docker daemon does not run on
+// this machine.
+const elsewhereRemediation = `sind expects to run on the Docker host: --data paths, host DNS for the
+*.sind names and the inotify check refer to this machine, the nodes to the
+daemon's. Run sind on the Docker host, or point the docker CLI at a daemon
+on this machine:
+
+unset DOCKER_HOST DOCKER_CONTEXT
+docker context use default`
 
 // rootlessRemediation is shown for a Docker daemon in rootless mode.
 const rootlessRemediation = `sind starts its nodes with --security-opt writable-cgroups=true, which
@@ -173,40 +178,25 @@ func runDoctor(cmd *cobra.Command) error {
 		checks = append(checks, daemon)
 	}
 
-	// Check cgroup2 with nsdelegate: the cgroup version containers run on
-	// comes from the daemon, the nsdelegate mount option from this host's
-	// /proc/mounts, which must show the unified hierarchy.
+	// Where the daemon runs: the checks below that read this machine
+	// describe the Docker host only when the daemon runs here.
 	log := sindlog.From(ctx)
-	log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
-	mountPath, hasV2, hasNsd := doctor.CgroupInfo(fs)
-	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd)
-	switch {
-	case info != nil && info.CgroupVersion != "" && info.CgroupVersion != "2":
-		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail:      fmt.Sprintf("Docker runs containers on cgroup v%s (sind requires cgroupv2)", info.CgroupVersion),
-			Remediation: unifiedRemediation})
-		failures = append(failures, "cgroup")
-	case !hasV2 && mountPath != "":
-		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail:      fmt.Sprintf("hybrid hierarchy: cgroup2 is mounted at %s, not %s (sind requires cgroupv2)", mountPath, doctor.CgroupRoot),
-			Remediation: unifiedRemediation})
-		failures = append(failures, "cgroup")
-	case !hasV2:
-		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation})
-		failures = append(failures, "cgroup")
-	case !hasNsd:
-		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail: "nsdelegate not found", Remediation: doctor.NsdelegateRemediation(mountPath)})
-		failures = append(failures, "cgroup-nsdelegate")
-	default:
-		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkOK,
-			Detail: fmt.Sprintf("nsdelegate enabled (%s)", mountPath)})
+	loc, locErr := doctor.LocateDaemon(ctx, client, fs, info)
+	local := locErr == nil && loc.Local()
+	log.Log(ctx, sindlog.LevelTrace, "docker host", "endpoint", loc.Endpoint.Host, "context", loc.Endpoint.Context, "local", local)
+	if info != nil {
+		checks = append(checks, hostCheck(loc, locErr))
 	}
 
+	cgroup, failure := cgroupCheck(ctx, client, fs, info, local)
+	if failure != "" {
+		failures = append(failures, failure)
+	}
+	checks = append(checks, cgroup)
+
 	// Advisory: enough inotify instances for large clusters. The limit is
-	// the Docker host's, so the check is left out for a remote daemon.
-	if n, ok := doctor.InotifyInstances(fs); ok && !remoteDockerHost() {
+	// the Docker host's, so the check is left out for a daemon elsewhere.
+	if n, ok := doctor.InotifyInstances(fs); ok && local {
 		inotify := doctorCheck{Name: "inotify", Status: checkOK,
 			Detail: fmt.Sprintf("max_user_instances %d (>= %d)", n, doctor.MinInotifyInstances)}
 		if n < doctor.MinInotifyInstances {
@@ -218,13 +208,13 @@ func runDoctor(cmd *cobra.Command) error {
 	}
 
 	// Advisory: host DNS resolution via systemd-resolved. It points this
-	// host's resolver at the mesh bridge, which a remote daemon has on its
-	// own host.
+	// host's resolver at the mesh bridge, which a daemon elsewhere has on
+	// its own host.
 	if mgr.ResolvedActive(ctx) {
 		switch {
-		case remoteDockerHost():
+		case !local:
 			checks = append(checks, doctorCheck{Name: "DNS policy", Status: checkWarning,
-				Detail: "not available: DOCKER_HOST names a daemon on another host (optional)"})
+				Detail: "not available: the Docker daemon does not run on this machine (optional)"})
 		case mgr.DNSPolkitAuthorized(ctx):
 			checks = append(checks, doctorCheck{Name: "DNS policy", Status: checkOK,
 				Detail: "host resolution available"})
@@ -245,6 +235,74 @@ func runDoctor(cmd *cobra.Command) error {
 		return fmt.Errorf("checks failed: %s", strings.Join(failures, ", "))
 	}
 	return nil
+}
+
+// hostCheck reports where the Docker daemon runs (doctor.LocateDaemon). A
+// daemon elsewhere is a warning: sind does not support it, but every
+// required check asks the daemon or probes its kernel, so they still hold.
+func hostCheck(loc doctor.DaemonLocation, err error) doctorCheck {
+	switch {
+	case err != nil:
+		return doctorCheck{Name: "Docker host", Status: checkWarning, Detail: "unknown: " + doctor.ErrorLine(err)}
+	case !loc.Local():
+		return doctorCheck{Name: "Docker host", Status: checkWarning,
+			Detail: "not this machine: " + loc.Elsewhere + " (unsupported)", Remediation: elsewhereRemediation}
+	}
+	return doctorCheck{Name: "Docker host", Status: checkOK, Detail: "this machine (" + loc.Endpoint.Host + ")"}
+}
+
+// cgroupCheck checks that the Docker host runs the unified cgroup2
+// hierarchy with nsdelegate, and returns the check and, when it failed,
+// the name of the failure. The cgroup version comes from the daemon (info).
+// For a daemon on this machine the cgroup2 mount comes from /proc/mounts in
+// fs, as the kernel is the same; for one elsewhere, from a throwaway
+// container of the default node image (doctor.ProbeCgroupInfo), if the
+// daemon has that image: doctor pulls none.
+func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *docker.DaemonInfo, local bool) (doctorCheck, string) {
+	log := sindlog.From(ctx)
+	if info != nil && info.CgroupVersion != "" && info.CgroupVersion != "2" {
+		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
+			Detail:      fmt.Sprintf("Docker runs containers on cgroup v%s (sind requires cgroupv2)", info.CgroupVersion),
+			Remediation: unifiedRemediation}, "cgroup"
+	}
+	var mountPath, where string
+	var hasV2, hasNsd bool
+	switch {
+	case local:
+		log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
+		mountPath, hasV2, hasNsd = doctor.CgroupInfo(fs)
+	case info == nil:
+		return doctorCheck{Name: "cgroupv2", Status: checkWarning, Detail: "nsdelegate not checked: Docker is not reachable"}, ""
+	default:
+		image := config.DefaultImage
+		_, present, err := client.ImageLabels(ctx, image)
+		if err == nil && !present {
+			return doctorCheck{Name: "cgroupv2", Status: checkWarning,
+				Detail:      fmt.Sprintf("nsdelegate not checked: the Docker host has no %s to probe it with (sind create checks it)", image),
+				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + image}, ""
+		}
+		if err == nil {
+			mountPath, hasV2, hasNsd, err = doctor.ProbeCgroupInfo(ctx, client, image)
+		}
+		if err != nil {
+			return doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not checked: " + doctor.ErrorLine(err)}, "cgroup"
+		}
+		where = ", in a container"
+	}
+	log.Log(ctx, sindlog.LevelTrace, "cgroup2 check", "mountPath", mountPath, "v2", hasV2, "nsdelegate", hasNsd, "local", local)
+	switch {
+	case !hasV2 && mountPath != "":
+		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
+			Detail:      fmt.Sprintf("hybrid hierarchy: cgroup2 is mounted at %s, not %s (sind requires cgroupv2)", mountPath, doctor.CgroupRoot),
+			Remediation: unifiedRemediation}, "cgroup"
+	case !hasV2:
+		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
+			Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation}, "cgroup"
+	case !hasNsd:
+		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
+			Detail: "nsdelegate not found", Remediation: doctor.NsdelegateRemediation(mountPath)}, "cgroup-nsdelegate"
+	}
+	return doctorCheck{Name: "cgroupv2", Status: checkOK, Detail: fmt.Sprintf("nsdelegate enabled (%s%s)", mountPath, where)}, ""
 }
 
 // printChecks writes one line per check, each failed or warning check

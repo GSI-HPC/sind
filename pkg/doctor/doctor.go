@@ -42,11 +42,7 @@ func DockerUnreachable(err error) (detail, remediation string) {
 	if errors.Is(err, exec.ErrNotFound) {
 		return "not reachable: docker CLI not found in PATH", dockerInstallRemediation
 	}
-	msg := err.Error()
-	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
-		msg = exitErr.Stderr
-	}
-	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
+	msg := ErrorLine(err)
 	lower := strings.ToLower(msg)
 	switch {
 	case strings.Contains(lower, "permission denied"):
@@ -54,7 +50,19 @@ func DockerUnreachable(err error) (detail, remediation string) {
 	case strings.Contains(lower, "cannot connect to the docker daemon"):
 		remediation = dockerStartRemediation
 	}
-	return "not reachable: " + strings.TrimSpace(msg), remediation
+	return "not reachable: " + msg, remediation
+}
+
+// ErrorLine returns the first line of what a failed command wrote to
+// stderr, or of err's message when it wrote nothing: the line that says
+// what went wrong, for the detail of a check.
+func ErrorLine(err error) string {
+	msg := err.Error()
+	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
+		msg = exitErr.Stderr
+	}
+	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
+	return strings.TrimSpace(msg)
 }
 
 // ParseVersion extracts the major and minor version numbers from a Docker
