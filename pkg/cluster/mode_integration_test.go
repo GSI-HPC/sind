@@ -1352,6 +1352,55 @@ nodes:
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+// TestNodeSetupStepFails creates a cluster with a user whose name the image
+// already has as a group: the node setup, one docker exec, stops at that
+// step, and the error names it and shows what groupadd wrote.
+func TestNodeSetupStepFails(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-setup")
+	clusterName := "it-setup"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+users:
+  - munge
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), ": adding users: exit status ")
+	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
+	assert.NotContains(t, err.Error(), setupStepMarker)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 // waitNodeIdle polls sinfo on from until the Slurm node is idle.
 func waitNodeIdle(t *testing.T, c *docker.Client, from docker.ContainerName, node string) {
 	t.Helper()

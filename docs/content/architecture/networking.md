@@ -188,10 +188,12 @@ The SSH relay connects to each cluster network so it can reach nodes at their cl
 
 ### Key injection
 
-Once sshd runs on a node, one `docker exec` injects the public key and collects the host key that sshd serves:
+Once sshd runs on a node, the last step of the node's setup, one `docker exec` with the nss_slurm and user steps before it, injects the public key and collects the host key that sshd serves:
 
 ```bash
-docker exec <node> sh -c 'mkdir -p /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost' sh "$pubkey"
+docker exec <node> sh -c '... mkdir -p /root/.ssh
+printf "%s\n" "$1" >> /root/.ssh/authorized_keys
+ssh-keyscan -t ed25519 localhost' sh "$pubkey"
 ```
 
 The host key is stored in `known_hosts` with the node's DNS name:

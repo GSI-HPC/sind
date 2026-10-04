@@ -282,7 +282,7 @@ func TestCreate_Accounts(t *testing.T) {
 		switch {
 		case strings.Contains(joined, "sind-dev-controller systemctl enable --now slurmctld"):
 			enabled = i
-		case c.Args[0] == "exec" && c.Args[1] == "sind-dev-controller" && len(c.Args) == 5 && strings.HasPrefix(c.Args[4], "groupadd "):
+		case isUsersSetup(c.Args, "sind-dev-controller"):
 			added = i
 		case isAccountsScript(c.Args):
 			first = i

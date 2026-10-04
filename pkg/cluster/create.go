@@ -17,7 +17,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/monitor"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
-	"github.com/GSI-HPC/sind/pkg/ssh"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -506,12 +505,13 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 }
 
 // setupNodes creates each node, starts its systemd monitor, waits for base
-// readiness, switches managed workers to nss_slurm (identity nssSlurm and
-// clientIds), adds the cluster users and groups where the identity mode
-// puts them, injects SSH public keys, and collects host keys — all
-// concurrently per node with no barrier between creation and probing.
+// readiness, and sets the node up in one docker exec (setupNode): it
+// switches managed workers to nss_slurm (identity nssSlurm and clientIds),
+// adds the cluster users and groups where the identity mode puts them,
+// injects the SSH public key, and collects the host key — all concurrently
+// per node with no barrier between creation and probing.
 //
-//	per node:  create → monitor → wait(container, systemd, sshd, munge) → (inspect ║ nss_slurm → users → SSH → hostkey)
+//	per node:  create → monitor → wait(container, systemd, sshd, munge) → (inspect ║ setup: nss_slurm → users → SSH key, host key)
 //
 // With identity clientIds munge is masked, so there is no munge to wait for.
 // rd bounds each node's steps after its container has started.
@@ -552,29 +552,17 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
 			}
 
-			// The node's IPs and ID do not depend on the steps below, so
-			// the inspect runs alongside them, off the critical path.
+			// The node's IPs and ID do not depend on its setup, so the
+			// inspect runs alongside it, off the critical path.
 			inspected := make(chan inspectResult, 1)
 			go func() {
 				info, err := client.InspectContainer(nctx, containerName)
 				inspected <- inspectResult{info: info, err: err}
 			}()
 
-			if nc.NSSSlurm {
-				if err := enableNSSSlurm(nctx, client, containerName, nc); err != nil {
-					return fmt.Errorf("node %s: %w", nc.ShortName, err)
-				}
-			}
-
-			if nc.AddUsers && !nc.Users.IsEmpty() {
-				if err := addUsers(nctx, client, containerName, nc.Users); err != nil {
-					return fmt.Errorf("node %s: %w", nc.ShortName, err)
-				}
-			}
-
-			hostKey, err := ssh.InjectKeyAndCollectHostKey(nctx, client, containerName, sshPubKey)
+			hostKey, err := setupNode(nctx, client, containerName, nc, sshPubKey)
 			if err != nil {
-				return fmt.Errorf("setting up SSH on %s: %w", nc.ShortName, err)
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 
 			ir := <-inspected

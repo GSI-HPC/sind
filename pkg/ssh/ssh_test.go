@@ -16,53 +16,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- InjectKeyAndCollectHostKey ---
+// --- InjectKeyScript, HostKey ---
 
 // Integration coverage is provided by TestClusterCreateDeleteLifecycle (full
-// cluster with sshd).
+// cluster with sshd), whose nodes run InjectKeyScript in their setup.
 
-func TestInjectKeyAndCollectHostKey(t *testing.T) {
-	var m mock.Executor
+func TestInjectKeyScript(t *testing.T) {
+	// One command per line, so that sh -e stops at the first that fails;
+	// the key is the shell's argument $1.
+	assert.Equal(t, []string{
+		"mkdir -p /root/.ssh",
+		`printf '%s\n' "$1" >> /root/.ssh/authorized_keys`,
+		"ssh-keyscan -t ed25519 localhost",
+	}, strings.Split(InjectKeyScript, "\n"))
+}
+
+func TestHostKey(t *testing.T) {
 	// ssh-keyscan output includes comments and the key line
-	m.AddResult("# localhost:22 SSH-2.0-OpenSSH_9.6\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n", "", nil)
-	c := docker.NewClient(&m)
-
-	key, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA-test-pubkey\n")
+	key, err := HostKey("# localhost:22 SSH-2.0-OpenSSH_9.6\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n")
 	require.NoError(t, err)
 	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest", key)
-
-	// One docker exec, with the key as an argument of the shell.
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{
-		"exec", "sind-dev-controller",
-		"sh", "-c", `mkdir -p /root/.ssh && printf '%s\n' "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost`,
-		"sh", "ssh-ed25519 AAAA-test-pubkey",
-	}, m.Calls[0].Args)
 }
 
-func TestInjectKeyAndCollectHostKey_KeyWithoutNewline(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("localhost ssh-ed25519 AAAA-hostkey\n", "", nil)
-	c := docker.NewClient(&m)
-
-	_, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...")
-	require.NoError(t, err)
-
-	// The script adds the newline.
-	assert.Equal(t, "ssh-ed25519 AAAA...", m.Calls[0].Args[len(m.Calls[0].Args)-1])
-}
-
-func TestInjectKeyAndCollectHostKey_ExecError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	_, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...\n")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "injecting SSH key and scanning host key")
-}
-
-func TestInjectKeyAndCollectHostKey_NoKey(t *testing.T) {
+func TestHostKey_NoKey(t *testing.T) {
 	for name, stdout := range map[string]string{
 		// ssh-keyscan returns only comments (e.g. sshd not serving ed25519)
 		"only comments": "# localhost:22 SSH-2.0-OpenSSH_9.6\n",
@@ -71,24 +47,15 @@ func TestInjectKeyAndCollectHostKey_NoKey(t *testing.T) {
 		"empty output":   "",
 	} {
 		t.Run(name, func(t *testing.T) {
-			var m mock.Executor
-			m.AddResult(stdout, "", nil)
-			c := docker.NewClient(&m)
-
-			_, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...\n")
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "no ed25519 host key found")
+			_, err := HostKey(stdout)
+			assert.EqualError(t, err, "no ed25519 host key found")
 		})
 	}
 }
 
-func TestInjectKeyAndCollectHostKey_MalformedThenValid(t *testing.T) {
-	var m mock.Executor
+func TestHostKey_MalformedThenValid(t *testing.T) {
 	// Malformed line skipped, valid key returned from next line
-	m.AddResult("malformed\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n", "", nil)
-	c := docker.NewClient(&m)
-
-	key, err := InjectKeyAndCollectHostKey(t.Context(), c, "sind-dev-controller", "ssh-ed25519 AAAA...\n")
+	key, err := HostKey("malformed\nlocalhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest\n")
 	require.NoError(t, err)
 	assert.Equal(t, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest", key)
 }

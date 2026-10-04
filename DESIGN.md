@@ -66,8 +66,12 @@ The nsdelegate check runs `cat /proc/self/mounts` in a throwaway container of th
 1. Create and start each node container in parallel, on its cluster network and the realm's mesh (see Cluster Network)
 2. Start per-node systemd D-Bus monitor immediately after each container starts
 3. Wait for each node to become ready, accelerated by events
-4. On managed workers with identity `nssSlurm` or `clientIds`, check for nss_slurm and put it first in `/etc/nsswitch.conf` (see Identity Modes)
-5. Add the cluster users and groups where the identity mode puts them (`users` and `groups` only; see Users)
+4. Set each node up in one `docker exec`, a shell script that runs these steps in order and stops at the first command that fails:
+   1. On managed workers with identity `nssSlurm` or `clientIds`, check for nss_slurm and put it first in `/etc/nsswitch.conf` (see Identity Modes)
+   2. Add the cluster users and groups where the identity mode puts them (`users` and `groups` only; see Users)
+   3. Append the realm's SSH public key to root's `authorized_keys` and collect the host key (see Public Key Injection and Host Key Collection)
+
+The script writes a marker line to stderr before each step, so that a failure names its step and shows what that step wrote, with the exit status of the command that failed (`node worker-0: adding users: exit status 9: groupadd: group 'munge' already exists`). It runs after the node's readiness wait, as ssh-keyscan needs sshd, and nss_slurm and the users are in place before Phase 4 starts the Slurm daemons and creates the Slurm accounts. A node takes the same docker calls from `docker create` to its host key whatever its role or identity mode: create, start, the readiness probes, an inspect for its addresses (alongside the setup) and the setup exec.
 
 Every node container starts with a short `/bin/sh` entrypoint instead of the image's own entrypoint or command. As PID 1, it moves itself into `init.scope`, enables each controller of the container's root cgroup in its `cgroup.subtree_control`, and execs `/sbin/init`. `docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and a process there makes systemd's own attempt to enable them fail (cgroup v2's no internal processes rule). An exec of sind's that landed before systemd had enabled controllers would otherwise leave every unit without them, including `Delegate=yes` daemons such as slurmd.
 
@@ -1415,10 +1419,12 @@ The `sind-ssh-config` volume contains:
 
 #### Public Key Injection and Host Key Collection
 
-When sind creates a node, it waits for sshd to start, then appends the public key from `sind-ssh-config` to root's `authorized_keys` and collects the host key that sshd serves, in one `docker exec`, as the cluster's setup waits for its slowest node. The node image ships no host keys, so each container generates its own on first boot and the pinned key identifies that node:
+When sind creates a node, it waits for sshd to start, then appends the public key from `sind-ssh-config` to root's `authorized_keys` and collects the host key that sshd serves, in the last step of the node's single setup `docker exec` (see Container Startup), as the cluster's setup waits for its slowest node. The node image ships no host keys, so each container generates its own on first boot and the pinned key identifies that node. The step runs these commands under `sh -e`, and it is the only step that writes to the setup's stdout:
 
 ```bash
-docker exec <node> sh -c 'mkdir -p /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost' sh "$pubkey"
+docker exec <node> sh -c '... mkdir -p /root/.ssh
+printf "%s\n" "$1" >> /root/.ssh/authorized_keys
+ssh-keyscan -t ed25519 localhost' sh "$pubkey"
 ```
 
 The public key is an argument of the shell, not part of its script. The `localhost` field is dropped and the key is added to `known_hosts` with the node's DNS name:

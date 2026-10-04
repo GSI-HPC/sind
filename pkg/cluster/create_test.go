@@ -1514,7 +1514,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 			case strings.Contains(joined, "is-active"):
 				return mock.Result{Stdout: "active\n"}
 			case strings.Contains(joined, "ssh-keyscan"):
-				return mock.Result{Err: fmt.Errorf("permission denied")}
+				return failedSetup(t, 1, "mkdir: cannot create directory '/root/.ssh': Permission denied\n", "ssh")
 			}
 		}
 		return mock.Result{}
@@ -1529,7 +1529,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "setting up SSH on controller: injecting SSH key")
+	assert.Contains(t, err.Error(), "node controller: setting up SSH: injecting SSH key and scanning host key: exit status 1: mkdir: cannot create directory '/root/.ssh': Permission denied")
 }
 
 func TestSetupNodes_HostKeyError(t *testing.T) {
@@ -1568,7 +1568,7 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "setting up SSH on controller: no ed25519 host key found")
+	assert.Contains(t, err.Error(), "node controller: setting up SSH: no ed25519 host key found")
 }
 
 func TestRegisterMesh_DNSError(t *testing.T) {

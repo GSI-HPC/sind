@@ -75,6 +75,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
   ├── node.go      Node initialization and setup
+  ├── setup.go     In-container node setup (nss_slurm, users, SSH) in one docker exec
   ├── discovery.go Cluster/node discovery queries, VolumeType
   ├── resources.go Resource creation helpers
   ├── types.go     Shared types (Cluster, Node, State)
