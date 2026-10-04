@@ -166,6 +166,9 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 	pr := newProgress(probes, events)
 	var lastErr error
 	for {
+		if pr.died != nil {
+			return pr.died
+		}
 		var failed bool
 		for i, p := range probes {
 			if pr.passed[i] {
@@ -192,17 +195,17 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 			case <-ctx.Done():
 				return waitEnded(ctx, name, lastErr)
 			case <-ticker.C:
+				// The tick and queued events can be ready at once, and
+				// select picks one at random: take the events first, so
+				// that the round runs the probes they concern.
+				events = pr.takeQueued(name, events)
 			case ev, ok := <-events:
 				if !ok {
 					events = nil
 					pr.distrust()
 					continue
 				}
-				relevant, err := pr.take(name, ev, events)
-				if err != nil {
-					return err
-				}
-				if !relevant {
+				if !pr.take(name, ev, events) {
 					continue
 				}
 			}
@@ -225,6 +228,9 @@ type progress struct {
 	// trusted is whether the events tell the wait about changes: they come
 	// on a buffered channel, and no monitor has stopped.
 	trusted bool
+	// died is the error of the wait once a die event of its container has
+	// come, which ends it before the next round.
+	died error
 }
 
 // newProgress returns the progress of a wait on probes with events, none
@@ -252,9 +258,9 @@ func (p *progress) distrust() {
 
 // take takes ev, just received from events, and the events already queued
 // there, and forgets the passed probes whose state they may have changed.
-// It reports whether any of them concerns the wait, and returns the error
-// for a die event of the container among them.
-func (p *progress) take(name docker.ContainerName, ev monitor.Event, events <-chan monitor.Event) (bool, error) {
+// It reports whether any of them concerns the wait, and records in died a
+// die event of the container among them.
+func (p *progress) take(name docker.ContainerName, ev monitor.Event, events <-chan monitor.Event) bool {
 	relevant := false
 	for {
 		// The buffer was full before ev was received: the watcher may have
@@ -264,9 +270,10 @@ func (p *progress) take(name docker.ContainerName, ev monitor.Event, events <-ch
 		}
 		if concerns(name, ev) {
 			if ev.Kind == monitor.EventContainerDie {
-				return true, fmt.Errorf("node %s not ready: %w", name, &TerminalError{
+				p.died = fmt.Errorf("node %s not ready: %w", name, &TerminalError{
 					Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
 				})
+				return true
 			}
 			relevant = true
 			p.changed(ev)
@@ -276,11 +283,27 @@ func (p *progress) take(name docker.ContainerName, ev monitor.Event, events <-ch
 		case ev, ok = <-events:
 			if !ok {
 				p.distrust()
-				return relevant, nil
+				return relevant
 			}
 		default:
-			return relevant, nil
+			return relevant
 		}
+	}
+}
+
+// takeQueued takes the events queued on events, as take does, without
+// waiting for one. It returns events, or nil once it is closed.
+func (p *progress) takeQueued(name docker.ContainerName, events <-chan monitor.Event) <-chan monitor.Event {
+	select {
+	case ev, ok := <-events:
+		if !ok {
+			p.distrust()
+			return nil
+		}
+		p.take(name, ev, events)
+		return events
+	default:
+		return events
 	}
 }
 

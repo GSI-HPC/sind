@@ -84,7 +84,7 @@ sind uses two event sources to accelerate readiness detection:
 - **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
 - **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active or slurmd.service failing). They run until the command ends, through the waits for the Slurm daemons and the accounts
 
-When an event of the node arrives, its readiness probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. Each node's wait receives only its own container's events, and the docker events stream asks only for the start, die, oom, pause and unpause actions, not for the exec events of the probes. If the event sources are unavailable, sind falls back to poll-only mode transparently.
+When an event of the node arrives, its readiness probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. A poll tick takes the events queued by then before its round as well, so the round runs the probes they concern. Each node's wait receives only its own container's events, and the docker events stream asks only for the start, die, oom, pause and unpause actions, not for the exec events of the probes. If the event sources are unavailable, sind falls back to poll-only mode transparently.
 
 Each round runs a node's checks in order and stops at the first that fails. Within one wait, a check that has passed is not run again in later rounds while the events can tell that what it checks has changed:
 

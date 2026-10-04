@@ -1185,6 +1185,54 @@ func TestUntilReadyWithEvents_FullBufferRerunsEveryProbe(t *testing.T) {
 	}
 }
 
+func TestProgress_TakeQueued(t *testing.T) {
+	// A tick takes the events queued meanwhile before its round, without
+	// waiting for one.
+	munge := ForService(ServiceMunge)
+	probes := []Probe{{Name: "container", Check: ContainerRunning}, munge}
+	passedAll := func() *progress {
+		p := newProgress(probes, make(chan monitor.Event, 1))
+		p.pass(0)
+		p.pass(1)
+		return p
+	}
+
+	t.Run("nothing queued", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		got := p.takeQueued(testContainer, events)
+		assert.Equal(t, (<-chan monitor.Event)(events), got)
+		assert.Equal(t, []bool{true, true}, p.passed)
+	})
+	t.Run("unit event", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer, Unit: munge.Unit}
+		got := p.takeQueued(testContainer, events)
+		assert.Equal(t, (<-chan monitor.Event)(events), got)
+		assert.Equal(t, []bool{true, false}, p.passed)
+		assert.True(t, p.trusted)
+	})
+	t.Run("closed", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		close(events)
+		got := p.takeQueued(testContainer, events)
+		assert.Nil(t, got)
+		assert.Equal(t, []bool{false, false}, p.passed)
+		assert.False(t, p.trusted)
+	})
+	t.Run("die", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		events <- monitor.Event{Kind: monitor.EventContainerDie, Container: testContainer, Detail: "exit 1"}
+		p.takeQueued(testContainer, events)
+		var te *TerminalError
+		require.ErrorAs(t, p.died, &te)
+		assert.Contains(t, p.died.Error(), "container sind-dev-controller died: exit 1")
+	})
+}
+
 // Services status queries check on managed workers and controllers.
 var (
 	workerServices     = []Service{ServiceMunge, ServiceSSHD, ServiceSlurmd}
