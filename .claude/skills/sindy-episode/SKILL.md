@@ -1,14 +1,13 @@
 ---
 name: sindy-episode
-description: Create or update a Sindy video episode (video/episodes/<id>/) for a sind docs page — storyboard, narration script.json, index.html built with the Episode builder, voice, check, render, and the {{< video >}} shortcode on the page. Use whenever someone asks for a video, episode, screencast or tutorial clip for a guide, wants an existing episode changed (pacing, scenes, terminal output, narration, acting), or edits a docs page that embeds {{< video "…" >}}, because its episode must change in the same PR.
+description: Create or update a Sindy video episode (video/episodes/<id>/) — a guide clip for a sind docs page, a video course episode or a refresher — storyboard, narration script.json, index.html built with the Episode builder, voice, check, render, and the {{< video >}} shortcode on the page. Use whenever someone asks for a video, episode, screencast or tutorial clip for a guide, wants an existing episode changed (pacing, scenes, terminal output, narration, acting), or edits a docs page that embeds {{< video "…" >}}, because its episode must change in the same PR.
 ---
 
 # Make or update a Sindy episode
 
-An episode is a short screencast and slideshow hybrid for one docs page,
-presented by Sindy, the AI anime avatar. It lives in `video/episodes/<id>/`,
-where `<id>` is the docs page's file name (`getting-started/quickstart.md` →
-`quickstart`). Only two files in it are written by hand:
+An episode is a short screencast and slideshow hybrid presented by Sindy, the
+AI anime avatar. It lives in `video/episodes/<id>/` and belongs to one of
+three series (see "Series" below). Only two files in it are written by hand:
 
 - `script.json`: the narration, one entry per line: `{ "id", "text" }`.
 - `index.html`: the composition, a chain of scene calls on the Episode builder.
@@ -25,6 +24,28 @@ Read before writing:
 - `video/episodes/quickstart/` (the reference episode) and
   `video/sindy/CHARACTER.md` (how Sindy talks and emotes).
 - The `sindy-voice` skill, for writing and checking the narration.
+
+## Series
+
+The video course (`docs/content/course/_index.md`) has three series:
+
+| Series | Id | Embedded on | Length | `intro` kicker, title | `outro` next |
+| --- | --- | --- | --- | --- | --- |
+| Guide clip | the page's file name: `quickstart` | its guide page, above the first heading | 45 s to 2 min | the docs section's title, the page title | the next page to read |
+| Course episode | `course-` and the page's file name: `course-07-failure-drills` | its own page, `docs/content/course/NN-slug.md` | 3 to 5 min | `The sind course · NN`, the episode title | the next episode's page title |
+| Refresher | `refresher-<topic>`: `refresher-node-states` | its section of `docs/content/course/refreshers.md` | 60 to 90 s | `Refresher`, the topic | the course episode that shows its shortened cut |
+
+`Episode.create` takes `title: "<Page title>: <subtitle>"` and `series:
+"<Page title>"` for a guide clip, `title: "NN · <Episode title>"` and
+`series: "Course NN"` for a course episode, and `title: "Refresher: <topic>"`
+and `series: "Refresher"` for a refresher.
+
+Every episode opens with why (a hook in the viewer's words, then one use case
+that it carries through) and closes with up to three takeaways and the outro.
+Course episodes stand on their own: they say early what they need and create
+the cluster they use, and each carries one refresher as a 20 to 45 s chapter
+`Refresher: <topic>`. Refreshers explain background with diagrams and slides
+and show sind commands only where a docs page has them.
 
 ## Setup
 
@@ -51,7 +72,7 @@ sessions" in the README cover the known causes.
 The video complements the page; it does not replace it. Pick the happy path
 and the 3 to 6 moments a newcomer should see (a concept, the main commands,
 the result), and leave flag tables, edge cases and alternatives to the text.
-Aim for 45 seconds to 3 minutes. Sindy speaks about 2.8 words per second, and
+Aim for the series' length (see "Series"). Sindy speaks about 2.8 words per second, and
 transitions and pauses add up, so the length is roughly the narration's word
 count divided by 2.4, plus 4 seconds.
 
@@ -80,13 +101,13 @@ Pick scenes by what the viewer needs to see:
 
 | Scene | Use it for | Rules of thumb |
 | --- | --- | --- |
-| `intro` | always first | kicker = the docs section's title ("Getting started", "Usage"), title = the page title; no episode numbers |
+| `intro` | always first | kicker and title per series (see "Series"); only course episodes carry numbers |
 | `talk` | framing right after the intro: what you'll build, why it matters | once per episode; up to 3 chips of about 40 characters together, or they wrap |
 | `slide` | a concept or a list of steps | at most 4 bullets, each landing on a cue word said in the narration |
 | `diagram` | how parts relate: networks, components, what talks to what | up to about 8 nodes on a grid; build it up on cue words, nodes before the edges between them |
 | `terminal` | commands and their output | lines up to about 62 columns keep the full-size font |
 | `terminal` with `wide: true` | wider output, e.g. tables like `sind get nodes` | up to 96 columns at full size |
-| `outro` | always last | `next` is the title of the page to read next: the page's own "going further" link, else the next page in the docs navigation |
+| `outro` | always last | `next` per series; for a guide clip, the title of the page to read next: the page's own "going further" link, else the next page in the docs navigation |
 | `custom(kind, o)` | anything else (a config file, a comparison) | see "Custom scenes" below |
 
 Keep scenes between about 5 and 20 seconds; split a long explanation over
@@ -166,6 +187,15 @@ so the comparison only runs once the shortcode is there. The shortcode renders
 nothing until the episode is published, so docs builds never need the video
 toolchain.
 
+A course episode's page embeds it already and has this body: a lead (the use
+case and what the episode shows), `## In this episode` (3 to 5 bullets that
+link the reference pages), `## Commands` (every command and output the
+episode shows, in order, copied verbatim from the reference pages: this is
+what `check` compares against, and what viewers copy), `## Refresher: <topic>`
+(one sentence and a link to its section of the refreshers page), and `## Go
+deeper`. Refreshers are embedded on `docs/content/course/refreshers.md`, one
+section each.
+
 ### 6. Check
 
 ```bash
@@ -193,6 +223,10 @@ was voiced. Fix all of them, and resolve every warning or say why it stays:
 - `N s without narration` → dead air; shorten the wait or add a line.
 - `line … is in script.json but never said` → use it or delete it.
 - `no docs page embeds` → step 5.
+- `command/output line on no reference page outside docs/content/course` →
+  a course page's copy went stale or never came from a reference page; copy
+  the current text from the reference page into the course page and the
+  episode.
 
 Then **look at the contact sheets** (open the JPGs) like a viewer would:
 text clipped or overflowing its box, captions covering terminal output or a
@@ -254,6 +288,12 @@ update it in the same PR:
 
 Pure prose edits on the page usually need no episode change; `check` passing
 is the signal.
+
+Course pages copy commands and output from the reference pages. When a
+reference page's commands or sample output change, grep
+`docs/content/course/` for the old text and update those course pages and
+their episodes as well; `check` on a course episode warns about copies that
+no reference page has any more.
 
 ## Custom scenes
 

@@ -57,7 +57,10 @@ episodes/<id>/     ──  lib/episode.js (scenes: intro, talk, slide, diagram, 
 
 An episode is `script.json` (the narration, one line per id) plus an
 `index.html` that chains scene calls. `episodes/quickstart/index.html` is the
-reference; copy it to start a new one.
+reference; copy it to start a new one. Episodes belong to three series, all
+listed on the docs' Video Course page (`docs/content/course/`): guide clips at
+the top of guide pages, the ten numbered course episodes, and refreshers. The
+`sindy-episode` skill gives each series' ids, lengths, pages and titles.
 
 ```js
 const tl = gsap.timeline({ paused: true });
