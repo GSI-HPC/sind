@@ -234,18 +234,38 @@
       return api;
     }
 
+    // The frame shared by slide layouts (bullets, diagram): background,
+    // chapter label and title, with Sindy in the corner. The layout fills the
+    // area below the title, then calls narrate() so that its items can refer
+    // to the lines, and shows each item at cue(item, i): just before its cue
+    // word (`at`), or one after another when it has none.
+    function slideFrame(kind, o) {
+      const { el, t } = begin(kind, o, { transition: "push", shot: "cornerR" });
+      const title = h("div", { class: "slide-title", text: o.title || "" });
+      el.append(h("div", { class: "bg-glow" }), chapterLabel(o), title);
+      S().enter(tl, title, t + 0.5);
+      return {
+        el,
+        t,
+        narrate() {
+          P.wait(o.lead != null ? o.lead : 0.6);
+          say(o.say, o.mood || "neutral");
+        },
+        cue(item, i) {
+          return item.at != null ? time(item.at) - 0.15 : t + 0.9 + i * 0.5;
+        },
+      };
+    }
+
     function slide(o) {
       o = o || {};
-      const { el, t } = begin("slide", o, { transition: "push", shot: "cornerR" });
-      const title = h("div", { class: "slide-title", text: o.title || "" });
+      const f = slideFrame("slide", o);
       const bullets = (o.bullets || []).map((b) => h("div", { class: "bullet" }, [icon(b.icon), h("div", { class: "txt" }, [h("div", { class: "t1", text: b.title }), b.text ? h("div", { class: "t2", text: b.text }) : null])]));
-      el.append(h("div", { class: "bg-glow" }), chapterLabel(o), title, h("div", { class: "bullets" }, bullets));
-      S().enter(tl, title, t + 0.5);
+      f.el.append(h("div", { class: "bullets" }, bullets));
       for (const b of bullets) tl.set(b, { opacity: 0 }, 0);
-      P.wait(o.lead != null ? o.lead : 0.6);
-      say(o.say, "neutral");
+      f.narrate();
       (o.bullets || []).forEach((b, i) => {
-        const at = b.at != null ? time(b.at) - 0.15 : t + 0.9 + i * 0.5;
+        const at = f.cue(b, i);
         tl.fromTo(bullets[i], { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, at);
         if (b.at != null) glance(at);
       });
