@@ -253,6 +253,44 @@ func TestGetAuthKey_Output(t *testing.T) {
 	assert.Equal(t, "c2VjcmV0LWtleQ==\n", stdout)
 }
 
+func TestGetAuthKey_TypeJWT(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running",
+			Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-dev-api", State: "running",
+			Image: "img:1", Labels: "sind.cluster=dev,sind.role=api",
+		},
+	), "", nil)
+	m.AddResult(testutil.TarArchive("jwt_hs256.key", "jwt-key"), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "auth-key", "dev", "--type", "jwt", "-o", "json")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type": "jwt", "key": "and0LWtleQ=="}`, stdout)
+	assert.Equal(t, []string{"cp", "sind-dev-api:/etc/slurm/jwt_hs256.key", "-"}, m.Calls[1].Args)
+}
+
+func TestGetAuthKey_TypeMissing(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(testutil.PsEntry{
+		ID: "a", Names: "sind-dev-controller", State: "running",
+		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+	}), "", nil)
+
+	_, _, err := executeWithMock(&m, "get", "auth-key", "dev", "--type", "jwt")
+	require.EqualError(t, err, `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`)
+	assert.False(t, isUsageError(err))
+}
+
+func TestGetAuthKey_TypeCompletion(t *testing.T) {
+	stdout, _, err := executeCommand("__complete", "get", "auth-key", "--type", "")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"munge", "slurm", "jwt", ":4"}, strings.Fields(stdout)[:4])
+}
+
 func TestGetDNS_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"get", "dns"})

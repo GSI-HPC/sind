@@ -1372,7 +1372,7 @@ nodes:
 	for _, m := range status.Mounts {
 		assert.NotEqual(t, slurm.MungeDir, m.Path)
 	}
-	key, err := GetAuthKey(ctx, c, realm, clusterName)
+	key, err := GetAuthKey(ctx, c, realm, clusterName, "")
 	require.NoError(t, err)
 	assert.Equal(t, AuthSlurm, key.Type)
 	assert.Len(t, key.Key, slurm.SlurmKeySize)

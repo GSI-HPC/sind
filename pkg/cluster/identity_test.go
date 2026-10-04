@@ -694,7 +694,7 @@ func TestGetAuthKey_ClientIDs(t *testing.T) {
 	m.AddResult(testutil.TarArchive("slurm.key", "slurm-key-bytes"), "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, &AuthKey{Type: AuthSlurm, Key: []byte("slurm-key-bytes")}, key)
@@ -710,7 +710,7 @@ func TestGetAuthKey_ClientIDsCopyError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("cp failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Equal(t, "reading slurm key: cp failed", err.Error())

@@ -147,3 +147,58 @@ func TestCreate_APINodeWithoutSlurmrestd(t *testing.T) {
 	assert.Contains(t, err.Error(), "node api: image img:1 has no slurmrestd")
 	assert.Empty(t, collectIdentityCalls(calls).enabled["sind-dev-api"])
 }
+
+func TestGetAuthKey_Types(t *testing.T) {
+	controller := testutil.PsEntry{ID: "c1", Names: "sind-dev-controller", State: "running", Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller"}
+	clientIDsController := controller
+	clientIDsController.Labels += ",sind.identity=clientIds"
+	api := testutil.PsEntry{ID: "c2", Names: "sind-dev-api", State: "running", Image: "img:1", Labels: "sind.cluster=dev,sind.role=api"}
+	bareAPI := api
+	bareAPI.Labels += ",sind.managed=false"
+
+	tests := []struct {
+		name       string
+		containers []testutil.PsEntry
+		authType   AuthType
+		wantType   AuthType
+		wantCopy   string // docker cp source
+		wantErr    string
+	}{
+		{"munge", []testutil.PsEntry{controller}, AuthMunge, AuthMunge, "sind-dev-controller:/etc/munge/munge.key", ""},
+		{"slurm", []testutil.PsEntry{clientIDsController}, AuthSlurm, AuthSlurm, "sind-dev-controller:/etc/slurm/slurm.key", ""},
+		{"jwt", []testutil.PsEntry{controller, api}, AuthJWT, AuthJWT, "sind-dev-api:/etc/slurm/jwt_hs256.key", ""},
+		{"jwt with clientIds", []testutil.PsEntry{clientIDsController, api}, AuthJWT, AuthJWT, "sind-dev-api:/etc/slurm/jwt_hs256.key", ""},
+		{"default with an api node", []testutil.PsEntry{api, controller}, "", AuthMunge, "sind-dev-api:/etc/munge/munge.key", ""},
+		{"munge under clientIds", []testutil.PsEntry{clientIDsController}, AuthMunge, "", "", `cluster "dev" has no munge key: its identity clientIds uses auth/slurm with slurm.key instead`},
+		{"slurm without clientIds", []testutil.PsEntry{controller}, AuthSlurm, "", "", `cluster "dev" has no slurm.key: only identity clientIds uses auth/slurm, and the cluster uses munge`},
+		{"jwt without an api node", []testutil.PsEntry{controller}, AuthJWT, "", "", `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`},
+		{"jwt with a bare api node", []testutil.PsEntry{controller, bareAPI}, AuthJWT, "", "", `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(testutil.NDJSON(tt.containers...), "", nil)
+			m.AddResult(testutil.TarArchive("key", "key-bytes"), "", nil)
+			c := docker.NewClient(&m)
+
+			key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", tt.authType)
+
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				assert.Len(t, m.Calls, 1, "no copy")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, &AuthKey{Type: tt.wantType, Key: []byte("key-bytes")}, key)
+			assert.Equal(t, []string{"cp", tt.wantCopy, "-"}, m.Calls[1].Args)
+		})
+	}
+}
+
+func TestGetAuthKey_UnknownType(t *testing.T) {
+	var m mock.Executor
+	_, err := GetAuthKey(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev", "kerberos")
+
+	require.EqualError(t, err, `unknown authentication type "kerberos": must be munge, slurm or jwt`)
+	assert.Empty(t, m.Calls)
+}

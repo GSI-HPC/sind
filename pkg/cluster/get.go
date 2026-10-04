@@ -358,8 +358,8 @@ func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*Vo
 	return result, nil
 }
 
-// AuthType is how a cluster's Slurm daemons and commands authenticate, and
-// so which key GetAuthKey returns.
+// AuthType is a Slurm authentication plugin a cluster uses, auth/<type>,
+// and so which key GetAuthKey returns.
 type AuthType string
 
 // Authentication types.
@@ -368,18 +368,31 @@ const (
 	AuthMunge AuthType = "munge"
 	// AuthSlurm is auth/slurm, with slurm.key, under identity clientIds.
 	AuthSlurm AuthType = "slurm"
+	// AuthJWT is auth/jwt, with jwt_hs256.key, the alternative
+	// authentication of slurmrestd's tokens on a cluster with a managed api
+	// node.
+	AuthJWT AuthType = "jwt"
 )
 
-// AuthKey is the key that authenticates a cluster's Slurm traffic.
+// AuthTypes are the authentication types GetAuthKey takes.
+var AuthTypes = []AuthType{AuthMunge, AuthSlurm, AuthJWT}
+
+// AuthKey is a key that authenticates a cluster's Slurm traffic.
 type AuthKey struct {
 	Type AuthType
 	Key  []byte
 }
 
-// GetAuthKey reads the key that authenticates a cluster's Slurm traffic
-// from one of its node containers: the munge key, or slurm.key with
-// identity clientIds.
-func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName string) (*AuthKey, error) {
+// GetAuthKey reads a key that authenticates a cluster's Slurm traffic from
+// one of its node containers: for authType munge the munge key, for slurm
+// slurm.key, with identity clientIds, and for jwt jwt_hs256.key, with a
+// managed api node. An empty authType is the cluster's AuthType: slurm with
+// identity clientIds, munge otherwise. A type the cluster does not use is
+// an error that says why.
+func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName string, authType AuthType) (*AuthKey, error) {
+	if authType != "" && !slices.Contains(AuthTypes, authType) {
+		return nil, fmt.Errorf("unknown authentication type %q: must be %s, %s or %s", authType, AuthMunge, AuthSlurm, AuthJWT)
+	}
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
@@ -389,11 +402,31 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 	if len(containers) == 0 {
 		return nil, fmt.Errorf("no containers found in cluster %q", clusterName)
 	}
-	authType, path := AuthMunge, slurm.MungeKeyPath
+	primary := AuthMunge
 	if IdentityFromLabels(containers[0].Labels) == config.IdentityClientIDs {
-		authType, path = AuthSlurm, slurm.SlurmKeyPath
+		primary = AuthSlurm
 	}
-	key, err := client.CopyFromContainer(ctx, containers[0].Name, path)
+	if authType == "" {
+		authType = primary
+	}
+	source, path := containers[0].Name, slurm.MungeKeyPath
+	switch {
+	case authType == AuthJWT:
+		i := slices.IndexFunc(containers, func(c docker.ContainerListEntry) bool {
+			return config.Role(c.Labels[LabelRole]) == config.RoleAPI && IsManaged(c.Labels)
+		})
+		if i < 0 {
+			return nil, fmt.Errorf("cluster %q has no JWT key: sind sets up JWT only for a cluster with a managed api node", clusterName)
+		}
+		source, path = containers[i].Name, slurm.JWTKeyPath
+	case authType != primary && primary == AuthSlurm:
+		return nil, fmt.Errorf("cluster %q has no munge key: its identity clientIds uses auth/slurm with slurm.key instead", clusterName)
+	case authType != primary:
+		return nil, fmt.Errorf("cluster %q has no slurm.key: only identity clientIds uses auth/slurm, and the cluster uses munge", clusterName)
+	case authType == AuthSlurm:
+		path = slurm.SlurmKeyPath
+	}
+	key, err := client.CopyFromContainer(ctx, source, path)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s key: %w", authType, err)
 	}

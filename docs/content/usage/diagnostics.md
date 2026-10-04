@@ -381,10 +381,18 @@ worker-0.default.sind.sind           172.19.0.3
 ## Authentication key
 
 ```bash
-sind get auth-key [CLUSTER]
+sind get auth-key [CLUSTER] [--type munge|slurm|jwt]
 ```
 
-Outputs the key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external tooling: the munge key, or `slurm.key` with [identity `clientIds`]({{< relref "/guides/users#clientids" >}}). `-o json` returns it with its type: `{"type": "munge", "key": "..."}` or `{"type": "slurm", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`.
+Outputs a key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external tooling. `--type` picks the Slurm authentication plugin:
+
+| `--type` | Key | Cluster |
+|----------|-----|---------|
+| `munge` | the munge key | identity `local` or `nssSlurm`, and every unmanaged cluster |
+| `slurm` | `slurm.key` | [identity `clientIds`]({{< relref "/guides/users#clientids" >}}) |
+| `jwt` | `jwt_hs256.key`, which signs [REST API tokens]({{< relref "/guides/rest-api" >}}) | with a managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) |
+
+Without `--type` it prints the cluster's main key: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not have fails with an error that says why. `-o json` returns the key with its type, e.g. `{"type": "jwt", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`.
 
 ## Mesh infrastructure
 
