@@ -735,10 +735,23 @@ func TestLockRealm_DaemonTwoClients(t *testing.T) {
 		acquired <- unlock2
 	}()
 
+	// The second client reports the holder once it finds the lock taken,
+	// which takes a create and an inspect on a daemon that other tests keep
+	// busy, then keeps waiting.
+	deadline := time.After(10 * time.Second)
+	for len(w.waits()) == 0 {
+		select {
+		case <-acquired:
+			t.Fatal("second client took the lock while the first held it")
+		case <-deadline:
+			t.Fatal("second client did not report the holder it waits for")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 	select {
 	case <-acquired:
 		t.Fatal("second client took the lock while the first held it")
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 	}
 	waits := w.waits()
 	require.Len(t, waits, 1)
