@@ -399,6 +399,86 @@ func TestWatcher_SystemdMonitorRunFailure(t *testing.T) {
 	w.Wait()
 }
 
+func TestWatcher_MonitorStreamEnds(t *testing.T) {
+	// A stream that ends while the watcher runs, as busctl's does when its
+	// node stops or the image has no busctl, is a monitor error too: the
+	// monitor's events are missing from then on.
+	for _, tt := range []struct {
+		name   string
+		pipe   int
+		node   string
+		detail string
+	}{
+		{"docker events", 0, "", "docker events stream ended"},
+		{"systemd monitor", 1, "controller", "systemd monitor stream ended"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pipes := &mock.Pipes{}
+			defer pipes.CloseAll()
+
+			m := &mock.Executor{OnStart: pipes.OnStart}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			w := NewWatcher(m, "sind-dev-", "dev")
+			sub := w.Subscribe()
+			require.NoError(t, w.Start(ctx, []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}))
+
+			pipes.CloseWithError(tt.pipe, nil) // EOF
+
+			select {
+			case ev := <-sub:
+				assert.Equal(t, EventMonitorError, ev.Kind)
+				assert.Equal(t, tt.node, ev.Node)
+				assert.Equal(t, tt.detail, ev.Detail)
+				assert.ErrorIs(t, ev.Err, errStreamEnded)
+			case <-time.After(2 * time.Second):
+				t.Fatal("timeout waiting for monitor error event")
+			}
+
+			cancel()
+			pipes.CloseAll()
+			w.Wait()
+		})
+	}
+}
+
+func TestWatcher_SubscribeToGetsWatcherErrors(t *testing.T) {
+	// A subscription to one container gets the monitor errors of the
+	// whole watcher, not those of another container's monitor.
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	w := NewWatcher(m, "sind-dev-", "dev")
+	worker := w.SubscribeTo("sind-dev-worker-0")
+	require.NoError(t, w.Start(ctx, nil))
+
+	w.emit(ctx, Event{Kind: EventMonitorError, Node: "controller", Container: "sind-dev-controller"})
+	w.emit(ctx, Event{Kind: EventMonitorError, Detail: "docker events stream failed"})
+
+	select {
+	case ev := <-worker:
+		assert.Equal(t, EventMonitorError, ev.Kind)
+		assert.Empty(t, ev.Container)
+		assert.Equal(t, "docker events stream failed", ev.Detail)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for the watcher's monitor error")
+	}
+	select {
+	case ev := <-worker:
+		t.Fatalf("unexpected event %+v", ev)
+	default:
+	}
+
+	cancel()
+	pipes.CloseAll()
+	w.Wait()
+}
+
 func TestWatcher_DockerMonitorStartFailure(t *testing.T) {
 	m := &mock.Executor{
 		OnStart: func(_ []string) mock.StreamResult {

@@ -86,6 +86,14 @@ sind uses two event sources to accelerate readiness detection:
 
 When an event of the node arrives, its readiness probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. Each node's wait receives only its own container's events, and the docker events stream asks only for the start, die, oom, pause and unpause actions, not for the exec events of the probes. If the event sources are unavailable, sind falls back to poll-only mode transparently.
 
+Each round runs a node's checks in order and stops at the first that fails. Within one wait, a check that has passed is not run again in later rounds while the events can tell that what it checks has changed:
+
+- The sshd, munge and Slurm daemon checks follow their systemd units (`sshd.service`, `munge.service`, ...): an event of the unit, which became active again or failed, runs the check again, and for munge and the Slurm daemons a failed unit then ends the wait (see Readiness Checks). Events of other units run no passed check again.
+- Any other event of the container (start, oom, pause, unpause) runs every passed check again; a die event ends the wait. The container and systemd checks have no unit, so only these events run them again.
+- When the events may be incomplete, the passed checks run again: after the wait's event buffer was full, as the watcher drops what a full subscriber has no room for, and in every round once a monitor has stopped (the docker events stream, or the node's busctl monitor, failed or ended, e.g. in an image without `busctl`), once the watcher has stopped, and in poll-only mode, where nothing tells a wait what changed.
+
+While systemd boots, a round then costs one `docker exec`, the systemd check, instead of a `docker inspect` and the exec, and once systemd runs, a round that waits for munge no longer repeats the systemd and sshd checks. The trade-off: a change that no event reports goes unnoticed until the wait ends, such as a unit that stops without failing (the systemd monitor reports only units that became active or failed). As the wait ends once every check has passed, that window is the time from a check passing to the last one passing, and the steps after the wait (the node setup's ssh-keyscan, the Slurm daemons) fail on such a node with their own errors. A final round that runs every check again before the wait ends would close the window, at the price of the calls the skipping saves in the deciding round; skipping in poll-only mode too would keep a container that exits from failing the wait at once, as the container check would not run again.
+
 #### Readiness Checks
 
 | Check | Description |

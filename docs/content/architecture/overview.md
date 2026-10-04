@@ -75,6 +75,8 @@ sind waits for each node to become ready before returning success. Probes are ac
 
 When an event of the node arrives, its probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. Each node's wait receives only its own container's events. If event sources are unavailable, sind falls back to poll-only mode.
 
+Each round runs a node's checks in order and stops at the first that fails. A check that has passed is not run again in later rounds of the same wait, until an event says that what it checks may have changed: an event of its systemd unit for the sshd, munge and Slurm daemon checks (a failed munge or Slurm daemon unit then ends the wait), any other event of the container for every check. After a full event buffer, or once a monitor has stopped, and in poll-only mode, the passed checks run again. While systemd boots, a round then costs one `docker exec` instead of a `docker inspect` and an exec.
+
 | Check | Description |
 |-------|-------------|
 | Container running | Docker container in running state |

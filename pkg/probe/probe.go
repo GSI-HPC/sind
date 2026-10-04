@@ -66,38 +66,43 @@ type Func func(ctx context.Context, client *docker.Client, name docker.Container
 type Probe struct {
 	Name  string
 	Check Func
+	// Unit is the systemd unit whose state the check follows, as busctl
+	// names it ("munge.service"), or empty. A wait with events does not run
+	// a check that has passed again until an event of its unit arrives (see
+	// UntilReadyWithEvents).
+	Unit string
 }
 
-// ForService returns the readiness probe for a Slurm daemon service.
+// serviceChecks are the readiness checks of the services sind waits for.
+var serviceChecks = map[Service]Func{
+	ServiceMunge:     MungeReady,
+	ServiceSSHD:      SSHDReady,
+	ServiceSlurmctld: SlurmctldReady,
+	ServiceSlurmd:    SlurmdReady,
+	ServiceSlurmdbd:  SlurmdbdReady,
+	ServiceSackd:     SackdReady,
+}
+
+// ForService returns the readiness probe for a service, which follows the
+// service's systemd unit. A service sind does not wait for (mariadb) gets
+// a probe without a check.
 func ForService(svc Service) Probe {
-	switch svc {
-	case ServiceSlurmctld:
-		return Probe{Name: string(svc), Check: SlurmctldReady}
-	case ServiceSlurmd:
-		return Probe{Name: string(svc), Check: SlurmdReady}
-	case ServiceSlurmdbd:
-		return Probe{Name: string(svc), Check: SlurmdbdReady}
-	case ServiceSackd:
-		return Probe{Name: string(svc), Check: SackdReady}
-	default:
+	check, ok := serviceChecks[svc]
+	if !ok {
 		return Probe{Name: string(svc)}
 	}
+	return Probe{Name: string(svc), Check: check, Unit: string(svc) + ".service"}
 }
 
 // NodeProbes returns the probes applicable to a node with the given role.
 func NodeProbes(role config.Role) []Probe {
 	probes := []Probe{
-		{"container", ContainerRunning},
-		{"systemd", SystemdReady},
-		{"sshd", SSHDReady},
+		{Name: "container", Check: ContainerRunning},
+		{Name: "systemd", Check: SystemdReady},
+		ForService(ServiceSSHD),
 	}
-	switch role {
-	case config.RoleController:
-		probes = append(probes, Probe{"slurmctld", SlurmctldReady})
-	case config.RoleDB:
-		probes = append(probes, Probe{"slurmdbd", SlurmdbdReady})
-	case config.RoleWorker:
-		probes = append(probes, Probe{"slurmd", SlurmdReady})
+	if svc, ok := ServiceForRole(role); ok {
+		probes = append(probes, ForService(svc))
 	}
 	return probes
 }
@@ -108,44 +113,13 @@ const DefaultInterval = 500 * time.Millisecond
 
 // UntilReady polls the given probes until they all pass or the context expires.
 // The caller controls the deadline via the context. The interval controls the
-// delay between polling attempts; zero or less means DefaultInterval. On
-// timeout, the error includes the name and message of the last failing probe.
+// delay between polling attempts; zero or less means DefaultInterval. Each
+// round runs the probes in order and stops at the first that fails; as
+// nothing tells UntilReady when what a passed probe checks changes, every
+// round starts again from the first probe. On timeout, the error includes
+// the name and message of the last failing probe.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
-	log := sindlog.From(ctx)
-	ticker := time.NewTicker(orDefault(interval))
-	defer ticker.Stop()
-
-	probeNames := make([]string, len(probes))
-	for i, p := range probes {
-		probeNames[i] = p.Name
-	}
-	log.DebugContext(ctx, "starting readiness probes", "node", string(name), "probes", strings.Join(probeNames, ","))
-
-	var lastErr error
-	for {
-		var failed bool
-		for _, p := range probes {
-			if err := p.Check(ctx, client, name); err != nil {
-				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
-				log.Log(ctx, sindlog.LevelTrace, "probe failed", "node", string(name), "probe", p.Name, "err", err)
-				failed = true
-				var te *TerminalError
-				if errors.As(err, &te) {
-					return fmt.Errorf("node %s not ready: %w", name, lastErr)
-				}
-				break
-			}
-		}
-		if !failed {
-			log.DebugContext(ctx, "all probes passed", "node", string(name))
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return waitEnded(ctx, name, lastErr)
-		case <-ticker.C:
-		}
-	}
+	return untilReady(ctx, client, name, probes, interval, nil, "starting readiness probes")
 }
 
 // UntilReadyWithEvents is like UntilReady but also listens for events from
@@ -154,9 +128,31 @@ func UntilReady(ctx context.Context, client *docker.Client, name docker.Containe
 // detection latency for event-backed state transitions. The events already
 // queued then are taken with it, so that a burst (systemd activates dozens
 // of units while it boots) costs one probe round, not one per event.
-// Container die events are treated as terminal errors. Once events is
-// closed, the wait goes on polling.
+// Container die events are treated as terminal errors.
+//
+// A probe that has passed is not run again in later rounds while the
+// events can tell that what it checks has changed:
+//
+//   - an event of its unit (Probe.Unit) runs it again: a unit that became
+//     active again, or one that failed, which a unit probe reports as a
+//     TerminalError;
+//   - another event of the container (start, oom, pause, unpause) runs
+//     every passed probe again;
+//   - a full events buffer runs every passed probe again, as the watcher
+//     drops the events a full subscriber has no room for;
+//   - from a monitor error on (monitor.EventMonitorError of the container
+//     or of the whole watcher), once events is closed, and for an
+//     unbuffered events channel, every round runs every probe, as in
+//     UntilReady.
+//
+// Once events is closed, the wait goes on polling.
 func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event) error {
+	return untilReady(ctx, client, name, probes, interval, events, "starting readiness probes (event-driven)")
+}
+
+// untilReady is UntilReady with events nil, UntilReadyWithEvents
+// otherwise; it logs msg first.
+func untilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event, msg string) error {
 	log := sindlog.From(ctx)
 	ticker := time.NewTicker(orDefault(interval))
 	defer ticker.Stop()
@@ -165,12 +161,16 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 	for i, p := range probes {
 		probeNames[i] = p.Name
 	}
-	log.DebugContext(ctx, "starting readiness probes (event-driven)", "node", string(name), "probes", strings.Join(probeNames, ","))
+	log.DebugContext(ctx, msg, "node", string(name), "probes", strings.Join(probeNames, ","))
 
+	pr := newProgress(probes, events)
 	var lastErr error
 	for {
 		var failed bool
-		for _, p := range probes {
+		for i, p := range probes {
+			if pr.passed[i] {
+				continue
+			}
 			if err := p.Check(ctx, client, name); err != nil {
 				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
 				log.Log(ctx, sindlog.LevelTrace, "probe failed", "node", string(name), "probe", p.Name, "err", err)
@@ -181,6 +181,7 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 				}
 				break
 			}
+			pr.pass(i)
 		}
 		if !failed {
 			log.DebugContext(ctx, "all probes passed", "node", string(name))
@@ -194,13 +195,15 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 			case ev, ok := <-events:
 				if !ok {
 					events = nil
+					pr.distrust()
 					continue
 				}
-				if ev.Container != name {
-					continue
-				}
-				if err := takeQueued(name, ev, events); err != nil {
+				relevant, err := pr.take(name, ev, events)
+				if err != nil {
 					return err
+				}
+				if !relevant {
+					continue
 				}
 			}
 			break
@@ -208,24 +211,94 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 	}
 }
 
-// takeQueued takes ev and the events already queued on events. It returns
-// the error for a die event of the container among them.
-func takeQueued(name docker.ContainerName, ev monitor.Event, events <-chan monitor.Event) error {
+// concerns reports whether ev concerns the wait for the container name: an
+// event of the container, or a monitor error of the whole watcher.
+func concerns(name docker.ContainerName, ev monitor.Event) bool {
+	return ev.Container == name || ev.Kind == monitor.EventMonitorError && ev.Container == ""
+}
+
+// progress remembers which probes of a wait have passed, which later
+// rounds skip while the events can tell when what they check changes.
+type progress struct {
+	probes []Probe
+	passed []bool
+	// trusted is whether the events tell the wait about changes: they come
+	// on a buffered channel, and no monitor has stopped.
+	trusted bool
+}
+
+// newProgress returns the progress of a wait on probes with events, none
+// passed yet.
+func newProgress(probes []Probe, events <-chan monitor.Event) *progress {
+	return &progress{
+		probes:  probes,
+		passed:  make([]bool, len(probes)),
+		trusted: events != nil && cap(events) > 0,
+	}
+}
+
+// pass records that probe i passed: later rounds skip it, if the events
+// can tell when it changes.
+func (p *progress) pass(i int) {
+	p.passed[i] = p.trusted
+}
+
+// distrust makes every later round run every probe: the events no longer
+// tell what changed.
+func (p *progress) distrust() {
+	p.trusted = false
+	clear(p.passed)
+}
+
+// take takes ev, just received from events, and the events already queued
+// there, and forgets the passed probes whose state they may have changed.
+// It reports whether any of them concerns the wait, and returns the error
+// for a die event of the container among them.
+func (p *progress) take(name docker.ContainerName, ev monitor.Event, events <-chan monitor.Event) (bool, error) {
+	relevant := false
 	for {
-		if ev.Kind == monitor.EventContainerDie && ev.Container == name {
-			return fmt.Errorf("node %s not ready: %w", name, &TerminalError{
-				Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
-			})
+		// The buffer was full before ev was received: the watcher may have
+		// dropped events since the wait last received one.
+		if len(events) >= cap(events)-1 {
+			clear(p.passed)
+		}
+		if concerns(name, ev) {
+			if ev.Kind == monitor.EventContainerDie {
+				return true, fmt.Errorf("node %s not ready: %w", name, &TerminalError{
+					Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
+				})
+			}
+			relevant = true
+			p.changed(ev)
 		}
 		var ok bool
 		select {
 		case ev, ok = <-events:
 			if !ok {
-				return nil
+				p.distrust()
+				return relevant, nil
 			}
 		default:
-			return nil
+			return relevant, nil
 		}
+	}
+}
+
+// changed forgets the passed probes whose state ev may have changed: those
+// of its unit for a unit event, every probe for another event of the
+// container, and from a monitor error on every probe of every round.
+func (p *progress) changed(ev monitor.Event) {
+	switch {
+	case ev.Kind == monitor.EventMonitorError:
+		p.distrust()
+	case ev.Unit != "":
+		for i, probe := range p.probes {
+			if probe.Unit == ev.Unit {
+				p.passed[i] = false
+			}
+		}
+	default:
+		clear(p.passed)
 	}
 }
 

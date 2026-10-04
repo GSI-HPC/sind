@@ -539,13 +539,16 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 				}})
 			}
 
+			// The sshd and munge probes follow their units: a wait with
+			// events runs them again after they passed only on an event of
+			// their unit (see probe.UntilReadyWithEvents).
 			baseProbes := []probe.Probe{
 				{Name: "container", Check: probe.ContainerRunning},
 				{Name: "systemd", Check: probe.SystemdReady},
-				{Name: "sshd", Check: probe.SSHDReady},
+				probe.ForService(probe.ServiceSSHD),
 			}
 			if nc.Identity != config.IdentityClientIDs {
-				baseProbes = append(baseProbes, probe.Probe{Name: "munge", Check: probe.MungeReady})
+				baseProbes = append(baseProbes, probe.ForService(probe.ServiceMunge))
 			}
 			log.DebugContext(nctx, "waiting for node", "node", nc.ShortName)
 			if err := waitReady(nctx, client, containerName, baseProbes, rd.interval, watcher); err != nil {

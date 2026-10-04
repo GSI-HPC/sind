@@ -1874,6 +1874,71 @@ func TestWaitReady_WithWatcher(t *testing.T) {
 	w.Wait()
 }
 
+func TestSetupNodes_SkipsPassedProbes(t *testing.T) {
+	// With the event watcher, the rounds while systemd boots run the
+	// systemd probe alone: the container probe passed in the first round,
+	// and only the docker events would tell that the container changed.
+	// Without it, every round inspects the container again.
+	for _, tt := range []struct {
+		name     string
+		watch    bool
+		inspects int
+	}{
+		{"events", true, 2},
+		{"poll only", false, 5},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pipes := &mock.Pipes{}
+			defer pipes.CloseAll()
+			booting := 3
+			var m mock.Executor
+			m.OnStart = pipes.OnStart
+			m.OnCall = func(args []string, _ string) mock.Result {
+				joined := strings.Join(args, " ")
+				switch {
+				case args[0] == "inspect":
+					return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})}
+				case strings.Contains(joined, "is-system-running"):
+					if booting > 0 {
+						booting--
+						return mock.Result{Stdout: "starting\n"}
+					}
+					return mock.Result{Stdout: "running\n"}
+				case strings.Contains(joined, "/dev/tcp"):
+					return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.9\n"}
+				case strings.Contains(joined, "is-active"):
+					return mock.Result{Stdout: "active\n"}
+				case strings.Contains(joined, "ssh-keyscan"):
+					return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey\n"}
+				}
+				return mock.Result{}
+			}
+			client := docker.NewClient(&m)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			var watcher *monitor.Watcher
+			if tt.watch {
+				w, stop := startWatcher(ctx, client, "sind-dev-", "dev")
+				require.NotNil(t, w)
+				defer func() {
+					cancel()
+					pipes.CloseAll()
+					stop()
+				}()
+				watcher = w
+			}
+			configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
+
+			_, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs,
+				&readiness{interval: time.Millisecond}, watcher)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.inspects, countCalls(m.Calls, "inspect"), "the probe's inspects and the one for the addresses")
+			assert.Equal(t, 4, countCalls(m.Calls, "exec", "sind-dev-worker-0", "sh", "-c", "systemctl is-system-running 2>/dev/null || true"))
+		})
+	}
+}
+
 func TestEnableService(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
