@@ -53,6 +53,34 @@ func TestDeleteContainers_RemoveError(t *testing.T) {
 	assert.Contains(t, err.Error(), "removing container sind-dev-controller")
 }
 
+// TestDeleteContainers_TriesEvery checks that a failed removal does not
+// keep the other containers from being removed, and that every failure is
+// returned.
+func TestDeleteContainers_TriesEvery(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[len(args)-1] == "sind-dev-worker-1" {
+			return mock.Result{Stderr: "removal already in progress\n", Err: testutil.ExitCode1(t)}
+		}
+		if args[len(args)-1] == "sind-dev-worker-3" {
+			return mock.Result{Err: fmt.Errorf("daemon gone")}
+		}
+		return mock.Result{}
+	}
+	c := docker.NewClient(&m)
+
+	var containers []docker.ContainerListEntry
+	for i := range 40 {
+		containers = append(containers, docker.ContainerListEntry{Name: docker.ContainerName(fmt.Sprintf("sind-dev-worker-%d", i))})
+	}
+	err := DeleteContainers(t.Context(), c, containers)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "removing container sind-dev-worker-1")
+	assert.Contains(t, err.Error(), "removing container sind-dev-worker-3: daemon gone")
+	assert.Len(t, m.Calls, 40, "every container is tried")
+}
+
 // TestDeleteContainers_AlreadyGone covers the manual-cleanup case: the user
 // `docker rm`'d a cluster container, then ran `sind delete cluster`. The
 // removal must succeed with a warning instead of aborting.
