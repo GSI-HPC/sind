@@ -16,8 +16,8 @@
 //
 // Narration (`say`): a line id, or { id, mood, cues: { word: mood }, gap },
 // or an array of those. Times are written as "line:word" (the start of the
-// first word in that line beginning with "word"; "line:word#2" for the third
-// match), and every helper accepts a number of seconds instead.
+// first word beginning with "word" in the line's latest occurrence;
+// "line:word#2" for the third match), and every helper accepts seconds instead.
 (function (global) {
   "use strict";
 
@@ -104,7 +104,7 @@
       if (typeof ref === "number") return ref;
       const m = /^([^:]+):([^#+-]+)(?:#(\d+))?([+-][\d.]+)?$/.exec(String(ref));
       if (!m) throw new Error(`bad time reference "${ref}" (want "line:word", "line:word#n" or seconds)`);
-      const said = P.said.find((s) => s.id === m[1]);
+      const said = P.said.findLast((s) => s.id === m[1]);
       if (!said) throw new Error(`line "${m[1]}" has not been said yet (reference "${ref}")`);
       const word = m[2].trim();
       if (m[3] == null) {
@@ -116,7 +116,7 @@
       return said.word(word, m[3] ? Number(m[3]) : 0) + (m[4] ? Number(m[4]) : 0);
     }
     const lineEnd = (id) => {
-      const said = P.said.find((s) => s.id === id);
+      const said = P.said.findLast((s) => s.id === id);
       if (!said) throw new Error(`line "${id}" has not been said yet`);
       return said.end;
     };

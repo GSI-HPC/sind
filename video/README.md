@@ -95,7 +95,7 @@ a word (`{ running: "joy" }`) and `look` turns her eyes at a word
 their content automatically.
 
 **Times** are written `"line:word"` (the first word in that line starting with
-`word`), `"line:word#1"` for the second match, `"line:word-0.1"` with an
+`word`, in the line's latest occurrence), `"line:word#1"` for the second match, `"line:word-0.1"` with an
 offset, or plain seconds. Terminal steps take `at` (absolute) or `after`
 (seconds after the previous step; a typed command ends when its last character
 is typed): `{ cmd }`, `{ out }`, `{ prompt: true }` (a fresh prompt after a
