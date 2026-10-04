@@ -62,6 +62,8 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .bullet .txt { display: flex; flex-direction: column; gap: 4px; }
 .bullet .t1 { font-size: 40px; font-weight: 700; color: #fff; }
 .bullet .t2 { font-size: 28px; color: var(--muted); }
+/* Four bullets: start higher and closer together, so the last clears the captions. */
+.bullets:has(> .bullet:nth-child(4)) { top: 290px; gap: 20px; }
 
 /* Terminal window. */
 .term { position: absolute; left: 100px; top: 150px; width: 1340px; height: 700px; border-radius: 22px; background: #0b1220; border: 2px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); overflow: hidden; }
