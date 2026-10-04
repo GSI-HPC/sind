@@ -25,6 +25,7 @@ type Summary struct {
 	Submitters   int    `json:"submitters"`
 	Controllers  int    `json:"controllers"`
 	DBs          int    `json:"dbs"`
+	APIs         int    `json:"apis"`
 	Workers      int    `json:"workers"`
 }
 
@@ -67,6 +68,8 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 			cd.summary.Controllers++
 		case config.RoleDB:
 			cd.summary.DBs++
+		case config.RoleAPI:
+			cd.summary.APIs++
 		case config.RoleSubmitter:
 			cd.summary.Submitters++
 		case config.RoleWorker:
@@ -226,17 +229,19 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 }
 
 // rolePrefix returns a single-character sort prefix that orders nodes by role
-// (controller < db < submitter < worker < other).
+// (controller < db < api < submitter < worker < other).
 func rolePrefix(role config.Role) string {
 	switch role {
 	case config.RoleController:
 		return "0"
 	case config.RoleDB:
 		return "1"
-	case config.RoleSubmitter:
+	case config.RoleAPI:
 		return "2"
-	case config.RoleWorker:
+	case config.RoleSubmitter:
 		return "3"
+	case config.RoleWorker:
+		return "4"
 	default:
 		return "9"
 	}
