@@ -44,7 +44,10 @@ only the files below. With Docker, `docker run --rm <new image> slurmctld -V` mu
    Dockerfile's `configure` flags against its `RELEASE_NOTES.md`. Dropping a line
    removes its entry; its published tags stay but are no longer rebuilt. Adding or
    dropping a line also updates the release lines listed in `README.md` and under
-   "Supported Versions" in `DESIGN.md`.
+   "Supported Versions" in `DESIGN.md`. slurmrestd builds only from 26.05 on, with
+   Rocky's llhttp (25.11 knows only the nodejs http-parser): dropping 25.11 removes the
+   `"slurm 25."*` case of the Dockerfile's build check and the 26.05 notes on the `api`
+   node in `DESIGN.md` and `docs/content/`.
 2. **Checksum the exact tarball the Dockerfile downloads:** `curl -fsSL <url> | sha256sum`.
    GitHub's auto-generated source archives differ from SchedMD's tarballs, so never use
    them. If the host is unreachable (cloud sessions may block `download.schedmd.com`),
