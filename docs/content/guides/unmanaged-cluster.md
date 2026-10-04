@@ -31,6 +31,7 @@ The flag applies to the whole cluster:
 
 - Every node is unmanaged. A worker or db node with `managed: true` is rejected.
 - `slurm` sections (`main`, `cgroup`, `gres`, `topology`, `plugstack`, `slurmdbd`) are rejected, because sind writes no Slurm configuration.
+- [Identity]({{< relref "/configuration/cluster-config#identity-section" >}}) modes other than `local` (`nssSlurm`, `clientIds`) are rejected for the same reason, and so are Slurm [accounts]({{< relref "/configuration/cluster-config#accounts-section" >}}) and the users' `accounts`, `coordinator` and `adminLevel`, since sind runs no slurmdbd. [Users and groups]({{< relref "/guides/users" >}}) still work: every node gets the Linux accounts and, with `users`, mounts the shared home volume.
 - A [db node]({{< relref "/configuration/node-definitions#database-node" >}}) is a bare node too: sind starts neither MariaDB nor slurmdbd on it, so your tooling can provision accounting as well. To keep sind's Slurm and provision only slurmdbd, use a managed cluster with `managed: false` on the db node instead.
 - `backupController: true` still adds `controller-backup` and the shared state volume (see [Controller pair](#controller-pair)).
 
@@ -61,7 +62,7 @@ SlurmUser=slurm
 StateSaveLocation=/var/spool/slurmctld
 SlurmdSpoolDir=/var/spool/slurmd
 ProctrackType=proctrack/cgroup
-TaskPlugin=task/cgroup,task/affinity
+TaskPlugin=task/cgroup
 ReturnToService=2
 NodeName=worker-[0-1] CPUs=1 State=UNKNOWN
 PartitionName=all Nodes=ALL Default=YES MaxTime=INFINITE State=UP

@@ -26,8 +26,8 @@ Containers require specific security options for systemd:
 
 - `--security-opt writable-cgroups=true` — allows systemd to manage cgroups
 - `--cgroupns=private` — private cgroup namespace
-- `--security-opt label=disable` — SELinux compatibility
-- `--tmpfs /run:exec,mode=755` — systemd runtime directory
+- `--security-opt label=disable` — lets systemd manage its cgroups, and the nodes use host bind mounts, on Docker daemons with SELinux labelling enabled, without host policy changes. The nodes then run unconfined (`spc_t` instead of `container_t`), so SELinux does not separate them from the host
+- `--tmpfs /run:exec,mode=755,size=64m` — systemd runtime directory, sized so that a volatile journal cannot grow into the node's memory
 - `--tmpfs /run/lock` — systemd lock files
 - `--entrypoint /bin/sh` with a short script — PID 1 moves itself into `init.scope`, enables every available cgroup controller in the root cgroup's `cgroup.subtree_control`, then execs `/sbin/init`
 
@@ -35,50 +35,57 @@ Containers require specific security options for systemd:
 
 ## Concurrency
 
-Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications. Read-only operations and `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}).
+Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}). The lock lives in each user's state directory, so sind clients that share a Docker daemon need separate realms.
 
 ## Creation flow
 
 ```
-┌ PreflightCheck → createResources → connect SSH relay ┐
-┤                                                      ├→ setupNodes
-└ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┘
+┌ PreflightCheck → createResources ───────────────────┐
+├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┼→ setupNodes
+└ DetectCVMFS (storage.cvmfs only) ────────────────────┘
                            │
   registerMesh ║ enableSlurm → createSlurmAccounts ║ createHomes
                            │
                        *Cluster
 ```
 
-- `createResources` creates the cluster network, the config volume and its Slurm configuration (managed clusters only), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
-- `resolveInfra` looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
+- `createResources` creates the cluster network and connects the SSH relay to it, the config volume and its Slurm configuration (managed clusters only), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
+- `resolveInfra` starts the mesh DNS and SSH relay if they are stopped, and looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
+- `DetectCVMFS` (`storage.cvmfs` only) picks how the nodes [mount CVMFS]({{< relref "/guides/cvmfs" >}}), also while the resources are created: the `cvmfs` Docker volume plugin if one is enabled, otherwise a bind mount of the host's `/cvmfs`, first tried in a throwaway container of the controller's image.
+- With `--pull`, each distinct node image is pulled once, concurrently, before the helper containers, the version check, the CVMFS check and the nodes run it; none of these containers is created with `--pull always`. A new mesh's DNS and relay containers, which `EnsureMesh` creates before, are created with `--pull always`.
+- The helper containers that write the Slurm configuration and the munge key copy each file in with its final mode, then hand the secrets to their owner with `chown`; `docker rm -f` stops them.
 - `setupNodes` creates, waits for, and sets up every node: nss_slurm on managed workers with identity `nssSlurm` or `clientIds`, the cluster users and groups where the identity mode puts them, SSH and host keys.
 - `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, and `sackd` on the submitter with identity `clientIds`.
 - `createSlurmAccounts` (`accounts` only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users' associations and the coordinators with `sacctmgr -i` on `controller`.
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
-- If any step fails, `sind create cluster` removes what it created.
+- If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 
-Mesh registration (batch DNS + known_hosts), Slurm enablement and the home directories run concurrently after all nodes are ready.
+Mesh registration (batch DNS ║ known_hosts), Slurm enablement and the home directories run concurrently after all nodes are ready. Slurm resolves the nodes' short hostnames on the cluster network, which the nodes join with gateway priority ahead of the mesh (see [Networking]({{< relref "/architecture/networking#cluster-network" >}})), so it does not wait for the mesh DNS records.
 
 ## Readiness probes
 
 sind waits for each node to become ready before returning success. Probes are accelerated by two event sources:
 
 - **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
-- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active)
+- **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active or slurmd.service failing). They run until the command ends, through the waits for the Slurm daemons and the accounts
 
-When an event arrives, probes re-evaluate immediately instead of waiting for the next poll tick. If event sources are unavailable, sind falls back to poll-only mode.
+When an event of the node arrives, its probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. Each node's wait receives only its own container's events. If event sources are unavailable, sind falls back to poll-only mode.
 
 | Check | Description |
 |-------|-------------|
 | Container running | Docker container in running state |
 | systemd ready | `systemctl is-system-running` returns `running` or `degraded` |
 | sshd listening | Port 22 accepting connections |
-| munge ready | munge service active |
-| slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host) |
+| munge ready | munge service active (not with identity `clientIds`, which masks munge) |
+| slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host); while it does not, a failed slurmctld unit ends the wait |
 | slurmd ready | slurmd service active (managed workers only) |
-| slurmdbd ready | slurmdbd service active (managed db nodes); a failed unit fails `sind create cluster` at once with the unit's journal tail. mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
+| sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
+| slurmdbd ready | slurmdbd service active (managed db nodes). mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
+| cluster registered | `sacctmgr show cluster` on `controller` lists the cluster (`accounts` only, before the accounts are created) |
+
+A unit that has failed does not recover on its own: a failed munge, slurmctld, slurmd, sackd or slurmdbd unit fails `sind create cluster` and `sind create worker` at once, with the tail of the unit's journal. So does a container that exits.
 
 With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), mariadb and slurmdbd are started and slurmdbd must be ready before slurmctld and slurmd are enabled.
 
@@ -90,7 +97,7 @@ sind interacts with Docker by shelling out to the `docker` CLI rather than using
 - Wider compatibility across Docker versions
 - No tight coupling to Docker daemon internals
 
-The `docker` package wraps command execution in a thin abstraction layer with proper output handling and error reporting.
+The `docker` package wraps command execution in a thin abstraction layer with proper output handling and error reporting. It runs at most 16 docker commands at once, so a large cluster does not fork hundreds of docker processes while its nodes boot; every node still boots at once, and long-lived streams such as `docker events` do not count.
 
 ## Dual use
 

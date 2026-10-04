@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -35,20 +36,18 @@ type NodeHealth struct {
 	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
-// GetNodeHealth checks the health of a single node container.
+// GetNodeHealth checks the health of a single node container, from its
+// docker inspect result, which the caller already holds.
 // If the container is not running, remaining checks are skipped and
 // default to false. The role determines which Slurm service is checked;
 // unmanaged nodes (see IsManaged) get none. clusterName is used to select
 // the cluster network IP.
-func GetNodeHealth(ctx context.Context, client *docker.Client, containerName string, role config.Role, realm, clusterName string) (*NodeHealth, error) {
-	info, err := client.InspectContainer(ctx, docker.ContainerName(containerName))
-	if err != nil {
-		return nil, fmt.Errorf("inspecting container: %w", err)
-	}
+func GetNodeHealth(ctx context.Context, client *docker.Client, info *docker.ContainerInfo, role config.Role, realm, clusterName string) (*NodeHealth, error) {
 	health := nodeHealthFromInfo(ctx, client, info, role, realm, clusterName)
 	// sind cannot tell which controller of an unmanaged pair is in control.
 	if role == config.RoleController && IsManaged(info.Labels) {
-		shortName := strings.TrimPrefix(containerName, ContainerPrefix(realm, clusterName))
+		shortName := strings.TrimPrefix(string(info.Name), ContainerPrefix(realm, clusterName))
+		var err error
 		if health.HA, err = nodeHA(ctx, client, realm, clusterName, shortName, health); err != nil {
 			return nil, err
 		}
@@ -102,8 +101,10 @@ type NetworkHealth struct {
 	MeshDriver     string `json:"mesh_driver"`     // mesh network driver (e.g. "bridge")
 	MeshSubnet     string `json:"mesh_subnet"`     // mesh network subnet
 	MeshGateway    string `json:"mesh_gateway"`    // mesh network gateway
-	DNS            bool   `json:"dns_ok"`          // sind-dns container exists
+	DNS            bool   `json:"dns_ok"`          // sind-dns container running
 	DNSName        string `json:"dns_name"`        // DNS container name (e.g. "sind-dns")
+	SSH            bool   `json:"ssh_ok"`          // sind-ssh relay container running
+	SSHName        string `json:"ssh_name"`        // SSH relay container name (e.g. "sind-ssh")
 	Cluster        bool   `json:"cluster_ok"`      // cluster network exists
 	ClusterName    string `json:"cluster_name"`    // cluster network name (e.g. "sind-dev-net")
 	ClusterDriver  string `json:"cluster_driver"`  // cluster network driver (e.g. "bridge")
@@ -111,7 +112,9 @@ type NetworkHealth struct {
 	ClusterGateway string `json:"cluster_gateway"` // cluster network gateway
 }
 
-// GetNetworkHealth checks the health of mesh, DNS, and cluster networking.
+// GetNetworkHealth checks the health of mesh, DNS, SSH relay, and cluster
+// networking. The DNS and SSH relay containers count as healthy only while
+// they run: after a host reboot they exist but are stopped.
 func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
 	// nil Docker client: only realm-derived names are needed here.
 	meshMgr := mesh.NewManager(nil, realm)
@@ -120,6 +123,7 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 	health := &NetworkHealth{
 		MeshName:    string(meshMgr.NetworkName()),
 		DNSName:     string(meshMgr.DNSContainerName()),
+		SSHName:     string(meshMgr.SSHContainerName()),
 		ClusterName: string(clusterNet),
 	}
 
@@ -133,10 +137,16 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		return nil, fmt.Errorf("checking mesh network: %w", err)
 	}
 
-	if _, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
-		health.DNS = true
+	if info, err := client.InspectContainer(ctx, meshMgr.DNSContainerName()); err == nil {
+		health.DNS = info.Status == docker.StateRunning
 	} else if !docker.IsNotFound(err) {
 		return nil, fmt.Errorf("checking DNS container: %w", err)
+	}
+
+	if info, err := client.InspectContainer(ctx, meshMgr.SSHContainerName()); err == nil {
+		health.SSH = info.Status == docker.StateRunning
+	} else if !docker.IsNotFound(err) {
+		return nil, fmt.Errorf("checking SSH container: %w", err)
 	}
 
 	if info, err := client.InspectNetwork(ctx, clusterNet); err == nil {
@@ -160,46 +170,33 @@ type MountPoint struct {
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
-// existence for Docker volumes. The data mount source is determined from
-// the sind.data.hostpath label on cluster containers: when present it is
-// a host-path bind mount, otherwise it is a Docker volume. Its mount point
-// is the sind.data.mountpath label, or /data. The sind.users label adds
-// the home volume at /home, and the sind.cvmfs label /cvmfs from the cvmfs
-// plugin volume or the host's /cvmfs. With identity clientIds (the
-// sind.identity label) there is no munge volume.
-func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []docker.ContainerListEntry) ([]MountPoint, error) {
-	// Determine data mount source and mount point from container labels.
-	dataHostPath := ""
-	for _, c := range containers {
-		if hp := c.Labels[LabelDataHostPath]; hp != "" {
-			dataHostPath = hp
-			break
-		}
-	}
-	dataMountPath := DefaultDataMountPath
-	for _, c := range containers {
-		if c.Labels[LabelDataMountPath] != "" {
-			dataMountPath = DataMountPath(c.Labels)
-			break
-		}
-	}
-
+// existence for Docker volumes. containers are the cluster's node
+// containers as docker inspect reports them, whose labels, unlike those
+// docker ps lists, keep values with commas (see docker.ContainerInfo).
+//
+// The data mount is what Docker mounts at a node's data mount point (the
+// sind.data.mountpath label, or /data): a host-path bind mount or a Docker
+// volume, the cluster's data volume when no node has one. The sind.users
+// label adds the home volume at /home, and the sind.cvmfs label /cvmfs from
+// the cvmfs plugin volume or the host's /cvmfs. With identity clientIds
+// (the sind.identity label) there is no munge volume.
+func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterName string, containers []*docker.ContainerInfo) ([]MountPoint, error) {
 	// Config is always a Docker volume, and so is munge, which identity
 	// clientIds does without.
 	mounts := []MountPoint{
 		{Path: slurm.ConfDir, Source: string(VolumeName(realm, clusterName, VolumeConfig)), Type: config.StorageVolume},
 	}
-	if !slices.ContainsFunc(containers, func(c docker.ContainerListEntry) bool {
+	if !slices.ContainsFunc(containers, func(c *docker.ContainerInfo) bool {
 		return IdentityFromLabels(c.Labels) == config.IdentityClientIDs
 	}) {
 		mounts = append(mounts, MountPoint{Path: slurm.MungeDir, Source: string(VolumeName(realm, clusterName, VolumeMunge)), Type: config.StorageVolume})
 	}
 
-	if dataHostPath != "" {
-		mounts = append(mounts, MountPoint{Path: dataMountPath, Source: dataHostPath, Type: config.StorageHostPath, OK: true})
-	} else {
-		mounts = append(mounts, MountPoint{Path: dataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume})
+	data, ok := dataMount(containers)
+	if !ok {
+		data = MountPoint{Path: DefaultDataMountPath, Source: string(VolumeName(realm, clusterName, VolumeData)), Type: config.StorageVolume}
 	}
+	mounts = append(mounts, data)
 
 	// Primary/backup controller pairs share the slurmctld state volume.
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
@@ -218,16 +215,16 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 		}
 	}
 
-	// Check existence of Docker volumes.
+	// Check existence of Docker volumes, with one listing for all of them.
+	volumes, err := clusterVolumes(ctx, client, realm, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("checking volumes: %w", err)
+	}
 	for i := range mounts {
 		if mounts[i].Type != config.StorageVolume {
 			continue
 		}
-		exists, err := client.VolumeExists(ctx, docker.VolumeName(mounts[i].Source))
-		if err != nil {
-			return nil, fmt.Errorf("checking volume %s: %w", mounts[i].Source, err)
-		}
-		mounts[i].OK = exists
+		_, mounts[i].OK = volumes[docker.VolumeName(mounts[i].Source)]
 	}
 
 	// CVMFS, when the nodes mount it (storage.cvmfs). The plugin volume
@@ -247,6 +244,27 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 	}
 
 	return mounts, nil
+}
+
+// dataMount returns the data mount of the first node that has one: the
+// bind mount or volume Docker reports at the node's data mount point. It
+// reads the source from the mount itself rather than from the
+// sind.data.hostpath label, which nodes of older sind versions may have
+// taken from their image.
+func dataMount(containers []*docker.ContainerInfo) (MountPoint, bool) {
+	for _, c := range containers {
+		path := DataMountPath(c.Labels)
+		for _, m := range c.Mounts {
+			if m.Destination != path {
+				continue
+			}
+			if m.Type == docker.MountBind {
+				return MountPoint{Path: path, Source: m.Source, Type: config.StorageHostPath, OK: true}, true
+			}
+			return MountPoint{Path: path, Source: string(m.Name), Type: config.StorageVolume}, true
+		}
+	}
+	return MountPoint{}, false
 }
 
 // NodeStatus combines node identity with health information.
@@ -286,7 +304,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	if len(containers) == 0 {
 		if _, nerr := client.InspectNetwork(ctx, NetworkName(realm, clusterName)); nerr != nil {
 			if docker.IsNotFound(nerr) {
-				return nil, fmt.Errorf("cluster %q not found in realm %q", clusterName, realm)
+				return nil, clusterNotFound(ctx, client, realm, clusterName)
 			}
 			return nil, fmt.Errorf("checking cluster network: %w", nerr)
 		}
@@ -296,12 +314,13 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	// per-node probe loop below has status + IP without additional round
 	// trips. One docker CLI fork instead of one per node.
 	infoByName := make(map[docker.ContainerName]*docker.ContainerInfo, len(containers))
+	var infos []*docker.ContainerInfo
 	if len(containers) > 0 {
 		names := make([]docker.ContainerName, len(containers))
 		for i, c := range containers {
 			names[i] = c.Name
 		}
-		infos, err := client.InspectContainers(ctx, names...)
+		infos, err = client.InspectContainers(ctx, names...)
 		if err != nil {
 			return nil, fmt.Errorf("inspecting cluster containers: %w", err)
 		}
@@ -311,8 +330,24 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}
 
 	prefix := ContainerPrefix(realm, clusterName)
+	for _, c := range containers {
+		if _, ok := infoByName[c.Name]; !ok {
+			return nil, fmt.Errorf("checking node %s: inspect returned no entry", strings.TrimPrefix(string(c.Name), prefix))
+		}
+	}
 	nodes := make([]*NodeStatus, len(containers))
 	states := make([]docker.ContainerState, len(containers))
+
+	// The network and mount checks need only the container list, so they
+	// run next to the node probes instead of after them.
+	var (
+		checks           sync.WaitGroup
+		network          *NetworkHealth
+		mounts           []MountPoint
+		netErr, mountErr error
+	)
+	checks.Go(func() { network, netErr = GetNetworkHealth(ctx, client, realm, clusterName) })
+	checks.Go(func() { mounts, mountErr = GetMountPoints(ctx, client, realm, clusterName, infos) })
 
 	// Probe nodes in parallel with a bounded worker pool. Each goroutine
 	// writes to its own pre-allocated index so no mutex is needed; the
@@ -322,11 +357,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	for i, c := range containers {
 		shortName := strings.TrimPrefix(string(c.Name), prefix)
 		role := config.Role(c.Labels[LabelRole])
-
-		info, ok := infoByName[c.Name]
-		if !ok {
-			return nil, fmt.Errorf("checking node %s: inspect returned no entry", shortName)
-		}
+		info := infoByName[c.Name]
 		states[i] = c.State
 		g.Go(func() error {
 			health := nodeHealthFromInfo(gctx, client, info, role, realm, clusterName)
@@ -352,14 +383,12 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		setControllerHA(ctx, client, realm, clusterName, nodes)
 	}
 
-	network, err := GetNetworkHealth(ctx, client, realm, clusterName)
-	if err != nil {
-		return nil, err
+	checks.Wait()
+	if netErr != nil {
+		return nil, netErr
 	}
-
-	mounts, err := GetMountPoints(ctx, client, realm, clusterName, containers)
-	if err != nil {
-		return nil, err
+	if mountErr != nil {
+		return nil, mountErr
 	}
 
 	var slurmVersion string

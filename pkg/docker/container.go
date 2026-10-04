@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -116,25 +117,74 @@ const (
 type ContainerInfo struct {
 	ID        ContainerID
 	Name      ContainerName
+	ImageRef  string // image reference the container was created from
 	Status    ContainerState
 	ExitCode  int
 	OOMKilled bool
 	Labels    Labels
 	IPs       map[NetworkName]string
+	Mounts    []Mount  // bind mounts and volumes; tmpfs mounts are not listed
+	DNS       []string // DNS servers set with --dns
+	// Image is the ID of the image the container runs (sha256:...), which
+	// stays valid when the reference it was created from moves.
+	Image      string
+	HostConfig HostConfig
+}
+
+// MountType is the kind of a container mount.
+type MountType string
+
+// Mount types docker inspect reports.
+const (
+	MountBind   MountType = "bind"
+	MountVolume MountType = "volume"
+)
+
+// Mount is a bind mount or volume of a container, as docker inspect
+// reports it.
+type Mount struct {
+	Type        MountType  `json:"Type"`
+	Name        VolumeName `json:"Name"`        // the volume, for MountVolume
+	Source      string     `json:"Source"`      // the host path
+	Destination string     `json:"Destination"` // the mount point in the container
+}
+
+// HostConfig is the part of a container's host configuration that sind
+// reads back: its resource limits and privileges.
+type HostConfig struct {
+	NanoCPUs    int64             `json:"NanoCpus"` // --cpus, in billionths of a CPU
+	Memory      int64             `json:"Memory"`   // --memory, in bytes
+	Tmpfs       map[string]string `json:"Tmpfs"`    // mount point → --tmpfs options
+	CapAdd      []string          `json:"CapAdd"`   // as the docker CLI normalizes them, e.g. CAP_SYS_ADMIN
+	CapDrop     []string          `json:"CapDrop"`
+	Devices     []DeviceMapping   `json:"Devices"`
+	SecurityOpt []string          `json:"SecurityOpt"`
+	DNS         []string          `json:"Dns"` // --dns
+}
+
+// DeviceMapping is a host device exposed to a container (--device).
+type DeviceMapping struct {
+	PathOnHost        string `json:"PathOnHost"`
+	PathInContainer   string `json:"PathInContainer"`
+	CgroupPermissions string `json:"CgroupPermissions"`
 }
 
 // inspectResult maps the subset of docker inspect JSON we care about.
 type inspectResult struct {
 	ID    string `json:"Id"`
 	Name  string `json:"Name"`
+	Image string `json:"Image"`
 	State struct {
 		Status    string `json:"Status"`
 		ExitCode  int    `json:"ExitCode"`
 		OOMKilled bool   `json:"OOMKilled"`
 	} `json:"State"`
 	Config struct {
+		Image  string            `json:"Image"`
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
+	Mounts          []Mount    `json:"Mounts"`
+	HostConfig      HostConfig `json:"HostConfig"`
 	NetworkSettings struct {
 		Networks map[string]struct {
 			IPAddress string `json:"IPAddress"`
@@ -181,13 +231,18 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 			ips[NetworkName(net)] = info.IPAddress
 		}
 		infos = append(infos, &ContainerInfo{
-			ID:        ContainerID(r.ID),
-			Name:      ContainerName(strings.TrimPrefix(r.Name, "/")),
-			Status:    ContainerState(r.State.Status),
-			ExitCode:  r.State.ExitCode,
-			OOMKilled: r.State.OOMKilled,
-			Labels:    r.Config.Labels,
-			IPs:       ips,
+			ID:         ContainerID(r.ID),
+			Name:       ContainerName(strings.TrimPrefix(r.Name, "/")),
+			Status:     ContainerState(r.State.Status),
+			ExitCode:   r.State.ExitCode,
+			OOMKilled:  r.State.OOMKilled,
+			Labels:     r.Config.Labels,
+			IPs:        ips,
+			Image:      r.Image,
+			ImageRef:   r.Config.Image,
+			HostConfig: r.HostConfig,
+			Mounts:     r.Mounts,
+			DNS:        r.HostConfig.DNS,
 		})
 	}
 	return infos, nil
@@ -243,7 +298,14 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 	return entries, nil
 }
 
-// parseLabels parses the comma-separated key=value label string from docker ps JSON output.
+// parseLabels parses the comma-separated key=value label string from the
+// JSON output of docker ps, docker network ls and docker volume ls.
+//
+// docker joins the labels with commas and escapes nothing, in no fixed
+// order, so a label value that contains a comma cannot be recovered: what
+// follows the comma reads as a label of its own, which may even replace
+// another label. Read labels whose values are free-form, such as paths,
+// from InspectContainer(s), which returns them as a JSON map.
 func parseLabels(s string) Labels {
 	if s == "" {
 		return nil
@@ -268,18 +330,31 @@ func (c *Client) Exec(ctx context.Context, container ContainerName, command ...s
 
 // ExecAllowNonZero is like Exec but returns stdout even when the inner
 // command exits non-zero. The returned error is non-nil iff the exec itself
-// failed (daemon unreachable, container gone); command-level non-zero exits
-// are surfaced via the stdout return. Intended for commands whose stdout is
-// meaningful on failure (e.g. systemctl is-active, which exits non-zero
-// whenever any listed unit is inactive but still prints the unit states).
+// failed (daemon unreachable, container missing, stopped or paused);
+// command-level non-zero exits are surfaced via the stdout return. Intended
+// for commands whose stdout is meaningful on failure (e.g. systemctl
+// is-active, which exits non-zero whenever any listed unit is inactive but
+// still prints the unit states).
 func (c *Client) ExecAllowNonZero(ctx context.Context, container ContainerName, command ...string) (string, error) {
 	args := append([]string{"exec", string(container)}, command...)
-	stdout, _, err := c.run(ctx, args...)
+	stdout, stderr, err := c.run(ctx, args...)
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if errors.As(err, &exitErr) && !execFailed(stderr) {
 		return stdout, nil
 	}
 	return stdout, err
+}
+
+// execFailed reports whether a non-zero exit of docker exec, given its
+// stderr, is docker's own failure rather than the inner command's: the
+// docker CLI exits 1 too when the daemon refuses the exec (the container is
+// missing, stopped or paused) or cannot be reached, and says so on stderr,
+// where the inner command has written nothing by then.
+func execFailed(stderr string) bool {
+	msg := strings.TrimSpace(stderr)
+	return strings.HasPrefix(msg, "Error response from daemon:") ||
+		strings.HasPrefix(msg, "Cannot connect to the Docker daemon") ||
+		strings.HasPrefix(msg, "error during connect:")
 }
 
 // ExecWithStdin runs a command inside a container, piping stdin to it.
@@ -299,6 +374,23 @@ func (c *Client) WriteFile(ctx context.Context, container ContainerName, path, c
 	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
 		"sh", "-c", "cat > "+path)
 }
+
+// ReplaceFile replaces a file in a running container via docker exec in
+// one step, unlike WriteFile, whose `cat >` truncates it first: the
+// content goes to a temporary file next to path, which takes path's place
+// (rename(2)) only once it holds all of content. A reader sees the old or
+// the new content, never a part of it, even when the docker CLI dies
+// mid-write and the shell in the container reads an early end of input.
+// The file is a new one, owned by the exec user, with its umask's mode.
+func (c *Client) ReplaceFile(ctx context.Context, container ContainerName, path, content string) error {
+	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
+		"sh", "-c", replaceFileScript, "sh", path, strconv.Itoa(len(content)))
+}
+
+// replaceFileScript writes its input to a temporary file next to $1, named
+// after the shell's PID, and moves it over $1 if it holds $2 bytes, or
+// removes it and fails.
+const replaceFileScript = `tmp="$1.tmp.$$"; cat > "$tmp" && [ $(wc -c < "$tmp") -eq "$2" ] && mv -f "$tmp" "$1" || { rm -f "$tmp"; exit 1; }`
 
 // AppendFile appends content to a file in a running container via docker exec.
 func (c *Client) AppendFile(ctx context.Context, container ContainerName, path, content string) error {

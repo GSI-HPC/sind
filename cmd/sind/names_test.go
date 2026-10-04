@@ -20,6 +20,8 @@ func TestInvalidClusterName(t *testing.T) {
 	}{
 		{[]string{"create", "cluster", "my_cluster"}, `invalid cluster name "my_cluster": '_' is not a letter, a digit or a hyphen`},
 		{[]string{"delete", "cluster", "../x"}, `invalid cluster name "../x": '.' is not a letter, a digit or a hyphen`},
+		{[]string{"create", "cluster", "ssh"}, `invalid cluster name "ssh": it is reserved`},
+		{[]string{"delete", "cluster", "ssh"}, `invalid cluster name "ssh": it is reserved`},
 		{[]string{"get", "cluster", "dev-"}, `invalid cluster name "dev-": it ends with a hyphen`},
 		{[]string{"get", "nodes", "dev.test"}, `invalid cluster name "dev.test": '.' is not a letter, a digit or a hyphen`},
 		{[]string{"get", "auth-key", "a/b"}, `invalid cluster name "a/b": '/' is not a letter, a digit or a hyphen`},
@@ -57,6 +59,17 @@ func TestInvalidRealm(t *testing.T) {
 		_, _, err := executeWithMock(&m, "delete", "cluster", "dev")
 		require.EqualError(t, err, `SIND_REALM: invalid realm name "ci_42": '_' is not a letter, a digit or a hyphen`)
 		assert.Empty(t, m.Calls)
+	})
+	t.Run("flag on commands without a realm", func(t *testing.T) {
+		// The root checks --realm for every command, including the ones
+		// that do not use it.
+		for _, args := range [][]string{{"version"}, {"get", "realms"}, {"mcp", "tools"}, {"help", "get"}} {
+			var m mock.Executor
+			_, _, err := executeWithMock(&m, append([]string{"--realm", "Not_A_Realm"}, args...)...)
+			require.EqualError(t, err, `--realm: invalid realm name "Not_A_Realm": '_' is not a letter, a digit or a hyphen`, args)
+			assert.True(t, isUsageError(err), args)
+			assert.Empty(t, m.Calls, args)
+		}
 	})
 	t.Run("env not used", func(t *testing.T) {
 		// A command that has no realm does not look at SIND_REALM.

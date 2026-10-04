@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +20,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultReadinessInterval = 500 * time.Millisecond
+// defaultWait is the --wait default of create cluster and create worker.
+const defaultWait = 5 * time.Minute
+
+// addWaitFlag adds --wait to a create command.
+func addWaitFlag(cmd *cobra.Command) {
+	cmd.Flags().Duration("wait", defaultWait,
+		"how long to wait for the nodes and Slurm to become ready, counted from when the node containers have started (0: no limit)")
+}
+
+// waitFlag returns the value of --wait. A negative one is a usage error.
+func waitFlag(cmd *cobra.Command) (time.Duration, error) {
+	wait, _ := cmd.Flags().GetDuration("wait")
+	if wait < 0 {
+		return 0, usagef("--wait must not be negative, got %s", wait)
+	}
+	return wait, nil
+}
 
 func newCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -49,15 +67,21 @@ func newCreateClusterCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&configFile, "config", "", "path to cluster configuration file")
+	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
 	cmd.Flags().String("data", ".", `host directory to mount as /data (use "volume" for Docker volume)`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
+	addWaitFlag(cmd)
 
 	return cmd
 }
 
 func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
-	cfg, err := loadConfig(cmd.InOrStdin(), configFile)
+	wait, err := waitFlag(cmd)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadConfig(cmd.InOrStdin(), cmd.ErrOrStderr(), configFile)
 	if err != nil {
 		return err
 	}
@@ -70,19 +94,36 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	if err := applyDataStorage(cfg, dataFlag); err != nil {
 		return err
 	}
+	if ds := cfg.Storage.DataStorage; ds.UsesHostPath() {
+		if w := cluster.DataPathWarning(ds.HostPath); w != "" {
+			cmd.PrintErrln("Warning:", termtext.EscapeText(w))
+		}
+	}
 
 	pull, _ := cmd.Flags().GetBool("pull")
 	cfg.Pull = pull
+	cfg.Wait = wait
 
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return err
+	}
+	for _, w := range cfg.Warnings() {
+		cmd.PrintErrln("Warning:", w)
 	}
 
 	ctx := cmd.Context()
 	client := clientFrom(ctx)
 	realm, err := resolveRealm(cmd, cfg.Realm)
 	if err != nil {
+		return err
+	}
+	// The cluster goes to the resolved realm; cluster.Create refuses a
+	// config realm that differs from its mesh manager's.
+	cfg.Realm = realm
+
+	// Refuse a daemon that cannot start the nodes before anything is pulled.
+	if err := cluster.CheckDaemon(ctx, client); err != nil {
 		return err
 	}
 
@@ -106,7 +147,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return fmt.Errorf("setting up mesh: %w", err)
 	}
 
-	_, err = cluster.Create(ctx, client, meshMgr, cfg, defaultReadinessInterval)
+	_, err = cluster.Create(ctx, client, meshMgr, cfg, cluster.DefaultReadinessInterval)
 	if err != nil {
 		return err
 	}
@@ -157,12 +198,39 @@ func applyDataFlag(cfg *config.Cluster, value string) error {
 	return nil
 }
 
-// loadConfig reads the cluster configuration from path, from stdin when it
-// holds data, or else returns the default configuration. stdin is the
+// configStdin is the --config value that reads the configuration from
+// stdin.
+const configStdin = "-"
+
+// stdinDeprecation is the warning printed before sind reads the
+// configuration from a stdin that is not a terminal without --config -.
+const stdinDeprecation = "Warning: reading the cluster configuration from stdin without --config - is deprecated; " +
+	"pass --config - to read it, or redirect stdin from /dev/null for the default cluster"
+
+// loadConfig reads the cluster configuration from path, from stdin when
+// path is "-", or else returns the default configuration. stdin is the
 // command's input (cmd.InOrStdin()), so that tests can set it with
 // cmd.SetIn instead of replacing the process-wide os.Stdin.
-func loadConfig(stdin io.Reader, path string) (*config.Cluster, error) {
-	if path != "" {
+//
+// Without a path, a stdin that is not a terminal is still read, for one
+// release: sind writes a deprecation warning to stderr first, since it
+// waits for the end of the input, and takes empty input for the default
+// configuration. An inherited pipe, as with ssh HOST sind create cluster,
+// or a read loop's input, would otherwise hang sind or be taken for the
+// configuration. With --config -, empty input is an error.
+func loadConfig(stdin io.Reader, stderr io.Writer, path string) (*config.Cluster, error) {
+	switch path {
+	case "":
+	case configStdin:
+		data, err := io.ReadAll(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("reading config from stdin: %w", err)
+		}
+		if len(bytes.TrimSpace(data)) == 0 {
+			return nil, errors.New("reading config from stdin: empty configuration")
+		}
+		return config.Parse(data)
+	default:
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("reading config: %w", err)
@@ -171,11 +239,14 @@ func loadConfig(stdin io.Reader, path string) (*config.Cluster, error) {
 	}
 
 	if stdinHasData(stdin) {
+		_, _ = fmt.Fprintln(stderr, stdinDeprecation)
 		data, err := io.ReadAll(stdin)
 		if err != nil {
 			return nil, fmt.Errorf("reading config from stdin: %w", err)
 		}
-		return config.Parse(data)
+		if len(bytes.TrimSpace(data)) > 0 {
+			return config.Parse(data)
+		}
 	}
 
 	return config.Parse([]byte("kind: Cluster\n"))

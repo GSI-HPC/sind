@@ -35,12 +35,16 @@
 # ==============================================================================
 # Stage: builder-base — Rocky 10 with common build toolchain
 # ==============================================================================
+# Each builder stage installs into /install, which is all that leaves it, and
+# deletes its build tree in the same RUN, so the layer in the build cache
+# holds only the installed files.
 FROM quay.io/rockylinux/rockylinux:10 AS builder-base
 
+# EPEL and CRB are enabled in the same RUN that ends with dnf clean all, so
+# no layer keeps the repository metadata.
 RUN dnf -y install epel-release dnf-plugins-core && \
-    dnf config-manager --set-enabled crb
-
-RUN dnf -y install \
+    dnf config-manager --set-enabled crb && \
+    dnf -y install \
         gcc gcc-c++ make \
         libevent-devel \
         hwloc-devel \
@@ -70,7 +74,8 @@ RUN tar xf ucx.tar.gz && \
         --without-rocm \
         --without-java && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf ucx-${UCX_VERSION}
 
 # ==============================================================================
 # Stage: pmix-builder — compile PMIx from source
@@ -91,7 +96,8 @@ RUN tar xf pmix.tar.bz2 && \
         --libdir=/usr/lib64 \
         --disable-static && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf pmix-${PMIX_VERSION}
 
 # ==============================================================================
 # Stage: prrte-builder — compile PRRTE from source (with PMIx 6.x)
@@ -114,7 +120,8 @@ RUN tar xf prrte.tar.bz2 && \
         --libdir=/usr/lib64 \
         --disable-static && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf prrte-${PRRTE_VERSION}
 
 # ==============================================================================
 # Stage: libjwt-builder — compile libjwt 1.x from source
@@ -148,24 +155,17 @@ RUN git clone --depth 1 --branch v${LIBJWT_VERSION} https://github.com/benmcolli
         --disable-static \
         --without-examples && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf libjwt
 
 # ==============================================================================
 # Stage: slurm-builder — compile Slurm from source (with PMIx support)
 # ==============================================================================
 FROM builder-base AS slurm-builder
 
-# Slurm version and the sha256 of its tarball. No defaults: docker-bake.hcl
-# sets both for each image (SLURM_RELEASES).
-ARG SLURM_VERSION
-ARG SLURM_SHA256
-
-# PMIx headers and libraries are needed for Slurm's PMIx launch plugin, and
-# libjwt's for auth/slurm. auth/slurm also needs the serializer/json plugin,
-# which Slurm builds only with json-c.
-COPY --from=pmix-builder /install/usr /usr
-COPY --from=libjwt-builder /install/usr /usr
-
+# Every RUN after an ARG sees it, so a new value invalidates its cache. The
+# packages come first, so they survive Slurm, PMIx and libjwt bumps and
+# install while PMIx and libjwt build.
 RUN dnf -y install \
         jansson-devel \
         openssl-devel \
@@ -179,6 +179,17 @@ RUN dnf -y install \
         libbpf-devel \
     && dnf clean all
 
+# PMIx headers and libraries are needed for Slurm's PMIx launch plugin, and
+# libjwt's for auth/slurm. auth/slurm also needs the serializer/json plugin,
+# which Slurm builds only with json-c.
+COPY --from=pmix-builder /install/usr /usr
+COPY --from=libjwt-builder /install/usr /usr
+
+# Slurm version and the sha256 of its tarball. No defaults: docker-bake.hcl
+# sets both for each image (SLURM_RELEASES).
+ARG SLURM_VERSION
+ARG SLURM_SHA256
+
 # Fetch the Slurm source tarball with integrity verification.
 ADD --checksum=sha256:${SLURM_SHA256} \
     https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2 /tmp/slurm.tar.bz2
@@ -189,6 +200,10 @@ ADD --checksum=sha256:${SLURM_SHA256} \
 # the job's user and groups from slurmstepd, is built and installed on its
 # own. Its libnss_slurm.so.2 lands in --libdir, /usr/lib64, where glibc
 # looks for NSS modules.
+#
+# Like Slurm's RPM spec, the image ships no static archives and no libtool
+# .la files. The debug sections are stripped from every ELF file except
+# srun, whose debugger symbols (MPIR) parallel debuggers read.
 WORKDIR /tmp
 RUN tar xf slurm.tar.bz2 && \
     cd slurm-${SLURM_VERSION} && \
@@ -198,6 +213,7 @@ RUN tar xf slurm.tar.bz2 && \
         --sysconfdir=/etc/slurm \
         --localstatedir=/var \
         --runstatedir=/run \
+        --disable-static \
         --with-munge \
         --with-pmix \
         --with-jwt \
@@ -208,7 +224,12 @@ RUN tar xf slurm.tar.bz2 && \
     make -j$(nproc) -C contribs/nss_slurm && \
     DESTDIR=/install make install && \
     DESTDIR=/install make -C contribs/nss_slurm install && \
-    mkdir -p /install/etc
+    find /install -name '*.la' -delete && \
+    find /install -type f ! -name srun \
+        -exec sh -c 'test "$(head -c 4 "$1" | tail -c 3)" = ELF' sh {} \; \
+        -exec strip --strip-debug {} + && \
+    mkdir -p /install/etc && \
+    cd /tmp && rm -rf slurm-${SLURM_VERSION}
 
 # ==============================================================================
 # Stage: ompi-builder — compile OpenMPI from source (with PRRTE + PMIx + UCX)
@@ -240,29 +261,33 @@ RUN tar xf openmpi.tar.bz2 && \
         --without-cuda \
         --without-rocm && \
     make -j$(nproc) && \
-    DESTDIR=/install make install
+    DESTDIR=/install make install && \
+    cd /tmp && rm -rf openmpi-${OMPI_VERSION}
 
 # ==============================================================================
 # Stage: runtime — lean image with only the packages needed at run time
 # ==============================================================================
-FROM quay.io/rockylinux/rockylinux:10
+# The setup that does not depend on the builds comes first and the version
+# ARGs come last, right before the LABEL that uses them: every RUN after an
+# ARG sees it, so a new Slurm version would otherwise rebuild the package
+# layer too. The images of all release lines and Slurm versions then share
+# the layers up to the builder COPYs, and the Slurm layers come last.
+FROM quay.io/rockylinux/rockylinux:10 AS runtime
 
-ARG SLURM_VERSION
-ARG UCX_VERSION=1.20.0
-ARG PMIX_VERSION=6.1.0
-ARG PRRTE_VERSION=4.1.0
-ARG OMPI_VERSION=5.0.10
-ARG LIBJWT_VERSION=1.18.4
-
-RUN dnf -y install epel-release dnf-plugins-core && \
-    dnf config-manager --set-enabled crb
-
-# Runtime dependencies.
+# Runtime dependencies, installed in the RUN that enables EPEL and CRB and
+# ends with dnf clean all, so no layer keeps the repository metadata.
+# Rocky retags its base image only at minor releases, so the RUN first
+# upgrades the base image's packages (glibc, openssl, ...). Building the
+# runtime stage without the cache (--no-cache-filter runtime) picks up the
+# current errata.
 # gcc is needed by mpicc (OpenMPI's wrapper compiler).
 # mariadb-server is included for the db role (slurmdbd accounting storage).
 # libevent and hwloc-libs are required by PMIx, PRRTE, and OpenMPI at runtime,
 # jansson by libjwt, json-c by Slurm's serializer/json.
-RUN dnf -y install \
+RUN dnf -y install epel-release dnf-plugins-core && \
+    dnf config-manager --set-enabled crb && \
+    dnf -y upgrade && \
+    dnf -y install \
         systemd \
         munge \
         mariadb-server \
@@ -280,24 +305,6 @@ RUN dnf -y install \
         json-c \
         gcc \
     && dnf clean all
-
-# Bring in compiled artifacts from each builder stage.
-COPY --from=slurm-builder /install/usr /usr
-COPY --from=slurm-builder /install/etc /etc
-COPY --from=ucx-builder /install/usr /usr
-COPY --from=pmix-builder /install/usr /usr
-COPY --from=prrte-builder /install/usr /usr
-COPY --from=ompi-builder /install/usr /usr
-COPY --from=libjwt-builder /install/usr /usr
-
-# Register the new libraries, and fail the build without nss_slurm, the
-# auth/slurm plugin and the serializer/json plugin it needs, or sackd, which
-# sind's identity modes nssSlurm and clientIds use.
-RUN ldconfig && \
-    test -e /usr/lib64/libnss_slurm.so.2 && \
-    test -e /usr/lib64/slurm/auth_slurm.so && \
-    test -e /usr/lib64/slurm/serializer_json.so && \
-    test -x /usr/sbin/sackd
 
 # Slurm daemons run as the unprivileged slurm user
 RUN useradd -r -s /sbin/nologin slurm
@@ -318,9 +325,15 @@ RUN mkdir -p /etc/munge /var/lib/munge /var/log/munge /run/munge && \
     chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge && \
     chmod 700 /etc/munge /var/lib/munge /var/log/munge /run/munge
 
-# Pre-generate SSH host keys and allow root login via pubkey only
-# (sind injects authorized_keys at container start for inter-node SSH)
-RUN ssh-keygen -A && \
+# Allow root login via pubkey only (sind injects authorized_keys at
+# container start for inter-node SSH). The image ships no SSH host keys:
+# sshd-keygen@.service, which sshd.service pulls in, generates them on each
+# container's first boot, before sshd starts, so no two nodes share a key.
+# sind pins only the ed25519 key, so sshd serves only that one and the RSA
+# and ECDSA key generation is masked.
+RUN rm -f /etc/ssh/ssh_host_* && \
+    echo 'HostKey /etc/ssh/ssh_host_ed25519_key' > /etc/ssh/sshd_config.d/40-sind-hostkey.conf && \
+    systemctl mask sshd-keygen@rsa.service sshd-keygen@ecdsa.service && \
     mkdir -p /run/sshd && \
     sed -i 's/#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
@@ -346,6 +359,43 @@ RUN systemctl mask \
     dev-hugepages.mount \
     getty.target \
     console-getty.service
+
+# Cap the journal, which the Slurm daemons log to. journald's defaults let a
+# volatile journal in /run, a tmpfs charged to the node's memory limit, grow
+# to 10% of /run (half the host's memory), and a persistent one to 4 GB.
+RUN mkdir -p /etc/systemd/journald.conf.d && \
+    printf '[Journal]\nRuntimeMaxUse=32M\nSystemMaxUse=64M\n' > /etc/systemd/journald.conf.d/50-sind.conf
+
+# Initialise MariaDB's data directory with the script mariadb.service runs
+# before its first start, which then finds it initialised: a db node's first
+# start then skips mariadb-install-db and the script's one-second sleep.
+RUN /usr/libexec/mariadb-prepare-db-dir mysql mysql && \
+    test -d /var/lib/mysql/mysql
+
+# Bring in compiled artifacts from each builder stage, Slurm last.
+COPY --from=ucx-builder /install/usr /usr
+COPY --from=pmix-builder /install/usr /usr
+COPY --from=prrte-builder /install/usr /usr
+COPY --from=ompi-builder /install/usr /usr
+COPY --from=libjwt-builder /install/usr /usr
+COPY --from=slurm-builder /install/usr /usr
+COPY --from=slurm-builder /install/etc /etc
+
+# Register the new libraries, and fail the build without nss_slurm, the
+# auth/slurm plugin and the serializer/json plugin it needs, or sackd, which
+# sind's identity modes nssSlurm and clientIds use.
+RUN ldconfig && \
+    test -e /usr/lib64/libnss_slurm.so.2 && \
+    test -e /usr/lib64/slurm/auth_slurm.so && \
+    test -e /usr/lib64/slurm/serializer_json.so && \
+    test -x /usr/sbin/sackd
+
+ARG SLURM_VERSION
+ARG UCX_VERSION=1.20.0
+ARG PMIX_VERSION=6.1.0
+ARG PRRTE_VERSION=4.1.0
+ARG OMPI_VERSION=5.0.10
+ARG LIBJWT_VERSION=1.18.4
 
 LABEL org.opencontainers.image.title="sind-node" \
       org.opencontainers.image.description="Generic Slurm node for sind" \

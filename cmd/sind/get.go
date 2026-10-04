@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -115,7 +116,7 @@ func runGetClusters(cmd *cobra.Command) error {
 	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/D/W)\tSLURM\tSTATUS")
 	for _, c := range clusters {
 		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d/%d)\t%s\t%s\n",
-			c.Name,
+			cell(c.Name),
 			c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.Workers,
 			formatSlurmVersion(c.SlurmVersion),
 			c.State,
@@ -152,7 +153,7 @@ func runGetRealms(cmd *cobra.Command) error {
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tCLUSTERS")
 	for _, r := range realms {
-		_, _ = fmt.Fprintf(w, "%s\t%d\n", r.Name, r.Clusters)
+		_, _ = fmt.Fprintf(w, "%s\t%d\n", cell(r.Name), r.Clusters)
 	}
 	return w.Flush()
 }
@@ -173,7 +174,11 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
-	if strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
+	// An FQDN is NODE.CLUSTER.REALM.sind. Neither node short names nor
+	// cluster names contain dots, so only the dot count tells it apart
+	// from NODE.CLUSTER: the suffix alone also matches a cluster named
+	// "sind" (controller.sind).
+	if strings.Count(arg, ".") >= 2 && strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
 		return usagef("use NODE[.CLUSTER], not the FQDN %q", arg)
 	}
 	// Parse shortName.cluster on the first dot (neither node short names
@@ -203,7 +208,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	}
 
 	role := config.Role(info.Labels[cluster.LabelRole])
-	health, err := cluster.GetNodeHealth(cmd.Context(), client, containerName, role, realm, clusterName)
+	health, err := cluster.GetNodeHealth(cmd.Context(), client, info, role, realm, clusterName)
 	if err != nil {
 		return err
 	}
@@ -228,10 +233,10 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	w := newTabWriter(out)
 	if health.HA != nil {
 		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tHA\tFQDN\tIP\tSTATUS")
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", containerName, role, formatHA(health.HA), fqdn, health.IP, health.State)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", containerName, cell(role), formatHA(health.HA), fqdn, cell(health.IP), cell(health.State))
 	} else {
 		_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, role, fqdn, health.IP, health.State)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", containerName, cell(role), fqdn, cell(health.IP), cell(health.State))
 	}
 	if err := w.Flush(); err != nil {
 		return err
@@ -278,7 +283,7 @@ func runGetAllNodes(cmd *cobra.Command) error {
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "CONTAINER\tCLUSTER\tROLE\tFQDN\tIP\tSTATUS")
 	for _, n := range nodes {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", n.Container, n.Cluster, n.Role, n.FQDN, n.IP, n.State)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Cluster), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
 	}
 	return w.Flush()
 }
@@ -304,7 +309,7 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "CONTAINER\tROLE\tFQDN\tIP\tSTATUS")
 	for _, n := range nodes {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", n.Container, n.Role, n.FQDN, n.IP, n.State)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
 	}
 	return w.Flush()
 }
@@ -330,7 +335,7 @@ func runGetNetworks(cmd *cobra.Command) error {
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
 	for _, n := range networks {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", n.Name, n.Driver, n.Subnet, n.Gateway)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(n.Name), cell(n.Driver), cell(n.Subnet), cell(n.Gateway))
 	}
 	return w.Flush()
 }
@@ -356,7 +361,7 @@ func runGetVolumes(cmd *cobra.Command) error {
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tDRIVER")
 	for _, v := range volumes {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", v.Name, v.Driver)
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(v.Name), cell(v.Driver))
 	}
 	return w.Flush()
 }
@@ -395,7 +400,7 @@ func runGetDNS(cmd *cobra.Command) error {
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "HOSTNAME\tIP")
 	for _, r := range records {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", r.Hostname, r.IP)
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(r.Hostname), cell(r.IP))
 	}
 	return w.Flush()
 }
@@ -502,14 +507,14 @@ func runGetMesh(cmd *cobra.Command) error {
 
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "PROPERTY\tVALUE")
-	_, _ = fmt.Fprintf(w, "network\t%s\n", info.Network)
-	_, _ = fmt.Fprintf(w, "dns-container\t%s\n", info.DNSContainer)
-	_, _ = fmt.Fprintf(w, "dns-ip\t%s\n", info.DNSIP)
-	_, _ = fmt.Fprintf(w, "dns-zone\t%s\n", info.DNSZone)
-	_, _ = fmt.Fprintf(w, "dns-image\t%s\n", info.DNSImage)
-	_, _ = fmt.Fprintf(w, "ssh-container\t%s\n", info.SSHContainer)
-	_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", info.SSHVolume)
-	_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", info.SSHImage)
+	_, _ = fmt.Fprintf(w, "network\t%s\n", cell(info.Network))
+	_, _ = fmt.Fprintf(w, "dns-container\t%s\n", cell(info.DNSContainer))
+	_, _ = fmt.Fprintf(w, "dns-ip\t%s\n", cell(info.DNSIP))
+	_, _ = fmt.Fprintf(w, "dns-zone\t%s\n", cell(info.DNSZone))
+	_, _ = fmt.Fprintf(w, "dns-image\t%s\n", cell(info.DNSImage))
+	_, _ = fmt.Fprintf(w, "ssh-container\t%s\n", cell(info.SSHContainer))
+	_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", cell(info.SSHVolume))
+	_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", cell(info.SSHImage))
 	return w.Flush()
 }
 
@@ -552,7 +557,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	// Header table
 	w := newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "CLUSTER\tSLURM\tSTATUS (R/S/P/T)")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", status.Name, formatSlurmVersion(status.SlurmVersion), formatState(status))
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", cell(status.Name), formatSlurmVersion(status.SlurmVersion), formatState(status))
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -563,8 +568,8 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	_, _ = fmt.Fprintln(out, "NETWORKS")
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY\tSTATUS")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", net.MeshName, net.MeshDriver, net.MeshSubnet, net.MeshGateway, checkmark(net.Mesh))
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", net.ClusterName, net.ClusterDriver, net.ClusterSubnet, net.ClusterGateway, checkmark(net.Cluster))
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(net.MeshName), cell(net.MeshDriver), cell(net.MeshSubnet), cell(net.MeshGateway), checkmark(net.Mesh))
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", cell(net.ClusterName), cell(net.ClusterDriver), cell(net.ClusterSubnet), cell(net.ClusterGateway), checkmark(net.Cluster))
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -574,7 +579,8 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	_, _ = fmt.Fprintln(out, "MESH SERVICES")
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
-	_, _ = fmt.Fprintf(w, "dns\t%s\t%s\n", net.DNSName, checkmark(net.DNS))
+	_, _ = fmt.Fprintf(w, "dns\t%s\t%s\n", cell(net.DNSName), checkmark(net.DNS))
+	_, _ = fmt.Fprintf(w, "ssh\t%s\t%s\n", cell(net.SSHName), checkmark(net.SSH))
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -585,7 +591,7 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "MOUNT\tSOURCE\tTYPE\tSTATUS")
 	for _, m := range status.Mounts {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.Path, m.Source, m.Type, checkmark(m.OK))
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(m.Path), cell(m.Source), cell(m.Type), checkmark(m.OK))
 	}
 	if err := w.Flush(); err != nil {
 		return err
@@ -605,14 +611,14 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 		h := n.Health
 		if withHA {
 			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-				n.Name, n.Role, formatHA(h.HA), h.IP, h.State, formatServices(h.Services))
+				cell(n.Name), cell(n.Role), formatHA(h.HA), cell(h.IP), cell(h.State), formatServices(h.Services))
 			continue
 		}
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			n.Name,
-			n.Role,
-			h.IP,
-			h.State,
+			cell(n.Name),
+			cell(n.Role),
+			cell(h.IP),
+			cell(h.State),
 			formatServices(h.Services),
 		)
 	}
@@ -648,12 +654,26 @@ func formatState(status *cluster.Status) string {
 }
 
 // formatSlurmVersion renders a cluster's Slurm version, "-" when sind does
-// not know it (unmanaged clusters).
+// not know it (unmanaged clusters). The version comes from a label, so it
+// is escaped like any other cell.
 func formatSlurmVersion(version string) string {
 	if version == "" {
 		return "-"
 	}
-	return version
+	return cell(version)
+}
+
+// cellReplacer shows the tab and newline that termtext.EscapeText keeps:
+// in a table cell they would start a column or a row of their own.
+var cellReplacer = strings.NewReplacer("\t", `\t`, "\n", `\n`)
+
+// cell makes text that came from a container, a label or docker safe to
+// print as a table cell. An image can set labels and print what sind
+// reads, so such text may hold control sequences that retitle the
+// terminal or write its clipboard; they are shown escaped (\x1b), as on
+// the final error line.
+func cell[S ~string](s S) string {
+	return cellReplacer.Replace(termtext.EscapeText(string(s)))
 }
 
 func checkmark(ok bool) string {

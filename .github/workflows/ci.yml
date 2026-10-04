@@ -1,39 +1,57 @@
 name: CI
 
+# Pushes to main and next test the merged result and write the image build
+# cache that pull requests read: a pull request run restores caches only
+# from its own ref, its base branch and the default branch.
 on:
   push:
-    branches: [main]
+    branches: [main, next]
   pull_request:
 
 permissions:
   contents: read
-  checks: write
+
+# A new push to a pull request cancels the run of the commit it replaces.
+# Runs of pushes to a branch always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
-      - uses: golangci/golangci-lint-action@v9
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
 
   unit-test:
     name: Unit Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # dorny/test-reporter publishes the results as a check run.
+      checks: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
       - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
+        run: go install gotest.tools/gotestsum@v1.13.0
 
       - name: Install firejail
         run: sudo apt-get update && sudo apt-get install -y firejail
@@ -43,36 +61,63 @@ jobs:
       - name: Prime module cache
         run: go mod download
 
+      # One run, in the sandbox, writes the test report and the coverage
+      # profile that Unit Test Coverage checks.
       - name: Unit tests
         run: make test
         env:
-          GOTEST: gotestsum --junitfile unit-tests.xml --
+          GOTEST: gotestsum --junitfile unit-tests.xml -- -coverprofile=coverage.out
 
       - name: Test report
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
         if: always()
         with:
           name: Unit Test Results
           path: unit-tests.xml
           reporter: java-junit
 
+      - name: Upload coverage profile
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 1
+
   unit-test-coverage:
     name: Unit Test Coverage
+    needs: unit-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage
+
+      - name: Check coverage thresholds
+        uses: vladopajic/go-test-coverage@f484eec846448c97c777a26f8b58c5a69a327e12 # v2.20.0
+        with:
+          config: .testcoverage.yml
+
+  # govulncheck reports known vulnerabilities in the Go dependencies and
+  # the standard library, and fails only on those in code sind calls.
+  govulncheck:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
-      - name: Generate coverage profile
-        run: go test -race -coverprofile=coverage.out ./...
-
-      - name: Check coverage thresholds
-        uses: vladopajic/go-test-coverage@v2
-        with:
-          config: .testcoverage.yml
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
   image-targets:
     name: Image Targets
@@ -80,13 +125,15 @@ jobs:
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # One bake target per Slurm release line (SLURM_RELEASES in
       # docker-bake.hcl), once per platform.
       - name: List node image targets
         id: targets
-        uses: docker/bake-action/subaction/matrix@v7
+        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           fields: platforms
 
@@ -94,14 +141,20 @@ jobs:
     name: Integration Test (${{ matrix.target }}, ${{ matrix.platforms }})
     needs: image-targets
     runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      # dorny/test-reporter publishes the results as a check run.
+      checks: write
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.image-targets.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -110,10 +163,10 @@ jobs:
       - name: Check prerequisites
         run: go run ./cmd/sind doctor
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build sind-node image
-        uses: docker/bake-action@v7
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           targets: ${{ matrix.target }}
           load: true
@@ -124,13 +177,14 @@ jobs:
             *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}-${{ runner.arch }}
             *.tags=local/sind-node:ci
 
-      # The mesh's SSH relay runs sind-node:latest, which Docker only pulls
-      # when missing. Use the image under test so it matches this platform.
+      # The mesh's SSH relay runs sind's default node image, which is
+      # sind-node:latest for the test binaries. Tag the image under test as
+      # it, so the relay runs that image and nothing is pulled.
       - name: Use the image under test for the SSH relay
         run: docker tag local/sind-node:ci ghcr.io/gsi-hpc/sind-node:latest
 
       - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
+        run: go install gotest.tools/gotestsum@v1.13.0
 
       - name: Integration tests
         run: make test-integration
@@ -139,7 +193,7 @@ jobs:
           GOTEST: gotestsum --junitfile integration-tests.xml --
 
       - name: Test report
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
         if: always()
         with:
           name: Integration Test Results (${{ matrix.target }}, ${{ matrix.platforms }})
@@ -147,11 +201,12 @@ jobs:
           reporter: java-junit
 
   # Single check over all release lines and platforms, so its name stays
-  # stable when SLURM_RELEASES or the platforms change.
+  # stable when SLURM_RELEASES or the platforms change. Skipped in a
+  # cancelled run, so a superseded commit gets no failed check.
   integration-test:
     name: Integration Test
     needs: integration-test-image
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check integration test results
@@ -163,9 +218,11 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -173,7 +230,7 @@ jobs:
         run: make build
 
       - name: Upload binary
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sind-linux-amd64
           path: sind-linux-amd64
@@ -182,17 +239,18 @@ jobs:
     name: Release Snapshot
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
       # The release build (.goreleaser.yaml) for every platform, without
       # publishing, so a broken config fails here instead of at release.
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: "~> v2"
+          version: v2.18.2
           args: release --snapshot --clean

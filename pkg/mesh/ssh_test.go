@@ -3,18 +3,21 @@
 package mesh
 
 import (
+	"archive/tar"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,44 +32,7 @@ func TestKnownHostLifecycle(t *testing.T) {
 	mgr := NewManager(c, testutil.Realm("it-mesh"))
 
 	if !rec.IsIntegration() {
-		// EnsureMesh
-		rec.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))      // network exists → no
-		rec.AddResult("net-id\n", "", nil)                                                 // create network
-		rec.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))     // DNS exists → no
-		rec.AddResult("dns-id\n", "", nil)                                                 // create DNS
-		rec.AddResult("", "", nil)                                                         // copy Corefile
-		rec.AddResult("sind-dns\n", "", nil)                                               // start DNS
-		rec.AddResult("", testutil.NoSuchVolume("sind-ssh-config"), testutil.ExitCode1(t)) // SSH vol exists → no
-		rec.AddResult("sind-ssh-config\n", "", nil)                                        // create SSH vol
-		rec.AddResult("keygen-id\n", "", nil)                                              // create keygen container
-		rec.AddResult("", "", nil)                                                         // copy keygen script
-		rec.AddResult("", "", nil)                                                         // remove keygen container
-		rec.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))     // SSH exists → no
-		rec.AddResult(dnsInspectJSON(), "", nil)                                           // inspect DNS for IP
-		rec.AddResult("ssh-id\n", "", nil)                                                 // create SSH
-		rec.AddResult("sind-ssh\n", "", nil)                                               // start SSH
-
-		// AddKnownHost "a"
-		rec.AddResult("", "", nil)
-
-		// AddKnownHost "b"
-		rec.AddResult("", "", nil)
-
-		// RemoveKnownHost "a": read → write
-		rec.AddResult("a.test.sind.sind ssh-ed25519 AAAA\nb.test.sind.sind ssh-ed25519 BBBB\n", "", nil)
-		rec.AddResult("", "", nil)
-
-		// CleanupMesh
-		rec.AddResult("[{}]\n", "", nil)            // SSH exists
-		rec.AddResult("sind-ssh\n", "", nil)        // stop SSH
-		rec.AddResult("sind-ssh\n", "", nil)        // rm SSH
-		rec.AddResult("[{}]\n", "", nil)            // DNS exists
-		rec.AddResult("sind-dns\n", "", nil)        // stop DNS
-		rec.AddResult("sind-dns\n", "", nil)        // rm DNS
-		rec.AddResult("[{}]\n", "", nil)            // network exists
-		rec.AddResult("sind-mesh\n", "", nil)       // rm network
-		rec.AddResult("[{}]\n", "", nil)            // SSH vol exists
-		rec.AddResult("sind-ssh-config\n", "", nil) // rm SSH vol
+		rec.SetOnCall(newFake(t).onCall)
 	}
 	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
 
@@ -84,295 +50,89 @@ func TestKnownHostLifecycle(t *testing.T) {
 	err = mgr.RemoveKnownHost(ctx, "a.test.sind.sind")
 	require.NoError(t, err)
 
+	knownHosts, err := mgr.GetSSHKnownHosts(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "b.test.sind.sind ssh-ed25519 BBBB\n", knownHosts)
+
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
-// --- EnsureSSHVolume ---
+// --- ensureSSH ---
 
-func TestEnsureSSHVolume_Creates(t *testing.T) {
-	const containerID = "abc123"
-
-	var m mock.Executor
-	// VolumeExists → not found
-	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		testutil.ExitCode1(t))
-	// CreateVolume → success
-	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
-	// CreateContainer → success
-	m.AddResult(containerID+"\n", "", nil)
-	// CopyToContainer → success
-	m.AddResult("", "", nil)
-	// RemoveContainer (defer) → success
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
+// TestEnsureSSH_Keys checks the keys a new relay gets: an ed25519 keypair
+// and an empty known_hosts, copied into the SSH volume through the relay
+// before it starts.
+func TestEnsureSSH_Keys(t *testing.T) {
+	_, c, m := newFakeDocker(t)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.EnsureSSHVolume(t.Context())
-	require.NoError(t, err)
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
 
-	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"volume", "inspect", string(SSHVolumeName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{
-		"volume", "create",
-		"--label", "com.docker.compose.project=sind-mesh",
-		"--label", "com.docker.compose.volume=ssh-config",
-		"--label", "sind.realm=" + DefaultRealm,
-		string(SSHVolumeName),
-	}, m.Calls[1].Args)
-	keygenName := string(mgr.SSHKeygenName())
-	assert.Equal(t, []string{
-		"create",
-		"--name", keygenName,
-		"-v", string(SSHVolumeName) + ":/ssh",
-		sshKeygenImage,
-	}, m.Calls[2].Args)
-	assert.Equal(t, []string{"cp", "-", keygenName + ":/ssh"}, m.Calls[3].Args)
-	assert.Equal(t, []string{"rm", "-f", "-v", keygenName}, m.Calls[4].Args)
-
-	// Verify all three files are in the tar archive.
-	privKey := extractTarFile(t, m.Calls[3].Stdin, "id_ed25519")
-	pubKey := extractTarFile(t, m.Calls[3].Stdin, "id_ed25519.pub")
-	knownHosts := extractTarFile(t, m.Calls[3].Stdin, "known_hosts")
-
+	i := indexOf(t, m, "cp - sind-ssh:/root/.ssh")
+	assert.Less(t, i, indexOf(t, m, "start sind-ssh"), "keys before start")
+	stdin := m.Calls[i].Stdin
+	privKey := extractTarFile(t, stdin, "id_ed25519")
+	pubKey := extractTarFile(t, stdin, "id_ed25519.pub")
+	knownHosts := extractTarFile(t, stdin, "known_hosts")
 	assert.Contains(t, privKey, "BEGIN OPENSSH PRIVATE KEY")
 	assert.Contains(t, privKey, "END OPENSSH PRIVATE KEY")
 	assert.True(t, strings.HasPrefix(pubKey, "ssh-ed25519 "))
 	assert.Equal(t, "", knownHosts)
+	assert.Equal(t, map[string]int64{"id_ed25519": 0o600, "id_ed25519.pub": 0o644, "known_hosts": 0o644}, tarModes(t, stdin))
 }
 
-func TestEnsureSSHVolume_AlreadyExists(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)
-	c := docker.NewClient(&m)
+// TestEnsureSSH_KeysIntoExistingRelay covers a new volume under an existing
+// relay: the keys go in through the relay.
+func TestEnsureSSH_KeysIntoExistingRelay(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.EnsureSSHVolume(t.Context())
-	require.NoError(t, err)
-	require.Len(t, m.Calls, 1)
+	require.NoError(t, mgr.ensureSSH(t.Context(), "10.0.0.2", true))
+
+	assert.Contains(t, f.containers["sind-ssh"].files, "/root/.ssh/id_ed25519")
 }
-
-func TestEnsureSSHVolume_CheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSHVolume(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "checking SSH volume")
-}
-
-func TestEnsureSSHVolume_CreateVolumeError(t *testing.T) {
-	var m mock.Executor
-	// VolumeExists → not found
-	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		testutil.ExitCode1(t))
-	// CreateVolume → error
-	m.AddResult("", "Error: permission denied\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSHVolume(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating SSH volume")
-}
-
-func TestEnsureSSHVolume_CreateContainerError(t *testing.T) {
-	var m mock.Executor
-	// VolumeExists → not found
-	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		testutil.ExitCode1(t))
-	// CreateVolume → success
-	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
-	// CreateContainer → error
-	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSHVolume(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating temporary container")
-}
-
-func TestEnsureSSHVolume_CopyError(t *testing.T) {
-	var m mock.Executor
-	// VolumeExists → not found
-	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		testutil.ExitCode1(t))
-	// CreateVolume → success
-	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
-	// CreateContainer → success
-	m.AddResult("abc123\n", "", nil)
-	// CopyToContainer → error
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	// RemoveContainer (defer) → success
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSHVolume(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "writing SSH keys")
-
-	// Verify temp container is still cleaned up on error.
-	assert.Equal(t, []string{"rm", "-f", "-v", string(mgr.SSHKeygenName())}, m.Calls[4].Args)
-}
-
-func TestEnsureSSHVolume_Pull(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		testutil.ExitCode1(t))
-	m.AddResult(string(SSHVolumeName)+"\n", "", nil)
-	m.AddResult("abc123\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-	mgr.Pull = true
-
-	err := mgr.EnsureSSHVolume(t.Context())
-	require.NoError(t, err)
-
-	createArgs := m.Calls[2].Args
-	pull, ok := testutil.ArgValue(createArgs, "--pull")
-	assert.True(t, ok, "--pull flag present in keygen container")
-	assert.Equal(t, "always", pull)
-}
-
-// --- EnsureSSH ---
 
 func TestEnsureSSH_Creates(t *testing.T) {
-	const containerID = "def456"
-
-	var m mock.Executor
-	// ContainerExists → not found
-	m.AddResult("", "Error: No such container: sind-ssh\n",
-		testutil.ExitCode1(t))
-	// InspectContainer(DNS) → mesh IP
-	m.AddResult(dnsInspectJSON(), "", nil)
-	// CreateContainer → success
-	m.AddResult(containerID+"\n", "", nil)
-	// StartContainer → success
-	m.AddResult("sind-ssh\n", "", nil)
-	c := docker.NewClient(&m)
+	_, c, m := newFakeDocker(t)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.EnsureSSH(t.Context())
-	require.NoError(t, err)
+	require.NoError(t, mgr.ensureSSH(t.Context(), "10.0.0.2", false))
 
-	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"container", "inspect", string(SSHContainerName)}, m.Calls[0].Args)
-	assert.Equal(t, []string{"inspect", string(DNSContainerName)}, m.Calls[1].Args)
-	sshCreateArgs := m.Calls[2].Args
-	assert.Equal(t, "create", sshCreateArgs[0])
-	assert.Equal(t, "--name", sshCreateArgs[1])
-	assert.Equal(t, string(SSHContainerName), sshCreateArgs[2])
-	assert.Contains(t, sshCreateArgs, "--label")
-	assert.Equal(t, "infinity", sshCreateArgs[len(sshCreateArgs)-1])
-	assert.Equal(t, "sleep", sshCreateArgs[len(sshCreateArgs)-2])
-	assert.Equal(t, SSHImage, sshCreateArgs[len(sshCreateArgs)-3])
-	assert.Equal(t, []string{"start", string(SSHContainerName)}, m.Calls[3].Args)
+	create := m.Calls[indexOf(t, m, "create")].Args
+	assert.Equal(t, []string{"create", "--name", string(SSHContainerName), "--network", string(NetworkName), "--dns", "10.0.0.2",
+		"-v", string(SSHVolumeName) + ":/root/.ssh"}, create[:9])
+	assert.Equal(t, []string{SSHImage(), "sleep", "infinity"}, create[len(create)-3:])
+	assert.Empty(t, calls(m, "cp"), "no keys without writeKeys")
+	assert.Equal(t, []string{"start sind-ssh"}, calls(m, "start"))
 }
 
-func TestEnsureSSH_AlreadyExists(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSH(t.Context())
-	require.NoError(t, err)
-	require.Len(t, m.Calls, 1)
+func TestSSHImage_DefaultNodeImage(t *testing.T) {
+	assert.Equal(t, config.DefaultImage, SSHImage())
 }
 
-func TestEnsureSSH_CheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSH(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "checking SSH container")
-}
-
-func TestEnsureSSH_InspectDNSError(t *testing.T) {
-	var m mock.Executor
-	// ContainerExists → not found
-	m.AddResult("", "Error: No such container: sind-ssh\n",
-		testutil.ExitCode1(t))
-	// InspectContainer(DNS) → error
-	m.AddResult("", "Error: No such container: sind-dns\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSH(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container")
-}
-
-func TestEnsureSSH_CreateError(t *testing.T) {
-	var m mock.Executor
-	// ContainerExists → not found
-	m.AddResult("", "Error: No such container: sind-ssh\n",
-		testutil.ExitCode1(t))
-	// InspectContainer(DNS) → success
-	m.AddResult(dnsInspectJSON(), "", nil)
-	// CreateContainer → error
-	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSH(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating SSH container")
-}
-
-func TestEnsureSSH_StartError(t *testing.T) {
-	var m mock.Executor
-	// ContainerExists → not found
-	m.AddResult("", "Error: No such container: sind-ssh\n",
-		testutil.ExitCode1(t))
-	// InspectContainer(DNS) → success
-	m.AddResult(dnsInspectJSON(), "", nil)
-	// CreateContainer → success
-	m.AddResult("def456\n", "", nil)
-	// StartContainer → error
-	m.AddResult("", "Error: cannot start\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureSSH(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "starting SSH container")
-}
-
-func TestEnsureSSH_Pull(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: sind-ssh\n",
-		testutil.ExitCode1(t))
-	m.AddResult(dnsInspectJSON(), "", nil)
-	m.AddResult("def456\n", "", nil)
-	m.AddResult("sind-ssh\n", "", nil)
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-	mgr.Pull = true
-
-	err := mgr.EnsureSSH(t.Context())
-	require.NoError(t, err)
-
-	createArgs := m.Calls[2].Args
-	pull, ok := testutil.ArgValue(createArgs, "--pull")
-	assert.True(t, ok, "--pull flag present in SSH container")
-	assert.Equal(t, "always", pull)
+// tarModes returns the mode of each file in a tar archive.
+func tarModes(t *testing.T, data string) map[string]int64 {
+	t.Helper()
+	modes := map[string]int64{}
+	tr := tar.NewReader(strings.NewReader(data))
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return modes
+		}
+		require.NoError(t, err)
+		modes[hdr.Name] = hdr.Mode
+	}
 }
 
 // --- AddKnownHost ---
 
 func TestAddKnownHost(t *testing.T) {
+	// An existing entry for the host is replaced, not duplicated.
 	var m mock.Executor
-	// AppendFile → success
-	m.AddResult("", "", nil)
+	m.AddResult("controller.dev.sind.sind ssh-ed25519 OLD\nworker-0.dev.sind.sind ssh-ed25519 W\n", "", nil) // ReadFile
+	m.AddResult("", "", nil)                                                                                 // WriteFile
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -380,12 +140,12 @@ func TestAddKnownHost(t *testing.T) {
 		"controller.dev.sind.sind", "ssh-ed25519 AAAA...")
 	require.NoError(t, err)
 
-	require.Len(t, m.Calls, 1)
+	require.Len(t, m.Calls, 2)
 	assert.Equal(t, []string{
 		"exec", "-i", string(SSHContainerName),
-		"sh", "-c", "cat >> " + knownHostsPath,
-	}, m.Calls[0].Args)
-	assert.Equal(t, "controller.dev.sind.sind ssh-ed25519 AAAA...\n", m.Calls[0].Stdin)
+		"sh", "-c", "cat > " + knownHostsPath,
+	}, m.Calls[1].Args)
+	assert.Equal(t, "worker-0.dev.sind.sind ssh-ed25519 W\ncontroller.dev.sind.sind ssh-ed25519 AAAA...\n", m.Calls[1].Stdin)
 }
 
 func TestAddKnownHost_Error(t *testing.T) {
@@ -397,7 +157,7 @@ func TestAddKnownHost_Error(t *testing.T) {
 	err := mgr.AddKnownHost(t.Context(),
 		"controller.dev.sind.sind", "ssh-ed25519 AAAA...")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "adding known host controller.dev.sind.sind")
+	assert.Contains(t, err.Error(), "reading known_hosts")
 }
 
 // --- AddKnownHosts (batch) ---

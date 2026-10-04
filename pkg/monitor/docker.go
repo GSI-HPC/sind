@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -107,12 +109,17 @@ func (m *DockerMonitor) extractShortName(containerName string) (string, bool) {
 }
 
 // DockerEventsArgs returns the docker CLI arguments for streaming container
-// events for the given cluster.
+// events for the given cluster. Only the actions in dockerActionMap are
+// asked for: every docker exec of the readiness probes would otherwise
+// send exec_create, exec_start and exec_die events to parse and drop.
 func DockerEventsArgs(clusterName string) []string {
-	return []string{
+	args := []string{
 		"events",
 		"--filter", "type=container",
 		"--filter", "label=sind.cluster=" + clusterName,
-		"--format", "{{json .}}",
 	}
+	for _, action := range slices.Sorted(maps.Keys(dockerActionMap)) {
+		args = append(args, "--filter", "event="+action)
+	}
+	return append(args, "--format", "{{json .}}")
 }

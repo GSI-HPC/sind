@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -84,9 +85,55 @@ defaults:
 	require.NoError(t, err)
 	assert.Len(t, nodes, 2)
 
+	// GetStatus and ListClusterResources find the network and the volumes
+	// with one listing each.
+	status, err := GetStatus(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.True(t, status.Network.Cluster)
+	require.Len(t, status.Mounts, 3)
+	for _, m := range status.Mounts {
+		assert.True(t, m.OK, "mount %s present", m.Path)
+	}
+	res, err := ListClusterResources(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.True(t, res.NetworkExists)
+	assert.Equal(t, []docker.VolumeName{
+		VolumeName(realm, clusterName, VolumeConfig),
+		VolumeName(realm, clusterName, VolumeMunge),
+		VolumeName(realm, clusterName, VolumeData),
+	}, res.Volumes)
+
+	// The default 512m node has a 256m /dev/shm, a 64m /run and no swap.
+	worker := ContainerName(realm, clusterName, "worker-0")
+	out, err := c.Exec(ctx, worker, "df", "--output=size", "-BM", "/dev/shm", "/run")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1M-blocks", "256M", "64M"}, strings.Fields(out))
+	out, err = c.Exec(ctx, worker, "cat", "/sys/fs/cgroup/memory.swap.max")
+	if err == nil { // only where the kernel accounts swap
+		assert.Equal(t, "0", strings.TrimSpace(out))
+	}
+
+	// A managed worker stays while the controller is frozen: sind could
+	// not take it out of sind-nodes.conf.
+	require.NoError(t, PowerFreeze(ctx, c, realm, clusterName, []string{"controller"}))
+	err = WorkerRemove(ctx, c, meshMgr, clusterName, []string{"worker-0"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not running (paused)")
+	exists, err := c.ContainerExists(ctx, ContainerName(realm, clusterName, "worker-0"))
+	require.NoError(t, err)
+	assert.True(t, exists)
+	require.NoError(t, PowerUnfreeze(ctx, c, realm, clusterName, []string{"controller"}))
+
 	// Delete.
 	err = Delete(ctx, c, meshMgr, clusterName)
 	require.NoError(t, err)
+
+	// The network and the volumes are gone too.
+	res, err = ListClusterResources(ctx, c, realm, clusterName)
+	require.NoError(t, err)
+	assert.Empty(t, res.Containers)
+	assert.False(t, res.NetworkExists)
+	assert.Empty(t, res.Volumes)
 
 	// Verify gone.
 	clusters, err = GetClusters(ctx, c, realm)
@@ -135,6 +182,8 @@ slurm:
     MaxNodeCount=10
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
+    PartitionName=DEFAULT DefaultTime=00:30:00
+    PartitionName=debug Nodes=worker-0 Default=YES MaxTime=01:00:00
   cgroup: |
     ConstrainCores=yes
 `, clusterName, img)))
@@ -155,6 +204,20 @@ slurm:
 	assert.Contains(t, out, "SelectType              = select/cons_tres")
 	assert.Contains(t, out, "SelectTypeParameters    = CR_CORE_MEMORY")
 	assert.Contains(t, out, "ConstrainCores          = yes")
+	// A job without --mem gets 512 MB per CPU, not the whole node.
+	assert.Contains(t, out, fmt.Sprintf("%-23s = %s", "DefMemPerCPU", "512"))
+
+	// sind-nodes.conf comes after slurm.main: its PartitionName=DEFAULT
+	// line applies to partition all, its partition may name sind's nodes,
+	// and its default partition stays the default.
+	out, err = c.Exec(ctx, controller, "scontrol", "show", "partition", "all")
+	require.NoError(t, err)
+	assert.Contains(t, out, "DefaultTime=00:30:00")
+	assert.Contains(t, out, "Default=NO")
+	out, err = c.Exec(ctx, controller, "scontrol", "show", "partition", "debug")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Default=YES")
+	assert.Contains(t, out, "Nodes=worker-0")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -189,6 +252,7 @@ kind: Cluster
 name: %s
 defaults:
   image: %s
+users: [alice]
 slurm:
   main:
     scheduling: |
@@ -196,6 +260,8 @@ slurm:
       SchedulerParameters=bf_continue
     resources: |
       SelectType=select/cons_tres
+    tasks: |
+      TaskPlugin=task/cgroup,task/affinity
 `, clusterName, img)))
 	require.NoError(t, err)
 	cfg.ApplyDefaults()
@@ -213,8 +279,44 @@ slurm:
 	assert.Contains(t, out, "SchedulerType           = sched/backfill")
 	assert.Contains(t, out, "SchedulerParameters     = bf_continue")
 	assert.Contains(t, out, "SelectType              = select/cons_tres")
+	assert.Contains(t, out, "TaskPlugin              = task/cgroup,task/affinity")
+
+	// The fragment's TaskPlugin replaces sind's instead of following it.
+	conf, err := c.ReadFile(ctx, controller, slurm.SlurmConfPath)
+	require.NoError(t, err)
+	assert.NotContains(t, conf, "TaskPlugin=")
+
+	// task/affinity binds the tasks of users other than root, which needs
+	// CAP_SYS_NICE on the worker: a job of alice runs.
+	worker := ContainerName(realm, clusterName, "worker-0")
+	assert.True(t, hasSysNice(t, c, worker))
+	assert.False(t, hasSysNice(t, c, controller))
+	waitNodeIdle(t, c, controller, "worker-0")
+	out, err = c.Exec(ctx, controller, "runuser", "-u", "alice", "--", "srun", "-N1", "id", "-un")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", strings.TrimSpace(out))
+
+	// A worker added later gets it too: sind reads the TaskPlugin from the
+	// fragment slurm.conf includes.
+	added, err := WorkerAdd(ctx, c, meshMgr, WorkerAddOptions{ClusterName: clusterName, Count: 1}, probeInterval)
+	require.NoError(t, err)
+	require.Len(t, added, 1)
+	assert.True(t, hasSysNice(t, c, ContainerName(realm, clusterName, added[0].Name)))
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// hasSysNice reports whether a node container has CAP_SYS_NICE (bit 23)
+// in its bounding set.
+func hasSysNice(t *testing.T, c *docker.Client, container docker.ContainerName) bool {
+	t.Helper()
+	out, err := c.Exec(t.Context(), container, "grep", "CapBnd", "/proc/1/status")
+	require.NoError(t, err)
+	fields := strings.Fields(out)
+	require.Len(t, fields, 2, out)
+	caps, err := strconv.ParseUint(fields[1], 16, 64)
+	require.NoError(t, err)
+	return caps&(1<<23) != 0
 }
 
 // TestControllerPairFailover exercises a primary/backup controller pair:
@@ -321,8 +423,111 @@ slurm:
 	assert.Contains(t, out, added[0].Name)
 
 	// Recovery: the restarted primary takes control back.
-	require.NoError(t, PowerOn(ctx, c, realm, clusterName, []string{"controller"}))
+	require.NoError(t, PowerOn(ctx, c, meshMgr, clusterName, []string{"controller"}))
 	waitInControl(t, c, realm, clusterName, "controller")
+
+	// The new worker may have taken the primary's old address: the mesh
+	// DNS record follows the address the primary has now.
+	assertDNSRecord(t, c, meshMgr, clusterName, "controller")
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// assertDNSRecord checks that the mesh DNS record of a node points at the
+// node's current address on its cluster network.
+func assertDNSRecord(t *testing.T, c *docker.Client, meshMgr *mesh.Manager, clusterName, shortName string) {
+	t.Helper()
+	info, err := c.InspectContainer(t.Context(), ContainerName(meshMgr.Realm, clusterName, shortName))
+	require.NoError(t, err)
+	ip := info.IPs[NetworkName(meshMgr.Realm, clusterName)]
+	require.NotEmpty(t, ip)
+	records, err := meshMgr.GetDNSRecords(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, records, mesh.DNSRecord{Hostname: DNSName(shortName, clusterName, meshMgr.Realm), IP: ip})
+}
+
+// TestClusterNamesAroundMesh creates two clusters in one realm whose
+// networks sort on both sides of the mesh network (<realm>-alpha-net <
+// <realm>-mesh < <realm>-test-net). Every node's hostname is also a DNS name
+// on the mesh, so without the cluster network's gateway priority, test's
+// nodes would resolve controller through the mesh, to both controllers.
+// Then it stops the mesh, as a host reboot does, and powers a node on.
+func TestClusterNamesAroundMesh(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-names")
+	meshMgr := mesh.NewManager(c, realm)
+	clusters := []string{"alpha", "test"}
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		for _, name := range clusters {
+			_ = Delete(bg, c, meshMgr, name)
+		}
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+	require.Less(t, string(NetworkName(realm, "alpha")), string(meshMgr.NetworkName()))
+	require.Greater(t, string(NetworkName(realm, "test")), string(meshMgr.NetworkName()))
+
+	// One create at a time: both rewrite the realm's Corefile.
+	for _, name := range clusters {
+		cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+`, name, img)))
+		require.NoError(t, err)
+		cfg.ApplyDefaults()
+		require.NoError(t, cfg.Validate())
+		_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+		require.NoError(t, err, "creating %s", name)
+	}
+
+	for _, name := range clusters {
+		controller, err := c.InspectContainer(ctx, ContainerName(realm, name, "controller"))
+		require.NoError(t, err)
+		want := controller.IPs[NetworkName(realm, name)]
+		require.NotEmpty(t, want)
+
+		out, err := c.Exec(ctx, ContainerName(realm, name, "worker-0"), "getent", "hosts", "controller")
+		require.NoError(t, err, "resolving controller in %s", name)
+		var got []string
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if fields := strings.Fields(line); len(fields) > 0 {
+				got = append(got, fields[0])
+			}
+		}
+		assert.Equal(t, []string{want}, got, "controller in cluster %s", name)
+	}
+
+	// After a host reboot the mesh containers exist but are stopped.
+	// Powering a node on starts them first and re-registers the node.
+	require.NoError(t, PowerShutdown(ctx, c, realm, "test", []string{"worker-0"}))
+	require.NoError(t, c.StopContainer(ctx, meshMgr.SSHContainerName()))
+	require.NoError(t, c.StopContainer(ctx, meshMgr.DNSContainerName()))
+	health, err := GetNetworkHealth(ctx, c, realm, "test")
+	require.NoError(t, err)
+	assert.False(t, health.DNS, "stopped DNS is not healthy")
+	assert.False(t, health.SSH, "stopped relay is not healthy")
+
+	require.NoError(t, PowerOn(ctx, c, meshMgr, "test", []string{"worker-0"}))
+	health, err = GetNetworkHealth(ctx, c, realm, "test")
+	require.NoError(t, err)
+	assert.True(t, health.DNS)
+	assert.True(t, health.SSH)
+	assertDNSRecord(t, c, meshMgr, "test", "worker-0")
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
@@ -509,8 +714,9 @@ name: %s
 defaults:
   image: %s
 slurm:
-  slurmdbd: |
-    DebugLevel=info
+  slurmdbd:
+    debug: |
+      DebugLevel=info
 nodes:
   - controller
   - db
@@ -525,15 +731,27 @@ nodes:
 	assert.Equal(t, StateRunning, result.State)
 	require.Len(t, result.Nodes, 3)
 
-	// slurmdbd.conf carries the slurmdbd section and the ownership and mode
-	// slurmdbd insists on.
+	// slurmdbd.conf includes the slurmdbd section's fragments. It has the
+	// ownership and mode slurmdbd insists on, and the fragments, which may
+	// hold secrets such as a StoragePass, get the same protection.
 	db := ContainerName(realm, clusterName, "db")
-	out, err := c.Exec(ctx, db, "stat", "-c", "%U:%G %a", slurm.SlurmdbdConfPath)
+	out, err := c.Exec(ctx, db, "stat", "-c", "%U:%G %a %n", slurm.SlurmdbdConfPath,
+		slurm.ConfDir+"/slurmdbd.conf.d", slurm.ConfDir+"/slurmdbd.conf.d/debug.conf")
 	require.NoError(t, err)
-	assert.Equal(t, "slurm:slurm 600", strings.TrimSpace(out))
+	assert.Equal(t, "slurm:slurm 600 /etc/slurm/slurmdbd.conf\n"+
+		"slurm:slurm 700 /etc/slurm/slurmdbd.conf.d\n"+
+		"slurm:slurm 600 /etc/slurm/slurmdbd.conf.d/debug.conf", strings.TrimSpace(out))
 	out, err = c.Exec(ctx, db, "cat", slurm.SlurmdbdConfPath)
 	require.NoError(t, err)
-	assert.Contains(t, out, "DebugLevel=info")
+	assert.Contains(t, out, "include /etc/slurm/slurmdbd.conf.d/debug.conf")
+
+	// MariaDB's slurm account authenticates with unix_socket: the OS user
+	// slurm, which slurmdbd runs as, logs in as it; no other user does,
+	// not even root.
+	_, err = c.Exec(ctx, db, "runuser", "-u", "slurm", "--", "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, db, "mysql", "-u", "slurm", "slurm_acct_db", "-e", "SELECT 1")
+	assert.Error(t, err, "root logged in as slurm")
 
 	// The controller sends accounting data to slurmdbd on the db node.
 	controller := ContainerName(realm, clusterName, "controller")
@@ -737,7 +955,9 @@ nodes:
 	assert.Equal(t, "bob", strings.TrimSpace(out))
 
 	// A job runs as its user, and what it writes to its home directory on
-	// the worker shows up on every node.
+	// the worker shows up on every node. With the default task/cgroup,
+	// which binds no tasks, the worker needs no CAP_SYS_NICE for that.
+	assert.False(t, hasSysNice(t, c, worker))
 	waitNodeIdle(t, c, submitter, "worker-0")
 	_, err = c.Exec(ctx, meshMgr.SSHContainerName(), "ssh", "-l", "alice", DNSName("submitter", clusterName, realm), "srun -N1 sh -c 'id -un > from-job; id -Gn > groups-in-job'")
 	require.NoError(t, err)
@@ -763,12 +983,22 @@ nodes:
 	out, err = c.Exec(ctx, newWorker, "id", "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "uid=1000(alice) gid=1000(alice) groups=1000(alice),3000(hpc)", strings.TrimSpace(out))
+	// It has worker-0's shape: the same image, by ID, and limits.
+	infos, err := c.InspectContainers(ctx, worker, newWorker)
+	require.NoError(t, err)
+	require.Len(t, infos, 2)
+	assert.Equal(t, infos[0].Image, infos[1].Image)
+	assert.Equal(t, infos[0].HostConfig.NanoCPUs, infos[1].HostConfig.NanoCPUs)
+	assert.Equal(t, infos[0].HostConfig.Memory, infos[1].HostConfig.Memory)
+	assert.Equal(t, infos[0].HostConfig.Tmpfs["/tmp"], infos[1].HostConfig.Tmpfs["/tmp"])
+	assert.Equal(t, infos[0].HostConfig.CapAdd, infos[1].HostConfig.CapAdd)
 	out, err = c.Exec(ctx, newWorker, "id", "bob")
 	require.NoError(t, err)
 	assert.Equal(t, "uid=2001(bob) gid=3000(hpc) groups=3000(hpc)", strings.TrimSpace(out))
 	out, err = c.ReadFile(ctx, newWorker, "/home/alice/from-job")
 	require.NoError(t, err)
 	assert.Equal(t, "alice", strings.TrimSpace(out))
+	assert.False(t, hasSysNice(t, c, newWorker))
 
 	// Deleting the cluster removes the home volume.
 	require.NoError(t, Delete(ctx, c, meshMgr, clusterName))

@@ -33,7 +33,7 @@ Full systemd-based nodes that emulate bare metal — use the same config managem
 
 ## Designed for CI/CD
 
-Runs rootless on standard GitHub Actions runners. [sind-action](https://github.com/GSI-HPC/sind-action) sets up clusters in a single step.
+Runs on standard GitHub Actions runners with the runner's Docker daemon, no sudo or privileged containers. [sind-action](https://github.com/GSI-HPC/sind-action) sets up clusters in a single step.
 
 {{< /columns >}}
 

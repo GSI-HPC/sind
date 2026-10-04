@@ -1,129 +1,95 @@
 name: Image
 
+# Publishes the sind-node images (docker-bake.hcl) to ghcr.io/gsi-hpc/sind-node:
+# - a push to main that changes the image build publishes <version>,
+#   <YY>.<MM> and latest, which development builds of sind use by default
+# - a release tag vX.Y.Z publishes vX.Y.Z-<YY>.<MM> and vX.Y.Z, which the
+#   release's binaries use by default (.goreleaser.yaml); GitHub does not
+#   apply path filters to tag pushes
+# - the weekly schedule, or a manual run on main, rebuilds both the images
+#   of main and those of the newest release with the current Rocky Linux
+#   packages; a manual run on a release tag rebuilds that release's images
+# Nothing else publishes: a run on any other ref fails.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "Dockerfile"
       - "docker-bake.hcl"
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
-env:
-  IMAGE: ghcr.io/gsi-hpc/sind-node
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  targets:
+  plan:
     runs-on: ubuntu-latest
     outputs:
-      targets: ${{ steps.targets.outputs.matrix }}
-      builds: ${{ steps.builds.outputs.matrix }}
+      builds: ${{ steps.plan.outputs.builds }}
     steps:
-      - uses: actions/checkout@v7
+      # Each build is {ref, release, refresh}; refresh rebuilds the runtime
+      # stage without the cache, so its packages are current.
+      - name: Plan the builds
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          refresh=false
+          if [[ "$GITHUB_EVENT_NAME" == schedule || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            refresh=true
+          fi
+          build() {
+            jq -cn --arg ref "$1" --arg release "$2" --argjson refresh "$refresh" \
+              '{ref: $ref, release: $release, refresh: $refresh}'
+          }
+          case "$GITHUB_REF" in
+            refs/heads/main)
+              builds=("$(build "$GITHUB_SHA" "")")
+              # A rebuild of main also rebuilds the newest release's images,
+              # which its binaries use, unless the release predates them.
+              if [[ "$refresh" == true ]]; then
+                tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName) || tag=""
+                if [[ -n "$tag" ]]; then
+                  config=$(gh api "repos/$GITHUB_REPOSITORY/contents/.goreleaser.yaml?ref=$tag" --jq .content | base64 -d) || config=""
+                  if grep -q 'pkg/config\.DefaultImage=' <<<"$config"; then
+                    builds+=("$(build "$tag" "$tag")")
+                  else
+                    echo "::notice::Release $tag predates release images and is not rebuilt"
+                  fi
+                fi
+              fi
+              ;;
+            refs/tags/v*)
+              builds=("$(build "$GITHUB_SHA" "$GITHUB_REF_NAME")")
+              ;;
+            *)
+              echo "::error::Images are published from main and release tags only, not from $GITHUB_REF"
+              exit 1
+              ;;
+          esac
+          echo "builds=$(jq -cs . <<<"${builds[*]}")" >> "$GITHUB_OUTPUT"
 
-      # One bake target per Slurm release line (SLURM_RELEASES in
-      # docker-bake.hcl). The bake file also sets the tags, including
-      # latest on the newest release line.
-      - name: List node image targets
-        id: targets
-        uses: docker/bake-action/subaction/matrix@v7
-
-      # Each target once per platform, built on a native runner: compiling
-      # the image under emulation would take hours.
-      - name: List builds per platform
-        id: builds
-        uses: docker/bake-action/subaction/matrix@v7
-        with:
-          fields: platforms
-
-  build:
-    name: build (${{ matrix.target }}, ${{ matrix.platforms }})
-    needs: targets
-    runs-on: ${{ matrix.platforms == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+  publish:
+    name: publish (${{ matrix.release || 'main' }})
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.targets.outputs.builds) }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Push untagged; the merge job tags the multi-platform image.
-      - name: Build and push by digest
-        id: bake
-        uses: docker/bake-action@v7
-        with:
-          targets: ${{ matrix.target }}
-          allow: network.host
-          set: |
-            *.platform=${{ matrix.platforms }}
-            *.tags=${{ env.IMAGE }}
-            *.output=type=image,push-by-digest=true,name-canonical=true,push=true
-            *.cache-from=type=gha,scope=${{ matrix.target }}-${{ runner.arch }}
-            *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}-${{ runner.arch }}
-
-      - name: Export digest
-        env:
-          DIGEST: ${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['containerimage.digest'] }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/digests"
-          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: digests-${{ matrix.target }}-${{ runner.arch }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    name: merge (${{ matrix.target }})
-    needs: [targets, build]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.targets.outputs.targets) }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: digests-${{ matrix.target }}-*
-          path: ${{ runner.temp }}/digests
-          merge-multiple: true
-
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tag the multi-platform image
-        env:
-          TARGET: ${{ matrix.target }}
-        run: |
-          mapfile -t tags < <(docker buildx bake --print "$TARGET" | jq -r --arg t "$TARGET" '.target[$t].tags[]')
-          args=()
-          for tag in "${tags[@]}"; do
-            args+=(--tag "$tag")
-          done
-          for digest in "$RUNNER_TEMP"/digests/*; do
-            args+=("$IMAGE@sha256:$(basename "$digest")")
-          done
-          docker buildx imagetools create "${args[@]}"
-          docker buildx imagetools inspect "${tags[0]}"
+        include: ${{ fromJSON(needs.plan.outputs.builds) }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/image-build.yml
+    with:
+      ref: ${{ matrix.ref }}
+      release: ${{ matrix.release }}
+      refresh: ${{ matrix.refresh }}

@@ -4,11 +4,15 @@ package cluster
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -19,26 +23,43 @@ import (
 // DefaultDataMountPath is the default mount path for the shared data volume.
 const DefaultDataMountPath = "/data"
 
+// RunTmpfsSize is the size of every node's /run tmpfs. /run holds systemd's
+// runtime state, the daemons' sockets and pid files, and journald's
+// volatile journal, which journald keeps to a tenth of the file system;
+// without a size it could grow to half the host's memory, all of it
+// charged to the node. systemd wants 16M free on /run to reload.
+const RunTmpfsSize = "64m"
+
 // Label keys used on sind containers.
+//
+// Docker merges the image's labels into a container's, so a label sind
+// leaves out can come from the image. Every node container therefore gets
+// each of these labels, with an empty value where there is nothing to
+// record, and readers treat an empty or missing label alike, as nodes
+// created by earlier sind versions lack some of them.
 const (
 	LabelRealm        = "sind.realm"
 	LabelCluster      = "sind.cluster"
 	LabelRole         = "sind.role"
 	LabelManaged      = "sind.managed"
 	LabelSlurmVersion = "sind.slurm.version"
+	// LabelDataHostPath records the host directory the node bind-mounts as
+	// its data (storage.dataStorage.hostPath), empty for the cluster's data
+	// volume.
 	LabelDataHostPath = "sind.data.hostpath"
-	// LabelDataMountPath records a data mount point other than
-	// DefaultDataMountPath (storage.dataStorage.mountPath).
+	// LabelDataMountPath records the data mount point
+	// (storage.dataStorage.mountPath, DefaultDataMountPath by default).
 	LabelDataMountPath = "sind.data.mountpath"
 	// LabelCVMFS records how the node mounts CVMFS (storage.cvmfs): "volume"
-	// for the cvmfs volume plugin, "hostPath" for the Docker host's /cvmfs.
+	// for the cvmfs volume plugin, "hostPath" for the Docker host's /cvmfs,
+	// empty for none.
 	LabelCVMFS = "sind.cvmfs"
 	// LabelUsers and LabelGroups record the cluster users and groups
 	// (users, groups), as space-separated entries (see LinuxUsers.Labels).
 	LabelUsers  = "sind.users"
 	LabelGroups = "sind.groups"
-	// LabelIdentity records the identity mode (identity) of a cluster
-	// whose mode is not local: nssSlurm or clientIds.
+	// LabelIdentity records the identity mode (identity) of the cluster:
+	// local, nssSlurm or clientIds.
 	LabelIdentity = "sind.identity"
 )
 
@@ -52,7 +73,7 @@ func IdentityFromLabels(labels docker.Labels) config.IdentityMode {
 }
 
 // DataMountPath returns where a node container mounts the cluster's data:
-// its LabelDataMountPath, or DefaultDataMountPath.
+// its LabelDataMountPath, or DefaultDataMountPath without one.
 func DataMountPath(labels docker.Labels) string {
 	if p := labels[LabelDataMountPath]; p != "" {
 		return p
@@ -69,9 +90,9 @@ func ComposeProject(realm, clusterName string) string {
 // managed records whether sind manages Slurm on the node (see IsManaged).
 // containerNumber is the 1-based instance number for compose compatibility.
 // The slurm version label is always set, empty when sind does not know the
-// version (unmanaged clusters): the sind-node image carries a label of the
-// same name, which would otherwise show through on the container.
-// The data host path label is omitted when dataHostPath is empty (Docker volume mode).
+// version (unmanaged clusters), and so is the data host path label, empty in
+// Docker volume mode: the image's labels would otherwise show through on the
+// container, and the sind-node image carries a slurm version label.
 func NodeLabels(realm, clusterName string, role config.Role, managed bool, slurmVersion, dataHostPath string, containerNumber int) docker.Labels {
 	labels := docker.ComposeLabels(ComposeProject(realm, clusterName), string(role), containerNumber)
 	labels[LabelRealm] = realm
@@ -79,9 +100,7 @@ func NodeLabels(realm, clusterName string, role config.Role, managed bool, slurm
 	labels[LabelRole] = string(role)
 	labels[LabelManaged] = strconv.FormatBool(managed)
 	labels[LabelSlurmVersion] = slurmVersion
-	if dataHostPath != "" {
-		labels[LabelDataHostPath] = dataHostPath
-	}
+	labels[LabelDataHostPath] = dataHostPath
 	return labels
 }
 
@@ -111,7 +130,6 @@ type RunConfig struct {
 	Managed         bool        // sind manages Slurm on the node: its configuration and daemon (see IsManaged)
 	SharedState     bool        // mount the shared slurmctld state volume (controllers of a backup pair)
 	ContainerNumber int         // 1-based compose container instance number
-	Pull            bool        // force fresh image pull (--pull always)
 	CapAdd          []string    // extra Linux capabilities (e.g. "SYS_ADMIN")
 	CapDrop         []string    // dropped Linux capabilities
 	Devices         []string    // host devices to expose (e.g. "/dev/fuse")
@@ -135,11 +153,40 @@ type RunConfig struct {
 	// NSSSlurm switches the node's passwd and group lookups to nss_slurm
 	// first: managed workers with identity nssSlurm or clientIds.
 	NSSSlurm bool
+
+	// StoragePass is, on a managed db node, the StoragePass the slurmdbd
+	// section sets: the password of slurmdbd's MariaDB account, which
+	// authenticates with unix_socket without one (see accountingSQL).
+	StoragePass string
+
+	// TaskAffinity is set on managed workers of a cluster whose slurm.conf
+	// enables task/affinity (see slurm.TaskAffinity): they get
+	// TaskAffinityCapability.
+	TaskAffinity bool
 }
 
-// UserJobCapability is the capability workers of a cluster with users get,
-// so that slurmstepd can bind the tasks of users other than root.
-const UserJobCapability = "SYS_NICE"
+// clusterNetworkSpec returns the --network value that attaches a node to its
+// cluster network with gateway priority 1 (Docker 28 and later), ahead of
+// the mesh network (see BuildRunArgs).
+func clusterNetworkSpec(realm, clusterName string) string {
+	return "name=" + string(NetworkName(realm, clusterName)) + ",gw-priority=1"
+}
+
+// TaskAffinityCapability is the capability managed workers get when the
+// cluster's TaskPlugin includes task/affinity: slurmstepd, as root, sets
+// each task's CPU affinity after the task has become the job's user, and
+// changing the affinity of another user's process needs CAP_SYS_NICE,
+// which Docker drops by default. Without it, every job of a user other
+// than root fails with task_g_set_affinity.
+const TaskAffinityCapability = "SYS_NICE"
+
+// getsTaskAffinityCapability reports whether BuildRunArgs gives a worker
+// TaskAffinityCapability: when its cluster's slurm.conf enables
+// task/affinity, unless capDrop lists the capability or ALL, as a
+// --cap-drop does not undo a --cap-add.
+func getsTaskAffinityCapability(taskAffinity bool, capDrop []string) bool {
+	return taskAffinity && !slices.Contains(capDrop, TaskAffinityCapability) && !slices.Contains(capDrop, "ALL")
+}
 
 // BuildRunArgs returns the docker arguments for creating a node container.
 // The returned slice does not include "create" or "run -d" — the caller
@@ -153,8 +200,15 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--hostname", cfg.ShortName,
 	)
 
-	// Network
-	args = append(args, "--network", string(NetworkName(cfg.Realm, cfg.ClusterName)))
+	// Network. Docker's embedded DNS answers a name from the first of the
+	// container's networks that knows it, ordered by gateway priority and
+	// then by network name. CreateNode also attaches the node to the realm's
+	// mesh, where the nodes of every cluster register their hostnames, so
+	// the cluster network gets priority 1 (the mesh keeps 0): controller,
+	// db and worker-N then resolve to this cluster's nodes whatever the
+	// cluster is called. It also makes the cluster network the default
+	// gateway.
+	args = append(args, "--network", clusterNetworkSpec(cfg.Realm, cfg.ClusterName))
 	if cfg.DNSIP != "" {
 		args = append(args, "--dns", cfg.DNSIP)
 	}
@@ -176,7 +230,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 		dataMountPath = DefaultDataMountPath
 	}
 	if cfg.DataHostPath != "" {
-		args = append(args, "-v", cfg.DataHostPath+":"+dataMountPath+":rw")
+		args = append(args, "--mount", bindMount(cfg.DataHostPath, dataMountPath))
 	} else {
 		args = append(args, "-v", string(VolumeName(cfg.Realm, cfg.ClusterName, VolumeData))+":"+dataMountPath+":rw")
 	}
@@ -199,15 +253,23 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
 	args = append(args,
 		"--tmpfs", "/tmp:rw,nosuid,nodev,size="+cfg.TmpSize,
-		"--tmpfs", "/run:exec,mode=755",
+		"--tmpfs", "/run:exec,mode=755,size="+RunTmpfsSize,
 		"--tmpfs", "/run/lock",
 	)
 
-	// Resource limits
+	// Resource limits. The memory limit covers the node's own daemons and
+	// the files in its tmpfs mounts (/tmp, /run, /dev/shm) as well as the
+	// jobs. The node gets no swap, so it behaves the same on hosts with and
+	// without swap, and a /dev/shm of half its memory, as a real node has,
+	// rather than Docker's 64m.
 	args = append(args,
 		"--cpus", strconv.Itoa(cfg.CPUs),
 		"--memory", cfg.Memory,
+		"--memory-swap", cfg.Memory,
 	)
+	if memMB, err := slurm.ParseMemoryMB(cfg.Memory); err == nil {
+		args = append(args, "--shm-size", strconv.Itoa(memMB/2)+"m")
+	}
 
 	// Security options for systemd containers
 	args = append(args,
@@ -216,12 +278,11 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--security-opt", "label=disable",
 	)
 
-	// Workers of a cluster with users may set the CPU affinity of other
-	// users' processes: slurmstepd, as root, binds each task after the task
-	// has become the job's user (task/affinity), which needs CAP_SYS_NICE
-	// unless the user is root. Docker drops it by default.
-	if cfg.Role == config.RoleWorker && len(cfg.Users.Users) > 0 {
-		args = append(args, "--cap-add", UserJobCapability)
+	// Workers that bind tasks with task/affinity may set the CPU affinity of
+	// other users' processes, unless the node drops the capability: a
+	// --cap-drop does not undo a --cap-add.
+	if cfg.Role == config.RoleWorker && getsTaskAffinityCapability(cfg.TaskAffinity, cfg.CapDrop) {
+		args = append(args, "--cap-add", TaskAffinityCapability)
 	}
 
 	// Extra capabilities and devices (opt-in)
@@ -238,18 +299,16 @@ func BuildRunArgs(cfg RunConfig) []string {
 		args = append(args, "--security-opt", opt)
 	}
 
-	// Labels
+	// Labels, each one set even when empty (see the label keys)
 	labels := NodeLabels(cfg.Realm, cfg.ClusterName, cfg.Role, cfg.Managed, cfg.SlurmVersion, cfg.DataHostPath, cfg.ContainerNumber)
-	if dataMountPath != DefaultDataMountPath {
-		labels[LabelDataMountPath] = dataMountPath
-	}
-	if cfg.CVMFS != "" {
-		labels[LabelCVMFS] = string(cfg.CVMFS)
-	}
+	labels[LabelDataMountPath] = dataMountPath
+	labels[LabelCVMFS] = string(cfg.CVMFS)
 	maps.Copy(labels, cfg.Users.Labels())
-	if cfg.Identity != "" && cfg.Identity != config.IdentityLocal {
-		labels[LabelIdentity] = string(cfg.Identity)
+	identity := cfg.Identity
+	if identity == "" {
+		identity = config.IdentityLocal
 	}
+	labels[LabelIdentity] = string(identity)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
@@ -257,11 +316,6 @@ func BuildRunArgs(cfg RunConfig) []string {
 	sort.Strings(keys)
 	for _, k := range keys {
 		args = append(args, "--label", k+"="+labels[k])
-	}
-
-	// Pull policy
-	if cfg.Pull {
-		args = append(args, "--pull", "always")
 	}
 
 	// Entrypoint: delegate the cgroup controllers, then start systemd
@@ -275,6 +329,20 @@ func BuildRunArgs(cfg RunConfig) []string {
 	args = append(args, cfg.Image, "-c", entrypoint)
 
 	return args
+}
+
+// bindMount returns the --mount value that bind-mounts the host directory
+// source read-write at target. Unlike -v, which has Docker create a missing
+// source as an empty root-owned directory, --mount fails on one. Docker
+// reads the value as a CSV record, so a field with a comma or a quote is
+// quoted.
+func bindMount(source, target string) string {
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	// Writing to a strings.Builder cannot fail.
+	_ = w.Write([]string{"type=bind", "source=" + source, "target=" + target})
+	w.Flush()
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // MaskMunge is the line the node entrypoint starts with under identity
@@ -329,18 +397,20 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
 // with (see DetectCVMFS), empty for none. The identity mode decides which
 // nodes get the cluster users and groups (see nodeGetsUsers) and which
-// resolve them with nss_slurm.
+// resolve them with nss_slurm. Managed workers get TaskAffinity when the
+// slurm.conf sind generates enables task/affinity.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
 	users := NewLinuxUsers(cfg)
 	hasSubmitter := slices.ContainsFunc(cfg.Nodes, func(n config.Node) bool { return n.Role == config.RoleSubmitter })
 	workerIdx := 0
 	clusterManaged := cfg.Managed()
+	taskAffinity := slurm.TaskAffinity(cfg.Slurm.Main)
 
 	dataHostPath := ""
 	dataMountPath := ""
 	if cfg.Storage.DataStorage.UsesHostPath() {
-		dataHostPath = cfg.Storage.DataStorage.HostPath
+		dataHostPath = absDataHostPath(cfg.Storage.DataStorage.HostPath)
 	}
 	if cfg.Storage.DataStorage.MountPath != "" {
 		dataMountPath = cfg.Storage.DataStorage.MountPath
@@ -368,7 +438,6 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				DataMountPath:   dataMountPath,
 				Managed:         nodeManaged,
 				ContainerNumber: 1,
-				Pull:            cfg.Pull,
 				CapAdd:          n.CapAdd,
 				CapDrop:         n.CapDrop,
 				Devices:         n.Devices,
@@ -377,6 +446,9 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				Users:           users,
 				AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, nodeManaged, hasSubmitter),
 				Identity:        cfg.Identity.Mode,
+			}
+			if n.Role == config.RoleDB && nodeManaged {
+				base.StoragePass = slurmdbdStoragePass(cfg.Slurm.Slurmdbd)
 			}
 			if n.Role != config.RoleController || !n.BackupController {
 				configs = append(configs, base)
@@ -411,7 +483,6 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 					DataMountPath:   dataMountPath,
 					Managed:         isManaged,
 					ContainerNumber: workerIdx + 1,
-					Pull:            cfg.Pull,
 					CapAdd:          n.CapAdd,
 					CapDrop:         n.CapDrop,
 					Devices:         n.Devices,
@@ -421,12 +492,47 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 					AddUsers:        nodeGetsUsers(cfg.Identity, config.RoleWorker, isManaged, hasSubmitter),
 					Identity:        cfg.Identity.Mode,
 					NSSSlurm:        isManaged && cfg.Identity.UsesNSSSlurm(),
+					TaskAffinity:    isManaged && taskAffinity,
 				})
 				workerIdx++
 			}
 		}
 	}
 	return configs
+}
+
+// absDataHostPath returns a data host path (storage.dataStorage.hostPath)
+// made absolute against the working directory, as sind create cluster does
+// before it validates the config, so that a library caller gets the same
+// bind mount: Docker would read a bare relative name such as "data" as a
+// named volume. The node labels then record an absolute path for sind create
+// worker, which may run in another directory. If the working directory
+// cannot be found, the path is left as it is, and Docker rejects it.
+func absDataHostPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
+}
+
+// DataPathWarning returns a warning when a cluster's data host path is the
+// host's root directory or the user's home directory ($HOME), which every
+// node then mounts read-write: typically by accident, from sind create
+// cluster run there with the default --data . It returns "" for any other
+// path.
+func DataPathWarning(hostPath string) string {
+	path := filepath.Clean(hostPath)
+	home, homeErr := os.UserHomeDir()
+	var what string
+	switch {
+	case path == "/":
+		what = "the root directory /"
+	case homeErr == nil && path == filepath.Clean(home):
+		what = "your home directory " + path
+	default:
+		return ""
+	}
+	return "every node mounts " + what + " read-write as its data; use --data DIR, --data volume or storage.dataStorage to share less"
 }
 
 // nodeGetsUsers reports whether a node gets the cluster's Linux users and
@@ -459,16 +565,4 @@ func nodeGetsUsers(identity config.Identity, role config.Role, managed, hasSubmi
 	default:
 		return true
 	}
-}
-
-// CreateClusterNodes creates all node containers for the cluster.
-// Each node is created, connected to the mesh network, and started.
-func CreateClusterNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, configs []RunConfig) error {
-	for _, cfg := range configs {
-		_, err := CreateNode(ctx, client, meshMgr, cfg)
-		if err != nil {
-			return fmt.Errorf("node %s: %w", cfg.ShortName, err)
-		}
-	}
-	return nil
 }

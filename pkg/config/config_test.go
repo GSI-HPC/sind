@@ -282,6 +282,7 @@ func TestValidate_DataStorage(t *testing.T) {
 		{name: "unknown type", ds: DataStorage{Type: "bind"}, wantErr: `storage.dataStorage.type must be "volume" or "hostPath", got "bind"`},
 		{name: "hostPath type without path", ds: DataStorage{Type: StorageHostPath}, wantErr: "storage.dataStorage.hostPath is required"},
 		{name: "relative mountPath", ds: DataStorage{MountPath: "data"}, wantErr: "storage.dataStorage.mountPath must be absolute"},
+		{name: "mountPath with a comma", ds: DataStorage{MountPath: "/data,2"}, wantErr: "storage.dataStorage.mountPath must not contain a comma"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -667,6 +668,14 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: RoleWorker, Count: -1},
 			},
 			wantErr: "count must not be negative",
+		},
+		{
+			name: "negative cpus",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleWorker, CPUs: -2},
+			},
+			wantErr: "cpus must not be negative, got -2",
 		},
 		{
 			name: "backupController on worker",

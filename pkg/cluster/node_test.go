@@ -3,7 +3,11 @@
 package cluster
 
 import (
+	"encoding/csv"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -24,6 +28,7 @@ func TestNodeLabels(t *testing.T) {
 		"sind.role":                               "controller",
 		"sind.managed":                            "true",
 		"sind.slurm.version":                      "25.11.0",
+		"sind.data.hostpath":                      "",
 		"com.docker.compose.project":              "sind-dev",
 		"com.docker.compose.service":              "controller",
 		"com.docker.compose.container-number":     "1",
@@ -42,6 +47,7 @@ func TestNodeLabels_NoSlurmVersion(t *testing.T) {
 		"sind.role":                               "worker",
 		"sind.managed":                            "false",
 		"sind.slurm.version":                      "",
+		"sind.data.hostpath":                      "",
 		"com.docker.compose.project":              "sind-dev",
 		"com.docker.compose.service":              "worker",
 		"com.docker.compose.container-number":     "3",
@@ -60,8 +66,9 @@ func TestNodeLabels_WithDataHostPath(t *testing.T) {
 func TestNodeLabels_NoDataHostPath(t *testing.T) {
 	labels := NodeLabels(mesh.DefaultRealm, "dev", config.RoleController, true, "25.11.0", "", 1)
 
-	_, ok := labels[LabelDataHostPath]
-	assert.False(t, ok, "data host path label absent when empty")
+	hostPath, ok := labels[LabelDataHostPath]
+	assert.True(t, ok, "set empty in volume mode, so that an image label cannot show through")
+	assert.Empty(t, hostPath)
 }
 
 func TestIsManaged(t *testing.T) {
@@ -157,7 +164,7 @@ func TestBuildRunArgs_Network(t *testing.T) {
 
 	network, ok := testutil.ArgValue(args, "--network")
 	assert.True(t, ok, "--network flag present")
-	assert.Equal(t, "sind-dev-net", network)
+	assert.Equal(t, "name=sind-dev-net,gw-priority=1", network, "cluster network first in name resolution")
 
 	dns, ok := testutil.ArgValue(args, "--dns")
 	assert.True(t, ok, "--dns flag present")
@@ -232,11 +239,29 @@ func TestBuildRunArgs_Mounts_HostPath(t *testing.T) {
 	cfg.DataMountPath = "/shared"
 	args := BuildRunArgs(cfg)
 
-	volumes := testutil.ArgValues(args, "-v")
-	assert.Contains(t, volumes, "/home/user/data:/shared:rw")
-	for _, v := range volumes {
+	assert.Equal(t, []string{"type=bind,source=/home/user/data,target=/shared"}, testutil.ArgValues(args, "--mount"),
+		"--mount, which fails on a missing source that -v would create as root")
+	for _, v := range testutil.ArgValues(args, "-v") {
 		assert.NotContains(t, v, "sind-dev-data")
+		assert.NotContains(t, v, "/home/user/data")
 	}
+}
+
+// TestBuildRunArgs_Mounts_HostPathQuoted checks that a path with a comma or a
+// quote is CSV-quoted, as Docker reads a --mount value as a CSV record.
+func TestBuildRunArgs_Mounts_HostPathQuoted(t *testing.T) {
+	cfg := defaultRunConfig()
+	cfg.DataHostPath = `/srv/run,2024/"x"`
+	cfg.DataMountPath = "/my data"
+	args := BuildRunArgs(cfg)
+
+	mount := testutil.ArgValues(args, "--mount")
+	require.Len(t, mount, 1)
+	assert.Equal(t, `type=bind,"source=/srv/run,2024/""x""",target=/my data`, mount[0])
+
+	fields, err := csv.NewReader(strings.NewReader(mount[0])).Read()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"type=bind", `source=/srv/run,2024/"x"`, "target=/my data"}, fields)
 }
 
 func TestBuildRunArgs_Mounts_DefaultDataPath(t *testing.T) {
@@ -253,8 +278,7 @@ func TestBuildRunArgs_Mounts_HostPathDefaultMount(t *testing.T) {
 	// DataMountPath left empty — should default to /data
 	args := BuildRunArgs(cfg)
 
-	volumes := testutil.ArgValues(args, "-v")
-	assert.Contains(t, volumes, "/home/user/data:/data:rw")
+	assert.Equal(t, []string{"type=bind,source=/home/user/data,target=/data"}, testutil.ArgValues(args, "--mount"))
 }
 
 func TestBuildRunArgs_Mounts_CustomMountPath(t *testing.T) {
@@ -274,13 +298,40 @@ func TestBuildRunArgs_DataMountPathLabel(t *testing.T) {
 	assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/shared")
 }
 
-func TestBuildRunArgs_NoDataMountPathLabelForDefault(t *testing.T) {
+func TestBuildRunArgs_DataMountPathLabelForDefault(t *testing.T) {
 	for _, mountPath := range []string{"", DefaultDataMountPath} {
 		cfg := defaultRunConfig()
 		cfg.DataMountPath = mountPath
 
-		for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
-			assert.NotContains(t, l, LabelDataMountPath)
+		assert.Contains(t, testutil.ArgValues(BuildRunArgs(cfg), "--label"), LabelDataMountPath+"=/data")
+	}
+}
+
+// TestBuildRunArgs_ReadBackLabelsAlwaysSet checks that a node of a cluster
+// that records nothing in them (volume mode, no CVMFS, no users, identity
+// local) still gets every label sind reads back: Docker merges the image's
+// labels into the container's, so a label left out could come from the
+// image, e.g. sind.data.hostpath=/ for sind create worker to bind-mount.
+func TestBuildRunArgs_ReadBackLabelsAlwaysSet(t *testing.T) {
+	cfg := defaultRunConfig()
+	labels := map[string]string{}
+	for _, l := range testutil.ArgValues(BuildRunArgs(cfg), "--label") {
+		k, v, _ := strings.Cut(l, "=")
+		labels[k] = v
+	}
+
+	for key, want := range map[string]string{
+		LabelSlurmVersion:  "25.11.0",
+		LabelDataHostPath:  "",
+		LabelDataMountPath: DefaultDataMountPath,
+		LabelCVMFS:         "",
+		LabelUsers:         "",
+		LabelGroups:        "",
+		LabelIdentity:      string(config.IdentityLocal),
+	} {
+		got, ok := labels[key]
+		if assert.True(t, ok, "label %s set", key) {
+			assert.Equal(t, want, got, key)
 		}
 	}
 }
@@ -309,9 +360,7 @@ func TestBuildRunArgs_NoCVMFS(t *testing.T) {
 	args := BuildRunArgs(defaultRunConfig())
 
 	assert.Empty(t, testutil.ArgValues(args, "--mount"))
-	for _, l := range testutil.ArgValues(args, "--label") {
-		assert.NotContains(t, l, LabelCVMFS)
-	}
+	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"=")
 }
 
 func TestDataMountPath(t *testing.T) {
@@ -334,10 +383,35 @@ func TestBuildRunArgs_Resources(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "8g", memory)
 
+	// No swap, and /dev/shm half the memory.
+	swap, ok := testutil.ArgValue(args, "--memory-swap")
+	assert.True(t, ok)
+	assert.Equal(t, "8g", swap)
+	shm, ok := testutil.ArgValue(args, "--shm-size")
+	assert.True(t, ok)
+	assert.Equal(t, "4096m", shm)
+
 	tmpfs := testutil.ArgValues(args, "--tmpfs")
 	assert.Contains(t, tmpfs, "/tmp:rw,nosuid,nodev,size=2g")
-	assert.Contains(t, tmpfs, "/run:exec,mode=755")
+	assert.Contains(t, tmpfs, "/run:exec,mode=755,size=64m")
 	assert.Contains(t, tmpfs, "/run/lock")
+}
+
+func TestBuildRunArgs_ShmSize(t *testing.T) {
+	for memory, want := range map[string]string{"512m": "256m", "1g": "512m", "7m": "3m"} {
+		cfg := defaultRunConfig()
+		cfg.Memory = memory
+		shm, ok := testutil.ArgValue(BuildRunArgs(cfg), "--shm-size")
+		assert.True(t, ok, memory)
+		assert.Equal(t, want, shm, memory)
+	}
+
+	// A memory value sind cannot read leaves /dev/shm at Docker's default;
+	// Docker rejects or reads --memory itself.
+	cfg := defaultRunConfig()
+	cfg.Memory = "lots"
+	_, ok := testutil.ArgValue(BuildRunArgs(cfg), "--shm-size")
+	assert.False(t, ok)
 }
 
 func TestBuildRunArgs_SecurityOpts(t *testing.T) {
@@ -354,20 +428,7 @@ func TestBuildRunArgs_SecurityOpts(t *testing.T) {
 	assert.Equal(t, "private", cgroupns)
 }
 
-func TestBuildRunArgs_Pull(t *testing.T) {
-	cfg := defaultRunConfig()
-	cfg.Pull = true
-	args := BuildRunArgs(cfg)
-
-	pull, ok := testutil.ArgValue(args, "--pull")
-	assert.True(t, ok, "--pull flag present")
-	assert.Equal(t, "always", pull)
-
-	// The image and the entrypoint's arguments still come last
-	assert.Equal(t, []string{cfg.Image, "-c", NodeEntrypoint}, args[len(args)-3:])
-}
-
-func TestBuildRunArgs_NoPull(t *testing.T) {
+func TestBuildRunArgs_NeverPulls(t *testing.T) {
 	cfg := defaultRunConfig()
 	args := BuildRunArgs(cfg)
 
@@ -384,7 +445,7 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 	assert.Equal(t, "sind-default-controller", name)
 
 	network, _ := testutil.ArgValue(args, "--network")
-	assert.Equal(t, "sind-default-net", network)
+	assert.Equal(t, "name=sind-default-net,gw-priority=1", network)
 
 	search, _ := testutil.ArgValue(args, "--dns-search")
 	assert.Equal(t, "default.sind.sind", search)
@@ -741,6 +802,53 @@ func TestNodeRunConfigs_HostPathStorage(t *testing.T) {
 	assert.Equal(t, "/shared", configs[0].DataMountPath)
 }
 
+func TestNodeRunConfigs_RelativeHostPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	cfg := &config.Cluster{
+		Name:    "dev",
+		Storage: config.Storage{DataStorage: config.DataStorage{HostPath: "data"}},
+		Nodes:   []config.Node{{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"}},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", "")
+
+	require.Len(t, configs, 1)
+	assert.Equal(t, filepath.Join(dir, "data"), configs[0].DataHostPath,
+		"absolute, not a named volume called data")
+}
+
+func TestAbsDataHostPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	assert.Equal(t, filepath.Join(dir, "data"), absDataHostPath("./data"))
+	assert.Equal(t, "/srv/data", absDataHostPath("/srv/data"))
+
+	// Without a working directory the path stays as it is, for Docker to
+	// reject.
+	gone := filepath.Join(dir, "gone")
+	require.NoError(t, os.Mkdir(gone, 0o755))
+	t.Chdir(gone)
+	require.NoError(t, os.Remove(gone))
+	assert.Equal(t, "data", absDataHostPath("data"))
+}
+
+func TestDataPathWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	assert.Equal(t, "every node mounts the root directory / read-write as its data; use --data DIR, --data volume or storage.dataStorage to share less",
+		DataPathWarning("/"))
+	assert.Equal(t, "every node mounts your home directory "+home+" read-write as its data; use --data DIR, --data volume or storage.dataStorage to share less",
+		DataPathWarning(home+"/"))
+	assert.Empty(t, DataPathWarning(filepath.Join(home, "project")))
+	assert.Empty(t, DataPathWarning("/srv"))
+
+	// Without $HOME only / is caught.
+	t.Setenv("HOME", "")
+	assert.Empty(t, DataPathWarning(home))
+}
+
 func TestNodeRunConfigs_VolumeStorage(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
@@ -809,70 +917,6 @@ func TestNodeRunConfigs_EmptyNodes(t *testing.T) {
 	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "172.18.0.2", "25.11.0", "")
 
 	assert.Empty(t, configs)
-}
-
-// --- CreateClusterNodes ---
-
-func TestCreateClusterNodes(t *testing.T) {
-	var m mock.Executor
-	// Node 1: CreateContainer + ConnectNetwork + StartContainer
-	m.AddResult("id1\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("", "", nil)
-	// Node 2: CreateContainer + ConnectNetwork + StartContainer
-	m.AddResult("id2\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c, mesh.DefaultRealm)
-
-	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController,
-			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker,
-			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-	}
-
-	err := CreateClusterNodes(t.Context(), c, mgr, configs)
-
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 6) // 2 nodes × 3 calls each
-}
-
-func TestCreateClusterNodes_Error(t *testing.T) {
-	var m mock.Executor
-	// Node 1: success
-	m.AddResult("id1\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("", "", nil)
-	// Node 2: CreateContainer fails
-	m.AddResult("", "", fmt.Errorf("image not found"))
-	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c, mesh.DefaultRealm)
-
-	configs := []RunConfig{
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController,
-			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-		{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker,
-			Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
-	}
-
-	err := CreateClusterNodes(t.Context(), c, mgr, configs)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "worker-0")
-	assert.Len(t, m.Calls, 4) // 3 (node1) + 1 (node2 fails on create)
-}
-
-func TestCreateClusterNodes_Empty(t *testing.T) {
-	var m mock.Executor
-	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c, mesh.DefaultRealm)
-
-	err := CreateClusterNodes(t.Context(), c, mgr, nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, m.Calls)
 }
 
 // --- Security fields in BuildRunArgs ---

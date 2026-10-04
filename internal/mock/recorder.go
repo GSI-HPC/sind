@@ -39,3 +39,11 @@ func (r *Recorder) AddResult(stdout, stderr string, err error) {
 func (r *Recorder) IsIntegration() bool {
 	return r.mock == nil
 }
+
+// SetOnCall makes the mock answer every call with onCall, for code that
+// runs calls concurrently. No-op in integration mode.
+func (r *Recorder) SetOnCall(onCall func(args []string, stdin string) Result) {
+	if r.mock != nil {
+		r.mock.OnCall = onCall
+	}
+}

@@ -50,7 +50,7 @@ coverage: ## Generate HTML coverage report
 	go tool cover -html=coverage.out -o coverage.html
 
 check-coverage: ## Check coverage thresholds (requires go-test-coverage)
-	go test -race -coverprofile=coverage.out ./...
+	$(MAKE) test GOTEST="go test -coverprofile=coverage.out"
 	go-test-coverage --config .testcoverage.yml
 
 image: ## Build the node images (one per Slurm release line) for the host platform via docker buildx bake

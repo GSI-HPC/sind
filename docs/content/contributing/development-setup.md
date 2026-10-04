@@ -41,7 +41,7 @@ All common tasks are available via `make`:
 | `make test` | Run unit tests with race detector, sandboxed with firejail |
 | `make test-integration` | Run integration tests (requires Docker) |
 | `make coverage` | Generate HTML coverage report |
-| `make check-coverage` | Check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
+| `make check-coverage` | Run the unit tests like `make test` and check the coverage thresholds in `.testcoverage.yml` (requires [go-test-coverage](https://github.com/vladopajic/go-test-coverage)) |
 | `make lint` | Run golangci-lint |
 | `make lint-docs` | Lint documentation markdown files |
 | `make image` | Build the node images (one per Slurm release line) for the host platform via docker buildx bake |
@@ -63,11 +63,13 @@ sind uses a minimal set of dependencies:
 | Dependency | Purpose |
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
+| `github.com/spf13/pflag` | Flag library under cobra: the MCP tool flag filter, and the flag errors that exit 2 as usage errors |
 | `sigs.k8s.io/yaml` | YAML configuration parsing |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
+| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
-| `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware |
+| `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Advisory file locking (flock) for realm locks |

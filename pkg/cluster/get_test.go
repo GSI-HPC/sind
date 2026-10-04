@@ -5,6 +5,7 @@ package cluster
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -502,6 +503,70 @@ func TestGetAllNodes_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "listing containers")
 }
 
+// --- GetNodeNames ---
+
+func TestGetNodeNames(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-prod-worker-10", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=worker"},
+		testutil.PsEntry{ID: "b", Names: "sind-prod-worker-2", State: "exited", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=worker"},
+		testutil.PsEntry{ID: "c", Names: "sind-dev-10-worker-0", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev-10,sind.role=worker"},
+		testutil.PsEntry{ID: "d", Names: "sind-dns", State: "running", Image: "img",
+			Labels: "sind.realm=sind"},
+		testutil.PsEntry{ID: "e", Names: "sind-dev-2-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev-2,sind.role=controller"},
+		testutil.PsEntry{ID: "f", Names: "sind-prod-db", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=db"},
+		testutil.PsEntry{ID: "g", Names: "sind-prod-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=prod,sind.role=controller"},
+	), "", nil)
+	c := docker.NewClient(&m)
+
+	names, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	// Clusters in string order, as the cluster discovery sorted them, then
+	// role and natural name order within each cluster. The mesh DNS
+	// container has no cluster and is left out.
+	assert.Equal(t, []string{
+		"worker-0.dev-10",
+		"controller.dev-2",
+		"controller.prod",
+		"db.prod",
+		"worker-2.prod",
+		"worker-10.prod",
+	}, names)
+
+	// One listing of the realm's containers, no inspect.
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.realm=sind"}, m.Calls[0].Args)
+}
+
+func TestGetNodeNames_Empty(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := docker.NewClient(&m)
+
+	names, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Empty(t, names)
+}
+
+func TestGetNodeNames_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing containers")
+}
+
 func TestGetNodes_SkipsEmptyClusterLabel(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
@@ -595,33 +660,73 @@ type networkEntry struct {
 	Driver string `json:"Driver"`
 }
 
-func networkInspectJSON(name, subnet, gateway string) string {
-	return fmt.Sprintf(`[{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}]`, name, subnet, gateway)
+// networkInspectEntry is one network of docker network inspect output.
+func networkInspectEntry(name, subnet, gateway string) string {
+	return fmt.Sprintf(`{"Name":%q,"IPAM":{"Config":[{"Subnet":%q,"Gateway":%q}]}}`, name, subnet, gateway)
 }
 
 func TestGetNetworks(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
+		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
 		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
 		networkEntry{Name: "sind-mesh", Driver: "bridge"},
-		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
 	), "", nil)
-	m.AddResult(networkInspectJSON("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil)
-	m.AddResult(networkInspectJSON("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil)
-	m.AddResult(networkInspectJSON("sind-prod-net", "172.20.0.0/16", "172.20.0.1"), "", nil)
+	m.AddResult("["+strings.Join([]string{
+		networkInspectEntry("sind-prod-net", "172.20.0.0/16", "172.20.0.1"),
+		networkInspectEntry("sind-dev-net", "172.18.0.0/16", "172.18.0.1"),
+		networkInspectEntry("sind-mesh", "172.19.0.0/16", "172.19.0.1"),
+	}, ",")+"]", "", nil)
 	c := docker.NewClient(&m)
 
 	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
-	require.Len(t, networks, 3)
 	// Sorted by name.
-	assert.Equal(t, "sind-dev-net", networks[0].Name)
-	assert.Equal(t, "bridge", networks[0].Driver)
-	assert.Equal(t, "172.18.0.0/16", networks[0].Subnet)
-	assert.Equal(t, "172.18.0.1", networks[0].Gateway)
-	assert.Equal(t, "sind-mesh", networks[1].Name)
-	assert.Equal(t, "sind-prod-net", networks[2].Name)
+	assert.Equal(t, []*NetworkSummary{
+		{Name: "sind-dev-net", Driver: "bridge", Subnet: "172.18.0.0/16", Gateway: "172.18.0.1"},
+		{Name: "sind-mesh", Driver: "bridge", Subnet: "172.19.0.0/16", Gateway: "172.19.0.1"},
+		{Name: "sind-prod-net", Driver: "bridge", Subnet: "172.20.0.0/16", Gateway: "172.20.0.1"},
+	}, networks)
+
+	// One inspect for all networks.
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"network", "inspect", "sind-prod-net", "sind-dev-net", "sind-mesh"}, m.Calls[1].Args)
+}
+
+// TestGetNetworks_InspectPartial covers a network removed between listing
+// and inspecting: it is still listed, without IPAM details.
+func TestGetNetworks_InspectPartial(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
+		networkEntry{Name: "sind-mesh", Driver: "bridge"},
+	), "", nil)
+	m.AddResult("["+networkInspectEntry("sind-mesh", "172.19.0.0/16", "172.19.0.1")+"]\n",
+		testutil.NoSuchNetwork("sind-dev-net"), testutil.ExitCode1(t))
+	c := docker.NewClient(&m)
+
+	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []*NetworkSummary{
+		{Name: "sind-dev-net", Driver: "bridge"},
+		{Name: "sind-mesh", Driver: "bridge", Subnet: "172.19.0.0/16", Gateway: "172.19.0.1"},
+	}, networks)
+}
+
+// TestGetNetworks_InspectError checks that IPAM details are best-effort:
+// a failed inspect leaves them empty instead of failing the listing.
+func TestGetNetworks_InspectError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(networkEntry{Name: "sind-dev-net", Driver: "bridge"}), "", nil)
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	networks, err := GetNetworks(t.Context(), c, mesh.DefaultRealm)
+
+	require.NoError(t, err)
+	assert.Equal(t, []*NetworkSummary{{Name: "sind-dev-net", Driver: "bridge"}}, networks)
 }
 
 func TestGetNetworks_Empty(t *testing.T) {
@@ -652,6 +757,7 @@ func TestGetNetworks_Error(t *testing.T) {
 type volumeEntry struct {
 	Name   string `json:"Name"`
 	Driver string `json:"Driver"`
+	Labels string `json:"Labels,omitempty"`
 }
 
 func TestGetVolumes(t *testing.T) {

@@ -72,6 +72,40 @@ func CheckCapabilities(field string, caps []string) error {
 	return nil
 }
 
+// securityOptNames lists the names of the Linux --security-opt options
+// Docker takes: label, apparmor, seccomp, no-new-privileges and
+// writable-cgroups, which the daemon reads, and systempaths, which the
+// docker CLI reads.
+var securityOptNames = map[string]bool{
+	"label":             true,
+	"apparmor":          true,
+	"seccomp":           true,
+	"no-new-privileges": true,
+	"writable-cgroups":  true,
+	"systempaths":       true,
+}
+
+// CheckSecurityOpts reports the first security option in opts that Docker
+// would reject for its form: NAME=VALUE (or Docker's older NAME:VALUE) with
+// a name in securityOptNames and a value, or no-new-privileges alone. field
+// names the setting in the error, e.g. "securityOpt". The values are left
+// to Docker, which checks them when it creates the container.
+func CheckSecurityOpts(field string, opts []string) error {
+	for _, opt := range opts {
+		if opt == "no-new-privileges" {
+			continue
+		}
+		name, value, ok := strings.Cut(opt, "=")
+		if !ok {
+			name, value, ok = strings.Cut(opt, ":")
+		}
+		if !ok || value == "" || !securityOptNames[name] {
+			return fmt.Errorf("unknown security option %q in %s: want label=, apparmor=, seccomp=, no-new-privileges, writable-cgroups= or systempaths=", opt, field)
+		}
+	}
+	return nil
+}
+
 // CheckDevices reports the first device whose host path is not absolute.
 // A device is HOST_PATH[:CONTAINER_PATH[:PERMISSIONS]].
 func CheckDevices(devices []string) error {

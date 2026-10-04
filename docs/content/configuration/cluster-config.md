@@ -20,7 +20,7 @@ This is equivalent to the fully expanded form:
 kind: Cluster
 name: default
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:latest
+  image: ghcr.io/gsi-hpc/sind-node:v0.11.0  # the image of your sind release
   cpus: 1
   memory: 512m
   tmpSize: 256m
@@ -65,7 +65,7 @@ slurm:
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
   cgroup: |
-    ConstrainCores=yes
+    ConstrainRAMSpace=yes
   slurmdbd: |
     PurgeJobAfter=1month
 
@@ -95,7 +95,7 @@ nodes:
 |-------|----------|---------|-------------|
 | `kind` | yes | — | Must be `"Cluster"` |
 | `name` | no | `"default"` | Cluster name, used in resource naming; must be a valid name (see below) |
-| `realm` | no | `"sind"` | Realm namespace for resource isolation; must be a valid name (see below) |
+| `realm` | no | `"sind"` | Realm namespace for resource isolation; must be a valid name (see below). `--realm` and `SIND_REALM` take precedence, and later commands do not read it: see [Realms]({{< relref "/configuration/realms#setting-the-realm" >}}) |
 | `defaults` | no | — | Default settings applied to all nodes |
 | `storage` | no | — | Shared storage configuration |
 | `slurm` | no | — | Slurm configuration extension |
@@ -105,7 +105,7 @@ nodes:
 | `identity` | no | `local` | Which nodes get the users, and how Slurm authenticates them |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
-Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`.
+Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`. A cluster may not be named `ssh`, as its config volume would be the realm's SSH volume, `<realm>-ssh-config`. With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), the cluster name has at most 40 characters, Slurm's limit for clusters with accounting: slurmdbd builds the names of the cluster's database tables from it.
 
 ## Defaults section
 
@@ -113,10 +113,10 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `image` | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `cpus` | `1` | CPU limit per container |
-| `memory` | `"512m"` | Memory limit per container |
-| `tmpSize` | `"256m"` | tmpfs size for `/tmp` |
+| `image` | the image of the sind release, e.g. `ghcr.io/gsi-hpc/sind-node:v0.11.0` ([details]({{< relref "/container-images/building-images#official-images" >}})) | Container image |
+| `cpus` | `1` | CPU limit per container; a managed worker's Slurm `CPUs` |
+| `memory` | `"512m"` | Memory limit per container, without swap, in Docker's size syntax (see below); a managed worker's Slurm `RealMemory`; `/dev/shm` gets half of it |
+| `tmpSize` | `"256m"` | tmpfs size for `/tmp`; files there count against `memory` |
 | `capAdd` | none | Extra Linux capabilities |
 | `capDrop` | none | Dropped Linux capabilities |
 | `devices` | none | Host devices to expose |
@@ -124,13 +124,19 @@ The `defaults` section sets values inherited by all nodes unless overridden at t
 
 Scalar fields (`image`, `cpus`, `memory`, `tmpSize`) are overridden by per-node values. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are merged with per-node values.
 
+`memory` takes Docker's size syntax: a number, optionally with a fraction, and an optional unit `b`, `k`, `m`, `g`, `t` or `p`, in either case, the last five optionally followed by `b` or `ib`. All units are powers of 1024 and a number without a unit counts bytes, so `512m`, `2g`, `2GB`, `2GiB`, `1.5g` and `1073741824` are valid. It must be at least `6m`, Docker's minimum. A managed worker's Slurm `RealMemory` is its `memory` in MiB, rounded down, with no reserve for the node's daemons or its `/tmp`, a tmpfs that counts against the limit; jobs that do not ask for memory get a share per CPU (see [`DefMemPerCPU`]({{< relref "/architecture/slurm-config#slurmconf" >}})). `tmpSize` is passed to the kernel as the tmpfs size: a whole number with an optional unit `k`, `m`, `g`, `t`, `p` or `e`, or a percentage of the memory, such as `50%`. `cpus` must not be negative; `0` means the default.
+
+`memory` covers everything in a node: the jobs, the node's own services (systemd, munge, sshd, the Slurm daemon; also mariadb and slurmdbd on a db node) and files in `/tmp`, `/run` and `/dev/shm`. Slurm is told the whole limit (`RealMemory`), so raise `memory` for jobs that need much memory or `/tmp`.
+
+Workers added later with `sind create worker` do not read the config: they take these settings from the cluster's newest worker (see [Worker Management]({{< relref "/usage/worker-management#defaults-from-the-newest-worker" >}})).
+
 ## Storage section
 
 ```yaml
 storage:
   dataStorage:
     type: hostPath     # "hostPath" or "volume"
-    hostPath: ./data   # host directory for type: hostPath
+    hostPath: ./data   # existing host directory for type: hostPath
     mountPath: /data   # default: /data
   cvmfs: true          # mount CVMFS read-only at /cvmfs (default: false)
 ```
@@ -140,7 +146,7 @@ storage:
 | Field | Default | Description |
 |-------|---------|-------------|
 | `type` | set by `--data` | `"hostPath"` bind-mounts `hostPath`; `"volume"` uses the Docker volume `<realm>-<cluster>-data` and ignores `hostPath`. A `hostPath` without `type` means `"hostPath"` |
-| `hostPath` | — | Host directory, required with `type: hostPath`. A relative path is taken relative to the directory `sind create cluster` runs in and stored as an absolute path |
+| `hostPath` | — | Host directory, required with `type: hostPath`. It must exist: `sind create cluster` fails otherwise rather than have Docker create it as root. A relative path is taken relative to the directory `sind create cluster` runs in and stored as an absolute path |
 | `mountPath` | `"/data"` | Absolute mount point inside the nodes |
 
 If the config sets neither `type` nor `hostPath`, the `--data` flag of `sind create cluster` decides; its default, `.`, bind-mounts the working directory (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})).
@@ -171,7 +177,7 @@ users:
 | User field | Default | Description |
 |------------|---------|-------------|
 | `name` | — | User name: a lowercase letter or `_`, then lowercase letters, digits, `_` and `-`, at most 32 characters |
-| `uid` | lowest free from `1000` | ID of the user, between 1000 and 2147483647 |
+| `uid` | lowest free from `1000` | ID of the user, between 1000 and 2147483647, but not 65534 or 65535 |
 | `group` | private group | Primary group, from `groups`. Without it, the user gets a private group of its own name with gid = uid |
 | `groups` | none | Supplementary groups, from `groups` |
 | `accounts` | none | Slurm accounts the user gets associations with, from `accounts`; the first is the default account |
@@ -181,13 +187,13 @@ users:
 | Group field | Default | Description |
 |-------------|---------|-------------|
 | `name` | — | Group name, with the same rules as user names. It must not be the name of a user with a private group |
-| `gid` | lowest free from `1000` | ID of the group, between 1000 and 2147483647 |
+| `gid` | lowest free from `1000` | ID of the group, between 1000 and 2147483647, but not 65534 or 65535 |
 
 Users without `uid` get their IDs first, in list order, skipping the explicit `gid`s; then groups without `gid` get the lowest IDs no user or group has. Set the IDs explicitly to keep file ownership stable across re-creates, e.g. on a `hostPath` data directory.
 
-Every node, including workers added later with `sind create worker`, gets each group and user with the same IDs, as munge and Slurm require. Workers also get the `SYS_NICE` capability, which slurmstepd needs to bind the tasks of users other than root (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})). The [identity mode](#identity-section) can keep them off some nodes. The home directories, `/home/<user>`, are on the Docker volume `<realm>-<cluster>-home`, which every node mounts at `/home`, so job output written there is the same on every node. The realm's SSH key may log in as each user, as it may as root. See [Node access]({{< relref "/usage/node-access#cluster-users" >}}) for running commands as a user.
+Every node, including workers added later with `sind create worker`, gets each group and user with the same IDs, as munge and Slurm require. With `task/affinity` in the `TaskPlugin` of the [`main` section](#slurm-section), managed workers also get the `SYS_NICE` capability, which slurmstepd then needs to bind the tasks of users other than root (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})). The [identity mode](#identity-section) can keep them off some nodes. The home directories, `/home/<user>`, are on the Docker volume `<realm>-<cluster>-home`, which every node mounts at `/home`, so job output written there is the same on every node. The realm's SSH key may log in as each user, as it may as root. See [Node access]({{< relref "/usage/node-access#cluster-users" >}}) for running commands as a user.
 
-A user or group name that already exists in the image, such as `root`, `slurm` or `wheel`, makes `sind create cluster` fail.
+A user or group name that already exists in the image, such as `root`, `slurm` or `wheel`, or a uid or gid an account of the image already has, such as Ubuntu's `ubuntu` at 1000, makes `sind create cluster` fail. See [Custom image requirements]({{< relref "/container-images/building-images#with-users" >}}).
 
 ## Accounts section
 
@@ -213,7 +219,7 @@ users:
 |---------------|---------|-------------|
 | `name` | — | Account name: lowercase letters, digits, `_` and `-`, not starting with `-`, at most 64 characters, not `root` |
 | `parent` | `root` | Parent account: `root` or an account declared before this one |
-| `limits` | none | Further `sacctmgr add account` options, passed as `key=value`, e.g. `GrpTRES: cpu=4`, `MaxJobs: 1`, `Fairshare: 10` |
+| `limits` | none | Further `sacctmgr add account` options, passed as `key=value`, e.g. `GrpTRES: cpu=4`, `MaxJobs: 1`, `Fairshare: 10`. The keys are among the options listed below |
 
 Once slurmctld has registered the cluster with slurmdbd, sind runs `sacctmgr -i` on the controller: `add account` for each account, in list order; `add user` for each user with accounts, with `defaultaccount` set to the first and `adminlevel` if set; then `add coordinator`. The example runs:
 
@@ -225,7 +231,11 @@ sacctmgr -i add user bob account=physics,theory defaultaccount=physics
 sacctmgr -i add coordinator account=physics names=bob
 ```
 
-Every account a user names must be declared, so a typo fails validation instead of creating a new account. See [Users and Identity]({{< relref "/guides/users" >}}) for a worked example with limits and roles. The associations are in place when `sind create cluster` returns. sind does not enforce them: set `AccountingStorageEnforce=associations,limits` in the [`main` section](#slurm-section) to reject jobs without an association and apply the limits. Slurm accounts and Linux groups are unrelated, even when they share a name.
+`limits` keys are these options, in any case: `Description`, `Organization` and `Flags` of the account, and `Comment`, `DefaultQOS`, `Fairshare` (or `Shares`), `GrpJobs`, `GrpJobsAccrue`, `GrpSubmitJobs`, `GrpTRES`, `GrpTRESMins`, `GrpTRESRunMins`, `GrpWall`, `MaxJobs`, `MaxJobsAccrue`, `MaxSubmitJobs`, `MaxTRES` (or `MaxTRESPerJob`), `MaxTRESMins` (or `MaxTRESMinsPerJob`), `MaxTRESPerNode`, `MaxTRESRunMins`, `MaxWall` (or `MaxWallDurationPerJob`), `MinPrioThresh`, `Priority` and `QOS` (or `QosLevel`) of its association. sacctmgr accepts abbreviations, but sind takes only these full names, so that no key reaches the name, parent or cluster options sind sets.
+
+YAML 1.1 reads unquoted numbers before sind sees them, and sind passes them in plain decimal form: `MaxJobs: 1` becomes `MaxJobs=1`, but `MaxJobs: 010` is octal and becomes `MaxJobs=8`, and `Description: 1.10` becomes `Description=1.1`. Quote a value to pass it as written, e.g. `Description: "1.10"`.
+
+sind runs the `sacctmgr` commands in one `docker exec` and stops at the first that fails; `sind create cluster` then fails with that command and what `sacctmgr` printed. Every account a user names must be declared, so a typo fails validation instead of creating a new account. See [Users and Identity]({{< relref "/guides/users" >}}) for a worked example with limits and roles. The associations are in place when `sind create cluster` returns. sind does not enforce them: set `AccountingStorageEnforce=associations,limits` in the [`main` section](#slurm-section) to reject jobs without an association and apply the limits. Without `limits` (or `safe` or `all`) there, Slurm ignores the `Max*` and `Grp*` limits, and `sind create cluster` prints a warning. Slurm accounts and Linux groups are unrelated, even when they share a name.
 
 ## Identity section
 
@@ -245,9 +255,9 @@ identity:
 |------|-------------------|-------------------|
 | `local` | every node | munge |
 | `nssSlurm` | every node but the managed workers | munge; `LaunchParameters=enable_nss_slurm`; `slurm` first for `passwd` and `group` in the workers' `/etc/nsswitch.conf` |
-| `clientIds` | the submitter, or the controllers without one; the controllers too with `controllerUsers` | as `nssSlurm`, plus `AuthType=auth/slurm`, `CredType=cred/slurm` and `AuthInfo=use_client_ids` in `slurm.conf` and `slurmdbd.conf`, a `slurm.key` instead of a munge key, munge masked on every node and `sackd` on the submitter |
+| `clientIds` | the submitter, or the controllers without one; the controllers too with `controllerUsers` | as `nssSlurm`, plus `AuthType=auth/slurm` and `AuthInfo=use_client_ids` in `slurm.conf` and `slurmdbd.conf` and `CredType=cred/slurm` in `slurm.conf`, a `slurm.key` instead of a munge key, munge masked on every node and `sackd` on the submitter |
 
-The `slurm.conf` parameters are set unless the [`main` section](#slurm-section) sets them; a `LaunchParameters` or `AuthInfo` there must keep `enable_nss_slurm` or `use_client_ids`. Unmanaged nodes, such as `managed: false` workers, get the Linux accounts in every mode. `nssSlurm` and `clientIds` need a managed cluster, and managed workers whose image has nss_slurm (`libnss_slurm.so.2`), as the official images do. See [Users and Identity]({{< relref "/guides/users" >}}) for how each mode resolves users, and how to choose one.
+The `slurm.conf` parameters are set unless the [`main` section](#slurm-section) sets them. A value set there must keep sind's, or validation fails: `LaunchParameters` must list `enable_nss_slurm`, and with `clientIds` `AuthInfo` must list `use_client_ids`, `AuthType` be `auth/slurm` and `CredType` `cred/slurm`. Unmanaged nodes, such as `managed: false` workers, get the Linux accounts in every mode. `nssSlurm` and `clientIds` need a managed cluster, and managed workers whose image has nss_slurm (`libnss_slurm.so.2`), as the official images do. Official images cached before identity modes existed lack it under the same tags; sind refuses such a cached image before it creates anything, and `--pull` fetches a current one. See [Users and Identity]({{< relref "/guides/users" >}}) for how each mode resolves users, and how to choose one.
 
 ## Slurm section
 
@@ -272,7 +282,7 @@ slurm:
     SelectType=select/cons_tres
     SelectTypeParameters=CR_Core_Memory
   cgroup: |
-    ConstrainCores=yes
+    ConstrainRAMSpace=yes
 ```
 
 **Map form** — named fragments placed in a `.conf.d/` directory:
@@ -292,7 +302,18 @@ Fragment validation:
 - Names must be plain filenames (no path separators)
 - Names and content must not be empty
 
-See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
+`main` goes into `slurm.conf` after sind's parameters and before the `include` of `sind-nodes.conf`, sind's nodes and its default partition `all`. A parameter `main` sets replaces sind's, and `NodeName=DEFAULT` and `PartitionName=DEFAULT` lines there apply to sind's nodes and partition, e.g. `PartitionName=DEFAULT DefaultTime=00:30:00` for a default time limit. See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for details on the generated files.
+
+## Trust
+
+Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as trusted as a script run with your Docker access, which amounts to root on the Docker host:
+
+- `image` runs any image, whose init and services run as root.
+- `storage.dataStorage.hostPath` bind-mounts any host directory read-write into every node, `/` included.
+- `capAdd`, `devices` and `securityOpt` give nodes host privileges, such as `SYS_ADMIN`, raw block devices or `apparmor=unconfined`.
+- The `slurm` sections set programs Slurm runs as root, such as `Prolog` or `HealthCheckProgram`.
+
+Use only configs you would run as a script: not a config from an untrusted pull request in a privileged CI workflow, and not one an agent wrote that you have not read.
 
 ## Validation rules
 
@@ -308,10 +329,12 @@ See [Slurm Configuration]({{< relref "/architecture/slurm-config" >}}) for detai
 - The `slurmdbd` section requires a managed `db` node
 - With `backupController`, `slurm.main` must not set `SlurmctldHost` (or its deprecated forms `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `count` must not be negative; `0` means the default, 1
+- `cpus` must not be negative; `memory` and `tmpSize` must be valid sizes (see [Defaults section](#defaults-section)), in `defaults` too
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
-- `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute
-- User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647 and unique, private groups included; a user's `group` and `groups` must be declared in `groups`
-- `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`
-- `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; every account a user names must be declared; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
+- `securityOpt` entries must name an option Docker knows, with a value: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges` (value optional), `writable-cgroups=` or `systempaths=`
+- `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute and contain no comma
+- User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647, not 65534 or 65535, and unique, private groups included; a user's `group` and `groups` must be declared in `groups`, and `groups` must not repeat an entry or the primary `group`
+- `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`; an identity parameter that `slurm.main` sets must keep sind's value (see [Identity section](#identity-section))
+- `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; `limits` keys must be among the options in the [Accounts section](#accounts-section), with non-empty values; every account a user names must be declared, at most once in each of `accounts` and `coordinator`; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - Unknown keys are rejected

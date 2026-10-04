@@ -3,6 +3,8 @@
 package slurm
 
 import (
+	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +15,8 @@ import (
 // Container paths for Slurm configuration files.
 const (
 	ConfDir          = "/etc/slurm"
+	SlurmConfFile    = "slurm.conf"
+	SlurmConfPath    = ConfDir + "/" + SlurmConfFile
 	NodesConfFile    = "sind-nodes.conf"
 	NodesConfPath    = ConfDir + "/" + NodesConfFile
 	SlurmdbdConfFile = "slurmdbd.conf"
@@ -50,27 +54,33 @@ type ConfOptions struct {
 	// Identity adds the settings of the identity modes other than local:
 	// nss_slurm for both, and auth/slurm with client IDs for clientIds.
 	Identity config.IdentityMode
-}
-
-// nssSlurmDefaults are the slurm.conf parameters sind sets with identity
-// nssSlurm or clientIds: slurmctld puts the job's user and groups into the
-// job credential, and slurmstepd serves them to nss_slurm on the workers.
-var nssSlurmDefaults = []parameter{
-	{"LaunchParameters", "enable_nss_slurm"},
-}
-
-// clientIDsDefaults are the slurm.conf parameters sind sets with identity
-// clientIds, in output order: auth/slurm and cred/slurm with slurm.key
-// instead of munge, and the users' identities in their tokens.
-var clientIDsDefaults = []parameter{
-	{"AuthType", "auth/slurm"},
-	{"CredType", "cred/slurm"},
-	{"AuthInfo", "use_client_ids"},
+	// DefMemPerCPU is the default memory of a job per allocated CPU, in
+	// MB, 0 for none (see DefMemPerCPU).
+	DefMemPerCPU int
 }
 
 // parameter is a slurm.conf parameter sind sets unless the main section
 // sets it.
 type parameter struct{ key, value string }
+
+// DefaultTaskPlugin is the TaskPlugin sind sets unless the main section
+// sets one. It leaves out task/affinity: sind limits a node's CPUs with a
+// CPU quota, not a cpuset, so every worker sees all host CPUs, and
+// task/affinity would bind the jobs of every worker to the same first
+// host CPUs.
+const DefaultTaskPlugin = "task/cgroup"
+
+// baseDefaults are the slurm.conf parameters sind sets on every managed
+// cluster unless the main section sets them, in output order: cgroup
+// process tracking and task containment, PMIx as the MPI type of srun, and
+// workers that return to service when they register with a valid
+// configuration.
+var baseDefaults = []parameter{
+	{"ProctrackType", "proctrack/cgroup"},
+	{"TaskPlugin", DefaultTaskPlugin},
+	{"MpiDefault", "pmix"},
+	{"ReturnToService", "2"},
+}
 
 // accountingDefaults are the slurm.conf parameters sind sets when the
 // cluster has a managed db node, in output order.
@@ -80,30 +90,119 @@ var accountingDefaults = []parameter{
 	{"JobAcctGatherType", "jobacct_gather/cgroup"},
 }
 
-// identityDefaults returns the slurm.conf parameters of an identity mode.
+// identityDefaults returns the slurm.conf parameters of an identity mode
+// (see config.IdentityMode.SlurmParameters).
 func identityDefaults(mode config.IdentityMode) []parameter {
-	switch mode {
-	case config.IdentityNSSSlurm:
-		return nssSlurmDefaults
-	case config.IdentityClientIDs:
-		return slices.Concat(clientIDsDefaults, nssSlurmDefaults)
-	default:
-		return nil
+	var defaults []parameter
+	for _, p := range mode.SlurmParameters() {
+		defaults = append(defaults, parameter{p.Key, p.Value})
+	}
+	return defaults
+}
+
+// writeDefaults writes each parameter that the main section does not set,
+// after a blank line if there are any.
+func writeDefaults(b *strings.Builder, main config.Section, defaults []parameter) {
+	blank := "\n"
+	for _, p := range defaults {
+		if !main.SetsParameter(p.key) {
+			b.WriteString(blank + p.key + "=" + p.value + "\n")
+			blank = ""
+		}
 	}
 }
 
-// writeDefaults writes a blank line and each parameter that the main
-// section does not set, if there are any parameters.
-func writeDefaults(b *strings.Builder, main config.Section, defaults []parameter) {
-	if len(defaults) == 0 {
-		return
+// TaskAffinity reports whether the slurm.conf sind generates with a main
+// section enables task/affinity: whether the main section's TaskPlugin, or
+// else DefaultTaskPlugin, lists it. slurmstepd then sets each task's CPU
+// affinity after the task has become the job's user, which needs
+// CAP_SYS_NICE for users other than root.
+func TaskAffinity(main config.Section) bool {
+	plugins, ok := main.Parameter("TaskPlugin")
+	if !ok {
+		plugins = DefaultTaskPlugin
 	}
-	b.WriteString("\n")
-	for _, p := range defaults {
-		if !main.SetsParameter(p.key) {
-			b.WriteString(p.key + "=" + p.value + "\n")
+	return listsTaskAffinity(plugins)
+}
+
+// listsTaskAffinity reports whether a TaskPlugin value lists task/affinity;
+// Slurm also takes a plugin name without its task/ prefix.
+func listsTaskAffinity(plugins string) bool {
+	return config.ListsValue(plugins, "task/affinity") || config.ListsValue(plugins, "affinity")
+}
+
+// maxIncludeDepth bounds the nesting of include directives that
+// ReadSlurmConf follows, which could otherwise loop.
+const maxIncludeDepth = 10
+
+// ReadSlurmConf returns a cluster's slurm.conf as slurmctld and slurmd
+// read it, as a section whose content holds its lines with each include
+// directive replaced by the lines of the file it names. read returns a
+// file of the config volume by path. sind-nodes.conf holds only sind's
+// nodes and partition and is left out, as are include paths with a "*",
+// which Slurm skips.
+func ReadSlurmConf(read func(path string) (string, error)) (config.Section, error) {
+	var b strings.Builder
+	var clusterName string
+	if err := readConfFile(read, SlurmConfPath, &b, &clusterName, 0); err != nil {
+		return config.Section{}, err
+	}
+	return config.Section{Content: b.String()}, nil
+}
+
+// readConfFile writes the lines of the file at path to b, each ending in a
+// newline, with the files it includes in place of their include
+// directives (see ReadSlurmConf). clusterName holds the ClusterName read
+// so far, which Slurm puts in place of %c in an include path.
+func readConfFile(read func(path string) (string, error), path string, b *strings.Builder, clusterName *string, depth int) error {
+	if depth > maxIncludeDepth {
+		return fmt.Errorf("reading %s: includes nested more than %d deep", path, maxIncludeDepth)
+	}
+	content, err := read(path)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	for line := range strings.Lines(content) {
+		if inc, ok := includePath(line, *clusterName); ok {
+			if inc == NodesConfPath || strings.Contains(inc, "*") {
+				continue
+			}
+			if err := readConfFile(read, inc, b, clusterName, depth+1); err != nil {
+				return err
+			}
+			continue
 		}
+		if v, ok := config.LineParameter(line, "ClusterName"); ok {
+			*clusterName = strings.ToLower(v)
+		}
+		b.WriteString(strings.TrimSuffix(line, "\n") + "\n")
 	}
+	return nil
+}
+
+// EnablesTaskAffinity reports whether a cluster's slurm.conf, as
+// ReadSlurmConf returns it, enables task/affinity, as slurmd on a worker
+// added now would read it: whether its TaskPlugin lists it. Without a
+// TaskPlugin, Slurm runs no task plugin.
+func EnablesTaskAffinity(conf config.Section) bool {
+	plugins, _ := conf.Parameter("TaskPlugin")
+	return listsTaskAffinity(plugins)
+}
+
+// includePath returns the file an include directive of slurm.conf names,
+// as Slurm reads it: the first word after "include", with %c replaced by
+// the cluster name and a relative path taken from ConfDir.
+func includePath(line, clusterName string) (string, bool) {
+	line, _, _ = strings.Cut(line, "#")
+	fields := strings.Fields(line)
+	if len(fields) < 2 || !strings.EqualFold(fields[0], "include") {
+		return "", false
+	}
+	file := strings.ReplaceAll(fields[1], "%c", clusterName)
+	if !path.IsAbs(file) {
+		file = path.Join(ConfDir, file)
+	}
+	return file, true
 }
 
 // GenerateSlurmConf generates the main slurm.conf content for a cluster.
@@ -111,6 +210,11 @@ func writeDefaults(b *strings.Builder, main config.Section, defaults []parameter
 // The main section can append content (string form) or include a .conf.d
 // directory (map form).
 //
+// The cluster name, the controller, SlurmUser, the spool directories and
+// PlugStackConfig are fixed: sind's volumes and images depend on them. The
+// parameters in baseDefaults follow, each unless the main section sets it,
+// and opts.DefMemPerCPU unless it sets DefMemPerCPU or DefMemPerNode, which
+// Slurm does not take together.
 // With opts.BackupController, controller-backup is configured as the backup
 // controller and SlurmctldTimeout defaults to DefaultSlurmctldTimeout unless
 // the main section sets it. With opts.Accounting, the accounting parameters
@@ -130,32 +234,39 @@ func GenerateSlurmConf(clusterName string, main config.Section, opts ConfOptions
 	b.WriteString("SlurmUser=slurm\n")
 	b.WriteString("StateSaveLocation=" + StateSaveLocation + "\n")
 	b.WriteString("SlurmdSpoolDir=/var/spool/slurmd\n")
-	b.WriteString("\n")
-	b.WriteString("ProctrackType=proctrack/cgroup\n")
-	b.WriteString("TaskPlugin=task/cgroup,task/affinity\n")
-	b.WriteString("MpiDefault=pmix\n")
-	b.WriteString("ReturnToService=2\n")
 	b.WriteString("PlugStackConfig=" + ConfDir + "/plugstack.conf\n")
+	base := baseDefaults
+	if opts.DefMemPerCPU > 0 && !main.SetsParameter("DefMemPerNode") {
+		base = append(slices.Clip(base), parameter{"DefMemPerCPU", strconv.Itoa(opts.DefMemPerCPU)})
+	}
+	writeDefaults(&b, main, base)
 	writeDefaults(&b, main, identityDefaults(opts.Identity))
 	if opts.Accounting {
 		writeDefaults(&b, main, accountingDefaults)
 	}
 	b.WriteString("\n")
-	b.WriteString("include " + NodesConfPath + "\n")
 	appendSection(&b, "slurm", main)
+	b.WriteString(nodesInclude)
 	return b.String()
 }
 
+// nodesInclude ends slurm.conf: sind-nodes.conf comes after the main
+// section, so that its NodeName=DEFAULT and PartitionName=DEFAULT lines
+// apply to sind's nodes and partition. slurmctld reads every node before
+// any partition, so the main section's partitions may name sind's nodes.
+const nodesInclude = "include " + NodesConfPath + "\n"
+
 // GenerateSlurmdbdConf generates slurmdbd.conf for the db node: slurmdbd
 // runs as SlurmUser and stores accounting data in the local MariaDB as
-// StorageUser, which has no password. It authenticates with munge, or with
-// identity clientIds with auth/slurm and the users' client IDs, as
-// slurmctld does. The slurmdbd section can append
+// StorageUser, which MariaDB authenticates by unix_socket as the OS user
+// slurmdbd runs as, or by the StoragePass the slurmdbd section sets. It
+// authenticates with munge, or with identity clientIds with auth/slurm and
+// the users' client IDs, as slurmctld does. The slurmdbd section can append
 // content (string form) or include .conf.d fragments (map form).
 //
 // The pid file lives in /run/slurmdbd, the RuntimeDirectory slurmdbd.service
-// creates for the slurm user: /run itself is not writable for it. There is
-// no StoragePass line, since slurmdbd rejects an empty value.
+// creates for the slurm user: /run itself is not writable for it. sind
+// writes no StoragePass line, since slurmdbd rejects an empty value.
 func GenerateSlurmdbdConf(slurmdbd config.Section, identity config.IdentityMode) string {
 	var b strings.Builder
 	b.WriteString("# Generated by sind\n")
@@ -214,16 +325,20 @@ func GenerateSectionConf(name string, section config.Section) string {
 }
 
 // appendSection appends section content to a config file builder.
-// String form appends content directly; map form appends an include
-// line for each fragment file (Slurm does not support glob includes).
+// String form appends content directly, ending with a newline; map form
+// appends an include line for each fragment file (Slurm does not support
+// glob includes).
 func appendSection(b *strings.Builder, name string, s config.Section) {
 	if s.IsEmpty() {
 		return
 	}
 	if s.IsMap() {
 		appendFragmentIncludes(b, name, s)
-	} else {
-		b.WriteString(s.Content)
+		return
+	}
+	b.WriteString(s.Content)
+	if !strings.HasSuffix(s.Content, "\n") {
+		b.WriteString("\n")
 	}
 }
 

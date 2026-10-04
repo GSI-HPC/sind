@@ -105,8 +105,20 @@ func TestRecorder_Integration(t *testing.T) {
 
 	assert.True(t, rec.IsIntegration())
 
-	// AddResult is a no-op in integration mode.
+	// AddResult and SetOnCall are no-ops in integration mode.
 	rec.AddResult("ignored", "", nil)
+	rec.SetOnCall(func([]string, string) Result { return Result{} })
+}
+
+func TestRecorder_SetOnCall(t *testing.T) {
+	rec := NewRecorder()
+	rec.SetOnCall(func(args []string, _ string) Result {
+		return Result{Stdout: args[0]}
+	})
+
+	stdout, _, err := rec.Run(t.Context(), "docker", "ps")
+	require.NoError(t, err)
+	assert.Equal(t, "ps", stdout)
 }
 
 func TestRecordingExecutor_Dump(t *testing.T) {

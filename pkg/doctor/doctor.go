@@ -4,15 +4,56 @@
 package doctor
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/spf13/afero"
 )
 
 // MinDockerMajor is the minimum required Docker Engine major version.
 const MinDockerMajor = 28
+
+// The remediations for the common reasons the docker CLI cannot reach the
+// daemon.
+const (
+	dockerInstallRemediation = "Install Docker Engine 28 or later: https://docs.docker.com/engine/install/"
+
+	dockerPermissionRemediation = "Add your user to the docker group, then log in again (or run newgrp docker):\n" +
+		"\n" +
+		"sudo usermod -aG docker $USER"
+
+	dockerStartRemediation = "Start the Docker daemon:\n" +
+		"\n" +
+		"sudo systemctl start docker"
+)
+
+// DockerUnreachable describes why the docker CLI could not reach the
+// daemon: the detail "not reachable: " followed by the first line of the
+// error, and the commands that fix it when the cause is a missing docker
+// CLI, a user outside the docker group or a daemon that is not running.
+func DockerUnreachable(err error) (detail, remediation string) {
+	if errors.Is(err, exec.ErrNotFound) {
+		return "not reachable: docker CLI not found in PATH", dockerInstallRemediation
+	}
+	msg := err.Error()
+	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
+		msg = exitErr.Stderr
+	}
+	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
+	lower := strings.ToLower(msg)
+	switch {
+	case strings.Contains(lower, "permission denied"):
+		remediation = dockerPermissionRemediation
+	case strings.Contains(lower, "cannot connect to the docker daemon"):
+		remediation = dockerStartRemediation
+	}
+	return "not reachable: " + strings.TrimSpace(msg), remediation
+}
 
 // ParseVersion extracts the major and minor version numbers from a Docker
 // version string such as "28.0.0" or "29.3.1-beta.1".
@@ -48,8 +89,36 @@ func CheckDockerVersion(version string) error {
 	return nil
 }
 
-// CgroupInfo reads /proc/mounts from fs and returns the cgroup2 mount path,
-// whether cgroup2 is mounted at all, and whether nsdelegate is enabled.
+// MinInotifyInstances is the fs.inotify.max_user_instances that clusters
+// of 10 or more nodes need. The systemd and journald of every node take
+// inotify instances of the host's root user, and the kernel's default of
+// 128 runs out first.
+const MinInotifyInstances = 1024
+
+// inotifyInstancesPath is where the kernel exposes
+// fs.inotify.max_user_instances.
+const inotifyInstancesPath = "/proc/sys/fs/inotify/max_user_instances"
+
+// InotifyInstances reads fs.inotify.max_user_instances from fs. ok is false
+// when it cannot be read or parsed.
+func InotifyInstances(fs afero.Fs) (n int, ok bool) {
+	data, err := afero.ReadFile(fs, inotifyInstancesPath)
+	if err != nil {
+		return 0, false
+	}
+	n, err = strconv.Atoi(strings.TrimSpace(string(data)))
+	return n, err == nil
+}
+
+// CgroupRoot is where the unified cgroup2 hierarchy that sind needs is
+// mounted. A systemd host in hybrid mode mounts cgroup2 elsewhere
+// (/sys/fs/cgroup/unified) and runs containers on cgroup v1.
+const CgroupRoot = "/sys/fs/cgroup"
+
+// CgroupInfo reads /proc/mounts from fs. hasV2 reports whether cgroup2 is
+// mounted at CgroupRoot, the unified hierarchy, and hasNsdelegate whether
+// that mount has the nsdelegate option. mountPath is CgroupRoot then, or
+// where else cgroup2 is mounted (a hybrid host), or empty.
 func CgroupInfo(fs afero.Fs) (mountPath string, hasV2, hasNsdelegate bool) {
 	data, err := afero.ReadFile(fs, "/proc/mounts")
 	if err != nil {
@@ -62,9 +131,15 @@ func CgroupInfo(fs afero.Fs) (mountPath string, hasV2, hasNsdelegate bool) {
 func parseCgroupInfo(mounts string) (mountPath string, hasV2, hasNsdelegate bool) {
 	for _, line := range strings.Split(mounts, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) >= 4 && fields[2] == "cgroup2" {
-			return fields[1], true, strings.Contains(fields[3], "nsdelegate")
+		if len(fields) < 4 || fields[2] != "cgroup2" {
+			continue
+		}
+		if fields[1] == CgroupRoot {
+			return CgroupRoot, true, slices.Contains(strings.Split(fields[3], ","), "nsdelegate")
+		}
+		if mountPath == "" {
+			mountPath = fields[1]
 		}
 	}
-	return "", false, false
+	return mountPath, false, false
 }

@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -95,8 +96,13 @@ func TestLinuxUsers_IsEmpty(t *testing.T) {
 
 func TestLinuxUsers_Labels(t *testing.T) {
 	assert.Equal(t, testUsersLabels, testUsers.Labels())
-	assert.Empty(t, LinuxUsers{}.Labels())
-	assert.Equal(t, docker.Labels{LabelGroups: "hpc:3000"}, LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}.Labels())
+	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: ""}, LinuxUsers{}.Labels(),
+		"both set, empty, so that image labels cannot show through")
+	assert.Equal(t, docker.Labels{LabelUsers: "", LabelGroups: "hpc:3000"}, LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}.Labels())
+
+	users, err := LinuxUsersFromLabels(LinuxUsers{}.Labels())
+	require.NoError(t, err)
+	assert.True(t, users.IsEmpty(), "empty labels record no users")
 }
 
 func TestLinuxUsersFromLabels(t *testing.T) {
@@ -194,23 +200,32 @@ func TestBuildRunArgs_Users(t *testing.T) {
 	assert.Contains(t, testutil.ArgValues(args, "--label"), "sind.groups=alice:1000 hpc:3000:alice")
 }
 
-func TestBuildRunArgs_UserJobCapability(t *testing.T) {
-	// Workers of a cluster with users get CAP_SYS_NICE, before the
-	// configured capabilities; other nodes, and clusters without users,
-	// do not.
+func TestBuildRunArgs_TaskAffinityCapability(t *testing.T) {
+	// Workers whose tasks task/affinity binds get CAP_SYS_NICE, before
+	// the configured capabilities, users or not; other nodes, and workers
+	// without task/affinity, do not.
 	worker := defaultRunConfig()
 	worker.Role = config.RoleWorker
 	worker.CapAdd = []string{"SYS_ADMIN"}
-	worker.Users = testUsers
+	worker.TaskAffinity = true
 	assert.Equal(t, []string{"SYS_NICE", "SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(worker), "--cap-add"))
 
 	controller := worker
 	controller.Role = config.RoleController
 	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(controller), "--cap-add"))
 
-	withoutUsers := worker
-	withoutUsers.Users = LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}
-	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(withoutUsers), "--cap-add"))
+	withoutAffinity := worker
+	withoutAffinity.TaskAffinity = false
+	withoutAffinity.Users = testUsers
+	assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(withoutAffinity), "--cap-add"))
+
+	// A capDrop of SYS_NICE or ALL wins: --cap-drop would not undo
+	// --cap-add.
+	for _, drop := range []string{"SYS_NICE", "ALL"} {
+		dropped := worker
+		dropped.CapDrop = []string{drop}
+		assert.Equal(t, []string{"SYS_ADMIN"}, testutil.ArgValues(BuildRunArgs(dropped), "--cap-add"), drop)
+	}
 }
 
 func TestBuildRunArgs_GroupsOnly(t *testing.T) {
@@ -231,10 +246,9 @@ func TestBuildRunArgs_NoUsers(t *testing.T) {
 	for _, v := range testutil.ArgValues(args, "-v") {
 		assert.NotContains(t, v, ":/home:")
 	}
-	for _, l := range testutil.ArgValues(args, "--label") {
-		assert.NotContains(t, l, LabelUsers)
-		assert.NotContains(t, l, LabelGroups)
-	}
+	labels := testutil.ArgValues(args, "--label")
+	assert.Contains(t, labels, LabelUsers+"=")
+	assert.Contains(t, labels, LabelGroups+"=")
 }
 
 func TestNodeRunConfigs_Users(t *testing.T) {
@@ -349,11 +363,33 @@ func TestCreate_Users(t *testing.T) {
 		assert.Equal(t, []string{"sind-dev-home:/home:rw"}, uc.mounts[n], n)
 		assert.Equal(t, []string{"sind.groups=alice:1000 hpc:3000:alice", "sind.users=alice:1000:1000 bob:2001:3000"}, uc.labels[n], n)
 	}
-	// Only the worker runs user jobs, which need CAP_SYS_NICE.
-	assert.Equal(t, map[string][]string{nodes[1]: {"SYS_NICE"}}, uc.caps)
+	// Without task/affinity no job needs CAP_SYS_NICE.
+	assert.Empty(t, uc.caps)
 	// The home volume is shared: the homes are created once, with the
 	// realm's SSH key.
 	assert.Equal(t, [][]string{{"sind-dev-controller", "ssh-ed25519 AAAA-test-key", "alice", "1000", "1000", "bob", "2001", "3000"}}, uc.homes)
+}
+
+func TestCreate_TaskAffinity(t *testing.T) {
+	// With task/affinity in slurm.main, the worker binds tasks and gets
+	// CAP_SYS_NICE; the controller does not.
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnStart = pipes.OnStart
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	cfg := createCfg()
+	cfg.Slurm.Main = config.Section{Content: "TaskPlugin=task/cgroup,task/affinity\n"}
+	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string][]string{"sind-dev-worker-0": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
 }
 
 func TestCreate_NoUsers(t *testing.T) {
@@ -376,7 +412,10 @@ func TestCreate_NoUsers(t *testing.T) {
 	assert.Empty(t, uc.added)
 	assert.Empty(t, uc.homes)
 	assert.Empty(t, uc.mounts)
-	assert.Empty(t, uc.labels)
+	assert.Equal(t, map[string][]string{
+		"sind-dev-controller": {"sind.groups=", "sind.users="},
+		"sind-dev-worker-0":   {"sind.groups=", "sind.users="},
+	}, uc.labels, "empty, so that image labels cannot show through")
 	assert.Empty(t, uc.caps)
 }
 
@@ -422,12 +461,25 @@ func TestCreate_CreateHomesFails(t *testing.T) {
 // with the given extra labels for docker ps and hands every other call to
 // base.
 func psWithLabels(base func([]string, string) mock.Result, labels string) func([]string, string) mock.Result {
+	all := "sind.cluster=dev,sind.role=controller," + labels
+	inspected := docker.Labels{LabelSlurmVersion: "25.11.0"}
+	for pair := range strings.SplitSeq(all, ",") {
+		k, v, _ := strings.Cut(pair, "=")
+		inspected[k] = v
+	}
 	return func(args []string, stdin string) mock.Result {
-		if len(args) > 0 && args[0] == "ps" {
+		switch {
+		case len(args) > 0 && args[0] == "ps":
 			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{
 				ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-				Labels: "sind.cluster=dev,sind.role=controller," + labels,
+				Labels: all,
 			})}
+		case len(args) > 1 && args[0] == "inspect" && args[1] == "sind-dev-controller":
+			data, _ := json.Marshal([]map[string]any{{
+				"Name": "/sind-dev-controller", "Image": testControllerImageID,
+				"State": map[string]string{"Status": "running"}, "Config": map[string]any{"Labels": inspected},
+			}})
+			return mock.Result{Stdout: string(data)}
 		}
 		return base(args, stdin)
 	}
@@ -451,14 +503,57 @@ func TestWorkerAdd_InheritsUsers(t *testing.T) {
 	worker := "sind-dev-worker-0"
 	assert.Equal(t, map[string]string{worker: testUsersScript}, uc.added)
 	assert.Equal(t, map[string][]string{worker: {"sind-dev-home:/home:rw"}}, uc.mounts)
-	assert.Equal(t, map[string][]string{worker: {"SYS_NICE"}}, uc.caps)
+	assert.Empty(t, uc.caps, "no task/affinity in slurm.conf")
 	assert.Equal(t, map[string][]string{worker: {"sind.groups=alice:1000 hpc:3000:alice", "sind.users=alice:1000:1000 bob:2001:3000"}}, uc.labels)
 	assert.Empty(t, uc.homes)
 }
 
+func TestWorkerAdd_TaskAffinity(t *testing.T) {
+	// A worker added to a cluster whose slurm.conf enables task/affinity
+	// gets CAP_SYS_NICE; sind reads it from the config volume.
+	var m mock.Executor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}) {
+			return mock.Result{Stdout: "ClusterName=dev\ninclude /etc/slurm/slurm.conf.d/tasks.conf\n"}
+		}
+		if slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf.d/tasks.conf"}) {
+			return mock.Result{Stdout: "TaskPlugin=task/cgroup,task/affinity\n"}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string][]string{"sind-dev-worker-1": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
+}
+
+func TestWorkerAdd_ReadSlurmConfError(t *testing.T) {
+	var m mock.Executor
+	inner := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}) {
+			return mock.Result{Err: fmt.Errorf("exit status 1")}
+		}
+		return inner(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+
+	require.EqualError(t, err, "reading /etc/slurm/slurm.conf: exit status 1")
+	for _, c := range m.Calls {
+		assert.NotEqual(t, "create", c.Args[0], "no worker container")
+	}
+}
+
 func TestWorkerAdd_InvalidUsersLabel(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = psWithLabels(func([]string, string) mock.Result { return mock.Result{} }, "sind.managed=false,sind.users=alice")
+	m.OnCall = psWithLabels(workerAddOnCall(t), "sind.managed=false,sind.users=alice")
 	client := docker.NewClient(&m)
 
 	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
@@ -472,13 +567,10 @@ func TestWorkerAdd_InvalidUsersLabel(t *testing.T) {
 
 func TestGetMountPoints_Home(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // config
-	m.AddResult("[{}]\n", "", nil) // munge
-	m.AddResult("[{}]\n", "", nil) // data
-	addNotFound(t, &m, 1)          // home
+	addVolumeLs(&m, "sind-dev-config", "sind-dev-munge", "sind-dev-data") // no home volume
 	c := docker.NewClient(&m)
 
-	containers := []docker.ContainerListEntry{
+	containers := []*docker.ContainerInfo{
 		{Name: "sind-dev-controller", Labels: docker.Labels{"sind.role": "controller", LabelUsers: "alice:1000:1000"}},
 		{Name: "sind-dev-worker-0", Labels: docker.Labels{"sind.role": "worker", LabelUsers: "alice:1000:1000"}},
 	}
@@ -487,6 +579,5 @@ func TestGetMountPoints_Home(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mounts, 4)
 	assert.Equal(t, MountPoint{Path: "/home", Source: "sind-dev-home", Type: config.StorageVolume, OK: false}, mounts[3])
-	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"volume", "inspect", "sind-dev-home"}, m.Calls[3].Args)
+	assert.Len(t, m.Calls, 1)
 }

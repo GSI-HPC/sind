@@ -20,6 +20,8 @@ Because names join realm and cluster with `-`, realm `ci` with cluster `42-dev` 
 - **Multiple environments** — run separate sets of clusters that don't interfere
 - **Testing sind itself** — integration tests use random realms for isolation
 
+Each realm's mesh and each cluster take one Docker network from the daemon's default address pools, which a stock daemon fills at about 30 networks. Hosts that run many realms in parallel need more, smaller pools; see [Limits]({{< relref "/architecture/networking#limits" >}}).
+
 ## Setting the realm
 
 Realm is determined by the following precedence (highest first):
@@ -27,11 +29,21 @@ Realm is determined by the following precedence (highest first):
 | Source | Example |
 |--------|---------|
 | `--realm` flag | `sind --realm ci-42 create cluster` |
-| Config file | `realm: ci-42` in the YAML config |
 | `SIND_REALM` environment variable | `export SIND_REALM=ci-42` |
+| Config file (`sind create cluster` only) | `realm: ci-42` in the YAML config |
 | Default | `sind` |
 
-A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source; `SIND_REALM` is only checked when it is the realm in effect.
+Only `sind create cluster` reads a config file, so a `realm` set there applies to that command alone. Pass the same realm to the commands that follow, with `--realm` or `SIND_REALM`, or they look in another realm:
+
+```bash
+sind create cluster --config dev.yaml       # dev.yaml sets realm: ci-42
+sind --realm ci-42 get cluster dev
+sind --realm ci-42 delete cluster dev
+```
+
+When `sind get cluster` does not find a cluster in its realm, the error names the realms that hold a cluster of that name, for example `cluster "dev" not found in realm "sind" (it exists in realm "ci-42")`.
+
+A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source. An invalid `--realm` fails every command with exit status 2, even one that does not use a realm such as `sind version`; `SIND_REALM` is only checked when it is the realm in effect.
 
 ## Resource naming
 
@@ -47,15 +59,19 @@ With realm `ci-42`, resources are prefixed accordingly:
 
 ## Advisory locking
 
-Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:
+Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:
 
 ```
 $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
 ```
 
-If another operation already holds the lock, sind waits until it completes. Read-only operations (`get`, `logs`, etc.) are not affected.
+If another operation already holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr and waits until it completes. Read-only operations (`get`, `logs`, etc.) are not affected.
 
 Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs.
+
+Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle`, which do not lock themselves.
+
+The lock lives in the invoking user's state directory, while the realm's resources live on the Docker daemon. sind clients that share one daemon, such as several users of a host, or CI jobs that share the host's Docker socket, do not see each other's locks: give each of them its own realm.
 
 ## Example
 

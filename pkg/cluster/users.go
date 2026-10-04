@@ -98,12 +98,14 @@ func NewLinuxUsers(cfg *config.Cluster) LinuxUsers {
 // Labels returns the labels that record the users and groups on every node
 // container (LabelUsers and LabelGroups), so that workers added later get
 // the same ones. Both are space-separated entries, not comma-separated:
-// docker ps joins all labels of a container with commas.
+// docker ps joins all labels of a container with commas. Both are set, empty
+// without users or groups, so that no image label of that name shows
+// through.
 //
 //	sind.users   name:uid:gid ...          alice:1000:1000 bob:2002:3000
 //	sind.groups  name:gid[:member+...] ... alice:1000 hpc:3000:alice
 func (l LinuxUsers) Labels() docker.Labels {
-	labels := docker.Labels{}
+	labels := docker.Labels{LabelUsers: "", LabelGroups: ""}
 	if len(l.Users) > 0 {
 		entries := make([]string, len(l.Users))
 		for i, u := range l.Users {

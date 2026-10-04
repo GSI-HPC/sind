@@ -92,7 +92,7 @@ func TestWatcher_AddNodes(t *testing.T) {
 	err := w.Start(ctx, nil)
 	require.NoError(t, err, "Start")
 
-	w.AddNodes(ctx, []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
 
 	// pipe 0 = docker events, pipe 1 = systemd monitor added via AddNodes.
 	pipes.Write(1, `{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"ActiveState":{"type":"s","data":"active"}},["Conditions"]]}}`+"\n")
@@ -107,6 +107,39 @@ func TestWatcher_AddNodes(t *testing.T) {
 	cancel()
 	pipes.CloseAll()
 	w.Wait()
+}
+
+func TestWatcher_AddNodesBeforeStart(t *testing.T) {
+	m := &mock.Executor{}
+	w := NewWatcher(m, "sind-dev-", "dev")
+	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	assert.Empty(t, m.Calls)
+}
+
+func TestWatcher_AddNodesStopsWithWatcher(t *testing.T) {
+	// The monitors AddNodes starts run on the watcher's context: cancelling
+	// it ends them, without their streams being closed, and Wait returns.
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	ctx, cancel := context.WithCancel(t.Context())
+	w := NewWatcher(m, "sind-dev-", "dev")
+	require.NoError(t, w.Start(ctx, nil))
+	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	require.Equal(t, 2, pipes.Len())
+
+	cancel()
+	done := make(chan struct{})
+	go func() {
+		w.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait did not return after the watcher's context ended")
+	}
 }
 
 func TestWatcher_MultipleSubscribers(t *testing.T) {
@@ -134,6 +167,48 @@ func TestWatcher_MultipleSubscribers(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatalf("subscriber %d: timeout", i)
 		}
+	}
+
+	cancel()
+	pipes.CloseAll()
+	w.Wait()
+}
+
+func TestWatcher_SubscribeTo(t *testing.T) {
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	m := &mock.Executor{OnStart: pipes.OnStart}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	w := NewWatcher(m, "sind-dev-", "dev")
+	worker := w.SubscribeTo("sind-dev-worker-0")
+	all := w.Subscribe()
+	require.NoError(t, w.Start(ctx, nil))
+
+	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1}`+"\n")
+	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-worker-0"}},"time":2}`+"\n")
+
+	for _, want := range []string{"controller", "worker-0"} {
+		select {
+		case ev := <-all:
+			assert.Equal(t, want, ev.Node)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout waiting for the %s event", want)
+		}
+	}
+	// The worker's subscription got the worker's event only.
+	select {
+	case ev := <-worker:
+		assert.Equal(t, "worker-0", ev.Node)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for the worker event")
+	}
+	select {
+	case ev := <-worker:
+		t.Fatalf("unexpected event %+v", ev)
+	default:
 	}
 
 	cancel()

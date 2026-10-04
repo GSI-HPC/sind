@@ -16,20 +16,29 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 	return strings.TrimSpace(stdout), nil
 }
 
+// ImageLabels returns the labels of a local image, and whether the image is
+// there: false, with no error, when it has not been pulled or built.
+func (c *Client) ImageLabels(ctx context.Context, image string) (Labels, bool, error) {
+	return c.labels(ctx, "image", "inspect", image, "--format", "{{json .Config.Labels}}")
+}
+
+// PullImage pulls an image from its registry, also when a copy of it is
+// present.
+func (c *Client) PullImage(ctx context.Context, image string) error {
+	_, _, err := c.run(ctx, "pull", "--quiet", image)
+	return err
+}
+
 // RunEphemeral runs a command in a temporary container and returns its stdout.
 // The container is removed after the command completes (docker run --rm).
-// When pull is true, --pull always is added to force a fresh image pull.
-func (c *Client) RunEphemeral(ctx context.Context, image string, pull bool, command ...string) (string, error) {
-	return c.RunEphemeralWith(ctx, nil, image, pull, command...)
+func (c *Client) RunEphemeral(ctx context.Context, image string, command ...string) (string, error) {
+	return c.RunEphemeralWith(ctx, nil, image, command...)
 }
 
 // RunEphemeralWith is RunEphemeral with extra docker run flags, such as
 // mounts, placed before the image.
-func (c *Client) RunEphemeralWith(ctx context.Context, flags []string, image string, pull bool, command ...string) (string, error) {
+func (c *Client) RunEphemeralWith(ctx context.Context, flags []string, image string, command ...string) (string, error) {
 	args := []string{"run", "--rm"}
-	if pull {
-		args = append(args, "--pull", "always")
-	}
 	args = append(args, flags...)
 	args = append(args, image)
 	args = append(args, command...)

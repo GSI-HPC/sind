@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,9 +15,50 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// The errors DaemonSupport wraps for a Docker daemon that cannot run sind
+// nodes.
+var (
+	// ErrRootlessDaemon is a daemon in rootless mode.
+	ErrRootlessDaemon = errors.New("the Docker daemon runs in rootless mode")
+	// ErrUsernsRemap is a daemon that remaps user namespaces.
+	ErrUsernsRemap = errors.New("the Docker daemon runs with userns-remap")
+	// ErrCgroupV1 is a daemon that runs containers on cgroup v1.
+	ErrCgroupV1 = errors.New("the Docker daemon runs containers on cgroup v1")
+)
+
+// CheckDaemon asks the Docker daemon what it is and returns DaemonSupport's
+// verdict. Call it before mesh.Manager.EnsureMesh and Create, so that an
+// unsupported daemon fails before anything is pulled or created.
+func CheckDaemon(ctx context.Context, client *docker.Client) error {
+	info, err := client.Info(ctx)
+	if err != nil {
+		return fmt.Errorf("querying the Docker daemon: %w", err)
+	}
+	return DaemonSupport(info)
+}
+
+// DaemonSupport returns nil when the daemon that info describes can run
+// sind nodes. Every node starts with --security-opt writable-cgroups=true,
+// which Docker refuses on a daemon in rootless mode or with userns-remap,
+// and only at `docker start`: after the images are pulled and the
+// cluster's network and volumes created. A node's entrypoint and systemd
+// need cgroup v2; on cgroup v1 the node never becomes ready.
+func DaemonSupport(info *docker.DaemonInfo) error {
+	const need = "sind needs a rootful Docker daemon without userns-remap, because Docker refuses the writable cgroups of sind's nodes otherwise"
+	switch {
+	case info.HasSecurityOption("rootless"):
+		return fmt.Errorf("%w; %s", ErrRootlessDaemon, need)
+	case info.HasSecurityOption("userns"):
+		return fmt.Errorf("%w; %s", ErrUsernsRemap, need)
+	case info.CgroupVersion != "" && info.CgroupVersion != "2":
+		return fmt.Errorf("%w; sind requires cgroup v2 (the unified hierarchy)", ErrCgroupV1)
+	}
+	return nil
+}
+
 // NodeShortNames returns the short hostname for each node defined in the config,
 // including the backup controller when enabled. Worker nodes are indexed sequentially across all worker groups, matching
-// the indexing used in slurm.GenerateNodesConf.
+// the indexing used in slurm.ManagedWorkers.
 func NodeShortNames(nodes []config.Node) []string {
 	var names []string
 	workerIdx := 0
@@ -120,7 +162,7 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 
 	if len(conflicts) > 0 {
 		sort.Strings(conflicts)
-		return fmt.Errorf("conflicting resources already exist: %s", strings.Join(conflicts, ", "))
+		return errorWith(ErrClusterExists, "conflicting resources already exist: %s", strings.Join(conflicts, ", "))
 	}
 
 	return nil

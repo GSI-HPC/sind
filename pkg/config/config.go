@@ -7,11 +7,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"sigs.k8s.io/yaml"
 )
@@ -137,6 +136,11 @@ func (d DataStorage) validate() error {
 	if d.MountPath != "" && !strings.HasPrefix(d.MountPath, "/") {
 		return fmt.Errorf("storage.dataStorage.mountPath must be absolute, got %q", d.MountPath)
 	}
+	// sind enter and sind exec read the mount point back from docker ps,
+	// which joins labels with commas.
+	if strings.Contains(d.MountPath, ",") {
+		return fmt.Errorf("storage.dataStorage.mountPath must not contain a comma, got %q", d.MountPath)
+	}
 	return nil
 }
 
@@ -177,23 +181,6 @@ func (s Section) FragmentNames() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// SetsParameter reports whether any line of the section (string form or
-// any fragment) assigns the given slurm.conf-style parameter. Keys are
-// matched case-insensitively, as Slurm does; comments are ignored.
-func (s Section) SetsParameter(key string) bool {
-	prefix := strings.ToLower(key) + "="
-	contents := slices.AppendSeq([]string{s.Content}, maps.Values(s.Fragments))
-	for _, content := range contents {
-		for line := range strings.Lines(content) {
-			line, _, _ = strings.Cut(line, "#")
-			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), prefix) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // UnmarshalJSON supports two YAML/JSON forms:
@@ -246,16 +233,26 @@ type Cluster struct {
 	// Pull is a runtime flag (not part of the config file) that forces
 	// fresh image pulls when creating containers.
 	Pull bool `json:"-" yaml:"-"`
+	// Wait is a runtime setting (not part of the config file): when
+	// positive, how long cluster.Create waits for the nodes and Slurm to
+	// become ready, counted from when the node containers have started.
+	Wait time.Duration `json:"-" yaml:"-"`
 }
 
 // Default resource values for cluster nodes.
 const (
 	DefaultClusterName = "default"
-	DefaultImage       = "ghcr.io/gsi-hpc/sind-node:latest"
 	DefaultCPUs        = 1
 	DefaultMemory      = "512m"
 	DefaultTmpSize     = "256m"
 )
+
+// DefaultImage is the node image of nodes that set none. Release builds
+// set it with -ldflags "-X" to the image the image workflow publishes for
+// their release, ghcr.io/gsi-hpc/sind-node:vX.Y.Z (.goreleaser.yaml), so a
+// release keeps the node image it was built with. Other builds use latest,
+// the newest Slurm release line.
+var DefaultImage = "ghcr.io/gsi-hpc/sind-node:latest"
 
 // ApplyDefaults populates missing fields with defaults.
 // If no nodes are defined, creates a minimal cluster (1 controller + 1 worker).
@@ -344,6 +341,9 @@ func (c *Cluster) Validate() error {
 	if err := CheckName("cluster", c.Name); err != nil {
 		return err
 	}
+	if c.HasManagedDB() && len(c.Name) > MaxAccountingClusterName {
+		return fmt.Errorf("cluster name %q has %d characters: with a managed db node it may have at most %d, as slurmdbd builds its table names from it", c.Name, len(c.Name), MaxAccountingClusterName)
+	}
 	if c.Realm != "" {
 		if err := CheckName("realm", c.Realm); err != nil {
 			return err
@@ -392,6 +392,10 @@ func (c *Cluster) Validate() error {
 		return fmt.Errorf("at least one worker node required, got %d", workers)
 	}
 
+	if err := c.validateResources(); err != nil {
+		return err
+	}
+
 	if err := c.Storage.DataStorage.validate(); err != nil {
 		return err
 	}
@@ -402,7 +406,7 @@ func (c *Cluster) Validate() error {
 	if err := c.validateAccounts(); err != nil {
 		return err
 	}
-	if err := c.Identity.validate(c.Managed()); err != nil {
+	if err := c.Identity.validate(c.Managed(), c.Slurm.Main); err != nil {
 		return err
 	}
 
@@ -414,6 +418,9 @@ func (c *Cluster) Validate() error {
 			return err
 		}
 		if err := CheckDevices(n.Devices); err != nil {
+			return err
+		}
+		if err := CheckSecurityOpts("securityOpt", n.SecurityOpt); err != nil {
 			return err
 		}
 	}

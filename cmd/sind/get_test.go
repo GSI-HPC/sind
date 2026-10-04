@@ -116,6 +116,30 @@ func TestGetClusters_UnknownSlurmVersion(t *testing.T) {
 	assert.Equal(t, []string{"dev", "1", "(0/1/0/0)", "-", "running"}, strings.Fields(lines[1]))
 }
 
+// TestGetClusters_EscapesLabels checks that a label holding a terminal
+// control sequence, as an untrusted image can set it, is printed escaped.
+func TestGetClusters_EscapesLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "evil",
+			Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.0\x1b]52;c;cm0gLXJmIH4K\x07",
+		},
+	), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "clusters")
+	require.NoError(t, err)
+	assert.NotContains(t, stdout, "\x1b")
+	assert.NotContains(t, stdout, "\x07")
+	assert.Contains(t, stdout, `25.11.0\x1b]52;c;cm0gLXJmIH4K\x07`)
+}
+
+func TestCell(t *testing.T) {
+	assert.Equal(t, "plain", cell("plain"))
+	assert.Equal(t, `a\tb\nc\x1b[2J\u202e`, cell("a\tb\nc\x1b[2J\u202e"))
+	assert.Equal(t, "worker", cell(config.RoleWorker))
+}
+
 func TestGetNodes_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"get", "nodes"})
@@ -498,11 +522,20 @@ func TestGetMesh_RejectsArgs(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// meshInspectCall answers the inspects of get mesh for a running mesh.
+func meshInspectCall(args []string, _ string) mock.Result {
+	switch {
+	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-dns":
+		return mock.Result{Stdout: `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Image":"coredns/coredns:1.14.7","Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`}
+	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-ssh":
+		return mock.Result{Stdout: `[{"Id":"ssh1","Name":"/sind-ssh","State":{"Status":"running"},"Config":{"Image":"ghcr.io/gsi-hpc/sind-node:latest","Labels":{}}}]`}
+	}
+	return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+}
+
 func TestGetMesh_Output(t *testing.T) {
-	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
-	m.AddResult(inspectJSON, "", nil)
+	m.OnCall = meshInspectCall
 
 	stdout, _, err := executeWithMock(&m, "get", "mesh")
 	require.NoError(t, err)
@@ -511,15 +544,15 @@ func TestGetMesh_Output(t *testing.T) {
 	assert.Contains(t, stdout, "sind-dns")
 	assert.Contains(t, stdout, "10.0.0.2")
 	assert.Contains(t, stdout, "sind.sind")
+	assert.Contains(t, stdout, "coredns/coredns:1.14.7")
 	assert.Contains(t, stdout, "sind-ssh")
 	assert.Contains(t, stdout, "sind-ssh-config")
+	assert.Contains(t, stdout, "ghcr.io/gsi-hpc/sind-node:latest")
 }
 
 func TestGetMesh_JSON(t *testing.T) {
-	inspectJSON := `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
-	m.AddResult(inspectJSON, "", nil)
+	m.OnCall = meshInspectCall
 
 	stdout, _, err := executeWithMock(&m, "get", "mesh", "--output", "json")
 	require.NoError(t, err)
@@ -530,12 +563,16 @@ func TestGetMesh_JSON(t *testing.T) {
 	assert.Equal(t, "sind-dns", got.DNSContainer)
 	assert.Equal(t, "10.0.0.2", got.DNSIP)
 	assert.Equal(t, "sind.sind", got.DNSZone)
+	assert.Equal(t, "coredns/coredns:1.14.7", got.DNSImage)
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", got.SSHImage)
 }
 
 func TestGetMesh_Error(t *testing.T) {
 	var m mock.Executor
-	// ContainerExists returns a non-exit-code-1 error (daemon unreachable).
-	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+	// The inspects fail with a non-exit-code-1 error (daemon unreachable).
+	m.OnCall = func([]string, string) mock.Result {
+		return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
+	}
 
 	_, _, err := executeWithMock(&m, "get", "mesh")
 	assert.Error(t, err)
@@ -744,6 +781,18 @@ func TestGetNode_RejectsFQDN(t *testing.T) {
 	assert.Contains(t, err.Error(), "worker-0.dev.sind.sind")
 }
 
+// TestGetNode_ClusterNamedSind checks that NODE.CLUSTER for a cluster named
+// "sind" is not taken for an FQDN, although it ends in ".sind".
+func TestGetNode_ClusterNamedSind(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such container: sind-sind-controller\n", testutil.ExitCode1(t))
+
+	_, _, err := executeWithMock(&m, "get", "node", "controller.sind")
+	require.EqualError(t, err, `node "controller" not found in cluster "sind"`)
+	require.Len(t, m.Calls, 1)
+	assert.Contains(t, m.Calls[0].Args, "sind-sind-controller")
+}
+
 // TestGetNode_NotFound covers the typo/unknown-node case: docker inspect
 // fails with exit status 1. The command must surface a clean
 // "node %q not found in cluster %q" error rather than leak the raw docker
@@ -803,6 +852,14 @@ func TestGetNode_Output(t *testing.T) {
 	assert.Contains(t, stdout, "slurmctld")
 	assert.Contains(t, stdout, "\u2713")
 	assert.NotContains(t, stdout, "HA")
+
+	var inspects int
+	for _, call := range m.Calls {
+		if call.Args[0] == "inspect" && call.Args[1] == "sind-dev-controller" {
+			inspects++
+		}
+	}
+	assert.Equal(t, 1, inspects, "the node container is inspected once")
 }
 
 func TestGetNode_JSON(t *testing.T) {
@@ -909,8 +966,14 @@ func pairOnCall(t *testing.T) func([]string, string) mock.Result {
 			return mock.Result{Stdout: b.String()}
 		case args[0] == "exec" && args[2] == "scontrol":
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP\n"}
-		case args[0] == "network" || args[0] == "volume":
+		case args[0] == "network":
 			return mock.Result{Stdout: "[{}]\n"}
+		case args[0] == "volume" && args[1] == "ls":
+			var vols strings.Builder
+			for _, v := range []string{"config", "munge", "data", "state"} {
+				vols.WriteString(`{"Name":"sind-dev-` + v + `","Driver":"local","Labels":""}` + "\n")
+			}
+			return mock.Result{Stdout: vols.String()}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
 	}

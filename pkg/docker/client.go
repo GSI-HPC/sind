@@ -35,23 +35,70 @@ type VolumeName string
 // Labels is a set of key-value metadata pairs applied to Docker resources.
 type Labels map[string]string
 
+// MaxConcurrentCalls is the number of docker commands a Client from
+// NewClient runs at once; further calls wait for one to finish. Creating a
+// cluster probes every node in its own goroutine, so without a bound a
+// large cluster forks hundreds of docker processes that compete with the
+// booting nodes for the daemon. Long-lived streams (Executor.Start, such as
+// docker events) do not count. No call waits for another while it runs, so
+// the bound cannot deadlock.
+const MaxConcurrentCalls = 16
+
 // Client provides operations against the Docker CLI.
 type Client struct {
 	Executor cmdexec.Executor
 	Command  string // docker executable path (default: "docker")
+
+	// slots bounds the docker commands that run at once (see
+	// MaxConcurrentCalls). A Client not made by NewClient has none and
+	// runs them unbounded.
+	slots chan struct{}
 }
 
-// NewClient returns a Client that runs docker commands through the given executor.
+// NewClient returns a Client that runs docker commands through the given
+// executor, at most MaxConcurrentCalls at once.
 func NewClient(executor cmdexec.Executor) *Client {
-	return &Client{Executor: executor, Command: "docker"}
+	return &Client{Executor: executor, Command: "docker", slots: make(chan struct{}, MaxConcurrentCalls)}
+}
+
+// acquire takes a slot for a docker command and returns the function that
+// gives it back. It waits while all slots are taken, until one is free or
+// ctx ends. A free slot is taken even when ctx has ended, so that a
+// command run with an ended context fails as the executor reports it.
+func (c *Client) acquire(ctx context.Context) (release func(), err error) {
+	if c.slots == nil {
+		return func() {}, nil
+	}
+	release = func() { <-c.slots }
+	select {
+	case c.slots <- struct{}{}:
+		return release, nil
+	default:
+	}
+	select {
+	case c.slots <- struct{}{}:
+		return release, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (c *Client) run(ctx context.Context, args ...string) (string, string, error) {
 	sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
+	release, err := c.acquire(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer release()
 	return c.Executor.Run(ctx, c.Command, args...)
 }
 
 func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
+	release, err := c.acquire(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer release()
 	return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
 }
 

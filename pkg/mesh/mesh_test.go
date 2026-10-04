@@ -32,6 +32,18 @@ func exitCode1(t *testing.T) *os.ProcessState {
 	return exitErr.ProcessState
 }
 
+// failure is a docker error result that is not "not found".
+func failure() mock.Result {
+	return mock.Result{Err: fmt.Errorf("connection refused")}
+}
+
+// warnings collects what a Manager reports with Warn.
+func warnings(mgr *Manager) *[]string {
+	var got []string
+	mgr.OnWarning = func(msg string) { got = append(got, msg) }
+	return &got
+}
+
 // --- Lifecycle ---
 
 func TestMeshLifecycle(t *testing.T) {
@@ -41,54 +53,14 @@ func TestMeshLifecycle(t *testing.T) {
 	mgr := NewManager(c, testutil.Realm("it-mesh"))
 
 	if !rec.IsIntegration() {
-		// EnsureMesh: create network, DNS, SSH volume, SSH container
-		rec.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))      // network exists → no
-		rec.AddResult("net-id\n", "", nil)                                                 // create network
-		rec.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))     // DNS exists → no
-		rec.AddResult("dns-id\n", "", nil)                                                 // create DNS
-		rec.AddResult("", "", nil)                                                         // copy Corefile
-		rec.AddResult("sind-dns\n", "", nil)                                               // start DNS
-		rec.AddResult("", testutil.NoSuchVolume("sind-ssh-config"), testutil.ExitCode1(t)) // SSH vol exists → no
-		rec.AddResult("sind-ssh-config\n", "", nil)                                        // create SSH vol
-		rec.AddResult("keygen-id\n", "", nil)                                              // create keygen container
-		rec.AddResult("", "", nil)                                                         // copy keygen script
-		rec.AddResult("", "", nil)                                                         // remove keygen container
-		rec.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))     // SSH exists → no
-		rec.AddResult(dnsInspectJSON(), "", nil)                                           // inspect DNS for IP
-		rec.AddResult("ssh-id\n", "", nil)                                                 // create SSH
-		rec.AddResult("sind-ssh\n", "", nil)                                               // start SSH
-
-		// Verify: network, DNS, SSH volume, SSH container exist
-		rec.AddResult("[{}]\n", "", nil) // network exists → yes
-		rec.AddResult("[{}]\n", "", nil) // DNS exists → yes
-		rec.AddResult("[{}]\n", "", nil) // SSH vol exists → yes
-		rec.AddResult("[{}]\n", "", nil) // SSH exists → yes
-
-		// EnsureMesh again (idempotent): all exist
-		rec.AddResult("[{}]\n", "", nil) // network
-		rec.AddResult("[{}]\n", "", nil) // DNS
-		rec.AddResult("[{}]\n", "", nil) // SSH vol
-		rec.AddResult("[{}]\n", "", nil) // SSH
-
-		// CleanupMesh: direct rm -f / network rm / volume rm; missing keygen
-		// is swallowed via IsNotFound.
-		rec.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t)) // rm -f keygen → not found
-		rec.AddResult("sind-ssh\n", "", nil)                                                  // rm -f SSH
-		rec.AddResult("sind-dns\n", "", nil)                                                  // rm -f DNS
-		rec.AddResult("sind-mesh\n", "", nil)                                                 // network rm
-		rec.AddResult("sind-ssh-config\n", "", nil)                                           // volume rm
-
-		// Verify: all gone
-		rec.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))  // network
-		rec.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t)) // DNS
-		rec.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t)) // SSH
-
+		rec.SetOnCall(newFake(t).onCall)
 	}
 	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
 
 	// EnsureMesh creates all resources.
 	err := mgr.EnsureMesh(ctx)
 	require.NoError(t, err)
+	assert.True(t, mgr.Created())
 
 	// Verify resources exist.
 	exists, err := c.NetworkExists(ctx, mgr.NetworkName())
@@ -107,9 +79,22 @@ func TestMeshLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists, "SSH container")
 
+	// The relay has the keypair, so sind can read it.
+	key, err := mgr.GetSSHPublicKey(ctx)
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(key, "ssh-ed25519 "), "public key %q", key)
+
 	// EnsureMesh is idempotent.
 	err = mgr.EnsureMesh(ctx)
 	require.NoError(t, err)
+	assert.False(t, mgr.Created(), "second EnsureMesh created nothing")
+
+	// The info reports the images the containers run.
+	info, err := mgr.GetInfo(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, DNSImage, info.DNSImage)
+	assert.Equal(t, SSHImage(), info.SSHImage)
+	assert.NotEmpty(t, info.DNSIP)
 
 	// CleanupMesh removes everything.
 	err = mgr.CleanupMesh(ctx)
@@ -138,54 +123,7 @@ func TestDNSRecordLifecycle(t *testing.T) {
 	mgr := NewManager(c, testutil.Realm("it-mesh"))
 
 	if !rec.IsIntegration() {
-		// EnsureMesh
-		rec.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))      // network exists → no
-		rec.AddResult("net-id\n", "", nil)                                                 // create network
-		rec.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))     // DNS exists → no
-		rec.AddResult("dns-id\n", "", nil)                                                 // create DNS
-		rec.AddResult("", "", nil)                                                         // copy Corefile
-		rec.AddResult("sind-dns\n", "", nil)                                               // start DNS
-		rec.AddResult("", testutil.NoSuchVolume("sind-ssh-config"), testutil.ExitCode1(t)) // SSH vol exists → no
-		rec.AddResult("sind-ssh-config\n", "", nil)                                        // create SSH vol
-		rec.AddResult("keygen-id\n", "", nil)                                              // create keygen container
-		rec.AddResult("", "", nil)                                                         // copy keygen script
-		rec.AddResult("", "", nil)                                                         // remove keygen container
-		rec.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))     // SSH exists → no
-		rec.AddResult(dnsInspectJSON(), "", nil)                                           // inspect DNS for IP
-		rec.AddResult("ssh-id\n", "", nil)                                                 // create SSH
-		rec.AddResult("sind-ssh\n", "", nil)                                               // start SSH
-
-		// AddDNSRecord "a": read → write → inspect → kill → start
-		rec.AddResult(corefileTar(t, nil), "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult(dnsInspectJSON(), "", nil)
-		rec.AddResult("sind-dns\n", "", nil)
-		rec.AddResult("sind-dns\n", "", nil)
-
-		// AddDNSRecord "b": read → write → inspect → kill → start
-		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.sind"}), "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult(dnsInspectJSON(), "", nil)
-		rec.AddResult("sind-dns\n", "", nil)
-		rec.AddResult("sind-dns\n", "", nil)
-
-		// RemoveDNSRecord "a": read → write → inspect → kill → start
-		rec.AddResult(corefileTar(t, []string{"172.18.0.2 a.test.sind.sind", "172.18.0.3 b.test.sind.sind"}), "", nil)
-		rec.AddResult("", "", nil)
-		rec.AddResult(dnsInspectJSON(), "", nil)
-		rec.AddResult("sind-dns\n", "", nil)
-		rec.AddResult("sind-dns\n", "", nil)
-
-		// CleanupMesh
-		rec.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t)) // keygen exists → no
-		rec.AddResult("[{}]\n", "", nil)                                                      // SSH exists
-		rec.AddResult("sind-ssh\n", "", nil)                                                  // rm -f SSH
-		rec.AddResult("[{}]\n", "", nil)                                                      // DNS exists
-		rec.AddResult("sind-dns\n", "", nil)                                                  // rm -f DNS
-		rec.AddResult("[{}]\n", "", nil)                                                      // network exists
-		rec.AddResult("sind-mesh\n", "", nil)                                                 // rm network
-		rec.AddResult("[{}]\n", "", nil)                                                      // SSH vol exists
-		rec.AddResult("sind-ssh-config\n", "", nil)                                           // rm SSH vol
+		rec.SetOnCall(newFake(t).onCall)
 	}
 	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
 
@@ -203,214 +141,200 @@ func TestDNSRecordLifecycle(t *testing.T) {
 	err = mgr.RemoveDNSRecord(ctx, "a.test.sind.sind")
 	require.NoError(t, err)
 
+	records, err := mgr.GetDNSRecords(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []DNSRecord{{Hostname: "b.test.sind.sind", IP: "172.18.0.3"}}, records)
+
+	// The reloads kept the DNS container running.
+	info, err := c.InspectContainer(ctx, mgr.DNSContainerName())
+	require.NoError(t, err)
+	assert.Equal(t, docker.StateRunning, info.Status)
+
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
 // --- EnsureMesh ---
 
 func TestEnsureMesh(t *testing.T) {
-	var m mock.Executor
-	// EnsureMeshNetwork: NetworkExists → not found, CreateNetwork → success
-	m.AddResult("", "Error: No such network: sind-mesh\n",
-		testutil.ExitCode1(t))
-	m.AddResult("net-id\n", "", nil)
-	// EnsureDNS: ContainerExists → not found, CreateContainer, CopyToContainer, StartContainer
-	m.AddResult("", "Error: No such container: sind-dns\n",
-		testutil.ExitCode1(t))
-	m.AddResult("dns-id\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("sind-dns\n", "", nil)
-	// EnsureSSHVolume: VolumeExists → not found, CreateVolume, CreateContainer, CopyToContainer, RemoveContainer
-	m.AddResult("", "Error: No such volume: sind-ssh-config\n",
-		testutil.ExitCode1(t))
-	m.AddResult("sind-ssh-config\n", "", nil)
-	m.AddResult("keygen-id\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("", "", nil)
-	// EnsureSSH: ContainerExists → not found, InspectDNS, CreateContainer, StartContainer
-	m.AddResult("", "Error: No such container: sind-ssh\n",
-		testutil.ExitCode1(t))
-	m.AddResult(dnsInspectJSON(), "", nil)
-	m.AddResult("ssh-id\n", "", nil)
-	m.AddResult("sind-ssh\n", "", nil)
-
-	c := docker.NewClient(&m)
+	f, c, m := newFakeDocker(t)
 	mgr := NewManager(c, DefaultRealm)
+	got := warnings(mgr)
 
 	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
+	assert.True(t, mgr.Created())
+	assert.Empty(t, *got)
+
+	assert.True(t, f.networks["sind-mesh"])
+	assert.True(t, f.volumes["sind-ssh-config"])
+
+	dns := f.containers["sind-dns"]
+	require.NotNil(t, dns)
+	assert.Equal(t, docker.StateRunning, dns.state)
+	assert.Equal(t, DNSImage, dns.image)
+	assert.Equal(t, "10.0.0.2", dns.ips["sind-mesh"], "DNS is the first container on the mesh")
+	assert.Contains(t, dns.files[corefilePath], "hosts {")
+
+	// The relay resolves through the DNS container and got the keys
+	// before it started; no helper container is involved.
+	relay := f.containers["sind-ssh"]
+	require.NotNil(t, relay)
+	assert.Equal(t, docker.StateRunning, relay.state)
+	assert.Equal(t, SSHImage(), relay.image)
+	assert.Equal(t, []string{"10.0.0.2"}, relay.dns)
+	assert.Contains(t, relay.files["/root/.ssh/id_ed25519"], "OPENSSH PRIVATE KEY")
+	assert.True(t, strings.HasPrefix(relay.files["/root/.ssh/id_ed25519.pub"], "ssh-ed25519 "))
+	assert.Contains(t, relay.files, "/root/.ssh/known_hosts")
+	assert.Empty(t, calls(m, "create --name sind-ssh-keygen"))
+
+	// The relay starts after the DNS container.
+	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
+	// Without --pull nothing is pulled.
+	for _, create := range calls(m, "create") {
+		assert.NotContains(t, create, "--pull")
+	}
+}
+
+func TestEnsureMesh_Pull(t *testing.T) {
+	_, c, m := newFakeDocker(t)
+	mgr := NewManager(c, DefaultRealm)
+	mgr.Pull = true
+
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
+
+	creates := calls(m, "create")
+	require.Len(t, creates, 2)
+	for _, create := range creates {
+		assert.Contains(t, create, "--pull always")
+	}
 }
 
 func TestEnsureMesh_AllExist(t *testing.T) {
-	var m mock.Executor
-	// All four exist checks return success.
-	m.AddResult("[{}]\n", "", nil) // NetworkExists
-	m.AddResult("[{}]\n", "", nil) // ContainerExists (DNS)
-	m.AddResult("[{}]\n", "", nil) // VolumeExists (SSH)
-	m.AddResult("[{}]\n", "", nil) // ContainerExists (SSH)
-
-	c := docker.NewClient(&m)
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
 	mgr := NewManager(c, DefaultRealm)
+	got := warnings(mgr)
 
 	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
+	assert.False(t, mgr.Created())
+	assert.Empty(t, *got)
+
+	// One inspect per resource, nothing else.
 	assert.Len(t, m.Calls, 4)
+	assert.Empty(t, calls(m, "start"))
+	assert.Empty(t, calls(m, "create"))
 }
 
-func TestEnsureMesh_NetworkError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
+// TestEnsureMesh_StartsStopped covers a realm after a host reboot or a Docker
+// daemon restart: the mesh containers exist but are stopped.
+func TestEnsureMesh_StartsStopped(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
 	mgr := NewManager(c, DefaultRealm)
+	got := warnings(mgr)
 
 	err := mgr.EnsureMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "mesh network")
+	require.NoError(t, err)
+	assert.False(t, mgr.Created())
+
+	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"), "DNS starts first")
+	assert.Equal(t, docker.StateRunning, f.containers["sind-dns"].state)
+	assert.Equal(t, docker.StateRunning, f.containers["sind-ssh"].state)
+	assert.Equal(t, "10.0.0.2", f.containers["sind-dns"].ips["sind-mesh"], "DNS got its address back")
+	assert.Empty(t, *got)
+	assert.Empty(t, calls(m, "create"))
 }
 
-func TestEnsureMesh_DNSError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // network exists
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
+// TestEnsureMesh_DNSAddressChanged covers a DNS container that comes back
+// with another address than the relay was created with.
+func TestEnsureMesh_DNSAddressChanged(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	// Another container took the DNS container's address meanwhile.
+	f.containers["sind-dev-controller"] = &fakeContainer{state: docker.StateCreated, networks: []string{"sind-mesh"}}
+	f.start("sind-dev-controller")
 	mgr := NewManager(c, DefaultRealm)
+	got := warnings(mgr)
 
 	err := mgr.EnsureMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "DNS container")
-}
-
-func TestEnsureMesh_SSHVolumeError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // network exists
-	m.AddResult("[{}]\n", "", nil) // DNS exists
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "SSH volume")
-}
-
-func TestEnsureMesh_SSHContainerError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // network exists
-	m.AddResult("[{}]\n", "", nil) // DNS exists
-	m.AddResult("[{}]\n", "", nil) // SSH volume exists
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "SSH container")
-}
-
-// --- CleanupMesh ---
-
-func TestCleanupMesh(t *testing.T) {
-	var m mock.Executor
-	// rm -f keygen: not found (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t))
-	// rm -f SSH: success
-	m.AddResult("sind-ssh\n", "", nil)
-	// rm -f DNS: success
-	m.AddResult("sind-dns\n", "", nil)
-	// network rm: success
-	m.AddResult("sind-mesh\n", "", nil)
-	// volume rm: success
-	m.AddResult("sind-ssh-config\n", "", nil)
-
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
-	// Verify order: keygen, SSH, DNS, network, volume.
-	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"rm", "-f", "-v", "sind-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"rm", "-f", "-v", string(SSHContainerName)}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", "-v", string(DNSContainerName)}, m.Calls[2].Args)
-	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
-	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[4].Args)
+	require.Len(t, *got, 1)
+	assert.Contains(t, (*got)[0], "mesh DNS sind-dns now has the address 10.0.0.3")
+	assert.Contains(t, (*got)[0], "containers created before still use 10.0.0.2 (sind-ssh)")
+	assert.Contains(t, (*got)[0], "the SSH relay is re-created")
 }
 
-func TestCleanupMesh_NoneExist(t *testing.T) {
-	var m mock.Executor
-	// All five remove ops return not found (IsNotFound, swallowed).
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t))
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
-	m.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))
-	m.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))
-	m.AddResult("", testutil.NoSuchVolume("sind-ssh-config"), testutil.ExitCode1(t))
-
-	c := docker.NewClient(&m)
+func TestEnsureMesh_ExistingVolumeKeepsKeys(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	delete(f.containers, "sind-ssh") // relay removed by hand
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.CleanupMesh(t.Context())
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 5)
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
+
+	// The relay is re-created on the volume, which keeps its keys.
+	require.Len(t, calls(m, "create --name sind-ssh"), 1)
+	assert.Empty(t, calls(m, "cp - sind-ssh"))
+	assert.Equal(t, docker.StateRunning, f.containers["sind-ssh"].state)
 }
 
-func TestCleanupMesh_SSHContainerError(t *testing.T) {
-	var m mock.Executor
-	// keygen rm: not found (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t))
-	// SSH rm: real (non-IsNotFound) error
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+func TestEnsureMesh_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		fail  string
+		match string
+	}{
+		{"network check", "network inspect", "checking mesh network"},
+		{"network create", "network create", "creating mesh network"},
+		{"DNS check", "inspect sind-dns", "checking DNS container"},
+		{"DNS create", "create --name sind-dns", "creating DNS container"},
+		{"DNS Corefile", "cp - sind-dns", "writing DNS configuration"},
+		{"DNS start", "start sind-dns", "starting DNS container"},
+		{"volume check", "volume inspect", "checking SSH volume"},
+		{"volume create", "volume create", "creating SSH volume"},
+		{"relay check", "inspect sind-ssh", "checking SSH container"},
+		{"relay create", "create --name sind-ssh", "creating SSH container"},
+		{"relay keys", "cp - sind-ssh", "writing SSH keys"},
+		{"relay start", "start sind-ssh", "starting SSH container"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, c, _ := newFakeDocker(t)
+			f.fail[tt.fail] = failure()
+			mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.CleanupMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "removing SSH container")
+			err := mgr.EnsureMesh(t.Context())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.match)
+		})
+	}
 }
 
-func TestCleanupMesh_DNSContainerError(t *testing.T) {
+// TestEnsureMesh_DNSInspectAfterStartError covers the inspect that reads the
+// address of a DNS container EnsureMesh just started.
+func TestEnsureMesh_DNSInspectAfterStartError(t *testing.T) {
 	var m mock.Executor
-	// keygen rm: not found (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t))
-	// SSH rm: not found (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
-	// DNS rm: real (non-IsNotFound) error
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	inspected := false
+	m.OnCall = func(args []string, _ string) mock.Result {
+		joined := strings.Join(args, " ")
+		switch {
+		case joined == "network inspect sind-mesh", joined == "volume inspect sind-ssh-config":
+			return mock.Result{Stdout: "[{}]\n"}
+		case joined == "inspect sind-dns" && !inspected:
+			inspected = true
+			return mock.Result{Stdout: dnsInspectExitedJSON()}
+		case joined == "start sind-dns":
+			return mock.Result{}
+		}
+		return failure()
+	}
+	mgr := NewManager(docker.NewClient(&m), DefaultRealm)
 
-	err := mgr.CleanupMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "removing DNS container")
-}
-
-func TestCleanupMesh_NetworkError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t)) // keygen rm (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))        // SSH rm (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))        // DNS rm (swallowed)
-	m.AddResult("", "", fmt.Errorf("connection refused"))                               // network rm: real error
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.CleanupMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "removing mesh network")
-}
-
-func TestCleanupMesh_VolumeError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t)) // keygen (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))        // SSH (swallowed)
-	m.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t))        // DNS (swallowed)
-	m.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))         // network (swallowed)
-	m.AddResult("", "", fmt.Errorf("connection refused"))                               // volume: real error
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.CleanupMesh(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "removing SSH volume")
+	err := mgr.EnsureMesh(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "inspecting DNS container")
 }
 
 // --- EnsureMeshNetwork ---
@@ -443,6 +367,19 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	}, m.Calls[1].Args)
 }
 
+// TestEnsureMeshNetwork_CreatedPerCall covers a Manager that serves several
+// creates: Created answers for the last call only.
+func TestEnsureMeshNetwork_CreatedPerCall(t *testing.T) {
+	_, c, _ := newFakeDocker(t)
+	mgr := NewManager(c, DefaultRealm)
+
+	require.NoError(t, mgr.EnsureMeshNetwork(t.Context()))
+	assert.True(t, mgr.Created())
+
+	require.NoError(t, mgr.EnsureMeshNetwork(t.Context()))
+	assert.False(t, mgr.Created(), "the mesh existed before the second call")
+}
+
 func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 	var m mock.Executor
 	// NetworkExists → found
@@ -457,6 +394,19 @@ func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
 	// Only inspect, no create
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
+}
+
+// TestEnsureMeshNetwork_CreatedConcurrently covers another client of the
+// same daemon creating the network between the check and the create.
+func TestEnsureMeshNetwork_CreatedConcurrently(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.networks["sind-mesh"] = true
+	f.fail["network inspect"] = notFound(t, testutil.NoSuchNetwork("sind-mesh"))
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.EnsureMeshNetwork(t.Context())
+	require.NoError(t, err)
+	assert.False(t, mgr.Created(), "the other client created it")
 }
 
 func TestEnsureMeshNetwork_InspectError(t *testing.T) {
@@ -483,134 +433,139 @@ func TestEnsureMeshNetwork_CreateError(t *testing.T) {
 	err := mgr.EnsureMeshNetwork(t.Context())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating mesh network")
+	assert.False(t, mgr.Created(), "no network was created")
 }
 
-// --- EnsureDNS ---
+// --- StartMesh ---
 
-func TestEnsureDNS_Creates(t *testing.T) {
-	const containerID = "abc123"
-
-	var m mock.Executor
-	// ContainerExists → not found
-	m.AddResult("", "Error: No such container: sind-dns\n",
-		testutil.ExitCode1(t))
-	// CreateContainer → success
-	m.AddResult(containerID+"\n", "", nil)
-	// CopyToContainer → success
-	m.AddResult("", "", nil)
-	// StartContainer → success
-	m.AddResult("sind-dns\n", "", nil)
-	c := docker.NewClient(&m)
+func TestStartMesh_NoMesh(t *testing.T) {
+	_, c, m := newFakeDocker(t)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.EnsureDNS(t.Context())
+	dnsIP, found, err := mgr.StartMesh(t.Context())
 	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"container", "inspect", string(DNSContainerName)}, m.Calls[0].Args)
-	createArgs := m.Calls[1].Args
-	assert.Equal(t, "create", createArgs[0])
-	assert.Equal(t, "--name", createArgs[1])
-	assert.Equal(t, string(DNSContainerName), createArgs[2])
-	assert.Equal(t, "--network", createArgs[3])
-	assert.Equal(t, string(NetworkName), createArgs[4])
-	assert.Contains(t, createArgs, "--label")
-	assert.Equal(t, DNSImage, createArgs[len(createArgs)-1])
-	assert.Equal(t, []string{"cp", "-", string(DNSContainerName) + ":/"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"start", string(DNSContainerName)}, m.Calls[3].Args)
-
-	// Verify initial Corefile has empty hosts block
-	corefile := extractTarFile(t, m.Calls[2].Stdin, "Corefile")
-	assert.Contains(t, corefile, "hosts {")
-	assert.Contains(t, corefile, "fallthrough")
-	assert.NotContains(t, corefile, "sind.sind\n")
+	assert.False(t, found)
+	assert.Empty(t, dnsIP)
+	assert.Len(t, m.Calls, 2, "two inspects")
 }
 
-func TestEnsureDNS_AlreadyExists(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)
-	c := docker.NewClient(&m)
+func TestStartMesh_Running(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.EnsureDNS(t.Context())
+	dnsIP, found, err := mgr.StartMesh(t.Context())
 	require.NoError(t, err)
-	require.Len(t, m.Calls, 1)
+	assert.True(t, found)
+	assert.Equal(t, "10.0.0.2", dnsIP)
+	assert.Empty(t, calls(m, "start"))
 }
 
-func TestEnsureDNS_InspectError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("connection refused"))
-	c := docker.NewClient(&m)
+func TestStartMesh_Stopped(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
 	mgr := NewManager(c, DefaultRealm)
+	var sys mock.Executor
+	sys.AddResult("", "", fmt.Errorf("inactive")) // host DNS: systemd-resolved not running
+	mgr.Exec = &sys
+	mgr.HostDNS = true
 
-	err := mgr.EnsureDNS(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "checking DNS container")
-}
-
-func TestEnsureDNS_CreateError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: sind-dns\n",
-		testutil.ExitCode1(t))
-	m.AddResult("", "Error: pull access denied\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureDNS(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating DNS container")
-}
-
-func TestEnsureDNS_CopyError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: sind-dns\n",
-		testutil.ExitCode1(t))
-	m.AddResult("abc123\n", "", nil)
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureDNS(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "writing DNS configuration")
-}
-
-func TestEnsureDNS_StartError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: sind-dns\n",
-		testutil.ExitCode1(t))
-	m.AddResult("abc123\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("", "Error: cannot start\n", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.EnsureDNS(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "starting DNS container")
-}
-
-func TestEnsureDNS_Pull(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container: sind-dns\n",
-		testutil.ExitCode1(t))
-	m.AddResult("abc123\n", "", nil)
-	m.AddResult("", "", nil)
-	m.AddResult("sind-dns\n", "", nil)
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-	mgr.Pull = true
-
-	err := mgr.EnsureDNS(t.Context())
+	dnsIP, found, err := mgr.StartMesh(t.Context())
 	require.NoError(t, err)
-
-	createArgs := m.Calls[1].Args
-	pull, ok := testutil.ArgValue(createArgs, "--pull")
-	assert.True(t, ok, "--pull flag present")
-	assert.Equal(t, "always", pull)
+	assert.True(t, found)
+	assert.Equal(t, "10.0.0.2", dnsIP)
+	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
+	require.Len(t, sys.Calls, 1, "host DNS reapplied")
+	assert.Equal(t, "systemctl", sys.Calls[0].Name)
 }
 
-// --- AddDNSRecord ---
+func TestStartMesh_OnlyDNS(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	delete(f.containers, "sind-ssh")
+	mgr := NewManager(c, DefaultRealm)
+
+	_, found, err := mgr.StartMesh(t.Context())
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, []string{"start sind-dns"}, calls(m, "start"))
+}
+
+func TestStartMesh_StaleRelay(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	f.containers["sind-ssh"].dns = []string{"10.0.0.9"}
+	mgr := NewManager(c, DefaultRealm)
+	got := warnings(mgr)
+
+	_, _, err := mgr.StartMesh(t.Context())
+	require.NoError(t, err)
+	require.Len(t, *got, 1)
+	assert.Contains(t, (*got)[0], "still use 10.0.0.9 (sind-ssh)")
+}
+
+func TestStartMesh_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		fail  string
+		match string
+	}{
+		{"DNS inspect", "inspect sind-dns", "inspecting DNS container"},
+		{"relay inspect", "inspect sind-ssh", "inspecting SSH container"},
+		{"DNS start", "start sind-dns", "starting DNS container"},
+		{"relay start", "start sind-ssh", "starting SSH container"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, c, _ := newFakeDocker(t)
+			f.withMesh(DefaultRealm, docker.StateExited)
+			f.fail[tt.fail] = failure()
+			mgr := NewManager(c, DefaultRealm)
+
+			_, _, err := mgr.StartMesh(t.Context())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.match)
+		})
+	}
+}
+
+// --- WarnStaleDNS ---
+
+func TestWarnStaleDNS(t *testing.T) {
+	mgr := NewManager(nil, DefaultRealm)
+	got := warnings(mgr)
+
+	mgr.WarnStaleDNS(t.Context(), "10.0.0.5",
+		&docker.ContainerInfo{Name: "sind-ssh", DNS: []string{"10.0.0.2"}},
+		&docker.ContainerInfo{Name: "sind-dev-worker-0", DNS: []string{"10.0.0.2"}},
+		&docker.ContainerInfo{Name: "sind-dev-controller", DNS: []string{"10.0.0.5"}},
+		&docker.ContainerInfo{Name: "sind-other", DNS: nil},
+	)
+
+	require.Len(t, *got, 1)
+	assert.Contains(t, (*got)[0], "mesh DNS sind-dns now has the address 10.0.0.5")
+	assert.Contains(t, (*got)[0], "still use 10.0.0.2 (sind-ssh, sind-dev-worker-0):")
+	assert.NotContains(t, (*got)[0], "sind-dev-controller")
+	assert.NotContains(t, (*got)[0], "sind-other")
+}
+
+func TestWarnStaleDNS_NothingToReport(t *testing.T) {
+	mgr := NewManager(nil, DefaultRealm)
+	got := warnings(mgr)
+	stale := &docker.ContainerInfo{Name: "sind-ssh", DNS: []string{"10.0.0.2"}}
+
+	mgr.WarnStaleDNS(t.Context(), "", stale)
+	mgr.WarnStaleDNS(t.Context(), "10.0.0.2", stale)
+
+	assert.Empty(t, *got)
+}
+
+func TestWarn_WithoutOnWarning(t *testing.T) {
+	mgr := NewManager(nil, DefaultRealm)
+	mgr.Warn(t.Context(), "logged at warn level") // must not panic
+}
+
+// --- writeDNSEntries ---
 
 func TestAddDNSRecord_Empty(t *testing.T) {
 	var m mock.Executor
@@ -620,9 +575,7 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	m.AddResult("", "", nil)
 	// InspectContainer → running
 	m.AddResult(dnsInspectJSON(), "", nil)
-	// KillContainer → success
-	m.AddResult("sind-dns\n", "", nil)
-	// StartContainer → success
+	// SignalContainer → success
 	m.AddResult("sind-dns\n", "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -630,19 +583,38 @@ func TestAddDNSRecord_Empty(t *testing.T) {
 	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
 	require.NoError(t, err)
 
-	require.Len(t, m.Calls, 5)
+	require.Len(t, m.Calls, 4)
 	// Verify read
 	assert.Equal(t, []string{"cp", string(DNSContainerName) + ":/Corefile", "-"}, m.Calls[0].Args)
 	// Verify written Corefile contains the record
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
-	// Verify state inspection + restart
+	// Verify state inspection + in-place reload (CoreDNS ignores SIGHUP)
 	assert.Equal(t, []string{"inspect", string(DNSContainerName)}, m.Calls[2].Args)
-	assert.Equal(t, []string{"kill", string(DNSContainerName)}, m.Calls[3].Args)
-	assert.Equal(t, []string{"start", string(DNSContainerName)}, m.Calls[4].Args)
+	assert.Equal(t, []string{"kill", "-s", "USR1", string(DNSContainerName)}, m.Calls[3].Args)
 }
 
 func TestAddDNSRecord_Appends(t *testing.T) {
+	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
+
+	var m mock.Executor
+	m.AddResult(corefileTar(t, existing), "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult(dnsInspectJSON(), "", nil)
+	m.AddResult("sind-dns\n", "", nil)
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddDNSRecord(t.Context(), "worker-0.dev.sind.sind", "172.18.0.3")
+	require.NoError(t, err)
+
+	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
+	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
+	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
+}
+
+func TestAddDNSRecord_ReplacesExisting(t *testing.T) {
+	// Re-registering a host at a new IP leaves one record, not two.
 	existing := []string{"172.18.0.2 controller.dev.sind.sind"}
 
 	var m mock.Executor
@@ -654,12 +626,12 @@ func TestAddDNSRecord_Appends(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.AddDNSRecord(t.Context(), "worker-0.dev.sind.sind", "172.18.0.3")
+	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.9")
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
-	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
+	assert.Contains(t, corefile, "172.18.0.9 controller.dev.sind.sind")
+	assert.NotContains(t, corefile, "172.18.0.2")
 }
 
 func TestAddDNSRecord_ReadError(t *testing.T) {
@@ -699,19 +671,20 @@ func TestAddDNSRecord_ReloadError(t *testing.T) {
 	assert.Contains(t, err.Error(), "reloading DNS")
 }
 
-func TestAddDNSRecord_RestartError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(corefileTar(t, nil), "", nil)               // read
-	m.AddResult("", "", nil)                                // write
-	m.AddResult(dnsInspectJSON(), "", nil)                  // inspect → running
-	m.AddResult("sind-dns\n", "", nil)                      // kill succeeds
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1")) // start fails
-	c := docker.NewClient(&m)
+// TestAddDNSRecords_Cancelled covers Ctrl+C during a DNS update: the write
+// and the reload still run, so CoreDNS loads the Corefile it was given.
+func TestAddDNSRecords_Cancelled(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
 	mgr := NewManager(c, DefaultRealm)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
 
-	err := mgr.AddDNSRecord(t.Context(), "controller.dev.sind.sind", "172.18.0.2")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reloading DNS")
+	// The mock ignores the context, so this checks that the write and
+	// the reload do not depend on it.
+	err := mgr.writeDNSEntries(ctx, []string{"172.18.0.2 controller.dev.sind.sind"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"USR1"}, f.containers["sind-dns"].signals)
 }
 
 // --- AddDNSRecords (batch) ---
@@ -723,8 +696,7 @@ func TestAddDNSRecords(t *testing.T) {
 	m.AddResult(corefileTar(t, existing), "", nil) // read
 	m.AddResult("", "", nil)                       // write
 	m.AddResult(dnsInspectJSON(), "", nil)         // inspect → running
-	m.AddResult("sind-dns\n", "", nil)             // kill
-	m.AddResult("sind-dns\n", "", nil)             // start
+	m.AddResult("sind-dns\n", "", nil)             // kill -s USR1
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -734,8 +706,8 @@ func TestAddDNSRecords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Five docker calls total (read, write, inspect, kill, start).
-	require.Len(t, m.Calls, 5)
+	// Four docker calls total (read, write, inspect, reload).
+	require.Len(t, m.Calls, 4)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
@@ -753,22 +725,66 @@ func TestAddDNSRecords_Dedup(t *testing.T) {
 	m.AddResult(corefileTar(t, existing), "", nil) // read
 	m.AddResult("", "", nil)                       // write
 	m.AddResult(dnsInspectJSON(), "", nil)         // inspect → running
-	m.AddResult("sind-dns\n", "", nil)             // kill
-	m.AddResult("sind-dns\n", "", nil)             // start
+	m.AddResult("sind-dns\n", "", nil)             // kill -s USR1
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
-	// Re-add controller with same IP — should replace, not duplicate.
+	// Re-add controller with a new IP — should replace, not duplicate.
 	err := mgr.AddDNSRecords(t.Context(), []DNSRecord{
-		{Hostname: "controller.dev.sind.sind", IP: "172.18.0.2"},
+		{Hostname: "controller.dev.sind.sind", IP: "172.18.0.5"},
 	})
 	require.NoError(t, err)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
-	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
+	assert.Contains(t, corefile, "172.18.0.5 controller.dev.sind.sind")
 	assert.Equal(t, 1, strings.Count(corefile, "controller.dev.sind.sind"),
 		"controller should appear exactly once")
+}
+
+// TestAddDNSRecords_Unchanged covers records that are already in place, as
+// when a power on finds the nodes at their old addresses: no write, no
+// reload.
+func TestAddDNSRecords_Unchanged(t *testing.T) {
+	existing := []string{
+		"172.18.0.2 controller.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
+	}
+
+	var m mock.Executor
+	m.AddResult(corefileTar(t, existing), "", nil) // read
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddDNSRecords(t.Context(), []DNSRecord{
+		{Hostname: "worker-0.dev.sind.sind", IP: "172.18.0.3"},
+	})
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 1)
+}
+
+// TestAddDNSRecords_DuplicateEntry covers a Corefile with an entry twice:
+// the rewrite drops the duplicate.
+func TestAddDNSRecords_DuplicateEntry(t *testing.T) {
+	existing := []string{
+		"172.18.0.3 worker-0.dev.sind.sind",
+		"172.18.0.3 worker-0.dev.sind.sind",
+	}
+
+	var m mock.Executor
+	m.AddResult(corefileTar(t, existing), "", nil) // read
+	m.AddResult("", "", nil)                       // write
+	m.AddResult(dnsInspectJSON(), "", nil)         // inspect → running
+	m.AddResult("sind-dns\n", "", nil)             // kill -s USR1
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddDNSRecords(t.Context(), []DNSRecord{
+		{Hostname: "worker-0.dev.sind.sind", IP: "172.18.0.3"},
+	})
+	require.NoError(t, err)
+	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
+	assert.Equal(t, 1, strings.Count(corefile, "worker-0.dev.sind.sind"))
 }
 
 func TestAddDNSRecords_ReadError(t *testing.T) {
@@ -797,8 +813,7 @@ func TestRemoveDNSRecords(t *testing.T) {
 	m.AddResult(corefileTar(t, existing), "", nil) // read
 	m.AddResult("", "", nil)                       // write
 	m.AddResult(dnsInspectJSON(), "", nil)         // inspect → running
-	m.AddResult("sind-dns\n", "", nil)             // kill
-	m.AddResult("sind-dns\n", "", nil)             // start
+	m.AddResult("sind-dns\n", "", nil)             // kill -s USR1
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -808,8 +823,8 @@ func TestRemoveDNSRecords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Five docker calls total (read, write, inspect, kill, start).
-	require.Len(t, m.Calls, 5)
+	// Four docker calls total (read, write, inspect, reload).
+	require.Len(t, m.Calls, 4)
 
 	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
 	assert.NotContains(t, corefile, "controller.dev.sind.sind")
@@ -848,30 +863,43 @@ func TestRemoveDNSRecords_Empty(t *testing.T) {
 	assert.Empty(t, m.Calls, "no docker calls for empty slice")
 }
 
-// TestRemoveDNSRecords_DNSStopped covers issue #52: deleting a cluster while
-// the sind-dns container is stopped must not fail. The Corefile is rewritten
-// and the running-state check short-circuits the kill/start reload.
+// TestRemoveDNSRecords_DNSStopped covers issue #52 and its follow-up:
+// deleting a cluster while the sind-dns container is stopped must not fail,
+// and starts the DNS container (and the stopped relay), which loads the new
+// Corefile, instead of leaving the realm without DNS.
 func TestRemoveDNSRecords_DNSStopped(t *testing.T) {
-	existing := []string{
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	f.containers["sind-dns"].files[corefilePath] = generateCorefile(DefaultRealm, []string{
 		"172.18.0.2 controller.dev.sind.sind",
 		"172.18.0.3 worker-0.dev.sind.sind",
-	}
-
-	var m mock.Executor
-	m.AddResult(corefileTar(t, existing), "", nil) // read
-	m.AddResult("", "", nil)                       // write
-	m.AddResult(dnsInspectExitedJSON(), "", nil)   // inspect → exited
-	c := docker.NewClient(&m)
+	})
 	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.RemoveDNSRecords(t.Context(), []string{"controller.dev.sind.sind"})
 	require.NoError(t, err)
 
-	// Only 3 docker calls (read, write, inspect) — no kill, no start.
-	require.Len(t, m.Calls, 3)
-	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.NotContains(t, corefile, "controller.dev.sind.sind")
-	assert.Contains(t, corefile, "172.18.0.3 worker-0.dev.sind.sind")
+	dns := f.containers["sind-dns"]
+	assert.Equal(t, docker.StateRunning, dns.state)
+	assert.Empty(t, dns.signals, "a started CoreDNS reads the Corefile anyway")
+	assert.NotContains(t, dns.files[corefilePath], "controller.dev.sind.sind")
+	assert.Contains(t, dns.files[corefilePath], "172.18.0.3 worker-0.dev.sind.sind")
+	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
+}
+
+// TestAddDNSRecords_DNSStoppedStartError covers a stopped DNS container that
+// does not start.
+func TestAddDNSRecords_DNSStoppedStartError(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	f.fail["start sind-dns"] = failure()
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.AddDNSRecords(t.Context(), []DNSRecord{
+		{Hostname: "controller.dev.sind.sind", IP: "172.18.0.2"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reloading DNS")
 }
 
 // TestRemoveDNSRecords_InspectError verifies that an inspect failure between
@@ -891,27 +919,6 @@ func TestRemoveDNSRecords_InspectError(t *testing.T) {
 	assert.Contains(t, err.Error(), "inspecting DNS container")
 }
 
-// TestAddDNSRecords_DNSStopped is the symmetric counterpart: adding records
-// while the DNS container is stopped writes the new Corefile but skips the
-// restart.
-func TestAddDNSRecords_DNSStopped(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(corefileTar(t, nil), "", nil)    // read
-	m.AddResult("", "", nil)                     // write
-	m.AddResult(dnsInspectExitedJSON(), "", nil) // inspect → exited
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	err := mgr.AddDNSRecords(t.Context(), []DNSRecord{
-		{Hostname: "controller.dev.sind.sind", IP: "172.18.0.2"},
-	})
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 3)
-	corefile := extractTarFile(t, m.Calls[1].Stdin, "Corefile")
-	assert.Contains(t, corefile, "172.18.0.2 controller.dev.sind.sind")
-}
-
 // --- RemoveDNSRecord ---
 
 func TestRemoveDNSRecord(t *testing.T) {
@@ -924,8 +931,7 @@ func TestRemoveDNSRecord(t *testing.T) {
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult(dnsInspectJSON(), "", nil)
-	m.AddResult("sind-dns\n", "", nil)
-	m.AddResult("sind-dns\n", "", nil)
+	m.AddResult("sind-dns\n", "", nil) // kill -s USR1
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -944,8 +950,7 @@ func TestRemoveDNSRecord_LastEntry(t *testing.T) {
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult(dnsInspectJSON(), "", nil)
-	m.AddResult("sind-dns\n", "", nil)
-	m.AddResult("sind-dns\n", "", nil)
+	m.AddResult("sind-dns\n", "", nil) // kill -s USR1
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -966,8 +971,7 @@ func TestRemoveDNSRecord_NotFound(t *testing.T) {
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult(dnsInspectJSON(), "", nil)
-	m.AddResult("sind-dns\n", "", nil)
-	m.AddResult("sind-dns\n", "", nil)
+	m.AddResult("sind-dns\n", "", nil) // kill -s USR1
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -1005,8 +1009,7 @@ func TestRemoveDNSRecord_DuplicateHostnames(t *testing.T) {
 	m.AddResult(corefileTar(t, existing), "", nil)
 	m.AddResult("", "", nil)
 	m.AddResult(dnsInspectJSON(), "", nil)
-	m.AddResult("sind-dns\n", "", nil)
-	m.AddResult("sind-dns\n", "", nil)
+	m.AddResult("sind-dns\n", "", nil) // kill -s USR1
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -1111,6 +1114,70 @@ func TestCustomRealm_DefaultProducesStandardNames(t *testing.T) {
 	assert.Equal(t, SSHVolumeName, mgr.SSHVolumeName())
 }
 
+// --- CleanupMesh ---
+
+func TestCleanupMesh(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.CleanupMesh(t.Context())
+	require.NoError(t, err)
+
+	assert.Empty(t, f.containers)
+	assert.Empty(t, f.networks)
+	assert.Empty(t, f.volumes)
+
+	// The containers go first (in any order), then the network, then the
+	// volume.
+	require.Len(t, m.Calls, 5)
+	var removed []string
+	for _, call := range m.Calls[:3] {
+		removed = append(removed, strings.Join(call.Args, " "))
+	}
+	assert.ElementsMatch(t, []string{
+		"rm -f -v sind-ssh-keygen", "rm -f -v sind-ssh", "rm -f -v sind-dns",
+	}, removed)
+	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[4].Args)
+}
+
+func TestCleanupMesh_NoneExist(t *testing.T) {
+	_, c, m := newFakeDocker(t)
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.CleanupMesh(t.Context())
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 5)
+}
+
+func TestCleanupMesh_Errors(t *testing.T) {
+	tests := []struct {
+		fail  string
+		match string
+	}{
+		{"rm -f -v sind-ssh-keygen", "removing SSH keygen container"},
+		{"rm -f -v sind-ssh", "removing SSH container"},
+		{"rm -f -v sind-dns", "removing DNS container"},
+		{"network rm", "removing mesh network"},
+		{"volume rm", "removing SSH volume"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.fail, func(t *testing.T) {
+			f, c, _ := newFakeDocker(t)
+			f.withMesh(DefaultRealm, docker.StateRunning)
+			f.fail[tt.fail] = failure()
+			mgr := NewManager(c, DefaultRealm)
+
+			err := mgr.CleanupMesh(t.Context())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.match)
+		})
+	}
+}
+
+// --- Custom Realm ---
+
 func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t)) // NetworkExists → no
@@ -1132,106 +1199,63 @@ func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
 	}, m.Calls[1].Args)
 }
 
-func TestCustomRealm_EnsureDNS(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("myrealm-dns"), testutil.ExitCode1(t)) // ContainerExists → no
-	m.AddResult("dns-id\n", "", nil)                                                // CreateContainer
-	m.AddResult("", "", nil)                                                        // CopyToContainer
-	m.AddResult("myrealm-dns\n", "", nil)                                           // StartContainer
-	c := docker.NewClient(&m)
+func TestCustomRealm_EnsureMesh(t *testing.T) {
+	f, c, m := newFakeDocker(t)
 	mgr := NewManager(c, "myrealm")
 
-	err := mgr.EnsureDNS(t.Context())
-	require.NoError(t, err)
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
 
-	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"container", "inspect", "myrealm-dns"}, m.Calls[0].Args)
-	createArgs := m.Calls[1].Args
-	assert.Equal(t, "--name", createArgs[1])
-	assert.Equal(t, "myrealm-dns", createArgs[2])
-	assert.Equal(t, "--network", createArgs[3])
-	assert.Equal(t, "myrealm-mesh", createArgs[4])
-}
+	assert.True(t, f.networks["myrealm-mesh"])
+	assert.True(t, f.volumes["myrealm-ssh-config"])
+	require.Contains(t, f.containers, "myrealm-dns")
+	require.Contains(t, f.containers, "myrealm-ssh")
+	assert.Equal(t, []string{"myrealm-mesh"}, f.containers["myrealm-dns"].networks)
+	assert.Equal(t, []string{"myrealm-mesh"}, f.containers["myrealm-ssh"].networks)
+	assert.Contains(t, f.containers["myrealm-dns"].files[corefilePath], "myrealm.sind:53")
 
-func TestCustomRealm_EnsureSSHVolume(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", testutil.NoSuchVolume("sind-ssh-config"), testutil.ExitCode1(t)) // VolumeExists → no
-	m.AddResult("myrealm-ssh-config\n", "", nil)                                     // CreateVolume
-	m.AddResult("keygen-id\n", "", nil)                                              // CreateContainer
-	m.AddResult("", "", nil)                                                         // CopyToContainer
-	m.AddResult("", "", nil)                                                         // RemoveContainer
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, "myrealm")
-
-	err := mgr.EnsureSSHVolume(t.Context())
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"volume", "inspect", "myrealm-ssh-config"}, m.Calls[0].Args)
 	assert.Equal(t, []string{
 		"volume", "create",
 		"--label", "com.docker.compose.project=myrealm-mesh",
 		"--label", "com.docker.compose.volume=ssh-config",
 		"--label", "sind.realm=myrealm",
 		"myrealm-ssh-config",
-	}, m.Calls[1].Args)
-	assert.Equal(t, []string{
-		"create",
-		"--name", "myrealm-ssh-keygen",
-		"-v", "myrealm-ssh-config:/ssh",
-		sshKeygenImage,
-	}, m.Calls[2].Args)
-}
-
-func TestCustomRealm_EnsureSSH(t *testing.T) {
-	inspectJSON := `[{"Id":"dns123","Name":"/myrealm-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"myrealm-mesh":{"IPAddress":"10.0.0.2"}}}}]`
-
-	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("myrealm-ssh"), testutil.ExitCode1(t)) // ContainerExists → no
-	m.AddResult(inspectJSON, "", nil)                                               // InspectContainer(DNS)
-	m.AddResult("ssh-id\n", "", nil)                                                // CreateContainer
-	m.AddResult("myrealm-ssh\n", "", nil)                                           // StartContainer
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, "myrealm")
-
-	err := mgr.EnsureSSH(t.Context())
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 4)
-	assert.Equal(t, []string{"container", "inspect", "myrealm-ssh"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"inspect", "myrealm-dns"}, m.Calls[1].Args)
-	createArgs := m.Calls[2].Args
-	assert.Equal(t, "--name", createArgs[1])
-	assert.Equal(t, "myrealm-ssh", createArgs[2])
-	assert.Equal(t, "--network", createArgs[3])
-	assert.Equal(t, "myrealm-mesh", createArgs[4])
-	assert.Equal(t, []string{"start", "myrealm-ssh"}, m.Calls[3].Args)
+	}, m.Calls[indexOf(t, m, "volume create")].Args)
+	relay := m.Calls[indexOf(t, m, "create --name myrealm-ssh")].Args
+	vol, _ := testutil.ArgValue(relay, "-v")
+	assert.Equal(t, "myrealm-ssh-config:/root/.ssh", vol)
+	assert.Equal(t, []string{SSHImage(), "sleep", "infinity"}, relay[len(relay)-3:])
 }
 
 func TestCustomRealm_CleanupMesh(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), testutil.ExitCode1(t)) // keygen rm: not found (swallowed)
-	m.AddResult("myrealm-ssh\n", "", nil)                                               // SSH rm
-	m.AddResult("myrealm-dns\n", "", nil)                                               // DNS rm
-	m.AddResult("myrealm-mesh\n", "", nil)                                              // network rm
-	m.AddResult("myrealm-ssh-config\n", "", nil)                                        // volume rm
-	c := docker.NewClient(&m)
+	f, c, m := newFakeDocker(t)
+	f.withMesh("myrealm", docker.StateRunning)
 	mgr := NewManager(c, "myrealm")
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
 
-	require.Len(t, m.Calls, 5)
-	assert.Equal(t, []string{"rm", "-f", "-v", "myrealm-ssh-keygen"}, m.Calls[0].Args)
-	assert.Equal(t, []string{"rm", "-f", "-v", "myrealm-ssh"}, m.Calls[1].Args)
-	assert.Equal(t, []string{"rm", "-f", "-v", "myrealm-dns"}, m.Calls[2].Args)
-	assert.Equal(t, []string{"network", "rm", "myrealm-mesh"}, m.Calls[3].Args)
-	assert.Equal(t, []string{"volume", "rm", "myrealm-ssh-config"}, m.Calls[4].Args)
+	assert.Empty(t, f.containers)
+	assert.Len(t, calls(m, "rm -f -v myrealm-ssh-keygen"), 1)
+	assert.Equal(t, []string{"network rm myrealm-mesh"}, calls(m, "network rm"))
+	assert.Equal(t, []string{"volume rm myrealm-ssh-config"}, calls(m, "volume rm"))
+}
+
+// indexOf returns the index of the first recorded call that starts with
+// prefix.
+func indexOf(t *testing.T, m *mock.Executor, prefix string) int {
+	t.Helper()
+	for i, c := range m.Calls {
+		if strings.HasPrefix(strings.Join(c.Args, " "), prefix) {
+			return i
+		}
+	}
+	require.Failf(t, "call not found", "%q", prefix)
+	return -1
 }
 
 // dnsInspectJSON returns a mock docker inspect result for the DNS container on the mesh network.
 func dnsInspectJSON() string {
-	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
+	return `[{"Id":"dns123","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Image":"` + DNSImage + `","Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`
 }
 
 // dnsInspectExitedJSON returns a mock docker inspect result for a stopped DNS container.
@@ -1242,11 +1266,10 @@ func dnsInspectExitedJSON() string {
 // --- GetInfo ---
 
 func TestGetInfo(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil)         // ContainerExists(DNS) → true
-	m.AddResult(dnsInspectJSON(), "", nil) // InspectContainer(DNS)
-
-	c := docker.NewClient(&m)
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	// A relay made by an older sind runs another image.
+	f.containers["sind-ssh"].image = "ghcr.io/gsi-hpc/sind-node:latest-old"
 	mgr := NewManager(c, DefaultRealm)
 
 	info, err := mgr.GetInfo(t.Context())
@@ -1255,35 +1278,39 @@ func TestGetInfo(t *testing.T) {
 	assert.Equal(t, "sind-dns", info.DNSContainer)
 	assert.Equal(t, "10.0.0.2", info.DNSIP)
 	assert.Equal(t, "sind.sind", info.DNSZone)
-	assert.Equal(t, string(DNSImage), info.DNSImage)
+	assert.Equal(t, DNSImage, info.DNSImage)
 	assert.Equal(t, "sind-ssh", info.SSHContainer)
 	assert.Equal(t, "sind-ssh-config", info.SSHVolume)
-	assert.Equal(t, SSHImage, info.SSHImage)
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest-old", info.SSHImage, "the image the relay runs")
 }
 
 func TestGetInfo_CustomRealm(t *testing.T) {
-	inspectJSON := `[{"Id":"dns1","Name":"/ci-dns","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{"ci-mesh":{"IPAddress":"10.1.0.5"}}}}]`
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
-	m.AddResult(inspectJSON, "", nil)
-
-	c := docker.NewClient(&m)
+	f, c, _ := newFakeDocker(t)
+	f.withMesh("ci", docker.StateRunning)
 	mgr := NewManager(c, "ci")
 
 	info, err := mgr.GetInfo(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "ci-mesh", info.Network)
 	assert.Equal(t, "ci-dns", info.DNSContainer)
-	assert.Equal(t, "10.1.0.5", info.DNSIP)
+	assert.Equal(t, "10.0.0.2", info.DNSIP)
 	assert.Equal(t, "ci.sind", info.DNSZone)
 }
 
-func TestGetInfo_NoMesh(t *testing.T) {
-	var m mock.Executor
-	// ContainerExists uses exit code 1 to signal "not found".
-	m.AddResult("", "Error: No such object\n", &exec.ExitError{ProcessState: exitCode1(t)})
+func TestGetInfo_Stopped(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	delete(f.containers, "sind-ssh")
+	mgr := NewManager(c, DefaultRealm)
 
-	c := docker.NewClient(&m)
+	info, err := mgr.GetInfo(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, info.DNSIP, "a stopped DNS container has no address")
+	assert.Empty(t, info.SSHImage, "no relay")
+}
+
+func TestGetInfo_NoMesh(t *testing.T) {
+	_, c, _ := newFakeDocker(t)
 	mgr := NewManager(c, DefaultRealm)
 
 	_, err := mgr.GetInfo(t.Context())
@@ -1292,32 +1319,22 @@ func TestGetInfo_NoMesh(t *testing.T) {
 	assert.Contains(t, err.Error(), DefaultRealm)
 }
 
-func TestGetInfo_InspectError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("[{}]\n", "", nil) // ContainerExists → true
-	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+func TestGetInfo_InspectErrors(t *testing.T) {
+	for _, tt := range []struct{ fail, match string }{
+		{"inspect sind-dns", "inspecting DNS container"},
+		{"inspect sind-ssh", "inspecting SSH container"},
+	} {
+		t.Run(tt.fail, func(t *testing.T) {
+			f, c, _ := newFakeDocker(t)
+			f.withMesh(DefaultRealm, docker.StateRunning)
+			f.fail[tt.fail] = failure()
+			mgr := NewManager(c, DefaultRealm)
 
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	_, err := mgr.GetInfo(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container")
-}
-
-func TestGetInfo_ContainerExistsError(t *testing.T) {
-	// ContainerExists failing with a non-exit-code-1 error (e.g. daemon
-	// unreachable) should surface as a "checking <container>" wrap naming
-	// the specific container the helper was probing.
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
-
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
-
-	_, err := mgr.GetInfo(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking sind-dns")
+			_, err := mgr.GetInfo(t.Context())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.match)
+		})
+	}
 }
 
 // --- GetDNSRecords ---
@@ -1363,6 +1380,9 @@ func TestGetDNSRecords_ReadError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestGetDNSRecords_CheckError covers a DNS container check that fails for
+// another reason than a missing container (daemon unreachable): the error
+// names the container.
 // TestGetDNSRecords_NoMesh covers the typo/empty-realm case: DNS container is
 // absent so GetDNSRecords must surface a clean "no mesh found" error instead
 // of leaking the raw docker exec failure.
@@ -1378,34 +1398,29 @@ func TestGetDNSRecords_NoMesh(t *testing.T) {
 	assert.NotContains(t, err.Error(), "exit status")
 }
 
+// TestGetDNSRecords_CheckError covers a DNS container check that fails for
+// another reason than a missing container (e.g. daemon unreachable): it
+// names the container instead of claiming there is no mesh.
+func TestGetDNSRecords_CheckError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("docker daemon unreachable"))
+	c := docker.NewClient(&m)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetDNSRecords(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checking sind-dns: docker daemon unreachable")
+}
+
 // --- HostDNS branches ---
 
-// ensureMeshAllExist queues mock results for EnsureMesh where all resources
-// already exist, so the function does nothing but check existence.
-func ensureMeshAllExist(m *mock.Executor) {
-	m.AddResult("[{}]\n", "", nil) // network exists → yes
-	m.AddResult("[{}]\n", "", nil) // DNS exists → yes
-	m.AddResult("[{}]\n", "", nil) // SSH vol exists → yes
-	m.AddResult("[{}]\n", "", nil) // SSH exists → yes
-}
-
-// cleanupMeshAllGone queues mock results for CleanupMesh where no resources exist.
-func cleanupMeshAllGone(m *mock.Executor, notFound error) {
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh-keygen"), notFound) // keygen rm → not found
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), notFound)        // SSH rm → not found
-	m.AddResult("", testutil.NoSuchContainer("sind-dns"), notFound)        // DNS rm → not found
-	m.AddResult("", testutil.NoSuchNetwork("sind-mesh"), notFound)         // network rm → not found
-	m.AddResult("", testutil.NoSuchVolume("sind-ssh-config"), notFound)    // volume rm → not found
-}
-
 func TestEnsureMesh_HostDNS_Skipped(t *testing.T) {
-	var dm mock.Executor
-	ensureMeshAllExist(&dm)
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
 
 	var sys mock.Executor
 	sys.AddResult("", "", fmt.Errorf("inactive")) // systemctl → not active
 
-	c := docker.NewClient(&dm)
 	mgr := NewManager(c, DefaultRealm)
 	mgr.HostDNS = true
 	mgr.Exec = &sys
@@ -1421,10 +1436,8 @@ func TestEnsureMesh_HostDNS_ConfigureFails(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
 
-	var dm mock.Executor
-	ensureMeshAllExist(&dm)
-	dm.AddResult(inspectNetworkJSON, "", nil)      // configureHostDNS: InspectNetwork
-	dm.AddResult(inspectDNSContainerJSON, "", nil) // configureHostDNS: InspectContainer
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl ok
@@ -1433,7 +1446,6 @@ func TestEnsureMesh_HostDNS_ConfigureFails(t *testing.T) {
 	sys.AddResult("", "", nil)
 	sys.AddResult("", "", fmt.Errorf("denied")) // resolvectl dns fails
 
-	c := docker.NewClient(&dm)
 	mgr := NewManager(c, DefaultRealm)
 	mgr.HostDNS = true
 	mgr.Exec = &sys
@@ -1441,6 +1453,7 @@ func TestEnsureMesh_HostDNS_ConfigureFails(t *testing.T) {
 	// Error is logged, not returned (best-effort).
 	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
+	assert.Len(t, sys.Calls, 5)
 }
 
 func TestEnsureMesh_HostDNS_Success(t *testing.T) {
@@ -1450,10 +1463,8 @@ func TestEnsureMesh_HostDNS_Success(t *testing.T) {
 	t.Cleanup(func() { sysClassNet = old })
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
 
-	var dm mock.Executor
-	ensureMeshAllExist(&dm)
-	dm.AddResult(inspectNetworkJSON, "", nil)      // configureHostDNS: InspectNetwork
-	dm.AddResult(inspectDNSContainerJSON, "", nil) // configureHostDNS: InspectContainer
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
 
 	var sys mock.Executor
 	sys.AddResult("", "", nil) // systemctl ok
@@ -1463,23 +1474,21 @@ func TestEnsureMesh_HostDNS_Success(t *testing.T) {
 	sys.AddResult("", "", nil) // resolvectl dns
 	sys.AddResult("", "", nil) // resolvectl domain
 
-	c := docker.NewClient(&dm)
 	mgr := NewManager(c, DefaultRealm)
 	mgr.HostDNS = true
 	mgr.Exec = &sys
 
 	err := mgr.EnsureMesh(t.Context())
 	require.NoError(t, err)
+	require.Len(t, sys.Calls, 6)
+	assert.Equal(t, []string{"dns", "br-abcdef012345", "10.0.0.2"}, sys.Calls[4].Args)
 }
 
 func TestCleanupMesh_HostDNS(t *testing.T) {
-	var dm mock.Executor
+	_, c, _ := newFakeDocker(t)
 	var sys mock.Executor
 	sys.AddResult("", "", fmt.Errorf("inactive")) // systemctl → not active (revertHostDNS skips)
 
-	cleanupMeshAllGone(&dm, testutil.ExitCode1(t))
-
-	c := docker.NewClient(&dm)
 	mgr := NewManager(c, DefaultRealm)
 	mgr.HostDNS = true
 	mgr.Exec = &sys

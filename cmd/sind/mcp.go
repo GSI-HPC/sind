@@ -4,10 +4,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -18,8 +16,9 @@ import (
 )
 
 // mcpStreamHost is the address `sind mcp stream` listens on unless --host
-// says otherwise. The stream has no authentication, and its tools create
-// and delete containers, so it is not offered to the network by default.
+// says otherwise. Its tools create and delete containers, so it is not
+// offered to the network by default; the bearer token it requires is what
+// keeps out the other users of this host, who reach loopback too.
 const mcpStreamHost = "127.0.0.1"
 
 // mcpExcluded lists the commands, by path below the root, that are not
@@ -40,10 +39,13 @@ type mcpEffect int
 const (
 	// readOnly tools only report state.
 	readOnly mcpEffect = iota
-	// additive tools create resources and destroy none.
+	// additive tools restore resources and destroy none.
 	additive
 	// destructive tools remove resources, stop nodes or run arbitrary
-	// commands.
+	// code. create cluster and create worker count: their flags choose
+	// the image a node runs as root, extra capabilities, devices, security
+	// options, a config file and a host directory mounted read-write, so
+	// one call can run code with host-root power.
 	destructive
 )
 
@@ -64,10 +66,10 @@ var mcpEffects = map[string]mcpEffect{
 	"get ssh-known-hosts": readOnly,
 	"get ssh-public-key":  readOnly,
 	"get volumes":         readOnly,
-	"create cluster":      additive,
-	"create worker":       additive,
 	"power on":            additive,
 	"power unfreeze":      additive,
+	"create cluster":      destructive,
+	"create worker":       destructive,
 	"delete cluster":      destructive,
 	"delete worker":       destructive,
 	"exec":                destructive,
@@ -187,24 +189,33 @@ func commandPath(cmd *cobra.Command) string {
 }
 
 // newMCPCommand returns the `sind mcp` command group, which serves sind's
-// commands as MCP tools through ophis.
+// commands as MCP tools through ophis. `sind mcp stream` keeps ophis's
+// flags but runs sind's own HTTP server, which requires a bearer token
+// (runMCPStream).
 func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 	cmd := ophis.Command(cfg)
+	var start, stream *cobra.Command
 	for _, sub := range cmd.Commands() {
 		switch sub.Name() {
-		case "start", "stream":
+		case "start":
 			withServerVersion(sub)
+			start = sub
+		case "stream":
+			stream = sub
 		}
-		if sub.Name() != "stream" {
-			continue
-		}
-		stopCleanly(sub)
-		// ophis listens on all interfaces by default.
-		host := sub.Flags().Lookup("host")
-		host.DefValue = mcpStreamHost
-		_ = host.Value.Set(mcpStreamHost)
-		host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
 	}
+	stream.Long = `Serve sind's MCP tools over streamable HTTP. Every request needs the
+header "Authorization: Bearer <token>". The token is ` + mcpTokenEnv + ` or, when
+that is not set, a new random one, written at every start to ` + mcpTokenFile + `
+in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
+	stream.RunE = func(cmd *cobra.Command, _ []string) error {
+		return runMCPStream(cmd, cfg, start)
+	}
+	// ophis listens on all interfaces by default.
+	host := stream.Flags().Lookup("host")
+	host.DefValue = mcpStreamHost
+	_ = host.Value.Set(mcpStreamHost)
+	host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
 	return cmd
 }
 
@@ -217,19 +228,5 @@ func withServerVersion(cmd *cobra.Command) {
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cmd.Root().Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
-	}
-}
-
-// stopCleanly makes `sind mcp stream` succeed when it is stopped. ophis
-// shuts the HTTP server down on SIGINT or SIGTERM, or when the context
-// ends, and then returns http.ErrServerClosed; whether sind saw the signal
-// first decided whether that exited 1 or 130.
-func stopCleanly(cmd *cobra.Command) {
-	run := cmd.RunE
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := run(cmd, args); !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
 	}
 }

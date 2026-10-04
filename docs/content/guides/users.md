@@ -12,7 +12,9 @@ sind runs everything as root unless the cluster config declares users. With [`us
 
 ```yaml
 kind: Cluster
-nodes: [controller, db, submitter, worker: 2]
+defaults:
+  cpus: 2
+nodes: [controller, db, submitter, worker: 3]
 slurm:
   main: |
     AccountingStorageEnforce=associations,limits
@@ -58,7 +60,7 @@ root
         └── bob
 ```
 
-With the enforcement in `slurm.main`, this tests that alice can have one job at a time, that all of physics shares 4 CPUs, that bob can manage limits and users below physics, that carol can run operator commands, and that dave's `sbatch` is rejected with "Invalid account or account/partition combination specified". The Linux group `physics` and the Slurm account `physics` are unrelated; they only share a name, as they often do at real sites.
+With the enforcement in `slurm.main`, this tests that alice can have one job at a time, that all of physics shares 4 of the cluster's 6 CPUs (three workers with two each), so that a fifth CPU requested under physics stays pending with the reason `AssocGrpCpuLimit` in `squeue`, that bob can manage limits and users below physics, that carol can run operator commands, and that dave's `sbatch` is rejected with "Invalid account or account/partition combination specified". The Linux group `physics` and the Slurm account `physics` are unrelated; they only share a name, as they often do at real sites.
 
 Run commands as a user:
 
@@ -75,9 +77,9 @@ Slurm needs a user's uid and groups on the nodes that run its daemons and jobs. 
 | | `local` (default) | `nssSlurm` | `clientIds` |
 |---|---|---|---|
 | Slurm settings | munge | munge, `LaunchParameters=enable_nss_slurm` | `AuthType=auth/slurm`, `CredType=cred/slurm`, `AuthInfo=use_client_ids`, `enable_nss_slurm` |
-| Linux accounts on | every node | controllers, submitter, db | the login node: the submitter, or the controllers without one |
+| Linux accounts on | every node | controllers, submitter, db | the login node: the submitter, or the controllers without one; the controllers too with `controllerUsers` |
 | Authentication key | munge key | munge key | `slurm.key`; munge is masked, `sackd` runs on the submitter |
-| SSH as a user to | every node | controllers, submitter, db | login node |
+| SSH as a user to | every node | controllers, submitter, db | login node, and the controllers with `controllerUsers` |
 | Prolog, epilog and health checks know user names | yes | not on workers | not on workers |
 | A job sees other users' names (`ls -l`, `id bob`) | yes | no | no |
 | Mirrors a site where | every node has LDAP or SSSD | compute nodes have no directory service | only login nodes have a directory service |
@@ -100,6 +102,7 @@ How each mode resolves a user:
 ### nssSlurm
 
 ```yaml
+kind: Cluster
 identity: nssSlurm
 nodes: [controller, db, submitter, worker: 2]
 users:
@@ -112,11 +115,12 @@ users:
 | controller, submitter, db | yes | `files` |
 | worker-0, worker-1 | no | inside job steps: nss_slurm; outside: not at all |
 
-`srun` and `sbatch` work as before; inside a job, `id`, `ls -l ~` and `getent passwd alice` see alice. `sind ssh alice@worker-0` fails. sind checks that each managed worker's image has `libnss_slurm.so.2` and fails `sind create cluster` and `sind create worker` with the image's name if not.
+`srun` and `sbatch` work as before; inside a job, `id`, `ls -l ~` and `getent passwd alice` see alice. `sind ssh alice@worker-0` fails. sind checks that each managed worker's image has `libnss_slurm.so.2` and fails `sind create cluster` and `sind create worker` with the image's name if not. If you used sind before identity modes existed, Docker may still have the official image of that time cached under the same tag: sind refuses it before it creates anything and tells you to pull a current one with `--pull`.
 
 ### clientIds
 
 ```yaml
+kind: Cluster
 identity: clientIds
 nodes: [controller, db, submitter, worker: 2]
 users:

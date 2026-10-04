@@ -21,11 +21,23 @@ func TestResolveRealm_FlagOverridesAll(t *testing.T) {
 	assert.Equal(t, "from-flag", result)
 }
 
-func TestResolveRealm_ConfigOverridesEnv(t *testing.T) {
+// TestResolveRealm_EnvOverridesConfig checks that SIND_REALM ranks above
+// the config file, as it does for every command that reads no config.
+func TestResolveRealm_EnvOverridesConfig(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("realm", "", "")
 
 	t.Setenv("SIND_REALM", "from-env")
+	result, err := resolveRealm(cmd, "from-config")
+	require.NoError(t, err)
+	assert.Equal(t, "from-env", result)
+}
+
+func TestResolveRealm_ConfigOverridesDefault(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("realm", "", "")
+
+	t.Setenv("SIND_REALM", "")
 	result, err := resolveRealm(cmd, "from-config")
 	require.NoError(t, err)
 	assert.Equal(t, "from-config", result)
@@ -93,8 +105,22 @@ func TestResolveRealm_InvalidEnvNotUsed(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("realm", "", "")
 
+	require.NoError(t, cmd.Flags().Set("realm", "from-flag"))
+
 	t.Setenv("SIND_REALM", "ci_42")
 	result, err := resolveRealm(cmd, "from-config")
 	require.NoError(t, err)
-	assert.Equal(t, "from-config", result)
+	assert.Equal(t, "from-flag", result)
+}
+
+// TestResolveRealm_InvalidEnvOverConfig checks that an invalid SIND_REALM
+// is an error even when the config names a realm: SIND_REALM is the realm
+// in effect.
+func TestResolveRealm_InvalidEnvOverConfig(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("realm", "", "")
+
+	t.Setenv("SIND_REALM", "ci_42")
+	_, err := resolveRealm(cmd, "from-config")
+	require.EqualError(t, err, `SIND_REALM: invalid realm name "ci_42": '_' is not a letter, a digit or a hyphen`)
 }

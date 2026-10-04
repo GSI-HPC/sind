@@ -5,10 +5,16 @@ title: "Container exits with code 255"
 
 ## Symptom
 
-Cluster creation fails with containers exiting immediately:
+Cluster creation fails with containers exiting immediately. Depending on whether the container had already exited when sind first checked it, or died while sind was waiting for it, the error reads:
 
 ```
-waiting for worker-5: container sind-dev-worker-5 is exited (exit code 255)
+waiting for worker-5: node sind-dev-worker-5 not ready: probe container: container sind-dev-worker-5 is exited (exit code 255)
+```
+
+or:
+
+```
+waiting for worker-5: node sind-dev-worker-5 not ready: container sind-dev-worker-5 died: exitCode=255
 ```
 
 This typically happens when creating clusters with many nodes (8+). Some containers start successfully while others crash within the first second.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +30,8 @@ func NewRootCommand() *cobra.Command {
 		TraverseChildren: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			applyVerbosity(cmd)
-			return nil
+			cmd.SetContext(withStderr(cmd.Context(), cmd.ErrOrStderr()))
+			return checkRealmFlag(cmd)
 		},
 	}
 
@@ -60,6 +62,20 @@ func NewRootCommand() *cobra.Command {
 func applyVerbosity(cmd *cobra.Command) {
 	v, _ := cmd.Root().Flags().GetCount("verbose")
 	cmd.SetContext(sindlog.With(cmd.Context(), newLogger(cmd.ErrOrStderr(), v)))
+}
+
+// checkRealmFlag rejects an invalid --realm before any command runs, as a
+// usage error, so that a command that does not use the realm (version,
+// get realms, mcp, help) does not accept a mistyped one silently.
+func checkRealmFlag(cmd *cobra.Command) error {
+	if !cmd.Root().Flags().Changed("realm") {
+		return nil
+	}
+	r, _ := cmd.Root().Flags().GetString("realm")
+	if err := config.CheckName("realm", r); err != nil {
+		return usagef("--realm: %w", err)
+	}
+	return nil
 }
 
 // builtins adds cobra's help and completion commands to the tree now,

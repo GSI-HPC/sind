@@ -107,7 +107,7 @@ cvmfs_config setup
 cvmfs_config probe
 ```
 
-autofs then mounts `/cvmfs/sft.cern.ch` on first access, and Slurm jobs on the worker can read it.
+autofs then mounts `/cvmfs/sft.cern.ch` on first access, and Slurm jobs on the worker can read it. Workers added later with `sind create worker` get the newest worker's `SYS_ADMIN`, `/dev/fuse` and `apparmor=unconfined` too, but not the CVMFS client: provision them the same way.
 
 Two things to know:
 

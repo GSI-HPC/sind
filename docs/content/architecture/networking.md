@@ -13,20 +13,24 @@ Each cluster has an isolated Docker bridge network:
 - Name: `<realm>-<cluster>-net` (e.g., `sind-dev-net`)
 - Nodes can reach each other by container hostname within this network
 
+Slurm uses these short hostnames (`controller`, `db`, `worker-0`). Docker's embedded DNS answers them from the first of a node's networks that knows the name, and a node's hostname is a name on the mesh network too, once per cluster of the realm. Nodes therefore join their cluster network with gateway priority 1, ahead of the mesh's 0 (`--network name=<realm>-<cluster>-net,gw-priority=1`, Docker 28 or later), so the names resolve to the node's own cluster whatever the clusters are called. Without the priority, Docker orders the networks by name, and in a cluster whose network sorts after `<realm>-mesh`, such as `test` or `prod`, `controller` would resolve to the controllers of every cluster in the realm. A name the cluster lacks, such as `db` in a cluster without a db node, still falls through to the mesh and reaches another cluster's node. The cluster network is also the nodes' default gateway.
+
 ## Mesh network
 
-All clusters join a shared mesh network for cross-cluster communication:
+Every node also joins its realm's mesh network, which carries the realm's DNS server and SSH relay:
 
 | Event | Result |
 |-------|--------|
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and `sind-ssh` |
 | Subsequent clusters | Connects nodes to `sind-mesh`, updates DNS |
-| Cluster deleted | Disconnects nodes, updates DNS |
+| Cluster deleted | Disconnects nodes, updates DNS (unless it was the last cluster) |
 | Last cluster deleted | Removes `sind-dns`, `sind-ssh`, and `sind-mesh` |
+
+The mesh does not route traffic between clusters by their DNS names: the `*.<realm>.sind` names resolve to cluster network addresses (see below), which the SSH relay and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name, such as `sind-dev-controller`.
 
 ## DNS
 
-The `sind-dns` container runs CoreDNS and provides name resolution across all clusters using a realm-aware zone:
+The `sind-dns` container runs CoreDNS and names every node of the realm, for the SSH relay and the host, using a realm-aware zone:
 
 ```
 <node>.<cluster>.<realm>.sind → container IP
@@ -46,9 +50,21 @@ Nodes are configured with:
 
 Within a cluster, short names work via the search domain: a node in the `dev` cluster can reach `controller` without the full `controller.dev.sind.sind`.
 
-DNS records use each node's **cluster network IP** (not mesh network IP), so traffic between nodes routes through the cluster's isolated network.
+DNS records use each node's **cluster network IP** (not mesh network IP), so the SSH relay and the host reach the nodes through the cluster's network.
+
+sind writes the records when it creates or deletes nodes, and again when `sind power on`, `reboot` or `cycle` start nodes: Docker can give a node another address each time it starts. CoreDNS reloads its configuration in place on `SIGUSR1`, without dropping queries.
 
 The DNS container is lightweight — no systemd or sshd.
+
+### After a host reboot or a Docker daemon restart
+
+sind sets no restart policy, so the mesh containers and the nodes stay stopped after a host reboot or a Docker daemon restart. `sind get cluster` then shows `dns` and `ssh` with ✗. `sind power on` starts them again: first the realm's DNS container, then the SSH relay, then the nodes, whose DNS records it points at their new addresses. It also applies host DNS again. `sind create cluster` and `sind create worker` start a stopped mesh too, and so do `sind delete cluster` and `sind delete worker` when they remove nodes from a mesh that other clusters keep, so that the nodes leave the relay's `known_hosts` as well as the DNS records.
+
+```bash
+sind power on controller,worker-[0-1]
+```
+
+Docker fixes the DNS server of the nodes and the relay (`--dns`) when it creates them. Starting the DNS container before anything else on the mesh gets it its old address back. If it gets another one, for example after containers were started by hand in another order, sind prints a warning: the containers created before resolve neither `*.<realm>.sind` names nor external names until they are created again. Delete and create the affected clusters to repair them; the SSH relay is created again with the realm's mesh after its last cluster is deleted.
 
 ### Host DNS resolution
 
@@ -67,7 +83,7 @@ ping controller    # → controller.default.sind.sind
 
 This feature is **best-effort**: it is silently skipped when systemd-resolved is not running or when the required polkit authorization is missing. Run `sind doctor` to check prerequisites and get a copyable install command.
 
-Host DNS is configured during every `sind create cluster` (the settings are idempotent) and reverted during `sind delete cluster` (last cluster).
+Host DNS is configured during every `sind create cluster` (the settings are idempotent), when `sind power on` starts a stopped mesh, and reverted during `sind delete cluster` (last cluster).
 
 #### Polkit policy
 
@@ -114,6 +130,22 @@ RULES
 {{< /tab >}}
 {{< /tabs >}}
 
+## Limits
+
+- **Address pools.** Each cluster network and each realm's mesh take one network from Docker's default address pools. A stock daemon has room for about 30 such networks (`172.17.0.0/16` to `172.31.0.0/16`, and `192.168.0.0/16` in `/20` steps), shared with Compose projects and every other network on the host. When they run out, `sind create cluster` fails with Docker's `all predefined address pools have been fully subnetted`. Hosts that run many clusters or realms at once can give Docker more, smaller pools in `/etc/docker/daemon.json` and restart the daemon:
+
+  ```json
+  {
+    "default-address-pools": [
+      {"base": "10.200.0.0/16", "size": 24}
+    ]
+  }
+  ```
+
+  This yields 256 networks of 254 addresses each.
+- **Bridge ports.** A Linux bridge has 1,024 ports, so a Docker bridge network holds at most about 1,023 containers. The mesh holds the DNS container, the SSH relay and every node of every cluster in the realm. Host limits such as `fs.inotify.max_user_instances` and memory usually bind long before (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})).
+- **Clients sharing a Docker daemon.** The realm lock lives in each client's state directory (see [Realms]({{< relref "/configuration/realms" >}})). sind clients that share one daemon, such as several users of a host or CI jobs that share the host's Docker socket, are not serialized against each other and must use separate realms.
+
 ## SSH infrastructure
 
 ### Global resources
@@ -146,20 +178,13 @@ The SSH relay connects to each cluster network so it can reach nodes at their cl
 
 ### Key injection
 
-The public key is injected into each node after container start:
+Once sshd runs on a node, one `docker exec` injects the public key and collects the host key that sshd serves:
 
 ```bash
-docker exec <node> mkdir -p /root/.ssh
-docker exec <node> sh -c 'cat >> /root/.ssh/authorized_keys' < pubkey
+docker exec <node> sh -c 'mkdir -p /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost' sh "$pubkey"
 ```
 
-Host keys are then collected:
-
-```bash
-docker exec <node> ssh-keyscan -t ed25519 localhost
-```
-
-And stored in `known_hosts` with the node's DNS name:
+The host key is stored in `known_hosts` with the node's DNS name:
 
 ```
 controller.dev.sind.sind ssh-ed25519 AAAA...

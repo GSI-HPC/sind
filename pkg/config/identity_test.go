@@ -63,6 +63,53 @@ func TestIdentity_UsesNSSSlurm(t *testing.T) {
 	assert.True(t, Identity{Mode: IdentityClientIDs}.UsesNSSSlurm())
 }
 
+func TestValidate_IdentityParameters(t *testing.T) {
+	// A parameter of the mode that slurm.main sets must keep sind's value:
+	// sind writes none of its own then.
+	for _, tt := range []struct {
+		mode    IdentityMode
+		main    string
+		wantErr string
+	}{
+		{IdentityLocal, "LaunchParameters=use_interactive_step\nAuthType=auth/munge\n", ""},
+		{IdentityNSSSlurm, "LaunchParameters=use_interactive_step,enable_nss_slurm\n", ""},
+		{IdentityNSSSlurm, "AuthType=auth/munge\n", ""},
+		{IdentityNSSSlurm, "LaunchParameters=use_interactive_step\n",
+			"slurm main sets LaunchParameters=use_interactive_step: identity nssSlurm needs enable_nss_slurm in it"},
+		{IdentityNSSSlurm, "LaunchParameters=enable_nss_slurm\nlaunchparameters = use_interactive_step # later wins\n",
+			"slurm main sets LaunchParameters=use_interactive_step: identity nssSlurm needs enable_nss_slurm in it"},
+		{IdentityClientIDs, "AuthType=auth/slurm\nCredType=cred/slurm\nAuthInfo=use_client_ids,cred_expire=30\n", ""},
+		{IdentityClientIDs, "AuthType=auth/munge\n",
+			"slurm main sets AuthType=auth/munge: identity clientIds needs auth/slurm in it"},
+		{IdentityClientIDs, "CredType=cred/munge\n",
+			"slurm main sets CredType=cred/munge: identity clientIds needs cred/slurm in it"},
+		{IdentityClientIDs, "AuthInfo=cred_expire=30\n",
+			"slurm main sets AuthInfo=cred_expire=30: identity clientIds needs use_client_ids in it"},
+		{IdentityClientIDs, "LaunchParameters=\"\"\n",
+			"slurm main sets LaunchParameters=: identity clientIds needs enable_nss_slurm in it"},
+	} {
+		cfg := &Cluster{Kind: "Cluster", Name: DefaultClusterName, Identity: Identity{Mode: tt.mode}, Slurm: Slurm{Main: Section{Content: tt.main}}}
+		cfg.ApplyDefaults()
+		err := cfg.Validate()
+		if tt.wantErr == "" {
+			assert.NoError(t, err, tt.main)
+			continue
+		}
+		assert.EqualError(t, err, tt.wantErr, tt.main)
+	}
+}
+
+func TestIdentityMode_SlurmParameters(t *testing.T) {
+	assert.Nil(t, IdentityLocal.SlurmParameters())
+	assert.Equal(t, []SlurmParameter{{"LaunchParameters", "enable_nss_slurm"}}, IdentityNSSSlurm.SlurmParameters())
+	assert.Equal(t, []SlurmParameter{
+		{"AuthType", "auth/slurm"},
+		{"CredType", "cred/slurm"},
+		{"AuthInfo", "use_client_ids"},
+		{"LaunchParameters", "enable_nss_slurm"},
+	}, IdentityClientIDs.SlurmParameters())
+}
+
 func TestValidate_Identity(t *testing.T) {
 	unmanaged := []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}
 	tests := []struct {

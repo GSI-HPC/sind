@@ -15,6 +15,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -86,6 +87,113 @@ func TestParseSSHArgs_OnlyDash(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"--"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "node argument required")
+}
+
+func TestParseSSHArgs_OnlyOptions(t *testing.T) {
+	_, _, _, err := parseSSHArgs([]string{"-v", "-l", "alice", "--", "id"})
+	require.Error(t, err)
+	assert.True(t, isUsageError(err))
+	assert.Contains(t, err.Error(), "node argument required")
+}
+
+// TestParseSSHArgs_OptionValues checks that the node is found among SSH
+// options the way ssh's getopt reads them: with the values of options that
+// take one, in the next argument or attached, and with options after the
+// node.
+func TestParseSSHArgs_OptionValues(t *testing.T) {
+	for name, tc := range map[string]struct {
+		args, opts []string
+	}{
+		"value in next argument":  {[]string{"-l", "alice", "worker-0"}, []string{"-l", "alice"}},
+		"value attached":          {[]string{"-p2222", "worker-0"}, []string{"-p2222"}},
+		"value of grouped option": {[]string{"-vL", "8080:localhost:80", "worker-0"}, []string{"-vL", "8080:localhost:80"}},
+		"value attached in group": {[]string{"-vp2222", "worker-0"}, []string{"-vp2222"}},
+		"value that looks like an option": {
+			[]string{"-o", "-x", "worker-0"}, []string{"-o", "-x"},
+		},
+		"options after the node": {[]string{"worker-0", "-v", "-o", "BatchMode=yes"}, []string{"-v", "-o", "BatchMode=yes"}},
+		"flag group":             {[]string{"-tt", "worker-0"}, []string{"-tt"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			opts, node, cmd, err := parseSSHArgs(append(tc.args, "--", "id"))
+			require.NoError(t, err)
+			assert.Equal(t, tc.opts, opts)
+			assert.Equal(t, "worker-0", node)
+			assert.Equal(t, []string{"id"}, cmd)
+		})
+	}
+}
+
+// TestParseSSHArgs_CommandWithoutDash checks that a remote command written
+// as for ssh, without the --, is a usage error that names it. sind took its
+// last word for the node and the node for an SSH option, which ssh then
+// failed to resolve in the relay.
+func TestParseSSHArgs_CommandWithoutDash(t *testing.T) {
+	for _, args := range [][]string{
+		{"worker-0", "hostname"},
+		{"-v", "worker-0", "hostname"},
+		{"worker-0", "hostname", "--", "id"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			_, _, _, err := parseSSHArgs(args)
+			require.Error(t, err)
+			assert.True(t, isUsageError(err))
+			assert.EqualError(t, err, `unexpected argument "hostname" after node "worker-0": a remote command goes after --, as in sind ssh NODE -- COMMAND`)
+		})
+	}
+}
+
+func TestParseSSHArgs_MissingOptionValue(t *testing.T) {
+	_, _, _, err := parseSSHArgs([]string{"worker-0", "-L", "--", "id"})
+	require.Error(t, err)
+	assert.True(t, isUsageError(err))
+	assert.EqualError(t, err, "ssh option -L needs a value")
+}
+
+func TestParseSSHArgs_LongOption(t *testing.T) {
+	_, _, _, err := parseSSHArgs([]string{"--realm", "ci", "worker-0"})
+	require.Error(t, err)
+	assert.True(t, isUsageError(err))
+	assert.Contains(t, err.Error(), "ssh has no option --realm")
+}
+
+func TestSSH_CommandWithoutDashExits2(t *testing.T) {
+	var stderr bytes.Buffer
+	code := run(t.Context(), []string{"ssh", "worker-0", "hostname"}, &stderr)
+	assert.Equal(t, exitUsage, code)
+	assert.Contains(t, stderr.String(), "a remote command goes after --")
+}
+
+func TestSSHOptionTakesNext(t *testing.T) {
+	for arg, want := range map[string]bool{
+		"-v":        false,
+		"-tt":       false,
+		"-L":        true,
+		"-vL":       true,
+		"-p2222":    false,
+		"-vp2222":   false,
+		"-o":        true,
+		"-B":        true,
+		"-P":        true,
+		"-46AaCfGg": false,
+	} {
+		assert.Equal(t, want, sshOptionTakesNext(arg), arg)
+	}
+}
+
+func TestCompleteSSHNodeArg_AfterGroupedFlagValue(t *testing.T) {
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "ssh")
+
+	// -vL takes the next argument as its value, as -L does.
+	names, directive := completeSSHNodeArg(sub, []string{"-vL"}, "8080")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveDefault, directive)
+
+	// -p2222 has its value attached, so no node is there yet; and a node
+	// after an option value is the node.
+	names, directive = completeSSHNodeArg(sub, []string{"-p2222", "-l", "alice", "worker-0.dev"}, "")
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
 // parseExecArgs gets exec's arguments as cobra's flag parsing leaves them:
@@ -311,7 +419,16 @@ func TestSSHAccess(t *testing.T) {
 	sshConfigPath := filepath.Join(sshConfigDir, "ssh_config")
 
 	if _, statErr := os.Stat(sshConfigPath); statErr == nil {
-		// ssh_config was exported — test direct SSH access.
+		// ssh_config was exported, with a ProxyCommand for each node that
+		// has the node's name in it rather than ssh's %h.
+		data, readErr := os.ReadFile(sshConfigPath)
+		require.NoError(t, readErr)
+		for _, node := range []string{"controller", "submitter", "worker-0"} {
+			assert.Contains(t, string(data), "\nHost "+node+"."+cluster+"."+realm+".sind\n")
+		}
+		assert.NotContains(t, string(data), "%h")
+
+		// Test direct SSH access.
 		sshCmd := exec.CommandContext(ctx, "ssh",
 			"-F", sshConfigPath,
 			"-o", "BatchMode=yes",

@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -111,15 +112,19 @@ func TestContainerExecAndFiles(t *testing.T) {
 	n := string(name)
 
 	if !rec.IsIntegration() {
-		rec.AddResult("abc123\n", "", nil)               // run
-		rec.AddResult("hello\n", "", nil)                // exec echo
-		rec.AddResult("", "", nil)                       // write
-		rec.AddResult("", "", nil)                       // append
-		rec.AddResult("line1\nline2\n", "", nil)         // read
-		rec.AddResult("", "", nil)                       // copy to
-		rec.AddResult(copyFromTar("content-a"), "", nil) // copy from
-		rec.AddResult(n+"\n", "", nil)                   // kill (cleanup)
-		rec.AddResult(n+"\n", "", nil)                   // rm (cleanup)
+		rec.AddResult("abc123\n", "", nil)                 // run
+		rec.AddResult("hello\n", "", nil)                  // exec echo
+		rec.AddResult("", "", nil)                         // write
+		rec.AddResult("", "", nil)                         // append
+		rec.AddResult("line1\nline2\n", "", nil)           // read
+		rec.AddResult("", "", nil)                         // replace
+		rec.AddResult("", "", errors.New("exit status 1")) // short replace
+		rec.AddResult("new\n", "", nil)                    // read
+		rec.AddResult("/tmp/test.txt\n", "", nil)          // ls
+		rec.AddResult("", "", nil)                         // copy to
+		rec.AddResult(copyFromTar("content-a"), "", nil)   // copy from
+		rec.AddResult(n+"\n", "", nil)                     // kill (cleanup)
+		rec.AddResult(n+"\n", "", nil)                     // rm (cleanup)
 	}
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
@@ -145,6 +150,21 @@ func TestContainerExecAndFiles(t *testing.T) {
 	content, err := c.ReadFile(ctx, name, "/tmp/test.txt")
 	require.NoError(t, err)
 	assert.Equal(t, "line1\nline2\n", content)
+
+	// Replace, and a replace whose input ends early, as when the docker
+	// CLI dies mid-write: the file and its directory stay as they were.
+	err = c.ReplaceFile(ctx, name, "/tmp/test.txt", "new\n")
+	require.NoError(t, err)
+
+	err = c.ExecWithStdin(ctx, name, strings.NewReader("par"), "sh", "-c", replaceFileScript, "sh", "/tmp/test.txt", "7")
+	require.Error(t, err)
+
+	content, err = c.ReadFile(ctx, name, "/tmp/test.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "new\n", content)
+	files, err := c.Exec(ctx, name, "sh", "-c", "ls /tmp/test.txt*")
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/test.txt\n", files, "no temporary file left")
 
 	// CopyTo + CopyFrom.
 	err = c.CopyToContainer(ctx, name, "/tmp", FileContents{
@@ -394,7 +414,12 @@ const inspectJSON = `[{
   "Id": "94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca",
   "Name": "/sind-dev-controller",
   "State": {"Status": "running", "Running": true, "Paused": false},
-  "Config": {"Labels": {"sind.cluster": "dev", "sind.role": "controller"}},
+  "Config": {"Image": "ghcr.io/gsi-hpc/sind-node:latest", "Labels": {"sind.cluster": "dev", "sind.role": "controller", "sind.data.hostpath": "/srv/run,2024"}},
+  "Mounts": [
+    {"Type": "volume", "Name": "sind-dev-config", "Source": "/var/lib/docker/volumes/sind-dev-config/_data", "Destination": "/etc/slurm", "Driver": "local", "Mode": "rw", "RW": true, "Propagation": ""},
+    {"Type": "bind", "Source": "/srv/run,2024", "Destination": "/data", "Mode": "", "RW": true, "Propagation": "rprivate"}
+  ],
+  "HostConfig": {"Dns": ["172.19.0.2"]},
   "NetworkSettings": {
     "Networks": {
       "sind-dev-net": {"IPAddress": "172.18.0.2"},
@@ -413,18 +438,60 @@ func TestInspectContainer(t *testing.T) {
 
 	assert.Equal(t, ContainerID("94649329a21a97708c8f53c7348adafb926eaef1929b79ae760458a50d78e1ca"), info.ID)
 	assert.Equal(t, testContainerName, info.Name)
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", info.ImageRef)
 	assert.Equal(t, StateRunning, info.Status)
+	assert.Equal(t, []string{"172.19.0.2"}, info.DNS)
 	assert.Equal(t, Labels{
-		"sind.cluster": "dev",
-		"sind.role":    "controller",
-	}, info.Labels)
+		"sind.cluster":       "dev",
+		"sind.role":          "controller",
+		"sind.data.hostpath": "/srv/run,2024",
+	}, info.Labels, "a label value with a comma is kept whole")
 	assert.Equal(t, map[NetworkName]string{
 		"sind-dev-net": "172.18.0.2",
 		"sind-mesh":    "172.19.0.3",
 	}, info.IPs)
+	assert.Equal(t, []Mount{
+		{Type: MountVolume, Name: "sind-dev-config", Source: "/var/lib/docker/volumes/sind-dev-config/_data", Destination: "/etc/slurm"},
+		{Type: MountBind, Source: "/srv/run,2024", Destination: "/data"},
+	}, info.Mounts)
 
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"inspect", string(testContainerName)}, m.Calls[0].Args)
+}
+
+func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{
+  "Id": "abc",
+  "Name": "/sind-dev-worker-0",
+  "Image": "sha256:f00d",
+  "State": {"Status": "exited"},
+  "Config": {"Image": "ghcr.io/gsi-hpc/sind-node:latest", "Labels": {}},
+  "HostConfig": {
+    "NanoCpus": 2000000000,
+    "Memory": 2147483648,
+    "Tmpfs": {"/tmp": "rw,nosuid,nodev,size=1g"},
+    "CapAdd": ["CAP_SYS_ADMIN"],
+    "CapDrop": null,
+    "Devices": [{"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"}],
+    "SecurityOpt": ["writable-cgroups=true", "label=disable"]
+  },
+  "NetworkSettings": {"Networks": {}}
+}]`, "", nil)
+	c := NewClient(&m)
+
+	info, err := c.InspectContainer(t.Context(), "sind-dev-worker-0")
+	require.NoError(t, err)
+
+	assert.Equal(t, "sha256:f00d", info.Image)
+	assert.Equal(t, HostConfig{
+		NanoCPUs:    2e9,
+		Memory:      2 << 30,
+		Tmpfs:       map[string]string{"/tmp": "rw,nosuid,nodev,size=1g"},
+		CapAdd:      []string{"CAP_SYS_ADMIN"},
+		Devices:     []DeviceMapping{{PathOnHost: "/dev/fuse", PathInContainer: "/dev/fuse", CgroupPermissions: "rwm"}},
+		SecurityOpt: []string{"writable-cgroups=true", "label=disable"},
+	}, info.HostConfig)
 }
 
 func TestInspectContainer_Error(t *testing.T) {
@@ -580,6 +647,21 @@ func TestListContainers_NoLabels(t *testing.T) {
 	assert.Nil(t, entries[0].Labels)
 }
 
+// TestListContainers_LabelValueWithComma pins down the limit parseLabels
+// documents: docker ps joins labels with unescaped commas, so a value with a
+// comma is cut there, and the rest reads as a label of its own.
+func TestListContainers_LabelValueWithComma(t *testing.T) {
+	const psComma = `{"ID":"abc123","Names":"sind-dev-controller","State":"running","Image":"img","Labels":"sind.cluster=dev,sind.data.hostpath=/srv/run,2024"}`
+	var m mock.Executor
+	m.AddResult(psComma, "", nil)
+	c := NewClient(&m)
+
+	entries, err := c.ListContainers(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, Labels{"sind.cluster": "dev", "sind.data.hostpath": "/srv/run", "2024": ""}, entries[0].Labels)
+}
+
 func TestListContainers_Empty(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
@@ -669,6 +751,41 @@ func TestExecAllowNonZero_NonZeroExitReturnsStdout(t *testing.T) {
 	assert.Equal(t, "active\ninactive\n", stdout)
 }
 
+// TestExecAllowNonZero_DockerFailurePropagates checks that docker's own
+// failures, which the docker CLI also reports with exit status 1, are not
+// taken for the inner command's exit status.
+func TestExecAllowNonZero_DockerFailurePropagates(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: container 0123abcd is not running\n",
+		"Error response from daemon: No such container: sind-dev-controller\n",
+		"Error response from daemon: container 0123abcd is paused, unpause the container before exec\n",
+		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
+		"error during connect: Get \"http://docker.example:2375/v1.47/containers/x/json\": dial tcp: connection refused\n",
+	} {
+		t.Run(stderr, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", stderr, &exec.ExitError{ProcessState: exitCode1(t)})
+			c := NewClient(&m)
+
+			_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), strings.TrimSpace(stderr))
+		})
+	}
+}
+
+// TestExecAllowNonZero_InnerStderr checks that what the inner command writes
+// to stderr does not turn its non-zero exit into an error.
+func TestExecAllowNonZero_InnerStderr(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("failed\n", "Unit slurmdbd.service could not be found.\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	stdout, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
+	require.NoError(t, err)
+	assert.Equal(t, "failed\n", stdout)
+}
+
 func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
@@ -744,6 +861,28 @@ func TestWriteFile_Error(t *testing.T) {
 	c := NewClient(&m)
 
 	err := c.WriteFile(t.Context(), testContainerName, "/tmp/out", "data")
+	assert.Error(t, err)
+}
+
+func TestReplaceFile(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.ReplaceFile(t.Context(), testContainerName, "/etc/slurm/sind-nodes.conf", "hello\n")
+	require.NoError(t, err)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", replaceFileScript, "sh", "/etc/slurm/sind-nodes.conf", "6"}, m.Calls[0].Args)
+	assert.Equal(t, "hello\n", m.Calls[0].Stdin)
+}
+
+func TestReplaceFile_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	err := c.ReplaceFile(t.Context(), testContainerName, "/tmp/out", "data")
 	assert.Error(t, err)
 }
 

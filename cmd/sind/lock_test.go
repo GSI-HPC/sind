@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -13,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAcquireRealmLock covers the CLI's use of state.LockRealm; the lock
+// itself is tested in pkg/state.
 func TestAcquireRealmLock(t *testing.T) {
 	t.Parallel()
 
@@ -33,12 +36,15 @@ func TestAcquireRealmLock(t *testing.T) {
 		t.Parallel()
 		stateHome := t.TempDir()
 
-		unlock1, err := acquireRealmLock(context.Background(), "contention", stateHome)
+		var stderr1 bytes.Buffer
+		unlock1, err := acquireRealmLock(withStderr(context.Background(), &stderr1), "contention", stateHome)
 		require.NoError(t, err)
+		assert.Empty(t, stderr1.String(), "a free lock gives no warning")
 
+		var stderr2 bytes.Buffer
 		acquired := make(chan struct{})
 		go func() {
-			unlock2, err := acquireRealmLock(context.Background(), "contention", stateHome)
+			unlock2, err := acquireRealmLock(withStderr(context.Background(), &stderr2), "contention", stateHome)
 			assert.NoError(t, err)
 			close(acquired)
 			unlock2()
@@ -58,45 +64,12 @@ func TestAcquireRealmLock(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("second lock not acquired after first was released")
 		}
+		assert.Equal(t, "Warning: waiting for another sind command in realm \"contention\" to finish\n", stderr2.String())
 	})
+}
 
-	t.Run("context cancellation unblocks", func(t *testing.T) {
-		t.Parallel()
-		stateHome := t.TempDir()
-
-		unlock1, err := acquireRealmLock(context.Background(), "cancel", stateHome)
-		require.NoError(t, err)
-		defer unlock1()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan error, 1)
-		go func() {
-			_, err := acquireRealmLock(ctx, "cancel", stateHome)
-			done <- err
-		}()
-
-		// Give the goroutine time to start blocking.
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-
-		select {
-		case err := <-done:
-			assert.ErrorIs(t, err, context.Canceled)
-		case <-time.After(5 * time.Second):
-			t.Fatal("context cancellation did not unblock lock acquisition")
-		}
-	})
-
-	t.Run("different realms do not contend", func(t *testing.T) {
-		t.Parallel()
-		stateHome := t.TempDir()
-
-		unlock1, err := acquireRealmLock(context.Background(), "realm-a", stateHome)
-		require.NoError(t, err)
-		defer unlock1()
-
-		unlock2, err := acquireRealmLock(context.Background(), "realm-b", stateHome)
-		require.NoError(t, err)
-		defer unlock2()
-	})
+func TestStderrFrom(t *testing.T) {
+	assert.Equal(t, os.Stderr, stderrFrom(context.Background()))
+	var buf bytes.Buffer
+	assert.Equal(t, &buf, stderrFrom(withStderr(context.Background(), &buf)))
 }

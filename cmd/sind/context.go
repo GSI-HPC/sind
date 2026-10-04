@@ -6,8 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
+	"github.com/GSI-HPC/sind/internal/termtext"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -23,7 +25,23 @@ const (
 	clientKey contextKey = iota
 	meshMgrKey
 	fsKey
+	stderrKey
 )
+
+// withStderr stores the command's error stream in the context, for the
+// warnings that code without the command at hand prints.
+func withStderr(ctx context.Context, w io.Writer) context.Context {
+	return context.WithValue(ctx, stderrKey, w)
+}
+
+// stderrFrom retrieves the error stream from the context, falling back to
+// os.Stderr.
+func stderrFrom(ctx context.Context) io.Writer {
+	if w, ok := ctx.Value(stderrKey).(io.Writer); ok {
+		return w
+	}
+	return os.Stderr
+}
 
 // withFs stores an afero.Fs in the context.
 func withFs(ctx context.Context, fs afero.Fs) context.Context {
@@ -71,12 +89,20 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 		},
 	}
 	mgr.HostDNS = true
+	mgr.OnWarning = func(msg string) {
+		_, _ = fmt.Fprintln(os.Stderr, "Warning:", termtext.EscapeText(msg))
+	}
 	return mgr
 }
 
 // resolveRealm determines the realm with the following precedence:
 //
-//	--realm flag > config file > SIND_REALM env var > mesh.DefaultRealm
+//	--realm flag > SIND_REALM env var > config file > mesh.DefaultRealm
+//
+// Only `create cluster` reads a config file; every other command resolves
+// --realm > SIND_REALM > mesh.DefaultRealm (realmFromFlag). Ranking
+// SIND_REALM above the config keeps them in step: a realm set in the
+// environment is the realm every later command looks in.
 //
 // The realm that wins must be a valid name (config.CheckName); a config
 // file's realm has already been checked by config.Validate.
@@ -88,14 +114,14 @@ func resolveRealm(cmd *cobra.Command, configRealm string) (string, error) {
 		}
 		return r, nil
 	}
-	if configRealm != "" {
-		return configRealm, nil
-	}
 	if env := os.Getenv("SIND_REALM"); env != "" {
 		if err := config.CheckName("realm", env); err != nil {
 			return "", fmt.Errorf("SIND_REALM: %w", err)
 		}
 		return env, nil
+	}
+	if configRealm != "" {
+		return configRealm, nil
 	}
 	return mesh.DefaultRealm, nil
 }

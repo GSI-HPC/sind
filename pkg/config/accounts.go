@@ -48,8 +48,10 @@ func (a *Account) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Limits are sacctmgr options of an account, by option name. YAML numbers
-// are kept as written, so MaxJobs: 1 becomes MaxJobs=1.
+// Limits are sacctmgr options of an account, by option name. Numbers are
+// passed in plain decimal form, as YAML 1.1 reads them before sind sees
+// them: MaxJobs: 1 becomes MaxJobs=1, but 010 is octal and becomes 8, and
+// 1.10 becomes 1.1. A quoted value is passed as written.
 type Limits map[string]string
 
 // UnmarshalJSON accepts a map of strings and numbers.
@@ -97,12 +99,63 @@ const (
 // sacctmgr unchanged: Slurm stores account names in lowercase.
 var accountNamePattern = regexp.MustCompile(`^[a-z0-9_][a-z0-9_-]{0,63}$`)
 
-// reservedLimitKeys are sacctmgr options that sind sets itself, or that
-// would point the account at another cluster, in lowercase.
-var reservedLimitKeys = []string{"name", "names", "parent", "cluster", "clusters"}
+// LimitKeys are the sacctmgr add account options an account's limits may
+// set, matched case-insensitively: the account's description,
+// organization and flags, and the limits and settings of its association.
+// sacctmgr also takes any prefix of an option name, so a deny list could
+// not keep limits off the options sind sets itself (name, parent and
+// cluster): A, Acct, N, C or Pa would reach them. Where would make
+// sacctmgr add account loop forever.
+var LimitKeys = []string{
+	"Comment", "DefaultQOS", "Description", "Fairshare", "Flags",
+	"GrpJobs", "GrpJobsAccrue", "GrpSubmitJobs", "GrpTRES", "GrpTRESMins", "GrpTRESRunMins", "GrpWall",
+	"MaxJobs", "MaxJobsAccrue", "MaxSubmitJobs", "MaxTRES", "MaxTRESMins", "MaxTRESMinsPerJob", "MaxTRESPerJob",
+	"MaxTRESPerNode", "MaxTRESRunMins", "MaxWall", "MaxWallDurationPerJob",
+	"MinPrioThresh", "Organization", "Priority", "QOS", "QosLevel", "Shares",
+}
 
-// limitKeyPattern matches sacctmgr option names.
-var limitKeyPattern = regexp.MustCompile(`^[A-Za-z]+$`)
+// isLimitKey reports whether key is one of LimitKeys, in any case.
+func isLimitKey(key string) bool {
+	return slices.ContainsFunc(LimitKeys, func(k string) bool { return strings.EqualFold(k, key) })
+}
+
+// enforcingValues are the AccountingStorageEnforce values that make
+// slurmctld enforce association limits, in lowercase.
+var enforcingValues = []string{"2", "limits", "safe", "all"}
+
+// Warnings returns what is likely a mistake in a valid config, for sind
+// create cluster to print: account limits (Max* and Grp*) that Slurm does
+// not enforce, as slurm.main's AccountingStorageEnforce does not include
+// limits. sind keeps Slurm's default of no enforcement, which changes which
+// jobs run.
+func (c *Cluster) Warnings() []string {
+	var limited []string
+	for _, a := range c.Accounts {
+		var keys []string
+		for _, key := range a.Limits.Keys() {
+			if k := strings.ToLower(key); strings.HasPrefix(k, "max") || strings.HasPrefix(k, "grp") {
+				keys = append(keys, key)
+			}
+		}
+		if len(keys) > 0 {
+			limited = append(limited, a.Name+": "+strings.Join(keys, ", "))
+		}
+	}
+	if len(limited) == 0 {
+		return nil
+	}
+	enforce, set := c.Slurm.Main.Parameter("AccountingStorageEnforce")
+	for v := range strings.SplitSeq(enforce, ",") {
+		if slices.Contains(enforcingValues, strings.ToLower(strings.TrimSpace(v))) {
+			return nil
+		}
+	}
+	fix := "slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it"
+	if set {
+		fix = "slurm.main sets AccountingStorageEnforce=" + enforce + "; add limits to it"
+	}
+	return []string{fmt.Sprintf("Slurm does not enforce the accounts' limits (%s): %s", strings.Join(limited, "; "), fix)}
+}
 
 // UsesAccounts reports whether the config asks for Slurm accounts:
 // accounts, or a user with accounts, coordinator or adminLevel.
@@ -149,8 +202,8 @@ func (c *Cluster) validateAccounts() error {
 		}
 		declared[a.Name] = true
 		for _, key := range a.Limits.Keys() {
-			if !limitKeyPattern.MatchString(key) || slices.Contains(reservedLimitKeys, strings.ToLower(key)) {
-				return fmt.Errorf("account %q: invalid limit %q: it must be a sacctmgr option other than %s", a.Name, key, strings.Join(reservedLimitKeys, ", "))
+			if !isLimitKey(key) {
+				return fmt.Errorf("account %q: invalid limit %q: it must be one of the sacctmgr options %s", a.Name, key, strings.Join(LimitKeys, ", "))
 			}
 			if a.Limits[key] == "" {
 				return fmt.Errorf("account %q: limit %s must not be empty", a.Name, key)

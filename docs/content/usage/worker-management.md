@@ -15,23 +15,43 @@ sind create worker [CLUSTER] [FLAGS]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--count` | `1` | Number of nodes to add |
-| `--image` | the controller's image | Container image |
-| `--cpus` | `1` | CPU limit per node |
-| `--memory` | `512m` | Memory limit |
-| `--tmp-size` | `256m` | `/tmp` tmpfs size |
+| `--image` | the newest worker's image, else the controller's | Container image |
+| `--cpus` | the newest worker's, else `1` | CPU limit per node |
+| `--memory` | the newest worker's, else `512m` | Memory limit, without swap; it covers the node's services and `/tmp` files too |
+| `--tmp-size` | the newest worker's, else `256m` | `/tmp` tmpfs size, part of `--memory` |
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
-| `--pull` | `false` | Pull images before creating containers |
-| `--cap-add` | none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
-| `--cap-drop` | none | Drop Linux capability (repeatable) |
-| `--device` | none | Expose host device (repeatable; e.g. `/dev/fuse`) |
-| `--security-opt` | none | Security option (repeatable) |
+| `--pull` | `false` | Pull the `--image` once before creating containers; needs `--image` |
+| `--wait` | `5m` | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit |
+| `--cap-add` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
+| `--cap-drop` | the newest worker's, else none | Drop Linux capability (repeatable) |
+| `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`) |
+| `--security-opt` | the newest worker's, else none | Security option (repeatable) |
 
-`--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, and `--device` needs an absolute host path, as `devices` does; sind checks them before it creates any container.
+### Defaults from the newest worker
+
+New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list.
+
+Not inherited:
+
+- the security options that sind gives every node, and the `SYS_NICE` capability where sind gave it to a managed worker for `task/affinity` (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})), as sind decides them for each new worker. A `SYS_NICE` you asked for yourself, with sind's default `TaskPlugin` or on unmanaged workers, is inherited;
+- a seccomp profile, which Docker reports by content rather than by file: pass it again with `--security-opt seccomp=FILE`.
+
+A cluster without workers gets the controller's image and 1 CPU, `512m` memory and a `256m` `/tmp`.
+
+### Image and Slurm version
+
+Without `--image`, new workers run the image the newest worker (or the controller) runs, by its ID: the tag it was created from may since point to another image, even another Slurm release. `--pull` therefore needs `--image`.
+
+With `--image`, sind runs `slurmctld -V` in the image, after pulling it with `--pull`, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.8`.
+
+### Checks
+
+`--count` must be at least 1 and `--cpus` must not be negative. `--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, `--device` needs an absolute host path, as `devices` does, `--security-opt` an option Docker knows, as `securityOpt` does, and `--memory` and `--tmp-size` take the sizes `memory` and `tmpSize` take (see [Defaults section]({{< relref "/configuration/cluster-config#defaults-section" >}})). sind rejects these, and `--pull` without `--image`, with exit status 2 before it creates any container. With `-v`, it logs the extra privileges of the new nodes, as `sind create cluster` does.
 
 ### Examples
 
 ```bash
-# 1 managed worker with default resources
+# 1 managed worker like the newest worker
 sind create worker
 
 # 3 managed workers
@@ -52,13 +72,17 @@ sind create worker --count 2 --unmanaged
 For managed workers (the default), sind:
 
 1. Creates the worker container(s)
-2. Appends node definitions to `sind-nodes.conf`
+2. Adds node definitions to `sind-nodes.conf`
 3. Reconfigures slurmctld (`scontrol reconfigure`)
 4. Starts slurmd on the new node(s)
 
-This requires `sind-nodes.conf` to exist in `/etc/slurm`. If you replaced the generated Slurm configuration, use `--unmanaged` instead.
+This requires a running controller and `sind-nodes.conf` in `/etc/slurm`. If you replaced the generated Slurm configuration, use `--unmanaged` instead. If the controller is stopped or frozen, sind fails with an error that says so: run `sind power on` or `sind power unfreeze` on it first.
+
+If a step fails, or you interrupt the command, sind removes the new containers again and writes back `sind-nodes.conf` as it found it, so you can simply retry. If that cleanup fails too, the error says so after the original one.
 
 On an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}}), every new worker is unmanaged, with or without `--unmanaged`.
+
+If a new worker is not ready within `--wait`, or its munge or slurmd unit fails, `sind create worker` fails with exit status 1, names the worker and the check that failed, and removes the workers it created, as `sind create cluster` does (see [Cluster Lifecycle]({{< relref "/usage/cluster-lifecycle#what-happens-during-creation" >}})).
 
 ## Remove workers
 
@@ -67,6 +91,8 @@ sind delete worker NODES
 ```
 
 For managed workers, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container. Works with both managed and unmanaged nodes. On an unmanaged cluster, sind never edits the Slurm configuration.
+
+Deleting a managed worker needs a running controller: with the controller stopped or frozen, `sind delete worker` fails and removes nothing, as the node would otherwise stay in Slurm's configuration without a container. Unmanaged workers can be deleted at any time.
 
 ```bash
 # Remove a single worker

@@ -3,13 +3,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -29,7 +33,7 @@ func noStdin(t *testing.T) *os.File {
 
 func TestLoadConfig_FromReader(t *testing.T) {
 	// A reader set with cmd.SetIn is read as piped input.
-	cfg, err := loadConfig(strings.NewReader("kind: Cluster\nname: from-reader\n"), "")
+	cfg, err := loadConfig(strings.NewReader("kind: Cluster\nname: from-reader\n"), io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "from-reader", cfg.Name)
 }
@@ -37,7 +41,7 @@ func TestLoadConfig_FromReader(t *testing.T) {
 func TestLoadConfig_FromCommandInput(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetIn(strings.NewReader("kind: Cluster\nname: from-cmd\n"))
-	cfg, err := loadConfig(cmd.InOrStdin(), "")
+	cfg, err := loadConfig(cmd.InOrStdin(), io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "from-cmd", cfg.Name)
 }
@@ -50,7 +54,7 @@ func TestStdinHasData_ClosedFile(t *testing.T) {
 }
 
 func TestLoadConfig_Default(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "Cluster", cfg.Kind)
 	assert.Equal(t, "default", cfg.Name)
@@ -62,13 +66,13 @@ func TestLoadConfig_FromFile(t *testing.T) {
 	data := []byte("kind: Cluster\nname: test\n")
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	cfg, err := loadConfig(noStdin(t), path)
+	cfg, err := loadConfig(noStdin(t), io.Discard, path)
 	require.NoError(t, err)
 	assert.Equal(t, "test", cfg.Name)
 }
 
 func TestLoadConfig_FileNotFound(t *testing.T) {
-	_, err := loadConfig(noStdin(t), "/nonexistent/config.yaml")
+	_, err := loadConfig(noStdin(t), io.Discard, "/nonexistent/config.yaml")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading config")
 }
@@ -78,7 +82,7 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("not: valid: yaml: ["), 0o644))
 
-	_, err := loadConfig(noStdin(t), path)
+	_, err := loadConfig(noStdin(t), io.Discard, path)
 	assert.Error(t, err)
 }
 
@@ -90,9 +94,83 @@ func TestLoadConfig_FromStdin(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	cfg, err := loadConfig(r, "")
+	cfg, err := loadConfig(r, io.Discard, "")
 	require.NoError(t, err)
 	assert.Equal(t, "from-stdin", cfg.Name)
+}
+
+// pipeWith returns the read end of a pipe holding data, as a shell gives
+// sind for `cmd | sind create cluster`.
+func pipeWith(t *testing.T, data string) *os.File {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close() })
+	_, err = w.WriteString(data)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	return r
+}
+
+func TestLoadConfig_ImplicitStdinWarns(t *testing.T) {
+	var stderr bytes.Buffer
+	cfg, err := loadConfig(pipeWith(t, "kind: Cluster\nname: piped\n"), &stderr, "")
+	require.NoError(t, err)
+	assert.Equal(t, "piped", cfg.Name)
+	assert.Equal(t, stdinDeprecation+"\n", stderr.String())
+	assert.True(t, strings.HasPrefix(stderr.String(), "Warning: "))
+}
+
+func TestLoadConfig_ImplicitEmptyStdinIsDefault(t *testing.T) {
+	// An empty pipe, as a CI runner or `true | sind create cluster` gives,
+	// creates the default cluster instead of failing.
+	for _, input := range []string{"", " \n\t\n"} {
+		var stderr bytes.Buffer
+		cfg, err := loadConfig(pipeWith(t, input), &stderr, "")
+		require.NoError(t, err)
+		assert.Equal(t, "default", cfg.Name)
+		assert.Equal(t, stdinDeprecation+"\n", stderr.String())
+	}
+}
+
+func TestLoadConfig_TerminalStdinDoesNotWarn(t *testing.T) {
+	var stderr bytes.Buffer
+	cfg, err := loadConfig(noStdin(t), &stderr, "")
+	require.NoError(t, err)
+	assert.Equal(t, "default", cfg.Name)
+	assert.Empty(t, stderr.String())
+}
+
+func TestLoadConfig_ExplicitStdin(t *testing.T) {
+	var stderr bytes.Buffer
+	cfg, err := loadConfig(pipeWith(t, "kind: Cluster\nname: explicit\n"), &stderr, "-")
+	require.NoError(t, err)
+	assert.Equal(t, "explicit", cfg.Name)
+	assert.Empty(t, stderr.String())
+
+	// --config - reads stdin whatever it is.
+	cfg, err = loadConfig(strings.NewReader("kind: Cluster\nname: reader\n"), &stderr, "-")
+	require.NoError(t, err)
+	assert.Equal(t, "reader", cfg.Name)
+}
+
+func TestLoadConfig_ExplicitEmptyStdin(t *testing.T) {
+	for _, input := range []string{"", "\n  \n"} {
+		_, err := loadConfig(pipeWith(t, input), io.Discard, "-")
+		require.EqualError(t, err, "reading config from stdin: empty configuration")
+	}
+}
+
+// failingReader fails every read.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("read failed") }
+
+func TestLoadConfig_StdinReadError(t *testing.T) {
+	for _, path := range []string{"", "-"} {
+		_, err := loadConfig(failingReader{}, io.Discard, path)
+		require.EqualError(t, err, "reading config from stdin: read failed")
+	}
 }
 
 func TestLoadConfig_StdinInvalidYAML(t *testing.T) {
@@ -102,7 +180,7 @@ func TestLoadConfig_StdinInvalidYAML(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	_, err = loadConfig(r, "")
+	_, err = loadConfig(r, io.Discard, "")
 	assert.Error(t, err)
 }
 
@@ -119,8 +197,26 @@ func TestCreateCluster_CommandExists(t *testing.T) {
 	assert.Equal(t, ".", createCmd.Flags().Lookup("data").DefValue)
 }
 
+func TestCreate_WaitFlag(t *testing.T) {
+	for _, sub := range []string{"cluster", "worker"} {
+		t.Run(sub, func(t *testing.T) {
+			c, _, err := NewRootCommand().Find([]string{"create", sub})
+			require.NoError(t, err)
+			flag := c.Flags().Lookup("wait")
+			require.NotNil(t, flag)
+			assert.Equal(t, "5m0s", flag.DefValue)
+
+			// A negative limit is a usage error, reported before sind acts.
+			_, _, err = executeCommand("create", sub, "--wait", "-1s")
+			require.Error(t, err)
+			assert.True(t, isUsageError(err))
+			assert.Equal(t, "--wait must not be negative, got -1s", err.Error())
+		})
+	}
+}
+
 func TestApplyDataFlag_HostPath(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "/tmp/my-project"))
@@ -130,7 +226,7 @@ func TestApplyDataFlag_HostPath(t *testing.T) {
 }
 
 func TestApplyDataFlag_RelativePath(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "."))
@@ -140,7 +236,7 @@ func TestApplyDataFlag_RelativePath(t *testing.T) {
 }
 
 func TestApplyDataFlag_Volume(t *testing.T) {
-	cfg, err := loadConfig(noStdin(t), "")
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
 
 	require.NoError(t, applyDataFlag(cfg, "volume"))
@@ -192,6 +288,45 @@ func TestApplyDataStorage(t *testing.T) {
 	}
 }
 
+func TestCreateCluster_WarnsAboutRootDataPath(t *testing.T) {
+	// An invalid config stops create after the warning, before any docker call.
+	cfgPath := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("kind: Cluster\nnodes: [worker]\n"), 0o644))
+	var m mock.Executor
+
+	_, stderr, err := executeWithMock(&m, "create", "cluster", "--config", cfgPath, "--data", "/")
+
+	require.Error(t, err)
+	assert.Contains(t, stderr, "Warning: every node mounts the root directory / read-write as its data")
+	assert.Empty(t, m.Calls)
+
+	_, stderr, _ = executeWithMock(&m, "create", "cluster", "--config", cfgPath, "--data", "volume")
+	assert.NotContains(t, stderr, "Warning")
+}
+
+func TestCreateCluster_WarnsAboutUnenforcedLimits(t *testing.T) {
+	// The warning comes right after validation, before sind touches
+	// docker.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SIND_REALM", "")
+	path := filepath.Join(t.TempDir(), "cluster.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`kind: Cluster
+nodes: [controller, db, worker]
+accounts:
+  - name: physics
+    limits:
+      MaxJobs: 1
+`), 0o644))
+	m := &mock.Executor{OnCall: func([]string, string) mock.Result {
+		return mock.Result{Err: errors.New("no docker")}
+	}}
+
+	_, stderr, err := executeWithMock(m, "create", "cluster", "--config", path)
+
+	require.Error(t, err)
+	assert.Contains(t, stderr, "Warning: Slurm does not enforce the accounts' limits (physics: MaxJobs): slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it\n")
+}
+
 func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {
 	_, _, err := executeCommand("create", "cluster", "name", "extra")
 	assert.Error(t, err)
@@ -203,7 +338,7 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 	data := []byte("kind: Cluster\nname: from-file\n")
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 
-	cfg, err := loadConfig(noStdin(t), path)
+	cfg, err := loadConfig(noStdin(t), io.Discard, path)
 	require.NoError(t, err)
 	assert.Equal(t, "from-file", cfg.Name)
 }
@@ -292,6 +427,12 @@ func TestClusterLifecycle(t *testing.T) {
 	assert.Contains(t, stdout, "NETWORKS")
 	assert.Contains(t, stdout, "MESH SERVICES")
 	assert.Contains(t, stdout, "MOUNTS")
+
+	// The mesh DNS and the SSH relay run.
+	stdout, _, err = executeWithRealmCtx(ctx, realm, "get", "cluster", cluster, "-o", "json")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, `"dns_ok": true`)
+	assert.Contains(t, stdout, `"ssh_ok": true`)
 
 	// --- exec ---
 	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", cluster, "--", "hostname")

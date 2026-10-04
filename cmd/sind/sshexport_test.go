@@ -70,12 +70,8 @@ func TestSindStateDir_CustomRealm(t *testing.T) {
 
 func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
 	mock := &mock.Executor{}
-	// ContainerExists: docker container inspect sind-ssh → success
-	mock.AddResult("[{}]", "", nil)
-	// ExportConfig: ReadFile private key
-	mock.AddResult("PRIVATE-KEY", "", nil)
-	// ExportConfig: ReadFile known_hosts
-	mock.AddResult("host1 ssh-ed25519 AAAA\n", "", nil)
+	// ExportConfig: one exec prints the private key and known_hosts
+	mock.AddResult("PRIVATE-KEY\x00controller.default.sind.sind ssh-ed25519 AAAA\n", "", nil)
 
 	client := docker.NewClient(mock)
 	meshMgr := mesh.NewManager(client, "sind")
@@ -92,18 +88,23 @@ func TestSyncSSHExport_ExportsWhenContainerExists(t *testing.T) {
 
 	data, err = afero.ReadFile(fs, filepath.Join(dir, "known_hosts"))
 	require.NoError(t, err)
-	assert.Equal(t, "host1 ssh-ed25519 AAAA\n", string(data))
+	assert.Equal(t, "controller.default.sind.sind ssh-ed25519 AAAA\n", string(data))
 
 	data, err = afero.ReadFile(fs, filepath.Join(dir, "ssh_config"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "Host *.sind.sind")
-	assert.Contains(t, string(data), "ProxyCommand docker exec -i sind-ssh")
+	assert.Contains(t, string(data), "Host controller.default.sind.sind\n    ProxyCommand docker exec -i sind-ssh ")
+
+	// The export's exec is the only docker call: no separate existence
+	// probe of the relay container.
+	require.Len(t, mock.Calls, 1)
+	assert.Equal(t, []string{"exec", "sind-ssh"}, mock.Calls[0].Args[:2])
 }
 
 func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
 	mock := &mock.Executor{}
-	// ContainerExists: not found
-	mock.AddResult("", "Error: No such container", testutil.ExitCode1(t))
+	// ExportConfig: the relay container is gone
+	mock.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
 
 	client := docker.NewClient(mock)
 	meshMgr := mesh.NewManager(client, "sind")
@@ -134,7 +135,7 @@ func TestSyncSSHExport_CleansFilesWhenContainerGone(t *testing.T) {
 
 func TestSyncSSHExport_NoFilesToClean(t *testing.T) {
 	mock := &mock.Executor{}
-	mock.AddResult("", "Error: No such container", testutil.ExitCode1(t))
+	mock.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
 
 	client := docker.NewClient(mock)
 	meshMgr := mesh.NewManager(client, "sind")
@@ -145,7 +146,7 @@ func TestSyncSSHExport_NoFilesToClean(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSyncSSHExport_ContainerCheckError(t *testing.T) {
+func TestSyncSSHExport_DockerError(t *testing.T) {
 	mock := &mock.Executor{}
 	mock.AddResult("", "", fmt.Errorf("connection refused"))
 
@@ -156,14 +157,23 @@ func TestSyncSSHExport_ContainerCheckError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestSyncSSHExport_ExportError checks that a failing export of a relay
+// container that exists, such as a stopped one, is an error and keeps the
+// files.
 func TestSyncSSHExport_ExportError(t *testing.T) {
 	mock := &mock.Executor{}
-	mock.AddResult("[{}]", "", nil)
-	mock.AddResult("", "Error", fmt.Errorf("exec failed"))
+	mock.AddResult("", "Error response from daemon: container sind-ssh is not running", testutil.ExitCode1(t))
 
 	client := docker.NewClient(mock)
 	meshMgr := mesh.NewManager(client, "sind")
+	fs := afero.NewMemMapFs()
+	dir := "/state/sind/sind"
+	require.NoError(t, afero.WriteFile(fs, filepath.Join(dir, "ssh_config"), []byte("old"), 0644))
 
-	err := syncSSHExport(t.Context(), client, meshMgr, afero.NewMemMapFs(), "/state/sind/sind")
-	assert.Error(t, err)
+	err := syncSSHExport(t.Context(), client, meshMgr, fs, dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not running")
+	exists, err := afero.Exists(fs, filepath.Join(dir, "ssh_config"))
+	require.NoError(t, err)
+	assert.True(t, exists)
 }

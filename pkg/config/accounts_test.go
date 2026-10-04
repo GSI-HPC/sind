@@ -36,6 +36,28 @@ users:
 	assert.Equal(t, []User{{Name: "alice", Accounts: []string{"theory", "physics"}, Coordinator: []string{"physics"}, AdminLevel: AdminOperator}}, cfg.Users)
 }
 
+func TestParse_LimitNumbers(t *testing.T) {
+	// YAML 1.1 reads unquoted numbers first; sind passes them in plain
+	// decimal form. Quoted values stay as written.
+	input := `kind: Cluster
+accounts:
+  - name: physics
+    limits:
+      MaxJobs: 010
+      MaxSubmitJobs: 0x10
+      GrpJobs: 1e3
+      Fairshare: 1.10
+      Description: "1.10"
+      Organization: "007"`
+
+	cfg, err := Parse([]byte(input))
+	require.NoError(t, err)
+	assert.Equal(t, Limits{
+		"MaxJobs": "8", "MaxSubmitJobs": "16", "GrpJobs": "1000", "Fairshare": "1.1",
+		"Description": "1.10", "Organization": "007",
+	}, cfg.Accounts[0].Limits)
+}
+
 func TestParse_AccountsErrors(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -137,10 +159,16 @@ func TestValidate_Accounts(t *testing.T) {
 			wantErr: `account "physics": parent "physics" must be declared before it`},
 		{name: "undeclared parent", accounts: []Account{{Name: "theory", Parent: "physic"}},
 			wantErr: `account "theory": parent "physic" is not declared in accounts`},
+		{name: "limits in any case", accounts: []Account{{Name: "physics", Limits: Limits{"maxjobs": "1", "GRPTRES": "cpu=4", "qos": "normal", "MaxWall": "1:00:00"}}}},
 		{name: "reserved limit", accounts: []Account{{Name: "physics", Limits: Limits{"Parent": "root"}}},
-			wantErr: `account "physics": invalid limit "Parent": it must be a sacctmgr option other than name, names, parent, cluster, clusters`},
+			wantErr: `account "physics": invalid limit "Parent": it must be one of the sacctmgr options Comment, DefaultQOS, Description, Fairshare, Flags, GrpJobs, `},
 		{name: "cluster limit", accounts: []Account{{Name: "physics", Limits: Limits{"clusters": "other"}}}, wantErr: `invalid limit "clusters"`},
 		{name: "limit with =", accounts: []Account{{Name: "physics", Limits: Limits{"GrpTRES=cpu": "4"}}}, wantErr: `invalid limit "GrpTRES=cpu"`},
+		{name: "abbreviated account option", accounts: []Account{{Name: "physics", Limits: Limits{"Acct": "other"}}}, wantErr: `invalid limit "Acct"`},
+		{name: "abbreviated parent", accounts: []Account{{Name: "physics", Limits: Limits{"Pa": "other"}}}, wantErr: `invalid limit "Pa"`},
+		{name: "abbreviated cluster", accounts: []Account{{Name: "physics", Limits: Limits{"C": "other"}}}, wantErr: `invalid limit "C"`},
+		{name: "where", accounts: []Account{{Name: "physics", Limits: Limits{"Where": "x"}}}, wantErr: `invalid limit "Where"`},
+		{name: "abbreviated limit", accounts: []Account{{Name: "physics", Limits: Limits{"MaxJ": "1"}}}, wantErr: `invalid limit "MaxJ"`},
 		{name: "empty limit", accounts: []Account{{Name: "physics", Limits: Limits{"MaxJobs": ""}}}, wantErr: `account "physics": limit MaxJobs must not be empty`},
 		{name: "undeclared account", accounts: []Account{{Name: "physics"}}, users: []User{{Name: "alice", Accounts: []string{"physic"}}},
 			wantErr: `user "alice": accounts: account "physic" is not declared in accounts`},
@@ -175,5 +203,33 @@ func TestValidate_Accounts(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
+	}
+}
+
+func TestCluster_Warnings(t *testing.T) {
+	limited := []Account{
+		{Name: "physics", Limits: Limits{"GrpTRES": "cpu=4", "Fairshare": "10"}},
+		{Name: "theory", Parent: "physics", Limits: Limits{"maxjobs": "1", "Description": "Theory"}},
+		{Name: "ops"},
+	}
+	for _, tt := range []struct {
+		name     string
+		accounts []Account
+		main     Section
+		want     []string
+	}{
+		{name: "no accounts"},
+		{name: "no limits Slurm enforces", accounts: []Account{{Name: "physics", Limits: Limits{"Fairshare": "10", "QOS": "normal"}}}},
+		{name: "not enforced", accounts: limited, want: []string{
+			"Slurm does not enforce the accounts' limits (physics: GrpTRES; theory: maxjobs): slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it"}},
+		{name: "associations only", accounts: limited, main: Section{Content: "AccountingStorageEnforce=associations,qos\n"}, want: []string{
+			"Slurm does not enforce the accounts' limits (physics: GrpTRES; theory: maxjobs): slurm.main sets AccountingStorageEnforce=associations,qos; add limits to it"}},
+		{name: "limits", accounts: limited, main: Section{Content: "AccountingStorageEnforce=associations,limits\n"}},
+		{name: "safe", accounts: limited, main: Section{Fragments: map[string]string{"acct": "AccountingStorageEnforce=Safe\n"}}},
+		{name: "all", accounts: limited, main: Section{Content: "AccountingStorageEnforce = all\n"}},
+		{name: "numeric", accounts: limited, main: Section{Content: "AccountingStorageEnforce=1,2\n"}},
+	} {
+		cfg := &Cluster{Accounts: tt.accounts, Slurm: Slurm{Main: tt.main}}
+		assert.Equal(t, tt.want, cfg.Warnings(), tt.name)
 	}
 }

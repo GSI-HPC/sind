@@ -12,17 +12,17 @@ toc: true
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
 | `db` | 0–1 | no | mariadb, slurmdbd | Accounting database (see below) |
-| `submitter` | 0–1 | no | none (clients only) | Job submission node |
+| `submitter` | 0–1 | no | none (clients only; `sackd` with identity `clientIds`) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
 ## Node parameters
 
 | Parameter | Scope | Default | Description |
 |-----------|-------|---------|-------------|
-| `image` | global + per-node | `ghcr.io/gsi-hpc/sind-node:latest` | Container image |
-| `cpus` | global + per-node | `1` | CPU limit |
-| `memory` | global + per-node | `"512m"` | Memory limit |
-| `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp` |
+| `image` | global + per-node | the image of the sind release, e.g. `ghcr.io/gsi-hpc/sind-node:v0.11.0` ([details]({{< relref "/container-images/building-images#official-images" >}})) | Container image |
+| `cpus` | global + per-node | `1` | CPU limit; a managed worker's Slurm `CPUs` |
+| `memory` | global + per-node | `"512m"` | Memory limit, without swap, in Docker's size syntax (`2g`, `2gb`, `1.5GiB`, ...), for the jobs, the node's own services and its `/tmp`, `/run` and `/dev/shm` files; `/dev/shm` gets half of it; a managed worker's Slurm `RealMemory` |
+| `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp`, a whole number with an optional unit or a percentage; files there count against `memory` |
 | `count` | worker only | `1` | Number of worker nodes |
 | `managed` | controller + db + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see below). Controller: `false` makes the whole cluster unmanaged (see below) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` (see below) |
@@ -115,8 +115,9 @@ nodes:
 ```
 
 - The container is `<realm>-<cluster>-db`, reachable as `db` inside the cluster. `count` and `backupController` are not valid on it.
-- sind writes `slurmdbd.conf` (owned by `slurm`, mode `0600`) and adds `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup` to `slurm.conf`, each unless the `main` section sets it. Extra slurmdbd settings go in the [`slurmdbd` section]({{< relref "/configuration/cluster-config#slurm-section" >}}).
+- sind writes `slurmdbd.conf` (owned by `slurm`, mode `0600`) and adds `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup` to `slurm.conf`, each unless the `main` section sets it. Extra slurmdbd settings go in the [`slurmdbd` section]({{< relref "/configuration/cluster-config#slurm-section" >}}); in its map form, the `slurmdbd.conf.d` fragments are protected the same way.
 - At creation, sind starts MariaDB, creates the `slurm_acct_db` database and the `slurm` database user, and starts slurmdbd before slurmctld and slurmd, so the controller registers the cluster on startup: `sind exec dev -- sacctmgr show cluster` lists it, and `sacct` shows finished jobs.
+- MariaDB authenticates the `slurm` database user by `unix_socket`: only slurmdbd, running as the OS user `slurm`, can log in as it, not the cluster users. With a `StoragePass` in the `slurmdbd` section, the user gets that password instead.
 - Accounting is not enforced: jobs run without users, accounts or associations. Declare them in the [`accounts` section]({{< relref "/configuration/cluster-config#accounts-section" >}}), or add them with `sacctmgr`, and set `AccountingStorageEnforce` in the `main` section to test limits.
 - `sind get cluster` and `sind get node` report `mariadb` and `slurmdbd` for the db node.
 - `managed: false` on the db node makes it a bare node in an otherwise managed cluster, to test your own slurmdbd provisioning while sind runs slurmctld and slurmd. sind then configures no accounting: no `slurmdbd.conf` (the `slurmdbd` section is rejected), no database, and no accounting parameters in `slurm.conf`. Point slurmctld at your slurmdbd through the `main` section, for example `AccountingStorageType=accounting_storage/slurmdbd` and `AccountingStorageHost=db`.
@@ -159,6 +160,8 @@ nodes:
 
 Capability names follow Docker convention (without the `CAP_` prefix). Device strings use Docker's format: `/dev/fuse` or `/dev/sda:/dev/xvda:rwm`.
 
+These fields can give a node root access to the host, so a config that sets them is only as safe as its author; see [Trust]({{< relref "/configuration/cluster-config#trust" >}}).
+
 When set in the `defaults` section, security fields apply to all nodes. Per-node values merge with (not replace) defaults:
 
 ```yaml
@@ -176,15 +179,19 @@ nodes:
       - NET_ADMIN    # workers get both SYS_ADMIN and NET_ADMIN
 ```
 
-sind logs a notice at cluster creation when extra privileges are configured, making the escalation visible.
+With `-v`, `sind create cluster` and `sind create worker` log an `extra privileges` notice at the info level for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). Without `-v` nothing is shown: like every successful mutation, creation is silent.
 
-One capability sind adds itself: workers of a cluster with [users]({{< relref "/configuration/cluster-config#users-section" >}}) get `SYS_NICE`. slurmstepd binds each task to its CPUs (`task/affinity`) after the task has become the job's user, and setting the CPU affinity of another user's process needs `CAP_SYS_NICE`, which Docker drops by default. Without it, every job of a user other than root fails with `task_g_set_affinity` and "Slurmd could not execve job".
+`securityOpt` entries must name an option Docker knows (`label`, `apparmor`, `seccomp`, `no-new-privileges`, `writable-cgroups` or `systempaths`); sind rejects others before it creates any container, and Docker checks the values.
 
-Workers created via `sind create worker` also support these fields:
+One capability sind adds itself, and only when the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}) sets a `TaskPlugin` with `task/affinity`: managed workers then get `SYS_NICE`, including workers added later with `sind create worker`. slurmstepd binds each task to its CPUs after the task has become the job's user, and setting the CPU affinity of another user's process needs `CAP_SYS_NICE`, which Docker drops by default. Without it, every job of a user other than root fails with `task_g_set_affinity` and "Slurmd could not execve job". sind's default, `TaskPlugin=task/cgroup`, binds no tasks and needs no extra capability (see [Slurm Configuration]({{< relref "/architecture/slurm-config#slurmconf" >}})). A `capDrop` of `SYS_NICE` or `ALL` keeps the capability off, as `--cap-drop` would not undo sind's `--cap-add`. For an unmanaged cluster whose own `slurm.conf` uses `task/affinity`, add `SYS_NICE` to the workers' `capAdd`; workers added later with `sind create worker` inherit it, as they do every capability sind did not add itself.
+
+Workers created via `sind create worker` take these fields from the cluster's newest worker, and the flags replace them:
 
 ```bash
 sind create worker --cap-add SYS_ADMIN --device /dev/fuse
 ```
+
+See [Worker Management]({{< relref "/usage/worker-management#defaults-from-the-newest-worker" >}}) for what new workers inherit.
 
 ## Default nodes
 

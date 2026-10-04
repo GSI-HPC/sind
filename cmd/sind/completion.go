@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/cobra"
@@ -42,23 +41,11 @@ func completeNodeNames(cmd *cobra.Command, _ []string, _ string) ([]string, cobr
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
-	clusters, err := cluster.DiscoverClusterNames(ctx, client, realm)
+	names, err := cluster.GetNodeNames(ctx, client, realm)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
-	var completions []string
-	for _, cl := range clusters {
-		nodes, err := cluster.GetNodes(ctx, client, realm, cl)
-		if err != nil {
-			continue
-		}
-		prefix := cluster.ContainerPrefix(realm, cl)
-		for _, n := range nodes {
-			shortName := strings.TrimPrefix(n.Container, prefix)
-			completions = append(completions, shortName+"."+cl)
-		}
-	}
-	return completions, cobra.ShellCompDirectiveNoFileComp
+	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
 // completeLogsArgs provides shell completion for the logs command.

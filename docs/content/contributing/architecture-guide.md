@@ -13,13 +13,15 @@ cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
   ├── root.go      Root command, persistent --realm and -v flags, TraverseChildren
   ├── context.go   Dependency injection via context
+  ├── exitcode.go  Exit statuses, usage errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
-  ├── lock.go      Per-realm advisory locking (flock)
+  ├── lock.go      Realm lock for mutating commands (pkg/state)
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations
+  ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── worker.go    Worker create/delete commands
   └── *.go         One file per command group
 
@@ -30,7 +32,7 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names)
 
-internal/termtext/ Escaping of untrusted text for the terminal (final error line)
+internal/termtext/ Escaping of untrusted text for the terminal (final error line, table cells, doctor details)
 
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Ptr[T]
@@ -49,6 +51,8 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
+  ├── info.go      docker info (daemon version, cgroup version, security options)
+  ├── plugin.go    Volume plugin queries (CVMFS)
   └── labels.go    Docker Compose compatibility labels
 
 pkg/cluster/       Cluster operations (orchestration)
@@ -57,8 +61,15 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
+  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNotReady), rollback bound
+  ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
+  ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
+  ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
+  ├── users.go     Linux users and groups, their labels, home directories
+  ├── identity.go  Identity modes: nss_slurm on workers, sackd on the submitter
+  ├── cvmfs.go     CVMFS backend detection and mount arguments
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
@@ -73,15 +84,17 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
-pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, DNS policy)
+pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, inotify, DNS policy)
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
 pkg/nodeset/       Nodeset expansion (worker-[0-3])
 pkg/probe/         Node readiness probes
 pkg/retry/         Bounded exponential-backoff helper
-pkg/slurm/         Slurm config generation and version discovery
+pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
+                   discovery, munge key and slurm.key generation, sacctmgr account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
+pkg/state/         sind's state directory and the realm lock (flock) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
 ```
 
 ## Dependency flow
@@ -92,18 +105,22 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                        → pkg/log
                        → pkg/mesh    → pkg/docker
                                      → pkg/cmdexec
+                                     → pkg/config
                                      → pkg/retry
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
                        → pkg/probe   → pkg/docker
+                                     → pkg/config
                                      → pkg/monitor
                        → pkg/retry
                        → pkg/slurm   → pkg/docker
+                                     → pkg/config
                        → pkg/ssh     → pkg/docker
          → pkg/nodeset
+         → pkg/state   (→ pkg/log)
 ```
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
 
 ## Adding a new CLI command
 
@@ -131,7 +148,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 ## Adding a Docker operation
 
 1. **Add the method** to `pkg/docker/client.go` (or the appropriate resource file)
-2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output
+2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
 3. **Use strong types**: `ContainerName`, `NetworkName`, `VolumeName`, etc.
 4. **Write unit tests** using `mock.Executor`
 
@@ -139,7 +156,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 
 ### Executor abstraction
 
-All external commands go through the `cmdexec.Executor` interface (from `pkg/cmdexec`), making every operation testable:
+All external commands go through the `cmdexec.Executor` interface (from `pkg/cmdexec`), making every operation testable, with one exception (see below):
 
 ```go
 type Executor interface {
@@ -150,6 +167,8 @@ type Executor interface {
 ```
 
 `pkg/docker` uses an executor for Docker CLI calls. `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl, pkcheck). The CLI wraps the mesh executor in a `LoggingExecutor` to emit TRACE-level logs for system commands.
+
+The exception is `dockerExec` in `cmd/sind/ssh.go`, used by `ssh`, `enter`, `exec` and `logs`. It runs `docker` through `os/exec` with the terminal's stdin, stdout and stderr attached, because `Executor` only captures output, and unlike the calls through `docker.Client` it logs no TRACE line. Its unit tests cannot use `mock.Executor`: they put the test binary first on `PATH` as a fake `docker`, controlled by the `SIND_TEST_DOCKER_*` variables in `cmd/sind/main_test.go`.
 
 ### Context-based dependency injection
 

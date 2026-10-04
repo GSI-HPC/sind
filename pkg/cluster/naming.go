@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
 // Package cluster provides types and operations for sind cluster management.
+//
+// Create, Delete, DeleteAll, WorkerAdd, WorkerRemove, PowerOn,
+// PowerReboot and PowerCycle change state that every cluster of a realm shares and take no lock themselves: their caller
+// holds the realm lock, state.LockRealm, for the whole operation.
 package cluster
 
 import (

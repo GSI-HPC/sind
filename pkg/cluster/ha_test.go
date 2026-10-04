@@ -116,8 +116,10 @@ func pairStatusOnCall(t *testing.T, states map[string]string, ping string, hb mo
 			return fusedIsActiveResponse(t, args)
 		case args[0] == "exec" && args[2] == "scontrol":
 			return mock.Result{Stdout: ping}
-		case args[0] == "network" || args[0] == "volume":
+		case args[0] == "network":
 			return mock.Result{Stdout: "[{}]\n"}
+		case args[0] == "volume" && args[1] == "ls":
+			return volumeLs("sind-dev-config", "sind-dev-munge", "sind-dev-data", "sind-dev-state")
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
@@ -261,8 +263,8 @@ func TestGetNodeHealth_UnmanagedControllerHasNoHA(t *testing.T) {
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 
-	health, err := GetNodeHealth(t.Context(), docker.NewClient(&m), "sind-dev-controller-backup",
-		config.RoleController, mesh.DefaultRealm, "dev")
+	health, err := inspectedNodeHealth(t, docker.NewClient(&m), "sind-dev-controller-backup",
+		config.RoleController)
 
 	require.NoError(t, err)
 	assert.Nil(t, health.HA)
@@ -327,7 +329,7 @@ func TestGetNodeHealth_ControllerHA(t *testing.T) {
 			m.OnCall = nodeHAOnCall(t, tt.states, tt.inspectErr, fresh)
 			c := docker.NewClient(&m)
 
-			health, err := GetNodeHealth(t.Context(), c, "sind-dev-"+tt.node, config.RoleController, mesh.DefaultRealm, "dev")
+			health, err := inspectedNodeHealth(t, c, "sind-dev-"+tt.node, config.RoleController)
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr)

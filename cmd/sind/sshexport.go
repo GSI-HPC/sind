@@ -4,13 +4,12 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/ssh"
+	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/afero"
 )
 
@@ -20,15 +19,12 @@ var sshExportFiles = []string{"ssh_config", "id_ed25519", "known_hosts"}
 // syncSSHExport updates or cleans the SSH configuration export directory.
 // If the mesh SSH container exists, it exports ssh_config, id_ed25519, and
 // known_hosts to dir. If the SSH container is gone (mesh cleaned up after
-// last cluster deletion), it removes those files but preserves the directory.
+// last cluster deletion), which the export's docker exec reports, it
+// removes those files but preserves the directory.
 func syncSSHExport(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, fs afero.Fs, dir string) error {
-	exists, err := client.ContainerExists(ctx, meshMgr.SSHContainerName())
-	if err != nil {
+	err := ssh.ExportConfig(ctx, client, fs, dir, meshMgr.Realm, meshMgr.SSHContainerName())
+	if !docker.IsNotFound(err) {
 		return err
-	}
-
-	if exists {
-		return ssh.ExportConfig(ctx, client, fs, dir, meshMgr.Realm, meshMgr.SSHContainerName())
 	}
 
 	for _, name := range sshExportFiles {
@@ -39,22 +35,9 @@ func syncSSHExport(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 	return nil
 }
 
-// sindStateDir returns the per-realm SSH export directory path.
-// Uses $XDG_STATE_HOME/sind/<realm>, falling back to ~/.local/state/sind/<realm>.
-// A relative XDG_STATE_HOME is ignored, as the XDG Base Directory
-// specification requires; the state would otherwise move with the working
-// directory. Adapted from GSI-HPC/clusterctl internal/config/paths.go.
+// sindStateDir returns the per-realm SSH export directory path,
+// state.RealmDir: $XDG_STATE_HOME/sind/<realm>, falling back to
+// ~/.local/state/sind/<realm>.
 func sindStateDir(realm string) (string, error) {
-	base := os.Getenv("XDG_STATE_HOME")
-	if !filepath.IsAbs(base) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		if !filepath.IsAbs(home) {
-			return "", fmt.Errorf("HOME is not an absolute path and XDG_STATE_HOME is not set to one")
-		}
-		base = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(base, "sind", realm), nil
+	return state.RealmDir(realm)
 }

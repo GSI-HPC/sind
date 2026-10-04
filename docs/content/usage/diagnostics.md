@@ -16,17 +16,33 @@ Checks system prerequisites and reports pass/fail for each:
 
 ```
 ✓ Docker Engine: 28.1.1 (>= 28.0)
+✓ Docker daemon: rootful, no userns-remap
 ✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)
+✓ inotify: max_user_instances 8192 (>= 1024)
 ✓ DNS policy: host resolution available
 ```
 
 | Check | Required | Description |
 |-------|----------|-------------|
-| Docker Engine | yes | Docker >= 28.0 reachable |
-| cgroupv2 | yes | cgroup2 mounted with `nsdelegate` option |
+| Docker Engine | yes | Docker >= 28.0 reachable (`docker info`) |
+| Docker daemon | yes | rootful, without `userns-remap`: Docker refuses the writable cgroups of sind's nodes in rootless mode and with `userns-remap` |
+| cgroupv2 | yes | Docker runs containers on cgroup v2 (`docker info`), and this host mounts the unified cgroup2 hierarchy at `/sys/fs/cgroup` with the `nsdelegate` option |
+| inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. The DNS policy check is advisory — it only appears when systemd-resolved is running, and failure does not affect the exit status. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+The Docker checks ask the daemon. The cgroup mount, inotify and DNS policy checks look at the machine sind runs on, which has to be the Docker host: sind does not support Docker Desktop or a remote `DOCKER_HOST`.
+
+The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
+
+```
+✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ...
+
+Add your user to the docker group, then log in again (or run newgrp docker):
+
+sudo usermod -aG docker $USER
+```
+
+A missing `docker` CLI and a daemon that is not running get their own hint. A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The inotify and DNS policy checks are advisory: a warning does not affect the exit status. The inotify check prints the `sysctl` commands that raise the limit; it is left out when the limit cannot be read or `DOCKER_HOST` names a daemon that is not reached through a local socket. The DNS policy check only appears when systemd-resolved is running; when `DOCKER_HOST` names a daemon on another host it reports host resolution as not available, since the mesh bridge that the host resolver would use is on that host. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 
@@ -47,7 +63,7 @@ sudo systemctl daemon-reload
 
 ### Machine-readable output
 
-`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name`, a `status` (`ok`, `failed`, or `warning` when the advisory DNS policy check does not pass) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
+`sind doctor -o json` prints the checks as a JSON array for scripts. Each check has a `name` (`Docker Engine`, `Docker daemon`, `cgroupv2`, `inotify`, `DNS policy`), a `status` (`ok`, `failed`, or `warning` when an advisory check does not pass) and a `detail`; a check that did not pass and has a fix adds the commands as `remediation`. The exit status is the same as with the default output.
 
 ```bash
 sind doctor -o json
@@ -61,13 +77,54 @@ sind doctor -o json
     "detail": "28.1.1 (>= 28.0)"
   },
   {
+    "name": "Docker daemon",
+    "status": "ok",
+    "detail": "rootful, no userns-remap"
+  },
+  {
     "name": "cgroupv2",
     "status": "failed",
     "detail": "nsdelegate not found",
     "remediation": "Enable nsdelegate temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n..."
+  },
+  {
+    "name": "inotify",
+    "status": "ok",
+    "detail": "max_user_instances 8192 (>= 1024)"
   }
 ]
 ```
+
+## Version
+
+```bash
+sind version
+```
+
+Prints the version and, for a release build, the commit it was built from:
+
+```
+sind 0.10.0 (0a57d68)
+```
+
+`--json` prints all fields as one JSON object, for scripts such as [sind-action](https://github.com/GSI-HPC/sind-action), which reads `version`:
+
+```bash
+sind version --json
+```
+
+```json
+{"version":"0.10.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}
+```
+
+| Field | Description |
+|-------|-------------|
+| `version` | sind's version, without the `v` of the release tag |
+| `commit` | the commit the binary was built from; left out when unknown |
+| `goVersion` | the Go toolchain that built the binary |
+| `platform` | operating system and architecture, `linux/amd64` or `linux/arm64` |
+
+A development build reports the output of `git describe`, such as `0.10.0-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
 
 ## Verbose logging
 
@@ -146,6 +203,7 @@ sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
 MESH SERVICES
 NAME   CONTAINER   STATUS
 dns    sind-dns    ✓
+ssh    sind-ssh    ✓
 
 MOUNTS
 MOUNT        SOURCE               TYPE       STATUS
@@ -172,11 +230,13 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 | `empty`   | No nodes exist                                        |
 | `unknown` | All containers are in a state sind does not map, e.g. `restarting` |
 
+`MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok` and `ssh_ok` in the JSON output). After a host reboot or a Docker daemon restart they exist but are stopped; `sind power on` starts them again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
+
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
 Nodes where sind does not manage Slurm (unmanaged workers and db nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. With [identity `clientIds`]({{< relref "/guides/users#clientids" >}}), no node lists `munge`, as auth/slurm replaces it, and the submitter lists `sackd`; `MOUNTS` has no `/etc/munge`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
 
-With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), `MOUNTS` lists the home volume at `/home`. With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
+The data row shows what Docker mounts at the nodes' data mount point: the bind-mounted host directory (type `hostPath`) or the volume. With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), `MOUNTS` lists the home volume at `/home`. With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
 
 Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`. Unmanaged clusters show no `HA` column: sind cannot tell which of their controllers is in control.
 
