@@ -8,8 +8,6 @@ toc: true
 
 <!-- Keep in sync with TestQuickstart in cmd/sind/quickstart_test.go -->
 
-{{< video "quickstart" >}}
-
 ## Create a cluster
 
 The simplest command creates a cluster named `default` with one controller and one worker:
