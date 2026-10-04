@@ -62,6 +62,9 @@
     return h("div", { class: "logo-grid" }, LOGO_CELLS.map(([c, o]) => h("i", { style: `background:${c};opacity:${o}` })));
   }
 
+  // Words match cues ignoring case and punctuation, as in Scenes.planner.
+  const norm = (w) => w.toLowerCase().replace(/[^a-z0-9]/g, "");
+
   // JetBrains Mono advances 0.6em per character.
   const MONO_ADVANCE = 0.6;
 
@@ -83,6 +86,7 @@
     const renderers = [];
     const chapters = [];
     const scenes = [];
+    const shown = []; // terminal commands and output, for `episode.mjs check`
     let shotName = null;
     let sceneCount = 0;
 
@@ -102,7 +106,14 @@
       if (!m) throw new Error(`bad time reference "${ref}" (want "line:word", "line:word#n" or seconds)`);
       const said = P.said.find((s) => s.id === m[1]);
       if (!said) throw new Error(`line "${m[1]}" has not been said yet (reference "${ref}")`);
-      return said.word(m[2].trim(), m[3] ? Number(m[3]) : 0) + (m[4] ? Number(m[4]) : 0);
+      const word = m[2].trim();
+      if (m[3] == null) {
+        // A prefix that matches several words picks the first; say so.
+        const key = norm(word);
+        const hits = said.line.words.filter((w) => norm(w.text).startsWith(key)).map((w) => w.text);
+        if (hits.length > 1) console.warn(`cue "${ref}" matches ${hits.length} words (${hits.join(", ")}); write "${m[1]}:${word}#0" for the first, or a longer prefix`);
+      }
+      return said.word(word, m[3] ? Number(m[3]) : 0) + (m[4] ? Number(m[4]) : 0);
     }
     const lineEnd = (id) => {
       const said = P.said.find((s) => s.id === id);
@@ -281,6 +292,10 @@
       body.style.fontSize = `${font}px`;
       const rows = Math.floor((geo.height - 58 - 52) / (font * 1.55));
       renderers.push(S().terminal(win, steps, { prompt, cps, rows }));
+      for (const st of steps) {
+        if (st.cmd != null) shown.push({ cmd: st.cmd, at: st.at });
+        if (st.out != null) shown.push({ out: st.out, at: st.at });
+      }
       return api;
     }
 
@@ -325,7 +340,7 @@
       // Docs renders turn burned-in captions off and ship a WebVTT track instead.
       if (S().vars({ captions: true }).captions) list.push(S().captions(captionsEl, P.said));
       S().clock(tl, END, list);
-      S().episode({ id: opts.id || compId, title: opts.title || series, duration: END, said: P.said, chapters });
+      S().episode({ id: opts.id || compId, title: opts.title || series, duration: END, said: P.said, chapters, terminal: shown });
       return tl;
     }
 

@@ -330,7 +330,8 @@
   }
 
   // Publish episode metadata on window.__episode for tools/publish.mjs:
-  // chapters (for the docs player) and caption cues (for WebVTT).
+  // chapters (for the docs player) and caption cues (for WebVTT). Narration
+  // spans and terminal content are for `episode.mjs check`.
   function episode(meta) {
     const r3 = (v) => Math.round(v * 1000) / 1000;
     global.__episode = {
@@ -343,6 +344,8 @@
         end: r3(p.end),
         text: p.words.map((w) => w.text).join(" "),
       })),
+      lines: meta.said.map((s) => ({ id: s.id, text: s.line.text, start: r3(s.start), end: r3(s.end) })),
+      terminal: meta.terminal || [],
     };
     return global.__episode;
   }

@@ -152,6 +152,7 @@ npm run voice:setup                        # download Kokoro (about 350 MB) and 
 npx hyperframes browser ensure             # download chrome-headless-shell, once
 
 npm run episode -- voice quickstart        # narration into episodes/quickstart/assets/voice/
+npm run episode -- check quickstart        # timeline, warnings, lint, stills in episodes/quickstart/snapshots/
 npm run episode -- render quickstart       # renders/quickstart.mp4 (add --draft for speed)
 npm run voice:samples                      # audition pack in renders/voice-samples/
 npm run sheet                              # sindy/sheet.png expression sheet
@@ -184,12 +185,12 @@ video/
   sindy/                character bible, expression sheet page
   voice/                TTS tool, voice presets, pronunciation lexicon
   episodes/<id>/        one HyperFrames project per docs page (script.json + index.html)
-  tools/                episode CLI, publishing, vendoring, screenshots, lip-sync stats
+  tools/                episode CLI (voice, check, render, publish, ci), vendoring, screenshots, lip-sync stats
 ```
 
-Generated files (`vendor/`, `assets/voice/`, `renders/`) are not committed.
-Renders need no network: GSAP and the fonts come from npm, and the voice
-metadata loads from a local script.
+Generated files (`vendor/`, `assets/voice/`, `snapshots/`, `renders/`) are not
+committed. Renders need no network: GSAP and the fonts come from npm, and the
+voice metadata loads from a local script.
 
 ## Decisions
 
