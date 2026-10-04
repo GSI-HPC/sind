@@ -421,6 +421,46 @@ func TestCreateNetwork_Error(t *testing.T) {
 	assert.Empty(t, id)
 }
 
+func TestCreateNetworkWithSubnet(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("net-id\n", "", nil)
+	c := NewClient(&m)
+
+	id, err := c.CreateNetworkWithSubnet(t.Context(), testNetworkName, Labels{"sind.realm": "sind"}, NetworkIPAM{
+		Subnet: "172.18.0.0/16", Gateway: "172.18.0.1", IPRange: "172.18.0.0/17",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, NetworkID("net-id"), id)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{
+		"network", "create",
+		"--subnet", "172.18.0.0/16", "--gateway", "172.18.0.1", "--ip-range", "172.18.0.0/17",
+		"--label", "sind.realm=sind",
+		string(testNetworkName),
+	}, m.Calls[0].Args)
+}
+
+func TestCreateNetworkWithSubnet_SubnetOnly(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("net-id\n", "", nil)
+	c := NewClient(&m)
+
+	_, err := c.CreateNetworkWithSubnet(t.Context(), testNetworkName, nil, NetworkIPAM{Subnet: "172.18.0.0/16"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"network", "create", "--subnet", "172.18.0.0/16", string(testNetworkName)}, m.Calls[0].Args)
+}
+
+func TestCreateNetworkWithSubnet_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error response from daemon: Pool overlaps with other one on this address space\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	id, err := c.CreateNetworkWithSubnet(t.Context(), testNetworkName, nil, NetworkIPAM{Subnet: "172.18.0.0/16"})
+	assert.Error(t, err)
+	assert.Empty(t, id)
+}
+
 func TestRemoveNetwork(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(string(testNetworkName)+"\n", "", nil)
@@ -497,6 +537,19 @@ func TestInspectNetwork(t *testing.T) {
 	assert.Equal(t, "bridge", info.Driver)
 	assert.Equal(t, "172.18.0.0/16", info.Subnet)
 	assert.Equal(t, "172.18.0.1", info.Gateway)
+}
+
+func TestInspectNetwork_IPRangeAndLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Name":"sind-mesh","Driver":"bridge","Labels":{"sind.dns.ip":"172.18.255.254"},`+
+		`"IPAM":{"Config":[{"Subnet":"172.18.0.0/16","IPRange":"172.18.0.0/17","Gateway":"172.18.0.1"}]}}]`, "", nil)
+	c := NewClient(&m)
+
+	info, err := c.InspectNetwork(t.Context(), "sind-mesh")
+	require.NoError(t, err)
+	assert.Equal(t, "172.18.0.0/16", info.Subnet)
+	assert.Equal(t, "172.18.0.0/17", info.IPRange)
+	assert.Equal(t, Labels{"sind.dns.ip": "172.18.255.254"}, info.Labels)
 }
 
 func TestInspectNetwork_NoIPAM(t *testing.T) {

@@ -48,6 +48,8 @@ Nodes are configured with:
 --dns-search <cluster>.<realm>.sind
 ```
 
+The DNS container keeps its address for as long as the realm's mesh exists (see [below](#after-a-host-reboot-or-a-docker-daemon-restart)). `sind get mesh` shows it, so DNS servers outside sind, such as the CoreDNS of a kind cluster on the same host, can forward the `<realm>.sind` zone to it.
+
 Within a cluster, short names work via the search domain: a node in the `dev` cluster can reach `controller` without the full `controller.dev.sind.sind`.
 
 DNS records use each node's **cluster network IP** (not mesh network IP), so the SSH relay and the host reach the nodes through the cluster's network.
@@ -64,7 +66,9 @@ sind sets no restart policy, so the mesh containers and the nodes stay stopped a
 sind power on controller,worker-[0-1]
 ```
 
-Docker fixes the DNS server of the nodes and the relay (`--dns`) when it creates them. Starting the DNS container before anything else on the mesh gets it its old address back. If it gets another one, for example after containers were started by hand in another order, sind prints a warning: the containers created before resolve neither `*.<realm>.sind` names nor external names until they are created again. Delete and create the affected clusters to repair them; the SSH relay is created again with the realm's mesh after its last cluster is deleted.
+Docker fixes the DNS server of the nodes and the relay (`--dns`) when it creates them, and does not keep the address of a stopped container. sind therefore pins the DNS container's address. The mesh network gets a subnet of its own, which sind lets Docker choose from its default address pools: Docker hands out the lower half to the nodes and the relay (`--ip-range`), and the DNS container gets a fixed address in the upper half (`--ip`), the last one before the broadcast address, such as `172.18.255.254` in `172.18.0.0/16`. It gets that address back in whatever order the containers start. The mesh network records it in its label `sind.dns.ip`.
+
+A mesh without a pinned address works as before: one created by an earlier sind version, or on a daemon whose address pools give networks smaller than `/21` (see [Limits](#limits)). Starting its DNS container before anything else on the mesh gets it its old address back. If it gets another one, for example after containers were started by hand in another order, sind prints a warning: the containers created before resolve neither `*.<realm>.sind` names nor external names until they are created again. Delete and create the affected clusters to repair them; the SSH relay is created again with the realm's mesh after its last cluster is deleted, and the new mesh pins the address.
 
 ### Host DNS resolution
 

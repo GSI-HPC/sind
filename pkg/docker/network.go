@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+// MaxBridgeEndpoints is the number of containers a Docker bridge network
+// holds at most: a Linux bridge has 1,024 ports (BR_MAX_PORTS), and the
+// kernel reserves port 0. Docker fails to connect another container with
+// "exchange full" (EXFULL).
+const MaxBridgeEndpoints = 1023
+
 // NetworkExists returns true if the given network exists.
 func (c *Client) NetworkExists(ctx context.Context, name NetworkName) (bool, error) {
 	return c.exists(ctx, "network", "inspect", string(name))
@@ -21,10 +27,42 @@ func (c *Client) NetworkLabels(ctx context.Context, name NetworkName) (Labels, b
 	return c.labels(ctx, "network", "inspect", string(name), "--format", "{{json .Labels}}")
 }
 
-// CreateNetwork creates a Docker network and returns its ID.
-// Labels are applied as --label flags when non-nil.
+// CreateNetwork creates a Docker network and returns its ID. Docker takes
+// its subnet from the daemon's default address pools. Labels are applied as
+// --label flags when non-nil.
 func (c *Client) CreateNetwork(ctx context.Context, name NetworkName, labels Labels) (NetworkID, error) {
+	return c.createNetwork(ctx, name, labels, nil)
+}
+
+// NetworkIPAM is a network's IPv4 subnet as the user configures it, rather
+// than one Docker takes from its default address pools.
+type NetworkIPAM struct {
+	Subnet  string // CIDR, e.g. 172.18.0.0/16
+	Gateway string // address in Subnet; empty lets Docker choose
+	// IPRange is the CIDR within Subnet that Docker takes the addresses of
+	// containers from that ask for none; empty for all of Subnet. A
+	// container's --ip may lie outside it.
+	IPRange string
+}
+
+// CreateNetworkWithSubnet creates a Docker network with the subnet that ipam
+// configures and returns its ID. Docker accepts a container's --ip only on
+// such a network. Labels are applied as --label flags when non-nil.
+func (c *Client) CreateNetworkWithSubnet(ctx context.Context, name NetworkName, labels Labels, ipam NetworkIPAM) (NetworkID, error) {
+	args := []string{"--subnet", ipam.Subnet}
+	if ipam.Gateway != "" {
+		args = append(args, "--gateway", ipam.Gateway)
+	}
+	if ipam.IPRange != "" {
+		args = append(args, "--ip-range", ipam.IPRange)
+	}
+	return c.createNetwork(ctx, name, labels, args)
+}
+
+// createNetwork runs docker network create with the given IPAM flags.
+func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Labels, ipamArgs []string) (NetworkID, error) {
 	args := []string{"network", "create"}
+	args = append(args, ipamArgs...)
 	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))
 	stdout, _, err := c.run(ctx, args...)
@@ -111,24 +149,30 @@ func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, con
 	return err
 }
 
-// NetworkInfo holds detailed information about a Docker network.
+// NetworkInfo holds detailed information about a Docker network. Subnet,
+// Gateway and IPRange are those of its first IPAM configuration; IPRange is
+// empty unless the user configured one.
 type NetworkInfo struct {
 	ID      string
 	Name    NetworkName
 	Driver  string
 	Subnet  string
 	Gateway string
+	IPRange string
+	Labels  Labels
 }
 
 // networkInspectResult maps the subset of docker network inspect JSON we need.
 type networkInspectResult struct {
-	ID     string `json:"Id"`
-	Name   string `json:"Name"`
-	Driver string `json:"Driver"`
+	ID     string            `json:"Id"`
+	Name   string            `json:"Name"`
+	Driver string            `json:"Driver"`
+	Labels map[string]string `json:"Labels"`
 	IPAM   struct {
 		Config []struct {
 			Subnet  string `json:"Subnet"`
 			Gateway string `json:"Gateway"`
+			IPRange string `json:"IPRange"`
 		} `json:"Config"`
 	} `json:"IPAM"`
 }
@@ -171,10 +215,11 @@ func (c *Client) InspectNetworks(ctx context.Context, names ...NetworkName) ([]*
 	}
 	infos := make([]*NetworkInfo, 0, len(results))
 	for _, r := range results {
-		info := &NetworkInfo{ID: r.ID, Name: NetworkName(r.Name), Driver: r.Driver}
+		info := &NetworkInfo{ID: r.ID, Name: NetworkName(r.Name), Driver: r.Driver, Labels: r.Labels}
 		if len(r.IPAM.Config) > 0 {
 			info.Subnet = r.IPAM.Config[0].Subnet
 			info.Gateway = r.IPAM.Config[0].Gateway
+			info.IPRange = r.IPAM.Config[0].IPRange
 		}
 		infos = append(infos, info)
 	}
