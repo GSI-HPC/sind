@@ -188,14 +188,12 @@ func addUsersScript(l LinuxUsers) string {
 	return b.String()
 }
 
-// addUsers creates the cluster's groups and users on a node. Every node
-// runs the same commands with the same IDs, so a user has one UID and GID
-// across the cluster, as munge and Slurm require.
-func addUsers(ctx context.Context, client *docker.Client, container docker.ContainerName, l LinuxUsers) error {
-	if _, err := client.Exec(ctx, container, "sh", "-ec", addUsersScript(l)); err != nil {
-		return fmt.Errorf("adding users: %w", err)
-	}
-	return nil
+// addUsersStep returns the node setup step (see nodeSetupSteps) that
+// creates the cluster's groups and users on a node. Every node runs the
+// same commands with the same IDs, so a user has one UID and GID across the
+// cluster, as munge and Slurm require.
+func addUsersStep(l LinuxUsers) setupStep {
+	return setupStep{name: "users", what: "adding users", script: addUsersScript(l)}
 }
 
 // createHomesScript creates, for each name, uid and gid triple in its

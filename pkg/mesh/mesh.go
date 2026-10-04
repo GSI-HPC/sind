@@ -5,7 +5,10 @@ package mesh
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"maps"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -25,6 +28,17 @@ const DefaultRealm = "sind"
 // pkg/cluster defines the same constant for cluster-scoped resources; keeping
 // it local here avoids a pkg/mesh → pkg/cluster import.
 const LabelRealm = "sind.realm"
+
+// LabelDNSIP is the label of a mesh network that records the address its
+// DNS container is pinned to (see EnsureMeshNetwork). Meshes created by
+// earlier sind versions lack it: their DNS container gets an address from
+// Docker each time it starts.
+const LabelDNSIP = "sind.dns.ip"
+
+// meshSubnetAttempts is how often EnsureMeshNetwork tries to create a new
+// mesh network again with its subnet pinned, when another network takes
+// the subnet in between, before it keeps one without.
+const meshSubnetAttempts = 5
 
 // Default-realm resource names. Production code uses Manager methods;
 // these constants are used in tests as expected values for DefaultRealm.
@@ -122,7 +136,8 @@ func (m *Manager) ComposeProject() string {
 func (m *Manager) EnsureMesh(ctx context.Context) error {
 	log := sindlog.From(ctx)
 	log.InfoContext(ctx, "ensuring mesh infrastructure", "realm", m.Realm)
-	if err := m.EnsureMeshNetwork(ctx); err != nil {
+	pinnedIP, err := m.ensureMeshNetwork(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -130,7 +145,7 @@ func (m *Manager) EnsureMesh(ctx context.Context) error {
 	var volumeCreated bool
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		ip, err := m.ensureDNS(gctx)
+		ip, err := m.ensureDNS(gctx, pinnedIP)
 		dnsIP = ip
 		return err
 	})
@@ -354,34 +369,135 @@ func (m *Manager) Created() bool {
 // EnsureMeshNetwork creates the shared mesh network if it does not already
 // exist, and records in Created whether it did.
 //
-// Another sind client of the same Docker daemon can create the network
-// between the check and the create, as the realm lock lives in each client's
-// home directory. Docker's "already exists" error then counts as an existing
-// network. Clients that share a daemon should still use separate realms.
+// A new mesh network pins the address of the DNS container, which every
+// node and the relay get as their --dns: Docker does not keep a stopped
+// container's address, so after a host reboot a container that starts
+// before the DNS container could take it. Docker accepts a fixed address
+// (--ip) only on a network with a user-configured subnet. EnsureMeshNetwork
+// therefore creates the network without one, so that Docker picks a subnet
+// from its default address pools that avoids the other networks and the
+// host's routes, removes it, and creates it again with that subnet and
+// gateway and the --ip-range that pinnedLayout derives, recording the DNS
+// address in the LabelDNSIP label. When another network takes the subnet in
+// between, it starts over with the subnet Docker picks next, up to
+// meshSubnetAttempts times. A subnet too small for the layout, or no
+// attempt left, leaves the network without a pinned address, as earlier sind
+// versions created it.
+//
+// A client of the same Docker daemon that does not hold the realm's lock on
+// the daemon (state.LockRealm with LockOptions.Client), such as a library
+// caller, can create the network between the check and the create.
+// Docker's "already exists" error then counts as an existing network, so
+// that the caller's failure handling never removes it.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
+	_, err := m.ensureMeshNetwork(ctx)
+	return err
+}
+
+// ensureMeshNetwork is EnsureMeshNetwork, and also returns the address the
+// mesh pins the DNS container to, empty for a mesh without one.
+func (m *Manager) ensureMeshNetwork(ctx context.Context) (string, error) {
 	m.created = false
-	name := m.NetworkName()
-	exists, err := m.Docker.NetworkExists(ctx, name)
+	labels, exists, err := m.Docker.NetworkLabels(ctx, m.NetworkName())
 	if err != nil {
-		return fmt.Errorf("checking mesh network: %w", err)
+		return "", fmt.Errorf("checking mesh network: %w", err)
 	}
 	if exists {
-		return nil
+		return labels[LabelDNSIP], nil
 	}
-	networkLabels := docker.Labels{
+	return m.createMeshNetwork(ctx)
+}
+
+// createMeshNetwork creates the mesh network as EnsureMeshNetwork describes,
+// and returns its pinned DNS address, empty without one.
+func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
+	log := sindlog.From(ctx)
+	name := m.NetworkName()
+	labels := docker.Labels{
 		LabelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
 		docker.ComposeNetworkLabel: "mesh",
 	}
-	_, err = m.Docker.CreateNetwork(ctx, name, networkLabels)
-	if err != nil {
-		if isAlreadyExists(err) {
-			return nil
+	for attempt := 1; ; attempt++ {
+		if _, err := m.Docker.CreateNetwork(ctx, name, labels); err != nil {
+			if isAlreadyExists(err) {
+				return "", nil
+			}
+			return "", fmt.Errorf("creating mesh network: %w", err)
 		}
-		return fmt.Errorf("creating mesh network: %w", err)
+		m.created = true
+		if attempt > meshSubnetAttempts {
+			log.InfoContext(ctx, "mesh DNS address not pinned: other networks took the subnets meanwhile", "network", string(name))
+			return "", nil
+		}
+		info, err := m.Docker.InspectNetwork(ctx, name)
+		if err != nil {
+			return "", fmt.Errorf("inspecting mesh network: %w", err)
+		}
+		ipam, dnsIP, ok := pinnedLayout(info.Subnet, info.Gateway)
+		if !ok {
+			log.InfoContext(ctx, "mesh DNS address not pinned: the subnet is too small", "network", string(name), "subnet", info.Subnet)
+			return "", nil
+		}
+
+		if err := m.Docker.RemoveNetwork(ctx, name); err != nil {
+			return "", fmt.Errorf("removing mesh network to pin its subnet: %w", err)
+		}
+		m.created = false
+		pinned := maps.Clone(labels)
+		pinned[LabelDNSIP] = dnsIP
+		_, err = m.Docker.CreateNetworkWithSubnet(ctx, name, pinned, ipam)
+		switch {
+		case err == nil:
+			m.created = true
+			log.DebugContext(ctx, "mesh network created", "subnet", ipam.Subnet, "ip-range", ipam.IPRange, "dns", dnsIP)
+			return dnsIP, nil
+		case isAlreadyExists(err):
+			return "", nil
+		case !isSubnetTaken(err):
+			return "", fmt.Errorf("creating mesh network: %w", err)
+		}
+		log.DebugContext(ctx, "mesh subnet taken meanwhile, trying another one", "subnet", ipam.Subnet, "error", err)
 	}
-	m.created = true
-	return nil
+}
+
+// pinnedLayout returns the IPAM configuration of a mesh network with the
+// given IPv4 subnet and gateway, and the DNS container's address: the lower
+// half of the subnet is the --ip-range that Docker takes the other
+// containers' addresses from, and the DNS container gets the last address
+// before the broadcast address, in the upper half, where no other container
+// gets one. The range has to hold an address for every container but the
+// DNS that a bridge network can take (docker.MaxBridgeEndpoints), besides
+// the network address and the gateway, so the subnet must be a /21 or
+// larger. It returns false for a subnet that is not IPv4, or smaller, or a
+// gateway outside it or at the DNS address.
+func pinnedLayout(subnet, gateway string) (docker.NetworkIPAM, string, bool) {
+	prefix, err := netip.ParsePrefix(subnet)
+	if err != nil || !prefix.Addr().Is4() {
+		return docker.NetworkIPAM{}, "", false
+	}
+	prefix = prefix.Masked()
+	gw, err := netip.ParseAddr(gateway)
+	if err != nil || !prefix.Contains(gw) {
+		return docker.NetworkIPAM{}, "", false
+	}
+	hostBits := 32 - prefix.Bits()
+	if hostBits < 2 || 1<<(hostBits-1)-2 < docker.MaxBridgeEndpoints-1 {
+		return docker.NetworkIPAM{}, "", false
+	}
+	base := prefix.Addr().As4()
+	broadcast := binary.BigEndian.Uint32(base[:]) | uint32(1<<hostBits-1)
+	var dns [4]byte
+	binary.BigEndian.PutUint32(dns[:], broadcast-1)
+	dnsIP := netip.AddrFrom4(dns)
+	if dnsIP == gw {
+		return docker.NetworkIPAM{}, "", false
+	}
+	return docker.NetworkIPAM{
+		Subnet:  prefix.String(),
+		Gateway: gw.String(),
+		IPRange: netip.PrefixFrom(prefix.Addr(), prefix.Bits()+1).String(),
+	}, dnsIP.String(), true
 }
 
 // isAlreadyExists reports whether err is Docker's error for a network name
@@ -390,17 +506,32 @@ func isAlreadyExists(err error) bool {
 	return strings.Contains(err.Error(), "already exists")
 }
 
+// isSubnetTaken reports whether err is Docker's error for a configured
+// subnet that overlaps another network's. With an --ip-range, Docker's
+// address allocator does not check the subnet for overlaps (moby#46756): it
+// shares the subnet of a network that has it already, and then fails to
+// allocate the gateway that network holds ("failed to allocate gateway
+// (172.18.0.1): Address already in use"). With another gateway, the bridge
+// driver refuses a subnet that overlaps another bridge network.
+func isSubnetTaken(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "Pool overlaps with other one on this address space") ||
+		strings.Contains(msg, "networks have overlapping IPv4") ||
+		strings.Contains(msg, "failed to allocate gateway") && strings.Contains(msg, "Address already in use")
+}
+
 // ensureDNS creates the mesh DNS container if it does not exist yet, or
 // starts it when it is stopped, and returns its address on the mesh network.
 // The container runs CoreDNS on the mesh network, serving <realm>.sind
-// records from inline hosts entries in the Corefile.
-func (m *Manager) ensureDNS(ctx context.Context) (string, error) {
+// records from inline hosts entries in the Corefile. A new container gets
+// the address pinnedIP, unless it is empty.
+func (m *Manager) ensureDNS(ctx context.Context, pinnedIP string) (string, error) {
 	info, err := m.inspectIfExists(ctx, m.DNSContainerName())
 	if err != nil {
 		return "", fmt.Errorf("checking DNS container: %w", err)
 	}
 	if info == nil {
-		info, err = m.createDNS(ctx)
+		info, err = m.createDNS(ctx, pinnedIP)
 	} else {
 		info, err = m.startDNS(ctx, info)
 	}
@@ -411,12 +542,16 @@ func (m *Manager) ensureDNS(ctx context.Context) (string, error) {
 }
 
 // createDNS creates and starts the mesh DNS container with an empty
-// Corefile, and returns its details once started.
-func (m *Manager) createDNS(ctx context.Context) (*docker.ContainerInfo, error) {
+// Corefile, at the address pinnedIP unless it is empty, and returns its
+// details once started.
+func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.ContainerInfo, error) {
 	name := m.DNSContainerName()
 	args := []string{
 		"--name", string(name),
 		"--network", string(m.NetworkName()),
+	}
+	if pinnedIP != "" {
+		args = append(args, "--ip", pinnedIP)
 	}
 	args = append(args, composeLabelFlags(m.ComposeProject(), "dns")...)
 	if m.Pull {

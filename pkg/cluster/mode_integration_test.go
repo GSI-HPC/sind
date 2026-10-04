@@ -103,8 +103,43 @@ defaults:
 		VolumeName(realm, clusterName, VolumeData),
 	}, res.Volumes)
 
-	// The default 512m node has a 256m /dev/shm, a 64m /run and no swap.
+	// Each node was set up in one docker exec, and joined the mesh without
+	// a docker network connect. How many rounds its readiness wait took,
+	// and in how many of them it inspected the container again, depends on
+	// the runner and the events: logged.
+	createCalls := rec.Calls()
+	for _, n := range []string{"controller", "worker-0"} {
+		name := string(ContainerName(realm, clusterName, n))
+		var setups, connects, inspects, rounds int
+		for _, call := range createCalls {
+			a := call.Args
+			switch {
+			case len(a) > 2 && a[0] == "network" && a[1] == "connect" && a[len(a)-1] == name:
+				connects++
+			case len(a) == 2 && a[0] == "inspect" && a[1] == name:
+				inspects++
+			case len(a) > 4 && a[0] == "exec" && a[1] == name && strings.Contains(a[4], "is-system-running"):
+				rounds++
+			default:
+				if container, _, ok := setupCall(a); ok && container == name {
+					setups++
+				}
+			}
+		}
+		assert.Equal(t, 1, setups, "setup execs of %s", n)
+		assert.Zero(t, connects, "network connects of %s", n)
+		t.Logf("%s: %d systemd probe rounds, %d inspects (probe and addresses)", n, rounds, inspects)
+	}
+
+	// docker create attached each node to its cluster network and the
+	// realm's mesh.
 	worker := ContainerName(realm, clusterName, "worker-0")
+	info, err := c.InspectContainer(ctx, worker)
+	require.NoError(t, err)
+	assert.NotEmpty(t, info.IPs[NetworkName(realm, clusterName)], "cluster network address")
+	assert.NotEmpty(t, info.IPs[meshMgr.NetworkName()], "mesh address")
+
+	// The default 512m node has a 256m /dev/shm, a 64m /run and no swap.
 	out, err := c.Exec(ctx, worker, "df", "--output=size", "-BM", "/dev/shm", "/run")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1M-blocks", "256M", "64M"}, strings.Fields(out))
@@ -1341,6 +1376,55 @@ nodes:
 	require.NoError(t, err)
 	assert.Equal(t, AuthSlurm, key.Type)
 	assert.Len(t, key.Key, slurm.SlurmKeySize)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// TestNodeSetupStepFails creates a cluster with a user whose name the image
+// already has as a group: the node setup, one docker exec, stops at that
+// step, and the error names it and shows what groupadd wrote.
+func TestNodeSetupStepFails(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	checkPrerequisites(t, c)
+
+	img := os.Getenv("SIND_TEST_IMAGE")
+	if img == "" {
+		img = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+
+	realm := testutil.Realm("it-setup")
+	clusterName := "it-setup"
+	meshMgr := mesh.NewManager(c, realm)
+
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = Delete(bg, c, meshMgr, clusterName)
+		_ = meshMgr.CleanupMesh(bg)
+	})
+
+	require.NoError(t, meshMgr.EnsureMesh(ctx))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+kind: Cluster
+name: %s
+defaults:
+  image: %s
+users:
+  - munge
+`, clusterName, img)))
+	require.NoError(t, err)
+	cfg.ApplyDefaults()
+	require.NoError(t, cfg.Validate())
+
+	_, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), ": adding users: exit status ")
+	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
+	assert.NotContains(t, err.Error(), setupStepMarker)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }

@@ -172,6 +172,9 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 		if args[0] == "exec" && args[1] == "sind-ssh" && len(args) > 2 && args[2] == "cat" {
 			return mock.Result{Stdout: "ssh-ed25519 AAAA-test-key\n"}
 		}
+		if isNsdelegateProbe(args) {
+			return mock.Result{Stdout: probeMounts}
+		}
 		if args[0] == "run" && args[1] == "--rm" {
 			return mock.Result{Stdout: "slurm 25.11.0\n"}
 		}
@@ -519,7 +522,7 @@ func TestCreate_CVMFS(t *testing.T) {
 			mounted := map[string]bool{}
 			for _, c := range m.Calls {
 				a := c.Args
-				if a[0] == "run" && slices.Contains(a, "--entrypoint") {
+				if a[0] == "run" && slices.Contains(a, "--entrypoint") && !isNsdelegateProbe(a) {
 					probed = true
 				}
 				if a[0] == "create" && slices.Contains(a, "--hostname") {
@@ -542,7 +545,7 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 		if args[0] == "plugin" {
 			return mock.Result{}, true
 		}
-		if args[0] == "run" && slices.Contains(args, "--entrypoint") {
+		if args[0] == "run" && slices.Contains(args, "--entrypoint") && !isNsdelegateProbe(args) {
 			return mock.Result{Stderr: "bind source path does not exist: /cvmfs", Err: fmt.Errorf("exit status 125")}, true
 		}
 		return mock.Result{}, false
@@ -560,6 +563,36 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 	for _, c := range m.Calls {
 		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
 	}
+}
+
+func TestCreate_NoNsdelegate(t *testing.T) {
+	// A Docker host without nsdelegate fails creation before any node
+	// container, with the commands that enable it, and the rollback
+	// removes what the other preparation branches created.
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if isNsdelegateProbe(args) {
+			return mock.Result{Stdout: "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.ErrorIs(t, err, ErrNoNsdelegate)
+	assert.Contains(t, err.Error(), "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
+	assert.Nil(t, cluster)
+	var probes [][]string
+	for _, c := range m.Calls {
+		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
+		if isNsdelegateProbe(c.Args) {
+			probes = append(probes, c.Args)
+		}
+	}
+	assert.Equal(t, [][]string{{"run", "--rm", "--network", "none", "--entrypoint", "cat", "img:1", "/proc/self/mounts"}}, probes,
+		"one probe, of the controller's image")
 }
 
 func TestCreate_NoCVMFS(t *testing.T) {
@@ -580,7 +613,7 @@ func TestCreate_NoCVMFS(t *testing.T) {
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "plugin", c.Args[0])
-		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "--entrypoint"), "no probe: %v", c.Args)
+		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "--entrypoint") && !isNsdelegateProbe(c.Args), "no CVMFS probe: %v", c.Args)
 		assert.Empty(t, testutil.ArgValues(c.Args, "--mount"))
 	}
 }
@@ -804,14 +837,15 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 
 	require.Error(t, err)
 	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
-	// deleteClusterResources. Preflight also calls ps once, hence 3 total.
+	// deleteClusterResources. Preflight calls ps twice, for conflicts and
+	// bridge ports, hence 4 total.
 	var psCalls int
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
 			psCalls++
 		}
 	}
-	assert.Equal(t, 3, psCalls, "preflight + diagnostics + deletion each call ListContainers")
+	assert.Equal(t, 4, psCalls, "preflight (2) + diagnostics + deletion each call ListContainers")
 }
 
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
@@ -1265,7 +1299,7 @@ func TestCreate_UnmanagedCluster(t *testing.T) {
 		args := c.Args
 		joined := strings.Join(args, " ")
 		switch {
-		case args[0] == "run" && args[1] == "--rm":
+		case args[0] == "run" && args[1] == "--rm" && !isNsdelegateProbe(args):
 			assert.Failf(t, "Slurm version discovered", "%v", args)
 		case args[0] == "volume" && args[1] == "create":
 			volumes = append(volumes, args[len(args)-1])
@@ -1480,7 +1514,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 			case strings.Contains(joined, "is-active"):
 				return mock.Result{Stdout: "active\n"}
 			case strings.Contains(joined, "ssh-keyscan"):
-				return mock.Result{Err: fmt.Errorf("permission denied")}
+				return failedSetup(t, 1, "mkdir: cannot create directory '/root/.ssh': Permission denied\n", "ssh")
 			}
 		}
 		return mock.Result{}
@@ -1495,7 +1529,7 @@ func TestSetupNodes_InjectKeyError(t *testing.T) {
 	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "setting up SSH on controller: injecting SSH key")
+	assert.Contains(t, err.Error(), "node controller: setting up SSH: injecting SSH key and scanning host key: exit status 1: mkdir: cannot create directory '/root/.ssh': Permission denied")
 }
 
 func TestSetupNodes_HostKeyError(t *testing.T) {
@@ -1534,7 +1568,7 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "setting up SSH on controller: no ed25519 host key found")
+	assert.Contains(t, err.Error(), "node controller: setting up SSH: no ed25519 host key found")
 }
 
 func TestRegisterMesh_DNSError(t *testing.T) {
@@ -1838,6 +1872,71 @@ func TestWaitReady_WithWatcher(t *testing.T) {
 	cancel()
 	pipes.CloseAll()
 	w.Wait()
+}
+
+func TestSetupNodes_SkipsPassedProbes(t *testing.T) {
+	// With the event watcher, the rounds while systemd boots run the
+	// systemd probe alone: the container probe passed in the first round,
+	// and only the docker events would tell that the container changed.
+	// Without it, every round inspects the container again.
+	for _, tt := range []struct {
+		name     string
+		watch    bool
+		inspects int
+	}{
+		{"events", true, 2},
+		{"poll only", false, 5},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pipes := &mock.Pipes{}
+			defer pipes.CloseAll()
+			booting := 3
+			var m mock.Executor
+			m.OnStart = pipes.OnStart
+			m.OnCall = func(args []string, _ string) mock.Result {
+				joined := strings.Join(args, " ")
+				switch {
+				case args[0] == "inspect":
+					return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})}
+				case strings.Contains(joined, "is-system-running"):
+					if booting > 0 {
+						booting--
+						return mock.Result{Stdout: "starting\n"}
+					}
+					return mock.Result{Stdout: "running\n"}
+				case strings.Contains(joined, "/dev/tcp"):
+					return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.9\n"}
+				case strings.Contains(joined, "is-active"):
+					return mock.Result{Stdout: "active\n"}
+				case strings.Contains(joined, "ssh-keyscan"):
+					return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey\n"}
+				}
+				return mock.Result{}
+			}
+			client := docker.NewClient(&m)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			var watcher *monitor.Watcher
+			if tt.watch {
+				w, stop := startWatcher(ctx, client, "sind-dev-", "dev")
+				require.NotNil(t, w)
+				defer func() {
+					cancel()
+					pipes.CloseAll()
+					stop()
+				}()
+				watcher = w
+			}
+			configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
+
+			_, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs,
+				&readiness{interval: time.Millisecond}, watcher)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.inspects, countCalls(m.Calls, "inspect"), "the probe's inspects and the one for the addresses")
+			assert.Equal(t, 4, countCalls(m.Calls, "exec", "sind-dev-worker-0", "sh", "-c", "systemctl is-system-running 2>/dev/null || true"))
+		})
+	}
 }
 
 func TestEnableService(t *testing.T) {

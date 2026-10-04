@@ -165,6 +165,11 @@ func TestBuildRunArgs_Network(t *testing.T) {
 	network, ok := testutil.ArgValue(args, "--network")
 	assert.True(t, ok, "--network flag present")
 	assert.Equal(t, "name=sind-dev-net,gw-priority=1", network, "cluster network first in name resolution")
+	assert.Equal(t, []string{"name=sind-dev-net,gw-priority=1"}, testutil.ArgValues(args, "--network"), "no mesh without MeshNetwork")
+
+	cfg.MeshNetwork = "sind-mesh"
+	assert.Equal(t, []string{"name=sind-dev-net,gw-priority=1", "sind-mesh"}, testutil.ArgValues(BuildRunArgs(cfg), "--network"),
+		"the cluster network stays the network mode, the mesh joins next to it")
 
 	dns, ok := testutil.ArgValue(args, "--dns")
 	assert.True(t, ok, "--dns flag present")
@@ -456,7 +461,6 @@ func TestBuildRunArgs_DefaultCluster(t *testing.T) {
 func TestCreateNode(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // CreateContainer
-	m.AddResult("", "", nil)         // ConnectNetwork
 	m.AddResult("", "", nil)         // StartContainer
 
 	c := docker.NewClient(&m)
@@ -467,17 +471,16 @@ func TestCreateNode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, docker.ContainerID("abc123"), id)
 
-	require.Len(t, m.Calls, 3)
+	// No docker network connect: the node joins the mesh on create.
+	require.Len(t, m.Calls, 2)
 
 	// CreateContainer: first arg is "create", then the image and its entrypoint arguments
 	assert.Equal(t, "create", m.Calls[0].Args[0])
+	assert.Equal(t, []string{"name=sind-dev-net,gw-priority=1", "sind-mesh"}, testutil.ArgValues(m.Calls[0].Args, "--network"))
 	assert.Equal(t, []string{"ghcr.io/gsi-hpc/sind-node:25.11", "-c", NodeEntrypoint}, m.Calls[0].Args[len(m.Calls[0].Args)-3:])
 
-	// ConnectNetwork
-	assert.Equal(t, []string{"network", "connect", "sind-mesh", "sind-dev-controller"}, m.Calls[1].Args)
-
 	// StartContainer
-	assert.Equal(t, []string{"start", "sind-dev-controller"}, m.Calls[2].Args)
+	assert.Equal(t, []string{"start", "sind-dev-controller"}, m.Calls[1].Args)
 }
 
 func TestCreateNode_CreateError(t *testing.T) {
@@ -494,26 +497,9 @@ func TestCreateNode_CreateError(t *testing.T) {
 	assert.Len(t, m.Calls, 1)
 }
 
-func TestCreateNode_ConnectError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("abc123\n", "", nil)             // CreateContainer
-	m.AddResult("", "", fmt.Errorf("net error")) // ConnectNetwork
-
-	c := docker.NewClient(&m)
-	mgr := mesh.NewManager(c, mesh.DefaultRealm)
-	cfg := defaultRunConfig()
-
-	_, err := CreateNode(t.Context(), c, mgr, cfg)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "connecting")
-	assert.Contains(t, err.Error(), "mesh")
-	assert.Len(t, m.Calls, 2)
-}
-
 func TestCreateNode_StartError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("abc123\n", "", nil)                // CreateContainer
-	m.AddResult("", "", nil)                        // ConnectNetwork
 	m.AddResult("", "", fmt.Errorf("start failed")) // StartContainer
 
 	c := docker.NewClient(&m)
@@ -523,7 +509,7 @@ func TestCreateNode_StartError(t *testing.T) {
 	_, err := CreateNode(t.Context(), c, mgr, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "starting container")
-	assert.Len(t, m.Calls, 3)
+	assert.Len(t, m.Calls, 2)
 }
 
 // --- NodeRunConfigs ---

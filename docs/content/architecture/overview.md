@@ -35,14 +35,15 @@ Containers require specific security options for systemd:
 
 ## Concurrency
 
-Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}). The lock lives in each user's state directory, so sind clients that share a Docker daemon need separate realms.
+Creating and deleting clusters and workers acquire a per-realm lock to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. The lock is a file lock (flock) in the user's state directory, which orders that user's commands, and a configuration-only network `<realm>-lock` on the Docker daemon, which orders every client of the daemon: other users, CI jobs that share its socket. A lock that a killed command left on the same host is taken over; one from another host or container is removed by hand. Different realms operate independently — see [Realms]({{< relref "/configuration/realms#advisory-locking" >}}).
 
 ## Creation flow
 
 ```
 ┌ PreflightCheck → createResources ───────────────────┐
-├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┼→ setupNodes
-└ DetectCVMFS (storage.cvmfs only) ────────────────────┘
+├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ─────┤
+├ DetectCVMFS (storage.cvmfs only) ────────────────────┼→ setupNodes
+└ CheckNsdelegate ─────────────────────────────────────┘
                            │
   registerMesh ║ enableSlurm → createSlurmAccounts ║ createHomes
                            │
@@ -52,9 +53,10 @@ Creating and deleting clusters and workers acquire a per-realm advisory lock (fl
 - `createResources` creates the cluster network and connects the SSH relay to it, the config volume and its Slurm configuration (managed clusters only), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
 - `resolveInfra` starts the mesh DNS and SSH relay if they are stopped, and looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
 - `DetectCVMFS` (`storage.cvmfs` only) picks how the nodes [mount CVMFS]({{< relref "/guides/cvmfs" >}}), also while the resources are created: the `cvmfs` Docker volume plugin if one is enabled, otherwise a bind mount of the host's `/cvmfs`, first tried in a throwaway container of the controller's image.
-- With `--pull`, each distinct node image is pulled once, concurrently, before the helper containers, the version check, the CVMFS check and the nodes run it; none of these containers is created with `--pull always`. A new mesh's DNS and relay containers, which `EnsureMesh` creates before, are created with `--pull always`.
+- `CheckNsdelegate` reads `/proc/self/mounts` in a throwaway container of the controller's image, also while the resources are created, and fails the creation, before any node container exists, when the cgroup2 mount lacks `nsdelegate`. `nsdelegate` is an option of the whole cgroup2 hierarchy, which the kernel lists in every cgroup2 mount, so the container shows the option of the kernel the Docker daemon runs on.
+- With `--pull`, each distinct node image is pulled once, concurrently, before the helper containers, the version check, the CVMFS check, the nsdelegate check and the nodes run it; none of these containers is created with `--pull always`. A new mesh's DNS and relay containers, which `EnsureMesh` creates before, are created with `--pull always`.
 - The helper containers that write the Slurm configuration and the munge key copy each file in with its final mode, then hand the secrets to their owner with `chown`; `docker rm -f` stops them.
-- `setupNodes` creates, waits for, and sets up every node: nss_slurm on managed workers with identity `nssSlurm` or `clientIds`, the cluster users and groups where the identity mode puts them, SSH and host keys.
+- `setupNodes` creates, waits for, and sets up every node: nss_slurm on managed workers with identity `nssSlurm` or `clientIds`, the cluster users and groups where the identity mode puts them, SSH and host keys. The setup is one `docker exec` per node, a script that stops at its first failing step; the error names the step and shows what it wrote.
 - `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, and `sackd` on the submitter with identity `clientIds`.
 - `createSlurmAccounts` (`accounts` only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users' associations and the coordinators with `sacctmgr -i` on `controller`.
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
@@ -72,6 +74,8 @@ sind waits for each node to become ready before returning success. Probes are ac
 - **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active or slurmd.service failing). They run until the command ends, through the waits for the Slurm daemons and the accounts
 
 When an event of the node arrives, its probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. Each node's wait receives only its own container's events. If event sources are unavailable, sind falls back to poll-only mode.
+
+Each round runs a node's checks in order and stops at the first that fails. A check that has passed is not run again in later rounds of the same wait, until an event says that what it checks may have changed: an event of its systemd unit for the sshd, munge and Slurm daemon checks (a failed munge or Slurm daemon unit then ends the wait), any other event of the container for every check. After a full event buffer, or once a monitor has stopped, and in poll-only mode, the passed checks run again. While systemd boots, a round then costs one `docker exec` instead of a `docker inspect` and an exec.
 
 | Check | Description |
 |-------|-------------|

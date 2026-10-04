@@ -189,30 +189,6 @@ func TestNodeRunConfigs_ClientIDsWithoutSubmitter(t *testing.T) {
 	assert.Equal(t, map[string]bool{"controller": true, "controller-backup": true, "worker-0": false}, users)
 }
 
-func TestEnableNSSSlurm(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	m.AddResult("", "", nil)
-
-	err := enableNSSSlurm(t.Context(), docker.NewClient(&m), "sind-dev-worker-0", RunConfig{Image: "img:1", Identity: config.IdentityNSSSlurm})
-
-	require.NoError(t, err)
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "sh", "-c", nssSlurmCheck}, m.Calls[0].Args)
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "sh", "-ec", nssSlurmSwitch}, m.Calls[1].Args)
-}
-
-func TestEnableNSSSlurm_NoModule(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("exit status 1"))
-
-	err := enableNSSSlurm(t.Context(), docker.NewClient(&m), "sind-dev-worker-0", RunConfig{Image: "old:1", Identity: config.IdentityClientIDs})
-
-	require.Error(t, err)
-	assert.Equal(t, "image old:1 has no libnss_slurm.so.2, which identity clientIds needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: exit status 1", err.Error())
-	assert.Len(t, m.Calls, 1, "nsswitch.conf left alone")
-}
-
 // Labels of sind-node images from before and since identity modes.
 const (
 	oldSindNodeLabels     = `{"org.opencontainers.image.title":"sind-node","sind.slurm.version":"25.11.8"}`
@@ -308,17 +284,6 @@ func TestCheckIdentityImages_Old(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "image img:1 is a sind-node image from before identity modes")
 	assert.Len(t, m.Calls, 1)
-}
-
-func TestEnableNSSSlurm_SwitchFails(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	m.AddResult("", "", fmt.Errorf("exit status 1"))
-
-	err := enableNSSSlurm(t.Context(), docker.NewClient(&m), "sind-dev-worker-0", RunConfig{Image: "img:1", Identity: config.IdentityNSSSlurm})
-
-	require.Error(t, err)
-	assert.Equal(t, "switching passwd and group lookups to nss_slurm: exit status 1", err.Error())
 }
 
 func TestCreateResources_ClientIDs(t *testing.T) {
@@ -420,12 +385,20 @@ func collectIdentityCalls(calls []mock.Call) *identityCalls {
 		case a[0] == "run" && slices.Contains(a, "--name"):
 			ic.helpers = append(ic.helpers, testutil.ArgValues(a, "--name")[0])
 		case a[0] != "exec" || len(a) < 4:
-		case a[2] == "sh" && a[len(a)-1] == nssSlurmCheck:
-			ic.nssCheck = append(ic.nssCheck, a[1])
-		case a[2] == "sh" && a[len(a)-1] == nssSlurmSwitch:
-			ic.nssSwitch = append(ic.nssSwitch, a[1])
-		case a[2] == "sh" && a[3] == "-ec" && strings.HasPrefix(a[4], "groupadd "):
-			ic.users = append(ic.users, a[1])
+		case a[2] == "sh":
+			container, steps, ok := setupCall(a)
+			if !ok {
+				break
+			}
+			if steps["nss_slurm"] == nssSlurmCheck {
+				ic.nssCheck = append(ic.nssCheck, container)
+			}
+			if steps["nsswitch"] == nssSlurmSwitch {
+				ic.nssSwitch = append(ic.nssSwitch, container)
+			}
+			if strings.HasPrefix(steps["users"], "groupadd ") {
+				ic.users = append(ic.users, container)
+			}
 		case a[2] == "systemctl" && a[3] == "is-active" && a[len(a)-1] == "munge":
 			if !slices.Contains(ic.mungeWait, a[1]) {
 				ic.mungeWait = append(ic.mungeWait, a[1])
@@ -520,8 +493,8 @@ func TestCreate_ClientIDs(t *testing.T) {
 func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, stdin string) (mock.Result, bool) {
-		if args[0] == "exec" && args[len(args)-1] == nssSlurmCheck {
-			return mock.Result{Err: fmt.Errorf("exit status 1")}, true
+		if _, steps, ok := setupCall(args); ok && steps["nss_slurm"] != "" {
+			return failedSetup(t, 1, "", "nss_slurm"), true
 		}
 		// A custom image: only the check on the node finds what it lacks.
 		return imageLabels("{}")(args, stdin)
@@ -534,7 +507,7 @@ func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
 	_, err := Create(ctx, client, meshMgr, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), time.Millisecond)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node worker-0: image img:1 has no libnss_slurm.so.2, which identity nssSlurm needs on managed workers")
+	assert.Contains(t, err.Error(), "node worker-0: image img:1 has no libnss_slurm.so.2, which identity nssSlurm needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: exit status 1")
 }
 
 func TestWorkerAdd_Identity(t *testing.T) {

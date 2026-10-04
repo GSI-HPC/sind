@@ -491,21 +491,20 @@ func TestSlurmdbdReady_Failed(t *testing.T) {
 }
 
 func TestForService(t *testing.T) {
-	p := ForService(ServiceSlurmctld)
-	assert.Equal(t, "slurmctld", p.Name)
-	assert.NotNil(t, p.Check)
+	for _, svc := range []Service{ServiceMunge, ServiceSSHD, ServiceSlurmctld, ServiceSlurmd, ServiceSlurmdbd, ServiceSackd} {
+		p := ForService(svc)
+		assert.Equal(t, string(svc), p.Name)
+		assert.NotNil(t, p.Check, svc)
+		assert.Equal(t, string(svc)+".service", p.Unit, "the unit the check follows")
+	}
 
-	p = ForService(ServiceSlurmd)
-	assert.Equal(t, "slurmd", p.Name)
-	assert.NotNil(t, p.Check)
-
-	p = ForService(ServiceSlurmdbd)
-	assert.Equal(t, "slurmdbd", p.Name)
-	assert.NotNil(t, p.Check)
+	p := ForService(ServiceMariadb)
+	assert.Equal(t, Probe{Name: "mariadb"}, p, "no check: sind does not wait for mariadb")
 
 	p = ForService("unknown")
 	assert.Equal(t, "unknown", p.Name)
 	assert.Nil(t, p.Check)
+	assert.Empty(t, p.Unit)
 }
 
 func TestServiceForRole(t *testing.T) {
@@ -532,21 +531,24 @@ func TestNodeProbes(t *testing.T) {
 	tests := []struct {
 		role  config.Role
 		names []string
+		units []string
 	}{
-		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}},
-		{config.RoleDB, []string{"container", "systemd", "sshd", "slurmdbd"}},
-		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}},
-		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}},
-		{"unknown", []string{"container", "systemd", "sshd"}},
+		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}, []string{"", "", "sshd.service", "slurmctld.service"}},
+		{config.RoleDB, []string{"container", "systemd", "sshd", "slurmdbd"}, []string{"", "", "sshd.service", "slurmdbd.service"}},
+		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}, []string{"", "", "sshd.service", "slurmd.service"}},
+		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}, []string{"", "", "sshd.service"}},
+		{"unknown", []string{"container", "systemd", "sshd"}, []string{"", "", "sshd.service"}},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.role), func(t *testing.T) {
 			probes := NodeProbes(tt.role)
-			var names []string
+			var names, units []string
 			for _, p := range probes {
 				names = append(names, p.Name)
+				units = append(units, p.Unit)
 			}
 			assert.Equal(t, tt.names, names)
+			assert.Equal(t, tt.units, units)
 		})
 	}
 }
@@ -560,7 +562,7 @@ func TestUntilReady_AllPass(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 1)
@@ -576,7 +578,7 @@ func TestUntilReady_RetryThenPass(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 2)
@@ -593,7 +595,7 @@ func TestUntilReady_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
@@ -611,8 +613,8 @@ func TestUntilReady_MultipleProbes(t *testing.T) {
 	defer cancel()
 
 	probes := []Probe{
-		{"container", ContainerRunning},
-		{"systemd", SystemdReady},
+		{Name: "container", Check: ContainerRunning},
+		{Name: "systemd", Check: SystemdReady},
 	}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
@@ -633,8 +635,8 @@ func TestUntilReady_SecondProbeFails(t *testing.T) {
 	defer cancel()
 
 	probes := []Probe{
-		{"container", ContainerRunning},
-		{"systemd", SystemdReady},
+		{Name: "container", Check: ContainerRunning},
+		{Name: "systemd", Check: SystemdReady},
 	}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.NoError(t, err)
@@ -654,8 +656,8 @@ func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
 	defer cancel()
 
 	probes := []Probe{
-		{"container", ContainerRunning},
-		{"systemd", SystemdReady},
+		{Name: "container", Check: ContainerRunning},
+		{Name: "systemd", Check: SystemdReady},
 	}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
@@ -680,7 +682,7 @@ func TestUntilReady_NonPositiveInterval(t *testing.T) {
 		m.AddResult(inspectJSON("running"), "", nil)
 		m.AddResult(inspectJSON("running"), "", nil)
 		c := docker.NewClient(&m)
-		probes := []Probe{{"container", ContainerRunning}}
+		probes := []Probe{{Name: "container", Check: ContainerRunning}}
 		require.NoError(t, UntilReady(t.Context(), c, testContainer, probes, interval))
 		require.NoError(t, UntilReadyWithEvents(t.Context(), c, testContainer, probes, interval, nil))
 	}
@@ -699,7 +701,7 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // already canceled
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
@@ -715,7 +717,7 @@ func TestUntilReady_TerminalError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
@@ -747,7 +749,7 @@ func TestUntilReadyWithEvents_AllPass(t *testing.T) {
 	defer cancel()
 
 	events := make(chan monitor.Event, 1)
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 1)
@@ -767,7 +769,7 @@ func TestUntilReadyWithEvents_EventTriggersImmediateCheck(t *testing.T) {
 	// Pre-load an event so the select picks it up instead of waiting for ticker.
 	events <- monitor.Event{Kind: monitor.EventContainerStart, Node: "controller", Container: testContainer}
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	// Use a very long interval so only the event can trigger the re-check.
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
 	require.NoError(t, err)
@@ -791,7 +793,7 @@ func TestUntilReadyWithEvents_ContainerDie(t *testing.T) {
 		Detail:    "exitCode=1",
 	}
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
 	require.Error(t, err)
 
@@ -817,7 +819,7 @@ func TestUntilReadyWithEvents_TakesQueuedEventsInOneRound(t *testing.T) {
 		events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer}
 	}
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Len(t, m.Calls, 2)
@@ -832,7 +834,7 @@ func TestUntilReadyWithEvents_QueuedDie(t *testing.T) {
 	events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer}
 	events <- monitor.Event{Kind: monitor.EventContainerDie, Container: testContainer, Detail: "exitCode=1"}
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Minute, events)
 	var te *TerminalError
 	require.ErrorAs(t, err, &te)
@@ -850,7 +852,7 @@ func TestUntilReadyWithEvents_ClosedWhileTaking(t *testing.T) {
 	events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer}
 	close(events)
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Minute, events)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 2)
@@ -869,7 +871,7 @@ func TestUntilReadyWithEvents_ClosedFallsBackToPolling(t *testing.T) {
 	events := make(chan monitor.Event)
 	close(events)
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, 20*time.Millisecond, events)
 	require.NoError(t, err)
 	assert.Len(t, m.Calls, 2)
@@ -893,7 +895,7 @@ func TestUntilReadyWithEvents_IgnoresOtherContainerEvents(t *testing.T) {
 		Container: "sind-dev-worker-0",
 	}
 
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	// Short interval so the ticker fires after the ignored event.
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
 	require.NoError(t, err)
@@ -910,7 +912,7 @@ func TestUntilReadyWithEvents_ContextCanceled(t *testing.T) {
 	cancel() // already cancelled
 
 	events := make(chan monitor.Event)
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
@@ -928,7 +930,7 @@ func TestUntilReadyWithEvents_Timeout(t *testing.T) {
 	defer cancel()
 
 	events := make(chan monitor.Event)
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
@@ -945,11 +947,290 @@ func TestUntilReadyWithEvents_TerminalError(t *testing.T) {
 	defer cancel()
 
 	events := make(chan monitor.Event)
-	probes := []Probe{{"container", ContainerRunning}}
+	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exited")
 	assert.Len(t, m.Calls, 1)
+}
+
+// --- skipping probes that passed ---
+
+// probeCalls names the probe each docker call of a wait ran: the container
+// probe's inspect, or the exec's command.
+func probeCalls(calls []mock.Call) []string {
+	names := make([]string, len(calls))
+	for i, c := range calls {
+		switch {
+		case c.Args[0] == "inspect":
+			names[i] = "container"
+		case c.Args[2] == "sh":
+			names[i] = "systemd"
+		case c.Args[2] == "bash":
+			names[i] = "sshd"
+		case c.Args[2] == "journalctl":
+			names[i] = "journal " + c.Args[4]
+		default:
+			names[i] = c.Args[len(c.Args)-1]
+		}
+	}
+	return names
+}
+
+// baseProbes are the probes a node's base readiness wait runs.
+var baseProbes = []Probe{
+	{Name: "container", Check: ContainerRunning},
+	{Name: "systemd", Check: SystemdReady},
+	ForService(ServiceSSHD),
+	ForService(ServiceMunge),
+}
+
+// queueBaseProbeResults queues the results of a base readiness wait whose
+// systemd probe fails rounds times first.
+func queueBaseProbeResults(m *mock.Executor, rounds int, container bool) {
+	for i := range rounds {
+		if i == 0 || container {
+			m.AddResult(inspectJSON("running"), "", nil)
+		}
+		m.AddResult("starting\n", "", nil)
+	}
+	if container {
+		m.AddResult(inspectJSON("running"), "", nil)
+	}
+	m.AddResult("running\n", "", nil)
+	m.AddResult("SSH-2.0-OpenSSH_9.9\n", "", nil)
+	m.AddResult("active\n", "", nil)
+}
+
+func TestUntilReadyWithEvents_SkipsPassedProbes(t *testing.T) {
+	// The container probe passed in the first round: the rounds while
+	// systemd boots run the systemd probe alone.
+	var m mock.Executor
+	queueBaseProbeResults(&m, 3, false)
+	c := docker.NewClient(&m)
+
+	events := make(chan monitor.Event, 64)
+	err := UntilReadyWithEvents(t.Context(), c, testContainer, baseProbes, time.Millisecond, events)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"container", "systemd", "systemd", "systemd", "systemd", "sshd", "munge"}, probeCalls(m.Calls))
+}
+
+func TestUntilReady_RunsEveryProbeEachRound(t *testing.T) {
+	// Without events nothing tells the wait that a passed probe changed:
+	// every round starts again from the first probe.
+	var m mock.Executor
+	queueBaseProbeResults(&m, 3, true)
+	c := docker.NewClient(&m)
+
+	err := UntilReady(t.Context(), c, testContainer, baseProbes, time.Millisecond)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"container", "systemd", "container", "systemd", "container", "systemd", "container", "systemd", "sshd", "munge",
+	}, probeCalls(m.Calls))
+}
+
+func TestUntilReadyWithEvents_UnitEventRerunsItsProbe(t *testing.T) {
+	// munge is still starting; an event of sshd.service runs the passed
+	// sshd probe again, one of another unit runs none.
+	for _, tt := range []struct {
+		unit string
+		want []string
+	}{
+		{"sshd.service", []string{"container", "systemd", "sshd", "munge", "sshd", "munge"}},
+		{"multi-user.target", []string{"container", "systemd", "sshd", "munge", "munge"}},
+	} {
+		t.Run(tt.unit, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(inspectJSON("running"), "", nil)
+			m.AddResult("running\n", "", nil)
+			m.AddResult("SSH-2.0-OpenSSH_9.9\n", "", nil)
+			m.AddResult("activating\n", "", nil)
+			if tt.unit == "sshd.service" {
+				m.AddResult("SSH-2.0-OpenSSH_9.9\n", "", nil)
+			}
+			m.AddResult("active\n", "", nil)
+			c := docker.NewClient(&m)
+
+			events := make(chan monitor.Event, 64)
+			events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer, Unit: tt.unit}
+			// A long interval: only the event starts the second round.
+			err := UntilReadyWithEvents(t.Context(), c, testContainer, baseProbes, time.Minute, events)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, probeCalls(m.Calls))
+		})
+	}
+}
+
+func TestUntilReadyWithEvents_FailedUnitEndsTheWait(t *testing.T) {
+	// munge passed, then failed while sshd was not up yet: its event runs
+	// the munge probe again, which finds the unit failed.
+	probes := []Probe{ForService(ServiceMunge), ForService(ServiceSSHD)}
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("munge: fatal: bad key\n", "", nil)
+	c := docker.NewClient(&m)
+
+	events := make(chan monitor.Event, 64)
+	events <- monitor.Event{Kind: monitor.EventUnitFailed, Container: testContainer, Unit: "munge.service"}
+	err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Minute, events)
+
+	var te *TerminalError
+	require.ErrorAs(t, err, &te)
+	assert.Equal(t, "munge failed:\nmunge: fatal: bad key", te.Msg)
+	assert.Equal(t, []string{"munge", "sshd", "munge", "journal munge"}, probeCalls(m.Calls))
+}
+
+func TestUntilReadyWithEvents_ContainerEventRerunsEveryProbe(t *testing.T) {
+	probes := []Probe{{Name: "container", Check: ContainerRunning}, {Name: "systemd", Check: SystemdReady}}
+	var m mock.Executor
+	m.AddResult(inspectJSON("running"), "", nil)
+	m.AddResult("starting\n", "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	m.AddResult("running\n", "", nil)
+	c := docker.NewClient(&m)
+
+	events := make(chan monitor.Event, 64)
+	events <- monitor.Event{Kind: monitor.EventContainerUnpause, Container: testContainer}
+	err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Minute, events)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"container", "systemd", "container", "systemd"}, probeCalls(m.Calls))
+}
+
+func TestUntilReadyWithEvents_UntrustedEventsRunEveryProbe(t *testing.T) {
+	// Once the events can no longer tell what changed, every round runs
+	// every probe, as UntilReady does.
+	for _, tt := range []struct {
+		name   string
+		events func() chan monitor.Event
+	}{
+		{"monitor error of the node", func() chan monitor.Event {
+			ch := make(chan monitor.Event, 64)
+			ch <- monitor.Event{Kind: monitor.EventMonitorError, Container: testContainer, Detail: "systemd monitor stream ended"}
+			return ch
+		}},
+		{"monitor error of the watcher", func() chan monitor.Event {
+			ch := make(chan monitor.Event, 64)
+			ch <- monitor.Event{Kind: monitor.EventMonitorError, Detail: "docker events stream failed"}
+			return ch
+		}},
+		{"closed", func() chan monitor.Event {
+			ch := make(chan monitor.Event, 64)
+			close(ch)
+			return ch
+		}},
+		{"closed while taking", func() chan monitor.Event {
+			ch := make(chan monitor.Event, 64)
+			ch <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer, Unit: "x.service"}
+			close(ch)
+			return ch
+		}},
+		{"unbuffered", func() chan monitor.Event { return make(chan monitor.Event) }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			queueBaseProbeResults(&m, 3, true)
+			c := docker.NewClient(&m)
+
+			err := UntilReadyWithEvents(t.Context(), c, testContainer, baseProbes, time.Millisecond, tt.events())
+
+			require.NoError(t, err)
+			assert.Equal(t, []string{
+				"container", "systemd", "container", "systemd", "container", "systemd", "container", "systemd", "sshd", "munge",
+			}, probeCalls(m.Calls))
+		})
+	}
+}
+
+func TestUntilReadyWithEvents_FullBufferRerunsEveryProbe(t *testing.T) {
+	// The watcher drops what a full subscriber has no room for: after a
+	// full buffer, the passed probes run again. Events of another
+	// container do not count, and with room left nothing was dropped.
+	probes := []Probe{{Name: "container", Check: ContainerRunning}, {Name: "systemd", Check: SystemdReady}}
+	other := monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer, Unit: "x.target"}
+	for _, tt := range []struct {
+		name   string
+		size   int
+		queued int
+		want   []string
+	}{
+		{"full", 3, 3, []string{"container", "systemd", "container", "systemd"}},
+		{"room left", 4, 2, []string{"container", "systemd", "systemd"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(inspectJSON("running"), "", nil)
+			m.AddResult("starting\n", "", nil)
+			if tt.name == "full" {
+				m.AddResult(inspectJSON("running"), "", nil)
+			}
+			m.AddResult("running\n", "", nil)
+			c := docker.NewClient(&m)
+
+			events := make(chan monitor.Event, tt.size)
+			events <- monitor.Event{Kind: monitor.EventUnitActive, Container: "sind-dev-worker-0", Unit: "x.target"}
+			for range tt.queued - 1 {
+				events <- other
+			}
+			err := UntilReadyWithEvents(t.Context(), c, testContainer, probes, time.Minute, events)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, probeCalls(m.Calls))
+		})
+	}
+}
+
+func TestProgress_TakeQueued(t *testing.T) {
+	// A tick takes the events queued meanwhile before its round, without
+	// waiting for one.
+	munge := ForService(ServiceMunge)
+	probes := []Probe{{Name: "container", Check: ContainerRunning}, munge}
+	passedAll := func() *progress {
+		p := newProgress(probes, make(chan monitor.Event, 1))
+		p.pass(0)
+		p.pass(1)
+		return p
+	}
+
+	t.Run("nothing queued", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		got := p.takeQueued(testContainer, events)
+		assert.Equal(t, (<-chan monitor.Event)(events), got)
+		assert.Equal(t, []bool{true, true}, p.passed)
+	})
+	t.Run("unit event", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		events <- monitor.Event{Kind: monitor.EventUnitActive, Container: testContainer, Unit: munge.Unit}
+		got := p.takeQueued(testContainer, events)
+		assert.Equal(t, (<-chan monitor.Event)(events), got)
+		assert.Equal(t, []bool{true, false}, p.passed)
+		assert.True(t, p.trusted)
+	})
+	t.Run("closed", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		close(events)
+		got := p.takeQueued(testContainer, events)
+		assert.Nil(t, got)
+		assert.Equal(t, []bool{false, false}, p.passed)
+		assert.False(t, p.trusted)
+	})
+	t.Run("die", func(t *testing.T) {
+		p := passedAll()
+		events := make(chan monitor.Event, 4)
+		events <- monitor.Event{Kind: monitor.EventContainerDie, Container: testContainer, Detail: "exit 1"}
+		p.takeQueued(testContainer, events)
+		var te *TerminalError
+		require.ErrorAs(t, p.died, &te)
+		assert.Contains(t, p.died.Error(), "container sind-dev-controller died: exit 1")
+	})
 }
 
 // Services status queries check on managed workers and controllers.

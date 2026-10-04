@@ -51,7 +51,8 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
-  ├── info.go      docker info (daemon version, cgroup version, security options)
+  ├── info.go      docker info (daemon version, cgroup version, security options, OS and kernel)
+  ├── endpoint.go  Daemon endpoint the docker CLI uses (DOCKER_HOST, docker context)
   ├── plugin.go    Volume plugin queries (CVMFS)
   └── labels.go    Docker Compose compatibility labels
 
@@ -61,7 +62,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
-  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNotReady), rollback bound
+  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNetworkFull), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
@@ -74,6 +75,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
   ├── node.go      Node initialization and setup
+  ├── setup.go     In-container node setup (nss_slurm, users, SSH) in one docker exec
   ├── discovery.go Cluster/node discovery queries, VolumeType
   ├── resources.go Resource creation helpers
   ├── types.go     Shared types (Cluster, Node, State)
@@ -84,7 +86,8 @@ pkg/cluster/       Cluster operations (orchestration)
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
-pkg/doctor/        Host prerequisite checks (Docker version, cgroupv2, inotify, DNS policy)
+pkg/doctor/        Host prerequisite checks (Docker version, where the daemon runs, cgroupv2 and the
+                   nsdelegate probe, inotify)
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
@@ -94,7 +97,7 @@ pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
                    discovery, munge key and slurm.key generation, sacctmgr account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
-pkg/state/         sind's state directory and the realm lock (flock) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
+pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock network on the daemon) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
 ```
 
 ## Dependency flow
@@ -102,6 +105,8 @@ pkg/state/         sind's state directory and the realm lock (flock) that librar
 ```
 cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
          → pkg/doctor  → pkg/config
+                       → pkg/doctor  → pkg/docker
+                                     → pkg/cmdexec
                        → pkg/log
                        → pkg/mesh    → pkg/docker
                                      → pkg/cmdexec
@@ -116,11 +121,13 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                        → pkg/slurm   → pkg/docker
                                      → pkg/config
                        → pkg/ssh     → pkg/docker
+                       → pkg/state   → pkg/docker
+                                     → pkg/log
          → pkg/nodeset
-         → pkg/state   (→ pkg/log)
+         → pkg/state
 ```
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
 
 ## Adding a new CLI command
 

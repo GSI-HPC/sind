@@ -44,9 +44,13 @@ Without `--image`, new workers run the image the newest worker (or the controlle
 
 With `--image`, sind runs `slurmctld -V` in the image, after pulling it with `--pull`, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.8`.
 
+Before it creates a worker container, sind checks that the Docker host still mounts cgroup2 with `nsdelegate`, in a throwaway container of the controller's image, as [`sind create cluster`]({{< relref "/usage/cluster-lifecycle#preflight-checks" >}}) does, and fails with the commands that enable it otherwise.
+
 ### Checks
 
 `--count` must be at least 1 and `--cpus` must not be negative. `--cap-add` and `--cap-drop` take the capability names the cluster config's `capAdd` and `capDrop` accept, `--device` needs an absolute host path, as `devices` does, `--security-opt` an option Docker knows, as `securityOpt` does, and `--memory` and `--tmp-size` take the sizes `memory` and `tmpSize` take (see [Defaults section]({{< relref "/configuration/cluster-config#defaults-section" >}})). sind rejects these, and `--pull` without `--image`, with exit status 2 before it creates any container. With `-v`, it logs the extra privileges of the new nodes, as `sind create cluster` does.
+
+Workers that would not fit on the realm's mesh or the cluster network, Docker bridge networks of at most 1,023 containers each, fail with exit status 1 before sind creates any of them (see [Limits]({{< relref "/architecture/networking#limits" >}})).
 
 ### Examples
 

@@ -98,15 +98,16 @@ func TestCreate_WaitLimit(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "cluster dev not ready within 500ms: waiting for worker-0")
 	assert.Contains(t, err.Error(), "last probe error: probe munge: munge not ready: activating")
-	// The rollback ran: preflight, diagnostics and deletion list the
-	// containers.
+	// The rollback ran: preflight (twice: the cluster's containers and
+	// those on the mesh and the cluster network), diagnostics and
+	// deletion list the containers.
 	var psCalls int
 	for _, c := range m.Calls {
 		if c.Args[0] == "ps" {
 			psCalls++
 		}
 	}
-	assert.Equal(t, 3, psCalls)
+	assert.Equal(t, 4, psCalls)
 }
 
 func TestCreate_WaitLimitAfterNodes(t *testing.T) {

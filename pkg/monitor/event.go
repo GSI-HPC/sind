@@ -35,7 +35,10 @@ const EventUnitActive EventKind = "unit.active"
 // EventUnitFailed indicates a systemd unit reached ActiveState=failed.
 const EventUnitFailed EventKind = "unit.failed"
 
-// EventMonitorError indicates an unrecoverable monitor failure.
+// EventMonitorError indicates that a monitor stopped while the watcher
+// runs: it failed to start, its stream failed, or its stream ended. Its
+// events are missing from then on: those of the container it names, or
+// those of every container when it names none (the docker events stream).
 const EventMonitorError EventKind = "monitor.error"
 
 // Event represents a single state change observed by a monitor.

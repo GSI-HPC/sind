@@ -6,7 +6,9 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
@@ -114,6 +116,135 @@ func TestInspectNetworksLifecycle(t *testing.T) {
 	assert.NotEmpty(t, infos[0].Subnet)
 
 	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+// TestConfigOnlyNetworkLifecycle checks against docker what the realm lock
+// relies on: a configuration-only network has no driver and no subnet, a
+// second create with its name fails as already existing, and it is removed
+// by ID.
+func TestConfigOnlyNetworkLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	name := itNetworkName("config-only")
+	labels := Labels{"sind.lock.pid": "42"}
+
+	const id = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
+	if !rec.IsIntegration() {
+		n := string(name)
+		// create
+		rec.AddResult(id+"\n", "", nil)
+		// inspect meta
+		rec.AddResult(`{"Name":"`+n+`","Id":"`+id+`","Created":"2026-10-04T10:02:03.5Z","Driver":"null","ConfigOnly":true,"Labels":{"sind.lock.pid":"42"}}`+"\n", "", nil)
+		// inspect
+		rec.AddResult(`[{"Name":"`+n+`","Driver":"null","IPAM":{"Driver":"default","Config":[]}}]`+"\n", "", nil)
+		// create again
+		rec.AddResult("", "Error response from daemon: network with name "+n+" already exists\n", &exec.ExitError{ProcessState: exitCode1(t)})
+		// remove by ID
+		rec.AddResult(id+"\n", "", nil)
+		// inspect meta
+		rec.AddResult("", "Error: No such network: "+n+"\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	}
+	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
+
+	created, err := c.CreateConfigOnlyNetwork(ctx, name, labels)
+	require.NoError(t, err)
+
+	meta, err := c.InspectNetworkMeta(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, created, meta.ID)
+	assert.Equal(t, name, meta.Name)
+	assert.True(t, meta.ConfigOnly)
+	assert.False(t, meta.Created.IsZero())
+	assert.Equal(t, "42", meta.Labels["sind.lock.pid"])
+
+	// No driver, so no bridge device, and no subnet from the address pools.
+	info, err := c.InspectNetwork(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "null", info.Driver)
+	assert.Empty(t, info.Subnet)
+
+	_, err = c.CreateConfigOnlyNetwork(ctx, name, labels)
+	require.Error(t, err)
+	assert.True(t, IsAlreadyExists(err), "second create: %v", err)
+
+	require.NoError(t, c.RemoveNetworkByID(ctx, created))
+	_, err = c.InspectNetworkMeta(ctx, name)
+	require.Error(t, err)
+	assert.True(t, IsNotFound(err), "removed network reported as not found: %v", err)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestCreateConfigOnlyNetwork(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("net-id\n", "", nil)
+	c := NewClient(&m)
+
+	id, err := c.CreateConfigOnlyNetwork(t.Context(), "sind-lock", Labels{"b": "2", "a": "1"})
+
+	require.NoError(t, err)
+	assert.Equal(t, NetworkID("net-id"), id)
+	assert.Equal(t, []string{"network", "create", "--config-only", "--label", "a=1", "--label", "b=2", "sind-lock"}, m.Calls[0].Args)
+}
+
+func TestCreateConfigOnlyNetwork_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("connection refused"))
+	c := NewClient(&m)
+
+	id, err := c.CreateConfigOnlyNetwork(t.Context(), "sind-lock", nil)
+
+	require.Error(t, err)
+	assert.Empty(t, id)
+}
+
+func TestRemoveNetworkByID(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("net-id\n", "", nil)
+	c := NewClient(&m)
+
+	require.NoError(t, c.RemoveNetworkByID(t.Context(), "net-id"))
+	assert.Equal(t, []string{"network", "rm", "net-id"}, m.Calls[0].Args)
+}
+
+func TestInspectNetworkMeta(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"Name":"sind-lock","Id":"net-id","Created":"2026-10-04T10:02:03.123456789Z","ConfigOnly":true,"Labels":{"sind.realm":"sind"}}`+"\n", "", nil)
+	c := NewClient(&m)
+
+	meta, err := c.InspectNetworkMeta(t.Context(), "sind-lock")
+
+	require.NoError(t, err)
+	assert.Equal(t, &NetworkMeta{
+		ID:         "net-id",
+		Name:       "sind-lock",
+		Created:    time.Date(2026, 10, 4, 10, 2, 3, 123456789, time.UTC),
+		ConfigOnly: true,
+		Labels:     Labels{"sind.realm": "sind"},
+	}, meta)
+	assert.Equal(t, []string{"network", "inspect", "sind-lock", "--format", "{{json .}}"}, m.Calls[0].Args)
+}
+
+func TestInspectNetworkMeta_NotFound(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such network: sind-lock\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	_, err := c.InspectNetworkMeta(t.Context(), "sind-lock")
+
+	require.Error(t, err)
+	assert.True(t, IsNotFound(err))
+}
+
+func TestInspectNetworkMeta_BadJSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("[]\n", "", nil)
+	c := NewClient(&m)
+
+	_, err := c.InspectNetworkMeta(t.Context(), "sind-lock")
+
+	require.ErrorContains(t, err, "parsing network inspect output")
 }
 
 func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
@@ -291,6 +422,68 @@ func TestCreateNetwork_Error(t *testing.T) {
 	assert.Empty(t, id)
 }
 
+func TestCreateNetwork_AddressPoolsExhausted(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: all predefined address pools have been fully subnetted\n",
+		"Error response from daemon: could not find an available, non-overlapping IPv4 address pool among the defaults to assign to the network\n",
+	} {
+		t.Run(stderr, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", stderr, &exec.ExitError{ProcessState: exitCode1(t)})
+			c := NewClient(&m)
+
+			_, err := c.CreateNetwork(t.Context(), testNetworkName, nil)
+
+			require.ErrorIs(t, err, ErrAddressPoolsExhausted)
+			assert.Contains(t, err.Error(), "the Docker daemon's default address pools are used up: every network takes a subnet from them")
+			assert.Contains(t, err.Error(), "default-address-pools in /etc/docker/daemon.json")
+			assert.Contains(t, err.Error(), "(exit status 1: "+strings.TrimSpace(stderr)+")")
+			var exitErr *exec.ExitError
+			assert.ErrorAs(t, err, &exitErr, "the docker error stays in the chain")
+		})
+	}
+}
+
+func TestCreateNetworkWithSubnet(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("net-id\n", "", nil)
+	c := NewClient(&m)
+
+	id, err := c.CreateNetworkWithSubnet(t.Context(), testNetworkName, Labels{"sind.realm": "sind"}, NetworkIPAM{
+		Subnet: "172.18.0.0/16", Gateway: "172.18.0.1", IPRange: "172.18.0.0/17",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, NetworkID("net-id"), id)
+
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{
+		"network", "create",
+		"--subnet", "172.18.0.0/16", "--gateway", "172.18.0.1", "--ip-range", "172.18.0.0/17",
+		"--label", "sind.realm=sind",
+		string(testNetworkName),
+	}, m.Calls[0].Args)
+}
+
+func TestCreateNetworkWithSubnet_SubnetOnly(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("net-id\n", "", nil)
+	c := NewClient(&m)
+
+	_, err := c.CreateNetworkWithSubnet(t.Context(), testNetworkName, nil, NetworkIPAM{Subnet: "172.18.0.0/16"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"network", "create", "--subnet", "172.18.0.0/16", string(testNetworkName)}, m.Calls[0].Args)
+}
+
+func TestCreateNetworkWithSubnet_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error response from daemon: Pool overlaps with other one on this address space\n", fmt.Errorf("exit status 1"))
+	c := NewClient(&m)
+
+	id, err := c.CreateNetworkWithSubnet(t.Context(), testNetworkName, nil, NetworkIPAM{Subnet: "172.18.0.0/16"})
+	assert.Error(t, err)
+	assert.Empty(t, id)
+}
+
 func TestRemoveNetwork(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(string(testNetworkName)+"\n", "", nil)
@@ -367,6 +560,19 @@ func TestInspectNetwork(t *testing.T) {
 	assert.Equal(t, "bridge", info.Driver)
 	assert.Equal(t, "172.18.0.0/16", info.Subnet)
 	assert.Equal(t, "172.18.0.1", info.Gateway)
+}
+
+func TestInspectNetwork_IPRangeAndLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`[{"Name":"sind-mesh","Driver":"bridge","Labels":{"sind.dns.ip":"172.18.255.254"},`+
+		`"IPAM":{"Config":[{"Subnet":"172.18.0.0/16","IPRange":"172.18.0.0/17","Gateway":"172.18.0.1"}]}}]`, "", nil)
+	c := NewClient(&m)
+
+	info, err := c.InspectNetwork(t.Context(), "sind-mesh")
+	require.NoError(t, err)
+	assert.Equal(t, "172.18.0.0/16", info.Subnet)
+	assert.Equal(t, "172.18.0.0/17", info.IPRange)
+	assert.Equal(t, Labels{"sind.dns.ip": "172.18.255.254"}, info.Labels)
 }
 
 func TestInspectNetwork_NoIPAM(t *testing.T) {

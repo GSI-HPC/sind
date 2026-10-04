@@ -18,25 +18,21 @@ import (
 // authorizedKeysPath is the path to the authorized_keys file inside node containers.
 const authorizedKeysPath = "/root/.ssh/authorized_keys"
 
-// injectKeyScript appends $1, a public key, to root's authorized_keys,
+// InjectKeyScript appends $1, a public key, to root's authorized_keys,
 // creating the directory if needed, and prints the ed25519 host key that
 // sshd serves, as ssh-keyscan reports it: "localhost ssh-ed25519 AAAA...".
-const injectKeyScript = `mkdir -p /root/.ssh && printf '%s\n' "$1" >> ` + authorizedKeysPath +
-	` && ssh-keyscan -t ed25519 localhost`
+// It has one command per line, for sh -e, which stops at the first that
+// fails, and takes the key as an argument of the shell, not as part of its
+// script. ssh-keyscan asks sshd, which must be running, for the key it
+// serves; HostKey reads it from the output.
+const InjectKeyScript = `mkdir -p /root/.ssh
+printf '%s\n' "$1" >> ` + authorizedKeysPath + `
+ssh-keyscan -t ed25519 localhost`
 
-// InjectKeyAndCollectHostKey writes the given SSH public key into the
-// container's /root/.ssh/authorized_keys file and returns the container's
-// ed25519 host public key in "ssh-ed25519 AAAA..." format (without the
-// hostname prefix). Both take one docker exec, as creating a cluster waits
-// for its slowest node: the key is an argument of the shell, not part of
-// its script, and ssh-keyscan asks sshd, which the caller has waited for,
-// for the key it serves.
-func InjectKeyAndCollectHostKey(ctx context.Context, client *docker.Client, container docker.ContainerName, pubKey string) (string, error) {
-	stdout, err := client.Exec(ctx, container, "sh", "-c", injectKeyScript, "sh", strings.TrimRight(pubKey, "\n"))
-	if err != nil {
-		return "", fmt.Errorf("injecting SSH key and scanning host key: %w", err)
-	}
-
+// HostKey returns the ed25519 host public key in the output of
+// InjectKeyScript, in "ssh-ed25519 AAAA..." format (without the hostname
+// prefix). It skips ssh-keyscan's comment lines.
+func HostKey(stdout string) (string, error) {
 	for _, line := range strings.Split(stdout, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {

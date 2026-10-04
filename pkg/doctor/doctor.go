@@ -4,6 +4,7 @@
 package doctor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/afero"
 )
 
@@ -40,11 +42,7 @@ func DockerUnreachable(err error) (detail, remediation string) {
 	if errors.Is(err, exec.ErrNotFound) {
 		return "not reachable: docker CLI not found in PATH", dockerInstallRemediation
 	}
-	msg := err.Error()
-	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
-		msg = exitErr.Stderr
-	}
-	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
+	msg := ErrorLine(err)
 	lower := strings.ToLower(msg)
 	switch {
 	case strings.Contains(lower, "permission denied"):
@@ -52,7 +50,19 @@ func DockerUnreachable(err error) (detail, remediation string) {
 	case strings.Contains(lower, "cannot connect to the docker daemon"):
 		remediation = dockerStartRemediation
 	}
-	return "not reachable: " + strings.TrimSpace(msg), remediation
+	return "not reachable: " + msg, remediation
+}
+
+// ErrorLine returns the first line of what a failed command wrote to
+// stderr, or of err's message when it wrote nothing: the line that says
+// what went wrong, for the detail of a check.
+func ErrorLine(err error) string {
+	msg := err.Error()
+	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok && strings.TrimSpace(exitErr.Stderr) != "" {
+		msg = exitErr.Stderr
+	}
+	msg, _, _ = strings.Cut(strings.TrimSpace(msg), "\n")
+	return strings.TrimSpace(msg)
 }
 
 // ParseVersion extracts the major and minor version numbers from a Docker
@@ -142,4 +152,36 @@ func parseCgroupInfo(mounts string) (mountPath string, hasV2, hasNsdelegate bool
 		}
 	}
 	return mountPath, false, false
+}
+
+// ProbeCgroupInfo is CgroupInfo for the kernel the Docker daemon runs on,
+// wherever that is: it reads the mount table in a throwaway container of
+// image, without a network and with cat as the entrypoint, as a custom
+// node image may set one. On a cgroup v2 daemon a container has cgroup2
+// mounted at CgroupRoot, and the kernel shows nsdelegate, an option of the
+// whole cgroup2 hierarchy, in every cgroup2 mount, in a container's cgroup
+// namespace too. docker run pulls image if the daemon does not have it.
+func ProbeCgroupInfo(ctx context.Context, client *docker.Client, image string) (mountPath string, hasV2, hasNsdelegate bool, err error) {
+	mounts, err := client.RunEphemeralWith(ctx, []string{"--network", "none", "--entrypoint", "cat"}, image, "/proc/self/mounts")
+	if err != nil {
+		return "", false, false, fmt.Errorf("reading the mount table in a container of %s: %w", image, err)
+	}
+	mountPath, hasV2, hasNsdelegate = parseCgroupInfo(mounts)
+	return mountPath, hasV2, hasNsdelegate, nil
+}
+
+// NsdelegateRemediation returns the commands that remount cgroup2 at
+// mountPath with nsdelegate on the Docker host, and keep the option across
+// reboots there.
+func NsdelegateRemediation(mountPath string) string {
+	return "Enable nsdelegate on the Docker host temporarily:\n" +
+		"\n" +
+		"sudo mount -o remount,nsdelegate " + mountPath + "\n" +
+		"\n" +
+		"Enable nsdelegate on boot (systemd):\n" +
+		"\n" +
+		"sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d\n" +
+		`echo -e '[Mount]\nOptions=nsdelegate' \` + "\n" +
+		"  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf\n" +
+		"sudo systemctl daemon-reload"
 }

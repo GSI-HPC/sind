@@ -14,7 +14,9 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +24,16 @@ import (
 )
 
 const validCgroupMounts = "cgroup2 /sys/fs/cgroup cgroup2 rw,nsdelegate 0 0\n"
+
+// defaultContext is the `docker context inspect --format '{{json .}}'`
+// output of the default context without DOCKER_HOST.
+const defaultContext = `{"Name":"default","Metadata":{},"Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock","SkipTLSVerify":false}}}`
+
+// localDockerHost is the DOCKER_HOST of the hermetic doctor tests, and
+// localHostCheck the Docker host check it gives.
+const localDockerHost = "unix:///var/run/docker.sock"
+
+var localHostCheck = doctorCheck{Name: "Docker host", Status: checkOK, Detail: "this machine (unix:///var/run/docker.sock)"}
 
 // dockerInfo returns the `docker info --format '{{json .}}'` output of a
 // rootful cgroup v2 daemon with the given version.
@@ -51,9 +63,10 @@ func hermeticDoctorCtxWithMounts(
 	mounts string,
 ) context.Context {
 	t.Helper()
-	// A DOCKER_HOST of the environment would hide the host checks; a test
-	// that needs one sets it after this.
-	t.Setenv("DOCKER_HOST", "")
+	// The local socket as DOCKER_HOST: the daemon runs on this machine,
+	// and doctor needs no `docker context inspect` to tell. A test that
+	// needs another endpoint sets it after this.
+	t.Setenv("DOCKER_HOST", localDockerHost)
 
 	fs := afero.NewMemMapFs()
 	require.NoError(t, afero.WriteFile(fs, "/proc/mounts", []byte(mounts), 0o644))
@@ -263,7 +276,8 @@ func TestDoctorCommand_WritesToStdout(t *testing.T) {
 		code = run(hermeticDoctorCtx(t, &m, nil), []string{"doctor"}, &stderr)
 	})
 	assert.Equal(t, 0, code)
-	assert.Equal(t, "✓ Docker Engine: 29.0.0 (>= 28.0)\n✓ Docker daemon: rootful, no userns-remap\n✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)\n", stdout)
+	assert.Equal(t, "✓ Docker Engine: 29.0.0 (>= 28.0)\n✓ Docker daemon: rootful, no userns-remap\n"+
+		"✓ Docker host: this machine (unix:///var/run/docker.sock)\n✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)\n", stdout)
 	assert.Empty(t, stderr.String())
 
 	m = mock.Executor{}
@@ -287,9 +301,10 @@ func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
 	require.EqualError(t, err, "checks failed: cgroup-nsdelegate")
 	assert.Equal(t, `✓ Docker Engine: 29.0.0 (>= 28.0)
 ✓ Docker daemon: rootful, no userns-remap
+✓ Docker host: this machine (unix:///var/run/docker.sock)
 ✗ cgroupv2: nsdelegate not found
 
-Enable nsdelegate temporarily:
+Enable nsdelegate on the Docker host temporarily:
 
 sudo mount -o remount,nsdelegate /sys/fs/cgroup
 
@@ -320,7 +335,8 @@ func TestDoctorCommand_DNSPolicyNotAuthorized(t *testing.T) {
 // host's resolver cannot use.
 func TestDoctorCommand_DNSPolicyRemoteDaemon(t *testing.T) {
 	var m mock.Executor
-	m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
+	m.AddResult(dockerInfo("29.0.0"), "", nil)                          // docker info
+	m.AddResult("", "Error: No such image: x\n", testutil.ExitCode1(t)) // image inspect: no node image
 
 	sys := &mock.Executor{}
 	sys.AddResult("", "", nil) // systemctl is-active → resolved running
@@ -328,7 +344,7 @@ func TestDoctorCommand_DNSPolicyRemoteDaemon(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "ssh://build-host")
 	out, err := executeDoctor(ctx, t)
 	require.NoError(t, err, "the DNS policy check is advisory")
-	assert.Contains(t, out, "✗ DNS policy: not available: DOCKER_HOST names a daemon on another host (optional)\n")
+	assert.Contains(t, out, "✗ DNS policy: not available: the Docker daemon does not run on this machine (optional)\n")
 	assert.Len(t, sys.Calls, 1, "polkit is not asked")
 }
 
@@ -344,6 +360,7 @@ func TestDoctorCommand_JSON(t *testing.T) {
 	assert.Equal(t, []doctorCheck{
 		{Name: "Docker Engine", Status: checkOK, Detail: "29.0.0 (>= 28.0)"},
 		{Name: "Docker daemon", Status: checkOK, Detail: "rootful, no userns-remap"},
+		localHostCheck,
 		{Name: "cgroupv2", Status: checkOK, Detail: "nsdelegate enabled (/sys/fs/cgroup)"},
 		{Name: "DNS policy", Status: checkOK, Detail: "host resolution available"},
 	}, checks)
@@ -360,16 +377,17 @@ func TestDoctorCommand_JSONFailures(t *testing.T) {
 
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks), "stdout holds only the JSON document")
-	require.Len(t, checks, 4)
+	require.Len(t, checks, 5)
 	assert.Equal(t, doctorCheck{Name: "Docker Engine", Status: checkFailed, Detail: "27.5.0 (requires >= 28.0)"}, checks[0])
 	assert.Equal(t, doctorCheck{Name: "Docker daemon", Status: checkOK, Detail: "rootful, no userns-remap"}, checks[1])
-	assert.Equal(t, "cgroupv2", checks[2].Name)
-	assert.Equal(t, checkFailed, checks[2].Status)
-	assert.Equal(t, "nsdelegate not found", checks[2].Detail)
-	assert.Equal(t, nsdelegateRemediation("/sys/fs/cgroup"), checks[2].Remediation)
-	assert.Contains(t, checks[2].Remediation, "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
+	assert.Equal(t, localHostCheck, checks[2])
+	assert.Equal(t, "cgroupv2", checks[3].Name)
+	assert.Equal(t, checkFailed, checks[3].Status)
+	assert.Equal(t, "nsdelegate not found", checks[3].Detail)
+	assert.Equal(t, doctor.NsdelegateRemediation("/sys/fs/cgroup"), checks[3].Remediation)
+	assert.Contains(t, checks[3].Remediation, "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
 	assert.Equal(t, doctorCheck{Name: "DNS policy", Status: checkWarning, Detail: "not authorized (optional)",
-		Remediation: dnsPolicyRemediation}, checks[3])
+		Remediation: dnsPolicyRemediation}, checks[4])
 }
 
 // TestDoctorCommand_DaemonMode checks that doctor fails a daemon in
@@ -392,7 +410,7 @@ func TestDoctorCommand_DaemonMode(t *testing.T) {
 			require.EqualError(t, err, "checks failed: docker-daemon")
 			var checks []doctorCheck
 			require.NoError(t, json.Unmarshal([]byte(out), &checks))
-			require.Len(t, checks, 3)
+			require.Len(t, checks, 4)
 			assert.Equal(t, doctorCheck{Name: "Docker daemon", Status: checkFailed, Detail: tt.detail, Remediation: tt.remediation}, checks[1])
 		})
 	}
@@ -439,6 +457,12 @@ func TestDoctorCommand_Inotify(t *testing.T) {
 		t.Helper()
 		var m mock.Executor
 		m.AddResult(dockerInfo("29.0.0"), "", nil) // docker info
+		switch {
+		case dockerHost == "":
+			m.AddResult(defaultContext, "", nil) // docker context inspect
+		case !strings.HasPrefix(dockerHost, "unix://"):
+			m.AddResult("", "Error: No such image: x\n", testutil.ExitCode1(t)) // no node image to probe with
+		}
 		ctx := hermeticDoctorCtx(t, &m, nil)
 		t.Setenv("DOCKER_HOST", dockerHost)
 		require.NoError(t, afero.WriteFile(fsFrom(ctx), "/proc/sys/fs/inotify/max_user_instances", []byte(limit), 0o644))
@@ -455,7 +479,7 @@ func TestDoctorCommand_Inotify(t *testing.T) {
 
 	out, err = run(t, "128\n", "tcp://build-host:2376")
 	require.NoError(t, err)
-	assert.NotContains(t, out, "inotify")
+	assert.NotContains(t, out, "max_user_instances")
 }
 
 func TestDoctorCommand_InotifyJSON(t *testing.T) {
@@ -468,10 +492,10 @@ func TestDoctorCommand_InotifyJSON(t *testing.T) {
 	require.NoError(t, err)
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
-	require.Len(t, checks, 4)
+	require.Len(t, checks, 5)
 	assert.Equal(t, doctorCheck{Name: "inotify", Status: checkWarning,
 		Detail:      "max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)",
-		Remediation: inotifyRemediation}, checks[3])
+		Remediation: inotifyRemediation}, checks[4])
 }
 
 // TestDoctorCommand_DaemonCgroupV1 checks that the cgroup version comes
@@ -485,10 +509,10 @@ func TestDoctorCommand_DaemonCgroupV1(t *testing.T) {
 	require.EqualError(t, err, "checks failed: cgroup")
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
-	require.Len(t, checks, 3)
+	require.Len(t, checks, 4)
 	assert.Equal(t, doctorCheck{Name: "Docker daemon", Status: checkOK, Detail: "rootful, no userns-remap"}, checks[1])
 	assert.Equal(t, doctorCheck{Name: "cgroupv2", Status: checkFailed,
-		Detail: "Docker runs containers on cgroup v1 (sind requires cgroupv2)", Remediation: unifiedRemediation}, checks[2])
+		Detail: "Docker runs containers on cgroup v1 (sind requires cgroupv2)", Remediation: unifiedRemediation}, checks[3])
 }
 
 // TestDoctorCommand_DockerPermissionDenied checks that doctor says why it
@@ -510,4 +534,147 @@ func TestDoctorCommand_InvalidOutput(t *testing.T) {
 	require.EqualError(t, err, `invalid --output value "yaml": must be "human" or "json"`)
 	assert.Empty(t, out)
 	assert.Empty(t, m.Calls, "no check runs")
+}
+
+// TestDoctorCommand_DaemonElsewhere checks doctor for a daemon that does
+// not run on this machine: a warning that says why, nsdelegate read in a
+// container of the default node image when the daemon has it, and no
+// check of this machine's inotify limit. A daemon elsewhere fails nothing
+// by itself.
+func TestDoctorCommand_DaemonElsewhere(t *testing.T) {
+	const (
+		withNsd    = "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate 0 0\n"
+		withoutNsd = "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"
+	)
+	noImage := mock.Result{Stderr: "Error: No such image: " + config.DefaultImage + "\n", Err: testutil.ExitCode1(t)}
+	hasImage := mock.Result{Stdout: "{}\n"}
+	elsewhere := func(why string) doctorCheck {
+		return doctorCheck{Name: "Docker host", Status: checkWarning, Detail: "not this machine: " + why + " (unsupported)",
+			Remediation: elsewhereRemediation}
+	}
+	probed := doctorCheck{Name: "cgroupv2", Status: checkOK, Detail: "nsdelegate enabled (/sys/fs/cgroup, in a container)"}
+	tests := []struct {
+		name       string
+		dockerHost string
+		info       string
+		kernel     string        // this machine's kernel release, empty for unknown
+		results    []mock.Result // after docker info
+		wantHost   doctorCheck
+		wantCgroup doctorCheck
+		wantErr    string
+	}{
+		{
+			name: "DOCKER_HOST", dockerHost: "tcp://build-host:2376", info: dockerInfo("29.0.0"),
+			results:  []mock.Result{hasImage, {Stdout: withNsd}},
+			wantHost: elsewhere("DOCKER_HOST is tcp://build-host:2376, not a unix socket"), wantCgroup: probed,
+		},
+		{
+			name: "remote context without the node image", info: dockerInfo("29.0.0"),
+			results:  []mock.Result{{Stdout: `{"Name":"build","Endpoints":{"docker":{"Host":"ssh://ci@build-host"}}}`}, noImage},
+			wantHost: elsewhere(`docker context "build" connects to ssh://ci@build-host, not a unix socket`),
+			wantCgroup: doctorCheck{Name: "cgroupv2", Status: checkWarning,
+				Detail:      "nsdelegate not checked: the Docker host has no " + config.DefaultImage + " to probe it with (sind create checks it)",
+				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + config.DefaultImage},
+		},
+		{
+			name: "Docker Desktop without nsdelegate", dockerHost: localDockerHost,
+			info:     `{"ServerVersion":"29.0.0","CgroupVersion":"2","OperatingSystem":"Docker Desktop","Name":"docker-desktop","KernelVersion":"6.10.14-linuxkit"}`,
+			kernel:   "6.10.14-linuxkit",
+			results:  []mock.Result{hasImage, {Stdout: withoutNsd}},
+			wantHost: elsewhere("Docker Desktop runs the daemon in a VM"),
+			wantCgroup: doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not found",
+				Remediation: doctor.NsdelegateRemediation("/sys/fs/cgroup")},
+			wantErr: "checks failed: cgroup-nsdelegate",
+		},
+		{
+			name: "another kernel, probe fails", dockerHost: "unix:///tmp/forwarded.sock",
+			info:   `{"ServerVersion":"29.0.0","CgroupVersion":"2","KernelVersion":"6.12.48+deb13-amd64"}`,
+			kernel: "6.8.0-45-generic",
+			results: []mock.Result{hasImage,
+				{Stderr: "docker: Error response from daemon: failed to create task\n\nRun 'docker run --help'\n", Err: testutil.ExitCode1(t)}},
+			wantHost:   elsewhere("the daemon runs kernel 6.12.48+deb13-amd64, this machine 6.8.0-45-generic"),
+			wantCgroup: doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not checked: docker: Error response from daemon: failed to create task"},
+			wantErr:    "checks failed: cgroup",
+		},
+		{
+			name: "image inspect fails", dockerHost: "ssh://ci@build-host", info: dockerInfo("29.0.0"),
+			results:    []mock.Result{{Stderr: "error during connect: EOF\n", Err: testutil.ExitCode1(t)}},
+			wantHost:   elsewhere("DOCKER_HOST is ssh://ci@build-host, not a unix socket"),
+			wantCgroup: doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not checked: error during connect: EOF"},
+			wantErr:    "checks failed: cgroup",
+		},
+		{
+			name: "context unknown", info: dockerInfo("29.0.0"),
+			results: []mock.Result{{Stderr: "context \"gone\": context not found\n", Err: testutil.ExitCode1(t)}, hasImage, {Stdout: withNsd}},
+			wantHost: doctorCheck{Name: "Docker host", Status: checkWarning,
+				Detail: `unknown: context "gone": context not found`},
+			wantCgroup: probed,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(tt.info, "", nil)
+			for _, r := range tt.results {
+				m.AddResult(r.Stdout, r.Stderr, r.Err)
+			}
+			ctx := hermeticDoctorCtx(t, &m, nil)
+			t.Setenv("DOCKER_HOST", tt.dockerHost)
+			fs := fsFrom(ctx)
+			require.NoError(t, afero.WriteFile(fs, "/proc/sys/fs/inotify/max_user_instances", []byte("128\n"), 0o644))
+			if tt.kernel != "" {
+				require.NoError(t, afero.WriteFile(fs, "/proc/sys/kernel/osrelease", []byte(tt.kernel+"\n"), 0o644))
+			}
+
+			out, err := executeDoctor(ctx, t, "-o", "json")
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, tt.wantErr)
+			}
+			var checks []doctorCheck
+			require.NoError(t, json.Unmarshal([]byte(out), &checks))
+			require.Len(t, checks, 4, "no inotify check")
+			assert.Equal(t, tt.wantHost, checks[2])
+			assert.Equal(t, tt.wantCgroup, checks[3])
+			assert.Len(t, m.Calls, 1+len(tt.results))
+			for _, c := range m.Calls {
+				if c.Args[0] == "run" {
+					assert.Equal(t, []string{"run", "--rm", "--network", "none", "--entrypoint", "cat", config.DefaultImage, "/proc/self/mounts"}, c.Args)
+				}
+			}
+		})
+	}
+}
+
+// TestDoctorCommand_DaemonElsewhereHuman checks the human output of a
+// daemon elsewhere: the warning with the way back to a local daemon.
+func TestDoctorCommand_DaemonElsewhereHuman(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(dockerInfo("29.0.0"), "", nil)                                                // docker info
+	m.AddResult("", "Error: No such image: "+config.DefaultImage+"\n", testutil.ExitCode1(t)) // image inspect
+
+	ctx := hermeticDoctorCtx(t, &m, nil)
+	t.Setenv("DOCKER_HOST", "tcp://build-host:2376")
+	out, err := executeDoctor(ctx, t)
+	require.NoError(t, err, "a daemon elsewhere is a warning")
+	assert.Contains(t, out, "✗ Docker host: not this machine: DOCKER_HOST is tcp://build-host:2376, not a unix socket (unsupported)\n\n"+
+		elsewhereRemediation+"\n\n✗ cgroupv2: nsdelegate not checked: ")
+	assert.Contains(t, elsewhereRemediation, "unset DOCKER_HOST DOCKER_CONTEXT\ndocker context use default")
+}
+
+// TestDoctorCommand_DaemonElsewhereNotReachable checks that doctor does not
+// read this machine's cgroup2 mount for a daemon elsewhere it cannot reach.
+func TestDoctorCommand_DaemonElsewhereNotReachable(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "error during connect: Get \"http://docker.example/v1.47/info\": dial tcp: lookup docker.example: no such host\n", testutil.ExitCode1(t))
+
+	ctx := hermeticDoctorCtx(t, &m, nil)
+	t.Setenv("DOCKER_HOST", "tcp://docker.example:2375")
+	out, err := executeDoctor(ctx, t, "-o", "json")
+	require.EqualError(t, err, "checks failed: docker")
+	var checks []doctorCheck
+	require.NoError(t, json.Unmarshal([]byte(out), &checks))
+	require.Len(t, checks, 2)
+	assert.Equal(t, doctorCheck{Name: "cgroupv2", Status: checkWarning, Detail: "nsdelegate not checked: Docker is not reachable"}, checks[1])
 }

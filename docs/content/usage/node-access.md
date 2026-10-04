@@ -145,9 +145,9 @@ sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/
 | `ssh_config` | SSH config snippet, with a `Host` block for each node of the realm |
 | `id_ed25519` | Private key |
 | `known_hosts` | Host keys |
-| `lock` | Advisory lock that serializes creating and deleting clusters and workers, and `sind power on`, `reboot` and `cycle`, in the realm |
+| `lock` | Advisory lock that serializes your commands that create and delete clusters and workers, and `sind power on`, `reboot` and `cycle`, in the realm; the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}) on the Docker daemon serializes them with other users' |
 
-The SSH files are updated on every create/delete operation and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file.
+The SSH files are updated on every create/delete operation and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file. Only your own sind commands update them: in a realm that you share with another user of the Docker daemon, that user's creates and deletes do not reach your files.
 
 To find the path for your current realm:
 

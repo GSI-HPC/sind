@@ -8,7 +8,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 
 ## Prerequisites
 
-- Linux host with the unified cgroupv2 hierarchy at `/sys/fs/cgroup` (not systemd's hybrid mode) and the `nsdelegate` mount option (`mount -o remount,nsdelegate /sys/fs/cgroup`); sind runs on the Docker host itself
+- Linux host with the unified cgroupv2 hierarchy at `/sys/fs/cgroup` (not systemd's hybrid mode) and the `nsdelegate` mount option (`mount -o remount,nsdelegate /sys/fs/cgroup`), which `sind create cluster` and `sind create worker` check on the daemon's kernel before they create a node (`cluster.CheckNsdelegate`; see Container Startup); sind runs on the Docker host itself, not against Docker Desktop or a remote daemon, which `sind doctor` reports with a warning (see Host Diagnostics)
 - Docker Engine 28.0+ (required for `--security-opt writable-cgroups=true` and the `gw-priority` network option), with a Docker CLI of the same release
 - A rootful Docker daemon without `userns-remap`: Docker refuses `writable-cgroups` in rootless mode and with `userns-remap`, at `docker start`. `sind doctor` checks `docker info`'s `SecurityOptions` for `name=rootless` and `name=userns`, and `sind create cluster` does the same (`cluster.CheckDaemon`) before the mesh is set up or an image pulled; it also refuses a daemon whose `CgroupVersion` is `1`
 - For clusters with 10+ nodes: `fs.inotify.max_user_instances >= 1024` (default 128 is too low; `sind doctor` warns below it)
@@ -49,7 +49,7 @@ A mesh that exists but is stopped, as after a host reboot, is started, the DNS c
 
 **Phase 2: Cluster Resources** (concurrent pipelines, no barriers)
 
-With `--pull`, sind pulls each distinct image of the cluster's nodes once (`docker pull`), concurrently with the preflight check, the mesh lookups and the creation of the network and volumes; the steps that run an image (the helper containers, the Slurm version check, the CVMFS check and the nodes) wait for it and create their containers without `--pull always`, so every node runs the same image and the registry is asked once per image.
+With `--pull`, sind pulls each distinct image of the cluster's nodes once (`docker pull`), concurrently with the preflight check, the mesh lookups and the creation of the network and volumes; the steps that run an image (the helper containers, the Slurm version check, the CVMFS check, the nsdelegate check and the nodes) wait for it and create their containers without `--pull always`, so every node runs the same image and the registry is asked once per image.
 
 1. Create cluster network → connect the realm's SSH relay container to it
 2. Create config volume → write Slurm configuration, and `slurmdbd.conf` for a managed db node (managed clusters only; see Unmanaged Cluster)
@@ -58,13 +58,20 @@ With `--pull`, sind pulls each distinct image of the cluster's nodes once (`dock
 5. Create state volume (backup controller only)
 6. Create home volume (`users` only)
 7. Detect the CVMFS backend (`storage.cvmfs` only; see CVMFS Mount)
+8. Check that the Docker host mounts cgroup2 with `nsdelegate` (`cluster.CheckNsdelegate`)
+
+The nsdelegate check runs `cat /proc/self/mounts` in a throwaway container of the controller's image (`--network none`, and `--entrypoint cat`, as a custom image may set an entrypoint) and fails with the commands that enable the option, the ones `sind doctor` prints. It reads the kernel the daemon runs on, wherever that is: `nsdelegate` is an option of the whole cgroup2 hierarchy (the kernel's `cgroup-v2.rst` calls it system wide, set only by a mount or remount in the init namespace and ignored on other mounts), and the kernel lists it in every cgroup2 mount, including the one Docker gives each container in its own cgroup namespace. Without the check, a host without `nsdelegate` gets as far as the nodes and fails later, as a node or Slurm daemon that does not become ready. The check runs alongside the other steps of this phase, after the pull with `--pull`, so a create that passes it waits for no extra container start; a create that fails it rolls back the network, volumes and helper containers made by then, before any node container exists. Running it before them instead would make every create wait for a container start, for a failure that is rare: systemd mounts cgroup2 with `nsdelegate` by default.
 
 **Phase 3: Node Containers**
-1. Create and start each node container in parallel
+1. Create and start each node container in parallel, on its cluster network and the realm's mesh (see Cluster Network)
 2. Start per-node systemd D-Bus monitor immediately after each container starts
 3. Wait for each node to become ready, accelerated by events
-4. On managed workers with identity `nssSlurm` or `clientIds`, check for nss_slurm and put it first in `/etc/nsswitch.conf` (see Identity Modes)
-5. Add the cluster users and groups where the identity mode puts them (`users` and `groups` only; see Users)
+4. Set each node up in one `docker exec`, a shell script that runs these steps in order and stops at the first command that fails:
+   1. On managed workers with identity `nssSlurm` or `clientIds`, check for nss_slurm and put it first in `/etc/nsswitch.conf` (see Identity Modes)
+   2. Add the cluster users and groups where the identity mode puts them (`users` and `groups` only; see Users)
+   3. Append the realm's SSH public key to root's `authorized_keys` and collect the host key (see Public Key Injection and Host Key Collection)
+
+The script writes a marker line to stderr before each step, so that a failure names its step and shows what that step wrote, with the exit status of the command that failed (`node worker-0: adding users: exit status 9: groupadd: group 'munge' already exists`). It runs after the node's readiness wait, as ssh-keyscan needs sshd, and nss_slurm and the users are in place before Phase 4 starts the Slurm daemons and creates the Slurm accounts. A node takes the same docker calls from `docker create` to its host key whatever its role or identity mode: create, start, the readiness probes, an inspect for its addresses (alongside the setup) and the setup exec.
 
 Every node container starts with a short `/bin/sh` entrypoint instead of the image's own entrypoint or command. As PID 1, it moves itself into `init.scope`, enables each controller of the container's root cgroup in its `cgroup.subtree_control`, and execs `/sbin/init`. `docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and a process there makes systemd's own attempt to enable them fail (cgroup v2's no internal processes rule). An exec of sind's that landed before systemd had enabled controllers would otherwise leave every unit without them, including `Delegate=yes` daemons such as slurmd.
 
@@ -77,7 +84,15 @@ sind uses two event sources to accelerate readiness detection:
 - **Docker events** — a single `docker events` stream watches all cluster containers for start/die events
 - **Systemd D-Bus monitors** — per-node `busctl monitor --watch-bind=yes` streams watch for unit state changes (e.g., sshd.service becoming active or slurmd.service failing). They run until the command ends, through the waits for the Slurm daemons and the accounts
 
-When an event of the node arrives, its readiness probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. Each node's wait receives only its own container's events, and the docker events stream asks only for the start, die, oom, pause and unpause actions, not for the exec events of the probes. If the event sources are unavailable, sind falls back to poll-only mode transparently.
+When an event of the node arrives, its readiness probes re-evaluate immediately instead of waiting for the next poll tick; the events queued by then go with it, so a burst of unit changes during boot costs one probe round. A poll tick takes the events queued by then before its round as well, so the round runs the probes they concern. Each node's wait receives only its own container's events, and the docker events stream asks only for the start, die, oom, pause and unpause actions, not for the exec events of the probes. If the event sources are unavailable, sind falls back to poll-only mode transparently.
+
+Each round runs a node's checks in order and stops at the first that fails. Within one wait, a check that has passed is not run again in later rounds while the events can tell that what it checks has changed:
+
+- The sshd, munge and Slurm daemon checks follow their systemd units (`sshd.service`, `munge.service`, ...): an event of the unit, which became active again or failed, runs the check again, and for munge and the Slurm daemons a failed unit then ends the wait (see Readiness Checks). Events of other units run no passed check again.
+- Any other event of the container (start, oom, pause, unpause) runs every passed check again; a die event ends the wait. The container and systemd checks have no unit, so only these events run them again.
+- When the events may be incomplete, the passed checks run again: after the wait's event buffer was full, as the watcher drops what a full subscriber has no room for, and in every round once a monitor has stopped (the docker events stream, or the node's busctl monitor, failed or ended, e.g. in an image without `busctl`), once the watcher has stopped, and in poll-only mode, where nothing tells a wait what changed.
+
+While systemd boots, a round then costs one `docker exec`, the systemd check, instead of a `docker inspect` and the exec, and once systemd runs, a round that waits for munge no longer repeats the systemd and sshd checks. The trade-off: a change that no event reports goes unnoticed until the wait ends, such as a unit that stops without failing (the systemd monitor reports only units that became active or failed). As the wait ends once every check has passed, that window is the time from a check passing to the last one passing, and the steps after the wait (the node setup's ssh-keyscan, the Slurm daemons) fail on such a node with their own errors. A final round that runs every check again before the wait ends would close the window, at the price of the calls the skipping saves in the deciding round; skipping in poll-only mode too would keep a container that exits from failing the wait at once, as the container check would not run again.
 
 #### Readiness Checks
 
@@ -124,7 +139,7 @@ The CLI command structure is reflected in the library API, allowing programmatic
 
 Library contract of `cluster.Create`: the caller sets up the mesh (`mesh.Manager.EnsureMesh`) and applies the config's defaults (`config.Cluster.ApplyDefaults`); `Create` validates the config itself before it creates anything, and refuses a config `realm` other than its `mesh.Manager`'s realm, the realm it creates the cluster in. The CLI resolves the realm first and sets it on the config.
 
-Errors that a library caller branches on wrap exported sentinels, so `errors.Is` tells them apart without matching messages: `cluster.ErrClusterExists` (preflight conflicts), `ErrClusterNotFound` (a cluster or its controller is missing), `ErrNodeNotFound`, `ErrNodesConfMissing` (managed workers without `sind-nodes.conf`) and `ErrNotReady` (the `--wait` limit ran out). When `Create` or `WorkerAdd` fails and its rollback fails too, the returned error joins the rollback's failures to the original one (`errors.Join`), so the caller learns that resources were left behind.
+Errors that a library caller branches on wrap exported sentinels, so `errors.Is` tells them apart without matching messages: `cluster.ErrClusterExists` (preflight conflicts), `ErrClusterNotFound` (a cluster or its controller is missing), `ErrNodeNotFound`, `ErrNodesConfMissing` (managed workers without `sind-nodes.conf`), `ErrNotReady` (the `--wait` limit ran out) and `ErrNetworkFull` (the nodes do not fit on the realm's mesh or the cluster network, see Limits). When `Create` or `WorkerAdd` fails and its rollback fails too, the returned error joins the rollback's failures to the original one (`errors.Join`), so the caller learns that resources were left behind.
 
 ### Go Dependencies
 
@@ -143,7 +158,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
-| `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
+| `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
 
 **Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
 
@@ -348,7 +363,7 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 
 `sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. Without `--config` it creates the default cluster (1 controller + 1 worker). For one release, a stdin that is not a terminal is still read without `--config -`: sind first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
 
-`sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist.
+`sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist, or if the nodes would not fit on the realm's mesh or the cluster network, Docker bridge networks of at most 1,023 containers (see Limits under Networking).
 
 `sind delete cluster` is idempotent and robust:
 - Deleting a non-existent cluster is not an error
@@ -462,12 +477,18 @@ A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`pr
 `sind doctor` validates host prerequisites for running sind:
 
 ```bash
-sind doctor [-o json]                    # check Docker version and mode, cgroupv2, inotify, DNS policy
+sind doctor [-o json]                    # check Docker version, mode and host, cgroupv2, inotify, DNS policy
 ```
 
-Checks the Docker Engine version (from `docker info`), that the daemon is rootful and has no `userns-remap` (`cluster.DaemonSupport`; skipped when Docker is not reachable), that Docker runs containers on cgroup v2 (`docker info`'s `CgroupVersion`) and this host mounts cgroup2 at `/sys/fs/cgroup` with `nsdelegate` (a hybrid host, whose cgroup2 is at `/sys/fs/cgroup/unified`, fails), that `fs.inotify.max_user_instances` is at least 1024 (advisory; left out when it cannot be read or `DOCKER_HOST` is not a `unix://` socket), and that polkit allows host DNS resolution via systemd-resolved (a `warning` without asking polkit when `DOCKER_HOST` is not a `unix://` socket: the mesh bridge is on the daemon's host). The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr. When Docker is not reachable, the Docker Engine detail is `not reachable: ` and the first line of docker's error (`doctor.DockerUnreachable`), with a remediation for a missing `docker` CLI, a user outside the docker group and a daemon that is not running. Details are escaped in the human output like the final error line, since they can quote docker.
+Checks the Docker Engine version (from `docker info`), that the daemon is rootful and has no `userns-remap` (`cluster.DaemonSupport`; skipped when Docker is not reachable), where the daemon runs (`doctor.LocateDaemon`; skipped when Docker is not reachable), that Docker runs containers on cgroup v2 (`docker info`'s `CgroupVersion`) and the Docker host mounts cgroup2 at `/sys/fs/cgroup` with `nsdelegate` (a hybrid host, whose cgroup2 is at `/sys/fs/cgroup/unified`, fails), that `fs.inotify.max_user_instances` is at least 1024 (advisory; left out when it cannot be read or the daemon runs elsewhere), and that polkit allows host DNS resolution via systemd-resolved (a `warning` without asking polkit when the daemon runs elsewhere: the mesh bridge is on the daemon's host). The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr. When Docker is not reachable, the Docker Engine detail is `not reachable: ` and the first line of docker's error (`doctor.DockerUnreachable`), with a remediation for a missing `docker` CLI, a user outside the docker group and a daemon that is not running. Details are escaped in the human output like the final error line, since they can quote docker.
 
-`-o json` prints the checks as a JSON array in clusterctl's check model: each entry has `name` (`Docker Engine`, `Docker daemon`, `cgroupv2`, `inotify`, `DNS policy`), `status` (`ok`, `failed`, or `warning` for the advisory inotify and DNS policy checks, which never fail doctor: sind-action runs it as a gate), `detail`, and, for a check that did not pass and has a fix, `remediation` with the commands.
+The `Docker host` check tells whether the daemon runs on the machine sind runs on. It takes the endpoint the docker CLI takes: `DOCKER_HOST`, else the context that `DOCKER_CONTEXT` names, else the current context of the CLI's configuration (`docker context use`), else the default socket; without `DOCKER_HOST`, `docker context inspect` resolves the context, without contacting the daemon (`docker.Client.Endpoint`). The daemon runs elsewhere when that endpoint is not a `unix://` socket (`tcp://`, `ssh://`), when `docker info` reports Docker Desktop (`OperatingSystem` `Docker Desktop` or `Name` `docker-desktop`), whose daemon runs in a VM, or when `docker info`'s `KernelVersion` is not this machine's `/proc/sys/kernel/osrelease`. A container shares its host's kernel, so a CI job in a container that reaches the host's daemon through a mounted socket counts as local, and a socket forwarded from a host with another kernel does not. The check is `ok`, with the endpoint, for a local daemon, and a `warning` that says why, with the way back to a local daemon, otherwise.
+
+A daemon elsewhere is a warning, not a failure. The detection is a heuristic from the client's side: a unix socket can be forwarded from a host that runs the same kernel release, and a `tcp://` endpoint can be this machine's own daemon, so a failure would block setups that work. And the required checks hold for a daemon elsewhere too, as they ask the daemon or read its kernel; what does not hold is what sind does on this machine: `--data` paths, which the daemon resolves on its own host, host DNS and the inotify limit. The trade-off is that doctor passes a setup that sind does not support; the warning says so, and `sind create cluster` and `sind create worker` check `nsdelegate` on the daemon's kernel either way.
+
+For a local daemon, `nsdelegate` comes from this machine's `/proc/mounts`, which shows the same kernel, so doctor needs no image and starts no container. For a daemon elsewhere it is read in a throwaway container of the default node image (`doctor.ProbeCgroupInfo`, as `cluster.CheckNsdelegate` does), the only container doctor starts, and only when the daemon has that image: doctor pulls none. Without the image the check is a `warning`, `nsdelegate not checked`, with the `docker pull` that lets doctor check; a probe that fails fails the check. A daemon elsewhere that is not reachable leaves the check a `warning`, next to the failed Docker Engine check.
+
+`-o json` prints the checks as a JSON array in clusterctl's check model: each entry has `name` (`Docker Engine`, `Docker daemon`, `Docker host`, `cgroupv2`, `inotify`, `DNS policy`), `status` (`ok`, `failed`, or `warning` for the advisory Docker host, inotify and DNS policy checks, and for a cgroupv2 check that could not read `nsdelegate`, none of which fails doctor: sind-action runs it as a gate on GitHub's runners, whose daemon is local), `detail`, and, for a check that did not pass and has a fix, `remediation` with the commands.
 
 ### Node Access
 
@@ -511,7 +532,9 @@ New workers take the shape of the cluster's newest worker, the one with the high
 
 Without `--image`, the workers run the newest worker's (or controller's) image by its ID, not by the tag it was created from, which may have moved to another image since; `--pull` therefore needs `--image`. With `--image`, sind runs `slurmctld -V` in the image (pulling it first with `--pull`) and refuses one whose Slurm version is not the cluster's (`sind.slurm.version`), as slurmd must not be newer than slurmctld; unmanaged workers and clusters without a recorded version skip this check.
 
-`--count` must be at least 1 and `--cpus` must not be negative. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device`, `--security-opt`, `--memory` and `--tmp-size`, which are checked like the config's `capAdd`, `capDrop`, `devices`, `securityOpt`, `memory` and `tmpSize`, are usage errors that sind reports before it takes the realm lock or creates any container.
+Before it creates a worker container, sind checks that the Docker host mounts cgroup2 with `nsdelegate`, as `sind create cluster` does (`cluster.CheckNsdelegate`; see Container Startup): a host that has lost it since the cluster was created, as by a reboot after a temporary remount, fails here with the commands that enable it. The check runs the controller's image by its ID, which the daemon has, and runs while sind reads the cluster's configuration and checks an explicit `--image`.
+
+`--count` must be at least 1 and `--cpus` must not be negative. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device`, `--security-opt`, `--memory` and `--tmp-size`, which are checked like the config's `capAdd`, `capDrop`, `devices`, `securityOpt`, `memory` and `tmpSize`, are usage errors that sind reports before it takes the realm lock or creates any container. Once it has found the cluster's controller, and before it starts a stopped mesh or creates a worker, sind refuses workers that would not fit on the realm's mesh or the cluster network (see Limits under Networking), with exit status 1.
 
 With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: mutations stay silent by default.
 
@@ -608,7 +631,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
-`sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. The images are the ones the mesh containers run, which can be older than the ones a new mesh gets. Useful for external consumers that need to connect to sind networks.
+`sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. The DNS IP is the DNS container's address while it runs, which stays the same for the life of a mesh that pins it (see Host Reboot and Docker Daemon Restart). The images are the ones the mesh containers run, which can be older than the ones a new mesh gets. Useful for external consumers that need to connect to sind networks.
 
 `sind get ssh-private-key`, `sind get ssh-public-key`, and `sind get ssh-known-hosts` dump SSH credentials to stdout. This replaces the need to extract files from Docker volumes.
 
@@ -1136,6 +1159,14 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 
 The mesh images do not follow `defaults.image`: the relay needs the `ssh` client and `bash` of sind's own node image, which custom images need not have. CoreDNS is pinned to a release; bump `DNSImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
 
+### Realm Lock
+
+| Type | Name Pattern | Example | Image |
+|------|-------------|---------|-------|
+| Configuration-only network | `<realm>-lock` | `sind-lock` | — |
+
+The network exists only while a sind command changes the realm: it is the realm lock's part on the Docker daemon (see Realm Advisory Locking). It is not part of the mesh, `sind get networks` leaves it out, and it has no `sind.cluster` label, so cluster discovery and `sind delete cluster --all` do not see it.
+
 ### Defaults
 
 The default realm is `sind` and the default cluster name is `default`, resulting in prefixes like `sind-default-*`.
@@ -1278,7 +1309,7 @@ from the image: an image labelled `sind.data.hostpath=/` would otherwise make `s
 bind-mount the host's root directory on a cluster that uses the data volume. Nodes created by
 earlier sind versions lack some of the labels; sind reads a missing label like an empty one.
 
-Every node container, the mesh's DNS and SSH containers, and every network and volume also carry Docker Compose labels (`com.docker.compose.*`), so Compose-aware tools group them. The project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh). A container's service is its role (`dns` or `ssh` in the mesh) and its container number is 1, N+1 for `worker-N` and 2 for `controller-backup`; networks and volumes name themselves `net`, `mesh`, the volume type (`config`, `munge`, `data`, `state`, `home`) or `ssh-config`.
+Every node container, the mesh's DNS and SSH containers, and every network and volume but the realm lock also carry Docker Compose labels (`com.docker.compose.*`), so Compose-aware tools group them. The project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh). A container's service is its role (`dns` or `ssh` in the mesh) and its container number is 1, N+1 for `worker-N` and 2 for `controller-backup`; networks and volumes name themselves `net`, `mesh`, the volume type (`config`, `munge`, `data`, `state`, `home`) or `ssh-config`.
 
 ### Enter and Exec
 
@@ -1297,7 +1328,7 @@ Each cluster has an isolated Docker bridge network:
 - Name: `<realm>-<cluster>-net`
 - Nodes can reach each other by container hostname
 
-Nodes join it with gateway priority 1 (`--network name=<realm>-<cluster>-net,gw-priority=1`, Docker 28+), ahead of the mesh network's 0. Docker makes a container's hostname a DNS name on every user-defined network it joins, so the mesh holds `controller`, `db` and `worker-N` once per cluster of the realm. The embedded DNS answers a name from the first of the container's networks that knows it, ordered by gateway priority and then by network name. With the priority, the short names Slurm uses resolve to the node's own cluster whatever the cluster is called; without it, a cluster whose network name sorts after `<realm>-mesh` (`test`, `prod`) would resolve `controller` to the controllers of every cluster in the realm. A name the cluster lacks, such as `db` without a db node, still falls through to the mesh and resolves to another cluster's node. The cluster network is also the nodes' default gateway.
+Nodes join it with gateway priority 1 (`--network name=<realm>-<cluster>-net,gw-priority=1`, Docker 28+), ahead of the mesh network's 0. Docker makes a container's hostname a DNS name on every user-defined network it joins, so the mesh holds `controller`, `db` and `worker-N` once per cluster of the realm. The embedded DNS answers a name from the first of the container's networks that knows it, ordered by gateway priority and then by network name. With the priority, the short names Slurm uses resolve to the node's own cluster whatever the cluster is called; without it, a cluster whose network name sorts after `<realm>-mesh` (`test`, `prod`) would resolve `controller` to the controllers of every cluster in the realm. A name the cluster lacks, such as `db` without a db node, still falls through to the mesh and resolves to another cluster's node. The cluster network is also the nodes' default gateway. `docker create` attaches a node to both networks, the cluster network first, as its network mode (`--network name=<realm>-<cluster>-net,gw-priority=1 --network <realm>-mesh`); Docker joins both when the container starts, as it would a network connected between create and start, so no `docker network connect` is needed.
 
 ### Mesh Network
 
@@ -1331,6 +1362,8 @@ Nodes are configured with:
 --dns-search <cluster>.<realm>.sind
 ```
 
+The DNS container's address is pinned for the life of the mesh (see Host Reboot and Docker Daemon Restart). `sind get mesh` reports it, so DNS servers outside sind, such as the CoreDNS of a kind cluster on the same host, can forward the `<realm>.sind` zone to it.
+
 The DNS container is lightweight and does not run systemd/sshd.
 
 sind keeps the records in the Corefile's `hosts` block and writes them when it creates or deletes nodes, and when `sind power on`, `reboot` and `cycle` start nodes, as a node can get another address on each start. A running CoreDNS reloads the Corefile on `SIGUSR1` (`docker kill -s USR1`), without dropping queries; a stopped DNS container is started instead. The write and the reload ignore Ctrl+C, and so does the rewrite of `known_hosts`, whose `cat >` truncates the file first. Each realm-wide file has one writer at a time (the realm lock); the Corefile and `known_hosts` updates run in parallel, as they live in different containers.
@@ -1350,13 +1383,19 @@ resolvectl domain <bridge> ~<realm>.sind default.<realm>.sind
 
 sind sets no restart policy: nodes keep the power state `sind power` gave them, and after a host reboot or a Docker daemon restart the mesh containers and the nodes stay stopped. `sind get cluster` shows a stopped DNS container or relay with ✗. `sind power on` starts the realm's DNS container, then the relay, then the nodes, re-registers the nodes' DNS records, and reapplies host DNS; `sind create cluster` and `sind create worker` also start a stopped mesh, DNS first, and so do `sind delete cluster` and `sind delete worker` before they remove nodes from a mesh that stays: `known_hosts` is read and written with `docker exec` in the relay.
 
-The DNS container's address is fixed into every node's and the relay's `--dns` when Docker creates them. Started before anything else on the mesh, the DNS container gets its old address back: it was the first container on the mesh, and Docker hands out the lowest free address. When it gets another one, sind warns (`Warning:` on stderr) and names the containers that still use the old address; they resolve neither `*.<realm>.sind` names nor external names until their clusters are created again (the relay with the realm's mesh, after the last cluster is deleted). A pinned DNS address (`--ip`) would need a mesh network with a user-defined subnet.
+The DNS container's address is fixed into every node's and the relay's `--dns` when Docker creates them, and Docker does not keep a stopped container's address: a container that starts first can take it. sind therefore pins the address. A new mesh network gets a user-configured subnet, as Docker accepts `--ip` only on such a network, with the subnet's lower half as its `--ip-range`, the range Docker takes the addresses of the nodes and the relay from. The DNS container is created with `--ip` at the subnet's last address before the broadcast address (`172.18.255.254` in `172.18.0.0/16`), which no other container gets, so it has that address again in whatever order the containers start. The mesh network records it in the label `sind.dns.ip`; a DNS container removed by hand is created again at that address.
+
+sind lets Docker choose the subnet: it creates the mesh network without one, so that Docker takes a subnet from its default address pools that no other network and no route of the host uses, reads the subnet and gateway with `docker network inspect`, removes the network and creates it again with them and the range. A network created in between can take the subnet. Docker then refuses the mesh's, with `Pool overlaps with other one on this address space` or, since Docker's address allocator does not check a subnet that comes with an `--ip-range` ([moby#46756](https://github.com/moby/moby/issues/46756)), with `failed to allocate gateway (...): Address already in use` when it shares the other network's subnet and gateway, or with the bridge driver's `networks have overlapping IPv4`, and sind starts over with the subnet Docker picks next, five times at most. Picking a free subnet itself would mean repeating Docker's checks against the other networks and the host's routes, and `docker info` lists only the pools configured in `daemon.json`, not Docker's built-in ones. The price is three more Docker calls when a realm's mesh is created, and a moment in which the mesh network exists without the subnet pinned: an interrupted `sind create cluster` can leave it like that, and it then works like a mesh of earlier sind versions.
+
+The range is half the subnet, and it has to hold every container but the DNS container that a bridge network can take (1,022, see Limits), besides the subnet's first address and the gateway: sind pins the address only in a subnet of `/21` or larger. Docker's stock pools always give one (`/16` and `/20`). With smaller pools (`default-address-pools` with a `size` above 21), and when the subnet was taken five times, the mesh network keeps the subnet Docker gave it, without a pinned address.
+
+A mesh without a pinned address, such as one created by an earlier sind version, works as before; sind does not create it again. Started before anything else on the mesh, its DNS container gets its old address back: it was the first container on the mesh, and Docker hands out the lowest free address. When it gets another one, sind warns (`Warning:` on stderr) and names the containers that still use the old address; they resolve neither `*.<realm>.sind` names nor external names until their clusters are created again (the relay with the realm's mesh, after the last cluster is deleted, when the realm's next mesh pins the address).
 
 ### Limits
 
-- Each cluster network and each mesh takes one network from Docker's default address pools, which a stock daemon fills at about 30 networks, shared with every other network on the host. `default-address-pools` in `daemon.json` gives hosts that run many realms or clusters smaller pools.
-- A Linux bridge has 1,024 ports, so one Docker bridge network holds at most about 1,023 containers; the mesh holds the DNS container, the relay and every node of the realm. Host limits such as inotify instances and memory bind long before.
-- The realm lock is a `flock(2)` on a file in the invoking user's state directory, while the realm's resources live on the Docker daemon, which sind does not lock. Clients that share a daemon (several users of a host, CI jobs that share the host's Docker socket, other `XDG_STATE_HOME`s) are not serialized against each other and must use separate realms. A mesh network that another client created between the check and the create counts as existing, so that client's failure handling never removes it.
+- Each cluster network and each mesh takes one network from Docker's default address pools, which a stock daemon fills at about 30 networks, shared with every other network on the host. `default-address-pools` in `daemon.json` gives hosts that run many realms or clusters smaller pools; with a `size` of 21 or less, the networks are still large enough for a mesh to pin its DNS address (see Host Reboot and Docker Daemon Restart). When the pools are used up, Docker refuses the network (`all predefined address pools have been fully subnetted`, or `could not find an available, non-overlapping IPv4 address pool` in older versions); sind returns that error wrapping `docker.ErrAddressPoolsExhausted`, with a pointer to `default-address-pools`.
+- A Linux bridge has 1,024 ports and the kernel reserves port 0, so one Docker bridge network holds at most 1,023 containers; past that, Docker fails to connect one with `exchange full`. The mesh holds the DNS container, the relay and every node of the realm, a cluster network its nodes and the relay. `sind create cluster`, in its preflight check before it creates the cluster's network, volumes and nodes, and `sind create worker`, before it starts a stopped mesh or creates a worker, list the containers connected to the realm's mesh and to the cluster network in one `docker ps -a --filter network=<realm>-mesh --filter network=<realm>-<cluster>-net`, stopped ones too, as they take a port again when they start. They refuse nodes that would not fit, counting the DNS container and the relay where the network lacks them, with an error that names the network, the containers it has, the number the command adds and the limit (`ErrNetworkFull`). Host limits such as inotify instances and memory bind long before.
+- The realm lock serializes the clients that share a daemon (several users of a host, CI jobs that share the host's Docker socket, other `XDG_STATE_HOME`s) through its part on the daemon, `<realm>-lock` (see Realm Advisory Locking). Go programs that call `state.LockRealm` without `LockOptions.Client` take only the file lock and are not serialized against other clients; a mesh network that such a client created between the check and the create counts as existing, so that the other client's failure handling never removes it. A lock left by a process that was killed on another host or in another container stays until it is removed by hand, as sind cannot tell whether that process still runs. Waiting clients take a freed lock in no particular order. Sharing a realm is safe, not isolated: `sind delete cluster --all` deletes every cluster of the realm, another user's or job's too, cluster names must differ, and each user's exported SSH configuration follows only that user's own commands. Independent jobs still use a realm each.
 
 ### SSH
 
@@ -1388,10 +1427,12 @@ The `sind-ssh-config` volume contains:
 
 #### Public Key Injection and Host Key Collection
 
-When sind creates a node, it waits for sshd to start, then appends the public key from `sind-ssh-config` to root's `authorized_keys` and collects the host key that sshd serves, in one `docker exec`, as the cluster's setup waits for its slowest node. The node image ships no host keys, so each container generates its own on first boot and the pinned key identifies that node:
+When sind creates a node, it waits for sshd to start, then appends the public key from `sind-ssh-config` to root's `authorized_keys` and collects the host key that sshd serves, in the last step of the node's single setup `docker exec` (see Container Startup), as the cluster's setup waits for its slowest node. The node image ships no host keys, so each container generates its own on first boot and the pinned key identifies that node. The step runs these commands under `sh -e`, and it is the only step that writes to the setup's stdout:
 
 ```bash
-docker exec <node> sh -c 'mkdir -p /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && ssh-keyscan -t ed25519 localhost' sh "$pubkey"
+docker exec <node> sh -c '... mkdir -p /root/.ssh
+printf "%s\n" "$1" >> /root/.ssh/authorized_keys
+ssh-keyscan -t ed25519 localhost' sh "$pubkey"
 ```
 
 The public key is an argument of the shell, not part of its script. The `localhost` field is dropped and the key is added to `known_hosts` with the node's DNS name:
@@ -1443,7 +1484,7 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 | `ssh_config` | SSH config snippet |
 | `id_ed25519` | Private key (copy from volume) |
 | `known_hosts` | Host keys (copy from volume) |
-| `lock` | Advisory realm lock (see Realm Advisory Locking) |
+| `lock` | The realm lock's file part (see Realm Advisory Locking) |
 
 The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path):
 
@@ -1490,7 +1531,7 @@ scp file.txt controller.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller.default.sind.sind   # port forwarding to the host
 ```
 
-sind updates these files automatically when clusters or nodes are created/deleted, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file.
+sind updates these files automatically when clusters or nodes are created/deleted, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file. The files are the invoking user's, so only that user's commands update them: in a realm shared with other clients of the daemon, their creates and deletes do not reach them.
 
 ## Command Routing
 
@@ -1733,11 +1774,17 @@ Within a cluster, short names resolve via the search domain: a node in the `dev`
 
 ## Realm Advisory Locking
 
-Mutating operations acquire a per-realm advisory lock (flock) to prevent concurrent modifications to shared realm state. The lock file is stored at:
+Mutating operations acquire a per-realm lock to prevent concurrent modifications to shared realm state. It has two parts, taken in this order and released in reverse:
 
-```
-$XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
-```
+1. A `flock(2)` on a file in the invoking user's state directory, which orders the commands that share that directory, and the goroutines of one process, without a call to the daemon:
+
+   ```
+   $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
+   ```
+
+2. The daemon lock: the network `<realm>-lock` on the Docker daemon, which exists while a command holds the lock. The realm's resources live on the daemon, which several clients can share: users of one host, CI jobs that share the host's Docker socket, containers that mount it, shells with another `XDG_STATE_HOME`. Each of them has a file lock of its own; they meet at the daemon.
+
+The file lock stays as the fast path: commands of one user wait for each other in the kernel, and only one of them at a time polls the daemon.
 
 ### Protected operations
 
@@ -1751,14 +1798,43 @@ Read-only operations (`get`, `logs`, `ssh`, etc.) and the other `power` commands
 
 ### Library callers
 
-The lock is `state.LockRealm` in `pkg/state`, which also resolves the state directory (`state.Dir`, `state.RealmDir`). `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle` take no lock themselves: their caller holds the realm lock for the whole operation, for `Create` from before `mesh.Manager.EnsureMesh`, as the CLI does. Without it, concurrent calls in one realm lose each other's DNS records, `known_hosts` entries and `sind-nodes.conf` lines, or remove each other's resources. The lock is a `flock(2)` on a file in the user's state directory, so it also serializes the goroutines of one process (see Limits for clients that share a daemon).
+The lock is `state.LockRealm` in `pkg/state`, which also resolves the state directory (`state.Dir`, `state.RealmDir`). `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle` take no lock themselves: their caller holds the realm lock for the whole operation, for `Create` from before `mesh.Manager.EnsureMesh`, as the CLI does. Without it, concurrent calls in one realm lose each other's DNS records, `known_hosts` entries and `sind-nodes.conf` lines, or remove each other's resources. `LockOptions.Client` is the daemon to take the daemon lock on; without it, `LockRealm` takes the file lock only, which does not serialize other clients of the daemon (see Limits). `LockOptions.OnWait` receives the holder of a lock it waits for (`state.LockHolder`, nil for the file lock), `OnWarning` the warnings below, and `Command` overrides the command line the lock records (the process's arguments). `state.LockNetworkName` names the daemon lock.
+
+### Daemon lock
+
+The daemon lock is a configuration-only network (`docker network create --config-only`) named `<realm>-lock`. dockerd refuses a network name that another network has: since Docker 25 the check is unconditional, and libnetwork checks and creates under a lock per name, so of the clients that create it at once exactly one succeeds; the others get `network with name <realm>-lock already exists`. A configuration-only network has the driver `null`: Docker takes no subnet from its address pools for it, creates no bridge device, and attaches no container to it, and creating it needs no image. Its labels describe the holder:
+
+| Label | Example | Description |
+|-------|---------|-------------|
+| `sind.realm` | `sind` | Realm namespace |
+| `sind.lock.command` | `sind create cluster dev` | The holder's command line, with the program's base name |
+| `sind.lock.host` | `build-07` | Host name of the machine or container the holder runs on |
+| `sind.lock.pid` | `4242` | The holder's process ID |
+| `sind.lock.boot-id` | `6b1f3a52-…` | `/proc/sys/kernel/random/boot_id` of the holder's kernel |
+| `sind.lock.pid-ns` | `pid:[4026531836]` | The holder's PID namespace (`/proc/self/ns/pid`) |
+| `sind.lock.token` | random | One acquisition: a create that failed after the daemon made the network removes only its own lock |
+
+The network carries no Docker Compose labels, as it belongs to no Compose project. `sind get networks` leaves it out; as it has no `sind.cluster` label, cluster discovery and `sind delete cluster --all` do not see it, and completion lists containers only.
+
+Alternatives that were rejected:
+
+- A never-started container `<realm>-lock`. Container names are reserved atomically as well, but a container needs an image. The pinned CoreDNS image is on the daemon wherever the realm has a mesh, but not before the realm's first create, and not after a sind upgrade that bumps it: taking the lock would pull, and fail on an offline host, even for `sind delete cluster`. sind's container listings by `sind.realm` (`get realms`, `get nodes`) would need to filter it too.
+- A bridge network `<realm>-lock`. It takes one of the about 30 networks of the default address pools and a bridge device while it is held, and fails when the pools are exhausted, which is when the user deletes clusters to free them.
+- A volume: `docker volume create` of an existing name succeeds, so it cannot be a mutex.
 
 ### Behavior
 
-- Lock is attempted non-blocking first; if free, the operation proceeds immediately
-- If another operation holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and blocks until the lock is released: waiting is a state the user may have to act on, so it is not left to `-v`. The wait has no timeout
-- Lock is released when the operation completes (success or failure)
-- Context cancellation (e.g., Ctrl+C) unblocks a waiting operation
+- Each part is attempted non-blocking first; if both are free, the operation proceeds immediately, without a notice
+- If another operation holds the file lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and blocks until the lock is released: waiting is a state the user may have to act on, so it is not left to `-v`
+- If another client holds the daemon lock, the warning names it from the lock's labels, e.g. `Warning: waiting for another sind command in realm "sind" to finish: sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03)`, with the time the daemon created the lock in local time. sind tries again at intervals that double from 100 ms to 2 s; waiting clients take a freed lock in no particular order. What the warnings quote of the labels is escaped, as another client wrote it
+- The waits have no timeout; context cancellation (e.g., Ctrl+C, SIGTERM) ends them
+- Lock is released when the operation completes, success or failure, after the rollback of a failed `create cluster`, and after Ctrl+C or SIGTERM: sind removes the daemon lock by its network ID, so that it never removes another client's lock, with a context that the interrupt does not cancel, for at most 30 s, and then releases the file lock. If the removal fails, sind warns `Warning: releasing the realm lock: <error>; remove it with: docker network rm <realm>-lock`
+
+### Stale daemon locks
+
+A process killed with SIGKILL, or by a second Ctrl+C, cannot release the daemon lock; the kernel releases its file lock. sind takes over a daemon lock whose holder ran on the same host name, kernel boot (boot ID) and PID namespace as itself, so that the holder's PID means the same process to both, and that no longer runs (`kill(pid, 0)` fails with `ESRCH`; `EPERM` means it runs as another user). It warns `Warning: removing the realm lock of <holder>, which no longer runs`, removes the lock by ID and takes it. The boot ID tells a reboot, after which PIDs start over; a PID namespace's inode number can pass to a new namespace only after the old one has ended with all its processes, and a PID taken in the new one only makes the holder count as running.
+
+A holder on another host, in another container (PID namespace) or since another boot cannot be checked from here, and sind never removes its lock, as that process may be running. After waiting a minute for such a lock, sind warns once: `Warning: the realm lock is still held by <holder>; if that command no longer runs, remove the lock with: docker network rm <realm>-lock`.
 
 ### Realm independence
 

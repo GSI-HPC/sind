@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/netip"
 	"path"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeContainer is a container of fakeDocker.
@@ -22,24 +24,35 @@ type fakeContainer struct {
 	image    string
 	state    docker.ContainerState
 	networks []string          // networks it joins
+	ip       string            // --ip on its first network
 	ips      map[string]string // address per network while running
 	dns      []string          // --dns servers
 	files    map[string]string // file contents by absolute path
 	signals  []string          // signals received with kill -s
 }
 
+// fakeNetwork is a network of fakeDocker.
+type fakeNetwork struct {
+	subnet  netip.Prefix
+	gateway netip.Addr
+	ipRange netip.Prefix // the subnet unless created with --ip-range
+	labels  map[string]string
+	used    map[netip.Addr]bool // addresses of running containers
+}
+
 // fakeDocker is a stateful stand-in for the docker CLI in mesh unit tests,
 // for code that runs docker calls concurrently, where queued results do not
 // work. It knows networks, volumes and containers, and the files the mesh
-// writes into containers. Addresses come from one counter per network,
-// starting at .2, and are released when a container stops, as Docker does.
-// Calls whose joined arguments start with a key of fail get that result.
+// writes into containers. A network created without --subnet gets the
+// first free 10.N.0.0/16 and the gateway 10.N.0.1. A starting container
+// gets its --ip, or else the lowest free address of the network's ip-range,
+// and loses it when it stops, as Docker does. Calls whose joined arguments
+// start with a key of fail get that result.
 type fakeDocker struct {
 	t          *testing.T
-	networks   map[string]bool
+	networks   map[string]*fakeNetwork
 	volumes    map[string]bool
 	containers map[string]*fakeContainer
-	used       map[string]map[int]bool // network → taken host numbers
 	fail       map[string]mock.Result
 }
 
@@ -47,10 +60,9 @@ type fakeDocker struct {
 func newFake(t *testing.T) *fakeDocker {
 	return &fakeDocker{
 		t:          t,
-		networks:   map[string]bool{},
+		networks:   map[string]*fakeNetwork{},
 		volumes:    map[string]bool{},
 		containers: map[string]*fakeContainer{},
-		used:       map[string]map[int]bool{},
 		fail:       map[string]mock.Result{},
 	}
 }
@@ -62,23 +74,42 @@ func newFakeDocker(t *testing.T) (*fakeDocker, *docker.Client, *mock.Executor) {
 	return f, docker.NewClient(m), m
 }
 
-// withMesh adds a complete mesh for realm, with both containers in state.
+// withMesh adds a complete mesh for realm, as earlier sind versions created
+// it: a network without a pinned DNS address, with both containers in
+// state.
 func (f *fakeDocker) withMesh(realm string, state docker.ContainerState) *fakeDocker {
+	return f.addMesh(realm, state, false)
+}
+
+// withPinnedMesh adds a complete mesh for realm whose network pins the DNS
+// container's address, with both containers in state.
+func (f *fakeDocker) withPinnedMesh(realm string, state docker.ContainerState) *fakeDocker {
+	return f.addMesh(realm, state, true)
+}
+
+func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned bool) *fakeDocker {
 	mgr := NewManager(nil, realm)
 	mesh := string(mgr.NetworkName())
-	f.networks[mesh] = true
-	f.volumes[string(mgr.SSHVolumeName())] = true
-	f.containers[string(mgr.DNSContainerName())] = &fakeContainer{
+	nw := f.addNetwork(mesh)
+	dns := &fakeContainer{
 		image: DNSImage, state: docker.StateCreated, networks: []string{mesh},
 		files: map[string]string{corefilePath: generateCorefile(realm, nil)},
 	}
-	f.start(string(mgr.DNSContainerName()))
-	dnsIP := f.containers[string(mgr.DNSContainerName())].ips[mesh]
+	if pinned {
+		ipam, dnsIP, ok := pinnedLayout(nw.subnet.String(), nw.gateway.String())
+		require.True(f.t, ok)
+		nw.ipRange = netip.MustParsePrefix(ipam.IPRange)
+		nw.labels[LabelDNSIP] = dnsIP
+		dns.ip = dnsIP
+	}
+	f.volumes[string(mgr.SSHVolumeName())] = true
+	f.containers[string(mgr.DNSContainerName())] = dns
+	require.NoError(f.t, f.start(string(mgr.DNSContainerName())))
 	f.containers[string(mgr.SSHContainerName())] = &fakeContainer{
-		image: SSHImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dnsIP},
+		image: SSHImage(), state: docker.StateCreated, networks: []string{mesh}, dns: []string{dns.ips[mesh]},
 		files: map[string]string{knownHostsPath: ""},
 	}
-	f.start(string(mgr.SSHContainerName()))
+	require.NoError(f.t, f.start(string(mgr.SSHContainerName())))
 	if state != docker.StateRunning {
 		f.stop(string(mgr.SSHContainerName()), state)
 		f.stop(string(mgr.DNSContainerName()), state)
@@ -86,32 +117,83 @@ func (f *fakeDocker) withMesh(realm string, state docker.ContainerState) *fakeDo
 	return f
 }
 
-func (f *fakeDocker) start(name string) {
-	c := f.containers[name]
-	c.state = docker.StateRunning
-	c.ips = map[string]string{}
-	for _, n := range c.networks {
-		if f.used[n] == nil {
-			f.used[n] = map[int]bool{}
+// addNetwork adds a network with the first free 10.N.0.0/16 subnet.
+func (f *fakeDocker) addNetwork(name string) *fakeNetwork {
+	for n := 0; ; n++ {
+		subnet := netip.PrefixFrom(netip.AddrFrom4([4]byte{10, byte(n), 0, 0}), 16)
+		if !f.overlaps(subnet) {
+			gateway := subnet.Addr().Next()
+			return f.addNetworkWith(name, subnet, gateway, subnet)
 		}
-		host := 2
-		for f.used[n][host] {
-			host++
-		}
-		f.used[n][host] = true
-		c.ips[n] = fmt.Sprintf("10.0.0.%d", host)
 	}
+}
+
+func (f *fakeDocker) addNetworkWith(name string, subnet netip.Prefix, gateway netip.Addr, ipRange netip.Prefix) *fakeNetwork {
+	nw := &fakeNetwork{subnet: subnet, gateway: gateway, ipRange: ipRange, labels: map[string]string{}, used: map[netip.Addr]bool{}}
+	f.networks[name] = nw
+	return nw
+}
+
+// overlaps reports whether subnet overlaps the subnet of a network.
+func (f *fakeDocker) overlaps(subnet netip.Prefix) bool {
+	for _, nw := range f.networks {
+		if nw.subnet.Overlaps(subnet) {
+			return true
+		}
+	}
+	return false
+}
+
+// start gives a container its addresses and makes it run. It fails as
+// Docker does when the container's --ip is taken.
+func (f *fakeDocker) start(name string) error {
+	c := f.containers[name]
+	ips := map[string]string{}
+	for i, n := range c.networks {
+		nw := f.networks[n]
+		if nw == nil {
+			nw = f.addNetwork(n)
+		}
+		addr := nw.free()
+		if i == 0 && c.ip != "" {
+			addr = netip.MustParseAddr(c.ip)
+		}
+		if nw.used[addr] {
+			f.release(ips)
+			return fmt.Errorf("Address already in use")
+		}
+		nw.used[addr] = true
+		ips[n] = addr.String()
+	}
+	c.ips = ips
+	c.state = docker.StateRunning
+	return nil
+}
+
+// free returns the lowest address of the network's ip-range that no
+// container has, other than the subnet's first address and the gateway.
+func (nw *fakeNetwork) free() netip.Addr {
+	addr := nw.ipRange.Addr()
+	for addr == nw.subnet.Addr() || addr == nw.gateway || nw.used[addr] {
+		addr = addr.Next()
+	}
+	return addr
 }
 
 func (f *fakeDocker) stop(name string, state docker.ContainerState) {
 	c := f.containers[name]
-	for n, ip := range c.ips {
-		var host int
-		_, _ = fmt.Sscanf(ip, "10.0.0.%d", &host)
-		delete(f.used[n], host)
-	}
+	f.release(c.ips)
 	c.ips = nil
 	c.state = state
+}
+
+// release frees the addresses that ips holds per network.
+func (f *fakeDocker) release(ips map[string]string) {
+	for n, ip := range ips {
+		if nw := f.networks[n]; nw != nil {
+			delete(nw.used, netip.MustParseAddr(ip))
+		}
+	}
 }
 
 func notFound(t *testing.T, stderr string) mock.Result {
@@ -132,18 +214,22 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 	last := args[len(args)-1]
 	switch {
 	case joined == "network inspect "+last:
-		if !f.networks[last] {
+		nw, ok := f.networks[last]
+		if !ok {
 			return notFound(f.t, testutil.NoSuchNetwork(last))
 		}
-		return mock.Result{Stdout: `[{"Id":"abcdef0123456789","Name":"` + last + `","Driver":"bridge"}]`}
-	case strings.HasPrefix(joined, "network create "):
-		if f.networks[last] {
-			return mock.Result{Stderr: "Error response from daemon: network with name " + last + " already exists\n", Err: testutil.ExitCode1(f.t)}
+		return mock.Result{Stdout: nw.inspectJSON(last)}
+	case len(args) == 5 && joined == "network inspect "+args[2]+" --format {{json .Labels}}":
+		nw, ok := f.networks[args[2]]
+		if !ok {
+			return notFound(f.t, testutil.NoSuchNetwork(args[2]))
 		}
-		f.networks[last] = true
-		return mock.Result{Stdout: "net-" + last + "\n"}
+		out, _ := json.Marshal(nw.labels)
+		return mock.Result{Stdout: string(out) + "\n"}
+	case strings.HasPrefix(joined, "network create "):
+		return f.createNetwork(args[2:])
 	case joined == "network rm "+last:
-		if !f.networks[last] {
+		if _, ok := f.networks[last]; !ok {
 			return notFound(f.t, testutil.NoSuchNetwork(last))
 		}
 		delete(f.networks, last)
@@ -176,7 +262,18 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 			return notFound(f.t, testutil.NoSuchContainer(last))
 		}
 		if c.state != docker.StateRunning {
-			f.start(last)
+			if err := f.start(last); err != nil {
+				return mock.Result{Stderr: "Error response from daemon: " + err.Error() + "\n", Err: testutil.ExitCode1(f.t)}
+			}
+		}
+		return mock.Result{Stdout: last + "\n"}
+	case joined == "stop "+last:
+		c, ok := f.containers[last]
+		if !ok {
+			return notFound(f.t, testutil.NoSuchContainer(last))
+		}
+		if c.state == docker.StateRunning {
+			f.stop(last, docker.StateExited)
 		}
 		return mock.Result{Stdout: last + "\n"}
 	case joined == "kill -s USR1 "+last:
@@ -245,6 +342,9 @@ func (f *fakeDocker) create(args []string) mock.Result {
 		case "--dns":
 			c.dns = append(c.dns, args[i+1])
 			i++
+		case "--ip":
+			c.ip = args[i+1]
+			i++
 		case "-v", "--label", "--pull":
 			i++
 		default:
@@ -257,6 +357,59 @@ func (f *fakeDocker) create(args []string) mock.Result {
 	c.image = rest[0]
 	f.containers[name] = c
 	return mock.Result{Stdout: "id-" + name + "\n"}
+}
+
+// createNetwork handles docker network create with the flags the mesh
+// uses. A --subnet that overlaps another network's fails as with Docker's
+// address allocator.
+func (f *fakeDocker) createNetwork(args []string) mock.Result {
+	name := args[len(args)-1]
+	if _, ok := f.networks[name]; ok {
+		return mock.Result{Stderr: "Error response from daemon: network with name " + name + " already exists\n", Err: testutil.ExitCode1(f.t)}
+	}
+	flags := map[string]string{}
+	labels := map[string]string{}
+	for i := 0; i < len(args)-1; i += 2 {
+		if args[i] == "--label" {
+			k, v, _ := strings.Cut(args[i+1], "=")
+			labels[k] = v
+			continue
+		}
+		flags[args[i]] = args[i+1]
+	}
+	var nw *fakeNetwork
+	if subnet, ok := flags["--subnet"]; ok {
+		prefix := netip.MustParsePrefix(subnet)
+		if f.overlaps(prefix) {
+			return mock.Result{Stderr: "Error response from daemon: invalid pool request: Pool overlaps with other one on this address space\n", Err: testutil.ExitCode1(f.t)}
+		}
+		ipRange := prefix
+		if r, ok := flags["--ip-range"]; ok {
+			ipRange = netip.MustParsePrefix(r)
+		}
+		nw = f.addNetworkWith(name, prefix, netip.MustParseAddr(flags["--gateway"]), ipRange)
+	} else {
+		nw = f.addNetwork(name)
+	}
+	nw.labels = labels
+	return mock.Result{Stdout: "net-" + name + "\n"}
+}
+
+// inspectJSON renders docker network inspect output for a network.
+func (nw *fakeNetwork) inspectJSON(name string) string {
+	config := map[string]string{"Subnet": nw.subnet.String(), "Gateway": nw.gateway.String()}
+	if nw.ipRange != nw.subnet {
+		config["IPRange"] = nw.ipRange.String()
+	}
+	doc := []map[string]any{{
+		"Id":     "abcdef0123456789",
+		"Name":   name,
+		"Driver": "bridge",
+		"Labels": nw.labels,
+		"IPAM":   map[string]any{"Config": []map[string]string{config}},
+	}}
+	out, _ := json.Marshal(doc)
+	return string(out) + "\n"
 }
 
 // exec handles the file reads and writes the mesh runs in its containers.

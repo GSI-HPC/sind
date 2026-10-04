@@ -23,20 +23,26 @@ const nssSlurmSwitch = `sed -i --follow-symlinks -E 's/^(passwd|group):[[:space:
 grep -q '^passwd: slurm ' /etc/nsswitch.conf
 grep -q '^group: slurm ' /etc/nsswitch.conf`
 
-// enableNSSSlurm makes a worker resolve users and groups with nss_slurm
-// first. Inside a job step, nss_slurm answers for the job's user and groups
-// from the job credential, which slurmctld fills with
-// LaunchParameters=enable_nss_slurm; outside of one it finds nothing, and
-// the image's own sources answer. It first checks that the image has the
-// module, which custom and older images may lack.
-func enableNSSSlurm(ctx context.Context, client *docker.Client, container docker.ContainerName, nc RunConfig) error {
-	if _, err := client.Exec(ctx, container, "sh", "-c", nssSlurmCheck); err != nil {
-		return fmt.Errorf("image %s has no libnss_slurm.so.2, which identity %s needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: %w", nc.Image, nc.Identity, err)
+// nssSlurmSteps returns the node setup steps (see nodeSetupSteps) that make
+// a worker resolve users and groups with nss_slurm first. Inside a job
+// step, nss_slurm answers for the job's user and groups from the job
+// credential, which slurmctld fills with LaunchParameters=enable_nss_slurm;
+// outside of one it finds nothing, and the image's own sources answer. The
+// first step checks that the image has the module, which custom and older
+// images may lack.
+func nssSlurmSteps(nc RunConfig) []setupStep {
+	return []setupStep{
+		{
+			name:   "nss_slurm",
+			what:   fmt.Sprintf("image %s has no libnss_slurm.so.2, which identity %s needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm", nc.Image, nc.Identity),
+			script: nssSlurmCheck,
+		},
+		{
+			name:   "nsswitch",
+			what:   "switching passwd and group lookups to nss_slurm",
+			script: nssSlurmSwitch,
+		},
 	}
-	if _, err := client.Exec(ctx, container, "sh", "-ec", nssSlurmSwitch); err != nil {
-		return fmt.Errorf("switching passwd and group lookups to nss_slurm: %w", err)
-	}
-	return nil
 }
 
 // Image labels that tell sind-node images apart.
@@ -56,11 +62,11 @@ const officialImageRepo = "ghcr.io/gsi-hpc/sind-node"
 
 // checkIdentityImage refuses a local sind-node image from before identity
 // modes, which lacks nss_slurm and auth/slurm, before sind creates nodes
-// with it: enableNSSSlurm would only fail once they have booted. The usual
-// cause is a cached image of an official tag after a sind upgrade, as
-// docker reuses it without --pull. An image that is not local passes, as
-// docker pulls a current one, and so does any image but sind-node's, which
-// enableNSSSlurm checks.
+// with it: the nss_slurm step of their setup (nssSlurmSteps) would only
+// fail once they have booted. The usual cause is a cached image of an
+// official tag after a sind upgrade, as docker reuses it without --pull. An
+// image that is not local passes, as docker pulls a current one, and so
+// does any image but sind-node's, which that step checks.
 func checkIdentityImage(ctx context.Context, client *docker.Client, image string, mode config.IdentityMode) error {
 	labels, local, err := client.ImageLabels(ctx, image)
 	if err != nil {

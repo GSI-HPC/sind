@@ -27,6 +27,11 @@ var (
 	// did not become ready within its wait limit (config.Cluster.Wait,
 	// WorkerAddOptions.Wait).
 	ErrNotReady = errors.New("not ready")
+	// ErrNetworkFull reports that the nodes of a Create or WorkerAdd do
+	// not fit on the realm's mesh or the cluster network, Docker bridge
+	// networks of at most docker.MaxBridgeEndpoints containers
+	// (PreflightCheck, Create, WorkerAdd).
+	ErrNetworkFull = errors.New("network full")
 )
 
 // rollbackTimeout bounds the rollback of a failed Create or WorkerAdd. The

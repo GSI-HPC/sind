@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -153,6 +154,65 @@ func TestDNSRecordLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+// TestMeshPinnedDNSAddress checks that a new mesh pins the DNS container's
+// address outside the range Docker hands out addresses from, so that after
+// a host reboot the DNS container gets it back even when another container
+// on the mesh, here the relay, starts first.
+func TestMeshPinnedDNSAddress(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	ctx := t.Context()
+	mgr := NewManager(c, testutil.Realm("it-pin"))
+	got := warnings(mgr)
+
+	if !rec.IsIntegration() {
+		rec.SetOnCall(newFake(t).onCall)
+	}
+	t.Cleanup(func() { _ = mgr.CleanupMesh(context.Background()) })
+
+	require.NoError(t, mgr.EnsureMesh(ctx))
+
+	mesh, err := c.InspectNetwork(ctx, mgr.NetworkName())
+	require.NoError(t, err)
+	pinned := mesh.Labels[LabelDNSIP]
+	require.NotEmpty(t, pinned, "the mesh network pins no DNS address: %+v", mesh)
+	subnet, err := netip.ParsePrefix(mesh.Subnet)
+	require.NoError(t, err)
+	ipRange, err := netip.ParsePrefix(mesh.IPRange)
+	require.NoError(t, err)
+	addr, err := netip.ParseAddr(pinned)
+	require.NoError(t, err)
+	assert.True(t, subnet.Contains(addr), "%s in %s", addr, subnet)
+	assert.False(t, ipRange.Contains(addr), "%s outside %s", addr, ipRange)
+
+	dns, err := c.InspectContainer(ctx, mgr.DNSContainerName())
+	require.NoError(t, err)
+	assert.Equal(t, pinned, dns.IPs[mgr.NetworkName()])
+	relay, err := c.InspectContainer(ctx, mgr.SSHContainerName())
+	require.NoError(t, err)
+	assert.Equal(t, []string{pinned}, relay.DNS)
+	relayAddr, err := netip.ParseAddr(relay.IPs[mgr.NetworkName()])
+	require.NoError(t, err)
+	assert.True(t, ipRange.Contains(relayAddr), "relay %s in %s", relayAddr, ipRange)
+
+	// After a host reboot, the relay starts before the DNS container.
+	require.NoError(t, c.StopContainer(ctx, mgr.SSHContainerName()))
+	require.NoError(t, c.StopContainer(ctx, mgr.DNSContainerName()))
+	require.NoError(t, c.StartContainer(ctx, mgr.SSHContainerName()))
+
+	dnsIP, found, err := mgr.StartMesh(ctx)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, pinned, dnsIP, "DNS got its pinned address back")
+	assert.Empty(t, *got, "the relay still resolves through the DNS container")
+
+	info, err := mgr.GetInfo(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, pinned, info.DNSIP)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 // --- EnsureMesh ---
 
 func TestEnsureMesh(t *testing.T) {
@@ -165,14 +225,20 @@ func TestEnsureMesh(t *testing.T) {
 	assert.True(t, mgr.Created())
 	assert.Empty(t, *got)
 
-	assert.True(t, f.networks["sind-mesh"])
 	assert.True(t, f.volumes["sind-ssh-config"])
+
+	// The mesh network pins the DNS address outside its ip-range.
+	mesh := f.networks["sind-mesh"]
+	require.NotNil(t, mesh)
+	assert.Equal(t, "10.0.0.0/16", mesh.subnet.String())
+	assert.Equal(t, "10.0.0.0/17", mesh.ipRange.String())
+	assert.Equal(t, "10.0.255.254", mesh.labels[LabelDNSIP])
 
 	dns := f.containers["sind-dns"]
 	require.NotNil(t, dns)
 	assert.Equal(t, docker.StateRunning, dns.state)
 	assert.Equal(t, DNSImage, dns.image)
-	assert.Equal(t, "10.0.0.2", dns.ips["sind-mesh"], "DNS is the first container on the mesh")
+	assert.Equal(t, "10.0.255.254", dns.ips["sind-mesh"], "DNS has the pinned address")
 	assert.Contains(t, dns.files[corefilePath], "hosts {")
 
 	// The relay resolves through the DNS container and got the keys
@@ -181,11 +247,26 @@ func TestEnsureMesh(t *testing.T) {
 	require.NotNil(t, relay)
 	assert.Equal(t, docker.StateRunning, relay.state)
 	assert.Equal(t, SSHImage(), relay.image)
-	assert.Equal(t, []string{"10.0.0.2"}, relay.dns)
+	assert.Equal(t, "10.0.0.2", relay.ips["sind-mesh"], "relay has an address of the ip-range")
+	assert.Equal(t, []string{"10.0.255.254"}, relay.dns)
 	assert.Contains(t, relay.files["/root/.ssh/id_ed25519"], "OPENSSH PRIVATE KEY")
 	assert.True(t, strings.HasPrefix(relay.files["/root/.ssh/id_ed25519.pub"], "ssh-ed25519 "))
 	assert.Contains(t, relay.files, "/root/.ssh/known_hosts")
 	assert.Empty(t, calls(m, "create --name sind-ssh-keygen"))
+
+	// Docker chose the subnet of a network without one, which sind
+	// created again with that subnet pinned.
+	assert.Equal(t, []string{
+		"network inspect sind-mesh --format {{json .Labels}}",
+		"network create --label com.docker.compose.network=mesh --label com.docker.compose.project=sind-mesh --label sind.realm=sind sind-mesh",
+		"network inspect sind-mesh",
+		"network rm sind-mesh",
+		"network create --subnet 10.0.0.0/16 --gateway 10.0.0.1 --ip-range 10.0.0.0/17 " +
+			"--label com.docker.compose.network=mesh --label com.docker.compose.project=sind-mesh --label sind.dns.ip=10.0.255.254 --label sind.realm=sind sind-mesh",
+	}, calls(m, "network"))
+	dnsCreate := calls(m, "create --name sind-dns")
+	require.Len(t, dnsCreate, 1)
+	assert.Contains(t, dnsCreate[0], "--network sind-mesh --ip 10.0.255.254 ")
 
 	// The relay starts after the DNS container.
 	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
@@ -253,7 +334,7 @@ func TestEnsureMesh_DNSAddressChanged(t *testing.T) {
 	f.withMesh(DefaultRealm, docker.StateExited)
 	// Another container took the DNS container's address meanwhile.
 	f.containers["sind-dev-controller"] = &fakeContainer{state: docker.StateCreated, networks: []string{"sind-mesh"}}
-	f.start("sind-dev-controller")
+	require.NoError(t, f.start("sind-dev-controller"))
 	mgr := NewManager(c, DefaultRealm)
 	got := warnings(mgr)
 
@@ -264,6 +345,60 @@ func TestEnsureMesh_DNSAddressChanged(t *testing.T) {
 	assert.Contains(t, (*got)[0], "mesh DNS sind-dns now has the address 10.0.0.3")
 	assert.Contains(t, (*got)[0], "containers created before still use 10.0.0.2 (sind-ssh)")
 	assert.Contains(t, (*got)[0], "the SSH relay is re-created")
+}
+
+// TestEnsureMesh_PinnedDNSKeepsAddress covers a mesh with a pinned DNS
+// address after a host reboot, when a node and the relay start before the
+// DNS container: it still gets its address back.
+func TestEnsureMesh_PinnedDNSKeepsAddress(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withPinnedMesh(DefaultRealm, docker.StateExited)
+	f.containers["sind-dev-controller"] = &fakeContainer{state: docker.StateCreated, networks: []string{"sind-mesh"}}
+	require.NoError(t, f.start("sind-dev-controller"))
+	require.NoError(t, f.start("sind-ssh"))
+	mgr := NewManager(c, DefaultRealm)
+	got := warnings(mgr)
+
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
+
+	assert.Equal(t, "10.0.255.254", f.containers["sind-dns"].ips["sind-mesh"])
+	assert.Equal(t, "10.0.0.2", f.containers["sind-dev-controller"].ips["sind-mesh"])
+	assert.Empty(t, *got, "the relay resolves through the DNS address it was created with")
+}
+
+// TestEnsureMesh_PinnedDNSRecreated covers a DNS container removed by hand
+// from a mesh with a pinned DNS address: the new one gets that address.
+func TestEnsureMesh_PinnedDNSRecreated(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withPinnedMesh(DefaultRealm, docker.StateRunning)
+	f.stop("sind-dns", docker.StateExited)
+	delete(f.containers, "sind-dns")
+	mgr := NewManager(c, DefaultRealm)
+
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
+
+	assert.False(t, mgr.Created())
+	require.Len(t, calls(m, "create --name sind-dns"), 1)
+	assert.Contains(t, calls(m, "create --name sind-dns")[0], "--ip 10.0.255.254")
+	assert.Equal(t, "10.0.255.254", f.containers["sind-dns"].ips["sind-mesh"])
+	assert.Empty(t, calls(m, "network create"))
+}
+
+// TestEnsureMesh_UnpinnedDNSRecreated covers a DNS container removed by hand
+// from a mesh of an earlier sind version: the new one gets an address from
+// Docker.
+func TestEnsureMesh_UnpinnedDNSRecreated(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	f.stop("sind-dns", docker.StateExited)
+	delete(f.containers, "sind-dns")
+	mgr := NewManager(c, DefaultRealm)
+
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
+
+	require.Len(t, calls(m, "create --name sind-dns"), 1)
+	assert.NotContains(t, calls(m, "create --name sind-dns")[0], "--ip")
+	assert.Equal(t, "10.0.0.2", f.containers["sind-dns"].ips["sind-mesh"])
 }
 
 func TestEnsureMesh_ExistingVolumeKeepsKeys(t *testing.T) {
@@ -320,7 +455,9 @@ func TestEnsureMesh_DNSInspectAfterStartError(t *testing.T) {
 	m.OnCall = func(args []string, _ string) mock.Result {
 		joined := strings.Join(args, " ")
 		switch {
-		case joined == "network inspect sind-mesh", joined == "volume inspect sind-ssh-config":
+		case joined == "network inspect sind-mesh --format {{json .Labels}}":
+			return mock.Result{Stdout: "{}\n"}
+		case joined == "volume inspect sind-ssh-config":
 			return mock.Result{Stdout: "[{}]\n"}
 		case joined == "inspect sind-dns" && !inspected:
 			inspected = true
@@ -343,10 +480,14 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	const networkID = "6f02052f0a95e0134b3f284b793c63803306b04225f9dc2b40cf48975a2e743b"
 
 	var m mock.Executor
-	// NetworkExists → not found (exit code 1)
+	// NetworkLabels → not found (exit code 1)
 	m.AddResult("", "Error: No such network: sind-mesh\n",
 		testutil.ExitCode1(t))
-	// CreateNetwork → success
+	// CreateNetwork → success, InspectNetwork → the subnet Docker chose
+	m.AddResult(networkID+"\n", "", nil)
+	m.AddResult(`[{"Name":"sind-mesh","IPAM":{"Config":[{"Subnet":"192.168.16.0/20","Gateway":"192.168.16.1"}]}}]`, "", nil)
+	// RemoveNetwork, CreateNetworkWithSubnet → success
+	m.AddResult("sind-mesh\n", "", nil)
 	m.AddResult(networkID+"\n", "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
@@ -356,8 +497,8 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, mgr.Created(), "Created() after creating mesh network")
 
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
+	require.Len(t, m.Calls, 5)
+	assert.Equal(t, []string{"network", "inspect", string(NetworkName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
 	assert.Equal(t, []string{
 		"network", "create",
 		"--label", "com.docker.compose.network=mesh",
@@ -365,6 +506,184 @@ func TestEnsureMeshNetwork_Creates(t *testing.T) {
 		"--label", "sind.realm=" + DefaultRealm,
 		string(NetworkName),
 	}, m.Calls[1].Args)
+	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[2].Args)
+	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
+	assert.Equal(t, []string{
+		"network", "create",
+		"--subnet", "192.168.16.0/20", "--gateway", "192.168.16.1", "--ip-range", "192.168.16.0/21",
+		"--label", "com.docker.compose.network=mesh",
+		"--label", "com.docker.compose.project=sind-mesh",
+		"--label", "sind.dns.ip=192.168.31.254",
+		"--label", "sind.realm=" + DefaultRealm,
+		string(NetworkName),
+	}, m.Calls[4].Args)
+}
+
+// TestEnsureMeshNetwork_SmallSubnet covers a daemon whose address pools give
+// networks too small to pin the DNS address: the network stays as Docker
+// created it.
+func TestEnsureMeshNetwork_SmallSubnet(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t))
+	m.AddResult("net-id\n", "", nil)
+	m.AddResult(`[{"Name":"sind-mesh","IPAM":{"Config":[{"Subnet":"10.200.3.0/24","Gateway":"10.200.3.1"}]}}]`, "", nil)
+	mgr := NewManager(docker.NewClient(&m), DefaultRealm)
+
+	pinned, err := mgr.ensureMeshNetwork(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, pinned)
+	assert.True(t, mgr.Created())
+	assert.Len(t, m.Calls, 3, "no re-create")
+}
+
+// TestEnsureMeshNetwork_SubnetTaken covers another network that takes the
+// mesh's subnet between its removal and its re-creation: sind starts over
+// with the subnet Docker picks next.
+func TestEnsureMeshNetwork_SubnetTaken(t *testing.T) {
+	for _, msg := range []string{
+		"invalid pool request: Pool overlaps with other one on this address space",
+		"cannot create network 0123 (br-0123): conflicts with network 4567 (br-4567): networks have overlapping IPv4",
+		"failed to allocate gateway (10.0.0.1): Address already in use",
+	} {
+		t.Run(msg, func(t *testing.T) {
+			f, c, m := newFakeDocker(t)
+			taken := false
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				joined := strings.Join(args, " ")
+				if !taken && strings.HasPrefix(joined, "network create --subnet 10.0.0.0/16 ") {
+					taken = true
+					f.addNetwork("other")
+					return mock.Result{Stderr: "Error response from daemon: " + msg + "\n", Err: testutil.ExitCode1(t)}
+				}
+				return f.onCall(args, stdin)
+			}
+			mgr := NewManager(c, DefaultRealm)
+
+			pinned, err := mgr.ensureMeshNetwork(t.Context())
+			require.NoError(t, err)
+			assert.True(t, mgr.Created())
+			assert.Equal(t, "10.1.255.254", pinned)
+			mesh := f.networks["sind-mesh"]
+			require.NotNil(t, mesh)
+			assert.Equal(t, "10.1.0.0/16", mesh.subnet.String())
+			assert.Equal(t, "10.1.255.254", mesh.labels[LabelDNSIP])
+			assert.Len(t, calls(m, "network rm sind-mesh"), 2)
+		})
+	}
+}
+
+// TestEnsureMeshNetwork_SubnetNeverFree covers a subnet that is taken on
+// every attempt: sind keeps a network without a pinned DNS address.
+func TestEnsureMeshNetwork_SubnetNeverFree(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.fail["network create --subnet"] = mock.Result{
+		Stderr: "Error response from daemon: invalid pool request: Pool overlaps with other one on this address space\n",
+		Err:    testutil.ExitCode1(t),
+	}
+	mgr := NewManager(c, DefaultRealm)
+
+	pinned, err := mgr.ensureMeshNetwork(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, pinned)
+	assert.True(t, mgr.Created())
+	require.Contains(t, f.networks, "sind-mesh")
+	assert.NotContains(t, f.networks["sind-mesh"].labels, LabelDNSIP)
+	assert.Len(t, calls(m, "network create --subnet"), meshSubnetAttempts)
+	assert.Len(t, calls(m, "network rm"), meshSubnetAttempts)
+}
+
+// TestEnsureMeshNetwork_PinErrors covers the failures after the network
+// without a subnet exists: sind reports them, and Created tells whether a
+// network is left to remove.
+func TestEnsureMeshNetwork_PinErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		fail    string
+		match   string
+		created bool
+	}{
+		{"inspect", "network inspect sind-mesh", "inspecting mesh network", true},
+		{"remove", "network rm", "removing mesh network to pin its subnet", true},
+		{"re-create", "network create --subnet", "creating mesh network", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, c, m := newFakeDocker(t)
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				joined := strings.Join(args, " ")
+				if joined == tt.fail || strings.HasPrefix(joined, tt.fail+" ") && !strings.Contains(joined, "--format") {
+					return failure()
+				}
+				return f.onCall(args, stdin)
+			}
+			mgr := NewManager(c, DefaultRealm)
+
+			_, err := mgr.ensureMeshNetwork(t.Context())
+			require.ErrorContains(t, err, tt.match)
+			assert.Equal(t, tt.created, mgr.Created())
+		})
+	}
+}
+
+// TestEnsureMeshNetwork_RecreatedConcurrently covers another client of the
+// same daemon creating the network while sind pins its subnet.
+func TestEnsureMeshNetwork_RecreatedConcurrently(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if strings.HasPrefix(strings.Join(args, " "), "network create --subnet") {
+			f.addNetwork("sind-mesh")
+		}
+		return f.onCall(args, stdin)
+	}
+	mgr := NewManager(c, DefaultRealm)
+
+	pinned, err := mgr.ensureMeshNetwork(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, pinned)
+	assert.False(t, mgr.Created(), "the other client created it")
+}
+
+func TestPinnedLayout(t *testing.T) {
+	tests := []struct {
+		subnet, gateway string
+		ipRange, dns    string // empty: no layout
+	}{
+		{"172.18.0.0/16", "172.18.0.1", "172.18.0.0/17", "172.18.255.254"},
+		{"192.168.16.0/20", "192.168.16.1", "192.168.16.0/21", "192.168.31.254"},
+		{"10.200.8.0/21", "10.200.8.1", "10.200.8.0/22", "10.200.15.254"},
+		{"10.0.0.0/8", "10.0.0.1", "10.0.0.0/9", "10.255.255.254"},
+		{"172.18.5.0/16", "172.18.0.1", "172.18.0.0/17", "172.18.255.254"}, // not masked
+		{"10.200.8.0/22", "10.200.8.1", "", ""},                            // range of 510
+		{"10.200.3.0/24", "10.200.3.1", "", ""},
+		{"10.0.0.0/31", "10.0.0.0", "", ""},
+		{"10.0.0.1/32", "10.0.0.1", "", ""},
+		{"fd00::/64", "fd00::1", "", ""},
+		{"", "", "", ""},
+		{"172.18.0.0/16", "", "", ""},
+		{"172.18.0.0/16", "172.19.0.1", "", ""},     // gateway outside
+		{"172.18.0.0/16", "172.18.255.254", "", ""}, // gateway at the DNS address
+	}
+	for _, tt := range tests {
+		t.Run(tt.subnet+" "+tt.gateway, func(t *testing.T) {
+			ipam, dns, ok := pinnedLayout(tt.subnet, tt.gateway)
+			if tt.dns == "" {
+				assert.False(t, ok)
+				return
+			}
+			require.True(t, ok)
+			assert.Equal(t, tt.ipRange, ipam.IPRange)
+			assert.Equal(t, tt.gateway, ipam.Gateway)
+			assert.Equal(t, tt.dns, dns)
+			ipRange := netip.MustParsePrefix(ipam.IPRange)
+			subnet := netip.MustParsePrefix(ipam.Subnet)
+			addr := netip.MustParseAddr(dns)
+			assert.True(t, subnet.Contains(addr))
+			assert.False(t, ipRange.Contains(addr), "the DNS address is outside the range")
+			// The range holds the network address, the gateway and every
+			// container but the DNS that a bridge network takes.
+			assert.GreaterOrEqual(t, 1<<(32-ipRange.Bits()), docker.MaxBridgeEndpoints+1)
+		})
+	}
 }
 
 // TestEnsureMeshNetwork_CreatedPerCall covers a Manager that serves several
@@ -381,26 +700,36 @@ func TestEnsureMeshNetwork_CreatedPerCall(t *testing.T) {
 }
 
 func TestEnsureMeshNetwork_AlreadyExists(t *testing.T) {
-	var m mock.Executor
-	// NetworkExists → found
-	m.AddResult("[{}]\n", "", nil)
-	c := docker.NewClient(&m)
-	mgr := NewManager(c, DefaultRealm)
+	for _, tt := range []struct {
+		labels, pinned string
+	}{
+		{`{"sind.dns.ip":"172.18.255.254","sind.realm":"sind"}`, "172.18.255.254"},
+		{`{"sind.realm":"sind"}`, ""}, // created by an earlier sind version
+	} {
+		t.Run(tt.labels, func(t *testing.T) {
+			var m mock.Executor
+			// NetworkLabels → found
+			m.AddResult(tt.labels+"\n", "", nil)
+			c := docker.NewClient(&m)
+			mgr := NewManager(c, DefaultRealm)
 
-	err := mgr.EnsureMeshNetwork(t.Context())
-	require.NoError(t, err)
-	assert.False(t, mgr.Created(), "Created() when mesh already existed")
+			pinned, err := mgr.ensureMeshNetwork(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, tt.pinned, pinned)
+			assert.False(t, mgr.Created(), "Created() when mesh already existed")
 
-	// Only inspect, no create
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "inspect", string(NetworkName)}, m.Calls[0].Args)
+			// Only inspect, no create
+			require.Len(t, m.Calls, 1)
+			assert.Equal(t, []string{"network", "inspect", string(NetworkName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
+		})
+	}
 }
 
 // TestEnsureMeshNetwork_CreatedConcurrently covers another client of the
 // same daemon creating the network between the check and the create.
 func TestEnsureMeshNetwork_CreatedConcurrently(t *testing.T) {
 	f, c, _ := newFakeDocker(t)
-	f.networks["sind-mesh"] = true
+	f.addNetwork("sind-mesh")
 	f.fail["network inspect"] = notFound(t, testutil.NoSuchNetwork("sind-mesh"))
 	mgr := NewManager(c, DefaultRealm)
 
@@ -1179,24 +1508,26 @@ func TestCleanupMesh_Errors(t *testing.T) {
 // --- Custom Realm ---
 
 func TestCustomRealm_EnsureMeshNetwork(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", testutil.NoSuchNetwork("sind-mesh"), testutil.ExitCode1(t)) // NetworkExists → no
-	m.AddResult("net-id\n", "", nil)                                            // CreateNetwork
-	c := docker.NewClient(&m)
+	f, c, m := newFakeDocker(t)
 	mgr := NewManager(c, "myrealm")
 
 	err := mgr.EnsureMeshNetwork(t.Context())
 	require.NoError(t, err)
 
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t, []string{"network", "inspect", "myrealm-mesh"}, m.Calls[0].Args)
 	assert.Equal(t, []string{
-		"network", "create",
-		"--label", "com.docker.compose.network=mesh",
-		"--label", "com.docker.compose.project=myrealm-mesh",
-		"--label", "sind.realm=myrealm",
-		"myrealm-mesh",
-	}, m.Calls[1].Args)
+		"network inspect myrealm-mesh --format {{json .Labels}}",
+		"network create --label com.docker.compose.network=mesh --label com.docker.compose.project=myrealm-mesh --label sind.realm=myrealm myrealm-mesh",
+		"network inspect myrealm-mesh",
+		"network rm myrealm-mesh",
+		"network create --subnet 10.0.0.0/16 --gateway 10.0.0.1 --ip-range 10.0.0.0/17 " +
+			"--label com.docker.compose.network=mesh --label com.docker.compose.project=myrealm-mesh --label sind.dns.ip=10.0.255.254 --label sind.realm=myrealm myrealm-mesh",
+	}, calls(m, "network"))
+	assert.Equal(t, map[string]string{
+		"com.docker.compose.network": "mesh",
+		"com.docker.compose.project": "myrealm-mesh",
+		LabelDNSIP:                   "10.0.255.254",
+		LabelRealm:                   "myrealm",
+	}, f.networks["myrealm-mesh"].labels)
 }
 
 func TestCustomRealm_EnsureMesh(t *testing.T) {
@@ -1205,7 +1536,7 @@ func TestCustomRealm_EnsureMesh(t *testing.T) {
 
 	require.NoError(t, mgr.EnsureMesh(t.Context()))
 
-	assert.True(t, f.networks["myrealm-mesh"])
+	assert.Contains(t, f.networks, "myrealm-mesh")
 	assert.True(t, f.volumes["myrealm-ssh-config"])
 	require.Contains(t, f.containers, "myrealm-dns")
 	require.Contains(t, f.containers, "myrealm-ssh")

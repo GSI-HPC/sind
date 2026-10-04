@@ -37,7 +37,7 @@ var testUsersLabels = docker.Labels{
 	LabelGroups: "alice:1000 hpc:3000:alice",
 }
 
-// testUsersScript is the addUsers script for testUsers.
+// testUsersScript is the addUsersScript for testUsers.
 const testUsersScript = `groupadd --gid 1000 alice
 groupadd --gid 3000 hpc
 useradd --uid 1000 --gid 1000 --groups hpc --home-dir /home/alice --no-create-home --shell /bin/bash alice
@@ -148,25 +148,8 @@ func TestAddUsersScript(t *testing.T) {
 	assert.Equal(t, "groupadd --gid 3000 hpc\n", addUsersScript(LinuxUsers{Groups: []LinuxGroup{{Name: "hpc", GID: 3000}}}))
 }
 
-func TestAddUsers(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-
-	err := addUsers(t.Context(), docker.NewClient(&m), "sind-dev-worker-0", testUsers)
-
-	require.NoError(t, err)
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", "sind-dev-worker-0", "sh", "-ec", testUsersScript}, m.Calls[0].Args)
-}
-
-func TestAddUsers_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "groupadd: group 'alice' already exists\n", fmt.Errorf("exit status 9"))
-
-	err := addUsers(t.Context(), docker.NewClient(&m), "sind-dev-worker-0", testUsers)
-
-	require.Error(t, err)
-	assert.Equal(t, "adding users: exit status 9", err.Error())
+func TestAddUsersStep(t *testing.T) {
+	assert.Equal(t, setupStep{name: "users", what: "adding users", script: testUsersScript}, addUsersStep(testUsers))
 }
 
 func TestCreateHomes(t *testing.T) {
@@ -292,8 +275,8 @@ func TestPreflightCheck_HomeVolume(t *testing.T) {
 }
 
 // userCalls sorts the calls of a Create or WorkerAdd run that concern
-// users: the containers that got the users with addUsers and the scripts
-// they ran, the createHomes runs, and the node containers and their home
+// users: the containers whose setup added the users and the scripts it
+// ran, the createHomes runs, and the node containers and their home
 // mounts and users and groups labels.
 type userCalls struct {
 	added   map[string]string
@@ -331,8 +314,10 @@ func collectUserCalls(calls []mock.Call) *userCalls {
 			if caps := testutil.ArgValues(a, "--cap-add"); len(caps) > 0 {
 				uc.caps[name] = caps
 			}
-		case a[0] == "exec" && len(a) == 5 && a[3] == "-ec" && strings.HasPrefix(a[4], "groupadd "):
-			uc.added[a[1]] = a[4]
+		case a[0] == "exec" && len(a) > 4 && a[3] == "-c":
+			if container, steps, ok := setupCall(a); ok && steps["users"] != "" {
+				uc.added[container] = steps["users"] + "\n"
+			}
 		case a[0] == "exec" && len(a) > 5 && a[4] == createHomesScript:
 			uc.homes = append(uc.homes, append([]string{a[1]}, a[6:]...))
 		}
@@ -422,8 +407,8 @@ func TestCreate_NoUsers(t *testing.T) {
 func TestCreate_AddUsersFails(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
-		if args[0] == "exec" && args[1] == "sind-dev-worker-0" && len(args) > 4 && args[4] == testUsersScript {
-			return mock.Result{Stderr: "useradd: cannot lock /etc/passwd\n", Err: fmt.Errorf("exit status 1")}, true
+		if container, steps, ok := setupCall(args); ok && container == "sind-dev-worker-0" && steps["users"] != "" {
+			return failedSetup(t, 1, "useradd: cannot lock /etc/passwd\n", "users"), true
 		}
 		return mock.Result{}, false
 	})
@@ -435,7 +420,7 @@ func TestCreate_AddUsersFails(t *testing.T) {
 	_, err := Create(ctx, client, meshMgr, usersCfg(), time.Millisecond)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node worker-0: adding users: exit status 1")
+	assert.Contains(t, err.Error(), "node worker-0: adding users: exit status 1: useradd: cannot lock /etc/passwd")
 }
 
 func TestCreate_CreateHomesFails(t *testing.T) {

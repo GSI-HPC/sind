@@ -41,6 +41,16 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 
 The mesh images do not follow `defaults.image`: the SSH relay runs sind's default node image, which has the `ssh` client and `bash` it needs (custom node images need not), and CoreDNS comes from Docker Hub. `sind get mesh` shows the images the mesh containers run. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers. An existing mesh keeps its containers and images until the realm's last cluster is deleted.
 
+## Realm lock
+
+| Type | Name pattern | Example | Image |
+|------|-------------|---------|-------|
+| Configuration-only network | `<realm>-lock` | `sind-lock` | — |
+
+While a sind command creates or deletes clusters or workers, or powers nodes on, it holds the realm's lock on the Docker daemon: this network, which it creates when it takes the lock and removes when it releases it (see [Advisory locking]({{< relref "/configuration/realms#advisory-locking" >}})). Docker refuses a second network of the same name, so only one command at a time holds it. A configuration-only network (`docker network create --config-only`) has the driver `null`: it takes no subnet from the address pools, has no bridge device, and no container joins it.
+
+Besides `sind.realm`, its labels name the command that holds it (`sind.lock.command`, `sind.lock.host`, `sind.lock.pid`), let sind tell whether a holder on the same host still runs (`sind.lock.boot-id`, `sind.lock.pid-ns`), and mark one acquisition (`sind.lock.token`). `sind get networks` does not list it.
+
 ## Volume mounts
 
 | Volume | Mount point | Controller | Db | Worker | Submitter |
@@ -113,6 +123,6 @@ sind applies labels to containers for filtering and metadata:
 
 Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image.
 
-A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network and the SSH volume carry `sind.realm` only. `sind get networks` and `sind get volumes` find resources by these labels. `sind delete cluster --all` finds clusters by them and by the labels of their containers, which also covers clusters made before sind labelled networks and volumes (v0.9.0).
+A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network, the SSH volume and the realm lock carry `sind.realm` only. `sind get networks` and `sind get volumes` find resources by these labels, leaving out the realm lock. `sind delete cluster --all` finds clusters by them and by the labels of their containers, which also covers clusters made before sind labelled networks and volumes (v0.9.0).
 
-Every node container, the mesh's DNS and SSH containers, and every network and volume also carry Docker Compose labels, so Compose-aware tools group them: the project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh), the service is the node's role (`dns` or `ssh` in the mesh), the container number is 1, or N+1 for `worker-N` and 2 for `controller-backup`, and networks and volumes name themselves `net`, `mesh`, the volume type or `ssh-config`.
+Every node container, the mesh's DNS and SSH containers, and every network and volume but the realm lock also carry Docker Compose labels, so Compose-aware tools group them: the project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh), the service is the node's role (`dns` or `ssh` in the mesh), the container number is 1, or N+1 for `worker-N` and 2 for `controller-backup`, and networks and volumes name themselves `net`, `mesh`, the volume type or `ssh-config`.

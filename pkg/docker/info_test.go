@@ -33,7 +33,8 @@ func TestInfoLifecycle(t *testing.T) {
 func TestInfo(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(`{"ID":"x","ServerVersion":"29.1.0","CgroupVersion":"2","CgroupDriver":"systemd",`+
-		`"SecurityOptions":["name=seccomp,profile=builtin","name=cgroupns"],"ClientInfo":{"Version":"29.1.0"}}`+"\n", "", nil)
+		`"SecurityOptions":["name=seccomp,profile=builtin","name=cgroupns"],"OperatingSystem":"Ubuntu 24.04.3 LTS",`+
+		`"Name":"runner","KernelVersion":"6.8.0-1017-azure","ClientInfo":{"Version":"29.1.0"}}`+"\n", "", nil)
 	c := NewClient(&m)
 
 	info, err := c.Info(t.Context())
@@ -42,7 +43,11 @@ func TestInfo(t *testing.T) {
 		ServerVersion:   "29.1.0",
 		CgroupVersion:   "2",
 		SecurityOptions: []string{"name=seccomp,profile=builtin", "name=cgroupns"},
+		OperatingSystem: "Ubuntu 24.04.3 LTS",
+		Name:            "runner",
+		KernelVersion:   "6.8.0-1017-azure",
 	}, info)
+	assert.False(t, info.DockerDesktop())
 	assert.Equal(t, []string{"info", "--format", "{{json .}}"}, m.Calls[0].Args)
 }
 
@@ -76,4 +81,14 @@ func TestDaemonInfo_HasSecurityOption(t *testing.T) {
 	assert.False(t, info.HasSecurityOption("userns"))
 	assert.False(t, info.HasSecurityOption("profile"))
 	assert.False(t, (&DaemonInfo{}).HasSecurityOption("rootless"))
+}
+
+// TestDaemonInfo_DockerDesktop checks the two marks of Docker Desktop's
+// VM in `docker info`.
+func TestDaemonInfo_DockerDesktop(t *testing.T) {
+	assert.True(t, (&DaemonInfo{OperatingSystem: "Docker Desktop", Name: "docker-desktop"}).DockerDesktop())
+	assert.True(t, (&DaemonInfo{OperatingSystem: "Docker Desktop"}).DockerDesktop())
+	assert.True(t, (&DaemonInfo{Name: "docker-desktop"}).DockerDesktop())
+	assert.False(t, (&DaemonInfo{OperatingSystem: "Ubuntu 24.04.3 LTS", Name: "build-host"}).DockerDesktop())
+	assert.False(t, (&DaemonInfo{}).DockerDesktop())
 }

@@ -4,6 +4,7 @@ package monitor
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 
@@ -63,9 +64,12 @@ type subscriber struct {
 	container docker.ContainerName
 }
 
-// wants reports whether the subscriber receives ev.
+// wants reports whether the subscriber receives ev: an event of its
+// container, or a monitor error of the whole watcher, which no container's
+// subscription may miss.
 func (s subscriber) wants(ev Event) bool {
-	return s.container == "" || ev.Container == s.container
+	return s.container == "" || ev.Container == s.container ||
+		ev.Kind == EventMonitorError && ev.Container == ""
 }
 
 // Subscribe returns a channel that receives a copy of every event.
@@ -78,7 +82,9 @@ func (w *Watcher) Subscribe() <-chan Event {
 // SubscribeTo is Subscribe for the events of one container, or of every
 // container when it is empty. A readiness wait for one node subscribes to
 // its container only: while many nodes boot, the other nodes' events would
-// otherwise fill its buffer and crowd out its own.
+// otherwise fill its buffer and crowd out its own. A subscription to one
+// container also receives the monitor errors of the whole watcher (those
+// without a container), as its container's events are missing after one.
 func (w *Watcher) SubscribeTo(container docker.ContainerName) <-chan Event {
 	ch := make(chan Event, 64)
 	w.mu.Lock()
@@ -133,8 +139,8 @@ func (w *Watcher) Start(ctx context.Context, nodes []NodeTarget) error {
 			}
 			_ = stdout.Close()
 		}()
-		if err := dm.Run(ctx, stdout, w.internalCh); err != nil && ctx.Err() == nil {
-			w.emit(ctx, Event{Kind: EventMonitorError, Err: err, Detail: "docker events stream failed"})
+		if detail, err := streamEnd("docker events", dm.Run(ctx, stdout, w.internalCh)); ctx.Err() == nil {
+			w.emit(ctx, Event{Kind: EventMonitorError, Err: err, Detail: detail})
 		}
 		close(runDone)
 	}()
@@ -217,17 +223,31 @@ func (w *Watcher) startSystemdMonitor(ctx context.Context, node NodeTarget) {
 			}
 			_ = stdout.Close()
 		}()
-		if err := sm.Run(ctx, stdout, w.internalCh); err != nil && ctx.Err() == nil {
+		if detail, err := streamEnd("systemd monitor", sm.Run(ctx, stdout, w.internalCh)); ctx.Err() == nil {
 			w.emit(ctx, Event{
 				Kind:      EventMonitorError,
 				Node:      node.ShortName,
 				Container: node.Container,
 				Err:       err,
-				Detail:    "systemd monitor stream failed",
+				Detail:    detail,
 			})
 		}
 		close(runDone)
 	}()
+}
+
+// errStreamEnded is the error of a monitor stream that ended without one,
+// such as the busctl monitor of a node that stopped, or of an image without
+// busctl.
+var errStreamEnded = errors.New("stream ended")
+
+// streamEnd returns the detail and the error of the EventMonitorError for a
+// monitor stream that stopped with err, nil when it ended cleanly.
+func streamEnd(source string, err error) (string, error) {
+	if err != nil {
+		return source + " stream failed", err
+	}
+	return source + " stream ended", errStreamEnded
 }
 
 // emit best-effort sends ev to the internal channel. The ctx.Done() branch

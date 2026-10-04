@@ -22,6 +22,15 @@ type DaemonInfo struct {
 	// feature, e.g. "name=seccomp,profile=builtin", "name=rootless" or
 	// "name=userns".
 	SecurityOptions []string `json:"SecurityOptions"`
+	// OperatingSystem is the daemon host's operating system, e.g.
+	// "Ubuntu 24.04.3 LTS", or "Docker Desktop" in Docker Desktop's VM.
+	OperatingSystem string `json:"OperatingSystem"`
+	// Name is the daemon host's hostname, "docker-desktop" in Docker
+	// Desktop's VM.
+	Name string `json:"Name"`
+	// KernelVersion is the release of the kernel the daemon runs on, as
+	// uname -r prints it, e.g. "6.8.0-1017-azure".
+	KernelVersion string `json:"KernelVersion"`
 }
 
 // Info runs `docker info` and returns what it says about the daemon.
@@ -56,4 +65,10 @@ func (i *DaemonInfo) HasSecurityOption(name string) bool {
 	return slices.ContainsFunc(i.SecurityOptions, func(opt string) bool {
 		return slices.Contains(strings.Split(opt, ","), "name="+name)
 	})
+}
+
+// DockerDesktop reports whether the daemon is Docker Desktop's, which runs
+// in a VM with a kernel of its own, not on the machine of the docker CLI.
+func (i *DaemonInfo) DockerDesktop() bool {
+	return i.OperatingSystem == "Docker Desktop" || i.Name == "docker-desktop"
 }

@@ -17,11 +17,12 @@ import (
 
 // PsEntry mirrors the docker ps --format json output structure.
 type PsEntry struct {
-	ID     string `json:"ID"`
-	Names  string `json:"Names"`
-	State  string `json:"State"`
-	Image  string `json:"Image"`
-	Labels string `json:"Labels,omitempty"`
+	ID       string `json:"ID"`
+	Names    string `json:"Names"`
+	State    string `json:"State"`
+	Image    string `json:"Image"`
+	Labels   string `json:"Labels,omitempty"`
+	Networks string `json:"Networks,omitempty"`
 }
 
 // NDJSON builds newline-delimited JSON from the given entries.

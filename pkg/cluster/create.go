@@ -17,7 +17,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/monitor"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
-	"github.com/GSI-HPC/sind/pkg/ssh"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -166,8 +165,9 @@ type nodeResult struct {
 // rolls back and returns an error that wraps ErrNotReady.
 //
 //	┌ PreflightCheck → createResources ─────────────────┐
-//	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
-//	├ DetectCVMFS (storage.cvmfs only) ─────────────────┤
+//	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┤
+//	├ DetectCVMFS (storage.cvmfs only) ─────────────────┼→ setupNodes
+//	├ CheckNsdelegate ──────────────────────────────────┤
 //	└ pullImages (cfg.Pull only) ───────────────────────┘
 //	                        │
 //	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only)
@@ -176,7 +176,9 @@ type nodeResult struct {
 //
 // With cfg.Pull, each distinct image is pulled once, concurrently, and the
 // steps that run one (the helpers of createResources, the Slurm version,
-// DetectCVMFS) wait for the pull; nothing is created with --pull always.
+// DetectCVMFS, CheckNsdelegate) wait for the pull; nothing is created with
+// --pull always. A failed check rolls back what the other branches have
+// created by then; no node container exists yet.
 //
 // An unmanaged cluster (managed: false on the controller) gets the same
 // containers, volumes and munge key, but sind writes no Slurm configuration,
@@ -292,6 +294,19 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return nil
 		})
 	}
+
+	// Branch D: nsdelegate on the Docker host's kernel, in a throwaway
+	// container of the controller's image, before any node container.
+	prepGroup.Go(func() error {
+		if err := pull.wait(prepCtx); err != nil {
+			return err
+		}
+		if err := CheckNsdelegate(prepCtx, client, controllerImage(cfg)); err != nil {
+			return err
+		}
+		log.DebugContext(prepCtx, "nsdelegate check passed")
+		return nil
+	})
 
 	if err := prepGroup.Wait(); err != nil {
 		return nil, err
@@ -490,12 +505,13 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 }
 
 // setupNodes creates each node, starts its systemd monitor, waits for base
-// readiness, switches managed workers to nss_slurm (identity nssSlurm and
-// clientIds), adds the cluster users and groups where the identity mode
-// puts them, injects SSH public keys, and collects host keys — all
-// concurrently per node with no barrier between creation and probing.
+// readiness, and sets the node up in one docker exec (setupNode): it
+// switches managed workers to nss_slurm (identity nssSlurm and clientIds),
+// adds the cluster users and groups where the identity mode puts them,
+// injects the SSH public key, and collects the host key — all concurrently
+// per node with no barrier between creation and probing.
 //
-//	per node:  create → monitor → wait(container, systemd, sshd, munge) → (inspect ║ nss_slurm → users → SSH → hostkey)
+//	per node:  create → monitor → wait(container, systemd, sshd, munge) → (inspect ║ setup: nss_slurm → users → SSH key, host key)
 //
 // With identity clientIds munge is masked, so there is no munge to wait for.
 // rd bounds each node's steps after its container has started.
@@ -523,42 +539,33 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 				}})
 			}
 
+			// The sshd and munge probes follow their units: a wait with
+			// events runs them again after they passed only on an event of
+			// their unit (see probe.UntilReadyWithEvents).
 			baseProbes := []probe.Probe{
 				{Name: "container", Check: probe.ContainerRunning},
 				{Name: "systemd", Check: probe.SystemdReady},
-				{Name: "sshd", Check: probe.SSHDReady},
+				probe.ForService(probe.ServiceSSHD),
 			}
 			if nc.Identity != config.IdentityClientIDs {
-				baseProbes = append(baseProbes, probe.Probe{Name: "munge", Check: probe.MungeReady})
+				baseProbes = append(baseProbes, probe.ForService(probe.ServiceMunge))
 			}
 			log.DebugContext(nctx, "waiting for node", "node", nc.ShortName)
 			if err := waitReady(nctx, client, containerName, baseProbes, rd.interval, watcher); err != nil {
 				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
 			}
 
-			// The node's IPs and ID do not depend on the steps below, so
-			// the inspect runs alongside them, off the critical path.
+			// The node's IPs and ID do not depend on its setup, so the
+			// inspect runs alongside it, off the critical path.
 			inspected := make(chan inspectResult, 1)
 			go func() {
 				info, err := client.InspectContainer(nctx, containerName)
 				inspected <- inspectResult{info: info, err: err}
 			}()
 
-			if nc.NSSSlurm {
-				if err := enableNSSSlurm(nctx, client, containerName, nc); err != nil {
-					return fmt.Errorf("node %s: %w", nc.ShortName, err)
-				}
-			}
-
-			if nc.AddUsers && !nc.Users.IsEmpty() {
-				if err := addUsers(nctx, client, containerName, nc.Users); err != nil {
-					return fmt.Errorf("node %s: %w", nc.ShortName, err)
-				}
-			}
-
-			hostKey, err := ssh.InjectKeyAndCollectHostKey(nctx, client, containerName, sshPubKey)
+			hostKey, err := setupNode(nctx, client, containerName, nc, sshPubKey)
 			if err != nil {
-				return fmt.Errorf("setting up SSH on %s: %w", nc.ShortName, err)
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 
 			ir := <-inspected
