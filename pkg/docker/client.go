@@ -179,6 +179,16 @@ func IsNotFound(err error) bool {
 	return networkNotFound.MatchString(msg)
 }
 
+// IsAlreadyExists reports whether err is docker's error for a network name
+// that another network has: docker network create exits 1 with "network
+// with name x already exists". Like IsNotFound, it needs the
+// *cmdexec.ExitError and its stderr, so that a daemon that cannot be
+// reached does not count.
+func IsAlreadyExists(err error) bool {
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	return ok && exitErr.ExitCode() == 1 && strings.Contains(strings.ToLower(exitErr.Stderr), "already exists")
+}
+
 // notFoundForms are docker's messages for a missing resource, lowercased.
 var notFoundForms = []string{
 	"no such container",

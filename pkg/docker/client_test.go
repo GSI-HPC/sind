@@ -82,6 +82,26 @@ func TestIsNotFound_OtherError(t *testing.T) {
 	assert.False(t, IsNotFound(fmt.Errorf("connection refused")))
 }
 
+func TestIsAlreadyExists(t *testing.T) {
+	err := exitError(t, 1, "Error response from daemon: network with name sind-lock already exists\n")
+	assert.True(t, IsAlreadyExists(err))
+	assert.True(t, IsAlreadyExists(fmt.Errorf("create: %w", err)))
+}
+
+func TestIsAlreadyExists_Other(t *testing.T) {
+	for name, err := range map[string]error{
+		"nil":             nil,
+		"plain error":     fmt.Errorf("already exists"),
+		"other exit 1":    exitError(t, 1, "Error response from daemon: No such network: sind-lock\n"),
+		"other exit code": exitError(t, 2, "network with name sind-lock already exists\n"),
+		"no daemon":       exitError(t, 1, "failed to connect to the docker API at unix:///var/run/docker.sock\n"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.False(t, IsAlreadyExists(err))
+		})
+	}
+}
+
 func TestComposeLabels(t *testing.T) {
 	labels := ComposeLabels("myproject", "web", 2)
 

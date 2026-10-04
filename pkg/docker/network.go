@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // NetworkExists returns true if the given network exists.
@@ -37,6 +38,65 @@ func (c *Client) CreateNetwork(ctx context.Context, name NetworkName, labels Lab
 func (c *Client) RemoveNetwork(ctx context.Context, name NetworkName) error {
 	_, _, err := c.run(ctx, "network", "rm", string(name))
 	return err
+}
+
+// CreateConfigOnlyNetwork creates a configuration-only network (docker
+// network create --config-only) and returns its ID. Such a network has no
+// driver: Docker takes no subnet from its address pools for it, creates no
+// bridge device, and attaches no container to it. Like every network create,
+// it fails when another network has the name (see IsAlreadyExists).
+func (c *Client) CreateConfigOnlyNetwork(ctx context.Context, name NetworkName, labels Labels) (NetworkID, error) {
+	args := []string{"network", "create", "--config-only"}
+	args = append(args, SortedLabelFlags(labels)...)
+	args = append(args, string(name))
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		return "", err
+	}
+	return NetworkID(strings.TrimSpace(stdout)), nil
+}
+
+// RemoveNetworkByID removes the network with the given ID. Unlike a name,
+// an ID never comes to stand for another network, so a caller that
+// inspected a network removes that one and no other.
+func (c *Client) RemoveNetworkByID(ctx context.Context, id NetworkID) error {
+	_, _, err := c.run(ctx, "network", "rm", string(id))
+	return err
+}
+
+// NetworkMeta is a network's ID, name, creation time and labels.
+type NetworkMeta struct {
+	ID         NetworkID
+	Name       NetworkName
+	Created    time.Time // by the daemon's clock
+	ConfigOnly bool
+	Labels     Labels
+}
+
+// InspectNetworkMeta returns the ID, creation time and labels of a network.
+// The error for a missing network satisfies IsNotFound.
+func (c *Client) InspectNetworkMeta(ctx context.Context, name NetworkName) (*NetworkMeta, error) {
+	stdout, _, err := c.run(ctx, "network", "inspect", string(name), "--format", "{{json .}}")
+	if err != nil {
+		return nil, err
+	}
+	var r struct {
+		ID         string    `json:"Id"`
+		Name       string    `json:"Name"`
+		Created    time.Time `json:"Created"`
+		ConfigOnly bool      `json:"ConfigOnly"`
+		Labels     Labels    `json:"Labels"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &r); err != nil {
+		return nil, fmt.Errorf("parsing network inspect output: %w", err)
+	}
+	return &NetworkMeta{
+		ID:         NetworkID(r.ID),
+		Name:       NetworkName(r.Name),
+		Created:    r.Created,
+		ConfigOnly: r.ConfigOnly,
+		Labels:     r.Labels,
+	}, nil
 }
 
 // ConnectNetwork connects a container to a network.
