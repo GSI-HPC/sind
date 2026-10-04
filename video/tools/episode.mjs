@@ -94,16 +94,19 @@ const publish = (dir, out) => {
 };
 const docsOut = { static: path.join(docs, "static/videos"), data: path.join(docs, "data/videos") };
 
-// Docs pages that embed an episode with {{< video "<id>" >}}.
-function docsPages(id) {
-  const walk = (dir) =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
-      const p = path.join(dir, d.name);
-      return d.isDirectory() ? walk(p) : d.name.endsWith(".md") ? [p] : [];
-    });
-  const re = new RegExp(`\\{\\{<\\s*video\\s+"${id}"\\s*>\\}\\}`);
-  return walk(path.join(docs, "content")).filter((f) => re.test(readFileSync(f, "utf8")));
+// Every docs page, and the pages that embed an episode with {{< video "<id>" >}}.
+function docsFiles(dir = path.join(docs, "content")) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
+    const p = path.join(dir, d.name);
+    return d.isDirectory() ? docsFiles(p) : d.name.endsWith(".md") ? [p] : [];
+  });
 }
+function docsPages(id) {
+  const re = new RegExp(`\\{\\{<\\s*video\\s+"${id}"\\s*>\\}\\}`);
+  return docsFiles().filter((f) => re.test(readFileSync(f, "utf8")));
+}
+// Video course pages copy their commands and output from the reference pages.
+const courseDir = path.join(docs, "content", "course") + path.sep;
 
 const clock = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
 
@@ -182,6 +185,20 @@ async function check(id, dir) {
     if (item.out != null)
       for (const l of item.out.split("\n").map((x) => x.trimEnd()).filter(Boolean))
         if (!docLines.has(l)) warnings.push(`output line not on the docs page ${where(item.at)}: ${l}`);
+  }
+  // A course page's copy must still match a reference page, or it went stale.
+  if (pages.length && pages.every((f) => f.startsWith(courseDir))) {
+    const refText = docsFiles()
+      .filter((f) => !f.startsWith(courseDir))
+      .map((f) => readFileSync(f, "utf8"))
+      .join("\n");
+    const refLines = new Set(refText.split("\n").map((l) => l.trimEnd()));
+    for (const item of ep.terminal) {
+      if (item.cmd != null && !refText.includes(item.cmd)) warnings.push(`command on no reference page outside docs/content/course ${where(item.at)}: ${item.cmd}`);
+      if (item.out != null)
+        for (const l of item.out.split("\n").map((x) => x.trimEnd()).filter(Boolean))
+          if (!refLines.has(l)) warnings.push(`output line on no reference page outside docs/content/course ${where(item.at)}: ${l}`);
+    }
   }
 
   if (!opt.quick) {
