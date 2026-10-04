@@ -55,7 +55,7 @@ func completeLogsArgs(cmd *cobra.Command, args []string, toComplete string) ([]s
 	case 0:
 		return completeNodeNames(cmd, args, toComplete)
 	case 1:
-		return []string{"slurmctld", "slurmd", "slurmdbd", "mariadb", "sackd", "sshd", "munge"}, cobra.ShellCompDirectiveNoFileComp
+		return []string{"slurmctld", "slurmd", "slurmdbd", "mariadb", "sackd", "slurmrestd", "sshd", "munge"}, cobra.ShellCompDirectiveNoFileComp
 	default:
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

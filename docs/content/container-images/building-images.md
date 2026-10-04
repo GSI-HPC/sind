@@ -98,6 +98,7 @@ Custom images must provide the following:
 | controller | slurmctld installed, **not enabled** |
 | db | mariadb-server (MariaDB 10.4 or later, whose `unix_socket` authentication sind uses for slurmdbd's `slurm` account) with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd runs as the OS user `slurm`; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user, which can write `/var/log/slurm` |
 | worker | slurmd installed, **not enabled** |
+| api | slurmrestd with its systemd unit, installed, **not enabled**: Slurm built with an HTTP parser (llhttp from Slurm 26.05 on) and `--with-jwt`; the unit runs slurmrestd as a user other than root and SlurmUser (Slurm's unit: `slurmrestd`) and listens on port 6820. sind checks for slurmrestd and the unit before it starts it, and adds a drop-in to the unit that sets `SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files`, as the container denies slurmrestd's `unshare` |
 | submitter | Slurm client tools only |
 
 sind enables Slurm services based on the node's role (`systemctl enable --now`) once every node is ready. Services must be installed but **not** enabled in the image.

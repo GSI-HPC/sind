@@ -416,6 +416,9 @@ func (c *Cluster) Validate() error {
 	if err := c.Identity.validate(c.Managed(), c.Slurm.Main); err != nil {
 		return err
 	}
+	if err := c.validateAPI(); err != nil {
+		return err
+	}
 
 	for _, n := range c.Nodes {
 		if err := CheckCapabilities("capAdd", n.CapAdd); err != nil {

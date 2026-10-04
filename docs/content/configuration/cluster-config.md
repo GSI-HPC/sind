@@ -77,6 +77,8 @@ nodes:
 
   - role: db
 
+  - role: api                    # slurmrestd, Slurm 26.05 images only
+
   - role: submitter
 
   - role: worker
@@ -257,7 +259,7 @@ identity:
 | `nssSlurm` | every node but the managed workers | munge; `LaunchParameters=enable_nss_slurm`; `slurm` first for `passwd` and `group` in the workers' `/etc/nsswitch.conf` |
 | `clientIds` | the submitter, or the controllers without one; the controllers too with `controllerUsers` | as `nssSlurm`, plus `AuthType=auth/slurm` and `AuthInfo=use_client_ids` in `slurm.conf` and `slurmdbd.conf` and `CredType=cred/slurm` in `slurm.conf`, a `slurm.key` instead of a munge key, munge masked on every node and `sackd` on the submitter |
 
-The `slurm.conf` parameters are set unless the [`main` section](#slurm-section) sets them. A value set there must keep sind's, or validation fails: `LaunchParameters` must list `enable_nss_slurm`, and with `clientIds` `AuthInfo` must list `use_client_ids`, `AuthType` be `auth/slurm` and `CredType` `cred/slurm`. Unmanaged nodes, such as `managed: false` workers, get the Linux accounts in every mode. `nssSlurm` and `clientIds` need a managed cluster, and managed workers whose image has nss_slurm (`libnss_slurm.so.2`), as the official images do. Official images cached before identity modes existed lack it under the same tags; sind refuses such a cached image before it creates anything, and `--pull` fetches a current one. See [Users and Identity]({{< relref "/guides/users" >}}) for how each mode resolves users, and how to choose one.
+The `slurm.conf` parameters are set unless the [`main` section](#slurm-section) sets them. A value set there must keep sind's, or validation fails: `LaunchParameters` must list `enable_nss_slurm`, and with `clientIds` `AuthInfo` must list `use_client_ids`, `AuthType` be `auth/slurm` and `CredType` `cred/slurm`. Unmanaged nodes, such as `managed: false` workers, get the Linux accounts in every mode. `nssSlurm` and `clientIds` need a managed cluster, and managed workers whose image has nss_slurm (`libnss_slurm.so.2`), as the official images do. Official images cached before identity modes existed lack it under the same tags; sind refuses such a cached image before it creates anything, and `--pull` fetches a current one. See [Users and Identity]({{< relref "/guides/users" >}}) for how each mode resolves users, and how to choose one. With an [`api` node]({{< relref "/configuration/node-definitions#api-node" >}}) and `clientIds`, sind also lets REST API tokens carry the user's identity (`use_jwt_client_ids`); see [REST API]({{< relref "/guides/rest-api#identity-modes" >}}).
 
 ## Slurm section
 
@@ -320,13 +322,15 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `kind` must be `"Cluster"`
 - Exactly one `controller` node is required
 - At most one `db` node is allowed
+- At most one `api` node is allowed
 - At most one `submitter` node is allowed
 - At least one `worker` node is required
 - `count` is only valid for worker nodes
-- `managed` is only valid for controller, db and worker nodes
-- With `managed: false` on the controller, no worker or db node may set `managed: true` and no `slurm` section may be set
+- `managed` is only valid for controller, db, api and worker nodes
+- With `managed: false` on the controller, no worker, db or api node may set `managed: true` and no `slurm` section may be set
 - `backupController` is only valid for controller nodes
 - The `slurmdbd` section requires a managed `db` node
+- With a managed [`api` node]({{< relref "/configuration/node-definitions#api-node" >}}), an `AuthAltTypes` that the `main` or `slurmdbd` section sets must list `auth/jwt`
 - With `backupController`, `slurm.main` must not set `SlurmctldHost` (or its deprecated forms `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `count` must not be negative; `0` means the default, 1
 - `cpus` must not be negative; `memory` and `tmpSize` must be valid sizes (see [Defaults section](#defaults-section)), in `defaults` too

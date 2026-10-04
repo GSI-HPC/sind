@@ -53,7 +53,7 @@ A mesh that exists but is stopped, as after a host reboot, is started, the DNS c
 With `--pull`, sind pulls each distinct image of the cluster's nodes once (`docker pull`), concurrently with the preflight check, the mesh lookups and the creation of the network and volumes; the steps that run an image (the helper containers, the Slurm version check, the CVMFS check, the nsdelegate check and the nodes) wait for it and create their containers without `--pull always`, so every node runs the same image and the registry is asked once per image.
 
 1. Create cluster network → connect the realm's SSH relay container to it
-2. Create config volume → write Slurm configuration, and `slurmdbd.conf` for a managed db node (managed clusters only; see Unmanaged Cluster)
+2. Create config volume → write Slurm configuration, `slurmdbd.conf` for a managed db node and `jwt_hs256.key` for a managed api node (managed clusters only; see Unmanaged Cluster)
 3. Create munge volume → generate and write munge key (not with identity `clientIds`, whose `slurm.key` goes to the config volume)
 4. Create data volume (if needed)
 5. Create state volume (backup controller only)
@@ -69,8 +69,9 @@ The nsdelegate check runs `cat /proc/self/mounts` in a throwaway container of th
 3. Wait for each node to become ready, accelerated by events
 4. Set each node up in one `docker exec`, a shell script that runs these steps in order and stops at the first command that fails:
    1. On managed workers with identity `nssSlurm` or `clientIds`, check for nss_slurm and put it first in `/etc/nsswitch.conf` (see Identity Modes)
-   2. Add the cluster users and groups where the identity mode puts them (`users` and `groups` only; see Users)
-   3. Append the realm's SSH public key to root's `authorized_keys` and collect the host key (see Public Key Injection and Host Key Collection)
+   2. On a managed api node, check for slurmrestd and its unit, then add the drop-in that lets it start in the container (see API Node)
+   3. Add the cluster users and groups where the identity mode puts them (`users` and `groups` only; see Users)
+   4. Append the realm's SSH public key to root's `authorized_keys` and collect the host key (see Public Key Injection and Host Key Collection)
 
 The script writes a marker line to stderr before each step, so that a failure names its step and shows what that step wrote, with the exit status of the command that failed (`node worker-0: adding users: exit status 9: groupadd: group 'munge' already exists`). It runs after the node's readiness wait, as ssh-keyscan needs sshd, and nss_slurm and the users are in place before Phase 4 starts the Slurm daemons and creates the Slurm accounts. A node takes the same docker calls from `docker create` to its host key whatever its role or identity mode: create, start, the readiness probes, an inspect for its addresses (alongside the setup) and the setup exec.
 
@@ -106,10 +107,11 @@ While systemd boots, a round then costs one `docker exec`, the systemd check, in
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host); while it does not, a failed slurmctld unit ends the wait |
 | slurmd ready | slurmd service active (managed workers only) |
 | sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
+| slurmrestd ready | slurmrestd service active and port 6820 accepting connections (managed api node) |
 | slurmdbd ready | slurmdbd service active (managed db nodes). mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
 | cluster registered | `sacctmgr show cluster` on `controller` lists the cluster (`accounts` only, before the accounts are created) |
 
-A unit that has failed does not recover on its own: a failed munge, slurmctld, slurmd, sackd or slurmdbd unit fails `sind create cluster` and `sind create worker` at once, with the tail of the unit's journal. So does a container that exits.
+A unit that has failed does not recover on its own: a failed munge, slurmctld, slurmd, sackd, slurmrestd or slurmdbd unit fails `sind create cluster` and `sind create worker` at once, with the tail of the unit's journal. So does a container that exits.
 
 `--wait DURATION` (default `5m`, `0` for no limit) bounds how long `sind create cluster` and `sind create worker` wait for the nodes and Slurm: the node checks above, the Slurm daemons, and with `accounts` the cluster's registration with slurmdbd and the `sacctmgr` commands. Each node's limit counts from when its container has started, so image pulls do not count; the steps after the nodes are ready (Phase 4) end the limit after the last node container started. When a node or check is not ready in time, the command fails with status `1`, not `130`, with an error that names the node and its last failing check (`cluster dev not ready within 5m0s: waiting for worker-0: ... last probe error: probe munge: ...`). The library returns that error wrapping `cluster.ErrNotReady`; `config.Cluster.Wait` and `WorkerAddOptions.Wait` set the limit, and zero sets none.
 
@@ -119,7 +121,7 @@ When a check fails for good, or the limit runs out, `sind create cluster` remove
 
 After all nodes are ready, sind runs mesh registration (batch DNS ║ known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network, which nodes join with gateway priority 1 so that it answers before the mesh (see Cluster Network). The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
 
-With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmctld registers the cluster with slurmdbd when it starts (see Database Node). With `accounts`, sind then waits until `sacctmgr show cluster` lists the cluster and creates the Slurm accounts and associations (see Slurm Accounts).
+With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmrestd on a managed api node, and sackd on the submitter with identity `clientIds`, are enabled alongside slurmctld and slurmd. slurmctld registers the cluster with slurmdbd when it starts (see Database Node). With `accounts`, sind then waits until `sacctmgr show cluster` lists the cluster and creates the Slurm accounts and associations (see Slurm Accounts).
 
 ### Design Goals
 
@@ -380,12 +382,12 @@ Example output:
 
 ```
 $ sind get clusters
-NAME      NODES (S/C/D/W)   SLURM     STATUS
-default   4 (1/1/0/2)       26.05.4   running
-dev       4 (0/1/1/2)       25.11.8   running
+NAME      NODES (S/C/D/A/W)   SLURM     STATUS
+default   5 (1/1/0/1/2)       26.05.4   running
+dev       4 (0/1/1/0/2)       25.11.8   running
 ```
 
-NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **W**orker. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
+NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **A**pi / **W**orker; the JSON output has `submitters`, `controllers`, `dbs`, `apis` and `workers`. SLURM shows `-` when sind does not know the version, as for unmanaged clusters; `sind get cluster` does the same.
 
 ```
 $ sind get nodes dev
@@ -445,7 +447,7 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 
 The data row (`/data`, or the configured mount point) shows what Docker mounts there on the nodes, as `docker inspect` reports it: the bind-mounted host directory or the volume. Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
-`SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, or mariadb and slurmdbd on a db node, where sind manages Slurm. Unmanaged nodes (unmanaged workers and db nodes, and every node of an unmanaged cluster) list only munge and sshd. With identity `clientIds` no node lists munge, and the submitter lists sackd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
+`SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, mariadb and slurmdbd on a db node, or slurmrestd on an api node, where sind manages Slurm. Unmanaged nodes (unmanaged workers, db and api nodes, and every node of an unmanaged cluster) list only munge and sshd. With identity `clientIds` no node lists munge, and the submitter lists sackd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
 Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Other nodes leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
 
@@ -609,6 +611,7 @@ sind logs controller --follow          # tail container logs
 sind logs controller slurmctld         # slurmctld journal logs
 sind logs worker-0 slurmd --follow    # follow slurmd logs
 sind logs db slurmdbd                  # slurmdbd journal logs on the db node
+sind logs api slurmrestd               # slurmrestd journal logs on the api node
 ```
 
 ### Utilities
@@ -807,6 +810,8 @@ nodes:
 
   - role: db                             # optional, at most one: MariaDB + slurmdbd
 
+  - role: api                            # optional, at most one: slurmrestd (Slurm 26.05 and later)
+
   - role: submitter                      # optional, at most one
 
   - role: worker
@@ -886,6 +891,7 @@ Validation rules:
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
 | `db` | 0-1 | no | mariadb, slurmdbd | Accounting database (see Database Node) |
+| `api` | 0-1 | no | slurmrestd | REST API (see API Node) |
 | `submitter` | 0-1 | no | none (clients only; `sackd` with identity `clientIds`) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
@@ -902,7 +908,7 @@ Validation rules:
 | `devices` | global + per-node | none | Host devices to expose (e.g. `/dev/fuse`) |
 | `securityOpt` | global + per-node | none | Extra security options |
 | `count` | worker only | `1` | Number of worker nodes |
-| `managed` | controller + db + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see Database Node). Controller: `false` makes the whole cluster unmanaged (see Unmanaged Cluster) |
+| `managed` | controller + db + api + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see Database Node). Api: run slurmrestd and set up JWT (see API Node). Controller: `false` makes the whole cluster unmanaged (see Unmanaged Cluster) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` |
 
 Per-node scalar values override the `defaults` section. List fields (`capAdd`, `capDrop`, `devices`, `securityOpt`) are **merged** with defaults rather than replacing them.
@@ -914,11 +920,12 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `nodes` - optional; if omitted, creates 1 controller + 1 worker
 - `role: controller` - exactly one (auto-created if nodes omitted)
 - `role: db` - at most one
+- `role: api` - at most one
 - `role: submitter` - at most one
 - `role: worker` - at least one (auto-created if nodes omitted)
 - `count` - only valid for worker role; must not be negative, and `0` means the default, 1
 - `cpus` - must not be negative, and `0` means the default; `memory` - Docker's size syntax: a number, optionally with a fraction, and an optional unit `b`, `k`, `m`, `g`, `t` or `p` (powers of 1024, either case, the last five optionally followed by `b` or `ib`), at least `6m`, Docker's minimum; `tmpSize` - a whole number with an optional unit `k`, `m`, `g`, `t`, `p` or `e`, or a percentage. These apply to `defaults` too
-- `managed` - only valid for controller, db and worker roles; with `managed: false` on the controller, no worker or db node may set `managed: true` and no `slurm` section may be set
+- `managed` - only valid for controller, db, api and worker roles; with `managed: false` on the controller, no worker, db or api node may set `managed: true` and no `slurm` section may be set
 - `backupController` - only valid for controller role; with it, `slurm.main` must not set `SlurmctldHost` (or `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `slurm.slurmdbd` - requires a managed `db` node
 - `accounts`, and the users' `accounts`, `coordinator` and `adminLevel` - require a managed `db` node; account names hold only lowercase letters, digits, `_` and `-`, do not start with `-`, have at most 64 characters, are unique and are not `root`; a `parent` is `root` or an account declared before; `limits` keys are among the options listed in Slurm Accounts, in any case, with non-empty values; every account a user names is declared, at most once per list; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
@@ -928,6 +935,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `storage.dataStorage` - `type` is `volume` or `hostPath`; `hostPath` requires a `hostPath`; `mountPath` is absolute and contains no comma (`sind enter` and `sind exec` read it back from `docker ps`, which joins labels with commas)
 - `users`, `groups` - a name or an object; user and group names start with a lowercase letter or `_`, hold only lowercase letters, digits, `_` and `-`, and have at most 32 characters; `uid` and `gid` are between 1000 and 2147483647 and not 65534 (`nobody` in the image) or 65535 (the 16-bit -1); no two users share a name or `uid`, no two groups (private ones included) a name or `gid`; a user's `group` and `groups` are declared in `groups`, and `groups` repeats neither an entry nor `group`
 - `identity` - `local`, `nssSlurm` or `clientIds`, or an object with `mode` and `controllerUsers`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` only with `clientIds`; a `LaunchParameters`, `AuthType`, `CredType` or `AuthInfo` that `slurm.main` sets for the mode lists sind's value (see Identity Modes)
+- with a managed api node, an `AuthAltTypes` that `slurm.main` or `slurm.slurmdbd` sets lists `auth/jwt` (or `jwt`); `AuthAltParameters` there is not checked (see API Node)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
 
@@ -1006,7 +1014,7 @@ nodes:
 - sind writes `slurmdbd.conf` to the config volume, owned by `slurm` with mode `0600` as slurmdbd requires: `DbdHost=db`, `SlurmUser=slurm`, the log in `/var/log/slurm/slurmdbd.log`, the pid file in `/run/slurmdbd`, and MariaDB storage on `localhost` (database `slurm_acct_db`, user `slurm`). MariaDB authenticates the `slurm` account by `unix_socket`: only a process of the OS user `slurm`, which slurmdbd runs as, logs in as it, so the cluster users on the db node cannot reach the accounting database. When the `slurmdbd` section sets a `StoragePass`, as a mirrored site `slurmdbd.conf` would, sind creates the account with that password instead (passing its `mysql_native_password` hash, never the password, to `mysql`). `slurm.slurmdbd` extends it like the other sections. The `slurmdbd.conf.d` fragments of its map form get the same protection, as they can hold secrets such as a `StoragePass`: owned by `slurm` with mode `0600`, in a directory owned by `slurm` with mode `0700`. sind writes these files with their final mode, so they are never readable by others on any node, and the munge key with mode `0400`.
 - `slurm.conf` gets `AccountingStorageType=accounting_storage/slurmdbd`, `AccountingStorageHost=db` and `JobAcctGatherType=jobacct_gather/cgroup`, each unless `slurm.main` sets it. sind sets no `AccountingStorageEnforce`: jobs run without users, accounts or associations, and `sacct` reports them. `accounts` declares accounts and associations (see Slurm Accounts).
 - At creation, sind enables mariadb, creates the database and the `slurm` database user, enables slurmdbd and waits for it before enabling slurmctld and slurmd. slurmdbd creates its schema and slurmctld registers the cluster (`sacctmgr show cluster`) on their first start. A failed slurmdbd fails `sind create cluster` with the unit's journal tail.
-- `sind get cluster` and `sind get node` report mariadb and slurmdbd for the db node, and `sind get clusters` counts it in `NODES (S/C/D/W)`.
+- `sind get cluster` and `sind get node` report mariadb and slurmdbd for the db node, and `sind get clusters` counts it in `NODES (S/C/D/A/W)`.
 - `managed: false` on the db node of a managed cluster makes it a bare node, labelled `sind.managed=false`, for testing your own slurmdbd provisioning while sind runs slurmctld and slurmd. sind then configures no accounting at all: no `slurmdbd.conf` (a `slurm.slurmdbd` section is rejected), no database, and none of the accounting parameters in `slurm.conf`; add them to `slurm.main` to point slurmctld at your slurmdbd. `slurmctld` starts without waiting for the db node, and `sind get cluster` lists only munge and sshd for it.
 - In an unmanaged cluster the db node is a bare node like the others: sind starts neither MariaDB nor slurmdbd and writes no `slurmdbd.conf`, leaving them to the provisioning under test.
 
@@ -1127,6 +1135,26 @@ identity:
 - The mode is stored as the `sind.identity` label, so `sind create worker` sets up new workers the same way.
 - slurmctld checks a partition's `AllowGroups` with local lookups only: with `clientIds`, `controllerUsers: true` gives the controllers the users and groups for it. sind does not parse `slurm.main` for `AllowGroups`.
 
+### API Node
+
+An `api` node runs slurmrestd, Slurm's REST API daemon, with JWT authentication:
+
+```yaml
+nodes: [controller, db, api, worker: 2]
+```
+
+- The container is `<realm>-<cluster>-api` with hostname `api`; it gets the defaults and per-node parameters like any node, but not `count` or `backupController`. Its mounts are the submitter's: `/etc/slurm` and `/etc/munge` read-only (no munge with identity `clientIds`), the data, `/home` with `users` and `/cvmfs` with `storage.cvmfs`. It gets the cluster users like the nodes that are neither worker nor controller: in `local` and `nssSlurm`, not in `clientIds`; slurmrestd itself needs none.
+- The API is at `http://api.<cluster>.<realm>.sind:6820`, for the SSH relay, the host (with host DNS, see Host DNS Resolution) and containers joined to the cluster network; `sind get node api -o json` has its address. sind publishes no host port.
+- sind enables the unit Slurm ships, `slurmrestd.service`, in Phase 4, alongside slurmctld and slurmd: it runs slurmrestd as the user `slurmrestd` (slurmrestd refuses root and SlurmUser) with `SLURM_JWT=daemon`, listening on `:6820`. sind waits until the unit is active and the port accepts connections. slurmrestd loads the `/slurmdb/` endpoints only when `slurm.conf` sends accounting to slurmdbd, i.e. with a managed db node.
+- Before that, on each managed api node, sind checks that the image has `slurmrestd` and its unit, and fails `sind create cluster` with the image's name if not. The sind-node images ship it from Slurm 26.05 on (see Generic Image); the 25.11 images fail this check.
+- slurmrestd unshares its System V IPC namespace and its file descriptor table when it starts, and exits when it cannot: a container denies `unshare`, as Docker's default seccomp profile allows it only with `CAP_SYS_ADMIN`. sind therefore adds the drop-in `/etc/systemd/system/slurmrestd.service.d/sind.conf` with `Environment=SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files` and reloads systemd, in the setup step after the check. This isolates no less: the container has an IPC namespace of its own, and systemd starts slurmrestd with a file descriptor table of its own.
+- **JWT:** sind writes `jwt_hs256.key`, 32 random bytes as Slurm's JWT guide creates it, to the config volume, owned by `slurm` with mode `0600` (slurmctld refuses a key that others can read). `slurm.conf`, and `slurmdbd.conf` with a managed db node, get `AuthAltTypes=auth/jwt` and `AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key`, with identity `clientIds` followed by `,use_jwt_client_ids`, each unless `slurm.main` (or `slurm.slurmdbd`) sets it. An `AuthAltTypes` there must list `auth/jwt`; an `AuthAltParameters` there is taken as written, e.g. to test a JWKS setup (`jwks=…`), and then sind's key is unused. slurmdbd has no default key path, so a `slurm.slurmdbd` that sets `AuthAltParameters` without `jwt_key=` or `jwks=` keeps slurmdbd from starting.
+- **Two checks per request:** slurmrestd holds no key and looks no user up; it passes the caller's token (`X-SLURM-USER-NAME`, `X-SLURM-USER-TOKEN`) on with each RPC. slurmctld (for `/slurm/`) or slurmdbd (for `/slurmdb/`) checks the signature and expiry with the key, the same in every identity mode, and then resolves the user: from the token's identity claims when `use_jwt_client_ids` is set and they are complete, otherwise by looking the name up in its own node's `/etc/passwd`.
+- **Tokens:** `scontrol token username=USER [lifespan=SECONDS]`, run as root (`sind exec`), prints `SLURM_JWT=<token>`; such a token carries only the user name (`sun`). A token signed with the key (HS256) can also carry the identity: `uid`, `gid` and `id` with `name` (equal to `sun`), a non-empty `gecos`, `dir`, `shell` and `gids` or `groups`. Whoever holds the key can sign a token for any user, root included.
+- **Identity modes:** in `local` and `nssSlurm` the controller and the db node have the users, so tokens from `scontrol token` work for every user. In `clientIds` they don't: root's tokens work everywhere, a user's only with identity claims, or with `controllerUsers: true` for the `/slurm/` endpoints. This is why sind sets `use_jwt_client_ids` there, the JWT counterpart of sackd's tokens.
+- `sind get cluster` and `sind get node` list slurmrestd on a managed api node, and `sind get clusters` counts it in `NODES (S/C/D/A/W)`.
+- `managed: false` on the api node of a managed cluster makes it a bare node, labelled `sind.managed=false`, for testing your own slurmrestd provisioning: sind starts no slurmrestd and sets up no JWT. In an unmanaged cluster the api node is a bare node like the others.
+
 ## Docker Resources
 
 ### Per-Cluster Resources
@@ -1137,6 +1165,7 @@ identity:
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
 | Backup controller | `<realm>-<cluster>-controller-backup` | `sind-dev-controller-backup` |
 | Db | `<realm>-<cluster>-db` | `sind-dev-db` |
+| Api | `<realm>-<cluster>-api` | `sind-dev-api` |
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
@@ -1174,15 +1203,15 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 
 ## Volume Mounts
 
-| Volume | Mount Point | Controller | Db | Worker | Submitter |
-|--------|-------------|------------|----|---------|-----------|
-| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro |
-| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro (not with identity `clientIds`) |
-| `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw |
-| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — |
-| `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw (`users` only) |
-| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro (`storage.cvmfs` only) |
-| tmpfs | `/tmp` | per-node | per-node | per-node | per-node |
+| Volume | Mount Point | Controller | Db | Api | Worker | Submitter |
+|--------|-------------|------------|----|-----|---------|-----------|
+| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro | ro (not with identity `clientIds`) |
+| `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw | rw |
+| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — | — |
+| `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw | rw (`users` only) |
+| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro | ro (`storage.cvmfs` only) |
+| tmpfs | `/tmp` | per-node | per-node | per-node | per-node | per-node |
 
 ### Mount Options
 
@@ -1295,7 +1324,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
-| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and db nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
+| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers, db and api nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version; empty for an unmanaged cluster |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path; empty with the data volume |
 | `sind.data.mountpath` | `/shared` | Data mount point, `/data` by default |
@@ -1490,7 +1519,7 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path):
 
 ```
-Host controller controller.* controller-backup controller-backup.* db db.* submitter submitter.* worker-*
+Host controller controller.* controller-backup controller-backup.* db db.* api api.* submitter submitter.* worker-*
     CanonicalizeHostname yes
     CanonicalDomains default.sind.sind sind.sind
 
@@ -1606,6 +1635,7 @@ Custom images must provide:
 | controller | slurmctld (installed, not enabled) |
 | db | mariadb-server (MariaDB 10.4 or later, for the built-in `unix_socket` authentication) with the `mysql` client, root access to MariaDB over its local socket without a password, slurmdbd (installed, not enabled) with a unit that creates `/run/slurmdbd` for the `slurm` user, and `/var/log/slurm` writable by it |
 | worker | slurmd (installed, not enabled) |
+| api | slurmrestd (Slurm built with an HTTP parser, llhttp from 26.05 on, and `--with-jwt`) with its systemd unit, installed but not enabled, running it as a user other than root and SlurmUser (Slurm's unit: `slurmrestd`) and listening on port 6820; sind adds a drop-in that sets `SLURMRESTD_SECURITY` (see API Node) |
 | submitter | Slurm client tools only |
 
 sind enables Slurm services based on the node's role once every node is ready (`systemctl enable --now`). Services should be installed but not enabled in the image.
@@ -1647,7 +1677,8 @@ sind generates a multi-file configuration structure:
 ├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
 ├── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
-└── slurm.key               # auth/slurm key (identity clientIds only)
+├── slurm.key               # auth/slurm key (identity clientIds only)
+└── jwt_hs256.key           # auth/jwt key (managed api node only)
 ```
 
 #### slurm.conf
@@ -1670,6 +1701,8 @@ ReturnToService=2
 DefMemPerCPU=<the smallest RealMemory/CPUs of the managed workers>
 
 <identity parameters: identity nssSlurm and clientIds (see Identity Modes)>
+
+<JWT parameters: a managed api node (see API Node)>
 
 <accounting parameters: a managed db node (see Database Node)>
 
@@ -1711,7 +1744,7 @@ sind generates a minimal `cgroup.conf`, `CgroupPlugin=autodetect`, which selects
 
 #### slurmdbd.conf
 
-Only generated for a cluster with a managed db node (not with `managed: false`), together with the accounting parameters in `slurm.conf`; see Database Node. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`; `CredType` is a `slurm.conf` parameter only.
+Only generated for a cluster with a managed db node (not with `managed: false`), together with the accounting parameters in `slurm.conf`; see Database Node. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`; `CredType` is a `slurm.conf` parameter only. With a managed api node it also gets the JWT parameters (see API Node).
 
 #### User Customization
 
