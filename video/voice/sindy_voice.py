@@ -6,6 +6,7 @@
     sindy_voice.py say "Hello!" -o out/hello  -> out/hello.wav + out/hello.json
     sindy_voice.py script lines.json -o dir   -> one wav/json pair per line
     sindy_voice.py samples -o dir             voice audition pack
+    sindy_voice.py phonemes "text" | -s lines.json   how each word will be pronounced
 
 The upstream ONNX export only returns audio. `setup` adds the duration
 predictor's per-token frame counts as a second output named "duration", which
@@ -314,6 +315,44 @@ def cmd_script(args):
     (out / "lines.js").write_text("window.SINDY_LINES = " + json.dumps(bundle, ensure_ascii=False, separators=(",", ":")) + ";\n")
 
 
+def cmd_phonemes(args):
+    """Print each word's phonemes and where they come from (lexicon or espeak).
+
+    Words that espeak often gets wrong are flagged: acronyms, words with digits
+    or symbols (commands, versions, paths), acronym plurals that lose their s,
+    consonant clusters that suggest jargon (sacctmgr), and words that come out
+    silent."""
+    v = Voice(args.voice or "sindy")
+    if args.script:
+        text = " ".join(line["text"] for line in json.loads(Path(args.script).read_text())["lines"])
+    else:
+        text = args.text or ""
+    seen = set()
+    for it in v.tokenize(text):
+        word = it.get("text")
+        if not word or word.lower() in seen:
+            continue
+        seen.add(word.lower())
+        source = "lexicon" if word.lower() in v.lexicon else "espeak"
+        flags = []
+        if source == "espeak":
+            if re.fullmatch(r"[A-Z]{2,}s?", word):
+                flags.append("acronym")
+            if re.fullmatch(r"[A-Z]{2,}s", word) and not it["ph"].rstrip("ˈˌː ").endswith(("s", "z")):
+                flags.append("plural-lost")
+            if re.search(r"[0-9]", word):
+                flags.append("digits")
+            if re.search(r"[^A-Za-z0-9'’-]|(?<![A-Za-z])-|-(?![A-Za-z])", word):
+                flags.append("symbols")
+            if re.search(r"[bcdfghjklmnpqrstvwxz]{4,}", word.lower()):
+                flags.append("jargon")
+        if not it["ph"].strip():
+            flags.append("silent")
+        if args.flagged and not flags:
+            continue
+        print(f"{word:<20} {it['ph']:<28} {source:<8} {' '.join(flags)}".rstrip())
+
+
 def cmd_samples(args):
     text = args.text or "Hi, I'm Sindy! Today we'll spin up a Slurm cluster in Docker with sind, and run our first job with srun."
     out = Path(args.out)
@@ -341,6 +380,12 @@ def main():
     p.add_argument("-v", "--voice")
     p.add_argument("--force", action="store_true")
     p.set_defaults(fn=cmd_script)
+    p = sub.add_parser("phonemes")
+    p.add_argument("text", nargs="?")
+    p.add_argument("-s", "--script", help="check every word of a script.json")
+    p.add_argument("-v", "--voice")
+    p.add_argument("--flagged", action="store_true", help="only words worth a closer look")
+    p.set_defaults(fn=cmd_phonemes)
     p = sub.add_parser("samples")
     p.add_argument("-o", "--out", required=True)
     p.add_argument("--text")

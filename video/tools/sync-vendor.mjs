@@ -13,6 +13,7 @@ const files = {
   "gsap.min.js": path.join(nm, "gsap/dist/gsap.min.js"),
   "sindy.js": path.join(root, "lib/sindy.js"),
   "scenes.js": path.join(root, "lib/scenes.js"),
+  "episode.js": path.join(root, "lib/episode.js"),
   "scenes.css": path.join(root, "lib/scenes.css"),
   "fonts/inter-400.woff2": path.join(nm, "@fontsource/inter/files/inter-latin-400-normal.woff2"),
   "fonts/inter-600.woff2": path.join(nm, "@fontsource/inter/files/inter-latin-600-normal.woff2"),

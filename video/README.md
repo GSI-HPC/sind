@@ -3,8 +3,8 @@
 Can coding agents produce tutorial videos for each sind guide, as a screencast
 and slideshow hybrid presented by an AI anime avatar, cheaply enough to
 re-render whenever the docs change? This directory is the answer so far: **yes,
-on a CPU**. It contains a working pipeline, a 45-second pilot episode for the
-quickstart, and its embedding in the docs.
+on a CPU**. It contains a working pipeline, a pilot episode for the
+quickstart, its embedding in the docs, and agent skills to make more.
 
 ![Sindy expression sheet](sindy/sheet.png)
 
@@ -14,8 +14,9 @@ quickstart, and its embedding in the docs.
 script.json ──► voice/sindy_voice.py ──► line.wav + line.json (words, visemes, loudness)
                  (Kokoro-82M, CPU)                       │
                                                          ▼
-episodes/<id>/     ──  lib/scenes.js (planner, captions, terminal, shots, transitions)
-                   ──  lib/sindy.js  (avatar: lip sync, blinks, expressions, gaze, wave)
+episodes/<id>/     ──  lib/episode.js (scenes: intro, talk, slide, diagram, terminal, outro)
+                   ──  lib/scenes.js  (planner, captions, terminal, shots, transitions)
+                   ──  lib/sindy.js   (avatar: lip sync, blinks, expressions, gaze, wave)
                                                          │
                                                          ▼
                                    HyperFrames (headless Chrome + FFmpeg) ──► MP4
@@ -41,12 +42,85 @@ episodes/<id>/     ──  lib/scenes.js (planner, captions, terminal, shots, tr
   lays narration lines on the timeline and resolves cue words ("show bullet 2
   when she says *munge*"), karaoke captions, a seekable terminal with typed
   commands and a fast-forward badge, avatar shots (`hero`, `full`, `left`,
-  `cornerR`, `cornerL`) that Sindy glides between, and iris, push and blur
-  transitions.
+  `cornerR`, `cornerL`, `mini`) that Sindy glides between, and iris, push and
+  blur transitions.
+- **Episode builder** (`lib/episode.js`): an episode is a chain of scene calls
+  (see [Writing an episode](#writing-an-episode)); each builds its scene,
+  places its narration, moves Sindy and adds the transition.
 - **Episodes** (`episodes/<id>/`, one per docs page): the pilot
   `episodes/quickstart/` has an intro with a logo animation and wave,
-  fullscreen talk with name tag, slide with corner avatar, terminal screencast
-  of the quickstart, outro with links and wink, and a fade to black.
+  fullscreen talk with name tag, slide with corner avatar, two terminal
+  screencasts (regular and fullscreen), outro with links and wink, and a fade
+  to black.
+
+## Writing an episode
+
+An episode is `script.json` (the narration, one line per id) plus an
+`index.html` that chains scene calls. `episodes/quickstart/index.html` is the
+reference; copy it to start a new one.
+
+```js
+const tl = gsap.timeline({ paused: true });
+Episode.create({ tl, id: "quickstart", title: "Quickstart: your first Slurm cluster", series: "Quickstart" })
+  .intro({ chapter: "Hi, I'm Sindy", kicker: "Getting started", title: "Quickstart", say: "intro" })
+  .talk({ chapter: "What you'll build", title: "…", sub: "…", chips: ["…"], nameTag: {}, say: "welcome" })
+  .slide({ chapter: "…", title: "…", say: "what", bullets: [{ icon: "network", title: "…", text: "…", at: "what:network" }] })
+  .diagram({ chapter: "…", title: "…", say: "mesh", nodes: [/* … */], groups: [/* … */], edges: [/* … */] })
+  .terminal({ chapter: "…", say: ["create", "check"], steps: [{ cmd: "sind create cluster", at: "create:Run" }] })
+  .terminal({ wide: true, chapter: "…", say: "nodes", steps: [/* … */] })
+  .outro({ chapter: "Wrap-up", next: "…", say: "outro" })
+  .done();
+window.__timelines["main"] = tl; // in the page, so HyperFrames' lint sees it
+```
+
+| Scene | Sindy | Default transition in | Use for |
+| --- | --- | --- | --- |
+| `intro` | rises in on the right, waves | — | logo sting, episode title, disclosure |
+| `talk` | fullscreen on the left | iris after the intro, else push | framing the topic: title card, chips, optional name tag |
+| `slide` | corner bubble | push | a title and up to four bullets that land on their cue words |
+| `diagram` | corner bubble (or `shot: "mini"` for more room) | push | boxes and arrows: how parts relate, built up on cue words |
+| `terminal` | corner bubble | push | commands and output; full-size font up to 62 columns, shrinks to fit 96 |
+| `terminal` with `wide: true` | small bubble (or `avatar: "none"`) | push | long lines, e.g. `sind get nodes`: 96 columns at full size, shrinks to fit 160 |
+| `outro` | fullscreen on the left, waves, winks | blur | links and the next episode, then fade to black |
+| `custom(kind, opts)` | unchanged | push | anything else: returns `{ el, t }` to fill by hand |
+
+Every scene takes `chapter` (listed under the docs player and shown on screen),
+`label` (on-screen text if it should differ), `transition`, `shot` and `lead`
+(seconds before the narration starts). Terminals fit their font to the longest
+line and log a console warning when a line does not fit even at the smallest
+size.
+
+**Slide layouts.** `slide` and `diagram` share one frame (`slideFrame()` in
+`lib/episode.js`): chapter label, title, Sindy in the corner, narration, and
+items that appear just before their cue word (`at`). A new layout, such as a
+table or a config file view, builds on the same frame.
+
+**Diagrams.** Nodes sit on a grid over the area below the title: `nodes: [{
+id, title, text, icon, pos: [col, row], width, accent, ghost, code, at }]`
+(fractional positions are fine; `grid: [cols, rows]` fixes the grid,
+`nodeWidth` the default width of 260 px, which fits a title of about 11
+characters). `groups: [{ id, label, around: [node ids], accent, at }]` draw a
+labelled box around nodes, and `edges: [{ from, to, label, dashed, arrow:
+"end" | "both" | "start" | "none", bend, accent, at }]` connect nodes or
+groups and draw themselves along their path. `pulse: [{ node, at }]` makes a
+node swell and ring once. For anything else, `svg` puts raw SVG into the area,
+and `reveal: [{ el: "#selector", at, draw }]` fades its elements in or draws
+their strokes. Overlapping nodes or groups, boxes outside the area, and node
+text that is cut off show up as warnings in `episode check`.
+
+**Narration and acting.** `say` is a line id, `{ id, mood, cues, look, gap }`
+or a list of those. `mood` is the expression for the line, `cues` change it at
+a word (`{ running: "joy" }`) and `look` turns her eyes at a word
+(`{ complete: 0.35, It: "camera" }`). Slides and terminals make her glance at
+their content automatically.
+
+**Times** are written `"line:word"` (the first word in that line starting with
+`word`, in the line's latest occurrence), `"line:word#1"` for the second match, `"line:word-0.1"` with an
+offset, or plain seconds. Terminal steps take `at` (absolute) or `after`
+(seconds after the previous step; a typed command ends when its last character
+is typed): `{ cmd }`, `{ out }`, `{ prompt: true }` (a fresh prompt after a
+silent command), `{ ff: "⏩ ~40 s later", hold }`, `{ mark: "text", until }`
+(highlight), `{ clear: true }`.
 
 ## Results
 
@@ -98,6 +172,7 @@ npm run voice:setup                        # download Kokoro (about 350 MB) and 
 npx hyperframes browser ensure             # download chrome-headless-shell, once
 
 npm run episode -- voice quickstart        # narration into episodes/quickstart/assets/voice/
+npm run episode -- check quickstart        # timeline, warnings, lint, stills in episodes/quickstart/snapshots/
 npm run episode -- render quickstart       # renders/quickstart.mp4 (add --draft for speed)
 npm run voice:samples                      # audition pack in renders/voice-samples/
 npm run sheet                              # sindy/sheet.png expression sheet
@@ -125,16 +200,17 @@ HyperFrames Studio (run `npm run vendor` first), and `npx hyperframes snapshot
 ```text
 video/
   lib/sindy.js          avatar rig
+  lib/episode.js        scene builders (an episode is a chain of scene calls)
   lib/scenes.js, .css   planner, captions, terminal, shots, transitions, look
   sindy/                character bible, expression sheet page
   voice/                TTS tool, voice presets, pronunciation lexicon
   episodes/<id>/        one HyperFrames project per docs page (script.json + index.html)
-  tools/                episode CLI, publishing, vendoring, screenshots, lip-sync stats
+  tools/                episode CLI (voice, check, render, publish, ci), vendoring, screenshots, lip-sync stats
 ```
 
-Generated files (`vendor/`, `assets/voice/`, `renders/`) are not committed.
-Renders need no network: GSAP and the fonts come from npm, and the voice
-metadata loads from a local script.
+Generated files (`vendor/`, `assets/voice/`, `snapshots/`, `renders/`) are not
+committed. Renders need no network: GSAP and the fonts come from npm, and the
+voice metadata loads from a local script.
 
 ## Decisions
 
@@ -261,6 +337,10 @@ Roadblocks met while building this pipeline, and their fixes.
   are mixed into the render, but each needs an `id`.
 - Named fonts need an `@font-face` with a local file, or `hyperframes lint`
   complains (`font_family_without_font_face`).
+- HyperFrames' lint reads only inline scripts, so each episode page creates the
+  paused GSAP timeline, passes it to `Episode.create({ tl })` and registers it
+  on `window.__timelines` itself; otherwise lint reports a missing timeline and
+  no duration source.
 - Never crossfade stacked features with opacity (the eyes looked ghosted);
   squash them shut and swap opaque states instead.
 - Lip sync: tune `lipKernel` and `lipGain` with `tools/mouth-stats.mjs`; a
@@ -294,21 +374,32 @@ Roadblocks met while building this pipeline, and their fixes.
 - If an episode fails to render, the deploy fails and the previous site stays
   online.
 
-## Next: skills
+## Skills
 
-Bake the workflow into `.claude/skills/`:
+Coding agents make episodes with two skills in `.claude/skills/`:
 
-- `sindy-episode`: turn a docs guide into a storyboard (intro, talk, slide,
-  terminal, outro), a narration `script.json` and an `index.html` built on
-  `lib/scenes.js`; then voice, lint, snapshot, render and QA (glitch scan,
-  audio sync, mouth statistics, caption overlap), and add the shortcode to the
-  page. When a guide with an episode changes, its script changes in the same
-  PR.
-- `sindy-voice`: rules for speakable scripts, lexicon upkeep, voice presets.
-- The HyperFrames skills (`npx hyperframes skills update`) as a dependency for
-  composition rules.
+- `sindy-episode`: from a docs page to a storyboard, `script.json` and
+  `index.html`; then voice, check, render, and the shortcode on the page. It
+  also covers updating an episode when its page changes.
+- `sindy-voice`: speakable narration, pronunciation checks and lexicon
+  entries, voicing and presets.
+
+Both rely on two checks an agent can run without eyes or ears:
+
+- `npm run episode -- check <id>` prints the timeline, console warnings (a
+  terminal line that does not fit, a cue that matches several words), stale
+  or unused narration, and terminal commands or output that are not on the
+  episode's docs page, then runs lint and writes two stills per chapter as
+  contact sheets.
+- `python3 voice/sindy_voice.py phonemes -s episodes/<id>/script.json
+  --flagged` shows how words will be pronounced and flags the risky ones.
+
+Ideas for later:
+
 - Real terminal output: record asciinema casts of the documented commands
   against a real cluster and play them back in the terminal scene.
+- The HyperFrames skills (`npx hyperframes skills update`) for composition
+  rules beyond the episode builder.
 
 ## Sources
 

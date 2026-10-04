@@ -6,3 +6,4 @@ __pycache__/
 # Generated narration (rebuild with voice/sindy_voice.py script ...)
 **/assets/voice/
 vendor/
+**/snapshots/

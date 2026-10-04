@@ -70,8 +70,10 @@ into one Pages artifact (`main` at `/`, `next` at `/next/`).
 
 Guides can embed a video episode with `{{< video "<id>" >}}`. Episodes live in
 `video/episodes/<id>/` (see `video/README.md`); the docs workflow renders them, so never
-commit rendered files. When a guide with an episode changes, update the episode in the
-same PR.
+commit rendered files. When a guide with an episode changes, check the episode
+(`npm run episode -- check <id>`) and update it in the same PR.
+`.claude/skills/sindy-episode` covers making and updating episodes,
+`.claude/skills/sindy-voice` their narration.
 
 ## Commits
 
