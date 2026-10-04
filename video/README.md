@@ -3,8 +3,8 @@
 Can coding agents produce tutorial videos for each sind guide, as a screencast
 and slideshow hybrid presented by an AI anime avatar, cheaply enough to
 re-render whenever the docs change? This directory is the answer so far: **yes,
-on a CPU**. It contains a working pipeline, a 45-second pilot episode for the
-quickstart, and its embedding in the docs.
+on a CPU**. It contains a working pipeline, a pilot episode for the
+quickstart, its embedding in the docs, and agent skills to make more.
 
 ![Sindy expression sheet](sindy/sheet.png)
 
@@ -354,21 +354,32 @@ Roadblocks met while building this pipeline, and their fixes.
 - If an episode fails to render, the deploy fails and the previous site stays
   online.
 
-## Next: skills
+## Skills
 
-Bake the workflow into `.claude/skills/`:
+Coding agents make episodes with two skills in `.claude/skills/`:
 
-- `sindy-episode`: turn a docs guide into a storyboard (intro, talk, slide,
-  terminal, outro), a narration `script.json` and an `index.html` built on
-  `lib/scenes.js`; then voice, lint, snapshot, render and QA (glitch scan,
-  audio sync, mouth statistics, caption overlap), and add the shortcode to the
-  page. When a guide with an episode changes, its script changes in the same
-  PR.
-- `sindy-voice`: rules for speakable scripts, lexicon upkeep, voice presets.
-- The HyperFrames skills (`npx hyperframes skills update`) as a dependency for
-  composition rules.
+- `sindy-episode`: from a docs page to a storyboard, `script.json` and
+  `index.html`; then voice, check, render, and the shortcode on the page. It
+  also covers updating an episode when its page changes.
+- `sindy-voice`: speakable narration, pronunciation checks and lexicon
+  entries, voicing and presets.
+
+Both rely on two checks an agent can run without eyes or ears:
+
+- `npm run episode -- check <id>` prints the timeline, console warnings (a
+  terminal line that does not fit, a cue that matches several words), stale
+  or unused narration, and terminal commands or output that are not on the
+  episode's docs page, then runs lint and writes two stills per chapter as
+  contact sheets.
+- `python3 voice/sindy_voice.py phonemes -s episodes/<id>/script.json
+  --flagged` shows how words will be pronounced and flags the risky ones.
+
+Ideas for later:
+
 - Real terminal output: record asciinema casts of the documented commands
   against a real cluster and play them back in the terminal scene.
+- The HyperFrames skills (`npx hyperframes skills update`) for composition
+  rules beyond the episode builder.
 
 ## Sources
 
