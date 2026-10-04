@@ -364,7 +364,7 @@ All `get` subcommands accept `--output|-o {human,json}`. The default is `human` 
 
 NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which then lists the nodes of every cluster.
 
-`sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. Without `--config` it creates the default cluster (1 controller + 1 worker). For one release, a stdin that is not a terminal is still read without `--config -`: sind first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
+`sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. Without `--config` it creates the default cluster (1 controller + 1 worker). Reading a stdin that is not a terminal without `--config -` is deprecated in v0.11.0 and will be removed: until then sind still reads it, but first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
 
 `sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist, or if the nodes would not fit on the realm's mesh or the cluster network, Docker bridge networks of at most 1,023 containers (see Limits under Networking).
 
@@ -631,7 +631,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
-`sind get auth-key` outputs a key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external management tooling. `--type` names the Slurm authentication plugin whose key it prints: `munge` (the munge key), `slurm` (`slurm.key`, identity `clientIds`) or `jwt` (`jwt_hs256.key`, which signs the REST API tokens of a cluster with a managed api node; see API Node). Without `--type` it prints the key of the cluster's `AuthType`: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not use fails with an error that says why, e.g. `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`; any other value is a usage error. `-o json` returns `{"type": "munge"|"slurm"|"jwt", "key": "<base64>"}`. It replaces `sind get munge-key`. The library takes the type as `cluster.GetAuthKey`'s last argument, empty for the `AuthType`'s key.
+`sind get auth-key` outputs a key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external management tooling. `--type` names the Slurm authentication plugin whose key it prints: `munge` (the munge key), `slurm` (`slurm.key`, identity `clientIds`) or `jwt` (`jwt_hs256.key`, which signs the REST API tokens of a cluster with a managed api node; see API Node). Without `--type` it prints the key of the cluster's `AuthType`: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not use fails with an error that says why, e.g. `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`; any other value is a usage error. `-o json` returns `{"type": "munge"|"slurm"|"jwt", "key": "<base64>"}`. It replaces `sind get munge-key`, which v0.11.0 removed: `sind get auth-key --type munge` prints the same key. The library takes the type as `cluster.GetAuthKey`'s last argument, empty for the `AuthType`'s key.
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
@@ -757,7 +757,7 @@ name: test-cluster                       # default: "default"
 realm: sind                              # default: "sind"; --realm and SIND_REALM win
 
 defaults:
-  image: ghcr.io/gsi-hpc/sind-node:25.11 # default: sind-node:<sind release>
+  image: ghcr.io/gsi-hpc/sind-node:26.05 # default: sind-node:<sind release>
   tmpSize: 256m                          # per-node /tmp tmpfs size
   cpus: 1                                # container CPU limit
   memory: 512m                           # container memory limit
@@ -1119,18 +1119,18 @@ identity:
 | | `local` (default) | `nssSlurm` | `clientIds` |
 |---|---|---|---|
 | Slurm settings | munge | munge + `LaunchParameters=enable_nss_slurm` | `AuthType=auth/slurm` + `CredType=cred/slurm` + `AuthInfo=use_client_ids` + `enable_nss_slurm` |
-| Linux accounts on | every node | controllers, submitter, db | login node: the submitter, or the controllers without one; the controllers too with `controllerUsers` |
+| Linux accounts on | every node | every node but the managed workers: controllers, db, api, submitter | login node: the submitter, or the controllers without one; the controllers too with `controllerUsers` |
 | Secret sind distributes | munge key | munge key | `slurm.key` |
 | munge | on every node | on every node | masked on every node; `sackd` on the submitter |
 | Image needs | nothing new | `libnss_slurm.so.2` on managed workers | `libnss_slurm.so.2` on managed workers, `auth/slurm` and `serializer/json` (Slurm built `--with-jwt --with-json`) everywhere, `sackd` on the submitter |
-| SSH as a user to | every node | controllers, submitter, db | login node |
+| SSH as a user to | every node | every node but the managed workers | login node, and the controllers with `controllerUsers` |
 | Mirrors a site where | every node has LDAP/SSSD | compute nodes have no directory | only login nodes have a directory |
 
 - **Controller:** with `local` and `nssSlurm`, slurmctld resolves each job's user and groups, and the uids of Slurm users, from its own passwd and group files; for an unknown user it retries only once an hour, which is why the controller gets the users before sind creates the Slurm accounts. With `clientIds` it takes the identity from the user's token: `sackd` on the login node puts the caller's passwd and group entries into it, and slurmctld sets the uid on the user's associations before it processes the request.
 - **db:** slurmdbd resolves user names itself only for its own checks (admin levels, coordinators, a user changing their default account); with `clientIds` it learns the uids from tokens. sind gives the db node the accounts in `local` and `nssSlurm`.
 - **Workers:** with `nssSlurm` and `clientIds`, a managed worker has no Linux accounts. Before it creates any node, sind refuses a local sind-node image from before identity modes, one whose labels lack `sind.libjwt.version`: such an image has neither nss_slurm nor auth/slurm, and is usually a cached official tag that docker reuses without `--pull`, so the error says to pull a current one with `--pull` (or to rebuild a local build). `sind create cluster` checks the images of the managed workers, and with `clientIds` of every managed node, unless it pulls them; `sind create worker` checks the new workers' image. On each managed worker, sind then checks that the image has nss_slurm (`ldconfig -p`, or `/usr/lib64/libnss_slurm.so.2`) and fails `sind create cluster` or `sind create worker` with the image name if not, then puts `slurm` first on the `passwd` and `group` lines of `/etc/nsswitch.conf`. nss_slurm answers only for the job's user and groups, from the job credential, and only to processes inside a job step; sshd, prolog, epilog and health checks run outside one, so SSH as a user to a worker fails by design. No `/etc/nss_slurm.conf` is needed: the hostname is the Slurm node name and the spool directory is the default.
 - **clientIds:** sind writes `slurm.key` (1024 random bytes, `slurm`-owned, mode `0600`) to the config volume, creates no munge volume or key, masks `munge.service` from the node entrypoint (`ln -sf /dev/null /etc/systemd/system/munge.service` before systemd starts) and waits for no munge, and enables `sackd` on the submitter like a Slurm daemon. `slurmdbd.conf` gets `AuthType=auth/slurm` and `AuthInfo=use_client_ids`. Root's client commands on the other nodes get their tokens from the SACK service of slurmctld, slurmdbd or slurmd.
-- **Every node, every mode:** root and SlurmUser stay local; the `slurm` user needs the same uid on every node, which the image ensures. Unmanaged nodes (unmanaged workers and db nodes) get the Linux accounts as with `local`, as sind does not manage their Slurm. `nssSlurm` and `clientIds` need a managed cluster.
+- **Every node, every mode:** root and SlurmUser stay local; the `slurm` user needs the same uid on every node, which the image ensures. Unmanaged nodes (unmanaged workers, db and api nodes) get the Linux accounts as with `local`, as sind does not manage their Slurm. `nssSlurm` and `clientIds` need a managed cluster.
 - The `slurm.conf` parameters are each set unless `slurm.main` sets it. A value `slurm.main` sets must list sind's, or validation fails, as the mode would not work without it: `LaunchParameters` must list `enable_nss_slurm`, and with `clientIds` `AuthInfo` must list `use_client_ids`, `AuthType` be `auth/slurm` and `CredType` `cred/slurm`.
 - The mode is stored as the `sind.identity` label, so `sind create worker` sets up new workers the same way.
 - slurmctld checks a partition's `AllowGroups` with local lookups only: with `clientIds`, `controllerUsers: true` gives the controllers the users and groups for it. sind does not parse `slurm.main` for `AllowGroups`.
@@ -1366,10 +1366,10 @@ All nodes of a realm also join its shared mesh network, which carries the realm'
 
 | Event | Result |
 |-------|--------|
-| First cluster created | Creates `sind-mesh` network, starts `sind-dns` |
+| First cluster created | Creates `sind-mesh` network, starts `sind-dns` and the SSH relay `sind-ssh` |
 | Subsequent clusters | Connects cluster nodes to `sind-mesh`, updates DNS |
 | Cluster deleted | Disconnects cluster nodes, updates DNS (unless it is the last cluster) |
-| Last cluster deleted | Removes `sind-dns` and `sind-mesh` network |
+| Last cluster deleted | Removes `sind-dns`, `sind-ssh` and the `sind-mesh` network |
 
 The mesh does not route traffic between clusters by DNS name: the mesh DNS records point at cluster network addresses, which the SSH relay (on every cluster network) and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name (`sind-dev-controller`).
 

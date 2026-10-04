@@ -29,10 +29,11 @@ sind create cluster --config unmanaged.yaml
 
 The flag applies to the whole cluster:
 
-- Every node is unmanaged. A worker or db node with `managed: true` is rejected.
+- Every node is unmanaged. A worker, db or api node with `managed: true` is rejected.
 - `slurm` sections (`main`, `cgroup`, `gres`, `topology`, `plugstack`, `slurmdbd`) are rejected, because sind writes no Slurm configuration.
 - [Identity]({{< relref "/configuration/cluster-config#identity-section" >}}) modes other than `local` (`nssSlurm`, `clientIds`) are rejected for the same reason, and so are Slurm [accounts]({{< relref "/configuration/cluster-config#accounts-section" >}}) and the users' `accounts`, `coordinator` and `adminLevel`, since sind runs no slurmdbd. [Users and groups]({{< relref "/guides/users" >}}) still work: every node gets the Linux accounts and, with `users`, mounts the shared home volume.
 - A [db node]({{< relref "/configuration/node-definitions#database-node" >}}) is a bare node too: sind starts neither MariaDB nor slurmdbd on it, so your tooling can provision accounting as well. To keep sind's Slurm and provision only slurmdbd, use a managed cluster with `managed: false` on the db node instead.
+- An [api node]({{< relref "/configuration/node-definitions#api-node" >}}) is a bare node too: sind starts no slurmrestd and sets up no JWT.
 - `backupController: true` still adds `controller-backup` and the shared state volume (see [Controller pair](#controller-pair)).
 
 ## What sind sets up
@@ -44,6 +45,7 @@ The flag applies to the whole cluster:
 | `/etc/slurm` | generated configuration | empty |
 | slurmctld and slurmd | running | not started |
 | MariaDB and slurmdbd (db node) | running | not started |
+| slurmrestd and its JWT key (api node) | running | not started |
 | Slurm version (`sind.slurm.version` label) | discovered from the image | empty |
 
 `/etc/slurm` is one volume shared by all nodes, like an NFS share: writable on the controllers, read-only on the other nodes. `/etc/munge` holds sind's munge key and is read-only on every node. `sind create cluster` returns once each node runs systemd, sshd and munge.

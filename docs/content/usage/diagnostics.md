@@ -392,7 +392,7 @@ Outputs a key that authenticates the cluster's Slurm traffic, encoded as base64,
 | `slurm` | `slurm.key` | [identity `clientIds`]({{< relref "/guides/users#clientids" >}}) |
 | `jwt` | `jwt_hs256.key`, which signs [REST API tokens]({{< relref "/guides/rest-api" >}}) | with a managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) |
 
-Without `--type` it prints the cluster's main key: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not have fails with an error that says why. `-o json` returns the key with its type, e.g. `{"type": "jwt", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`.
+Without `--type` it prints the cluster's main key: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not have fails with an error that says why. `-o json` returns the key with its type, e.g. `{"type": "jwt", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`, which v0.11.0 removed: `sind get auth-key --type munge` prints the same key.
 
 ## Mesh infrastructure
 

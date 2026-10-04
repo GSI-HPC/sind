@@ -77,9 +77,9 @@ Slurm needs a user's uid and groups on the nodes that run its daemons and jobs. 
 | | `local` (default) | `nssSlurm` | `clientIds` |
 |---|---|---|---|
 | Slurm settings | munge | munge, `LaunchParameters=enable_nss_slurm` | `AuthType=auth/slurm`, `CredType=cred/slurm`, `AuthInfo=use_client_ids`, `enable_nss_slurm` |
-| Linux accounts on | every node | controllers, submitter, db | the login node: the submitter, or the controllers without one; the controllers too with `controllerUsers` |
+| Linux accounts on | every node | every node but the managed workers: controllers, db, api, submitter | the login node: the submitter, or the controllers without one; the controllers too with `controllerUsers` |
 | Authentication key | munge key | munge key | `slurm.key`; munge is masked, `sackd` runs on the submitter |
-| SSH as a user to | every node | controllers, submitter, db | login node, and the controllers with `controllerUsers` |
+| SSH as a user to | every node | every node but the managed workers | login node, and the controllers with `controllerUsers` |
 | Prolog, epilog and health checks know user names | yes | not on workers | not on workers |
 | A job sees other users' names (`ls -l`, `id bob`) | yes | no | no |
 | Mirrors a site where | every node has LDAP or SSSD | compute nodes have no directory service | only login nodes have a directory service |

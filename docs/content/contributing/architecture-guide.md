@@ -30,7 +30,7 @@ internal/mock/     Test doubles for cmdexec.Executor
   ├── recorder.go  mock.Recorder (mock in unit mode, OSExecutor in integration mode)
   └── recording.go mock.RecordingExecutor, RecordedCall
 
-internal/hostname/ DNS label check behind config.CheckName (cluster and realm names)
+internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
 internal/termtext/ Escaping of untrusted text for the terminal (final error line, table cells, doctor details)
 
@@ -105,29 +105,39 @@ pkg/state/         sind's state directory and the realm lock (flock, and the <re
 ## Dependency flow
 
 ```
-cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
-         → pkg/doctor  → pkg/config
+cmd/sind → pkg/cluster → pkg/cmdexec
+                       → pkg/config  → internal/hostname
+                       → pkg/docker  → pkg/cmdexec
+                                     → pkg/log
                        → pkg/doctor  → pkg/docker
                                      → pkg/cmdexec
                        → pkg/log
                        → pkg/mesh    → pkg/docker
                                      → pkg/cmdexec
                                      → pkg/config
+                                     → pkg/log
                                      → pkg/retry
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
+                                     → pkg/log
                        → pkg/probe   → pkg/docker
                                      → pkg/config
+                                     → pkg/log
                                      → pkg/monitor
                        → pkg/retry
                        → pkg/slurm   → pkg/docker
                                      → pkg/config
                        → pkg/ssh     → pkg/docker
+                                     → internal/hostname
                        → pkg/state   → pkg/docker
                                      → pkg/log
+         → pkg/doctor
          → pkg/nodeset
          → pkg/state
+         → internal/termtext
 ```
+
+`cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
 
 The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
 
