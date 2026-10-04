@@ -50,10 +50,13 @@ func CreateClusterVolume(ctx context.Context, client *docker.Client, realm, clus
 // slurmdbd.conf.d fragments of a map-form slurmdbd section, and turns on
 // accounting in slurm.conf; an unmanaged db node gets neither. With identity
 // clientIds it writes a new slurm.key, the key of auth/slurm, which every
-// node reads from the config volume. These files can hold secrets, such as
-// a StoragePass, and every node mounts the config volume: they are written
-// with mode 0600, so that others can never read them, and slurmdbd refuses
-// a slurmdbd.conf, and auth/slurm a slurm.key, that others may read. docker
+// node reads from the config volume, and with a managed api node a new
+// jwt_hs256.key, the key of auth/jwt, and the JWT parameters in slurm.conf
+// and slurmdbd.conf. These files can hold secrets, such as a StoragePass,
+// and every node mounts the config volume: they are written with mode 0600,
+// so that others can never read them, and slurmdbd refuses a slurmdbd.conf,
+// auth/slurm a slurm.key and auth/jwt a jwt_hs256.key, that others may
+// read. docker
 // cp writes files as root, so the helper then runs (like the munge helper)
 // to give them to SlurmUser with docker exec, and the fragments' directory
 // too, with mode 0700.
@@ -66,6 +69,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	helperName := ContainerName(realm, cfg.Name, "config-helper")
 	volName := VolumeName(realm, cfg.Name, VolumeConfig)
 	hasDB := cfg.HasManagedDB()
+	hasAPI := cfg.HasManagedAPI()
 	clientIDs := cfg.Identity.Mode == config.IdentityClientIDs
 	var secrets []string    // files owned by SlurmUser, mode 0600, relative to slurm.ConfDir
 	var secretDirs []string // their directories owned by SlurmUser, mode 0700
@@ -80,6 +84,9 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	}
 	if clientIDs {
 		secrets = append(secrets, slurm.SlurmKeyFile)
+	}
+	if hasAPI {
+		secrets = append(secrets, slurm.JWTKeyFile)
 	}
 
 	args := []string{
@@ -107,6 +114,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		BackupController: cfg.HasBackupController(),
 		Accounting:       hasDB,
 		Identity:         cfg.Identity.Mode,
+		JWT:              hasAPI,
 		DefMemPerCPU:     slurm.DefMemPerCPU(workers),
 	}
 	files := docker.FileContents{
@@ -139,11 +147,14 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 	}
 
 	if hasDB {
-		files[slurm.SlurmdbdConfFile] = []byte(slurm.GenerateSlurmdbdConf(cfg.Slurm.Slurmdbd, cfg.Identity.Mode))
+		files[slurm.SlurmdbdConfFile] = []byte(slurm.GenerateSlurmdbdConf(cfg.Slurm.Slurmdbd, cfg.Identity.Mode, hasAPI))
 		addSectionFragments(files, "slurmdbd", cfg.Slurm.Slurmdbd)
 	}
 	if clientIDs {
 		files[slurm.SlurmKeyFile] = slurm.GenerateSlurmKey()
+	}
+	if hasAPI {
+		files[slurm.JWTKeyFile] = slurm.GenerateJWTKey()
 	}
 
 	withModes := make(map[string]docker.File, len(files))

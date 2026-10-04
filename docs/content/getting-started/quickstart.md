@@ -43,8 +43,8 @@ sind get clusters
 ```
 
 ```
-NAME      NODES (S/C/D/W)   SLURM     STATUS
-default   2 (0/1/0/1)       26.05.4   running
+NAME      NODES (S/C/D/A/W)   SLURM     STATUS
+default   2 (0/1/0/0/1)       26.05.4   running
 ```
 
 View individual nodes:

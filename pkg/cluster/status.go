@@ -32,7 +32,7 @@ type ServiceHealth map[probe.Service]bool
 type NodeHealth struct {
 	State    docker.ContainerState `json:"status"`       // container state from Docker (e.g. "running", "exited")
 	IP       string                `json:"ip"`           // container IP address
-	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge unless identity clientIds, sshd, and on managed nodes the role's slurmctld/slurmd, mariadb and slurmdbd, or sackd)
+	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge unless identity clientIds, sshd, and on managed nodes the role's slurmctld/slurmd, mariadb and slurmdbd, slurmrestd, or sackd)
 	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
@@ -419,8 +419,8 @@ func nodeStatusOrder(n *NodeStatus) string {
 // nodeServices returns the services checked on a node, from its labels:
 // munge, except with identity clientIds, and sshd, plus the role's Slurm
 // daemon when sind manages Slurm on the node. A managed db node reports
-// mariadb next to slurmdbd, and a managed submitter with identity clientIds
-// sackd.
+// mariadb next to slurmdbd, a managed api node slurmrestd, and a managed
+// submitter with identity clientIds sackd.
 func nodeServices(role config.Role, labels docker.Labels) []probe.Service {
 	identity := IdentityFromLabels(labels)
 	var services []probe.Service

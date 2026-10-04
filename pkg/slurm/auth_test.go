@@ -14,3 +14,10 @@ func TestGenerateSlurmKey(t *testing.T) {
 	assert.NotEqual(t, a, b)
 	assert.Equal(t, "/etc/slurm/slurm.key", SlurmKeyPath)
 }
+
+func TestGenerateJWTKey(t *testing.T) {
+	a, b := GenerateJWTKey(), GenerateJWTKey()
+	assert.Len(t, a, JWTKeySize)
+	assert.NotEqual(t, a, b)
+	assert.Equal(t, "/etc/slurm/jwt_hs256.key", JWTKeyPath)
+}

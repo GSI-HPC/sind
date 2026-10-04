@@ -148,3 +148,5 @@ identity:
 ```
 
 Without a submitter, the controller is the login node and gets the accounts anyway.
+
+With an [api node]({{< relref "/configuration/node-definitions#api-node" >}}), REST API tokens from `scontrol token` carry only the user name, which slurmctld and slurmdbd cannot look up under `clientIds`. sind lets tokens carry the user's identity there instead; see [REST API]({{< relref "/guides/rest-api#identity-modes" >}}).

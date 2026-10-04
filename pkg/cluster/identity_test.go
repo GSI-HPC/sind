@@ -656,6 +656,9 @@ func TestNodeServices(t *testing.T) {
 		{config.RoleSubmitter, clientIDs, []probe.Service{s, probe.ServiceSackd}},
 		{config.RoleDB, clientIDs, []probe.Service{s, probe.ServiceMariadb, probe.ServiceSlurmdbd}},
 		{config.RoleWorker, clientIDsUnmanaged, []probe.Service{s}},
+		{config.RoleAPI, managed, []probe.Service{m, s, probe.ServiceSlurmrestd}},
+		{config.RoleAPI, clientIDs, []probe.Service{s, probe.ServiceSlurmrestd}},
+		{config.RoleAPI, unmanaged, []probe.Service{m, s}},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s/%v", tt.role, tt.labels), func(t *testing.T) {

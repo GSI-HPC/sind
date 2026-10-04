@@ -14,6 +14,7 @@ toc: true
 | Controller | `<realm>-<cluster>-controller` | `sind-dev-controller` |
 | Backup controller | `<realm>-<cluster>-controller-backup` | `sind-dev-controller-backup` |
 | Db | `<realm>-<cluster>-db` | `sind-dev-db` |
+| Api | `<realm>-<cluster>-api` | `sind-dev-api` |
 | Submitter | `<realm>-<cluster>-submitter` | `sind-dev-submitter` |
 | Worker | `<realm>-<cluster>-worker-<N>` | `sind-dev-worker-0` |
 | Config volume | `<realm>-<cluster>-config` | `sind-dev-config` |
@@ -53,18 +54,18 @@ Besides `sind.realm`, its labels name the command that holds it (`sind.lock.comm
 
 ## Volume mounts
 
-| Volume | Mount point | Controller | Db | Worker | Submitter |
-|--------|------------|------------|----|--------|-----------|
-| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro |
-| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro (not with identity `clientIds`) |
-| `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw |
-| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — |
-| `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw (`users` only) |
-| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro (`storage.cvmfs` only) |
-| tmpfs | `/tmp` | configurable | configurable | configurable | configurable |
-| tmpfs | `/run` | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m |
-| tmpfs | `/run/lock` | — | — | — | — |
-| shm | `/dev/shm` | half the memory | half the memory | half the memory | half the memory |
+| Volume | Mount point | Controller | Db | Api | Worker | Submitter |
+|--------|------------|------------|----|-----|--------|-----------|
+| `<realm>-<cluster>-config` | `/etc/slurm` | rw | ro | ro | ro | ro |
+| `<realm>-<cluster>-munge` | `/etc/munge` | ro | ro | ro | ro | ro (not with identity `clientIds`) |
+| `<realm>-<cluster>-data` | `/data` | rw | rw | rw | rw | rw |
+| `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — | — |
+| `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw | rw (`users` only) |
+| `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro | ro (`storage.cvmfs` only) |
+| tmpfs | `/tmp` | configurable | configurable | configurable | configurable | configurable |
+| tmpfs | `/run` | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m |
+| tmpfs | `/run/lock` | — | — | — | — | — |
+| shm | `/dev/shm` | half the memory | half the memory | half the memory | half the memory | half the memory |
 
 Files in the tmpfs mounts and `/dev/shm` count against the node's `memory` limit, as do its services. Nodes get no swap: `--memory-swap` equals `--memory`.
 
@@ -112,7 +113,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.realm` | `sind` | Realm namespace |
 | `sind.cluster` | `dev` | Cluster name |
 | `sind.role` | `worker` | Node role |
-| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers and db nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
+| `sind.managed` | `true` | Whether sind manages Slurm on the node: `false` for unmanaged workers, db and api nodes and for every node of an unmanaged cluster. Nodes created before this label existed count as managed. |
 | `sind.slurm.version` | `25.11.8` | Slurm version, empty for an unmanaged cluster |
 | `sind.data.hostpath` | `/home/user/project` | Resolved data mount host path, empty with the data volume |
 | `sind.data.mountpath` | `/shared` | Data mount point (`storage.dataStorage.mountPath`, `/data` by default) |

@@ -50,14 +50,14 @@ Creating and deleting clusters and workers acquire a per-realm lock to serialize
                        *Cluster
 ```
 
-- `createResources` creates the cluster network and connects the SSH relay to it, the config volume and its Slurm configuration (managed clusters only), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
+- `createResources` creates the cluster network and connects the SSH relay to it, the config volume and its Slurm configuration (managed clusters only; with a managed api node also `jwt_hs256.key`), the munge volume and key (with identity `clientIds`, `slurm.key` on the config volume instead), the data volume (unless the data is a host path), for a backup controller pair the state volume and, with `users`, the home volume, all in parallel.
 - `resolveInfra` starts the mesh DNS and SSH relay if they are stopped, and looks up the mesh DNS IP, the SSH public key and, for managed clusters, the Slurm version of the controller's image, while the resources are created.
 - `DetectCVMFS` (`storage.cvmfs` only) picks how the nodes [mount CVMFS]({{< relref "/guides/cvmfs" >}}), also while the resources are created: the `cvmfs` Docker volume plugin if one is enabled, otherwise a bind mount of the host's `/cvmfs`, first tried in a throwaway container of the controller's image.
 - `CheckNsdelegate` reads `/proc/self/mounts` in a throwaway container of the controller's image, also while the resources are created, and fails the creation, before any node container exists, when the cgroup2 mount lacks `nsdelegate`. `nsdelegate` is an option of the whole cgroup2 hierarchy, which the kernel lists in every cgroup2 mount, so the container shows the option of the kernel the Docker daemon runs on.
 - With `--pull`, each distinct node image is pulled once, concurrently, before the helper containers, the version check, the CVMFS check, the nsdelegate check and the nodes run it; none of these containers is created with `--pull always`. A new mesh's DNS and relay containers, which `EnsureMesh` creates before, are created with `--pull always`.
 - The helper containers that write the Slurm configuration and the munge key copy each file in with its final mode, then hand the secrets to their owner with `chown`; `docker rm -f` stops them.
-- `setupNodes` creates, waits for, and sets up every node: nss_slurm on managed workers with identity `nssSlurm` or `clientIds`, the cluster users and groups where the identity mode puts them, SSH and host keys. The setup is one `docker exec` per node, a script that stops at its first failing step; the error names the step and shows what it wrote.
-- `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, and `sackd` on the submitter with identity `clientIds`.
+- `setupNodes` creates, waits for, and sets up every node: nss_slurm on managed workers with identity `nssSlurm` or `clientIds`, the check for slurmrestd on a managed api node, the cluster users and groups where the identity mode puts them, SSH and host keys. The setup is one `docker exec` per node, a script that stops at its first failing step; the error names the step and shows what it wrote.
+- `enableSlurm` (managed clusters only) first starts mariadb, the accounting database and slurmdbd on a managed db node, then slurmctld and slurmd, slurmrestd on a managed api node, and `sackd` on the submitter with identity `clientIds`.
 - `createSlurmAccounts` (`accounts` only) waits until slurmdbd lists the cluster, then creates the Slurm accounts, the users' associations and the coordinators with `sacctmgr -i` on `controller`.
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
 - If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it.
@@ -86,10 +86,11 @@ Each round runs a node's checks in order and stops at the first that fails. A ch
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host); while it does not, a failed slurmctld unit ends the wait |
 | slurmd ready | slurmd service active (managed workers only) |
 | sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
+| slurmrestd ready | slurmrestd service active and port 6820 accepting connections (managed api node) |
 | slurmdbd ready | slurmdbd service active (managed db nodes). mariadb is started before it with `systemctl enable --now`, which returns once the unit is active |
 | cluster registered | `sacctmgr show cluster` on `controller` lists the cluster (`accounts` only, before the accounts are created) |
 
-A unit that has failed does not recover on its own: a failed munge, slurmctld, slurmd, sackd or slurmdbd unit fails `sind create cluster` and `sind create worker` at once, with the tail of the unit's journal. So does a container that exits.
+A unit that has failed does not recover on its own: a failed munge, slurmctld, slurmd, sackd, slurmrestd or slurmdbd unit fails `sind create cluster` and `sind create worker` at once, with the tail of the unit's journal. So does a container that exits.
 
 With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), mariadb and slurmdbd are started and slurmdbd must be ready before slurmctld and slurmd are enabled.
 

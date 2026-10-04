@@ -2,7 +2,7 @@
 weight: 220
 title: "Node Definitions"
 icon: "dns"
-description: "Node roles, shorthand syntax, managed vs unmanaged workers, database nodes, and unmanaged clusters"
+description: "Node roles, shorthand syntax, managed vs unmanaged workers, database and API nodes, and unmanaged clusters"
 toc: true
 ---
 
@@ -12,6 +12,7 @@ toc: true
 |------|-------|----------|---------------|-------------|
 | `controller` | exactly 1 | yes | slurmctld | Cluster controller |
 | `db` | 0–1 | no | mariadb, slurmdbd | Accounting database (see below) |
+| `api` | 0–1 | no | slurmrestd | REST API (see below) |
 | `submitter` | 0–1 | no | none (clients only; `sackd` with identity `clientIds`) | Job submission node |
 | `worker` | 1+ | yes | slurmd | Worker nodes |
 
@@ -24,7 +25,7 @@ toc: true
 | `memory` | global + per-node | `"512m"` | Memory limit, without swap, in Docker's size syntax (`2g`, `2gb`, `1.5GiB`, ...), for the jobs, the node's own services and its `/tmp`, `/run` and `/dev/shm` files; `/dev/shm` gets half of it; a managed worker's Slurm `RealMemory` |
 | `tmpSize` | global + per-node | `"256m"` | tmpfs size for `/tmp`, a whole number with an optional unit or a percentage; files there count against `memory` |
 | `count` | worker only | `1` | Number of worker nodes |
-| `managed` | controller + db + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see below). Controller: `false` makes the whole cluster unmanaged (see below) |
+| `managed` | controller + db + api + worker | `true` | Worker: start slurmd and add to slurm.conf. Db: run MariaDB and slurmdbd and configure accounting (see below). Api: run slurmrestd and set up JWT (see below). Controller: `false` makes the whole cluster unmanaged (see below) |
 | `backupController` | controller only | `false` | Add a backup controller, `controller-backup` (see below) |
 | `capAdd` | global + per-node | none | Extra Linux capabilities (e.g. `SYS_ADMIN`) |
 | `capDrop` | global + per-node | none | Dropped Linux capabilities |
@@ -125,6 +126,25 @@ nodes:
 
 Each cluster has its own db node; clusters do not share a slurmdbd.
 
+## API node
+
+An `api` node runs slurmrestd, Slurm's REST API daemon, with JWT authentication:
+
+```yaml
+nodes:
+  - controller
+  - db
+  - api
+  - worker: 2
+```
+
+- The container is `<realm>-<cluster>-api`, reachable as `api` inside the cluster. `count` and `backupController` are not valid on it. It needs a Slurm 26.05 image: the 25.11 images have no slurmrestd, and sind fails the create with the image's name.
+- slurmrestd listens on port 6820: `http://api.<cluster>.<realm>.sind:6820`, e.g. `http://api.default.sind.sind:6820/slurm/v0.0.45/ping/`, from the host or any container on the cluster network. sind publishes no host port.
+- sind writes `jwt_hs256.key` (owned by `slurm`, mode `0600`) to `/etc/slurm` and adds `AuthAltTypes=auth/jwt` and `AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key` to `slurm.conf`, and to `slurmdbd.conf` with a db node, each unless the `main` (or `slurmdbd`) section sets it. With identity `clientIds`, `AuthAltParameters` also lists `use_jwt_client_ids`.
+- Each request needs a token: `sind exec dev -- scontrol token username=root` prints one for root. See [REST API]({{< relref "/guides/rest-api" >}}) for tokens, users and identity modes.
+- `sind get cluster` and `sind get node` report `slurmrestd` for the api node.
+- `managed: false` on the api node makes it a bare node in an otherwise managed cluster, to test your own slurmrestd provisioning: sind starts no slurmrestd and sets up no JWT. In an unmanaged cluster the api node is a bare node too.
+
 ## Unmanaged cluster
 
 `managed: false` on the controller makes the whole cluster unmanaged: sind creates the nodes, the volumes and the munge key, but writes no Slurm configuration and starts no Slurm daemon, so your own tooling can provision Slurm.
@@ -139,7 +159,7 @@ nodes:
 
 - Every worker is unmanaged. A worker with `managed: true` is rejected, and so is any `slurm` section.
 - `backupController: true` still adds `controller-backup` and the shared state volume.
-- `managed` is not valid on the submitter, which runs no Slurm daemon. A db node is bare too, and `managed: true` on it is rejected.
+- `managed` is not valid on the submitter, which runs no Slurm daemon. db and api nodes are bare too, and `managed: true` on them is rejected.
 
 See [Unmanaged Cluster]({{< relref "/guides/unmanaged-cluster" >}}) for provisioning Slurm on such a cluster.
 

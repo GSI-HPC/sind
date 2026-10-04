@@ -507,11 +507,12 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 // setupNodes creates each node, starts its systemd monitor, waits for base
 // readiness, and sets the node up in one docker exec (setupNode): it
 // switches managed workers to nss_slurm (identity nssSlurm and clientIds),
-// adds the cluster users and groups where the identity mode puts them,
-// injects the SSH public key, and collects the host key — all concurrently
-// per node with no barrier between creation and probing.
+// checks a managed api node for slurmrestd, adds the cluster users and
+// groups where the identity mode puts them, injects the SSH public key, and
+// collects the host key — all concurrently per node with no barrier between
+// creation and probing.
 //
-//	per node:  create → monitor → wait(container, systemd, sshd, munge) → (inspect ║ setup: nss_slurm → users → SSH key, host key)
+//	per node:  create → monitor → wait(container, systemd, sshd, munge) → (inspect ║ setup: nss_slurm | slurmrestd → users → SSH key, host key)
 //
 // With identity clientIds munge is masked, so there is no munge to wait for.
 // rd bounds each node's steps after its container has started.
@@ -644,9 +645,9 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 }
 
 // enableSlurm enables the Slurm daemon on each managed node with a Slurm
-// role, and sackd on the submitter with identity clientIds (see
-// nodeSlurmService), and waits for the service to become ready —
-// concurrently per node.
+// role, slurmrestd on the api node and sackd on the submitter with identity
+// clientIds (see nodeSlurmService), and waits for the service to become
+// ready — concurrently per node.
 // A managed db node goes first: slurmctld registers the cluster with slurmdbd
 // when it starts, so mariadb and slurmdbd must be up by then.
 //
@@ -655,12 +656,12 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	│ enable mariadb → init DB         │
 //	│ enable slurmdbd → wait slurmdbd  │
 //	└────────────────┬─────────────────┘
-//	┌────────────────┴───┐ ┌─────────────────────┐
-//	│ controller:        │ │ worker-0:            │
-//	│ enable slurmctld   │ │ enable slurmd        │ ...
-//	│ wait slurmctld     │ │ wait slurmd          │
-//	└─────────┬──────────┘ └──────────┬───────────┘
-//	          └───────────┬───────────┘
+//	┌────────────────┴───┐ ┌─────────────────────┐ ┌─────────────────────┐
+//	│ controller:        │ │ worker-0:            │ │ api:                │
+//	│ enable slurmctld   │ │ enable slurmd        │ │ enable slurmrestd   │ ...
+//	│ wait slurmctld     │ │ wait slurmd          │ │ wait slurmrestd     │
+//	└─────────┬──────────┘ └──────────┬───────────┘ └──────────┬──────────┘
+//	          └───────────────────────┼────────────────────────┘
 func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) error {
 	log := sindlog.From(ctx)
 

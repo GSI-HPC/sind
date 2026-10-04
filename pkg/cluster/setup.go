@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/ssh"
 )
@@ -70,6 +71,8 @@ func nodeSetupScript(steps []setupStep) string {
 //     nssSlurmSteps): the check that the image has the module comes before
 //     nsswitch.conf names it, so that a missing module fails with the image
 //     name.
+//   - The check for slurmrestd (a managed api node; see slurmrestdStep),
+//     before the users, so that an image without it fails early.
 //   - The cluster's groups, then its users, which name their groups (where
 //     the identity mode puts them; see nodeGetsUsers).
 //   - The realm's SSH key and the host key (every node).
@@ -88,6 +91,9 @@ func nodeSetupSteps(nc RunConfig) []setupStep {
 	var steps []setupStep
 	if nc.NSSSlurm {
 		steps = append(steps, nssSlurmSteps(nc)...)
+	}
+	if nc.Role == config.RoleAPI && nc.Managed {
+		steps = append(steps, slurmrestdStep(nc))
 	}
 	if nc.AddUsers && !nc.Users.IsEmpty() {
 		steps = append(steps, addUsersStep(nc.Users))
