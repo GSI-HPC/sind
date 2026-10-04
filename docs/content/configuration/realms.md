@@ -56,22 +56,37 @@ With realm `ci-42`, resources are prefixed accordingly:
 | SSH container | `sind-ssh` | `ci-42-ssh` |
 | Cluster network | `sind-default-net` | `ci-42-default-net` |
 | Container | `sind-default-controller` | `ci-42-default-controller` |
+| Realm lock (while a command changes the realm) | `sind-lock` | `ci-42-lock` |
 
 ## Advisory locking
 
-Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm file lock to prevent concurrent modifications. The lock file is stored at:
+Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm lock to prevent concurrent modifications. Read-only operations (`get`, `logs`, etc.) are not affected. The lock has two parts:
+
+- A file lock in the invoking user's state directory, which orders that user's commands without asking the Docker daemon:
+
+  ```
+  $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
+  ```
+
+- A lock on the Docker daemon, the network `<realm>-lock`, which exists while a command holds the lock. It serializes every sind client of the daemon: several users of a host, CI jobs that share the host's Docker socket, or containers that mount it. The network is configuration-only: it takes no subnet from Docker's address pools and no bridge device, and `sind get networks` does not list it.
+
+If another operation already holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr and waits until it completes. For a command of another client the warning names it, for example:
 
 ```
-$XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
+Warning: waiting for another sind command in realm "sind" to finish: sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03)
 ```
 
-If another operation already holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr and waits until it completes. Read-only operations (`get`, `logs`, etc.) are not affected.
+The wait has no timeout; Ctrl+C ends it. sind releases the lock when the command ends, also when it fails or is interrupted with Ctrl+C or SIGTERM.
 
-Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs.
+A command killed with SIGKILL leaves the daemon lock behind. When the killed command ran on the same host, in the same container and since the last boot, the next sind command finds that its process is gone, removes the lock and says so (`Warning: removing the realm lock of ..., which no longer runs`). A lock from another host or container is never removed automatically, as its command may still be running; after a minute of waiting, sind prints the command that removes it:
 
-Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle`, which do not lock themselves.
+```
+Warning: the realm lock is still held by sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03); if that command no longer runs, remove the lock with: docker network rm sind-lock
+```
 
-The lock lives in the invoking user's state directory, while the realm's resources live on the Docker daemon. sind clients that share one daemon, such as several users of a host, or CI jobs that share the host's Docker socket, do not see each other's locks: give each of them its own realm.
+Locks are per-realm — operations in different realms run concurrently without contention, making realm-based CI isolation safe for parallel jobs. Clients that share a realm are safe from each other, but not isolated: `sind delete cluster --all` deletes the other client's clusters too, and cluster names must differ. Give independent jobs a realm each.
+
+Go programs that use sind as a library take the same lock with `state.LockRealm` from `github.com/GSI-HPC/sind/pkg/state` around `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle`, which do not lock themselves. They pass their Docker client as `LockOptions.Client`; without it, only the file lock is taken, which does not serialize other clients of the daemon.
 
 ## Example
 

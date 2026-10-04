@@ -669,6 +669,7 @@ func TestGetNetworks(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
 		networkEntry{Name: "sind-prod-net", Driver: "bridge"},
+		networkEntry{Name: "sind-lock", Driver: "null"}, // the realm lock, held by a command
 		networkEntry{Name: "sind-dev-net", Driver: "bridge"},
 		networkEntry{Name: "sind-mesh", Driver: "bridge"},
 	), "", nil)
@@ -689,7 +690,7 @@ func TestGetNetworks(t *testing.T) {
 		{Name: "sind-prod-net", Driver: "bridge", Subnet: "172.20.0.0/16", Gateway: "172.20.0.1"},
 	}, networks)
 
-	// One inspect for all networks.
+	// One inspect for all networks; the lock is left out.
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t, []string{"network", "inspect", "sind-prod-net", "sind-dev-net", "sind-mesh"}, m.Calls[1].Args)
 }

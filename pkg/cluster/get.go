@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/slurm"
+	"github.com/GSI-HPC/sind/pkg/state"
 )
 
 // Summary holds summary information about a sind cluster.
@@ -278,12 +279,16 @@ type NetworkSummary struct {
 }
 
 // GetNetworks lists all sind-related Docker networks with IPAM details.
-// This includes per-cluster networks (sind-<cluster>-net) and the mesh network (sind-mesh).
+// This includes per-cluster networks (sind-<cluster>-net) and the mesh
+// network (sind-mesh), but not the realm lock (state.LockNetworkName),
+// which carries the realm label while a command holds it.
 func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*NetworkSummary, error) {
 	entries, err := client.ListNetworks(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return nil, fmt.Errorf("listing networks: %w", err)
 	}
+	lock := state.LockNetworkName(realm)
+	entries = slices.DeleteFunc(entries, func(e docker.NetworkListEntry) bool { return e.Name == lock })
 	if len(entries) == 0 {
 		return []*NetworkSummary{}, nil
 	}

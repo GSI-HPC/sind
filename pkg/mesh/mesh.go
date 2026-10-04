@@ -354,10 +354,11 @@ func (m *Manager) Created() bool {
 // EnsureMeshNetwork creates the shared mesh network if it does not already
 // exist, and records in Created whether it did.
 //
-// Another sind client of the same Docker daemon can create the network
-// between the check and the create, as the realm lock lives in each client's
-// home directory. Docker's "already exists" error then counts as an existing
-// network. Clients that share a daemon should still use separate realms.
+// A client of the same Docker daemon that does not hold the realm's lock on
+// the daemon (state.LockRealm with LockOptions.Client), such as a library
+// caller, can create the network between the check and the create.
+// Docker's "already exists" error then counts as an existing network, so
+// that the caller's failure handling never removes it.
 func (m *Manager) EnsureMeshNetwork(ctx context.Context) error {
 	m.created = false
 	name := m.NetworkName()

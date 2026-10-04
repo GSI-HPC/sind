@@ -6,7 +6,9 @@
 // sind keeps its state in $XDG_STATE_HOME/sind, or ~/.local/state/sind:
 // the MCP stream's generated token (mcp-token) and, per realm, the lock
 // file and the exported SSH configuration. The realm itself (its mesh, DNS
-// records, known_hosts and clusters) lives in the Docker daemon.
+// records, known_hosts and clusters) lives in the Docker daemon, and so
+// does the second part of the realm lock, which serializes the daemon's
+// clients (LockRealm).
 package state
 
 import (

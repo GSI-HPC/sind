@@ -144,7 +144,7 @@ RULES
 
   This yields 256 networks of 254 addresses each.
 - **Bridge ports.** A Linux bridge has 1,024 ports, so a Docker bridge network holds at most about 1,023 containers. The mesh holds the DNS container, the SSH relay and every node of every cluster in the realm. Host limits such as `fs.inotify.max_user_instances` and memory usually bind long before (see [Container exits with code 255]({{< relref "/troubleshooting/container-exit-255" >}})).
-- **Clients sharing a Docker daemon.** The realm lock lives in each client's state directory (see [Realms]({{< relref "/configuration/realms" >}})). sind clients that share one daemon, such as several users of a host or CI jobs that share the host's Docker socket, are not serialized against each other and must use separate realms.
+- **Clients sharing a Docker daemon.** sind clients that share one daemon, such as several users of a host or CI jobs that share the host's Docker socket, are serialized by the realm lock's part on the daemon, the network `<realm>-lock` (see [Realms]({{< relref "/configuration/realms#advisory-locking" >}})). A lock that a command killed on another host or in another container left behind stays until it is removed with `docker network rm <realm>-lock`, as sind cannot tell whether that command still runs. Go programs that take the lock without their Docker client (`LockOptions.Client`) are not serialized against other clients. A shared realm is not isolated: `sind delete cluster --all` deletes every client's clusters, and each user's exported SSH configuration follows only that user's commands, so independent jobs still use a realm each.
 
 ## SSH infrastructure
 

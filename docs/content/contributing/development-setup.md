@@ -72,7 +72,7 @@ sind uses a minimal set of dependencies:
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
-| `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
+| `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
 | `github.com/stretchr/testify` | Test assertions (test only) |
 
 ## Run tests

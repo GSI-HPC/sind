@@ -35,7 +35,7 @@ Containers require specific security options for systemd:
 
 ## Concurrency
 
-Creating and deleting clusters and workers acquire a per-realm advisory lock (flock) to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. Different realms operate independently — see [Realms]({{< relref "/configuration/realms" >}}). The lock lives in each user's state directory, so sind clients that share a Docker daemon need separate realms.
+Creating and deleting clusters and workers acquire a per-realm lock to serialize concurrent modifications, and so do `power on`, `reboot` and `cycle`, which start a stopped mesh and rewrite DNS records. Read-only operations and the other `power` commands do not take it. The lock is a file lock (flock) in the user's state directory, which orders that user's commands, and a configuration-only network `<realm>-lock` on the Docker daemon, which orders every client of the daemon: other users, CI jobs that share its socket. A lock that a killed command left on the same host is taken over; one from another host or container is removed by hand. Different realms operate independently — see [Realms]({{< relref "/configuration/realms#advisory-locking" >}}).
 
 ## Creation flow
 

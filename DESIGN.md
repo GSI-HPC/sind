@@ -143,7 +143,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
-| `golang.org/x/sys` | Advisory file locking (flock) for realm locks |
+| `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
 
 **Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
 
@@ -1136,6 +1136,14 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 
 The mesh images do not follow `defaults.image`: the relay needs the `ssh` client and `bash` of sind's own node image, which custom images need not have. CoreDNS is pinned to a release; bump `DNSImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
 
+### Realm Lock
+
+| Type | Name Pattern | Example | Image |
+|------|-------------|---------|-------|
+| Configuration-only network | `<realm>-lock` | `sind-lock` | — |
+
+The network exists only while a sind command changes the realm: it is the realm lock's part on the Docker daemon (see Realm Advisory Locking). It is not part of the mesh, `sind get networks` leaves it out, and it has no `sind.cluster` label, so cluster discovery and `sind delete cluster --all` do not see it.
+
 ### Defaults
 
 The default realm is `sind` and the default cluster name is `default`, resulting in prefixes like `sind-default-*`.
@@ -1278,7 +1286,7 @@ from the image: an image labelled `sind.data.hostpath=/` would otherwise make `s
 bind-mount the host's root directory on a cluster that uses the data volume. Nodes created by
 earlier sind versions lack some of the labels; sind reads a missing label like an empty one.
 
-Every node container, the mesh's DNS and SSH containers, and every network and volume also carry Docker Compose labels (`com.docker.compose.*`), so Compose-aware tools group them. The project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh). A container's service is its role (`dns` or `ssh` in the mesh) and its container number is 1, N+1 for `worker-N` and 2 for `controller-backup`; networks and volumes name themselves `net`, `mesh`, the volume type (`config`, `munge`, `data`, `state`, `home`) or `ssh-config`.
+Every node container, the mesh's DNS and SSH containers, and every network and volume but the realm lock also carry Docker Compose labels (`com.docker.compose.*`), so Compose-aware tools group them. The project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh). A container's service is its role (`dns` or `ssh` in the mesh) and its container number is 1, N+1 for `worker-N` and 2 for `controller-backup`; networks and volumes name themselves `net`, `mesh`, the volume type (`config`, `munge`, `data`, `state`, `home`) or `ssh-config`.
 
 ### Enter and Exec
 
@@ -1356,7 +1364,7 @@ The DNS container's address is fixed into every node's and the relay's `--dns` w
 
 - Each cluster network and each mesh takes one network from Docker's default address pools, which a stock daemon fills at about 30 networks, shared with every other network on the host. `default-address-pools` in `daemon.json` gives hosts that run many realms or clusters smaller pools.
 - A Linux bridge has 1,024 ports, so one Docker bridge network holds at most about 1,023 containers; the mesh holds the DNS container, the relay and every node of the realm. Host limits such as inotify instances and memory bind long before.
-- The realm lock is a `flock(2)` on a file in the invoking user's state directory, while the realm's resources live on the Docker daemon, which sind does not lock. Clients that share a daemon (several users of a host, CI jobs that share the host's Docker socket, other `XDG_STATE_HOME`s) are not serialized against each other and must use separate realms. A mesh network that another client created between the check and the create counts as existing, so that client's failure handling never removes it.
+- The realm lock serializes the clients that share a daemon (several users of a host, CI jobs that share the host's Docker socket, other `XDG_STATE_HOME`s) through its part on the daemon, `<realm>-lock` (see Realm Advisory Locking). Go programs that call `state.LockRealm` without `LockOptions.Client` take only the file lock and are not serialized against other clients; a mesh network that such a client created between the check and the create counts as existing, so that the other client's failure handling never removes it. A lock left by a process that was killed on another host or in another container stays until it is removed by hand, as sind cannot tell whether that process still runs. Waiting clients take a freed lock in no particular order. Sharing a realm is safe, not isolated: `sind delete cluster --all` deletes every cluster of the realm, another user's or job's too, cluster names must differ, and each user's exported SSH configuration follows only that user's own commands. Independent jobs still use a realm each.
 
 ### SSH
 
@@ -1443,7 +1451,7 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 | `ssh_config` | SSH config snippet |
 | `id_ed25519` | Private key (copy from volume) |
 | `known_hosts` | Host keys (copy from volume) |
-| `lock` | Advisory realm lock (see Realm Advisory Locking) |
+| `lock` | The realm lock's file part (see Realm Advisory Locking) |
 
 The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path):
 
@@ -1490,7 +1498,7 @@ scp file.txt controller.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller.default.sind.sind   # port forwarding to the host
 ```
 
-sind updates these files automatically when clusters or nodes are created/deleted, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file.
+sind updates these files automatically when clusters or nodes are created/deleted, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file. The files are the invoking user's, so only that user's commands update them: in a realm shared with other clients of the daemon, their creates and deletes do not reach them.
 
 ## Command Routing
 
@@ -1733,11 +1741,17 @@ Within a cluster, short names resolve via the search domain: a node in the `dev`
 
 ## Realm Advisory Locking
 
-Mutating operations acquire a per-realm advisory lock (flock) to prevent concurrent modifications to shared realm state. The lock file is stored at:
+Mutating operations acquire a per-realm lock to prevent concurrent modifications to shared realm state. It has two parts, taken in this order and released in reverse:
 
-```
-$XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
-```
+1. A `flock(2)` on a file in the invoking user's state directory, which orders the commands that share that directory, and the goroutines of one process, without a call to the daemon:
+
+   ```
+   $XDG_STATE_HOME/sind/<realm>/lock    # default: ~/.local/state/sind/<realm>/lock
+   ```
+
+2. The daemon lock: the network `<realm>-lock` on the Docker daemon, which exists while a command holds the lock. The realm's resources live on the daemon, which several clients can share: users of one host, CI jobs that share the host's Docker socket, containers that mount it, shells with another `XDG_STATE_HOME`. Each of them has a file lock of its own; they meet at the daemon.
+
+The file lock stays as the fast path: commands of one user wait for each other in the kernel, and only one of them at a time polls the daemon.
 
 ### Protected operations
 
@@ -1751,14 +1765,43 @@ Read-only operations (`get`, `logs`, `ssh`, etc.) and the other `power` commands
 
 ### Library callers
 
-The lock is `state.LockRealm` in `pkg/state`, which also resolves the state directory (`state.Dir`, `state.RealmDir`). `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle` take no lock themselves: their caller holds the realm lock for the whole operation, for `Create` from before `mesh.Manager.EnsureMesh`, as the CLI does. Without it, concurrent calls in one realm lose each other's DNS records, `known_hosts` entries and `sind-nodes.conf` lines, or remove each other's resources. The lock is a `flock(2)` on a file in the user's state directory, so it also serializes the goroutines of one process (see Limits for clients that share a daemon).
+The lock is `state.LockRealm` in `pkg/state`, which also resolves the state directory (`state.Dir`, `state.RealmDir`). `cluster.Create`, `cluster.Delete`, `cluster.DeleteAll`, `cluster.WorkerAdd`, `cluster.WorkerRemove`, `cluster.PowerOn`, `cluster.PowerReboot` and `cluster.PowerCycle` take no lock themselves: their caller holds the realm lock for the whole operation, for `Create` from before `mesh.Manager.EnsureMesh`, as the CLI does. Without it, concurrent calls in one realm lose each other's DNS records, `known_hosts` entries and `sind-nodes.conf` lines, or remove each other's resources. `LockOptions.Client` is the daemon to take the daemon lock on; without it, `LockRealm` takes the file lock only, which does not serialize other clients of the daemon (see Limits). `LockOptions.OnWait` receives the holder of a lock it waits for (`state.LockHolder`, nil for the file lock), `OnWarning` the warnings below, and `Command` overrides the command line the lock records (the process's arguments). `state.LockNetworkName` names the daemon lock.
+
+### Daemon lock
+
+The daemon lock is a configuration-only network (`docker network create --config-only`) named `<realm>-lock`. dockerd refuses a network name that another network has: since Docker 25 the check is unconditional, and libnetwork checks and creates under a lock per name, so of the clients that create it at once exactly one succeeds; the others get `network with name <realm>-lock already exists`. A configuration-only network has the driver `null`: Docker takes no subnet from its address pools for it, creates no bridge device, and attaches no container to it, and creating it needs no image. Its labels describe the holder:
+
+| Label | Example | Description |
+|-------|---------|-------------|
+| `sind.realm` | `sind` | Realm namespace |
+| `sind.lock.command` | `sind create cluster dev` | The holder's command line, with the program's base name |
+| `sind.lock.host` | `build-07` | Host name of the machine or container the holder runs on |
+| `sind.lock.pid` | `4242` | The holder's process ID |
+| `sind.lock.boot-id` | `6b1f3a52-…` | `/proc/sys/kernel/random/boot_id` of the holder's kernel |
+| `sind.lock.pid-ns` | `pid:[4026531836]` | The holder's PID namespace (`/proc/self/ns/pid`) |
+| `sind.lock.token` | random | One acquisition: a create that failed after the daemon made the network removes only its own lock |
+
+The network carries no Docker Compose labels, as it belongs to no Compose project. `sind get networks` leaves it out; as it has no `sind.cluster` label, cluster discovery and `sind delete cluster --all` do not see it, and completion lists containers only.
+
+Alternatives that were rejected:
+
+- A never-started container `<realm>-lock`. Container names are reserved atomically as well, but a container needs an image. The pinned CoreDNS image is on the daemon wherever the realm has a mesh, but not before the realm's first create, and not after a sind upgrade that bumps it: taking the lock would pull, and fail on an offline host, even for `sind delete cluster`. sind's container listings by `sind.realm` (`get realms`, `get nodes`) would need to filter it too.
+- A bridge network `<realm>-lock`. It takes one of the about 30 networks of the default address pools and a bridge device while it is held, and fails when the pools are exhausted, which is when the user deletes clusters to free them.
+- A volume: `docker volume create` of an existing name succeeds, so it cannot be a mutex.
 
 ### Behavior
 
-- Lock is attempted non-blocking first; if free, the operation proceeds immediately
-- If another operation holds the lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and blocks until the lock is released: waiting is a state the user may have to act on, so it is not left to `-v`. The wait has no timeout
-- Lock is released when the operation completes (success or failure)
-- Context cancellation (e.g., Ctrl+C) unblocks a waiting operation
+- Each part is attempted non-blocking first; if both are free, the operation proceeds immediately, without a notice
+- If another operation holds the file lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and blocks until the lock is released: waiting is a state the user may have to act on, so it is not left to `-v`
+- If another client holds the daemon lock, the warning names it from the lock's labels, e.g. `Warning: waiting for another sind command in realm "sind" to finish: sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03)`, with the time the daemon created the lock in local time. sind tries again at intervals that double from 100 ms to 2 s; waiting clients take a freed lock in no particular order. What the warnings quote of the labels is escaped, as another client wrote it
+- The waits have no timeout; context cancellation (e.g., Ctrl+C, SIGTERM) ends them
+- Lock is released when the operation completes, success or failure, after the rollback of a failed `create cluster`, and after Ctrl+C or SIGTERM: sind removes the daemon lock by its network ID, so that it never removes another client's lock, with a context that the interrupt does not cancel, for at most 30 s, and then releases the file lock. If the removal fails, sind warns `Warning: releasing the realm lock: <error>; remove it with: docker network rm <realm>-lock`
+
+### Stale daemon locks
+
+A process killed with SIGKILL, or by a second Ctrl+C, cannot release the daemon lock; the kernel releases its file lock. sind takes over a daemon lock whose holder ran on the same host name, kernel boot (boot ID) and PID namespace as itself, so that the holder's PID means the same process to both, and that no longer runs (`kill(pid, 0)` fails with `ESRCH`; `EPERM` means it runs as another user). It warns `Warning: removing the realm lock of <holder>, which no longer runs`, removes the lock by ID and takes it. The boot ID tells a reboot, after which PIDs start over; a PID namespace's inode number can pass to a new namespace only after the old one has ended with all its processes, and a PID taken in the new one only makes the holder count as running.
+
+A holder on another host, in another container (PID namespace) or since another boot cannot be checked from here, and sind never removes its lock, as that process may be running. After waiting a minute for such a lock, sind warns once: `Warning: the realm lock is still held by <holder>; if that command no longer runs, remove the lock with: docker network rm <realm>-lock`.
 
 ### Realm independence
 

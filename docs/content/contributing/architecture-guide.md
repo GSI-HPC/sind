@@ -94,7 +94,7 @@ pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
                    discovery, munge key and slurm.key generation, sacctmgr account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
-pkg/state/         sind's state directory and the realm lock (flock) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
+pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock network on the daemon) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
 ```
 
 ## Dependency flow
@@ -116,8 +116,10 @@ cmd/sind → pkg/cluster → pkg/docker   → pkg/cmdexec
                        → pkg/slurm   → pkg/docker
                                      → pkg/config
                        → pkg/ssh     → pkg/docker
+                       → pkg/state   → pkg/docker
+                                     → pkg/log
          → pkg/nodeset
-         → pkg/state   (→ pkg/log)
+         → pkg/state
 ```
 
 The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration). `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.

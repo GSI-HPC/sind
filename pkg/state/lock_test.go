@@ -44,7 +44,7 @@ func TestLockRealm(t *testing.T) {
 		go func() {
 			unlock2, err := LockRealm(context.Background(), "contention", &LockOptions{
 				Dir:    dir,
-				OnWait: func() { waited.Add(1) },
+				OnWait: func(h *LockHolder) { assert.Nil(t, h, "the file lock has no known holder"); waited.Add(1) },
 			})
 			assert.NoError(t, err)
 			close(acquired)
@@ -160,7 +160,7 @@ func TestLockRealm_Errors(t *testing.T) {
 	t.Run("blocking flock fails", func(t *testing.T) {
 		_, err := LockRealm(t.Context(), "ci-42", &LockOptions{
 			Dir:    t.TempDir(),
-			OnWait: func() {},
+			OnWait: func(*LockHolder) {},
 			flock: func(_ int, how int) error {
 				if how&unix.LOCK_NB != 0 {
 					return unix.EWOULDBLOCK
