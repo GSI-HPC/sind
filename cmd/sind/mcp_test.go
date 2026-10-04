@@ -439,6 +439,35 @@ func TestMCPStream_ListenError(t *testing.T) {
 	require.ErrorContains(t, err, "address already in use")
 }
 
+// TestMCPStream_ListenErrorKeepsToken checks that a stream that cannot
+// have its port leaves the token file of the stream that has it alone.
+func TestMCPStream_ListenErrorKeepsToken(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv(mcpTokenEnv, "")
+	tokenPath := filepath.Join(stateHome, "sind", mcpTokenFile)
+	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0o700))
+	require.NoError(t, os.WriteFile(tokenPath, []byte("running-stream-token\n"), 0o600))
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+
+	_, _, err = executeCommand("mcp", "stream", "--port", port)
+	require.ErrorContains(t, err, "address already in use")
+	got, err := os.ReadFile(tokenPath)
+	require.NoError(t, err)
+	assert.Equal(t, "running-stream-token\n", string(got))
+}
+
+// TestMCPStream_TokenError checks that a token that cannot be made fails
+// the stream after it has its port, and frees the port.
+func TestMCPStream_TokenError(t *testing.T) {
+	t.Setenv(mcpTokenEnv, "bad token")
+	_, _, err := executeCommand("mcp", "stream", "--port", "0")
+	require.ErrorContains(t, err, "a token is printable ASCII without spaces")
+}
+
 func TestMCPStreamToken(t *testing.T) {
 	t.Run("invalid env", func(t *testing.T) {
 		for _, token := range []string{"two words", "tab\there", "nl\n", "ümlaut"} {
