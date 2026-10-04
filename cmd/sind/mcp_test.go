@@ -21,6 +21,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -528,4 +529,27 @@ func TestMCPStreamToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, entries, 1, "the temporary file is removed")
 	})
+}
+
+// TestWithMCPRealm checks that a server command hands the root's --realm
+// to the sind processes of its tool calls through SIND_REALM.
+func TestWithMCPRealm(t *testing.T) {
+	t.Setenv("SIND_REALM", "env")
+	root := &cobra.Command{Use: "sind"}
+	root.PersistentFlags().String("realm", "", "")
+	var got string
+	server := &cobra.Command{Use: "start", RunE: func(*cobra.Command, []string) error {
+		got = os.Getenv("SIND_REALM")
+		return nil
+	}}
+	root.AddCommand(server)
+	withMCPRealm(server)
+
+	root.SetArgs([]string{"start"})
+	require.NoError(t, root.Execute())
+	assert.Equal(t, "env", got, "without --realm, SIND_REALM stays")
+
+	root.SetArgs([]string{"--realm", "ci", "start"})
+	require.NoError(t, root.Execute())
+	assert.Equal(t, "ci", got)
 }
