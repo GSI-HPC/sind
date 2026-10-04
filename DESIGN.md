@@ -357,7 +357,7 @@ sind get ssh-config
 sind get ssh-private-key
 sind get ssh-public-key
 sind get ssh-known-hosts
-sind get auth-key [CLUSTER]
+sind get auth-key [CLUSTER] [--type munge|slurm|jwt]
 ```
 
 All `get` subcommands accept `--output|-o {human,json}`. The default is `human` (tabular text); `json` emits a machine-readable document.
@@ -620,7 +620,7 @@ sind logs api slurmrestd               # slurmrestd journal logs on the api node
 sind version [--json]                  # print version information
 sind doctor [-o json]                  # check host prerequisites
 sind get realms                        # list active realms
-sind get auth-key [CLUSTER]            # output the Slurm authentication key (base64)
+sind get auth-key [CLUSTER] [--type T] # output a Slurm authentication key (base64)
 sind get ssh-config                    # show SSH config path for Include
 sind get mesh                          # show mesh infrastructure info
 sind get dns                           # list mesh DNS records
@@ -631,7 +631,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
-`sind get auth-key` outputs the key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external management tooling: the munge key, or `slurm.key` with identity `clientIds`. `-o json` returns `{"type": "munge"|"slurm", "key": "<base64>"}`. It replaces `sind get munge-key`.
+`sind get auth-key` outputs a key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external management tooling. `--type` names the Slurm authentication plugin whose key it prints: `munge` (the munge key), `slurm` (`slurm.key`, identity `clientIds`) or `jwt` (`jwt_hs256.key`, which signs the REST API tokens of a cluster with a managed api node; see API Node). Without `--type` it prints the key of the cluster's `AuthType`: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not use fails with an error that says why, e.g. `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`; any other value is a usage error. `-o json` returns `{"type": "munge"|"slurm"|"jwt", "key": "<base64>"}`. It replaces `sind get munge-key`. The library takes the type as `cluster.GetAuthKey`'s last argument, empty for the `AuthType`'s key.
 
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
@@ -1150,7 +1150,7 @@ nodes: [controller, db, api, worker: 2]
 - slurmrestd unshares its System V IPC namespace and its file descriptor table when it starts, and exits when it cannot: a container denies `unshare`, as Docker's default seccomp profile allows it only with `CAP_SYS_ADMIN`. sind therefore adds the drop-in `/etc/systemd/system/slurmrestd.service.d/sind.conf` with `Environment=SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files` and reloads systemd, in the setup step after the check. This isolates no less: the container has an IPC namespace of its own, and systemd starts slurmrestd with a file descriptor table of its own.
 - **JWT:** sind writes `jwt_hs256.key`, 32 random bytes as Slurm's JWT guide creates it, to the config volume, owned by `slurm` with mode `0600` (slurmctld refuses a key that others can read). `slurm.conf`, and `slurmdbd.conf` with a managed db node, get `AuthAltTypes=auth/jwt` and `AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key`, with identity `clientIds` followed by `,use_jwt_client_ids`, each unless `slurm.main` (or `slurm.slurmdbd`) sets it. An `AuthAltTypes` there must list `auth/jwt`; an `AuthAltParameters` there is taken as written, e.g. to test a JWKS setup (`jwks=…`), and then sind's key is unused. slurmdbd has no default key path, so a `slurm.slurmdbd` that sets `AuthAltParameters` without `jwt_key=` or `jwks=` keeps slurmdbd from starting.
 - **Two checks per request:** slurmrestd holds no key and looks no user up; it passes the caller's token (`X-SLURM-USER-NAME`, `X-SLURM-USER-TOKEN`) on with each RPC. slurmctld (for `/slurm/`) or slurmdbd (for `/slurmdb/`) checks the signature and expiry with the key, the same in every identity mode, and then resolves the user: from the token's identity claims when `use_jwt_client_ids` is set and they are complete, otherwise by looking the name up in its own node's `/etc/passwd`.
-- **Tokens:** `scontrol token username=USER [lifespan=SECONDS]`, run as root (`sind exec`), prints `SLURM_JWT=<token>`; such a token carries only the user name (`sun`). A token signed with the key (HS256) can also carry the identity: `uid`, `gid` and `id` with `name` (equal to `sun`), a non-empty `gecos`, `dir`, `shell` and `gids` or `groups`. Whoever holds the key can sign a token for any user, root included.
+- **Tokens:** `scontrol token username=USER [lifespan=SECONDS]`, run as root (`sind exec`), prints `SLURM_JWT=<token>`; such a token carries only the user name (`sun`). `sind get auth-key --type jwt` exports the key, so that tooling can sign tokens of its own (HS256), with any lifespan, also while slurmctld is down. Such a token can also carry the identity: `uid`, `gid` and `id` with `name` (equal to `sun`), a non-empty `gecos`, `dir`, `shell` and `gids` or `groups`. Whoever holds the key can sign a token for any user, root included.
 - **Identity modes:** in `local` and `nssSlurm` the controller and the db node have the users, so tokens from `scontrol token` work for every user. In `clientIds` they don't: root's tokens work everywhere, a user's only with identity claims, or with `controllerUsers: true` for the `/slurm/` endpoints. This is why sind sets `use_jwt_client_ids` there, the JWT counterpart of sackd's tokens.
 - `sind get cluster` and `sind get node` list slurmrestd on a managed api node, and `sind get clusters` counts it in `NODES (S/C/D/A/W)`.
 - `managed: false` on the api node of a managed cluster makes it a bare node, labelled `sind.managed=false`, for testing your own slurmrestd provisioning: sind starts no slurmrestd and sets up no JWT. In an unmanaged cluster the api node is a bare node like the others.

@@ -97,7 +97,7 @@ Only generated with identity `clientIds`: 1024 random bytes, owned by `slurm` wi
 
 ## jwt_hs256.key
 
-Only generated with a managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}): 32 random bytes, owned by `slurm` with mode `0600`, the HS256 key with which slurmctld and slurmdbd check the tokens of REST API requests (`auth/jwt`). slurmrestd itself does not read it. Whoever has the key can sign a token for any user, root included.
+Only generated with a managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}): 32 random bytes, owned by `slurm` with mode `0600`, the HS256 key with which slurmctld and slurmdbd check the tokens of REST API requests (`auth/jwt`). slurmrestd itself does not read it. `sind get auth-key --type jwt` prints it. Whoever has the key can sign a token for any user, root included.
 
 ## sind-nodes.conf
 

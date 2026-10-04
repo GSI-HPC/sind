@@ -100,20 +100,20 @@ With `clientIds`, only the login node has the users, and slurmctld and slurmdbd 
 
 ## Sign your own tokens
 
-A token is an HS256 JSON Web Token signed with the cluster's key. Read the key as root, base64-encoded:
+A token is an HS256 JSON Web Token signed with the cluster's key, which `sind get auth-key` exports, base64-encoded:
 
 ```bash
-sind exec -- base64 -w0 /etc/slurm/jwt_hs256.key
+sind get auth-key --type jwt
 ```
 
-Then sign tokens with any JWT library, for example PyJWT:
+With the key, tooling can sign tokens without asking slurmctld: for any user, with any lifespan, and with the user's identity. Any JWT library does, for example PyJWT:
 
 ```python
 import base64, subprocess, time
 import jwt  # pip install pyjwt
 
 key = base64.b64decode(subprocess.check_output(
-    ["sind", "exec", "--", "base64", "-w0", "/etc/slurm/jwt_hs256.key"]))
+    ["sind", "get", "auth-key", "--type", "jwt"]))
 now = int(time.time())
 token = jwt.encode({
     "sun": "alice", "iat": now, "exp": now + 3600,
@@ -127,4 +127,4 @@ token = jwt.encode({
 - `sun` is the user name, and `exp` when the token expires.
 - The identity needs `uid`, `gid` and `id` with `name`, which must equal `sun`, a non-empty `gecos`, `dir`, `shell`, and either `gids` (a list of group IDs) or `groups` (group names mapped to IDs). An incomplete identity is ignored.
 
-Whoever holds the key can sign a token for any user, root included, so treat it like root's password. To test your own token setup instead, such as a JWKS file of an identity provider, set `AuthAltParameters` in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}): sind then writes no value of its own, and its key goes unused.
+Whoever holds the key can sign a token for any user, root included, so treat it like root's password. The [MCP server]({{< relref "/guides/mcp" >}}) leaves `sind get auth-key` out of its tools. To test your own token setup instead, such as a JWKS file of an identity provider, set `AuthAltParameters` in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}): sind then writes no value of its own, and its key goes unused.

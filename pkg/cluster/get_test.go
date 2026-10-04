@@ -830,7 +830,7 @@ func TestGetAuthKey(t *testing.T) {
 	m.AddResult(testutil.TarArchive("munge.key", keyData), "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, &AuthKey{Type: AuthMunge, Key: []byte(keyData)}, key)
@@ -843,7 +843,7 @@ func TestGetAuthKey_NoContainers(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no containers found")
@@ -854,7 +854,7 @@ func TestGetAuthKey_ListError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -869,7 +869,7 @@ func TestGetAuthKey_CopyError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("cp failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading munge key")
