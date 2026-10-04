@@ -543,6 +543,7 @@ func TestEnsureMeshNetwork_SubnetTaken(t *testing.T) {
 	for _, msg := range []string{
 		"invalid pool request: Pool overlaps with other one on this address space",
 		"cannot create network 0123 (br-0123): conflicts with network 4567 (br-4567): networks have overlapping IPv4",
+		"failed to allocate gateway (10.0.0.1): Address already in use",
 	} {
 		t.Run(msg, func(t *testing.T) {
 			f, c, m := newFakeDocker(t)

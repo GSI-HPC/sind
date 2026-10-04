@@ -508,12 +508,16 @@ func isAlreadyExists(err error) bool {
 
 // isSubnetTaken reports whether err is Docker's error for a configured
 // subnet that overlaps another network's. With an --ip-range, Docker's
-// address allocator does not check the subnet for overlaps (moby#46756),
-// but the bridge driver refuses one that overlaps another bridge network.
+// address allocator does not check the subnet for overlaps (moby#46756): it
+// shares the subnet of a network that has it already, and then fails to
+// allocate the gateway that network holds ("failed to allocate gateway
+// (172.18.0.1): Address already in use"). With another gateway, the bridge
+// driver refuses a subnet that overlaps another bridge network.
 func isSubnetTaken(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "Pool overlaps with other one on this address space") ||
-		strings.Contains(msg, "networks have overlapping IPv4")
+		strings.Contains(msg, "networks have overlapping IPv4") ||
+		strings.Contains(msg, "failed to allocate gateway") && strings.Contains(msg, "Address already in use")
 }
 
 // ensureDNS creates the mesh DNS container if it does not exist yet, or
