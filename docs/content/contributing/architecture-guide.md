@@ -61,7 +61,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
-  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNotReady), rollback bound
+  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNetworkFull), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state

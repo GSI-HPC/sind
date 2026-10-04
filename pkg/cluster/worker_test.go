@@ -286,6 +286,31 @@ func TestWorkerAdd_ListContainersError(t *testing.T) {
 	assert.Contains(t, err.Error(), "listing containers")
 }
 
+// TestWorkerAdd_MeshFull covers workers that do not fit on the realm's
+// mesh: WorkerAdd refuses them before it starts the mesh or creates any.
+func TestWorkerAdd_MeshFull(t *testing.T) {
+	full := testutil.NDJSON(onNetworks("sind-mesh", docker.MaxBridgeEndpoints-1, "sind-dns", "sind-ssh")...)
+	base := workerAddOnCall(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" && slices.Contains(args, "network=sind-mesh") {
+			return mock.Result{Stdout: full}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
+		ClusterName: "dev",
+		Count:       2,
+	}, time.Millisecond)
+
+	require.ErrorIs(t, err, ErrNetworkFull)
+	assert.Contains(t, err.Error(), "network sind-mesh has 1022 containers and would get 2 more")
+	assert.Zero(t, countCalls(m.Calls, "create"))
+	assert.Zero(t, countCalls(m.Calls, "inspect"), "the mesh is not started")
+}
+
 // unmanagedClusterContainers returns the containers of an unmanaged cluster:
 // every node carries sind.managed=false.
 func unmanagedClusterContainers(computes ...string) string {

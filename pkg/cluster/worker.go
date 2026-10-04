@@ -82,7 +82,8 @@ func (o WorkerAddOptions) Check() error {
 // returns.
 //
 // For managed workers (default), the flow is:
-//  1. Validate: options, controller exists, sind-nodes.conf present
+//  1. Validate: options, controller exists, room on the realm's mesh and
+//     the cluster network (see checkBridgePorts), sind-nodes.conf present
 //  2. Inspect the controller and the newest worker, for the cluster's
 //     settings and the new workers' shape
 //  3. Check an explicit image: its Slurm version, its identity support
@@ -129,6 +130,12 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	// reliable for this choice.
 	wantManaged := !opts.Unmanaged && IsManaged(controller.Labels)
 	newest, _ := newestWorker(containers, realm, opts.ClusterName, wantManaged)
+
+	// The mesh and the cluster network must have room for the new workers
+	// before sind starts the mesh or creates any of them.
+	if err := checkBridgePorts(ctx, client, realm, opts.ClusterName, max(opts.Count, 1)); err != nil {
+		return nil, err
+	}
 
 	infra, err := resolveWorkerInfra(ctx, client, meshMgr, controllerName, newest)
 	if err != nil {

@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -85,7 +87,9 @@ func NodeShortNames(nodes []config.Node) []string {
 
 // PreflightCheck verifies that no Docker resources conflict with the cluster
 // that would be created from the given configuration. It checks for existing
-// networks, volumes, and containers with matching names.
+// networks, volumes, and containers with matching names, and that the
+// realm's mesh and the cluster network have room for the nodes
+// (checkBridgePorts).
 //
 // Container existence is checked with a single `docker ps` filtered by the
 // cluster's realm + name labels; this keeps the call count constant regardless
@@ -156,6 +160,10 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		return nil
 	})
 
+	g.Go(func() error {
+		return checkBridgePorts(gctx, client, realm, cfg.Name, len(NodeShortNames(cfg.Nodes)))
+	})
+
 	if err := g.Wait(); err != nil {
 		return err
 	}
@@ -165,5 +173,52 @@ func PreflightCheck(ctx context.Context, client *docker.Client, realm string, cf
 		return errorWith(ErrClusterExists, "conflicting resources already exist: %s", strings.Join(conflicts, ", "))
 	}
 
+	return nil
+}
+
+// checkBridgePorts refuses to add nodes to a cluster when the realm's mesh
+// or the cluster network would then hold more containers than a Docker
+// bridge network can (docker.MaxBridgeEndpoints), before any of them
+// exists: Docker would only refuse a container past the limit when it
+// connects it ("exchange full"), after the others were created. The mesh
+// holds the DNS container, the SSH relay and every node of the realm, and a
+// cluster network the cluster's nodes and the relay. One docker ps lists the
+// containers connected to either network, also the stopped ones, which take
+// a bridge port again when they start. To them come the nodes, and the DNS
+// container and the relay where the network lacks them, as when this
+// create makes the mesh or the cluster network.
+func checkBridgePorts(ctx context.Context, client *docker.Client, realm, clusterName string, nodes int) error {
+	meshMgr := mesh.NewManager(nil, realm)
+	networks := []struct {
+		name  docker.NetworkName
+		needs []docker.ContainerName // the containers the network has to hold besides the nodes
+		hint  string
+	}{
+		{meshMgr.NetworkName(), []docker.ContainerName{meshMgr.DNSContainerName(), meshMgr.SSHContainerName()},
+			"the realm's mesh holds the nodes of all its clusters, while another realm (--realm) has a mesh of its own"},
+		{NetworkName(realm, clusterName), []docker.ContainerName{meshMgr.SSHContainerName()},
+			"the cluster network holds the cluster's nodes and the SSH relay"},
+	}
+	entries, err := client.ListContainers(ctx,
+		"network="+string(networks[0].name), "network="+string(networks[1].name))
+	if err != nil {
+		return fmt.Errorf("listing the containers of %s and %s: %w", networks[0].name, networks[1].name, err)
+	}
+	for _, n := range networks {
+		count, adds := 0, nodes+len(n.needs)
+		for _, e := range entries {
+			if !slices.Contains(e.Networks, n.name) {
+				continue
+			}
+			count++
+			if slices.Contains(n.needs, e.Name) {
+				adds--
+			}
+		}
+		if count+adds > docker.MaxBridgeEndpoints {
+			return errorWith(ErrNetworkFull, "network %s has %d containers and would get %d more, but a Docker bridge network holds at most %d (a Linux bridge has 1,024 ports): %s",
+				n.name, count, adds, docker.MaxBridgeEndpoints, n.hint)
+		}
+	}
 	return nil
 }

@@ -804,14 +804,15 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 
 	require.Error(t, err)
 	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
-	// deleteClusterResources. Preflight also calls ps once, hence 3 total.
+	// deleteClusterResources. Preflight calls ps twice, for conflicts and
+	// bridge ports, hence 4 total.
 	var psCalls int
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
 			psCalls++
 		}
 	}
-	assert.Equal(t, 3, psCalls, "preflight + diagnostics + deletion each call ListContainers")
+	assert.Equal(t, 4, psCalls, "preflight (2) + diagnostics + deletion each call ListContainers")
 }
 
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {

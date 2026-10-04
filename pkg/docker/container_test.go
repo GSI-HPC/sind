@@ -645,6 +645,70 @@ func TestListContainers_NoLabels(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Nil(t, entries[0].Labels)
+	assert.Nil(t, entries[0].Networks)
+}
+
+func TestListContainers_Networks(t *testing.T) {
+	const psNetworks = `{"ID":"a","Names":"sind-dev-controller","State":"exited","Image":"img","Networks":"sind-dev-net,sind-mesh"}` + "\n" +
+		`{"ID":"b","Names":"sind-dns","State":"running","Image":"img","Networks":"sind-mesh"}`
+	var m mock.Executor
+	m.AddResult(psNetworks, "", nil)
+	c := NewClient(&m)
+
+	entries, err := c.ListContainers(t.Context(), "network=sind-mesh", "network=sind-dev-net")
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, []NetworkName{"sind-dev-net", "sind-mesh"}, entries[0].Networks)
+	assert.Equal(t, []NetworkName{"sind-mesh"}, entries[1].Networks)
+	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "network=sind-mesh", "--filter", "network=sind-dev-net"}, m.Calls[0].Args)
+}
+
+// TestListContainersOnNetwork checks against docker that a network filter
+// lists the containers connected to the network, also a stopped one, with
+// the network among their Networks.
+func TestListContainersOnNetwork(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	network := itNetworkName("list")
+	name := itContainerName("list")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("net-id\n", "", nil)        // network create
+		rec.AddResult("cid\n", "", nil)           // run
+		rec.AddResult(string(name)+"\n", "", nil) // stop
+		rec.AddResult(`{"ID":"cid","Names":"`+string(name)+`","State":"exited","Image":"busybox:latest","Networks":"`+string(network)+`"}`+"\n", "", nil)
+		rec.AddResult("", "", nil)                // ps for another network
+		rec.AddResult(string(name)+"\n", "", nil) // rm (cleanup)
+		rec.AddResult("", "", nil)                // network rm (cleanup)
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_ = c.RemoveContainer(cleanupCtx, name)
+		_ = c.RemoveNetwork(cleanupCtx, network)
+	})
+
+	_, err := c.CreateNetwork(ctx, network, nil)
+	require.NoError(t, err)
+	// docker stop returns once the container has exited, which SIGKILL
+	// makes at once.
+	_, err = c.RunContainer(ctx, "--name", string(name), "--network", string(network), "--stop-signal", "KILL",
+		"busybox:latest", "sleep", "60")
+	require.NoError(t, err)
+	require.NoError(t, c.StopContainer(ctx, name))
+
+	entries, err := c.ListContainers(ctx, "network="+string(network))
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, name, entries[0].Name)
+	assert.Equal(t, StateExited, entries[0].State)
+	assert.Equal(t, []NetworkName{network}, entries[0].Networks)
+
+	entries, err = c.ListContainers(ctx, "network="+string(itNetworkName("list-none")))
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
 // TestListContainers_LabelValueWithComma pins down the limit parseLabels

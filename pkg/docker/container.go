@@ -248,26 +248,32 @@ func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) 
 	return infos, nil
 }
 
-// ContainerListEntry holds summary information from docker ps.
+// ContainerListEntry holds summary information from docker ps. Networks are
+// the networks the container is connected to, also while it is stopped.
 type ContainerListEntry struct {
-	ID     ContainerID
-	Name   ContainerName
-	State  ContainerState
-	Image  string
-	Labels Labels
+	ID       ContainerID
+	Name     ContainerName
+	State    ContainerState
+	Image    string
+	Labels   Labels
+	Networks []NetworkName
 }
 
 // psEntry maps the docker ps --format json output.
 type psEntry struct {
-	ID     string `json:"ID"`
-	Names  string `json:"Names"`
-	State  string `json:"State"`
-	Image  string `json:"Image"`
-	Labels string `json:"Labels"`
+	ID       string `json:"ID"`
+	Names    string `json:"Names"`
+	State    string `json:"State"`
+	Image    string `json:"Image"`
+	Labels   string `json:"Labels"`
+	Networks string `json:"Networks"`
 }
 
-// ListContainers returns containers matching the given filters.
-// Each filter is passed as a --filter flag to docker ps (e.g. "label=sind.cluster").
+// ListContainers returns containers matching the given filters, running or
+// not. Each filter is passed as a --filter flag to docker ps (e.g.
+// "label=sind.cluster"); docker ps keeps a container that matches every
+// filter key, and any of the values a key is given more than once with
+// ("network=a", "network=b").
 func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]ContainerListEntry, error) {
 	args := []string{"ps", "-a", "--no-trunc", "--format", "json"}
 	for _, f := range filters {
@@ -287,13 +293,21 @@ func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]Conta
 		if err := json.Unmarshal([]byte(line), &p); err != nil {
 			return nil, fmt.Errorf("parsing ps output: %w", err)
 		}
-		entries = append(entries, ContainerListEntry{
+		entry := ContainerListEntry{
 			ID:     ContainerID(p.ID),
 			Name:   ContainerName(p.Names),
 			State:  ContainerState(p.State),
 			Image:  p.Image,
 			Labels: parseLabels(p.Labels),
-		})
+		}
+		// docker joins the network names with commas; sind's own names
+		// have none.
+		if p.Networks != "" {
+			for n := range strings.SplitSeq(p.Networks, ",") {
+				entry.Networks = append(entry.Networks, NetworkName(n))
+			}
+		}
+		entries = append(entries, entry)
 	}
 	return entries, nil
 }
