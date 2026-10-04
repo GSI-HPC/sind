@@ -83,6 +83,10 @@ func TestGetClusters_Output(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=db,sind.slurm.version=25.11.0",
 		},
 		testutil.PsEntry{
+			ID: "d", Names: "sind-dev-api", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=api,sind.slurm.version=25.11.0",
+		},
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
@@ -92,8 +96,8 @@ func TestGetClusters_Output(t *testing.T) {
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	require.Len(t, lines, 2)
-	assert.Equal(t, []string{"NAME", "NODES", "(S/C/D/W)", "SLURM", "STATUS"}, strings.Fields(lines[0]))
-	assert.Equal(t, []string{"dev", "3", "(0/1/1/1)", "25.11.0", "running"}, strings.Fields(lines[1]))
+	assert.Equal(t, []string{"NAME", "NODES", "(S/C/D/A/W)", "SLURM", "STATUS"}, strings.Fields(lines[0]))
+	assert.Equal(t, []string{"dev", "4", "(0/1/1/1/1)", "25.11.0", "running"}, strings.Fields(lines[1]))
 	assert.Contains(t, stdout, "NAME")
 	assert.Contains(t, stdout, "dev")
 	assert.Contains(t, stdout, "25.11.0")
@@ -113,7 +117,7 @@ func TestGetClusters_UnknownSlurmVersion(t *testing.T) {
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	require.Len(t, lines, 2)
-	assert.Equal(t, []string{"dev", "1", "(0/1/0/0)", "-", "running"}, strings.Fields(lines[1]))
+	assert.Equal(t, []string{"dev", "1", "(0/1/0/0/0)", "-", "running"}, strings.Fields(lines[1]))
 }
 
 // TestGetClusters_EscapesLabels checks that a label holding a terminal

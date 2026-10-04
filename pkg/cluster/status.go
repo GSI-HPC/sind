@@ -270,7 +270,7 @@ func dataMount(containers []*docker.ContainerInfo) (MountPoint, bool) {
 // NodeStatus combines node identity with health information.
 type NodeStatus struct {
 	Name    string      `json:"name"`    // DNS-style name: "controller.dev"
-	Role    config.Role `json:"role"`    // "controller", "db", "submitter", "worker"
+	Role    config.Role `json:"role"`    // "controller", "db", "api", "submitter", "worker"
 	Managed bool        `json:"managed"` // sind manages Slurm on the node (see IsManaged)
 	Health  *NodeHealth `json:"health"`  //nolint:revive // nested health is intentional
 }
@@ -406,7 +406,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	}, nil
 }
 
-// nodeStatusOrder returns a sort key for NodeStatus (controller, db,
+// nodeStatusOrder returns a sort key for NodeStatus (controller, db, api,
 // submitter, worker) with natural ordering of any numeric suffixes in the node name.
 // The key uses the short name, so "controller" sorts before
 // "controller-backup" ("-" < "." would otherwise put "controller-backup.dev"

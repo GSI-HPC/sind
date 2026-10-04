@@ -606,6 +606,60 @@ func TestNodeRunConfigs_WithDB(t *testing.T) {
 	assert.False(t, db.SharedState)
 }
 
+func TestNodeRunConfigs_WithAPI(t *testing.T) {
+	cfg := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleAPI, Image: "img:1", CPUs: 2, Memory: "1g", TmpSize: "1g"},
+			{Role: config.RoleWorker},
+		},
+	}
+
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "26.05.4", "")
+
+	require.Len(t, configs, 3)
+	api := configs[1]
+	assert.Equal(t, "api", api.ShortName)
+	assert.Equal(t, config.RoleAPI, api.Role)
+	assert.Equal(t, "img:1", api.Image)
+	assert.Equal(t, 2, api.CPUs)
+	assert.Equal(t, "26.05.4", api.SlurmVersion)
+	assert.Equal(t, 1, api.ContainerNumber)
+	assert.True(t, api.Managed, "api of a managed cluster")
+	assert.False(t, api.SharedState)
+	assert.Empty(t, api.StoragePass)
+}
+
+func TestNodeRunConfigs_UnmanagedAPI(t *testing.T) {
+	inManaged := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController},
+			{Role: config.RoleAPI, Managed: testutil.Ptr(false)},
+			{Role: config.RoleWorker},
+		},
+	}
+	configs := NodeRunConfigs(inManaged, mesh.DefaultRealm, "", "26.05.4", "")
+	require.Len(t, configs, 3)
+	assert.True(t, configs[0].Managed, "controller")
+	assert.Equal(t, "api", configs[1].ShortName)
+	assert.False(t, configs[1].Managed, "api with managed: false")
+	assert.True(t, configs[2].Managed, "worker")
+
+	inUnmanaged := &config.Cluster{
+		Name: "dev",
+		Nodes: []config.Node{
+			{Role: config.RoleController, Managed: testutil.Ptr(false)},
+			{Role: config.RoleAPI},
+			{Role: config.RoleWorker},
+		},
+	}
+	configs = NodeRunConfigs(inUnmanaged, mesh.DefaultRealm, "", "", "")
+	require.Len(t, configs, 3)
+	assert.False(t, configs[1].Managed, "bare api node in an unmanaged cluster")
+}
+
 func TestNodeRunConfigs_UnmanagedDBInManagedCluster(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",

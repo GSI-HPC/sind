@@ -66,7 +66,7 @@ func TestGenerateSSHConfig_DefaultRealm(t *testing.T) {
 	config := GenerateSSHConfig(docker.ContainerName("sind-ssh"), "/home/user/.sind", "sind",
 		[]string{"controller.default.sind.sind", "worker-0.dev.sind.sind"})
 
-	assert.Equal(t, `Host controller controller.* controller-backup controller-backup.* db db.* submitter submitter.* worker-*
+	assert.Equal(t, `Host controller controller.* controller-backup controller-backup.* db db.* api api.* submitter submitter.* worker-*
     CanonicalizeHostname yes
     CanonicalDomains default.sind.sind sind.sind
 

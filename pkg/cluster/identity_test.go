@@ -189,6 +189,33 @@ func TestNodeRunConfigs_ClientIDsWithoutSubmitter(t *testing.T) {
 	assert.Equal(t, map[string]bool{"controller": true, "controller-backup": true, "worker-0": false}, users)
 }
 
+func TestNodeRunConfigs_APIUsers(t *testing.T) {
+	// The api node gets the users like any node that is neither a worker
+	// nor a controller: slurmrestd itself needs none.
+	tests := []struct {
+		mode    config.IdentityMode
+		managed *bool
+		want    bool
+	}{
+		{config.IdentityLocal, nil, true},
+		{config.IdentityNSSSlurm, nil, true},
+		{config.IdentityClientIDs, nil, false},
+		{config.IdentityClientIDs, testutil.Ptr(false), true},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s/managed=%v", tt.mode, tt.managed), func(t *testing.T) {
+			cfg := usersCfg()
+			cfg.Identity = config.Identity{Mode: tt.mode}
+			cfg.Nodes = []config.Node{{Role: config.RoleController}, {Role: config.RoleAPI, Managed: tt.managed}, {Role: config.RoleSubmitter}, {Role: config.RoleWorker}}
+
+			users, nss := placement(NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", ""))
+
+			assert.Equal(t, tt.want, users["api"])
+			assert.False(t, nss["api"])
+		})
+	}
+}
+
 // Labels of sind-node images from before and since identity modes.
 const (
 	oldSindNodeLabels     = `{"org.opencontainers.image.title":"sind-node","sind.slurm.version":"25.11.8"}`
