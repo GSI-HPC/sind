@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -434,6 +436,75 @@ func TestCheckDaemon_InfoError(t *testing.T) {
 	m.AddResult("", "Cannot connect to the Docker daemon\n", testutil.ExitCode1(t))
 	err := CheckDaemon(t.Context(), docker.NewClient(&m))
 	require.ErrorContains(t, err, "querying the Docker daemon: exit status 1: Cannot connect to the Docker daemon")
+}
+
+// --- CheckNsdelegate ---
+
+// probeMounts is the mount table that CheckNsdelegate's probe container
+// shows on a cgroup v2 host that mounts cgroup2 with nsdelegate.
+const probeMounts = "overlay / overlay rw,relatime,lowerdir=/l,upperdir=/u,workdir=/w 0 0\n" +
+	"cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n"
+
+// isNsdelegateProbe reports whether args run CheckNsdelegate's probe
+// container.
+func isNsdelegateProbe(args []string) bool {
+	return args[0] == "run" && slices.Contains(args, "/proc/self/mounts")
+}
+
+// TestCheckNsdelegateLifecycle probes a real daemon in integration mode:
+// the CI runners mount cgroup2 with nsdelegate.
+func TestCheckNsdelegateLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	image := os.Getenv("SIND_TEST_IMAGE")
+	if image == "" {
+		image = "ghcr.io/gsi-hpc/sind-node:latest"
+	}
+	if !rec.IsIntegration() {
+		rec.AddResult(probeMounts, "", nil)
+	}
+
+	require.NoError(t, CheckNsdelegate(t.Context(), c, image))
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestCheckNsdelegate(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(probeMounts, "", nil)
+
+	require.NoError(t, CheckNsdelegate(t.Context(), docker.NewClient(&m), "img:1"))
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"run", "--rm", "--network", "none", "--entrypoint", "cat", "img:1", "/proc/self/mounts"}, m.Calls[0].Args)
+}
+
+func TestCheckNsdelegate_Missing(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n", "", nil)
+
+	err := CheckNsdelegate(t.Context(), docker.NewClient(&m), "img:1")
+	require.ErrorIs(t, err, ErrNoNsdelegate)
+	assert.Equal(t, "the Docker host mounts cgroup2 without nsdelegate, which sind requires\n\n"+
+		doctor.NsdelegateRemediation("/sys/fs/cgroup"), err.Error())
+}
+
+func TestCheckNsdelegate_NoCgroup2(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("tmpfs /sys/fs/cgroup tmpfs ro,nosuid,nodev,noexec,mode=755 0 0\n"+
+		"cgroup /sys/fs/cgroup/memory cgroup ro,nosuid,nodev,noexec,relatime,memory 0 0\n", "", nil)
+
+	err := CheckNsdelegate(t.Context(), docker.NewClient(&m), "img:1")
+	require.ErrorIs(t, err, ErrCgroupV1)
+	assert.Contains(t, err.Error(), "a container of img:1 has no cgroup2 at /sys/fs/cgroup")
+}
+
+func TestCheckNsdelegate_ProbeError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "docker: Error response from daemon: pull access denied for img\n", fmt.Errorf("exit status 125"))
+
+	err := CheckNsdelegate(t.Context(), docker.NewClient(&m), "img:1")
+	require.ErrorContains(t, err, "checking the Docker host for nsdelegate: reading the mount table in a container of img:1: exit status 125")
+	assert.NotErrorIs(t, err, ErrNoNsdelegate)
 }
 
 // --- helpers ---

@@ -166,8 +166,9 @@ type nodeResult struct {
 // rolls back and returns an error that wraps ErrNotReady.
 //
 //	┌ PreflightCheck → createResources ─────────────────┐
-//	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┼→ setupNodes
-//	├ DetectCVMFS (storage.cvmfs only) ─────────────────┤
+//	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┤
+//	├ DetectCVMFS (storage.cvmfs only) ─────────────────┼→ setupNodes
+//	├ CheckNsdelegate ──────────────────────────────────┤
 //	└ pullImages (cfg.Pull only) ───────────────────────┘
 //	                        │
 //	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only)
@@ -176,7 +177,9 @@ type nodeResult struct {
 //
 // With cfg.Pull, each distinct image is pulled once, concurrently, and the
 // steps that run one (the helpers of createResources, the Slurm version,
-// DetectCVMFS) wait for the pull; nothing is created with --pull always.
+// DetectCVMFS, CheckNsdelegate) wait for the pull; nothing is created with
+// --pull always. A failed check rolls back what the other branches have
+// created by then; no node container exists yet.
 //
 // An unmanaged cluster (managed: false on the controller) gets the same
 // containers, volumes and munge key, but sind writes no Slurm configuration,
@@ -292,6 +295,19 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return nil
 		})
 	}
+
+	// Branch D: nsdelegate on the Docker host's kernel, in a throwaway
+	// container of the controller's image, before any node container.
+	prepGroup.Go(func() error {
+		if err := pull.wait(prepCtx); err != nil {
+			return err
+		}
+		if err := CheckNsdelegate(prepCtx, client, controllerImage(cfg)); err != nil {
+			return err
+		}
+		log.DebugContext(prepCtx, "nsdelegate check passed")
+		return nil
+	})
 
 	if err := prepGroup.Wait(); err != nil {
 		return nil, err

@@ -172,6 +172,9 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 		if args[0] == "exec" && args[1] == "sind-ssh" && len(args) > 2 && args[2] == "cat" {
 			return mock.Result{Stdout: "ssh-ed25519 AAAA-test-key\n"}
 		}
+		if isNsdelegateProbe(args) {
+			return mock.Result{Stdout: probeMounts}
+		}
 		if args[0] == "run" && args[1] == "--rm" {
 			return mock.Result{Stdout: "slurm 25.11.0\n"}
 		}
@@ -519,7 +522,7 @@ func TestCreate_CVMFS(t *testing.T) {
 			mounted := map[string]bool{}
 			for _, c := range m.Calls {
 				a := c.Args
-				if a[0] == "run" && slices.Contains(a, "--entrypoint") {
+				if a[0] == "run" && slices.Contains(a, "--entrypoint") && !isNsdelegateProbe(a) {
 					probed = true
 				}
 				if a[0] == "create" && slices.Contains(a, "--hostname") {
@@ -542,7 +545,7 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 		if args[0] == "plugin" {
 			return mock.Result{}, true
 		}
-		if args[0] == "run" && slices.Contains(args, "--entrypoint") {
+		if args[0] == "run" && slices.Contains(args, "--entrypoint") && !isNsdelegateProbe(args) {
 			return mock.Result{Stderr: "bind source path does not exist: /cvmfs", Err: fmt.Errorf("exit status 125")}, true
 		}
 		return mock.Result{}, false
@@ -560,6 +563,36 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 	for _, c := range m.Calls {
 		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
 	}
+}
+
+func TestCreate_NoNsdelegate(t *testing.T) {
+	// A Docker host without nsdelegate fails creation before any node
+	// container, with the commands that enable it, and the rollback
+	// removes what the other preparation branches created.
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if isNsdelegateProbe(args) {
+			return mock.Result{Stdout: "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	cluster, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+
+	require.ErrorIs(t, err, ErrNoNsdelegate)
+	assert.Contains(t, err.Error(), "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
+	assert.Nil(t, cluster)
+	var probes [][]string
+	for _, c := range m.Calls {
+		assert.False(t, c.Args[0] == "create" && slices.Contains(c.Args, "--hostname"), "no node container: %v", c.Args)
+		if isNsdelegateProbe(c.Args) {
+			probes = append(probes, c.Args)
+		}
+	}
+	assert.Equal(t, [][]string{{"run", "--rm", "--network", "none", "--entrypoint", "cat", "img:1", "/proc/self/mounts"}}, probes,
+		"one probe, of the controller's image")
 }
 
 func TestCreate_NoCVMFS(t *testing.T) {
@@ -580,7 +613,7 @@ func TestCreate_NoCVMFS(t *testing.T) {
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "plugin", c.Args[0])
-		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "--entrypoint"), "no probe: %v", c.Args)
+		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "--entrypoint") && !isNsdelegateProbe(c.Args), "no CVMFS probe: %v", c.Args)
 		assert.Empty(t, testutil.ArgValues(c.Args, "--mount"))
 	}
 }
@@ -1266,7 +1299,7 @@ func TestCreate_UnmanagedCluster(t *testing.T) {
 		args := c.Args
 		joined := strings.Join(args, " ")
 		switch {
-		case args[0] == "run" && args[1] == "--rm":
+		case args[0] == "run" && args[1] == "--rm" && !isNsdelegateProbe(args):
 			assert.Failf(t, "Slurm version discovered", "%v", args)
 		case args[0] == "volume" && args[1] == "create":
 			volumes = append(volumes, args[len(args)-1])

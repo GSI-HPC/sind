@@ -415,6 +415,10 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 		case args[0] == "create":
 			return mock.Result{Stdout: "new-cid\n"}
 
+		// CheckNsdelegate's probe
+		case isNsdelegateProbe(args):
+			return mock.Result{Stdout: probeMounts}
+
 		// slurmctld -V in an explicit --image
 		case args[0] == "run" && args[1] == "--rm":
 			return mock.Result{Stdout: "slurm 25.11.0\n"}
@@ -589,7 +593,9 @@ func TestWorkerAdd_UsesNewestWorkerImageID(t *testing.T) {
 	assert.Contains(t, args, testWorkerImageID)
 	assert.NotContains(t, args, "img:1", "not the reference docker ps reports")
 	assert.NotContains(t, args, "--pull")
-	assert.Zero(t, countCalls(m.Calls, "run", "--rm"), "no version check for the cluster's own image")
+	for _, c := range m.Calls {
+		assert.NotContains(t, c.Args, "slurmctld", "no version check for the cluster's own image")
+	}
 }
 
 func TestWorkerAdd_InheritsShape(t *testing.T) {
@@ -1398,6 +1404,32 @@ func TestWorkerAdd_ExplicitImageVersionError(t *testing.T) {
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
+// TestWorkerAdd_NoNsdelegate checks that a Docker host without nsdelegate
+// fails create worker before any container exists, probed with the
+// controller's image by ID, which the daemon has.
+func TestWorkerAdd_NoNsdelegate(t *testing.T) {
+	base := workerAddOnCall(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if isNsdelegateProbe(args) {
+			return mock.Result{Stdout: "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	require.ErrorIs(t, err, ErrNoNsdelegate)
+	assert.Contains(t, err.Error(), "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
+	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "--network", "none", "--entrypoint", "cat", testControllerImageID, "/proc/self/mounts"))
+	assert.Zero(t, countCalls(m.Calls, "create"), "no worker container")
+	assert.Zero(t, countCalls(m.Calls, "rm"), "nothing to roll back")
+	assert.Empty(t, nodesConfWrites(m.Calls))
+}
+
 func TestWorkerAdd_ExplicitImageUnmanaged(t *testing.T) {
 	// Unmanaged workers run no slurmd of sind's: their image is pulled but
 	// not checked.
@@ -1413,7 +1445,9 @@ func TestWorkerAdd_ExplicitImageUnmanaged(t *testing.T) {
 	}, time.Millisecond)
 	require.NoError(t, err)
 
-	assert.Zero(t, countCalls(m.Calls, "run"))
+	for _, c := range m.Calls {
+		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "plain:1"), "no version check: %v", c.Args)
+	}
 	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "plain:1"))
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
@@ -2567,6 +2601,9 @@ func workerLifecycleOnCall(t *testing.T) func([]string, string) mock.Result {
 		case args[0] == "exec" && args[1] == "sind-ssh" && len(args) > 2 && args[2] == "cat":
 			// ReadFile: SSH pubkey
 			return mock.Result{Stdout: "ssh-ed25519 AAAA-test-key\n"}
+
+		case isNsdelegateProbe(args):
+			return mock.Result{Stdout: probeMounts}
 
 		case args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat":
 			// ReadFile: sind-nodes.conf

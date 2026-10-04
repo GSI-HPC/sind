@@ -75,6 +75,8 @@ Before it sets up the mesh or pulls an image, sind asks the Docker daemon whethe
 
 Before creating resources, sind checks for conflicts — containers, networks, or volumes with matching names that already exist. If conflicts are found, creation fails with an error. It also checks that the nodes fit on the realm's mesh and on the cluster network: a Docker bridge network holds at most 1,023 containers, and the mesh holds the nodes of every cluster in the realm (see [Limits]({{< relref "/architecture/networking#limits" >}})).
 
+Before it creates a node container, sind checks that the Docker host mounts cgroup2 with the `nsdelegate` option, in a throwaway container of the controller's image, which shows the option of the kernel the daemon runs on. Without it, creation fails with the commands that enable it, the ones [`sind doctor`]({{< relref "/usage/diagnostics#doctor" >}}) prints, and removes what it has created so far. The check runs alongside the other preparation steps, so it costs no time when it passes.
+
 ## List clusters
 
 ```bash

@@ -86,7 +86,9 @@ func (o WorkerAddOptions) Check() error {
 //     the cluster network (see checkBridgePorts), sind-nodes.conf present
 //  2. Inspect the controller and the newest worker, for the cluster's
 //     settings and the new workers' shape
-//  3. Check an explicit image: its Slurm version, its identity support
+//  3. Check an explicit image: its Slurm version, its identity support;
+//     meanwhile check the Docker host for nsdelegate (CheckNsdelegate) in
+//     a container of the controller's image
 //  4. Create worker container(s)
 //  5. Wait for readiness, inject SSH keys, collect host keys
 //  6. Register DNS + known_hosts, while sind-nodes.conf gets the new nodes,
@@ -141,6 +143,18 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if err != nil {
 		return nil, err
 	}
+
+	// Check nsdelegate on the Docker host's kernel in a throwaway container
+	// of the controller's image, which the daemon has, while the steps up to
+	// the first worker container run. An early return stops the check and
+	// waits for it, so that its docker run does not outlive WorkerAdd.
+	nsdCtx, stopNsd := context.WithCancel(ctx)
+	var nsdelegate errgroup.Group
+	nsdelegate.Go(func() error { return CheckNsdelegate(nsdCtx, client, infra.controller.Image) })
+	defer func() {
+		stopNsd()
+		_ = nsdelegate.Wait()
+	}()
 
 	// The cluster's settings come from the controller's labels as docker
 	// inspect reports them, a map. docker ps joins all labels with commas,
@@ -244,6 +258,10 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}
 	}
 	logExtraPrivileges(ctx, nodeConfigs)
+
+	if err := nsdelegate.Wait(); err != nil {
+		return nil, err
+	}
 
 	// From this point on, worker containers, and their NodeName lines in
 	// sind-nodes.conf, may exist. Clean them up on failure so the user does

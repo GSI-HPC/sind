@@ -4,10 +4,15 @@ package doctor
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,4 +193,71 @@ func TestDockerUnreachable(t *testing.T) {
 			assert.Equal(t, tt.remediation, remediation)
 		})
 	}
+}
+
+// probeImage is the image the probe tests run: the image under test in CI.
+func probeImage() string {
+	if image := os.Getenv("SIND_TEST_IMAGE"); image != "" {
+		return image
+	}
+	return "ghcr.io/gsi-hpc/sind-node:latest"
+}
+
+// TestProbeCgroupInfoLifecycle probes a real daemon in integration mode,
+// which runs on the machine the tests run on: the container shows the
+// nsdelegate option of this machine's own cgroup2 mount, which the CI
+// runners mount with it.
+func TestProbeCgroupInfoLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	wantNsd := true
+	if rec.IsIntegration() {
+		_, _, wantNsd = CgroupInfo(afero.NewOsFs())
+	} else {
+		rec.AddResult("overlay / overlay rw,relatime,lowerdir=/l,upperdir=/u,workdir=/w 0 0\n"+
+			"proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n"+
+			"cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n", "", nil)
+	}
+
+	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), c, probeImage())
+	require.NoError(t, err)
+	assert.Equal(t, CgroupRoot, mountPath)
+	assert.True(t, hasV2)
+	assert.Equal(t, wantNsd, hasNsd, "the probe sees the nsdelegate of this machine's kernel")
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
+func TestProbeCgroupInfo(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n", "", nil)
+
+	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), docker.NewClient(&m), "img:1")
+	require.NoError(t, err)
+	assert.Equal(t, CgroupRoot, mountPath)
+	assert.True(t, hasV2)
+	assert.False(t, hasNsd)
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"run", "--rm", "--network", "none", "--entrypoint", "cat", "img:1", "/proc/self/mounts"}, m.Calls[0].Args)
+}
+
+func TestProbeCgroupInfo_RunError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "docker: Error response from daemon: pull access denied for img\n", fmt.Errorf("exit status 125"))
+
+	_, _, _, err := ProbeCgroupInfo(t.Context(), docker.NewClient(&m), "img:1")
+	require.ErrorContains(t, err, "reading the mount table in a container of img:1: exit status 125")
+}
+
+func TestNsdelegateRemediation(t *testing.T) {
+	assert.Equal(t, `Enable nsdelegate on the Docker host temporarily:
+
+sudo mount -o remount,nsdelegate /sys/fs/cgroup
+
+Enable nsdelegate on boot (systemd):
+
+sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d
+echo -e '[Mount]\nOptions=nsdelegate' \
+  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf
+sudo systemctl daemon-reload`, NsdelegateRemediation(CgroupRoot))
 }

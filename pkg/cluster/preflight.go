@@ -13,6 +13,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"golang.org/x/sync/errgroup"
 )
@@ -26,6 +27,9 @@ var (
 	ErrUsernsRemap = errors.New("the Docker daemon runs with userns-remap")
 	// ErrCgroupV1 is a daemon that runs containers on cgroup v1.
 	ErrCgroupV1 = errors.New("the Docker daemon runs containers on cgroup v1")
+	// ErrNoNsdelegate is a Docker host whose cgroup2 hierarchy is mounted
+	// without nsdelegate (CheckNsdelegate).
+	ErrNoNsdelegate = errors.New("the Docker host mounts cgroup2 without nsdelegate")
 )
 
 // CheckDaemon asks the Docker daemon what it is and returns DaemonSupport's
@@ -54,6 +58,28 @@ func DaemonSupport(info *docker.DaemonInfo) error {
 		return fmt.Errorf("%w; %s", ErrUsernsRemap, need)
 	case info.CgroupVersion != "" && info.CgroupVersion != "2":
 		return fmt.Errorf("%w; sind requires cgroup v2 (the unified hierarchy)", ErrCgroupV1)
+	}
+	return nil
+}
+
+// CheckNsdelegate reads the cgroup2 mount of the Docker daemon's kernel in
+// a throwaway container of image (doctor.ProbeCgroupInfo), and returns an
+// error that wraps ErrNoNsdelegate, with the commands that enable it, when
+// the mount lacks nsdelegate, or ErrCgroupV1 when the container has no
+// cgroup2 at doctor.CgroupRoot. Unlike `sind doctor` for a daemon on this
+// machine, it looks at the daemon's kernel wherever that runs. Create and
+// WorkerAdd call it before they create a node container: without
+// nsdelegate the failure would show only later, as a node or Slurm
+// daemon that does not become ready.
+func CheckNsdelegate(ctx context.Context, client *docker.Client, image string) error {
+	mountPath, hasV2, hasNsd, err := doctor.ProbeCgroupInfo(ctx, client, image)
+	switch {
+	case err != nil:
+		return fmt.Errorf("checking the Docker host for nsdelegate: %w", err)
+	case !hasV2:
+		return fmt.Errorf("%w: a container of %s has no cgroup2 at %s; sind requires cgroup v2 (the unified hierarchy)", ErrCgroupV1, image, doctor.CgroupRoot)
+	case !hasNsd:
+		return fmt.Errorf("%w, which sind requires\n\n%s", ErrNoNsdelegate, doctor.NsdelegateRemediation(mountPath))
 	}
 	return nil
 }

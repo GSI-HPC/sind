@@ -34,21 +34,6 @@ const (
 	checkFailed  = "failed"
 )
 
-// nsdelegateRemediation is shown when cgroup2 is mounted at mountPath
-// without nsdelegate.
-func nsdelegateRemediation(mountPath string) string {
-	return "Enable nsdelegate temporarily:\n" +
-		"\n" +
-		"sudo mount -o remount,nsdelegate " + mountPath + "\n" +
-		"\n" +
-		"Enable nsdelegate on boot (systemd):\n" +
-		"\n" +
-		"sudo mkdir -p /etc/systemd/system/sys-fs-cgroup.mount.d\n" +
-		`echo -e '[Mount]\nOptions=nsdelegate' \` + "\n" +
-		"  | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf\n" +
-		"sudo systemctl daemon-reload"
-}
-
 // unifiedRemediation is shown when the host does not run the unified
 // cgroup2 hierarchy: cgroup v1, or systemd's hybrid mode.
 const unifiedRemediation = `Boot with the unified cgroup hierarchy: add
@@ -212,7 +197,7 @@ func runDoctor(cmd *cobra.Command) error {
 		failures = append(failures, "cgroup")
 	case !hasNsd:
 		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail: "nsdelegate not found", Remediation: nsdelegateRemediation(mountPath)})
+			Detail: "nsdelegate not found", Remediation: doctor.NsdelegateRemediation(mountPath)})
 		failures = append(failures, "cgroup-nsdelegate")
 	default:
 		checks = append(checks, doctorCheck{Name: "cgroupv2", Status: checkOK,

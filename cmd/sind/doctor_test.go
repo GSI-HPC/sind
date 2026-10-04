@@ -15,6 +15,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/doctor"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -289,7 +290,7 @@ func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
 ✓ Docker daemon: rootful, no userns-remap
 ✗ cgroupv2: nsdelegate not found
 
-Enable nsdelegate temporarily:
+Enable nsdelegate on the Docker host temporarily:
 
 sudo mount -o remount,nsdelegate /sys/fs/cgroup
 
@@ -366,7 +367,7 @@ func TestDoctorCommand_JSONFailures(t *testing.T) {
 	assert.Equal(t, "cgroupv2", checks[2].Name)
 	assert.Equal(t, checkFailed, checks[2].Status)
 	assert.Equal(t, "nsdelegate not found", checks[2].Detail)
-	assert.Equal(t, nsdelegateRemediation("/sys/fs/cgroup"), checks[2].Remediation)
+	assert.Equal(t, doctor.NsdelegateRemediation("/sys/fs/cgroup"), checks[2].Remediation)
 	assert.Contains(t, checks[2].Remediation, "sudo mount -o remount,nsdelegate /sys/fs/cgroup\n")
 	assert.Equal(t, doctorCheck{Name: "DNS policy", Status: checkWarning, Detail: "not authorized (optional)",
 		Remediation: dnsPolicyRemediation}, checks[3])

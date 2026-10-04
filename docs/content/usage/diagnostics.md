@@ -49,7 +49,7 @@ Example output when `nsdelegate` is missing:
 ```
 ✗ cgroupv2: nsdelegate not found
 
-Enable nsdelegate temporarily:
+Enable nsdelegate on the Docker host temporarily:
 
 sudo mount -o remount,nsdelegate /sys/fs/cgroup
 
@@ -60,6 +60,8 @@ echo -e '[Mount]\nOptions=nsdelegate' \
   | sudo tee /etc/systemd/system/sys-fs-cgroup.mount.d/nsdelegate.conf
 sudo systemctl daemon-reload
 ```
+
+`sind create cluster` and `sind create worker` check `nsdelegate` too, before they create a node container, and fail with the same commands. They read it in a throwaway container of the node image, which shows the option of the kernel the Docker daemon runs on, wherever that is.
 
 ### Machine-readable output
 
@@ -85,7 +87,7 @@ sind doctor -o json
     "name": "cgroupv2",
     "status": "failed",
     "detail": "nsdelegate not found",
-    "remediation": "Enable nsdelegate temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n..."
+    "remediation": "Enable nsdelegate on the Docker host temporarily:\n\nsudo mount -o remount,nsdelegate /sys/fs/cgroup\n..."
   },
   {
     "name": "inotify",
