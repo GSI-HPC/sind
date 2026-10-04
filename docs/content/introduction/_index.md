@@ -66,4 +66,4 @@ sind includes a built-in [Model Context Protocol](https://modelcontextprotocol.i
 
 ## Next steps
 
-Ready to try it? Head to the [Getting Started]({{< relref "getting-started" >}}) section to install sind and create your first cluster.
+Ready to try it? Head to the [Getting Started]({{< relref "getting-started" >}}) section to install sind and create your first cluster. To watch first, the [Video Course]({{< relref "course" >}}) walks through sind in ten short episodes.
