@@ -22,7 +22,7 @@ Setting up a multi-node Slurm cluster for development or testing traditionally r
 
 ### Multi-node, multi-cluster & multi-realm
 
-Each cluster consists of individual containers for controller, database, submitter, and worker nodes. Run multiple clusters simultaneously with shared networking, and organize them into isolated realms for federation and multi-tenant testing scenarios.
+Each cluster consists of individual containers for controller, database, REST API, submitter, and worker nodes. Run multiple clusters simultaneously with shared networking, and organize them into isolated realms for federation and multi-tenant testing scenarios.
 
 ### System containers
 
@@ -39,6 +39,18 @@ sind runs on standard GitHub Actions runners with the runner's Docker daemon —
 ### Worker lifecycle
 
 Dynamically add and remove worker nodes from running clusters. Test how your workloads react to nodes joining and leaving — without touching the controller.
+
+### Job accounting, users and identity
+
+A [db node]({{< relref "/configuration/node-definitions#database-node" >}}) runs MariaDB and slurmdbd, so job accounting, `sacct` and `sacctmgr` work as on a production cluster. sind also creates [Linux users and groups, Slurm accounts and associations]({{< relref "/guides/users" >}}) with their limits, and lets you choose where the nodes resolve the users: in local accounts on every node, through nss_slurm on the workers, or from auth/slurm tokens with sackd on the login node.
+
+### REST API
+
+An [api node]({{< relref "/guides/rest-api" >}}) runs slurmrestd, Slurm's REST API daemon, with JWT authentication (Slurm 26.05), so portals, workflow engines and tests can drive the cluster over HTTP.
+
+### CVMFS
+
+With `storage.cvmfs`, every node [mounts `/cvmfs`]({{< relref "/guides/cvmfs" >}}) read-only, from the Docker host or a CVMFS Docker volume plugin, and repositories mount on demand as on bare metal.
 
 ### Power cycle simulation
 
