@@ -420,6 +420,9 @@ func TestCheckDaemon(t *testing.T) {
 		{"userns-remap", `{"ServerVersion":"29.1.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","name=userns","name=cgroupns"]}`, ErrUsernsRemap},
 		{"cgroup v1", `{"ServerVersion":"29.1.0","CgroupVersion":"1","SecurityOptions":["name=seccomp,profile=builtin"]}`, ErrCgroupV1},
 		{"no cgroup version", `{"ServerVersion":"29.1.0","SecurityOptions":[]}`, nil},
+		{"Docker 28", `{"ServerVersion":"28.0.0","CgroupVersion":"2","SecurityOptions":[]}`, nil},
+		{"Docker 27", `{"ServerVersion":"27.5.1","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin"]}`, ErrDockerTooOld},
+		{"unparsable version", `{"ServerVersion":"dev","CgroupVersion":"2","SecurityOptions":[]}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -433,6 +436,10 @@ func TestCheckDaemon(t *testing.T) {
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr == ErrCgroupV1 {
 				assert.Contains(t, err.Error(), "sind requires cgroup v2")
+				return
+			}
+			if tt.wantErr == ErrDockerTooOld {
+				assert.EqualError(t, err, "the Docker Engine is too old: 27.5.1; sind requires Docker Engine 28.0 or later, for the writable cgroups and network options of its nodes")
 				return
 			}
 			assert.Contains(t, err.Error(), "sind needs a rootful Docker daemon without userns-remap")
