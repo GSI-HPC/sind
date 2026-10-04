@@ -30,6 +30,23 @@
     "kubectl": "kjˈuːb kəntɹˌoʊl",
     "ci": "sˌiːˈaɪ",
     "dns": "dˌiːˌɛnˈɛs",
-    "mcp": "ˌɛmsˌiːpˈiː"
+    "mcp": "ˌɛmsˌiːpˈiː",
+    "sacctmgr": "ˈɛs ɐkˈaʊnt mˈænɪdʒɚ",
+    "sackd": "sˈæk dˈiː",
+    "slurm.conf": "slˈɜːm dˈɑːt kˈɑːnf",
+    "slurmctldhost": "slˈɜːm kəntɹˈoʊl dˈiː hˈoʊst",
+    "tres": "tɹˈɛs",
+    "journalctl": "dʒˈɜːnəl kəntɹˈoʊl",
+    "mpirun": "ˌɛmpˌiːˈaɪ ɹˈʌn",
+    "mpiexec": "ˌɛmpˌiːˈaɪ ɛɡzˈɛk",
+    "mpicc": "ˌɛmpˌiːˈaɪ sˌiːsˈiː",
+    "init": "ɪnˈɪt",
+    "inotify": "ˈaɪ nˈoʊɾɪfˌaɪ",
+    "pid": "pˌiːˌaɪdˈiː",
+    "uid": "jˌuːˌaɪdˈiː",
+    "gid": "dʒˌiːˌaɪdˈiː",
+    "cpus": "sˌiːpˌiːjˈuːz",
+    "gpus": "dʒˌiːpˌiːjˈuːz",
+    "vms": "vˌiːˈɛmz"
   }
 }
