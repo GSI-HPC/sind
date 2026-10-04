@@ -53,10 +53,11 @@ Every official image:
 
 - Is based on Rocky Linux 10
 - Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
-- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd), munge, sshd, MariaDB and a full MPI stack
+- Contains the Slurm daemons (slurmctld, slurmdbd, slurmd, and from Slurm 26.05 on slurmrestd), munge, sshd, MariaDB and a full MPI stack
 - Ships MariaDB's data directory initialised, so the first start of MariaDB on a db node skips `mariadb-install-db`
 - Slurm is built with PMIx support (`--with-pmix`) for native PMIx job launch
 - Includes nss_slurm, Slurm's NSS module for job users, as `/usr/lib64/libnss_slurm.so.2`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x, and the `serializer/json` plugin they need, built with json-c; and `sackd`, Slurm's authentication daemon for login nodes
+- From Slurm 26.05 on, includes slurmrestd, Slurm's REST API daemon, built with Rocky Linux's llhttp, with its JWT plugin and a `slurmrestd` user to run it as. Slurm 25.11 builds slurmrestd only with the archived nodejs http-parser, which Rocky Linux 10 does not package, so the 25.11 images have none
 - OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1), with the journal capped at 32 MB in `/run`, which counts against the node's memory limit, and 64 MB on disk
 
@@ -97,6 +98,7 @@ Custom images must provide the following:
 | controller | slurmctld installed, **not enabled** |
 | db | mariadb-server (MariaDB 10.4 or later, whose `unix_socket` authentication sind uses for slurmdbd's `slurm` account) with the `mysql` client and slurmdbd installed, **not enabled**; root reaches MariaDB over its local socket without a password; slurmdbd runs as the OS user `slurm`; slurmdbd's unit creates `/run/slurmdbd` for the `slurm` user, which can write `/var/log/slurm` |
 | worker | slurmd installed, **not enabled** |
+| api | slurmrestd with its systemd unit, installed, **not enabled**: Slurm built with an HTTP parser (llhttp from Slurm 26.05 on) and `--with-jwt`; the unit runs slurmrestd as a user other than root and SlurmUser (Slurm's unit: `slurmrestd`) and listens on port 6820. sind checks for slurmrestd and the unit before it starts it, and adds a drop-in to the unit that sets `SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files`, as the container denies slurmrestd's `unshare` |
 | submitter | Slurm client tools only |
 
 sind enables Slurm services based on the node's role (`systemctl enable --now`) once every node is ready. Services must be installed but **not** enabled in the image.

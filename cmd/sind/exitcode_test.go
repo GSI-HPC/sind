@@ -48,6 +48,7 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"get", "cluster", "a", "b"}, "accepts at most 1 arg(s), received 2"},
 		{[]string{"get", "cluster", "Not_A_Name"}, `invalid cluster name "Not_A_Name"`},
 		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml"`},
+		{[]string{"get", "auth-key", "--type", "kerberos"}, `invalid --type value "kerberos": must be munge, slurm, jwt`},
 		{[]string{"--realm", "Not_A_Realm", "get", "clusters"}, `--realm: invalid realm name "Not_A_Realm"`},
 		{[]string{"get", "node", "worker-0.dev.sind.sind"}, "not the FQDN"},
 		{[]string{"get", "node", "worker-0.Not_A_Name"}, `invalid node name "worker-0.Not_A_Name"`},

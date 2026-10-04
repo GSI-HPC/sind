@@ -106,9 +106,10 @@ func checkIdentityImages(ctx context.Context, client *docker.Client, cfg *config
 }
 
 // nodeSlurmService returns the service sind enables and waits for on a
-// managed node: the role's Slurm daemon, or sackd on the submitter with
-// identity clientIds, which hands its client commands their auth/slurm
-// tokens. Other nodes get theirs from their Slurm daemon.
+// managed node: the role's Slurm daemon (slurmrestd on the api node), or
+// sackd on the submitter with identity clientIds, which hands its client
+// commands their auth/slurm tokens. Other nodes get theirs from their Slurm
+// daemon; slurmrestd uses the JWT of each request.
 func nodeSlurmService(nc RunConfig) (probe.Service, bool) {
 	if nc.Role == config.RoleSubmitter && nc.Identity == config.IdentityClientIDs {
 		return probe.ServiceSackd, true

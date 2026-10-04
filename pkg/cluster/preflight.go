@@ -92,7 +92,7 @@ func NodeShortNames(nodes []config.Node) []string {
 	workerIdx := 0
 	for _, n := range nodes {
 		switch n.Role {
-		case config.RoleController, config.RoleDB, config.RoleSubmitter:
+		case config.RoleController, config.RoleDB, config.RoleAPI, config.RoleSubmitter:
 			names = append(names, string(n.Role))
 			if n.Role == config.RoleController && n.BackupController {
 				names = append(names, ControllerBackupShortName)

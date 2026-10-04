@@ -17,9 +17,9 @@ import (
 )
 
 // Service identifies a per-node readiness check. The string value is the
-// systemd unit name for munge/sshd/slurmd/slurmdbd/mariadb and the slurm RPC
-// endpoint name for slurmctld, so it also doubles as the user-facing label
-// for each check in status output.
+// systemd unit name for munge/sshd/slurmd/slurmdbd/mariadb/sackd/slurmrestd
+// and the slurm RPC endpoint name for slurmctld, so it also doubles as the
+// user-facing label for each check in status output.
 type Service string
 
 // Per-node readiness services managed by sind.
@@ -32,6 +32,8 @@ const (
 	ServiceMariadb   Service = "mariadb"
 	// ServiceSackd is the auth/slurm token daemon of a login node.
 	ServiceSackd Service = "sackd"
+	// ServiceSlurmrestd is the REST API daemon of the api node.
+	ServiceSlurmrestd Service = "slurmrestd"
 )
 
 // ServiceForRole returns the Slurm readiness-check service associated with
@@ -43,6 +45,8 @@ func ServiceForRole(role config.Role) (Service, bool) {
 		return ServiceSlurmctld, true
 	case config.RoleDB:
 		return ServiceSlurmdbd, true
+	case config.RoleAPI:
+		return ServiceSlurmrestd, true
 	case config.RoleWorker:
 		return ServiceSlurmd, true
 	default:
@@ -81,6 +85,9 @@ var serviceChecks = map[Service]Func{
 	ServiceSlurmd:    SlurmdReady,
 	ServiceSlurmdbd:  SlurmdbdReady,
 	ServiceSackd:     SackdReady,
+	// Its port check follows the unit too: slurmrestd closes the port only
+	// when its unit stops.
+	ServiceSlurmrestd: SlurmrestdReady,
 }
 
 // ForService returns the readiness probe for a service, which follows the
@@ -493,6 +500,24 @@ func ClusterRegistered(clusterName string) Func {
 // TerminalError (see UnitActive).
 func SackdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
 	return UnitActive(ctx, client, name, string(ServiceSackd))
+}
+
+// SlurmrestdPort is the TCP port slurmrestd listens on: SLURMRESTD_LISTEN
+// of the unit Slurm ships, Slurm's default port for it.
+const SlurmrestdPort = "6820"
+
+// SlurmrestdReady verifies that the slurmrestd service is active and
+// accepts connections on SlurmrestdPort. The unit is of type simple, so it
+// is active as soon as slurmrestd started, before it listens. A failed unit
+// is a TerminalError (see UnitActive).
+func SlurmrestdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+	if err := UnitActive(ctx, client, name, string(ServiceSlurmrestd)); err != nil {
+		return err
+	}
+	if _, err := client.Exec(ctx, name, "bash", "-c", "exec 3<>/dev/tcp/localhost/"+SlurmrestdPort); err != nil {
+		return fmt.Errorf("slurmrestd not listening on port %s: %w", SlurmrestdPort, err)
+	}
+	return nil
 }
 
 // journalLines is the number of journal lines UnitJournal returns.

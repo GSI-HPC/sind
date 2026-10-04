@@ -113,11 +113,11 @@ func runGetClusters(cmd *cobra.Command) error {
 	}
 
 	w := newTabWriter(cmd.OutOrStdout())
-	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/D/W)\tSLURM\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tNODES (S/C/D/A/W)\tSLURM\tSTATUS")
 	for _, c := range clusters {
-		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d/%d)\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%d (%d/%d/%d/%d/%d)\t%s\t%s\n",
 			cell(c.Name),
-			c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.Workers,
+			c.NodeCount, c.Submitters, c.Controllers, c.DBs, c.APIs, c.Workers,
 			formatSlurmVersion(c.SlurmVersion),
 			c.State,
 		)
@@ -406,9 +406,16 @@ func runGetDNS(cmd *cobra.Command) error {
 }
 
 func newGetAuthKeyCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:               "auth-key [CLUSTER]",
-		Short:             "Output the key that authenticates Slurm traffic (base64)",
+	cmd := &cobra.Command{
+		Use:   "auth-key [CLUSTER]",
+		Short: "Output a key that authenticates Slurm traffic (base64)",
+		Long: `Output a key that authenticates the cluster's Slurm traffic, encoded as base64.
+
+--type picks the Slurm authentication plugin whose key to print: munge,
+slurm (auth/slurm, identity clientIds) or jwt (auth/jwt, which signs the
+REST API tokens of a cluster with an api node). Without it, the key of the
+cluster's AuthType: slurm.key with identity clientIds, the munge key
+otherwise.`,
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -419,18 +426,34 @@ func newGetAuthKeyCommand() *cobra.Command {
 			return runGetAuthKey(cmd, name)
 		},
 	}
+	cmd.Flags().String("type", "", "authentication plugin of the key: munge, slurm or jwt (default: the cluster's AuthType)")
+	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions(authTypeNames(), cobra.ShellCompDirectiveNoFileComp))
+	return cmd
+}
+
+// authTypeNames returns the values --type of get auth-key takes.
+func authTypeNames() []string {
+	names := make([]string, len(cluster.AuthTypes))
+	for i, t := range cluster.AuthTypes {
+		names[i] = string(t)
+	}
+	return names
 }
 
 func runGetAuthKey(cmd *cobra.Command, name string) error {
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
+	authType, _ := cmd.Flags().GetString("type")
+	if authType != "" && !slices.Contains(cluster.AuthTypes, cluster.AuthType(authType)) {
+		return usagef("invalid --type value %q: must be %s", authType, strings.Join(authTypeNames(), ", "))
+	}
 	client := clientFrom(cmd.Context())
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err
 	}
-	key, err := cluster.GetAuthKey(cmd.Context(), client, realm, name)
+	key, err := cluster.GetAuthKey(cmd.Context(), client, realm, name, cluster.AuthType(authType))
 	if err != nil {
 		return err
 	}

@@ -57,7 +57,7 @@ EOF
 4. All node containers start in parallel
 5. sind waits for each node to become ready (systemd, sshd, Slurm daemons)
 
-`--wait` limits how long sind waits for the nodes, the Slurm daemons and, with `accounts`, for slurmdbd to register the cluster. Each node's limit counts from when its container has started, so pulling the image does not count against it. A container that exits, or a munge, slurmctld, slurmd, sackd or slurmdbd unit that fails, ends the wait at once with the tail of the unit's journal.
+`--wait` limits how long sind waits for the nodes, the Slurm daemons and, with `accounts`, for slurmdbd to register the cluster. Each node's limit counts from when its container has started, so pulling the image does not count against it. A container that exits, or a munge, slurmctld, slurmd, sackd, slurmrestd or slurmdbd unit that fails, ends the wait at once with the tail of the unit's journal.
 
 If a node is not ready within `--wait`, or a check fails for good, the command fails with exit status 1 and names the node and the last check that failed, for example:
 
@@ -84,12 +84,12 @@ sind get clusters
 ```
 
 ```
-NAME      NODES (S/C/D/W)   SLURM     STATUS
-default   4 (1/1/0/2)       26.05.4   running
-dev       4 (0/1/1/2)       25.11.8   running
+NAME      NODES (S/C/D/A/W)   SLURM     STATUS
+default   5 (1/1/0/1/2)       26.05.4   running
+dev       4 (0/1/1/0/2)       25.11.8   running
 ```
 
-The `NODES` column shows the total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **W**orker. `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters.
+The `NODES` column shows the total count and breakdown: **S**ubmitter / **C**ontroller / **D**b / **A**pi / **W**orker. `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters.
 
 ## Delete a cluster
 

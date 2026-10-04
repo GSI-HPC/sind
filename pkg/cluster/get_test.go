@@ -52,6 +52,10 @@ func TestGetClusters(t *testing.T) {
 			ID: "g", Names: "sind-prod-worker-1", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=prod,sind.role=worker,sind.slurm.version=25.11.0",
 		},
+		testutil.PsEntry{
+			ID: "i", Names: "sind-prod-api", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=prod,sind.role=api,sind.slurm.version=25.11.0",
+		},
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -68,15 +72,17 @@ func TestGetClusters(t *testing.T) {
 	assert.Equal(t, 0, clusters[0].Submitters)
 	assert.Equal(t, 1, clusters[0].Controllers)
 	assert.Equal(t, 0, clusters[0].DBs)
+	assert.Equal(t, 0, clusters[0].APIs)
 	assert.Equal(t, 2, clusters[0].Workers)
 
 	assert.Equal(t, "prod", clusters[1].Name)
 	assert.Equal(t, "25.11.0", clusters[1].SlurmVersion)
 	assert.Equal(t, StateRunning, clusters[1].State)
-	assert.Equal(t, 5, clusters[1].NodeCount)
+	assert.Equal(t, 6, clusters[1].NodeCount)
 	assert.Equal(t, 1, clusters[1].Submitters)
 	assert.Equal(t, 1, clusters[1].Controllers)
 	assert.Equal(t, 1, clusters[1].DBs)
+	assert.Equal(t, 1, clusters[1].APIs)
 	assert.Equal(t, 2, clusters[1].Workers)
 }
 
@@ -332,6 +338,10 @@ func TestGetNodes_SortOrder(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=controller",
 		},
 		testutil.PsEntry{
+			ID: "e", Names: "sind-dev-api", State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=api",
+		},
+		testutil.PsEntry{
 			ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
 			Labels: "sind.cluster=dev,sind.role=db",
 		},
@@ -340,6 +350,7 @@ func TestGetNodes_SortOrder(t *testing.T) {
 		inspectEntry{Name: "sind-dev-worker-0", Status: "running", Networks: net},
 		inspectEntry{Name: "sind-dev-submitter", Status: "running", Networks: net},
 		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: net},
+		inspectEntry{Name: "sind-dev-api", Status: "running", Networks: net},
 		inspectEntry{Name: "sind-dev-db", Status: "running", Networks: net},
 	), "", nil)
 	c := docker.NewClient(&m)
@@ -347,12 +358,13 @@ func TestGetNodes_SortOrder(t *testing.T) {
 	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
-	require.Len(t, nodes, 4)
-	// Order: controller, db, submitter, worker
+	require.Len(t, nodes, 5)
+	// Order: controller, db, api, submitter, worker
 	assert.Equal(t, config.RoleController, nodes[0].Role)
 	assert.Equal(t, config.RoleDB, nodes[1].Role)
-	assert.Equal(t, config.RoleSubmitter, nodes[2].Role)
-	assert.Equal(t, config.RoleWorker, nodes[3].Role)
+	assert.Equal(t, config.RoleAPI, nodes[2].Role)
+	assert.Equal(t, config.RoleSubmitter, nodes[3].Role)
+	assert.Equal(t, config.RoleWorker, nodes[4].Role)
 }
 
 func TestGetNodes_UnknownRole(t *testing.T) {
@@ -818,7 +830,7 @@ func TestGetAuthKey(t *testing.T) {
 	m.AddResult(testutil.TarArchive("munge.key", keyData), "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, &AuthKey{Type: AuthMunge, Key: []byte(keyData)}, key)
@@ -831,7 +843,7 @@ func TestGetAuthKey_NoContainers(t *testing.T) {
 	m.AddResult("", "", nil)
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no containers found")
@@ -842,7 +854,7 @@ func TestGetAuthKey_ListError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing containers")
@@ -857,7 +869,7 @@ func TestGetAuthKey_CopyError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("cp failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading munge key")

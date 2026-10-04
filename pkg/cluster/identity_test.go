@@ -189,6 +189,33 @@ func TestNodeRunConfigs_ClientIDsWithoutSubmitter(t *testing.T) {
 	assert.Equal(t, map[string]bool{"controller": true, "controller-backup": true, "worker-0": false}, users)
 }
 
+func TestNodeRunConfigs_APIUsers(t *testing.T) {
+	// The api node gets the users like any node that is neither a worker
+	// nor a controller: slurmrestd itself needs none.
+	tests := []struct {
+		mode    config.IdentityMode
+		managed *bool
+		want    bool
+	}{
+		{config.IdentityLocal, nil, true},
+		{config.IdentityNSSSlurm, nil, true},
+		{config.IdentityClientIDs, nil, false},
+		{config.IdentityClientIDs, testutil.Ptr(false), true},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s/managed=%v", tt.mode, tt.managed), func(t *testing.T) {
+			cfg := usersCfg()
+			cfg.Identity = config.Identity{Mode: tt.mode}
+			cfg.Nodes = []config.Node{{Role: config.RoleController}, {Role: config.RoleAPI, Managed: tt.managed}, {Role: config.RoleSubmitter}, {Role: config.RoleWorker}}
+
+			users, nss := placement(NodeRunConfigs(cfg, mesh.DefaultRealm, "", "", ""))
+
+			assert.Equal(t, tt.want, users["api"])
+			assert.False(t, nss["api"])
+		})
+	}
+}
+
 // Labels of sind-node images from before and since identity modes.
 const (
 	oldSindNodeLabels     = `{"org.opencontainers.image.title":"sind-node","sind.slurm.version":"25.11.8"}`
@@ -629,6 +656,9 @@ func TestNodeServices(t *testing.T) {
 		{config.RoleSubmitter, clientIDs, []probe.Service{s, probe.ServiceSackd}},
 		{config.RoleDB, clientIDs, []probe.Service{s, probe.ServiceMariadb, probe.ServiceSlurmdbd}},
 		{config.RoleWorker, clientIDsUnmanaged, []probe.Service{s}},
+		{config.RoleAPI, managed, []probe.Service{m, s, probe.ServiceSlurmrestd}},
+		{config.RoleAPI, clientIDs, []probe.Service{s, probe.ServiceSlurmrestd}},
+		{config.RoleAPI, unmanaged, []probe.Service{m, s}},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s/%v", tt.role, tt.labels), func(t *testing.T) {
@@ -664,7 +694,7 @@ func TestGetAuthKey_ClientIDs(t *testing.T) {
 	m.AddResult(testutil.TarArchive("slurm.key", "slurm-key-bytes"), "", nil)
 	c := docker.NewClient(&m)
 
-	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	key, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, &AuthKey{Type: AuthSlurm, Key: []byte("slurm-key-bytes")}, key)
@@ -680,7 +710,7 @@ func TestGetAuthKey_ClientIDsCopyError(t *testing.T) {
 	m.AddResult("", "", fmt.Errorf("cp failed"))
 	c := docker.NewClient(&m)
 
-	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev")
+	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
 	assert.Equal(t, "reading slurm key: cp failed", err.Error())

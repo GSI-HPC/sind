@@ -36,6 +36,8 @@ const (
 	RoleDB         Role = "db"
 	RoleSubmitter  Role = "submitter"
 	RoleWorker     Role = "worker"
+	// RoleAPI is the node that runs slurmrestd, Slurm's REST API daemon.
+	RoleAPI Role = "api"
 )
 
 // Node represents a single node or node group in the cluster configuration.
@@ -350,19 +352,21 @@ func (c *Cluster) Validate() error {
 		}
 	}
 
-	var controllers, dbs, submitters, workers int
+	var controllers, dbs, apis, submitters, workers int
 	for _, n := range c.Nodes {
 		switch n.Role {
 		case RoleController:
 			controllers++
 		case RoleDB:
 			dbs++
+		case RoleAPI:
+			apis++
 		case RoleSubmitter:
 			submitters++
 		case RoleWorker:
 			workers++
 		default:
-			return fmt.Errorf("invalid role %q, must be one of: controller, db, submitter, worker", n.Role)
+			return fmt.Errorf("invalid role %q, must be one of: controller, db, api, submitter, worker", n.Role)
 		}
 
 		if n.Count < 0 {
@@ -371,8 +375,8 @@ func (c *Cluster) Validate() error {
 		if n.Count > 0 && n.Role != RoleWorker {
 			return fmt.Errorf("count is only valid for worker nodes, not %q", n.Role)
 		}
-		if n.Managed != nil && n.Role != RoleWorker && n.Role != RoleController && n.Role != RoleDB {
-			return fmt.Errorf("managed is only valid for controller, db and worker nodes, not %q", n.Role)
+		if n.Managed != nil && n.Role == RoleSubmitter {
+			return fmt.Errorf("managed is only valid for controller, db, api and worker nodes, not %q", n.Role)
 		}
 		if n.BackupController && n.Role != RoleController {
 			return fmt.Errorf("backupController is only valid for controller nodes, not %q", n.Role)
@@ -384,6 +388,9 @@ func (c *Cluster) Validate() error {
 	}
 	if dbs > 1 {
 		return fmt.Errorf("at most one db node allowed, got %d", dbs)
+	}
+	if apis > 1 {
+		return fmt.Errorf("at most one api node allowed, got %d", apis)
 	}
 	if submitters > 1 {
 		return fmt.Errorf("at most one submitter allowed, got %d", submitters)
@@ -407,6 +414,9 @@ func (c *Cluster) Validate() error {
 		return err
 	}
 	if err := c.Identity.validate(c.Managed(), c.Slurm.Main); err != nil {
+		return err
+	}
+	if err := c.validateAPI(); err != nil {
 		return err
 	}
 
@@ -484,11 +494,26 @@ var backupControllerManagedKeys = []string{
 // Only then does sind configure accounting (slurmdbd.conf and the accounting
 // parameters in slurm.conf).
 func (c *Cluster) HasManagedDB() bool {
+	return c.hasManaged(RoleDB)
+}
+
+// HasManagedAPI reports whether the cluster has an api node on which sind
+// runs slurmrestd: one without managed: false, in a managed cluster. Only
+// then does sind set up JWT authentication (jwt_hs256.key and the AuthAlt
+// parameters in slurm.conf and slurmdbd.conf).
+func (c *Cluster) HasManagedAPI() bool {
+	return c.hasManaged(RoleAPI)
+}
+
+// hasManaged reports whether the cluster has a node of a role that is
+// managed: one without managed: false, in a managed cluster. It is meant
+// for the roles of at most one node.
+func (c *Cluster) hasManaged(role Role) bool {
 	if !c.Managed() {
 		return false
 	}
 	for _, n := range c.Nodes {
-		if n.Role == RoleDB {
+		if n.Role == role {
 			return n.Managed == nil || *n.Managed
 		}
 	}

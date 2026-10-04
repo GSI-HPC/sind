@@ -261,7 +261,7 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
-Nodes where sind does not manage Slurm (unmanaged workers and db nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. With [identity `clientIds`]({{< relref "/guides/users#clientids" >}}), no node lists `munge`, as auth/slurm replaces it, and the submitter lists `sackd`; `MOUNTS` has no `/etc/munge`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
+A managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) lists `slurmrestd`. Nodes where sind does not manage Slurm (unmanaged workers, db and api nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. With [identity `clientIds`]({{< relref "/guides/users#clientids" >}}), no node lists `munge`, as auth/slurm replaces it, and the submitter lists `sackd`; `MOUNTS` has no `/etc/munge`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
 
 The data row shows what Docker mounts at the nodes' data mount point: the bind-mounted host directory (type `hostPath`) or the volume. With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), `MOUNTS` lists the home volume at `/home`. With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
 
@@ -308,6 +308,7 @@ sind logs controller slurmctld
 sind logs worker-0 slurmd --follow
 sind logs submitter sackd             # identity clientIds
 sind logs db slurmdbd
+sind logs api slurmrestd
 ```
 
 ## List nodes
@@ -380,10 +381,18 @@ worker-0.default.sind.sind           172.19.0.3
 ## Authentication key
 
 ```bash
-sind get auth-key [CLUSTER]
+sind get auth-key [CLUSTER] [--type munge|slurm|jwt]
 ```
 
-Outputs the key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external tooling: the munge key, or `slurm.key` with [identity `clientIds`]({{< relref "/guides/users#clientids" >}}). `-o json` returns it with its type: `{"type": "munge", "key": "..."}` or `{"type": "slurm", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`.
+Outputs a key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external tooling. `--type` picks the Slurm authentication plugin:
+
+| `--type` | Key | Cluster |
+|----------|-----|---------|
+| `munge` | the munge key | identity `local` or `nssSlurm`, and every unmanaged cluster |
+| `slurm` | `slurm.key` | [identity `clientIds`]({{< relref "/guides/users#clientids" >}}) |
+| `jwt` | `jwt_hs256.key`, which signs [REST API tokens]({{< relref "/guides/rest-api" >}}) | with a managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) |
+
+Without `--type` it prints the cluster's main key: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not have fails with an error that says why. `-o json` returns the key with its type, e.g. `{"type": "jwt", "key": "..."}`. `sind get auth-key` replaces `sind get munge-key`.
 
 ## Mesh infrastructure
 

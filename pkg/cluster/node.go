@@ -118,7 +118,7 @@ type RunConfig struct {
 	Realm           string      // realm name (e.g. "sind")
 	ClusterName     string      // cluster name
 	ShortName       string      // node hostname: "controller", "worker-0"
-	Role            config.Role // "controller", "db", "submitter", "worker"
+	Role            config.Role // "controller", "db", "api", "submitter", "worker"
 	Image           string      // container image
 	CPUs            int         // CPU limit
 	Memory          string      // memory limit (e.g. "2g")
@@ -400,8 +400,8 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 
 // NodeRunConfigs builds RunConfig entries for all nodes in the cluster config.
 // Worker nodes are indexed sequentially across all worker groups. In an
-// unmanaged cluster every node is unmanaged; otherwise only workers and db
-// nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
+// unmanaged cluster every node is unmanaged; otherwise only workers, db and
+// api nodes with managed: false are. cvmfs is the backend every node mounts CVMFS
 // with (see DetectCVMFS), empty for none. The identity mode decides which
 // nodes get the cluster users and groups (see nodeGetsUsers) and which
 // resolve them with nss_slurm. Managed workers get TaskAffinity when the
@@ -425,9 +425,9 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
-		case config.RoleController, config.RoleDB, config.RoleSubmitter:
+		case config.RoleController, config.RoleDB, config.RoleAPI, config.RoleSubmitter:
 			nodeManaged := clusterManaged
-			if n.Role == config.RoleDB && n.Managed != nil && !*n.Managed {
+			if (n.Role == config.RoleDB || n.Role == config.RoleAPI) && n.Managed != nil && !*n.Managed {
 				nodeManaged = false
 			}
 			base := RunConfig{

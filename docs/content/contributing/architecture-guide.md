@@ -67,6 +67,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
+  ├── api.go       slurmrestd setup steps of the api node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
   ├── users.go     Linux users and groups, their labels, home directories
   ├── identity.go  Identity modes: nss_slurm on workers, sackd on the submitter
@@ -75,7 +76,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations
   ├── node.go      Node initialization and setup
-  ├── setup.go     In-container node setup (nss_slurm, users, SSH) in one docker exec
+  ├── setup.go     In-container node setup (nss_slurm, slurmrestd, users, SSH) in one docker exec
   ├── discovery.go Cluster/node discovery queries, VolumeType
   ├── resources.go Resource creation helpers
   ├── types.go     Shared types (Cluster, Node, State)
@@ -95,7 +96,8 @@ pkg/nodeset/       Nodeset expansion (worker-[0-3])
 pkg/probe/         Node readiness probes
 pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
-                   discovery, munge key and slurm.key generation, sacctmgr account commands
+                   discovery, munge key, slurm.key and jwt_hs256.key generation, sacctmgr
+                   account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
 pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock network on the daemon) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
 ```

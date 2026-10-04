@@ -419,7 +419,32 @@ func TestValidate_Valid(t *testing.T) {
 			nodes: []Node{
 				{Role: RoleController},
 				{Role: RoleDB},
+				{Role: RoleAPI},
 				{Role: RoleSubmitter},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "unmanaged api in a managed cluster",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleAPI, Managed: testutil.Ptr(false)},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "managed: true on api",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleAPI, Managed: testutil.Ptr(true)},
+				{Role: RoleWorker},
+			},
+		},
+		{
+			name: "api in an unmanaged cluster",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleAPI},
 				{Role: RoleWorker},
 			},
 		},
@@ -581,6 +606,43 @@ func TestValidate_Constraints(t *testing.T) {
 			wantErr: "count is only valid for worker",
 		},
 		{
+			name: "multiple apis",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleAPI},
+				{Role: RoleAPI},
+				{Role: RoleWorker},
+			},
+			wantErr: "at most one api node allowed, got 2",
+		},
+		{
+			name: "count on api",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleAPI, Count: 2},
+				{Role: RoleWorker},
+			},
+			wantErr: "count is only valid for worker",
+		},
+		{
+			name: "backupController on api",
+			nodes: []Node{
+				{Role: RoleController},
+				{Role: RoleAPI, BackupController: true},
+				{Role: RoleWorker},
+			},
+			wantErr: "backupController is only valid for controller",
+		},
+		{
+			name: "managed api under unmanaged controller",
+			nodes: []Node{
+				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleAPI, Managed: testutil.Ptr(true)},
+				{Role: RoleWorker},
+			},
+			wantErr: "api managed: true requires a managed controller",
+		},
+		{
 			name: "managed db under unmanaged controller",
 			nodes: []Node{
 				{Role: RoleController, Managed: testutil.Ptr(false)},
@@ -632,7 +694,7 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: "compute"},
 				{Role: RoleWorker},
 			},
-			wantErr: `invalid role "compute", must be one of: controller, db, submitter, worker`,
+			wantErr: `invalid role "compute", must be one of: controller, db, api, submitter, worker`,
 		},
 		{
 			name: "managed false on submitter",
@@ -641,7 +703,7 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: RoleSubmitter, Managed: testutil.Ptr(false)},
 				{Role: RoleWorker},
 			},
-			wantErr: `managed is only valid for controller, db and worker nodes, not "submitter"`,
+			wantErr: `managed is only valid for controller, db, api and worker nodes, not "submitter"`,
 		},
 		{
 			name: "managed true on submitter",
@@ -650,7 +712,7 @@ func TestValidate_Constraints(t *testing.T) {
 				{Role: RoleSubmitter, Managed: testutil.Ptr(true)},
 				{Role: RoleWorker},
 			},
-			wantErr: `managed is only valid for controller, db and worker nodes, not "submitter"`,
+			wantErr: `managed is only valid for controller, db, api and worker nodes, not "submitter"`,
 		},
 		{
 			name: "managed worker under unmanaged controller",
@@ -1217,6 +1279,26 @@ func TestCluster_HasManagedDB(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Cluster{Nodes: tt.nodes}
 			assert.Equal(t, tt.want, c.HasManagedDB())
+		})
+	}
+}
+
+func TestCluster_HasManagedAPI(t *testing.T) {
+	tests := []struct {
+		name  string
+		nodes []Node
+		want  bool
+	}{
+		{"no api", []Node{{Role: RoleController}, {Role: RoleDB}, {Role: RoleWorker}}, false},
+		{"api", []Node{{Role: RoleController}, {Role: RoleAPI}, {Role: RoleWorker}}, true},
+		{"managed: true api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: testutil.Ptr(true)}, {Role: RoleWorker}}, true},
+		{"unmanaged api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, false},
+		{"api in an unmanaged cluster", []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleAPI}, {Role: RoleWorker}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Cluster{Nodes: tt.nodes}
+			assert.Equal(t, tt.want, c.HasManagedAPI())
 		})
 	}
 }

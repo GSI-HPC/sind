@@ -352,6 +352,44 @@ func TestSackdReady(t *testing.T) {
 	assert.NotNil(t, p.Check)
 }
 
+func TestSlurmrestdReady(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil) // systemctl is-active
+	m.AddResult("", "", nil)         // port check
+	c := docker.NewClient(&m)
+
+	require.NoError(t, SlurmrestdReady(t.Context(), c, testContainer))
+	require.Len(t, m.Calls, 2)
+	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmrestd"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"exec", string(testContainer), "bash", "-c", "exec 3<>/dev/tcp/localhost/6820"}, m.Calls[1].Args)
+}
+
+func TestSlurmrestdReady_NotListening(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("active\n", "", nil)
+	m.AddResult("", "connection refused", fmt.Errorf("exit status 1"))
+	c := docker.NewClient(&m)
+
+	err := SlurmrestdReady(t.Context(), c, testContainer)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slurmrestd not listening on port 6820")
+	var te *TerminalError
+	assert.NotErrorAs(t, err, &te, "slurmrestd may still be starting")
+}
+
+func TestSlurmrestdReady_Failed(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("failed\n", "", nil)                            // systemctl is-active
+	m.AddResult("fatal: Unable to bind listen port\n", "", nil) // journalctl
+	c := docker.NewClient(&m)
+
+	err := SlurmrestdReady(t.Context(), c, testContainer)
+	var te *TerminalError
+	require.ErrorAs(t, err, &te)
+	assert.Equal(t, "slurmrestd failed:\nfatal: Unable to bind listen port", te.Msg)
+	assert.Len(t, m.Calls, 2, "no port check after a failed unit")
+}
+
 func TestClusterRegistered(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("other\ndev\n", "", nil)
@@ -491,7 +529,7 @@ func TestSlurmdbdReady_Failed(t *testing.T) {
 }
 
 func TestForService(t *testing.T) {
-	for _, svc := range []Service{ServiceMunge, ServiceSSHD, ServiceSlurmctld, ServiceSlurmd, ServiceSlurmdbd, ServiceSackd} {
+	for _, svc := range []Service{ServiceMunge, ServiceSSHD, ServiceSlurmctld, ServiceSlurmd, ServiceSlurmdbd, ServiceSackd, ServiceSlurmrestd} {
 		p := ForService(svc)
 		assert.Equal(t, string(svc), p.Name)
 		assert.NotNil(t, p.Check, svc)
@@ -520,6 +558,10 @@ func TestServiceForRole(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, ServiceSlurmd, svc)
 
+	svc, ok = ServiceForRole(config.RoleAPI)
+	assert.True(t, ok)
+	assert.Equal(t, ServiceSlurmrestd, svc)
+
 	_, ok = ServiceForRole(config.RoleSubmitter)
 	assert.False(t, ok)
 
@@ -535,6 +577,7 @@ func TestNodeProbes(t *testing.T) {
 	}{
 		{config.RoleController, []string{"container", "systemd", "sshd", "slurmctld"}, []string{"", "", "sshd.service", "slurmctld.service"}},
 		{config.RoleDB, []string{"container", "systemd", "sshd", "slurmdbd"}, []string{"", "", "sshd.service", "slurmdbd.service"}},
+		{config.RoleAPI, []string{"container", "systemd", "sshd", "slurmrestd"}, []string{"", "", "sshd.service", "slurmrestd.service"}},
 		{config.RoleWorker, []string{"container", "systemd", "sshd", "slurmd"}, []string{"", "", "sshd.service", "slurmd.service"}},
 		{config.RoleSubmitter, []string{"container", "systemd", "sshd"}, []string{"", "", "sshd.service"}},
 		{"unknown", []string{"container", "systemd", "sshd"}, []string{"", "", "sshd.service"}},

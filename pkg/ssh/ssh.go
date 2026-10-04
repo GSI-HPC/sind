@@ -61,7 +61,7 @@ const defaultRealm = "sind"
 // host the user meant. The patterns are the node names: the roles,
 // controller-backup and worker-<n>.
 // Placeholders: realm.
-const sshCanonicalTemplate = `Host controller controller.* controller-backup controller-backup.* db db.* submitter submitter.* worker-*
+const sshCanonicalTemplate = `Host controller controller.* controller-backup controller-backup.* db db.* api api.* submitter submitter.* worker-*
     CanonicalizeHostname yes
     CanonicalDomains default.%[1]s.sind %[1]s.sind
 

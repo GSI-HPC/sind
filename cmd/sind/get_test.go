@@ -83,6 +83,10 @@ func TestGetClusters_Output(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=db,sind.slurm.version=25.11.0",
 		},
 		testutil.PsEntry{
+			ID: "d", Names: "sind-dev-api", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=api,sind.slurm.version=25.11.0",
+		},
+		testutil.PsEntry{
 			ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "sind-node:25.11",
 			Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.0",
 		},
@@ -92,8 +96,8 @@ func TestGetClusters_Output(t *testing.T) {
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	require.Len(t, lines, 2)
-	assert.Equal(t, []string{"NAME", "NODES", "(S/C/D/W)", "SLURM", "STATUS"}, strings.Fields(lines[0]))
-	assert.Equal(t, []string{"dev", "3", "(0/1/1/1)", "25.11.0", "running"}, strings.Fields(lines[1]))
+	assert.Equal(t, []string{"NAME", "NODES", "(S/C/D/A/W)", "SLURM", "STATUS"}, strings.Fields(lines[0]))
+	assert.Equal(t, []string{"dev", "4", "(0/1/1/1/1)", "25.11.0", "running"}, strings.Fields(lines[1]))
 	assert.Contains(t, stdout, "NAME")
 	assert.Contains(t, stdout, "dev")
 	assert.Contains(t, stdout, "25.11.0")
@@ -113,7 +117,7 @@ func TestGetClusters_UnknownSlurmVersion(t *testing.T) {
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	require.Len(t, lines, 2)
-	assert.Equal(t, []string{"dev", "1", "(0/1/0/0)", "-", "running"}, strings.Fields(lines[1]))
+	assert.Equal(t, []string{"dev", "1", "(0/1/0/0/0)", "-", "running"}, strings.Fields(lines[1]))
 }
 
 // TestGetClusters_EscapesLabels checks that a label holding a terminal
@@ -247,6 +251,44 @@ func TestGetAuthKey_Output(t *testing.T) {
 	stdout, _, err := executeWithMock(&m, "get", "auth-key", "dev")
 	require.NoError(t, err)
 	assert.Equal(t, "c2VjcmV0LWtleQ==\n", stdout)
+}
+
+func TestGetAuthKey_TypeJWT(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running",
+			Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+		},
+		testutil.PsEntry{
+			ID: "b", Names: "sind-dev-api", State: "running",
+			Image: "img:1", Labels: "sind.cluster=dev,sind.role=api",
+		},
+	), "", nil)
+	m.AddResult(testutil.TarArchive("jwt_hs256.key", "jwt-key"), "", nil)
+
+	stdout, _, err := executeWithMock(&m, "get", "auth-key", "dev", "--type", "jwt", "-o", "json")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type": "jwt", "key": "and0LWtleQ=="}`, stdout)
+	assert.Equal(t, []string{"cp", "sind-dev-api:/etc/slurm/jwt_hs256.key", "-"}, m.Calls[1].Args)
+}
+
+func TestGetAuthKey_TypeMissing(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(testutil.PsEntry{
+		ID: "a", Names: "sind-dev-controller", State: "running",
+		Image: "img:1", Labels: "sind.cluster=dev,sind.role=controller",
+	}), "", nil)
+
+	_, _, err := executeWithMock(&m, "get", "auth-key", "dev", "--type", "jwt")
+	require.EqualError(t, err, `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`)
+	assert.False(t, isUsageError(err))
+}
+
+func TestGetAuthKey_TypeCompletion(t *testing.T) {
+	stdout, _, err := executeCommand("__complete", "get", "auth-key", "--type", "")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"munge", "slurm", "jwt", ":4"}, strings.Fields(stdout)[:4])
 }
 
 func TestGetDNS_CommandExists(t *testing.T) {

@@ -25,7 +25,8 @@ sind generates a multi-file Slurm configuration and writes it to the `<realm>-<c
 ├── topology.conf.d/        # topology fragments (if slurm.topology is a map)
 ├── slurmdbd.conf           # accounting daemon config (if a managed db node exists)
 ├── slurmdbd.conf.d/        # slurmdbd fragments (if slurm.slurmdbd is a map)
-└── slurm.key               # auth/slurm key (identity clientIds only)
+├── slurm.key               # auth/slurm key (identity clientIds only)
+└── jwt_hs256.key           # auth/jwt key (managed api node only)
 ```
 
 ## slurm.conf
@@ -77,15 +78,26 @@ AuthInfo=use_client_ids
 LaunchParameters=enable_nss_slurm
 ```
 
+With a managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) it contains the JWT parameters for slurmrestd, each unless the `main` section sets it, with `,use_jwt_client_ids` after the key under identity `clientIds`. An `AuthAltTypes` set there must list `auth/jwt` (validation checks it); an `AuthAltParameters` set there replaces sind's, e.g. with a JWKS file:
+
+```
+AuthAltTypes=auth/jwt
+AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key
+```
+
 sind does not modify `slurm.conf` after initial creation.
 
 ## slurmdbd.conf
 
-Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (`StorageHost=localhost`, `StorageLoc=slurm_acct_db`, `StorageUser=slurm`, which MariaDB authenticates by `unix_socket` as the OS user `slurm` slurmdbd runs as, or by the `StoragePass` the `slurmdbd` section sets), keeps the pid file in `/run/slurmdbd` and the log in `/var/log/slurm/slurmdbd.log`, and is owned by `slurm` with mode `0600`, as slurmdbd requires. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`. The `slurmdbd` section extends it like the other sections. The fragments of its map form, in `slurmdbd.conf.d/`, get the same protection, as they can hold secrets such as a `StoragePass`: owned by `slurm` with mode `0600`, in a directory only `slurm` can read.
+Only generated for a cluster with a managed db node. It points slurmdbd at the local MariaDB (`StorageHost=localhost`, `StorageLoc=slurm_acct_db`, `StorageUser=slurm`, which MariaDB authenticates by `unix_socket` as the OS user `slurm` slurmdbd runs as, or by the `StoragePass` the `slurmdbd` section sets), keeps the pid file in `/run/slurmdbd` and the log in `/var/log/slurm/slurmdbd.log`, and is owned by `slurm` with mode `0600`, as slurmdbd requires. It authenticates with `AuthType=auth/munge`, or with identity `clientIds` with `AuthType=auth/slurm` and `AuthInfo=use_client_ids`, and with a managed api node also with the JWT parameters of `slurm.conf`, each unless the `slurmdbd` section sets it (slurmdbd has no default key path, so an `AuthAltParameters` there needs a `jwt_key=` or `jwks=`). The `slurmdbd` section extends it like the other sections. The fragments of its map form, in `slurmdbd.conf.d/`, get the same protection, as they can hold secrets such as a `StoragePass`: owned by `slurm` with mode `0600`, in a directory only `slurm` can read.
 
 ## slurm.key
 
 Only generated with identity `clientIds`: 1024 random bytes, owned by `slurm` with mode `0600`, the key of `auth/slurm` and `cred/slurm`. Every node reads it from the config volume; there is no munge key. `sind get auth-key` prints it.
+
+## jwt_hs256.key
+
+Only generated with a managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}): 32 random bytes, owned by `slurm` with mode `0600`, the HS256 key with which slurmctld and slurmdbd check the tokens of REST API requests (`auth/jwt`). slurmrestd itself does not read it. `sind get auth-key --type jwt` prints it. Whoever has the key can sign a token for any user, root included.
 
 ## sind-nodes.conf
 

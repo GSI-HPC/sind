@@ -54,6 +54,15 @@ func TestNodeShortNames(t *testing.T) {
 			want: []string{"controller", "db", "worker-0"},
 		},
 		{
+			name: "with api",
+			nodes: []config.Node{
+				{Role: config.RoleController},
+				{Role: config.RoleAPI},
+				{Role: config.RoleWorker},
+			},
+			want: []string{"controller", "api", "worker-0"},
+		},
+		{
 			name: "with backup controller",
 			nodes: []config.Node{
 				{Role: config.RoleController, BackupController: true},
