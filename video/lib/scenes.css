@@ -65,6 +65,29 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 /* Four bullets: start higher and closer together, so the last clears the captions. */
 .bullets:has(> .bullet:nth-child(4)) { top: 290px; gap: 20px; }
 
+/* Diagram: nodes and labels in HTML over an SVG layer of groups and edges. */
+.dlines { position: absolute; left: 0; top: 0; overflow: visible; }
+.dgroup { fill: rgba(20, 184, 166, 0.05); stroke: rgba(94, 234, 212, 0.45); stroke-width: 2; stroke-dasharray: 10 8; }
+.dgroup.accent { stroke: var(--teal); stroke-dasharray: none; }
+.dgroup-label { position: absolute; font-size: 22px; font-weight: 700; color: var(--mint); white-space: nowrap; }
+.dedge { fill: none; stroke: #94a3b8; stroke-width: 3; stroke-linecap: round; }
+.dedge.accent { stroke: var(--mint); }
+.dedge.dashed { stroke-dasharray: 10 9; }
+.dreveal { fill: none; stroke: #fff; stroke-width: 30; stroke-linecap: round; }
+.dnode { position: absolute; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-radius: 20px; background: #16213a; border: 2px solid var(--line); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35); }
+.dnode.accent { border-color: var(--teal); background: #12303a; }
+.dnode.ghost { border-style: dashed; background: rgba(30, 41, 59, 0.45); box-shadow: none; }
+.dnode .icon { flex: none; width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: rgba(20, 184, 166, 0.16); }
+.dnode .icon svg { width: 30px; height: 30px; }
+.dnode .txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dnode .t1 { font-size: 28px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dnode .t2 { font-size: 22px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dnode .t2.code { font-family: "JetBrains Mono", monospace; font-size: 20px; }
+.dlabel-at { position: absolute; width: 0; height: 0; display: flex; align-items: center; justify-content: center; }
+.dlabel { flex: none; padding: 4px 14px; border-radius: 999px; background: var(--bg); border: 2px solid var(--line); font-size: 22px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.diagram-art { position: absolute; }
+.diagram-art > svg { width: 100%; height: 100%; }
+
 /* Terminal window. */
 .term { position: absolute; left: 100px; top: 150px; width: 1340px; height: 700px; border-radius: 22px; background: #0b1220; border: 2px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); overflow: hidden; }
 .term-bar { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 22px; background: #111a2c; border-bottom: 2px solid #1c2740; }

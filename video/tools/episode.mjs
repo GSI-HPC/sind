@@ -136,6 +136,12 @@ async function check(id, dir) {
   });
   await page.goto("file://" + path.join(dir, "index.html"));
   const ep = await page.evaluate(() => window.__episode);
+  // Text that does not fit its box is cut off with an ellipsis.
+  const clipped = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return [...document.querySelectorAll(".dnode .t1, .dnode .t2")].filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent);
+  });
+  for (const text of clipped) warnings.push(`text cut off in a diagram node: "${text}"; widen the node (width) or shorten the text`);
   await browser.close();
   if (!ep) {
     errors.push("no window.__episode: the page must end with Episode.create(...)...done()");

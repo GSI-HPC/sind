@@ -83,10 +83,11 @@ Pick scenes by what the viewer needs to see:
 | `intro` | always first | kicker = the docs section's title ("Getting started", "Usage"), title = the page title; no episode numbers |
 | `talk` | framing right after the intro: what you'll build, why it matters | once per episode; up to 3 chips of about 40 characters together, or they wrap |
 | `slide` | a concept or a list of steps | at most 4 bullets, each landing on a cue word said in the narration |
+| `diagram` | how parts relate: networks, components, what talks to what | up to about 8 nodes on a grid; build it up on cue words, nodes before the edges between them |
 | `terminal` | commands and their output | lines up to about 62 columns keep the full-size font |
 | `terminal` with `wide: true` | wider output, e.g. tables like `sind get nodes` | up to 96 columns at full size |
 | `outro` | always last | `next` is the title of the page to read next: the page's own "going further" link, else the next page in the docs navigation |
-| `custom(kind, o)` | anything else (a diagram, a config file) | see "Custom scenes" below |
+| `custom(kind, o)` | anything else (a config file, a comparison) | see "Custom scenes" below |
 
 Keep scenes between about 5 and 20 seconds; split a long explanation over
 several scenes rather than letting one slide hang. A terminal that only shows
@@ -181,6 +182,11 @@ was voiced. Fix all of them, and resolve every warning or say why it stays:
   columns by choosing another command from the page.
 - `console: cue "line:word" matches N words` → the cue picked the first
   match; write `line:word#0` if that is right, or a longer prefix.
+- `console: diagram …: nodes … overlap` or `… reaches outside the diagram
+  area` → change `grid`, `pos` or `width`; with many columns, `shot: "mini"`
+  gives the diagram the full width.
+- `text cut off in a diagram node` → widen the node (`width`) or shorten the
+  title; 260 px fit about 11 characters.
 - `command/output line not on the docs page` → copy it from the page; the
   episode is wrong, not the page. If the page is wrong, fix it in the same PR
   (a "Keep in sync" comment on the page names the test that covers it).
@@ -259,11 +265,11 @@ timeline, then continue with the API object:
 const ep = Episode.create({ tl, id: "networking", title: "…", series: "Networking" })
   .intro({ … })
   .talk({ … });
-const { el, t } = ep.custom("diagram", { chapter: "How nodes find each other", shot: "cornerR" });
-el.innerHTML = `<div class="bg-glow"></div><div class="diagram">…</div>`;
-Scenes.enter(ep.tl, el.querySelector(".diagram"), t + 0.5);
+const { el, t } = ep.custom("config", { chapter: "A cluster file", shot: "cornerR" });
+el.innerHTML = `<div class="bg-glow"></div><pre class="config">…</pre>`;
+Scenes.enter(ep.tl, el.querySelector(".config"), t + 0.5);
 ep.P.wait(0.6);
-ep.say({ id: "dns", mood: "neutral" });
+ep.say({ id: "config", mood: "neutral" });
 ep.outro({ … }).done();
 ```
 
@@ -272,7 +278,10 @@ Style it in the page's `<style>` with the palette variables from
 `Math.random`, `Date.now`, `setTimeout`, CSS animations or network requests;
 HyperFrames renders frames in any order on parallel workers.
 
-Move a scene into `lib/episode.js` only when a second episode needs it.
+Move a scene into `lib/episode.js` only when a second episode needs it. A
+new slide layout (a table, a code view) builds on `slideFrame(kind, o)` there,
+as `slide` and `diagram` do: it gets the chapter label, title, corner shot,
+narration and cue timing for free.
 Changing `lib/`, the voice presets or the lexicon re-renders **every**
 episode in CI and can change all of them, so run `npm run episode -- voice
 --all` (a fresh checkout has no narration) and `npm run episode -- check
@@ -286,6 +295,8 @@ episode in CI and can change all of them, so run `npm run episode -- voice
 | `line "x" has not been said yet` | time references can only point at lines said in this or an earlier scene |
 | `word "x" not found in: …` | the cue must be the start of a word in that line (case and punctuation ignored); use `x#1` for the second match |
 | `bad time reference` | write `"line:word"`, `"line:word#n"`, `"line:word+0.5"` or seconds |
+| `diagram …: group/edge/pulse names no node` | ids in `around`, `from`, `to` and `pulse` must be node ids (edges also take group ids) |
+| `diagram …: reveal "x" matches nothing` | the selector must match an element inside the diagram's `svg` |
 | lint: missing timeline or duration source | the page must create `tl`, pass it to `Episode.create` and register it on `window.__timelines` inline |
 | lint: `font_family_without_font_face` | use only Inter and JetBrains Mono, which the copied head declares |
 | `fetches from the network` | load everything from `vendor/` or the episode directory |

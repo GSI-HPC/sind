@@ -14,7 +14,7 @@ quickstart, its embedding in the docs, and agent skills to make more.
 script.json ──► voice/sindy_voice.py ──► line.wav + line.json (words, visemes, loudness)
                  (Kokoro-82M, CPU)                       │
                                                          ▼
-episodes/<id>/     ──  lib/episode.js (scene builders: intro, talk, slide, terminal, outro)
+episodes/<id>/     ──  lib/episode.js (scenes: intro, talk, slide, diagram, terminal, outro)
                    ──  lib/scenes.js  (planner, captions, terminal, shots, transitions)
                    ──  lib/sindy.js   (avatar: lip sync, blinks, expressions, gaze, wave)
                                                          │
@@ -65,6 +65,7 @@ Episode.create({ tl, id: "quickstart", title: "Quickstart: your first Slurm clus
   .intro({ chapter: "Hi, I'm Sindy", kicker: "Getting started", title: "Quickstart", say: "intro" })
   .talk({ chapter: "What you'll build", title: "…", sub: "…", chips: ["…"], nameTag: {}, say: "welcome" })
   .slide({ chapter: "…", title: "…", say: "what", bullets: [{ icon: "network", title: "…", text: "…", at: "what:network" }] })
+  .diagram({ chapter: "…", title: "…", say: "mesh", nodes: [/* … */], groups: [/* … */], edges: [/* … */] })
   .terminal({ chapter: "…", say: ["create", "check"], steps: [{ cmd: "sind create cluster", at: "create:Run" }] })
   .terminal({ wide: true, chapter: "…", say: "nodes", steps: [/* … */] })
   .outro({ chapter: "Wrap-up", next: "…", say: "outro" })
@@ -77,6 +78,7 @@ window.__timelines["main"] = tl; // in the page, so HyperFrames' lint sees it
 | `intro` | rises in on the right, waves | — | logo sting, episode title, disclosure |
 | `talk` | fullscreen on the left | iris after the intro, else push | framing the topic: title card, chips, optional name tag |
 | `slide` | corner bubble | push | a title and up to four bullets that land on their cue words |
+| `diagram` | corner bubble (or `shot: "mini"` for more room) | push | boxes and arrows: how parts relate, built up on cue words |
 | `terminal` | corner bubble | push | commands and output; full-size font up to 62 columns, shrinks to fit 96 |
 | `terminal` with `wide: true` | small bubble (or `avatar: "none"`) | push | long lines, e.g. `sind get nodes`: 96 columns at full size, shrinks to fit 160 |
 | `outro` | fullscreen on the left, waves, winks | blur | links and the next episode, then fade to black |
@@ -87,6 +89,24 @@ Every scene takes `chapter` (listed under the docs player and shown on screen),
 (seconds before the narration starts). Terminals fit their font to the longest
 line and log a console warning when a line does not fit even at the smallest
 size.
+
+**Slide layouts.** `slide` and `diagram` share one frame (`slideFrame()` in
+`lib/episode.js`): chapter label, title, Sindy in the corner, narration, and
+items that appear just before their cue word (`at`). A new layout, such as a
+table or a config file view, builds on the same frame.
+
+**Diagrams.** Nodes sit on a grid over the area below the title: `nodes: [{
+id, title, text, icon, pos: [col, row], width, accent, ghost, code, at }]`
+(fractional positions are fine; `grid: [cols, rows]` fixes the grid,
+`nodeWidth` the default width of 260 px, which fits a title of about 11
+characters). `groups: [{ id, label, around: [node ids], accent, at }]` draw a
+labelled box around nodes, and `edges: [{ from, to, label, dashed, arrow:
+"end" | "both" | "start" | "none", bend, accent, at }]` connect nodes or
+groups and draw themselves along their path. `pulse: [{ node, at }]` makes a
+node swell and ring once. For anything else, `svg` puts raw SVG into the area,
+and `reveal: [{ el: "#selector", at, draw }]` fades its elements in or draws
+their strokes. Overlapping nodes or groups, boxes outside the area, and node
+text that is cut off show up as warnings in `episode check`.
 
 **Narration and acting.** `say` is a line id, `{ id, mood, cues, look, gap }`
 or a list of those. `mood` is the expression for the line, `cues` change it at
