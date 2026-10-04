@@ -5,6 +5,7 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -59,7 +60,20 @@ func (c *Client) CreateNetworkWithSubnet(ctx context.Context, name NetworkName, 
 	return c.createNetwork(ctx, name, labels, args)
 }
 
-// createNetwork runs docker network create with the given IPAM flags.
+// ErrAddressPoolsExhausted reports that the Docker daemon has no subnet
+// left in its default address pools for a new network (CreateNetwork).
+var ErrAddressPoolsExhausted = errors.New("the Docker daemon's default address pools are used up")
+
+// addressPoolsExhausted are the daemon's messages for default address pools
+// without a free subnet, in current and in older Docker versions.
+var addressPoolsExhausted = []string{
+	"all predefined address pools have been fully subnetted",
+	"could not find an available, non-overlapping IPv4 address pool",
+}
+
+// createNetwork runs docker network create with the given IPAM flags. When
+// the default address pools are used up, the error wraps
+// ErrAddressPoolsExhausted and says how to get more.
 func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Labels, ipamArgs []string) (NetworkID, error) {
 	args := []string{"network", "create"}
 	args = append(args, ipamArgs...)
@@ -67,6 +81,13 @@ func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Lab
 	args = append(args, string(name))
 	stdout, _, err := c.run(ctx, args...)
 	if err != nil {
+		for _, msg := range addressPoolsExhausted {
+			if strings.Contains(err.Error(), msg) {
+				return "", fmt.Errorf("%w: every network takes a subnet from them, and a stock daemon has about 30; "+
+					"give the daemon more or smaller pools with default-address-pools in /etc/docker/daemon.json and restart it, "+
+					"or remove networks no longer in use (%w)", ErrAddressPoolsExhausted, err)
+			}
+		}
 		return "", err
 	}
 	return NetworkID(strings.TrimSpace(stdout)), nil

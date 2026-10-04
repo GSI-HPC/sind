@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -419,6 +420,28 @@ func TestCreateNetwork_Error(t *testing.T) {
 	id, err := c.CreateNetwork(t.Context(), testNetworkName, nil)
 	assert.Error(t, err)
 	assert.Empty(t, id)
+}
+
+func TestCreateNetwork_AddressPoolsExhausted(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: all predefined address pools have been fully subnetted\n",
+		"Error response from daemon: could not find an available, non-overlapping IPv4 address pool among the defaults to assign to the network\n",
+	} {
+		t.Run(stderr, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", stderr, &exec.ExitError{ProcessState: exitCode1(t)})
+			c := NewClient(&m)
+
+			_, err := c.CreateNetwork(t.Context(), testNetworkName, nil)
+
+			require.ErrorIs(t, err, ErrAddressPoolsExhausted)
+			assert.Contains(t, err.Error(), "the Docker daemon's default address pools are used up: every network takes a subnet from them")
+			assert.Contains(t, err.Error(), "default-address-pools in /etc/docker/daemon.json")
+			assert.Contains(t, err.Error(), "(exit status 1: "+strings.TrimSpace(stderr)+")")
+			var exitErr *exec.ExitError
+			assert.ErrorAs(t, err, &exitErr, "the docker error stays in the chain")
+		})
+	}
 }
 
 func TestCreateNetworkWithSubnet(t *testing.T) {

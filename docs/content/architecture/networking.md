@@ -136,17 +136,17 @@ RULES
 
 ## Limits
 
-- **Address pools.** Each cluster network and each realm's mesh take one network from Docker's default address pools. A stock daemon has room for about 30 such networks (`172.17.0.0/16` to `172.31.0.0/16`, and `192.168.0.0/16` in `/20` steps), shared with Compose projects and every other network on the host. When they run out, `sind create cluster` fails with Docker's `all predefined address pools have been fully subnetted`. Hosts that run many clusters or realms at once can give Docker more, smaller pools in `/etc/docker/daemon.json` and restart the daemon:
+- **Address pools.** Each cluster network and each realm's mesh take one network from Docker's default address pools. A stock daemon has room for about 30 such networks (`172.17.0.0/16` to `172.31.0.0/16`, and `192.168.0.0/16` in `/20` steps), shared with Compose projects and every other network on the host. When they run out, `sind create cluster` fails with Docker's `all predefined address pools have been fully subnetted` and a pointer to `default-address-pools`. Hosts that run many clusters or realms at once can give Docker more, smaller pools in `/etc/docker/daemon.json` and restart the daemon:
 
   ```json
   {
     "default-address-pools": [
-      {"base": "10.200.0.0/16", "size": 24}
+      {"base": "10.200.0.0/13", "size": 21}
     ]
   }
   ```
 
-  This yields 256 networks of 254 addresses each.
+  This yields 256 networks of 2,046 addresses each, from `10.200.0.0` to `10.207.255.255`; pick a base that no network of the host or its LAN uses. A pool `size` above 21 gives more networks, but ones too small for a mesh to pin its DNS address (see [above](#after-a-host-reboot-or-a-docker-daemon-restart)) and for as many containers as a bridge holds: 253 with a `size` of 24.
 - **Bridge ports.** A Linux bridge has 1,024 ports, one of which the kernel reserves, so a Docker bridge network holds at most 1,023 containers. The mesh holds the DNS container, the SSH relay and every node of every cluster in the realm; a cluster network holds the cluster's nodes and the relay. `sind create cluster` and `sind create worker` count the containers connected to both networks, stopped ones included, before they create any node, and refuse nodes that would not fit:
 
   ```
