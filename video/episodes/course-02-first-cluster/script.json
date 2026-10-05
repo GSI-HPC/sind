@@ -1,0 +1,32 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! In this episode, we go from an empty machine to a running Slurm cluster, and back again." },
+    { "id": "hook", "text": "Say you're a research software engineer with a fresh batch script. You'd like to watch it run on a real Slurm cluster, today." },
+    { "id": "need", "text": "All you need is a Linux machine with Docker, plus sind itself, a single binary. sind needs no root privileges of its own." },
+    { "id": "plan", "text": "Here's the plan: install sind, check the host with sind doctor, create a cluster and submit the job, then SSH in and clean up." },
+    { "id": "dl", "text": "First, download the binary from the latest release. This one is for Intel and AMD machines, and there's one for ARM too." },
+    { "id": "verify", "text": "Before you install it, verify it. The release carries a build attestation, and the GitHub CLI checks that the sind release workflow made this file." },
+    { "id": "install", "text": "Then install it for your user alone, into the local bin directory. No root needed." },
+    { "id": "path", "text": "If your shell can't find sind, log out and back in. Most distributions only put that directory on your path if it exists at login." },
+    { "id": "alt", "text": "Prefer a tool manager, or building from source with Go? The installation guide covers both." },
+    { "id": "doctor", "text": "Next, ask sind doctor whether the host is ready. It looks at the Docker version and daemon mode, where the daemon runs, and the cgroup setup." },
+    { "id": "doctorok", "text": "Every line starts with a check mark, so we're good to go. If a check fails, sind doctor tells you how to fix it." },
+    { "id": "create", "text": "Time for the cluster! Run sind create cluster. With no options, you get one controller and one worker, in a cluster named default." },
+    { "id": "check", "text": "sind is silent when all goes well, so let's ask: sind get clusters reports it as running." },
+    { "id": "nodes", "text": "And sind get nodes goes one level deeper: every node container, with its host name and IP address." },
+    { "id": "data", "text": "One detail makes testing easy. sind mounts your current directory on every node, as the data directory." },
+    { "id": "data2", "text": "So a script you save here is right there on the controller and the worker, and so is its output." },
+    { "id": "script", "text": "Let's write a tiny job script. It prints the host name of its node, then sleeps for thirty seconds." },
+    { "id": "submit", "text": "Submit it with sind exec, which runs sbatch on the controller. Slurm answers with the job ID." },
+    { "id": "output", "text": "Once the job completes, its output file is right here in your directory. Hello from worker zero!" },
+    { "id": "ssh", "text": "Want to look around on a node yourself? sind ssh worker zero logs you in there, as root." },
+    { "id": "sshhome", "text": "Your shell starts in the home directory, not in the data directory." },
+    { "id": "delete", "text": "Back on your machine, sind delete cluster removes the cluster when you're done." },
+    { "id": "delete2", "text": "And with the last cluster gone, sind also cleans up the shared network, DNS and SSH services." },
+    { "id": "take1", "text": "Let's recap. Run sind doctor first, so you know the host is ready." },
+    { "id": "take2", "text": "One command creates a cluster, and one more deletes it." },
+    { "id": "take3", "text": "And your current directory becomes the data directory on every node, so your jobs see your files." },
+    { "id": "outro", "text": "Next up: inside a sind cluster, with its roles, networks and DNS. See you there!" }
+  ]
+}
