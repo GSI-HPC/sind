@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Controller Failover</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Controller Failover: docs/content/guides/controller-failover.md. ha.yaml,
+  // the commands, the sind get cluster and scontrol ping output are copied
+  // from that page (Create a cluster with a backup controller, Check which
+  // controller is in control, Graceful failover, Failover by outage); keep
+  // both in sync.
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "controller-failover", title: "Controller Failover: a backup slurmctld", series: "Controller Failover" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Guides", title: "Controller Failover", say: "intro" })
+    .talk({
+      chapter: "Why rehearse a failover",
+      kicker: "Guides",
+      title: "Rehearse a failover",
+      sub: "A primary and a backup slurmctld: hand over gracefully, or simulate an outage.",
+      chips: ["Primary + backup", "Graceful or outage"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "thinking", cues: { Rehearse: "happy" }, look: { Rehearse: "camera" } },
+    })
+    .code({
+      chapter: "A backup controller",
+      title: "One line in the config",
+      file: "ha.yaml",
+      lang: "yaml",
+      text: ["kind: Cluster", "name: dev", "nodes:", "  - role: controller", "    backupController: true", "  - role: worker", "    count: 2"].join("\n"),
+      say: { id: "config", mood: "neutral" },
+      marks: [
+        { text: "backupController: true", at: "config:backup" },
+        { text: "count: 2", at: "config:two" },
+      ],
+    })
+    .diagram({
+      chapter: "What sind sets up",
+      title: "What sind sets up",
+      say: [
+        { id: "setup", mood: "neutral" },
+        { id: "setup2", mood: "neutral", cues: { takes: "happy" } },
+      ],
+      grid: [3, 2],
+      shot: "mini",
+      nodes: [
+        { id: "ctl", title: "controller", text: "primary slurmctld", icon: "server", width: 300, pos: [0, 1], at: "setup:sind" },
+        { id: "conf", title: "slurm.conf", text: "SlurmctldTimeout=20", code: true, icon: "job", width: 360, pos: [1, 0], at: "setup:lists" },
+        { id: "bak", title: "controller-backup", text: "backup slurmctld", icon: "server", width: 400, pos: [2, 1], at: "setup:backup" },
+        { id: "state", title: "state volume", text: "/var/spool/slurmctld", code: true, icon: "db", width: 380, pos: [1, 1], at: "setup2:shared" },
+      ],
+      edges: [
+        { from: "conf", to: "ctl", dashed: true, at: "setup:timeout" },
+        { from: "conf", to: "bak", dashed: true, at: "setup:timeout" },
+        { from: "ctl", to: "state", arrow: "both", at: "setup2:volume" },
+        { from: "bak", to: "state", arrow: "both", at: "setup2:volume" },
+      ],
+      pulse: [{ node: "bak", at: "setup2:takes" }],
+    })
+    .terminal({
+      wide: true,
+      chapter: "Create and check the pair",
+      say: [
+        { id: "create", mood: "happy" },
+        { id: "show", mood: "neutral", cues: { star: "smug" }, gap: 1.2 },
+        { id: "ping", mood: "happy", cues: { up: "joy" }, gap: 1.0 },
+      ],
+      steps: [
+        { cmd: "sind create cluster --config ha.yaml", at: "create:Create#0" },
+        { ff: "⏩ fast-forward", at: "create:waits", hold: 1.6 },
+        { prompt: true, at: "create:answer" },
+        { cmd: "sind get cluster dev", at: "show:sind" },
+        {
+          out: [
+            "NODES",
+            "NAME                    ROLE        HA         IP            STATUS    SERVICES",
+            "controller.dev          controller  primary*   172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓",
+            "controller-backup.dev   controller  backup     172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓",
+            "worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓",
+          ].join("\n"),
+          at: "show:shows",
+        },
+        { mark: "primary*", at: "show:star", delay: -0.1 },
+        { cmd: "sind exec dev -- scontrol ping", at: "ping:scontrol" },
+        { out: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP", at: "ping:reports" },
+        { mark: "is UP", at: "ping:up", delay: -0.1 },
+      ],
+    })
+    // sind get cluster shows backup* and slurmctld ✗ after a takeover, but the
+    // page has no sample of that output, so these commands stay silent.
+    .terminal({
+      chapter: "Trigger a failover",
+      say: [
+        { id: "takeover", mood: "neutral", cues: { kept: "happy" } },
+        { id: "handback", mood: "neutral", cues: { charge: "happy" } },
+        { id: "cut", mood: "concerned", cues: { backup: "happy" } },
+        { id: "on", mood: "happy", cues: { again: "smug" } },
+      ],
+      steps: [
+        { cmd: "sind exec dev -- scontrol takeover", at: "takeover:scontrol" },
+        { prompt: true, after: 0.6 },
+        { cmd: "sind ssh controller.dev -- systemctl start slurmctld", at: "handback:start" },
+        { prompt: true, after: 0.6 },
+        { cmd: "sind power cut controller.dev", at: "cut:sind" },
+        { prompt: true, after: 0.6 },
+        { ff: "⏩ fast-forward", at: "cut:twenty", hold: 2.0 },
+        { cmd: "sind power on controller.dev", at: "on:Power" },
+        { prompt: true, after: 0.6 },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "takeaway", mood: "neutral", cues: { gracefully: "happy" } },
+      bullets: [
+        { icon: "server", title: "backupController: true", text: "adds controller-backup and a shared state volume", at: "takeaway:line" },
+        { icon: "check", title: "scontrol takeover", text: "a graceful failover; jobs are kept", at: "takeaway:takeover" },
+        { icon: "warn", title: "sind power cut", text: "the backup takes over after SlurmctldTimeout", at: "takeaway:power" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "Unmanaged Cluster", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
