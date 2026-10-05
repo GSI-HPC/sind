@@ -47,6 +47,17 @@
     "gid": "dʒˌiːˌaɪdˈiː",
     "cpus": "sˌiːpˌiːjˈuːz",
     "gpus": "dʒˌiːpˌiːjˈuːz",
-    "vms": "vˌiːˈɛmz"
+    "vms": "vˌiːˈɛmz",
+    "exec": "ˈɛɡzɛk",
+    "config": "kˈɑːnfɪɡ",
+    "configs": "kˈɑːnfɪɡz",
+    "containerd": "kəntˈeɪnɚ dˈiː",
+    "provenance": "pɹˈɑːvənəns",
+    "retry": "ɹiːtɹˈaɪ",
+    "retries": "ɹiːtɹˈaɪz",
+    "backend": "bˈækɛnd",
+    "backends": "bˈækɛndz",
+    "clientids": "klˈaɪənt ˌaɪdˈiːz",
+    "ids": "ˌaɪdˈiːz"
   }
 }
