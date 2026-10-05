@@ -6,6 +6,8 @@ description: "Node roles, shorthand syntax, managed vs unmanaged workers, databa
 toc: true
 ---
 
+{{< video "node-definitions" >}}
+
 ## Node roles
 
 | Role | Count | Required | Slurm daemons | Description |
