@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    {"id": "intro", "text": "Hi, I'm Sindy! Let's get onto the nodes of your cluster."},
+    {"id": "why", "text": "Your cluster is up, but its nodes are containers. How do you get a shell on one, or run a quick command there?"},
+    {"id": "usecase", "text": "Say you're testing a job script, and want to look around on a worker. sind gives you three ways in: ssh, enter and exec."},
+    {"id": "ssh", "text": "sind ssh logs you in to any node by its name, here the controller."},
+    {"id": "ssh2", "text": "To run a command on a node, put it after two dashes. Full-screen programs like top also want the t flag."},
+    {"id": "relay", "text": "Under the hood, sind ssh runs ssh in a relay container on the mesh, which reaches every node by name."},
+    {"id": "enter", "text": "sind enter opens a shell on the submitter, or on the controller if there's none, right in the data directory."},
+    {"id": "exec", "text": "sind exec runs a single command there instead, and passes back its exit status, here three."},
+    {"id": "data", "text": "That data directory is your current directory on the host, mounted on every node."},
+    {"id": "home", "text": "sind ssh starts in your home directory instead, so change into the data directory there."},
+    {"id": "own", "text": "And to use your own ssh client, include the SSH config that sind exports for each realm."},
+    {"id": "take", "text": "So: sind ssh reaches any node by name, enter and exec land in the data directory, and your own client needs one include line."},
+    {"id": "outro", "text": "Next up: adding and removing workers. See you there!"}
+  ]
+}

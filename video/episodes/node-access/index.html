@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Node Access</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+  /* Show "--" and "$?" as typed, not as JetBrains Mono ligatures. */
+  .term-body { font-variant-ligatures: none; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Node Access: docs/content/usage/node-access.md. Terminal content is copied
+  // from that page; keep both in sync. The page shows no output for these
+  // commands, so interactive sessions are skipped with a fast-forward, and the
+  // exit status is only the page's own comment ("# 3") on the command line.
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "node-access", title: "Node Access: ssh, enter and exec", series: "Node Access" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Usage", title: "Node Access", say: "intro" })
+    .talk({
+      chapter: "Three ways in",
+      kicker: "Usage",
+      title: "Three ways in",
+      sub: "SSH to any node, or a shell and one-shot commands on the submitter.",
+      chips: ["sind ssh", "sind enter", "sind exec"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "why", mood: "happy" },
+        { id: "usecase", mood: "thinking" },
+      ],
+    })
+    .terminal({
+      chapter: "SSH into any node",
+      say: [
+        { id: "ssh", mood: "neutral" },
+        { id: "ssh2", mood: "neutral", cues: { flag: "smug" } },
+      ],
+      steps: [
+        { cmd: "sind ssh controller", at: "ssh:sind" },
+        { ff: "⏩ fast-forward", at: "ssh:controller+0.9", hold: 1.4 },
+        { prompt: true, at: "ssh:controller+1.6" },
+        { cmd: "sind ssh -t worker-0 -- top", at: "ssh2:dashes" },
+        { mark: "-t", at: "ssh2:flag", until: "ssh2:flag+1.6" },
+        { ff: "⏩ fast-forward", at: "ssh2:flag+1.2", hold: 1.4 },
+        { prompt: true, at: "ssh2:flag+1.9" },
+      ],
+    })
+    .diagram({
+      chapter: "Through the SSH relay",
+      title: "sind ssh goes through a relay",
+      shot: "mini",
+      say: { id: "relay", mood: "neutral", cues: { name: "happy" } },
+      grid: [4, 2],
+      nodes: [
+        { id: "you", title: "your shell", text: "sind ssh worker-0", icon: "host", pos: [0, 0.5], width: 300, at: "relay:sind" },
+        { id: "relay", title: "sind-ssh", text: "relay container", icon: "key", pos: [1.8, 0.5], width: 280, accent: true, at: "relay:relay" },
+        { id: "ctl", title: "controller", icon: "server", pos: [3, 0], at: "relay:every" },
+        { id: "w0", title: "worker-0", icon: "nodes", pos: [3, 1], at: "relay:every" },
+      ],
+      groups: [{ id: "mesh", label: "mesh", around: ["relay", "ctl", "w0"], at: "relay:mesh" }],
+      edges: [
+        { from: "you", to: "relay", label: "docker exec", accent: true, at: "relay:runs" },
+        { from: "relay", to: "ctl", label: "ssh", at: "relay:reaches" },
+        { from: "relay", to: "w0", label: "ssh", at: "relay:reaches+0.2" },
+      ],
+      pulse: [{ node: "w0", at: "relay:name" }],
+    })
+    .terminal({
+      chapter: "A shell or one command",
+      say: [
+        { id: "enter", mood: "neutral" },
+        { id: "exec", mood: "neutral", cues: { three: "happy" } },
+      ],
+      steps: [
+        { cmd: "sind enter", at: "enter:sind" },
+        { ff: "⏩ fast-forward", at: "enter:directory", hold: 1.4 },
+        { prompt: true, at: "enter:directory+0.7" },
+        { cmd: "sind exec -- sh -c 'exit 3'; echo $?   # 3", at: "exec:sind" },
+        { prompt: true, after: 0.8 },
+        { mark: "exit 3", at: "exec:single", until: "exec:exit" },
+        { mark: "echo $?", at: "exec:exit", until: "exec:three+1.2" },
+      ],
+    })
+    .slide({
+      chapter: "Where you land",
+      title: "Where you land",
+      say: [
+        { id: "data", mood: "neutral" },
+        { id: "home", mood: "thinking", cues: { change: "neutral" } },
+        { id: "own", mood: "happy" },
+      ],
+      bullets: [
+        { icon: "disk", title: "enter and exec: /data", text: "your current directory, mounted on every node", at: "data:current" },
+        { icon: "user", title: "sind ssh: the home directory", text: "the data mount is still there: cd /data", at: "home:home" },
+        { icon: "key", title: "Your own ssh client", text: "Include the ssh_config that sind exports per realm", at: "own:include" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "server", title: "sind ssh NODE", text: "any node by name, through the relay", at: "take:reaches" },
+        { icon: "terminal", title: "sind enter · sind exec", text: "a shell or one command, in /data", at: "take:enter" },
+        { icon: "key", title: "Your own ssh client", text: "one Include line for the exported ssh_config", at: "take:own" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "Worker Management", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
