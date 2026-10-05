@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind course 08: Slurm in your pipeline</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Course 08, Slurm in your pipeline: docs/content/course/08-slurm-in-ci.md.
+  // Commands, output and config are copied from guides/ci-cd.md (job steps,
+  // SlurmdTimeout), configuration/realms.md (realm example),
+  // usage/diagnostics.md (version and doctor JSON) and usage/exit-status.md
+  // (usage error), via the course page's Commands section; keep all of them
+  // in sync. The runner slide follows guides/ci-cd.md (data directory,
+  // untrusted changes, the realm lock after a job timeout).
+
+  const SERIES = "Course 08";
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "course-08-slurm-in-ci", title: "08 · Slurm in your pipeline", series: SERIES })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "The sind course · 08", title: "Slurm in your pipeline", say: "intro" })
+    .talk({
+      chapter: "Mocks only go so far",
+      kicker: "CI integration tests",
+      title: "A real Slurm in every CI run",
+      sub: "Test the code that talks to Slurm in every pull request, on any CI with Docker.",
+      chips: ["sind-action", "Realms", "JSON and exit codes"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [{ id: "hook", mood: "thinking", cues: { never: "concerned" } }, { id: "need", mood: "happy" }],
+    })
+    .slide({
+      chapter: "What the pipeline needs",
+      title: "Your code, your pipeline",
+      say: [{ id: "usecase", mood: "neutral", cues: { library: "happy" } }, { id: "needs", mood: "neutral" }],
+      bullets: [
+        { icon: "job", title: "Code that submits jobs", text: "a workflow engine, a portal, a client library", at: "usecase:workflow" },
+        { icon: "network", title: "Parallel jobs that don't collide", text: "many jobs, one Docker daemon", at: "needs:Parallel" },
+        { icon: "warn", title: "Failure tests that finish fast", text: "workers that fail on purpose", at: "needs:failure" },
+        { icon: "terminal", title: "Output scripts can parse", text: "JSON and exit statuses", at: "needs:parse" },
+      ],
+    })
+    .slide({
+      chapter: "sind-action on GitHub",
+      title: "On GitHub: sind-action",
+      say: [{ id: "action", mood: "happy" }, { id: "runners", mood: "neutral", cues: { sudo: "smug" } }],
+      bullets: [
+        { icon: "check", title: "sind-action", text: "installs sind and creates clusters in one step", at: "action:installs" },
+        { icon: "server", title: "Standard GitHub-hosted runners", text: "ubuntu-latest (x64) and ubuntu-24.04-arm", at: "runners:Ubuntu" },
+        { icon: "docker", title: "The runner's Docker daemon", text: "no sudo, privileged containers or custom runner images", at: "runners:Docker" },
+      ],
+    });
+
+  ep.code({
+    chapter: "Any other CI",
+    title: "Any CI with rootful Docker",
+    file: "job steps",
+    lang: "sh",
+    say: [{ id: "other", mood: "neutral" }, { id: "steps", mood: "neutral", cues: { creates: "happy" } }, { id: "gate", mood: "thinking", cues: { stops: "smug" } }],
+    text: [
+      "curl -fsSL -o sind-linux-amd64 \\",
+      '  "https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64"',
+      "gh attestation verify sind-linux-amd64 --repo GSI-HPC/sind \\",
+      "  --signer-workflow GSI-HPC/sind/.github/workflows/release.yml",
+      "install -m 755 sind-linux-amd64 ./sind",
+      "./sind doctor",
+      "./sind create cluster --config cluster.yml",
+    ].join("\n"),
+    marks: [
+      { line: 1, at: "other:downloads", until: "other:checks" },
+      { line: 2, at: "other:downloads", until: "other:checks" },
+      { line: 3, at: "other:checks", until: "steps:installs" },
+      { line: 4, at: "other:checks", until: "steps:installs" },
+      { line: 5, at: "steps:installs", until: "steps:doctor" },
+      { line: 6, at: "steps:doctor", until: "steps:creates" },
+      { line: 7, at: "steps:creates", until: "gate:fails" },
+      { line: 6, at: "gate:fails" },
+    ],
+  });
+
+  ep.diagram({
+    chapter: "A realm per job",
+    title: "One realm per job",
+    say: [{ id: "shared", mood: "thinking", cues: { realm: "neutral" } }, { id: "realm", mood: "neutral", cues: { see: "smug" } }],
+    grid: [2, 3],
+    nodes: [
+      { id: "j1", title: "Job 1", text: "--realm dev", code: true, icon: "job", ghost: true, pos: [0, -0.15], width: 330, at: "shared:share" },
+      { id: "j2", title: "Job 2", text: "--realm staging", code: true, icon: "job", ghost: true, pos: [1, -0.15], width: 330, at: "shared:share" },
+      { id: "m1", title: "dev-mesh", text: "DNS · SSH relay", icon: "network", pos: [0, 1], width: 330, at: "realm:mesh" },
+      { id: "m2", title: "staging-mesh", text: "DNS · SSH relay", icon: "network", pos: [1, 1], width: 330, at: "realm:mesh" },
+      { id: "c1", title: "cluster app", text: "dev-app-net", icon: "nodes", pos: [0, 1.85], width: 330, at: "realm:clusters" },
+      { id: "c2", title: "cluster app", text: "staging-app-net", icon: "nodes", pos: [1, 1.85], width: 330, at: "realm:clusters" },
+    ],
+    groups: [
+      { id: "g1", label: "realm dev", around: ["m1", "c1"], accent: true, at: "shared:realm" },
+      { id: "g2", label: "realm staging", around: ["m2", "c2"], accent: true, at: "shared:realm" },
+    ],
+    edges: [
+      { from: "j1", to: "g1", accent: true, at: "shared:realm+0.3" },
+      { from: "j2", to: "g2", accent: true, at: "shared:realm+0.3" },
+    ],
+  })
+    .slide({
+      chapter: "Setting the realm",
+      title: "Setting the realm",
+      say: [{ id: "pick", mood: "neutral" }, { id: "config", mood: "thinking" }, { id: "share", mood: "thinking", cues: { "delete#0": "concerned" } }],
+      bullets: [
+        { icon: "terminal", title: "--realm ci-42", text: "a flag on any command", at: "pick:flag" },
+        { icon: "gear", title: "SIND_REALM=ci-42", text: "once for the whole job", at: "pick:variable" },
+        { icon: "job", title: "realm: ci-42 in the config", text: "read by sind create cluster only", at: "config:config" },
+        { icon: "warn", title: "A shared realm is not isolated", text: "delete cluster --all removes every job's clusters", at: "share:delete#0" },
+      ],
+    })
+    .terminal({
+      chapter: "Two realms, one name",
+      say: [{ id: "demo", mood: "happy", cues: { clash: "smug" }, gap: 0.6 }, { id: "teardown", mood: "happy", gap: 1.6 }],
+      steps: [
+        { cmd: "sind --realm dev create cluster app", at: "demo:looks" },
+        { ff: "⏩ fast-forward", after: 0.2, hold: 1.0 },
+        { prompt: true, after: 0.6 },
+        { cmd: "sind --realm staging create cluster app", at: "demo:create" },
+        { ff: "⏩ fast-forward", after: 0.2, hold: 1.0 },
+        { prompt: true, after: 0.6 },
+        { cmd: "sind --realm dev delete cluster app", at: "teardown:delete" },
+        { prompt: true, after: 0.3 },
+        { cmd: "sind --realm staging delete cluster app", after: 0.2 },
+        { prompt: true, after: 0.3 },
+      ],
+    })
+    .terminal({
+      wide: true,
+      chapter: "JSON for scripts",
+      say: [{ id: "json", mood: "happy" }, { id: "version", mood: "neutral" }, { id: "doctorjson", mood: "neutral", cues: { detail: "happy" }, gap: 1.2 }],
+      steps: [
+        { cmd: "sind version --json", at: "version:sind#0" },
+        { out: '{"version":"0.10.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}', at: "version:prints" },
+        { mark: '"version":"0.10.0"', at: "version:field", until: "doctorjson:Like" },
+        { cmd: "sind doctor -o json", at: "doctorjson:doctor" },
+        {
+          out: [
+            "[",
+            "  {",
+            '    "name": "Docker Engine",',
+            '    "status": "ok",',
+            '    "detail": "28.1.1 (>= 28.0)"',
+            "  },",
+            "  {",
+            '    "name": "Docker daemon",',
+            '    "status": "ok",',
+            '    "detail": "rootful, no userns-remap"',
+          ].join("\n"),
+          at: "doctorjson:takes",
+        },
+        { mark: '"name"', at: "doctorjson:name", until: "doctorjson:status" },
+        { mark: '"status"', at: "doctorjson:status", until: "doctorjson:detail" },
+        { mark: '"detail"', at: "doctorjson:detail" },
+      ],
+    })
+    .slide({
+      chapter: "Exit status",
+      title: "Exit status is a contract",
+      say: [{ id: "exits", mood: "neutral" }, { id: "exits2", mood: "neutral" }],
+      bullets: [
+        { icon: "check", title: "0 · success", text: "the command succeeded", at: "exits:Zero" },
+        { icon: "warn", title: "1 · ran and failed", text: "Docker not reachable, a cluster that does not exist", at: "exits:one" },
+        { icon: "terminal", title: "2 · command line rejected", text: "an unknown flag, the wrong number of arguments", at: "exits2:Two" },
+        { icon: "gear", title: "130 · interrupted", text: "Ctrl-C, timeout, docker stop", at: "exits2:hundred" },
+      ],
+    })
+    .terminal({
+      chapter: "A usage error",
+      say: { id: "usage", mood: "neutral", cues: { retrying: "thinking" }, gap: 0.8 },
+      steps: [
+        { cmd: "sind get cluster dev extra", at: "usage:Here" },
+        { out: "12:00:00.000 ERRO accepts at most 1 arg(s), received 2", at: "usage:usage" },
+        { cmd: "echo $?", at: "usage:exits" },
+        { out: "2", at: "usage:two" },
+      ],
+    });
+
+  ep.code({
+    chapter: "Fast failure tests",
+    title: "Fail fast: SlurmdTimeout",
+    file: "cluster.yml · slurm section",
+    lang: "yaml",
+    say: { id: "failure", mood: "neutral", cues: { thirty: "smug" } },
+    text: ["slurm:", "  main: |", "    SlurmdTimeout=30"].join("\n"),
+    marks: [{ text: "SlurmdTimeout=30", at: "failure:timeout" }],
+    notes: [
+      { icon: "check", text: "DOWN within about 30 to 40 s", at: "failure:forty" },
+      { icon: "warn", warn: true, text: "Too short: slow but healthy nodes go DOWN too", at: "failure:minutes" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "On a CI runner",
+    title: "On a CI runner",
+    say: [
+      { id: "data", mood: "thinking" },
+      { id: "volume", mood: "happy" },
+      { id: "trust", mood: "concerned" },
+      { id: "lock", mood: "neutral", cues: { removes: "happy" } },
+    ],
+    bullets: [
+      { icon: "disk", title: "The workspace is mounted at /data", text: "files root writes there may need sudo", at: "data:workspace" },
+      { icon: "check", title: "--data volume", text: "keeps the workspace out of the cluster", at: "volume:volume" },
+      { icon: "lock", title: "Untrusted pull requests", text: "no clusters from configs they can change", at: "trust:untrusted" },
+      { icon: "gear", title: "A job timeout mid-command", text: "a later sind command removes <realm>-lock", at: "lock:timeout" },
+    ],
+  })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "takeaway", mood: "happy" },
+      bullets: [
+        { icon: "server", title: "A real Slurm in every run", text: "sind-action, or the release binary and sind doctor", at: "takeaway:real#0" },
+        { icon: "network", title: "A realm for every job", text: "SIND_REALM keeps delete cluster --all to yourself", at: "takeaway:realm" },
+        { icon: "terminal", title: "Scripts that parse and fail fast", text: "-o json, exit status, SlurmdTimeout=30", at: "takeaway:scripts" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "09 · Bring your own provisioning", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
