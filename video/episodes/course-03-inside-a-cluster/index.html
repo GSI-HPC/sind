@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind course 03: Inside a sind cluster</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Course 03, Inside a sind cluster: docs/content/course/03-inside-a-cluster.md.
+  // Terminal content is copied from docs/content/getting-started/quickstart.md
+  // (sind create cluster) and docs/content/usage/diagnostics.md (get nodes,
+  // get networks, get dns); sind ssh controller from
+  // docs/content/usage/node-access.md appears in the sind ssh diagram, as the
+  // page shows no output for it. The course page's Commands section repeats
+  // all of it. Diagrams follow docs/content/architecture/networking.md,
+  // docker-resources.md and overview.md, and the roles
+  // docs/content/configuration/node-definitions.md.
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "course-03-inside-a-cluster", title: "03 · Inside a sind cluster", series: "Course 03" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "The sind course · 03", title: "Inside a sind cluster", say: "intro" })
+    .talk({
+      chapter: "What did sind create?",
+      kicker: "Trust and debugging",
+      title: "What does that one command create?",
+      sub: "Roles, networks, DNS and the SSH relay: drawn first, then explored with get and ssh.",
+      chips: ["sind + Docker", "Roles · networks", "DNS · SSH"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "hook", mood: "neutral", cues: { But: "thinking" } },
+    })
+    .slide({
+      chapter: "Before you trust it",
+      title: "Why look inside?",
+      say: [
+        { id: "trust", mood: "neutral" },
+        { id: "debug", mood: "concerned" },
+        { id: "needs", mood: "happy" },
+      ],
+      bullets: [
+        { icon: "docker", title: "Know what runs on your host", text: "containers, networks and volumes", at: "trust:Docker" },
+        { icon: "warn", title: "Know where to look", text: "when a node stops answering", at: "debug:look" },
+        { icon: "terminal", title: "All you need: sind and Docker", text: "draw the cluster, then explore it", at: "needs:draw" },
+      ],
+    })
+    .terminal({
+      chapter: "Create a cluster",
+      say: { id: "create", mood: "happy", cues: { Before: "thinking" }, gap: 0.4 },
+      steps: [
+        { cmd: "sind create cluster", at: "create:Run" },
+        { ff: "⏩ fast-forward", after: 0.5, hold: 1.8 },
+        { prompt: true, after: 0.9 },
+      ],
+    })
+    .diagram({
+      chapter: "Refresher: Docker networks and DNS",
+      label: "Refresher · Docker networks and DNS",
+      title: "Docker networks and DNS",
+      say: [
+        { id: "rf1", mood: "happy" },
+        { id: "rf2", mood: "neutral" },
+        { id: "rf3", mood: "neutral", cues: { apart: "concerned" } },
+        { id: "rf4", mood: "neutral", cues: { each: "smug" } },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "a1", title: "web", text: "container", icon: "docker", pos: [0, 0], at: "rf2:containers" },
+        { id: "a2", title: "app", text: "container", icon: "docker", pos: [0, 1], at: "rf2:containers" },
+        { id: "b1", title: "api", text: "container", icon: "docker", pos: [2, 0], at: "rf3:separate" },
+        { id: "b2", title: "cache", text: "container", icon: "docker", pos: [2, 1], at: "rf3:separate" },
+        { id: "p", title: "proxy", text: "on both networks", icon: "docker", pos: [1, 1], width: 300, accent: true, at: "rf4:join" },
+      ],
+      groups: [
+        { id: "A", label: "network A", around: ["a1", "a2"], at: "rf2:network" },
+        { id: "B", label: "network B", around: ["b1", "b2"], at: "rf3:bridge" },
+      ],
+      edges: [
+        { from: "a1", to: "a2", label: "by name", arrow: "both", at: "rf2:name#0" },
+        { from: "a1", to: "b1", label: "✗ isolated", dashed: true, arrow: "none", at: "rf3:reach" },
+        { from: "p", to: "A", accent: true, arrow: "none", at: "rf4:several" },
+        { from: "p", to: "B", accent: true, arrow: "none", at: "rf4:several+0.3" },
+      ],
+      pulse: [{ node: "a2", at: "rf2:address" }],
+    })
+    .slide({
+      chapter: "Node roles",
+      title: "Node roles",
+      say: [
+        { id: "roles1", mood: "neutral", cues: { matches: "smug" } },
+        { id: "roles2", mood: "neutral" },
+        { id: "roles3", mood: "neutral" },
+      ],
+      bullets: [
+        { icon: "docker", title: "One container per node", text: "systemd inside: munge, sshd and Slurm", at: "roles1:container" },
+        { icon: "server", title: "controller · exactly one", text: "runs slurmctld", at: "roles2:controller" },
+        { icon: "nodes", title: "worker · one or more", text: "runs slurmd", at: "roles2:worker" },
+        { icon: "db", title: "db and submitter · optional", text: "MariaDB and slurmdbd for accounting · a node for submitting jobs", at: "roles3:optional" },
+      ],
+    })
+    .diagram({
+      chapter: "Cluster network and mesh",
+      title: "One network per cluster, one mesh per realm",
+      say: [
+        { id: "net1", mood: "neutral" },
+        { id: "net2", mood: "neutral" },
+        { id: "helpers", mood: "neutral", cues: { arrive: "happy" } },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "c0", title: "controller", text: "slurmctld", icon: "server", pos: [0, 0], width: 340, at: "net1:controller" },
+        { id: "w0", title: "worker-0", text: "slurmd", icon: "nodes", pos: [0, 1], width: 340, at: "net1:worker" },
+        { id: "dns", title: "sind-dns", text: "CoreDNS", icon: "globe", pos: [2, 0], width: 300, accent: true, at: "helpers:DNS" },
+        { id: "ssh", title: "sind-ssh", text: "SSH relay", icon: "key", pos: [2, 1], width: 300, accent: true, at: "helpers:relay" },
+      ],
+      groups: [
+        { id: "net", label: "default · sind-default-net", around: ["c0", "w0"], at: "net1:bridge" },
+        { id: "mesh", label: "sind-mesh · realm sind", around: ["dns", "ssh"], accent: true, at: "net2:mesh" },
+      ],
+      edges: [
+        { from: "c0", to: "w0", label: "short names", arrow: "both", at: "net1:short" },
+        { from: "c0", to: "mesh", dashed: true, arrow: "none", at: "net2:mesh+0.3" },
+        { from: "w0", to: "mesh", dashed: true, arrow: "none", at: "net2:mesh+0.5" },
+      ],
+    })
+    .diagram({
+      chapter: "Names from sind-dns",
+      title: "Every node has a name",
+      say: [
+        { id: "dns1", mood: "neutral" },
+        { id: "dns2", mood: "neutral", cues: { pointing: "happy" } },
+        { id: "dns3", mood: "smug" },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "c0", title: "controller", text: "172.19.0.2", code: true, icon: "server", pos: [0, 1] },
+        { id: "w0", title: "worker-0", text: "172.19.0.3", code: true, icon: "nodes", pos: [1.3, 1] },
+        { id: "dns", title: "sind-dns", text: "CoreDNS", icon: "globe", pos: [2, 0], width: 300, accent: true, at: "dns1:CoreDNS" },
+        { id: "host", title: "Your machine", icon: "host", pos: [0, 0], width: 300, ghost: true, at: "dns3:host" },
+      ],
+      groups: [{ id: "net", label: "default · sind-default-net", around: ["c0", "w0"] }],
+      edges: [
+        { from: "w0", to: "c0", label: "short names", arrow: "both" },
+        { from: "dns", to: "c0", label: "controller.default.sind.sind", accent: true, at: "dns2:controller#1" },
+        { from: "host", to: "dns", label: "*.sind.sind", dashed: true, at: "dns3:names" },
+      ],
+      pulse: [{ node: "c0", at: "dns2:address" }],
+    })
+    .terminal({
+      wide: true,
+      chapter: "Explore the nodes",
+      say: [
+        { id: "nodes", mood: "neutral", cues: { address: "happy" } },
+        { id: "names", mood: "neutral", cues: { easy: "smug" } },
+      ],
+      steps: [
+        { cmd: "sind get nodes", at: "nodes:sind" },
+        {
+          out: [
+            "CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS",
+            "sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running",
+            "sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running",
+          ].join("\n"),
+          at: "nodes:lists",
+        },
+        { mark: "controller.default.sind.sind", at: "nodes:DNS", until: "nodes:IP" },
+        { mark: "172.19.0.2", at: "nodes:IP", until: "names:Container#0" },
+        { mark: "sind-default-worker-0", at: "names:pattern" },
+      ],
+    })
+    .terminal({
+      chapter: "Explore networks and DNS",
+      say: [
+        { id: "networks", mood: "neutral" },
+        { id: "records", mood: "neutral", cues: { same: "happy" }, gap: 0.5 },
+      ],
+      steps: [
+        { cmd: "sind get networks", at: "networks:sind" },
+        {
+          out: [
+            "NAME              DRIVER   SUBNET           GATEWAY",
+            "sind-default-net  bridge   172.19.0.0/16    172.19.0.1",
+            "sind-mesh         bridge   172.18.0.0/16    172.18.0.1",
+          ].join("\n"),
+          at: "networks:shows",
+        },
+        { mark: "sind-default-net", at: "networks:cluster", until: "networks:mesh" },
+        { mark: "sind-mesh", at: "networks:mesh", until: "records:sind#0" },
+        { cmd: "sind get dns", at: "records:sind#0" },
+        {
+          out: ["HOSTNAME                              IP", "controller.default.sind.sind         172.19.0.2", "worker-0.default.sind.sind           172.19.0.3"].join("\n"),
+          at: "records:lists",
+        },
+        { mark: "172.19.0.2", at: "records:same" },
+      ],
+    })
+    .diagram({
+      chapter: "Under the hood: sind ssh",
+      title: "How sind ssh reaches a node",
+      say: [
+        { id: "ssh", mood: "neutral", cues: { How: "thinking" } },
+        { id: "hood1", mood: "neutral" },
+        { id: "hood2", mood: "neutral", cues: { reach: "happy" } },
+        { id: "hood3", mood: "neutral", cues: { collects: "smug" } },
+      ],
+      shot: "mini",
+      grid: [3, 2],
+      nodes: [
+        { id: "you", title: "Your machine", text: "sind ssh controller", code: true, icon: "host", pos: [-0.1, 0], width: 340, ghost: true, at: "ssh:sind" },
+        { id: "ssh", title: "sind-ssh", text: "SSH relay", icon: "key", pos: [1, 0], accent: true, at: "hood1:relay" },
+        { id: "dns", title: "sind-dns", text: "CoreDNS", icon: "globe", pos: [1, 1], accent: true, at: "hood2:answers" },
+        { id: "c0", title: "controller", text: "172.19.0.2", code: true, icon: "server", pos: [2, 0], width: 280, at: "hood2:address#1" },
+        { id: "vol", title: "sind-ssh-config", text: "keys, known_hosts", icon: "lock", pos: [0.3, 1], width: 360, at: "hood3:volume" },
+      ],
+      groups: [
+        { id: "mesh", label: "sind-mesh", around: ["ssh", "dns"], accent: true, at: "hood2:answers" },
+        { id: "net", label: "sind-default-net", around: ["c0"], at: "hood2:joins" },
+      ],
+      edges: [
+        { from: "you", to: "ssh", label: "docker exec", at: "hood1:docker" },
+        { from: "ssh", to: "dns", label: "full name → IP", arrow: "both", at: "hood2:answers+0.3" },
+        { from: "ssh", to: "c0", label: "ssh", accent: true, at: "hood2:reach" },
+        { from: "vol", to: "ssh", arrow: "none", dashed: true, at: "hood3:volume+0.2" },
+        { from: "ssh", to: "c0", label: "keys", arrow: "both", bend: 110, at: "hood3:public" },
+      ],
+      pulse: [
+        { node: "ssh", at: "hood3:relay" },
+        { node: "c0", at: "hood3:collects" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: [
+        { id: "take", mood: "happy" },
+        { id: "take2", mood: "happy", cues: { records: "smug" } },
+      ],
+      bullets: [
+        { icon: "nodes", title: "One container per node", text: "controller, workers, optional db and submitter", at: "take:container" },
+        { icon: "network", title: "A network per cluster, a mesh per realm", text: "names from sind-dns, shells through sind-ssh", at: "take:mesh" },
+        { icon: "terminal", title: "sind get shows every piece", text: "sind get nodes · networks · dns", at: "take2:get" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "04 · Test your job scripts before the queue", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
