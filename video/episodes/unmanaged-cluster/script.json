@@ -1,0 +1,20 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Today: an unmanaged cluster, where you set up Slurm yourself." },
+    { "id": "why", "text": "Need to test the Chef or Ansible code that installs your Slurm, end to end? Or debug a Slurm configuration by hand?" },
+    { "id": "why2", "text": "An unmanaged cluster brings the sind nodes, and hands Slurm over to your own tooling." },
+    { "id": "config", "text": "One line does it: managed false on the controller. It covers the whole cluster, so the submitter and workers are unmanaged too." },
+    { "id": "setup", "text": "What stays the same: containers, networking, DNS and SSH access, and munge, running with a shared key." },
+    { "id": "notset", "text": "What's missing: sind writes no Slurm configuration, and starts no Slurm daemon." },
+    { "id": "create", "text": "Create the cluster the usual way. Once every node runs systemd, sshd and munge, sind hands back the prompt." },
+    { "id": "heredoc", "text": "Now it's your turn. By hand, sind ssh writes a slurm.conf on the controller, and all nodes share that file." },
+    { "id": "start", "text": "Next comes a one-line cgroup config, and then slurmctld on the controller." },
+    { "id": "workers", "text": "Start slurmd on both workers, and the last command runs a first job across them." },
+    { "id": "ansible", "text": "Chef and Ansible reach the nodes over SSH, as root: include the SSH config sind exports, and list the node names as hosts, as in this inventory." },
+    { "id": "more1", "text": "To debug a configuration, run slurmctld in the foreground, with full verbosity." },
+    { "id": "more2", "text": "Backup controllers and new workers work too, and you add them to your Slurm configuration yourself." },
+    { "id": "takeaway", "text": "So: managed false keeps sind out of Slurm, the nodes still come with SSH and munge, and your own tooling provisions the rest." },
+    { "id": "outro", "text": "Next up, the guide to using CVMFS. See you there!" }
+  ]
+}
