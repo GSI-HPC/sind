@@ -1,0 +1,16 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's get sind onto your machine." },
+    { "id": "why", "text": "Downloading a tool is easy. But is the file genuine, and is your host ready for it? Let's install sind, verify it, and ask sind doctor." },
+    { "id": "ways", "text": "sind installs three ways: the pre-built binary from a release, a tool manager that fetches it for you, or a build from source with Go." },
+    { "id": "dl", "text": "We'll take the binary: curl fetches it from the latest release, here the build for Intel and AMD processors." },
+    { "id": "verify", "text": "Is it genuine? Its attestation tells the GitHub CLI which workflow built it, and only the sind release workflow passes." },
+    { "id": "install", "text": "Install puts it into a bin folder in your home, so you don't need root. Then, run sind doctor." },
+    { "id": "doctor", "text": "It looks at four things: your Docker Engine version, the daemon mode, where the daemon lives, and how cgroups are set up." },
+    { "id": "needs", "text": "Anything missing comes with fix instructions. Docker Desktop and rootless Docker are not supported." },
+    { "id": "image", "text": "Last, the node image. Add the pull flag to sind create cluster for a fresh copy. Otherwise, Docker reuses the image it pulled for your first cluster." },
+    { "id": "take", "text": "So: verify the download before you install it, let sind doctor check the host, and your first cluster brings the node image." },
+    { "id": "outro", "text": "Next up: the quick start, your first cluster. See you there!" }
+  ]
+}
