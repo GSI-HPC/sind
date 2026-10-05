@@ -3,6 +3,8 @@ weight: 100
 title: "Container exits with code 255"
 ---
 
+{{< video "container-exit-255" >}}
+
 ## Symptom
 
 Cluster creation fails with containers exiting immediately. Depending on whether the container had already exited when sind first checked it, or died while sind was waiting for it, the error reads:
