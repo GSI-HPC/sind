@@ -184,7 +184,7 @@ async function check(id, dir) {
     if (item.cmd != null && !docText.includes(item.cmd)) warnings.push(`command not on the docs page ${where(item.at)}: ${item.cmd}`);
     if (item.out != null)
       for (const l of item.out.split("\n").map((x) => x.trimEnd()).filter(Boolean))
-        if (!docLines.has(l)) warnings.push(`output line not on the docs page ${where(item.at)}: ${l}`);
+        if (!docLines.has(l)) warnings.push(`${item.code ? `line of ${item.code}` : "output line"} not on the docs page ${where(item.at)}: ${l}`);
   }
   // A course page's copy must still match a reference page, or it went stale.
   if (pages.length && pages.every((f) => f.startsWith(courseDir))) {
@@ -197,7 +197,7 @@ async function check(id, dir) {
       if (item.cmd != null && !refText.includes(item.cmd)) warnings.push(`command on no reference page outside docs/content/course ${where(item.at)}: ${item.cmd}`);
       if (item.out != null)
         for (const l of item.out.split("\n").map((x) => x.trimEnd()).filter(Boolean))
-          if (!refLines.has(l)) warnings.push(`output line on no reference page outside docs/content/course ${where(item.at)}: ${l}`);
+          if (!refLines.has(l)) warnings.push(`${item.code ? `line of ${item.code}` : "output line"} on no reference page outside docs/content/course ${where(item.at)}: ${l}`);
     }
   }
 

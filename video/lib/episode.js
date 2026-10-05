@@ -9,6 +9,7 @@
 //   ep.talk({ chapter: "What you'll build", title: "…", say: "welcome" });
 //   ep.slide({ chapter: "…", title: "…", bullets: [{ icon: "network", title: "…", text: "…", at: "what:network" }], say: "what" });
 //   ep.diagram({ chapter: "…", title: "…", nodes: [{ id: "dns", title: "sind-dns", pos: [1, 0], at: "mesh:DNS" }], edges: [{ from: "host", to: "dns" }], say: "mesh" });
+//   ep.code({ chapter: "…", title: "…", file: "dev.yaml", lang: "yaml", text: "…", marks: [{ text: "realm:", at: "cfg:realm" }], say: "cfg" });
 //   ep.terminal({ chapter: "…", say: ["create", "check"], steps: [{ cmd: "sind create cluster", at: "create:Run" }, …] });
 //   ep.terminal({ wide: true, … });          // fullscreen terminal for long lines
 //   ep.outro({ chapter: "Wrap-up", next: "…", say: "outro" });
@@ -95,6 +96,63 @@
 
   // JetBrains Mono advances 0.6em per character.
   const MONO_ADVANCE = 0.6;
+
+  // Code panels: the area below the slide title (all of it without a title),
+  // the panel's bar and padding, the line height and the note chips under the
+  // panels.
+  const CODE_AREA = {
+    cornerR: { x: 120, y: 280, w: 1340, h: 630 },
+    wide: { x: 120, y: 280, w: 1680, h: 580 },
+  };
+  const CODE = { bar: 58, padX: 36, padY: 20, line: 1.45, max: 32, min: 18, gap: 24, note: 62, noteGap: 14 };
+
+  // Syntax colours per language: keys (k), strings (s), comments (c),
+  // keywords (w) and punctuation (p), on HTML-escaped text.
+  const escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const span = (cls, s) => (s ? `<span class="${cls}">${escHtml(s)}</span>` : "");
+  const splitComment = (l, re) => {
+    const i = l.search(re);
+    return i < 0 ? [l, ""] : [l.slice(0, i), l.slice(i)];
+  };
+  const PAINT = {
+    yaml(l) {
+      const [code, com] = splitComment(l, /(^|\s)#/);
+      const m = /^(\s*)(- )?([\w.-]+:)(\s.*|)$/.exec(code);
+      const d = /^(\s*)(- )(.*)$/.exec(code);
+      const body = m ? escHtml(m[1]) + span("p", m[2]) + span("k", m[3]) + escHtml(m[4]) : d ? escHtml(d[1]) + span("p", d[2]) + escHtml(d[3]) : escHtml(code);
+      return body + span("c", com);
+    },
+    sh(l) {
+      const [code, com] = splitComment(l, /(^|\s)#/);
+      const body = code.split(/('[^']*'|"[^"]*")/).map((p, i) => (i % 2 ? span("s", p) : escHtml(p))).join("");
+      return body + span("c", com);
+    },
+    c(l) {
+      if (/^\s*#/.test(l)) return span("w", l);
+      const [code, com] = splitComment(l, /\/\//);
+      const body = code
+        .split(/("[^"]*")/)
+        .map((p, i) =>
+          i % 2
+            ? span("s", p)
+            : escHtml(p)
+                .replace(/\b(int|char|void|return|if|else|for|while|const|struct|unsigned|long|double|float)\b/g, '<span class="w">$1</span>')
+                .replace(/\b([A-Za-z_]\w*)(?=\()/g, '<span class="k">$1</span>')
+        )
+        .join("");
+      return body + span("c", com);
+    },
+    conf(l) {
+      const [code, com] = splitComment(l, /(^|\s)#/);
+      const body = escHtml(code).replace(/(^|\s)([A-Za-z][\w.]*)=/g, '$1<span class="k">$2</span>=');
+      return body + span("c", com);
+    },
+    json(l) {
+      const parts = l.split(/("(?:[^"\\]|\\.)*")/);
+      return parts.map((p, i) => (i % 2 ? span(/^\s*:/.test(parts[i + 1] || "") ? "k" : "s", p) : escHtml(p))).join("");
+    },
+    text: escHtml,
+  };
 
   // ------------------------------------------------------------ builder --
   function create(opts) {
@@ -469,6 +527,112 @@
       return api;
     }
 
+    // Files on the slide frame: one panel (`file`, `lang`, `text`) or several
+    // side by side (`panels: [{ file, lang, text }]`), coloured by `lang`
+    // (yaml, sh, c, conf, json, text). Lines in a `reveal` range ([first, last],
+    // counted from 1) fade in at its cue, `marks` light up the lines that
+    // contain `text` (or line number `line`) from their cue until `until`, and
+    // `notes` are chips under the panels. A panel scrolls to keep revealed and
+    // marked lines in view. The text is checked against the docs like
+    // terminal output, so it must be copied from the page.
+    function code(o) {
+      o = o || {};
+      const wide = !!o.wide;
+      const f = slideFrame("code", Object.assign({ shot: wide ? "mini" : "cornerR" }, o));
+      const a = Object.assign({}, CODE_AREA[wide ? "wide" : "cornerR"]);
+      if (!o.title) {
+        a.h += a.y - 150;
+        a.y = 150;
+      }
+      const specs = o.panels || [{ file: o.file, lang: o.lang, text: o.text }];
+      const notes = o.notes || [];
+      const notesH = notes.length ? CODE.gap + notes.length * CODE.note + (notes.length - 1) * CODE.noteGap : 0;
+      const pw = (a.w - CODE.gap * (specs.length - 1)) / specs.length;
+      const bodyH = a.h - notesH - CODE.bar - 2 * CODE.padY;
+      const panels = specs.map((p) => Object.assign({}, p, { lines: String(p.text || "").replace(/\n+$/, "").split("\n") }));
+      const cols = Math.max(20, ...panels.flatMap((p) => p.lines.map((l) => l.length)));
+      const most = Math.max(...panels.map((p) => p.lines.length));
+      const fitW = Math.floor((pw - 2 * CODE.padX) / (cols * MONO_ADVANCE));
+      const font = Math.max(CODE.min, Math.min(o.font || CODE.max, fitW, Math.floor(bodyH / (most * CODE.line))));
+      if (fitW < CODE.min) console.warn(`code ${specs.map((p) => p.file).join(", ")}: ${cols} columns do not fit at ${CODE.min}px; use wide: true or fewer panels`);
+      const lh = font * CODE.line;
+      const rows = Math.max(1, Math.floor(bodyH / lh));
+      const ph = CODE.bar + 2 * CODE.padY + Math.min(most, rows) * lh;
+
+      const paint = PAINT[o.lang] || PAINT.text;
+      panels.forEach((p, k) => {
+        const color = PAINT[p.lang] || paint;
+        p.lineEls = p.lines.map((l) => h("div", { class: "code-line" }, [h("span", { class: "code-hl" }), h("span", { class: "code-txt", html: color(l) || "&nbsp;" })]));
+        p.view = h("div", { class: "code-lines" }, p.lineEls);
+        p.el = h("div", { class: "code-panel", style: `left:${a.x + k * (pw + CODE.gap)}px;top:${a.y}px;width:${pw}px;height:${ph}px` }, [
+          h("div", { class: "term-bar" }, [h("i", { style: "background:#f87171" }), h("i", { style: "background:#fbbf24" }), h("i", { style: "background:#34d399" }), h("span", { class: "title", text: p.file || "" })]),
+          h("div", { class: "code-body", style: `font-size:${font}px;line-height:${lh}px` }, [p.view]),
+        ]);
+        f.el.append(p.el);
+        shown.push({ out: p.lines.join("\n"), at: f.t, code: p.file || "code" });
+      });
+      const noteEls = notes.map((n, i) =>
+        h("div", { class: n.warn ? "code-note warn" : "code-note", style: `left:${a.x}px;top:${a.y + ph + CODE.gap + i * (CODE.note + CODE.noteGap)}px` }, [icon(n.icon || (n.warn ? "warn" : "check")), h("span", { text: n.text })])
+      );
+      f.el.append(...noteEls);
+      S().enter(
+        tl,
+        panels.map((p) => p.el),
+        f.t + 0.6,
+        { y: 40, stagger: 0.15 }
+      );
+      for (const n of noteEls) tl.set(n, { opacity: 0 }, 0);
+      f.narrate();
+
+      // Reveals and marks, in time order; each one scrolls its panel if needed.
+      const panelOf = (it) => panels[it.panel || 0];
+      const events = [];
+      for (const r of o.reveal || []) {
+        const p = panelOf(r);
+        const [i0, i1] = [r.lines[0] - 1, (r.lines[1] || r.lines[0]) - 1];
+        const els = p.lineEls.slice(i0, i1 + 1);
+        for (const e of els) tl.set(e, { opacity: 0 }, 0);
+        events.push({ at: time(r.at) - 0.15, p, first: i0, last: i1, run: (at) => tl.fromTo(els, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out", stagger: 0.06, immediateRender: false }, at) });
+      }
+      for (const m of o.marks || []) {
+        const targets = (m.panel != null ? [panelOf(m)] : panels).flatMap((p) =>
+          p.lines.map((l, i) => ({ p, i })).filter(({ i }) => (m.line != null ? i === m.line - 1 : p.lines[i].includes(m.text)))
+        );
+        if (!targets.length) throw new Error(`code: mark "${m.text != null ? m.text : m.line}" matches no line`);
+        const hls = targets.map(({ p, i }) => p.lineEls[i].firstChild);
+        const until = m.until != null ? time(m.until) - 0.1 : null;
+        events.push({
+          at: time(m.at) - 0.1,
+          p: targets[0].p,
+          first: targets[0].i,
+          last: targets.filter((x) => x.p === targets[0].p).pop().i,
+          run: (at) => {
+            tl.fromTo(hls, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out", immediateRender: false }, at);
+            if (until != null) tl.fromTo(hls, { opacity: 1 }, { opacity: 0, duration: 0.3, ease: "power2.in", immediateRender: false }, until);
+            glance(at, 0.9, -0.7, -0.05);
+          },
+        });
+      }
+      for (const p of panels) p.top = 0;
+      for (const ev of events.sort((x, y) => x.at - y.at)) {
+        const p = ev.p;
+        let top = p.top;
+        if (ev.last >= top + rows) top = ev.last - rows + 1;
+        if (ev.first < top) top = ev.first;
+        if (top !== p.top) {
+          tl.to(p.view, { y: -top * lh, duration: 0.5, ease: "power2.inOut" }, ev.at - 0.3);
+          p.top = top;
+        }
+        ev.run(ev.at);
+      }
+      notes.forEach((n, i) => {
+        const at = f.cue(n, i);
+        tl.fromTo(noteEls[i], { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out", immediateRender: false }, at);
+        glance(at, 0.9, -0.7, 0.1);
+      });
+      return api;
+    }
+
     function terminal(o) {
       o = o || {};
       const wide = !!o.wide;
@@ -561,7 +725,7 @@
       return tl;
     }
 
-    const api = { tl, P, root, time, lineEnd, feel, look, wave, glance, say, intro, talk, slide, diagram, terminal, outro, custom, done };
+    const api = { tl, P, root, time, lineEnd, feel, look, wave, glance, say, intro, talk, slide, diagram, code, terminal, outro, custom, done };
     return api;
   }
 

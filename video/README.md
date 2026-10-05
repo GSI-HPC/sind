@@ -69,6 +69,7 @@ Episode.create({ tl, id: "quickstart", title: "Quickstart: your first Slurm clus
   .talk({ chapter: "What you'll build", title: "…", sub: "…", chips: ["…"], nameTag: {}, say: "welcome" })
   .slide({ chapter: "…", title: "…", say: "what", bullets: [{ icon: "network", title: "…", text: "…", at: "what:network" }] })
   .diagram({ chapter: "…", title: "…", say: "mesh", nodes: [/* … */], groups: [/* … */], edges: [/* … */] })
+  .code({ chapter: "…", title: "…", say: "cfg", file: "dev.yaml", lang: "yaml", text: "…", marks: [{ text: "realm:", at: "cfg:realm" }] })
   .terminal({ chapter: "…", say: ["create", "check"], steps: [{ cmd: "sind create cluster", at: "create:Run" }] })
   .terminal({ wide: true, chapter: "…", say: "nodes", steps: [/* … */] })
   .outro({ chapter: "Wrap-up", next: "…", say: "outro" })
@@ -82,6 +83,7 @@ window.__timelines["main"] = tl; // in the page, so HyperFrames' lint sees it
 | `talk` | fullscreen on the left | iris after the intro, else push | framing the topic: title card, chips, optional name tag |
 | `slide` | corner bubble | push | a title and up to four bullets that land on their cue words |
 | `diagram` | corner bubble (or `shot: "mini"` for more room) | push | boxes and arrows: how parts relate, built up on cue words |
+| `code` | corner bubble (or `wide: true` for a small one) | push | a config file or source file copied from the docs, with lines that light up or appear on cue |
 | `terminal` | corner bubble | push | commands and output; full-size font up to 62 columns, shrinks to fit 96 |
 | `terminal` with `wide: true` | small bubble (or `avatar: "none"`) | push | long lines, e.g. `sind get nodes`: 96 columns at full size, shrinks to fit 160 |
 | `outro` | fullscreen on the left, waves, winks | blur | links and the next episode, then fade to black |
@@ -110,6 +112,16 @@ node swell and ring once. For anything else, `svg` puts raw SVG into the area,
 and `reveal: [{ el: "#selector", at, draw }]` fades its elements in or draws
 their strokes. Overlapping nodes or groups, boxes outside the area, and node
 text that is cut off show up as warnings in `episode check`.
+
+**Code.** `code` shows one file (`file`, `lang`, `text`) or several side by
+side (`panels: [{ file, lang, text }]`), coloured as `yaml`, `sh`, `c`,
+`conf`, `json` or `text`, with the font fitted to the longest line.
+`reveal: [{ lines: [first, last], at }]` fades lines in (counted from 1),
+`marks: [{ text | line, at, until }]` light up whole lines, and `notes: [{
+icon, text, warn, at }]` are chips under the panel; a panel scrolls to keep
+revealed and marked lines in view. Like terminal output, every line is
+compared with the docs page by `episode check`, so copy files from the page
+and leave out lines rather than edit them.
 
 **Narration and acting.** `say` is a line id, `{ id, mood, cues, look, gap }`
 or a list of those. `mood` is the expression for the line, `cues` change it at

@@ -105,10 +105,11 @@ Pick scenes by what the viewer needs to see:
 | `talk` | framing right after the intro: what you'll build, why it matters | once per episode; up to 3 chips of about 40 characters together, or they wrap |
 | `slide` | a concept or a list of steps | at most 4 bullets, each landing on a cue word said in the narration |
 | `diagram` | how parts relate: networks, components, what talks to what | up to about 8 nodes on a grid; build it up on cue words, nodes before the edges between them |
+| `code` | a config or source file from the page, built up or highlighted on cue | copy the file verbatim (`check` compares it like output); up to about 14 lines per panel stay readable, `wide: true` for long lines |
 | `terminal` | commands and their output | lines up to about 62 columns keep the full-size font |
 | `terminal` with `wide: true` | wider output, e.g. tables like `sind get nodes` | up to 96 columns at full size |
 | `outro` | always last | `next` per series; for a guide clip, the title of the page to read next: the page's own "going further" link, else the next page in the docs navigation |
-| `custom(kind, o)` | anything else (a config file, a comparison) | see "Custom scenes" below |
+| `custom(kind, o)` | anything else (a table, a chat, a comparison) | see "Custom scenes" below |
 
 Keep scenes between about 5 and 20 seconds; split a long explanation over
 several scenes rather than letting one slide hang. A terminal that only shows
@@ -217,7 +218,8 @@ was voiced. Fix all of them, and resolve every warning or say why it stays:
   gives the diagram the full width.
 - `text cut off in a diagram node` → widen the node (`width`) or shorten the
   title; 260 px fit about 11 characters.
-- `command/output line not on the docs page` → copy it from the page; the
+- `command/output line not on the docs page` (or `line of <file>` for a
+  `code` scene) → copy it from the page; the
   episode is wrong, not the page. If the page is wrong, fix it in the same PR
   (a "Keep in sync" comment on the page names the test that covers it).
 - `N s without narration` → dead air; shorten the wait or add a line.
@@ -305,11 +307,11 @@ timeline, then continue with the API object:
 const ep = Episode.create({ tl, id: "networking", title: "…", series: "Networking" })
   .intro({ … })
   .talk({ … });
-const { el, t } = ep.custom("config", { chapter: "A cluster file", shot: "cornerR" });
-el.innerHTML = `<div class="bg-glow"></div><pre class="config">…</pre>`;
-Scenes.enter(ep.tl, el.querySelector(".config"), t + 0.5);
+const { el, t } = ep.custom("compare", { chapter: "Two ways", shot: "cornerR" });
+el.innerHTML = `<div class="bg-glow"></div><table class="compare">…</table>`;
+Scenes.enter(ep.tl, el.querySelector(".compare"), t + 0.5);
 ep.P.wait(0.6);
-ep.say({ id: "config", mood: "neutral" });
+ep.say({ id: "compare", mood: "neutral" });
 ep.outro({ … }).done();
 ```
 
@@ -319,8 +321,8 @@ Style it in the page's `<style>` with the palette variables from
 HyperFrames renders frames in any order on parallel workers.
 
 Move a scene into `lib/episode.js` only when a second episode needs it. A
-new slide layout (a table, a code view) builds on `slideFrame(kind, o)` there,
-as `slide` and `diagram` do: it gets the chapter label, title, corner shot,
+new slide layout (a table, say) builds on `slideFrame(kind, o)` there, as
+`slide`, `diagram` and `code` do: it gets the chapter label, title, corner shot,
 narration and cue timing for free.
 Changing `lib/`, the voice presets or the lexicon re-renders **every**
 episode in CI and can change all of them, so run `npm run episode -- voice

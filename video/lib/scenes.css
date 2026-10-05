@@ -101,6 +101,23 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .term.wide { left: 60px; top: 120px; width: 1800px; height: 800px; }
 .term-ff { position: absolute; right: 26px; top: 76px; padding: 8px 18px; border-radius: 999px; background: rgba(14, 165, 233, 0.18); border: 2px solid var(--blue); color: var(--sky); font-family: "Inter", sans-serif; font-size: 24px; font-weight: 700; opacity: 0; }
 
+/* Code panels: a file card (the terminal's bar) whose lines light up on cue. */
+.code-panel { position: absolute; border-radius: 22px; background: #0b1220; border: 2px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); overflow: hidden; }
+.code-body { position: absolute; left: 0; right: 0; top: 58px; bottom: 0; padding: 20px 0; overflow: hidden; font-family: "JetBrains Mono", monospace; color: #e2e8f0; white-space: pre; font-variant-ligatures: none; }
+.code-line { position: relative; padding: 0 36px; }
+.code-hl { position: absolute; left: 14px; right: 14px; top: 0; bottom: 0; border-radius: 10px; background: rgba(94, 234, 212, 0.16); border-left: 6px solid var(--mint); opacity: 0; }
+.code-txt { position: relative; }
+.code-txt .k { color: var(--mint); }
+.code-txt .s { color: var(--sky); }
+.code-txt .c { color: #8a9bb3; font-style: italic; }
+.code-txt .w { color: #c4b5fd; }
+.code-txt .p { color: var(--muted); }
+.code-note { position: absolute; display: flex; align-items: center; gap: 16px; height: 62px; padding: 0 24px 0 14px; border-radius: 16px; border: 2px solid var(--line); background: rgba(30, 41, 59, 0.85); font-size: 26px; font-weight: 600; color: #fff; }
+.code-note .icon { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(20, 184, 166, 0.16); }
+.code-note .icon svg { width: 26px; height: 26px; }
+.code-note.warn { border-color: #fbbf24; }
+.code-note.warn .icon { background: rgba(251, 191, 36, 0.16); }
+
 /* Brand mark. */
 .logo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .logo-grid i { display: block; width: 100%; aspect-ratio: 1; border-radius: 18%; }
