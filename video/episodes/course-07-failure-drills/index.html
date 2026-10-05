@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind course 07: Failure drills</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+  /* Node-state strip beside a drill terminal, between the terminal and Sindy. */
+  .nstrip { position: absolute; left: 1476px; top: 150px; width: 396px; padding: 22px 22px 24px; border-radius: 22px; background: rgba(22, 33, 58, 0.94); border: 2px solid var(--line); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4); opacity: 0; }
+  .nstrip .hd { font-size: 22px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+  .nstrip .nd { margin-top: 4px; font-family: "JetBrains Mono", monospace; font-size: 28px; font-weight: 700; color: #fff; }
+  .nstrip .st { display: flex; align-items: center; gap: 14px; height: 58px; margin-top: 12px; padding: 0 16px; border-radius: 14px; border: 2px solid var(--line); background: rgba(15, 23, 42, 0.6); opacity: 0.25; }
+  .nstrip .st i { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--teal); }
+  .nstrip .st.warn i { background: #fbbf24; }
+  .nstrip .st.bad i { background: #f87171; }
+  .nstrip .st b { font-family: "JetBrains Mono", monospace; font-size: 27px; font-weight: 700; color: #fff; }
+  .nstrip .st span { font-size: 21px; color: var(--muted); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Course 07, Failure drills: docs/content/course/07-failure-drills.md (its
+  // Commands section holds every command and output shown here). Copied from
+  // docs/content/getting-started/quickstart.md and usage/cluster-lifecycle.md
+  // (sind create cluster), usage/worker-management.md (create and delete
+  // worker), usage/power-control.md (freeze, cut, on, the SlurmdTimeout
+  // snippet, node failure detection) and guides/controller-failover.md
+  // (ha.yaml, sind get cluster dev, freeze and recovery, scontrol ping).
+  // The node-state strips beside the drill terminals are a diagram of what
+  // usage/power-control.md says about node failure detection, not sinfo
+  // output (no docs page shows sinfo for these drills).
+  const tl = gsap.timeline({ paused: true });
+
+  // A strip of Slurm node states beside the terminal scene just built: the
+  // strip enters at `at`, and each row lights up at its cue. With `step`, the
+  // lit row dims again when the next one lights (one node moving through its
+  // states); without, rows appear one by one and stay lit (a list of nodes).
+  const COLORS = { ok: "#14b8a6", warn: "#fbbf24", bad: "#f87171" };
+  function stateStrip(ep, o) {
+    const scene = [...ep.root.querySelectorAll("section.scene")].pop();
+    const box = document.createElement("div");
+    box.className = "nstrip";
+    box.innerHTML = `<div class="hd">${o.head}</div>${o.node ? `<div class="nd">${o.node}</div>` : ""}` +
+      o.rows.map((r) => `<div class="st ${r.kind || "ok"}"><i></i><b>${r.state}</b><span>${r.note || ""}</span></div>`).join("");
+    scene.append(box);
+    tl.fromTo(box, { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out", immediateRender: false }, ep.time(o.at));
+    const rows = [...box.querySelectorAll(".st")];
+    const dim = o.step ? 0.25 : 0;
+    rows.forEach((row, i) => {
+      const r = o.rows[i];
+      const c = COLORS[r.kind || "ok"];
+      const a = ep.time(r.at);
+      if (!o.step) tl.set(row, { opacity: 0 }, 0);
+      tl.fromTo(row, { opacity: dim, borderColor: "#334155", scale: 1.06 }, { opacity: 1, borderColor: c, scale: 1, duration: 0.4, ease: "power3.out", immediateRender: false }, a);
+      if (o.step && i + 1 < rows.length) {
+        tl.fromTo(row, { opacity: 1, borderColor: c }, { opacity: 0.5, borderColor: "#334155", duration: 0.35, immediateRender: false }, ep.time(o.rows[i + 1].at));
+      }
+    });
+  }
+
+  const ep = Episode.create({ tl, id: "course-07-failure-drills", title: "07 · Failure drills", series: "Course 07" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "The sind course · 07", title: "Failure drills", say: "intro" })
+    .talk({
+      chapter: "When nodes fail",
+      kicker: "Resilience testing",
+      title: "Break it on purpose",
+      sub: "Rehearse node and controller failures on a cluster you can throw away.",
+      chips: ["sind power", "Node states", "Failover"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "hook", mood: "thinking", cues: { Better: "smug" }, look: { Better: "camera" } },
+        { id: "case", mood: "neutral" },
+      ],
+    })
+    .slide({
+      chapter: "Four drills",
+      title: "What happens when…",
+      say: [
+        { id: "plan", mood: "thinking" },
+        { id: "needs", mood: "happy", cues: { Docker: "joy" } },
+      ],
+      bullets: [
+        { icon: "nodes", title: "Nodes join and leave", text: "sind create worker, sind delete worker", at: "plan:join" },
+        { icon: "warn", title: "A node hangs", text: "sind power freeze", at: "plan:hang" },
+        { icon: "disk", title: "Nodes die", text: "sind power cut", at: "plan:die" },
+        { icon: "server", title: "The controller fails", text: "a backup controller takes over", at: "plan:controller" },
+      ],
+    })
+    .diagram({
+      chapter: "Refresher: Node states",
+      label: "Refresher · Node states",
+      title: "Node states",
+      say: [
+        { id: "ns1", mood: "neutral" },
+        { id: "ns2", mood: "neutral" },
+        { id: "ns3", mood: "neutral", cues: { down: "concerned" } },
+        { id: "ns4", mood: "neutral", cues: { back: "happy" } },
+      ],
+      grid: [2, 2],
+      nodeWidth: 330,
+      nodes: [
+        { id: "idle", title: "idle", text: "no jobs", icon: "check", pos: [0, 0], at: "ns1:idle" },
+        { id: "alloc", title: "allocated", text: "running jobs", icon: "job", pos: [1, 0], at: "ns1:allocated" },
+        { id: "star", title: "idle*", text: "not responding", icon: "warn", pos: [0, 1], at: "ns2:stops" },
+        { id: "down", title: "DOWN", text: "nothing scheduled", icon: "warn", pos: [1, 1], at: "ns3:slurmctld" },
+      ],
+      edges: [
+        { from: "idle", to: "alloc", arrow: "both", label: "jobs", at: "ns1:busy" },
+        { from: "idle", to: "star", label: "no ping reply", at: "ns2:answering" },
+        { from: "star", to: "down", label: "SlurmdTimeout", at: "ns3:marks" },
+        { from: "down", to: "idle", label: "slurmd registers", accent: true, dashed: true, at: "ns4:registers" },
+      ],
+      pulse: [
+        { node: "star", at: "ns2:star#0" },
+        { node: "down", at: "ns3:down" },
+        { node: "idle", at: "ns4:back" },
+      ],
+    })
+    .terminal({
+      chapter: "Drill: nodes join",
+      say: [
+        { id: "setup", mood: "happy" },
+        { id: "join", mood: "neutral", cues: { slurmd: "happy" } },
+      ],
+      steps: [
+        { cmd: "sind create cluster", at: "setup:plain" },
+        { ff: "⏩ fast-forward", after: 0.4, hold: 1.6 },
+        { prompt: true, after: 1.0 },
+        { cmd: "sind create worker --count 3", at: "join:create" },
+        { prompt: true, after: 0.6 },
+      ],
+    });
+  stateStrip(ep, {
+    head: "Slurm nodes",
+    at: "setup:worker",
+    rows: [
+      { state: "worker-0", note: "idle", at: "setup:worker+0.3" },
+      { state: "worker-1", note: "idle", at: "join:starts" },
+      { state: "worker-2", note: "idle", at: "join:starts+0.2" },
+      { state: "worker-3", note: "idle", at: "join:starts+0.4" },
+    ],
+  });
+  ep.terminal({
+    chapter: "Drill: a node hangs",
+    say: [
+      { id: "freeze", mood: "neutral", cues: { nothing: "concerned" } },
+      { id: "wait", mood: "thinking" },
+      { id: "unfreeze", mood: "happy" },
+    ],
+    steps: [
+      { cmd: "sind power freeze worker-0", at: "freeze:sind" },
+      { prompt: true, after: 0.6 },
+      { ff: "⏩ ~5 min later", at: "wait:five", hold: 2.4 },
+      { cmd: "sind power unfreeze worker-0", at: "unfreeze:Unfreeze" },
+      { prompt: true, after: 0.6 },
+    ],
+  });
+  stateStrip(ep, {
+    head: "In Slurm",
+    node: "worker-0",
+    step: true,
+    at: "freeze:Drill",
+    rows: [
+      { state: "idle", note: "no jobs", at: "freeze:Drill+0.3" },
+      { state: "idle*", note: "a ping failed", kind: "warn", at: "wait:idle" },
+      { state: "DOWN", note: "nothing scheduled", kind: "bad", at: "wait:down" },
+      { state: "idle", note: "slurmd registered", at: "unfreeze:back" },
+    ],
+  });
+  ep.terminal({
+    chapter: "Drill: nodes die",
+    say: [
+      { id: "cut", mood: "concerned" },
+      { id: "watch", mood: "thinking" },
+      { id: "on", mood: "happy" },
+      { id: "leave", mood: "neutral" },
+    ],
+    steps: [
+      { cmd: "sind power cut worker-[0-3]", at: "cut:sind" },
+      { prompt: true, after: 0.6 },
+      { ff: "⏩ ~5 min later", at: "on:Once", hold: 1.8 },
+      { cmd: "sind power on worker-[0-3]", at: "on:sind" },
+      { prompt: true, after: 0.6 },
+      { cmd: "sind delete worker worker-2", at: "leave:sind" },
+      { prompt: true, after: 0.6 },
+    ],
+  });
+  stateStrip(ep, {
+    head: "In Slurm",
+    node: "worker-[0-3]",
+    step: true,
+    at: "cut:Drill",
+    rows: [
+      { state: "idle", note: "no jobs", at: "cut:Drill+0.3" },
+      { state: "idle*", note: "pings fail", kind: "warn", at: "watch:moment" },
+      { state: "DOWN", note: "nothing scheduled", kind: "bad", at: "on:down" },
+      { state: "idle", note: "slurmd registered", at: "on:return" },
+    ],
+  });
+  ep.code({
+    chapter: "Faster drills",
+    title: "Lower SlurmdTimeout",
+    file: "cluster config · slurm section",
+    lang: "yaml",
+    text: ["slurm:", "  main: |", "    SlurmdTimeout=30"].join("\n"),
+    say: [
+      { id: "fast", mood: "neutral", cues: { shorter: "smug" } },
+      { id: "fast2", mood: "happy" },
+      { id: "careful", mood: "concerned" },
+    ],
+    marks: [{ text: "SlurmdTimeout=30", at: "fast:shorter" }],
+    notes: [
+      { icon: "check", text: "DOWN within about 30 to 40 s", at: "fast2:about" },
+      { icon: "warn", warn: true, text: "Also marks a slow but healthy node DOWN", at: "careful:slow" },
+    ],
+  })
+    .code({
+      chapter: "Drill: the controller fails",
+      title: "A backup controller",
+      file: "ha.yaml",
+      lang: "yaml",
+      text: ["kind: Cluster", "name: dev", "nodes:", "  - role: controller", "    backupController: true", "  - role: worker", "    count: 2"].join("\n"),
+      say: { id: "ha", mood: "thinking", cues: { This: "neutral" } },
+      marks: [
+        { text: "name: dev", at: "ha:dev" },
+        { text: "backupController: true", at: "ha:backup" },
+        { text: "count: 2", at: "ha:two" },
+      ],
+    })
+    .terminal({
+      wide: true,
+      label: "A controller pair",
+      say: [
+        { id: "pair", mood: "neutral" },
+        { id: "show", mood: "happy", cues: { star: "smug" }, gap: 1.4 },
+      ],
+      steps: [
+        { cmd: "sind create cluster --config ha.yaml", at: "pair:Create" },
+        { ff: "⏩ fast-forward", at: "pair:returns", hold: 1.8 },
+        { prompt: true, at: "pair:controllers" },
+        { cmd: "sind get cluster dev", at: "show:sind" },
+        {
+          out: [
+            "NODES",
+            "NAME                    ROLE        HA         IP            STATUS    SERVICES",
+            "controller.dev          controller  primary*   172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓",
+            "controller-backup.dev   controller  backup     172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓",
+            "worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓",
+          ].join("\n"),
+          at: "show:lists",
+        },
+        { mark: "primary*", at: "show:star", delay: -0.1 },
+      ],
+    })
+    .terminal({
+      label: "Freeze the primary",
+      say: [
+        { id: "frz", mood: "neutral", cues: { backup: "happy" } },
+        { id: "state", mood: "neutral" },
+        { id: "back", mood: "thinking" },
+        { id: "ping", mood: "happy", cues: { up: "joy" }, gap: 1.0 },
+      ],
+      steps: [
+        { cmd: "sind power freeze controller.dev", at: "frz:freeze" },
+        { prompt: true, after: 0.6 },
+        { ff: "⏩ fast-forward", at: "frz:twenty", hold: 2.0 },
+        { cmd: "sind power unfreeze controller.dev", at: "back:unfreeze" },
+        { cmd: "sind ssh controller.dev -- systemctl restart slurmctld", after: 0.35 },
+        { prompt: true, after: 0.6 },
+        { cmd: "sind exec dev -- scontrol ping", at: "ping:scontrol" },
+        { out: "Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is UP", at: "ping:confirms" },
+        { mark: "is UP", at: "ping:up", delay: -0.1 },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: [
+        { id: "take1", mood: "neutral" },
+        { id: "take2", mood: "happy" },
+      ],
+      bullets: [
+        { icon: "warn", title: "Break nodes on purpose", text: "sind power cut, freeze, on and unfreeze", at: "take1:power" },
+        { icon: "check", title: "Slurm notices missed pings", text: "idle*, then DOWN after SlurmdTimeout: lower it for drills", at: "take1:pings" },
+        { icon: "server", title: "Rehearse failover", text: "a backup controller takes over after SlurmctldTimeout", at: "take2:backup" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "08 · Slurm in your pipeline", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
