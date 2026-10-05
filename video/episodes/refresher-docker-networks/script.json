@@ -1,0 +1,15 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's talk about Docker networks and DNS." },
+    { "id": "hook", "text": "How does one container find another, just by its name?" },
+    { "id": "usecase", "text": "Say a web app runs in one container, and its database in another. The app connects to db, and it just works. Here's why." },
+    { "id": "bridge", "text": "A bridge network is like a virtual switch on your host. Each container on it gets an address, and they can talk to each other." },
+    { "id": "dns", "text": "On a network you create, Docker also has a built-in DNS server. Ask it for db, and it answers with that container's address." },
+    { "id": "default", "text": "One catch: the default network, called bridge, doesn't resolve container names. That's why tools like Compose create networks of their own." },
+    { "id": "iso", "text": "Containers on a second, separate bridge can't reach the first one directly. Docker keeps the two apart." },
+    { "id": "multi", "text": "But a container can join several networks at once. It gets an address on each, and reaches the containers on all of them." },
+    { "id": "take", "text": "So: one network lets containers talk, DNS turns names into addresses, and separate networks stay apart." },
+    { "id": "outro", "text": "Next up: episode three, Inside a sind cluster. See you there!" }
+  ]
+}
