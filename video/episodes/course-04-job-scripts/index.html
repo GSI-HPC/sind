@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind course 04: Test your job scripts before the queue</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Course 04, "Test your job scripts before the queue":
+  // docs/content/course/04-job-scripts.md, whose Commands section copies every
+  // command and output shown here from its reference page:
+  // the cluster config, hello_mpi.c, mpicc, srun and its output, and the
+  // batch job (mpi_job.sh, `sbatch --wait`, `cat slurm-*.out`, shown as a code
+  // panel since the page has no output for it) from guides/mpi-jobs.md, the MOUNTS
+  // lines of `sind get cluster` from usage/diagnostics.md, job.sh, sbatch and
+  // its output from getting-started/quickstart.md, `sind delete cluster` from
+  // usage/cluster-lifecycle.md. Keep them in sync.
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "course-04-job-scripts", title: "04 · Test your job scripts before the queue", series: "Course 04" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "The sind course · 04", title: "Test your job scripts before the queue", say: "intro" })
+    .talk({
+      chapter: "Hours in the queue",
+      kicker: "Testing job scripts",
+      title: "Hours in the queue, then a typo",
+      sub: "Catch it on your laptop instead, on a real Slurm cluster in Docker.",
+      chips: ["sind + Docker", "sbatch · srun", "MPI"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "hook", mood: "concerned", cues: { familiar: "thinking" } },
+        { id: "promise", mood: "happy", look: { laptop: "camera" } },
+      ],
+    })
+    .slide({
+      chapter: "Who this is for",
+      title: "Who this is for",
+      say: [{ id: "who" }, { id: "need", cues: { Docker: "happy" } }, { id: "plan" }],
+      bullets: [
+        { icon: "user", title: "A researcher or RSE", text: "a job script and an MPI code for production", at: "who:researcher" },
+        { icon: "docker", title: "sind and Docker", text: "all you need on your laptop", at: "need:Docker" },
+        { icon: "job", title: "Submit the job script", text: "sbatch, from your project directory", at: "plan:submit" },
+        { icon: "network", title: "MPI across three workers", text: "srun starts one task per rank", at: "plan:MPI" },
+      ],
+    })
+    .terminal({
+      chapter: "Create a cluster",
+      title: "~/project — bash",
+      say: [
+        { id: "create", mood: "happy", gap: 0.8 },
+        { id: "mounts", mood: "neutral", cues: { project: "happy" } },
+        { id: "enter", mood: "neutral", cues: { moment: "smug" } },
+      ],
+      steps: [
+        { cmd: "sind create cluster --config - <<'EOF'", at: "create:Run" },
+        { out: "kind: Cluster\nnodes:\n  - controller\n  - worker: 3\nEOF", at: "create:config" },
+        { ff: "⏩ fast-forward", at: "create:workers+0.4", hold: 1.2 },
+        { prompt: true, at: "create:workers+1.0" },
+        { cmd: "sind get cluster", at: "mounts:sind" },
+        { out: "MOUNTS\nMOUNT        SOURCE               TYPE       STATUS\n/data        /home/user/project   hostPath   ✓", at: "mounts:lists" },
+        { mark: "/home/user/project", at: "mounts:project" },
+        { mark: "/data", at: "mounts:data" },
+      ],
+    })
+    .terminal({
+      chapter: "Submit a job script",
+      title: "~/project — bash",
+      say: [
+        { id: "script", mood: "neutral" },
+        { id: "submit", mood: "happy" },
+        { id: "output", mood: "happy", cues: { needed: "smug" } },
+        { id: "typo", mood: "smug" },
+      ],
+      steps: [
+        { cmd: "cat > job.sh << 'EOF'", at: "script:Write" },
+        { out: "#!/bin/bash\n#SBATCH --job-name=hello\necho \"Hello from $(hostname)\"\nsleep 30\nEOF", after: 0.3 },
+        { cmd: "sind exec -- sbatch job.sh", at: "submit:Hand" },
+        { out: "Submitted batch job <JOBID>", at: "submit:back" },
+        { ff: "⏩ fast-forward", at: "output:When", hold: 1.4 },
+        { cmd: "cat slurm-<JOBID>.out", at: "output:plain" },
+        { out: "Hello from worker-0", at: "output:project" },
+      ],
+    })
+    .diagram({
+      chapter: "Refresher: MPI ranks and srun",
+      label: "Refresher · MPI ranks and srun",
+      title: "MPI ranks and srun",
+      say: [{ id: "ref1", mood: "neutral" }, { id: "ref2" }, { id: "ref3", cues: { others: "happy" } }],
+      grid: [3, 2],
+      nodes: [
+        { id: "w0", title: "worker-0", text: "rank 0", icon: "nodes", pos: [0, 1], at: "ref1:ranks" },
+        { id: "w1", title: "worker-1", text: "rank 1", icon: "nodes", pos: [1, 1], at: "ref1:ranks+0.2" },
+        { id: "w2", title: "worker-2", text: "rank 2", icon: "nodes", pos: [2, 1], at: "ref1:ranks+0.4" },
+        { id: "srun", title: "srun", text: "PMIx launch", icon: "terminal", pos: [1, 0], accent: true, at: "ref3:srun" },
+      ],
+      groups: [{ id: "alloc", label: "allocated nodes", around: ["w0", "w1", "w2"], at: "ref3:allocated" }],
+      edges: [
+        { from: "w0", to: "w1", arrow: "both", dashed: true, accent: true, label: "messages", at: "ref2:messages" },
+        { from: "w1", to: "w2", arrow: "both", dashed: true, accent: true, at: "ref2:messages+0.2" },
+        { from: "srun", to: "w0", at: "ref3:starts" },
+        { from: "srun", to: "w1", at: "ref3:starts+0.15" },
+        { from: "srun", to: "w2", at: "ref3:starts+0.3" },
+      ],
+      pulse: [{ node: "srun", at: "ref3:PMIx" }],
+    })
+    .code({
+      chapter: "The MPI program",
+      file: "hello_mpi.c — ~/project",
+      lang: "c",
+      text: [
+        "int main(int argc, char **argv) {",
+        "    MPI_Init(&argc, &argv);",
+        "",
+        "    int rank, size;",
+        "    char hostname[256];",
+        "    MPI_Comm_rank(MPI_COMM_WORLD, &rank);",
+        "    MPI_Comm_size(MPI_COMM_WORLD, &size);",
+        "    gethostname(hostname, sizeof(hostname));",
+        "",
+        "    MPI_Barrier(MPI_COMM_WORLD);",
+        '    printf("rank %d of %d on %s\\n", rank, size, hostname);',
+        "",
+        "    MPI_Finalize();",
+        "    return 0;",
+        "}",
+      ].join("\n"),
+      say: [{ id: "code1" }, { id: "code2" }, { id: "code3", cues: { project: "happy" } }],
+      marks: [
+        { text: "MPI_Comm_rank", at: "code1:number", until: "code2:Then" },
+        { text: "MPI_Comm_size", at: "code1:size", until: "code2:Then" },
+        { text: "MPI_Barrier", at: "code2:barrier", until: "code3:guide" },
+        { text: "printf", at: "code2:prints", until: "code3:guide" },
+      ],
+    })
+    .terminal({
+      chapter: "MPI across workers",
+      title: "~/project — bash",
+      say: [
+        { id: "compile", mood: "neutral" },
+        { id: "run", mood: "happy" },
+        { id: "ranks", mood: "joy" },
+        { id: "pmix", mood: "smug" },
+      ],
+      steps: [
+        { cmd: "sind exec -- mpicc -o hello_mpi hello_mpi.c", at: "compile:Compile#0" },
+        { prompt: true, at: "compile:wraps" },
+        { cmd: "sind exec -- srun -N3 --ntasks-per-node=1 ./hello_mpi", at: "run:srun" },
+        { out: "rank 0 of 3 on worker-0\nrank 1 of 3 on worker-1\nrank 2 of 3 on worker-2", at: "ranks:Three#0" },
+        { mark: "of 3", at: "ranks:ranks", until: "pmix:MPI" },
+      ],
+    })
+    .code({
+      chapter: "An MPI batch job",
+      title: "An MPI batch job",
+      file: "what you run · ~/project",
+      lang: "sh",
+      text: [
+        `sind exec -- sh -c 'cat > mpi_job.sh << "SCRIPT"`,
+        "#!/bin/sh",
+        "#SBATCH --job-name=mpi-hello",
+        "#SBATCH --nodes=3",
+        "#SBATCH --ntasks-per-node=1",
+        "srun hello_mpi",
+        "SCRIPT'",
+        "",
+        "sind exec -- sbatch --wait mpi_job.sh",
+        "sind exec -- sh -c 'cat slurm-*.out'",
+      ].join("\n"),
+      say: [
+        { id: "batch1", mood: "neutral" },
+        { id: "batch2", mood: "neutral" },
+        { id: "batch3", mood: "neutral", cues: { done: "happy" } },
+      ],
+      reveal: [
+        { lines: [1, 7], at: "batch1:like" },
+        { lines: [9, 10], at: "batch3:submit" },
+      ],
+      marks: [
+        { text: "--nodes=3", at: "batch2:three", until: "batch2:task" },
+        { text: "--ntasks-per-node=1", at: "batch2:task", until: "batch2:srun" },
+        { text: "srun hello_mpi", at: "batch2:srun", until: "batch3:submit" },
+        { text: "sbatch --wait", at: "batch3:wait", until: "batch3:cat" },
+        { text: "cat slurm-*.out", at: "batch3:cat" },
+      ],
+    })
+    .terminal({
+      chapter: "Clean up",
+      title: "~/project — bash",
+      say: { id: "delete", mood: "happy", cues: { stay: "smug" }, gap: 0.4 },
+      steps: [
+        { cmd: "sind delete cluster", at: "delete:sind" },
+        { prompt: true, at: "delete:removes" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "takeaway", cues: { workers: "happy" } },
+      bullets: [
+        { icon: "disk", title: "Your project on every node", text: "scripts and output in the data directory", at: "takeaway:project" },
+        { icon: "job", title: "sbatch and srun, for real", text: "real Slurm on your laptop, before the queue", at: "takeaway:sbatch" },
+        { icon: "network", title: "MPI across workers", text: "PMIx by default, no extra flags", at: "takeaway:MPI" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "05 · Model your site", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
