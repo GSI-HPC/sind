@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's look at node images: the official ones, and your own." },
+    { "id": "why", "text": "Your test cluster should run the same Slurm release as your site. So which node image do you pick, and when do you build your own?" },
+    { "id": "official", "text": "There's one official node image per Slurm release line that sind supports." },
+    { "id": "tags", "text": "Latest is the newest line. A year and month tag tracks the newest patch of that line, and a full version pins just one." },
+    { "id": "pick", "text": "To run a cluster on one release line, set its image under defaults in the cluster configuration." },
+    { "id": "digest", "text": "But every tag can move when the images are rebuilt. For reproducible CI, pin one exact build by its sha two fifty-six instead." },
+    { "id": "inside", "text": "Every official image is based on Rocky Linux. It builds Slurm and a full MPI stack from source, and runs systemd as init." },
+    { "id": "verify", "text": "Each published image is attested, so the GitHub CLI can check that the sind image workflow built it." },
+    { "id": "local", "text": "You only build locally when you change the Dockerfile. make image builds every release line, and bake can build just one." },
+    { "id": "custom", "text": "Building your own image? It must boot systemd as init, with the SSH daemon and munge enabled." },
+    { "id": "custom2", "text": "Install the Slurm daemons without enabling them. sind enables each by role, when all nodes are ready." },
+    { "id": "take", "text": "So: pick a release line by its tag, pin one exact build for CI, and give your own image systemd, sshd and munge." },
+    { "id": "outro", "text": "Next up: containers that exit with code two fifty-five. See you there!" }
+  ]
+}

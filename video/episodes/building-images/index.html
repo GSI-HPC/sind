@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Building Images: one image per Slurm release</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
+  /* Release lines and their image tags, as in the docs table. */
+  .rtable { position: absolute; left: 120px; top: 300px; width: 1100px; display: flex; flex-direction: column; gap: 16px; }
+  .rt-row { display: grid; grid-template-columns: 340px 1fr; align-items: center; padding: 20px 30px; border-radius: 18px; background: rgba(30, 41, 59, 0.75); border: 2px solid var(--line); }
+  .rt-head { background: none; border-color: rgba(0, 0, 0, 0); padding-top: 0; padding-bottom: 0; font-size: 24px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .rt-line { font-family: "JetBrains Mono", monospace; font-size: 44px; font-weight: 700; color: #fff; }
+  .rt-tags { display: flex; gap: 16px; }
+  .tag { padding: 6px 18px; border-radius: 12px; background: #1e293b; border: 2px solid var(--line); font-family: "JetBrains Mono", monospace; font-size: 34px; color: var(--text); }
+  .rt-note { position: absolute; left: 120px; top: 690px; display: flex; flex-direction: column; gap: 14px; }
+  .rt-note div { font-size: 30px; color: var(--muted); }
+  .rt-note b { font-family: "JetBrains Mono", monospace; font-weight: 700; color: var(--mint); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Building Images: docs/content/container-images/building-images.md. The
+  // release lines and tags, the defaults.image configs, the attestation and
+  // local build commands on screen are copied from that page; keep both in
+  // sync. The page has no output for its commands, so they appear in code
+  // scenes (checked against the page) as what you run, not as a terminal
+  // session. The release-line table stays a custom scene: the code scene
+  // shows files only.
+  const SERIES = "Building Images";
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const el = (html) => {
+    const t = document.createElement("template");
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  };
+
+  // A custom slide: background, chapter label and title, Sindy in the corner.
+  function frame(ep, kind, o) {
+    const s = ep.custom(kind, { chapter: o.chapter, shot: "cornerR" });
+    s.el.append(
+      el('<div class="bg-glow"></div>'),
+      el(`<div class="chapter"><span class="dot"></span>${SERIES}<b> · ${esc(o.label || o.chapter)}</b></div>`),
+      el(`<div class="slide-title">${esc(o.title)}</div>`)
+    );
+    Scenes.enter(ep.tl, s.el.querySelector(".slide-title"), s.t + 0.5);
+    return s;
+  }
+
+  // Mark image tags in mint from `at`, until `until` if given.
+  const ON = { backgroundColor: "#5eead4", borderColor: "#5eead4", color: "#0b1220" };
+  const OFF = { backgroundColor: "#1e293b", borderColor: "#334155", color: "#e2e8f0" };
+  function mark(tl, els, at, until) {
+    tl.fromTo(els, OFF, Object.assign({ duration: 0.3 }, ON), at);
+    if (until != null) tl.fromTo(els, ON, Object.assign({ duration: 0.3, immediateRender: false }, OFF), until);
+  }
+
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "building-images", title: "Building Images: one image per Slurm release", series: SERIES })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Container Images", title: "Building Images", say: "intro" })
+    .talk({
+      chapter: "Why images matter",
+      kicker: "Container Images",
+      title: "Which node image?",
+      sub: "Official node images for every supported release line, and what your own image needs.",
+      chips: ["Official images", "Tags", "Custom images"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "neutral", cues: { which: "thinking" } },
+    });
+
+  // ---- Official images: the release-line table of the page ----
+  {
+    const s = frame(ep, "release", { chapter: "Official images", title: "One image per release line" });
+    const table = el(`<div class="rtable">
+      <div class="rt-row rt-head"><div>Slurm release line</div><div>Image tags</div></div>
+      <div class="rt-row"><div class="rt-line">26.05</div><div class="rt-tags"><span class="tag latest">latest</span><span class="tag mm">26.05</span><span class="tag pin">26.05.4</span></div></div>
+      <div class="rt-row"><div class="rt-line">25.11</div><div class="rt-tags"><span class="tag mm">25.11</span><span class="tag pin">25.11.8</span></div></div>
+    </div>`);
+    const note = el('<div class="rt-note"><div>image <b>ghcr.io/gsi-hpc/sind-node</b></div></div>');
+    s.el.append(table, note);
+    ep.P.wait(0.6);
+    ep.say([
+      { id: "official", mood: "neutral" },
+      { id: "tags", mood: "neutral", cues: { pins: "smug" } },
+    ]);
+    const T = ep.time;
+    Scenes.enter(tl, table.children, T("official:image") - 0.3, { stagger: 0.15 });
+    Scenes.enter(tl, note, T("official:release"), { y: 16 });
+    ep.glance(T("official:image"), 0.9, -0.7, -0.1);
+    mark(tl, table.querySelectorAll(".latest"), T("tags:Latest"), T("tags:year"));
+    mark(tl, table.querySelectorAll(".mm"), T("tags:year"), T("tags:pins"));
+    mark(tl, table.querySelectorAll(".pin"), T("tags:pins"));
+    ep.glance(T("tags:year"), 0.8, -0.5, -0.1);
+  }
+
+  // One panel for both ways to set the image: the tag, then the digest,
+  // which replaces it (the tag lines dim once the digest appears).
+  ep.code({
+    chapter: "Pick and pin a release",
+    title: "Pick a release line, or one build",
+    wide: true,
+    say: [
+      { id: "pick", mood: "neutral" },
+      { id: "digest", mood: "thinking", cues: { reproducible: "neutral", sha: "happy" } },
+    ],
+    file: "cluster.yaml · by tag, or by digest",
+    lang: "yaml",
+    text: ["defaults:", "  image: ghcr.io/gsi-hpc/sind-node:25.11", "", "defaults:", "  image: ghcr.io/gsi-hpc/sind-node:25.11@sha256:<digest>"].join("\n"),
+    reveal: [{ lines: [4, 5], at: "digest:pin" }],
+    marks: [
+      { line: 2, at: "pick:defaults", until: "digest:pin" },
+      { text: "@sha256", at: "digest:sha" },
+    ],
+    notes: [
+      { icon: "docker", text: "25.11 follows the newest patch of its release line", at: "pick:release" },
+      { warn: true, text: "every tag can move: a rebuild publishes a new image under it", at: "digest:move" },
+      { icon: "lock", text: "@sha256:<digest> runs exactly one build", at: "digest:sha" },
+    ],
+  });
+  {
+    const lines = [...ep.root.querySelectorAll(".scene-code")].pop().querySelectorAll(".code-line");
+    tl.fromTo([lines[0], lines[1]], { opacity: 1 }, { opacity: 0.4, duration: 0.4, immediateRender: false }, ep.time("digest:pin") + 0.3);
+  }
+
+  ep.slide({
+    chapter: "Inside every official image",
+    title: "Inside every official image",
+    say: { id: "inside", mood: "neutral", cues: { systemd: "happy" } },
+    bullets: [
+      { icon: "disk", title: "Based on Rocky Linux 10", text: "one multi-role image for every node", at: "inside:Rocky" },
+      { icon: "gear", title: "Slurm and a full MPI stack", text: "Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt, built from source", at: "inside:builds" },
+      { icon: "check", title: "systemd as init", text: "with the Slurm daemons, munge, sshd and MariaDB", at: "inside:systemd" },
+    ],
+  });
+
+  // Verify a published image, or build one: both commands from the page.
+  ep.code({
+    chapter: "Verify or build",
+    title: "Check it, or build it yourself",
+    wide: true,
+    say: [
+      { id: "verify", mood: "neutral", cues: { workflow: "smug" } },
+      { id: "local", mood: "neutral", cues: { bake: "smug" } },
+    ],
+    file: "bash",
+    lang: "sh",
+    text: [
+      "gh attestation verify oci://ghcr.io/gsi-hpc/sind-node:25.11 --repo GSI-HPC/sind \\",
+      "  --signer-workflow GSI-HPC/sind/.github/workflows/image-build.yml",
+      "",
+      "make image                                                # all release lines",
+      "docker buildx bake --set '*.platform=local' slurm-25-11   # a single release line",
+    ].join("\n"),
+    reveal: [{ lines: [4, 5], at: "local:only" }],
+    marks: [
+      { line: 1, at: "verify:GitHub", until: "verify:workflow" },
+      { line: 2, at: "verify:workflow", until: "local:only" },
+      { line: 4, at: "local:make", until: "local:bake" },
+      { line: 5, at: "local:bake" },
+    ],
+    notes: [
+      { icon: "docker", text: "oci://…/sind-node:25.11 is the image to check", at: "verify:check" },
+      { icon: "lock", text: "--signer-workflow names the workflow that must have built it", at: "verify:workflow" },
+      { icon: "host", text: "--set '*.platform=local' builds for the host platform only", at: "local:just" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "Custom images",
+    title: "Your own image needs…",
+    say: [
+      { id: "custom", mood: "thinking", cues: { systemd: "neutral" } },
+      { id: "custom2", mood: "neutral", cues: { role: "happy" } },
+    ],
+    bullets: [
+      { icon: "check", title: "systemd as init", text: "at /sbin/init, with /bin/sh", at: "custom:systemd" },
+      { icon: "key", title: "sshd and munge, enabled", text: "sind injects the SSH key at runtime", at: "custom:munge" },
+      { icon: "server", title: "Slurm daemons, not enabled", text: "sind enables them by role once every node is ready", at: "custom2:daemons" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "Takeaways",
+    title: "Takeaways",
+    say: { id: "take", mood: "happy" },
+    bullets: [
+      { icon: "docker", title: "Pick a release line by its tag", text: "defaults.image: ghcr.io/gsi-hpc/sind-node:25.11", at: "take:pick" },
+      { icon: "lock", title: "Pin one exact build for CI", text: "ghcr.io/gsi-hpc/sind-node:25.11@sha256:<digest>", at: "take:pin" },
+      { icon: "check", title: "Your own image", text: "systemd as init, with sshd and munge enabled", at: "take:own" },
+    ],
+  });
+
+  ep.outro({ chapter: "Wrap-up", next: "Container exits with code 255", say: "outro" }).done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
