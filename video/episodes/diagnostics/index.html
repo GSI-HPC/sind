@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Diagnostics</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Diagnostics: docs/content/usage/diagnostics.md. Terminal commands and
+  // output are copied from that page (Doctor, Cluster status, List networks,
+  // List volumes) and the logs slide from its "Logs" section; keep both in
+  // sync. sind get cluster prints its output at once; the episode reveals it
+  // in two parts, so that the terminal scrolls from the networks to the nodes.
+  const DOCTOR = [
+    "✓ Docker Engine: 28.1.1 (>= 28.0)",
+    "✓ Docker daemon: rootful, no userns-remap",
+    "✓ Docker host: this machine (unix:///var/run/docker.sock)",
+    "✓ cgroupv2: nsdelegate enabled (/sys/fs/cgroup)",
+    "✓ inotify: max_user_instances 8192 (>= 1024)",
+    "✓ DNS policy: host resolution available",
+  ].join("\n");
+  const CLUSTER_TOP = [
+    "CLUSTER   SLURM     STATUS (R/S/P/T)",
+    "dev       25.11.8   running (4/0/0/4)",
+    "",
+    "NETWORKS",
+    "NAME             DRIVER   SUBNET           GATEWAY        STATUS",
+    "sind-mesh        bridge   172.18.0.0/16    172.18.0.1     ✓",
+    "sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓",
+    "",
+    "MESH SERVICES",
+    "NAME   CONTAINER   STATUS",
+    "dns    sind-dns    ✓",
+    "ssh    sind-ssh    ✓",
+  ].join("\n");
+  const CLUSTER_BOTTOM = [
+    "",
+    "MOUNTS",
+    "MOUNT        SOURCE               TYPE       STATUS",
+    "/etc/slurm   sind-dev-config      volume     ✓",
+    "/etc/munge   sind-dev-munge       volume     ✓",
+    "/data        /home/user/project   hostPath   ✓",
+    "",
+    "NODES",
+    "NAME              ROLE        IP            STATUS    SERVICES",
+    "controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓",
+    "db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓",
+    "worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓",
+    "worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓",
+  ].join("\n");
+  const NETWORKS = [
+    "NAME              DRIVER   SUBNET           GATEWAY",
+    "sind-default-net  bridge   172.19.0.0/16    172.19.0.1",
+    "sind-mesh         bridge   172.18.0.0/16    172.18.0.1",
+  ].join("\n");
+  const VOLUMES = [
+    "NAME                  DRIVER",
+    "sind-default-config   local",
+    "sind-default-data     local",
+    "sind-default-munge    local",
+    "sind-ssh-config       local",
+  ].join("\n");
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "diagnostics", title: "Diagnostics: find what's wrong", series: "Diagnostics" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Usage", title: "Diagnostics", say: "intro" })
+    .talk({
+      chapter: "Where to look first",
+      kicker: "Usage",
+      title: "Where do you look first?",
+      sub: "Host checks, cluster health, logs, and every resource sind created.",
+      chips: ["sind doctor", "sind get cluster", "sind logs"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "thinking", cues: { Let: "happy" } },
+    })
+    .terminal({
+      chapter: "Check the host",
+      say: [
+        { id: "doctor", mood: "neutral" },
+        { id: "doctorok", mood: "happy", cues: { fails: "neutral" } },
+      ],
+      steps: [
+        { cmd: "sind doctor", at: "doctor:sind" },
+        { out: DOCTOR, at: "doctor:checks" },
+        { mark: "✓", at: "doctorok:passes", until: "doctorok:fails" },
+      ],
+    })
+    .terminal({
+      wide: true,
+      chapter: "Cluster health",
+      say: [
+        { id: "health", mood: "neutral" },
+        { id: "health2", mood: "neutral" },
+        { id: "svc", mood: "neutral", cues: { But: "surprised", failed: "concerned" } },
+        { id: "svc2", mood: "thinking", gap: 0.8 },
+      ],
+      steps: [
+        { cmd: "sind get cluster dev", at: "health:sind" },
+        { out: CLUSTER_TOP, at: "health:shows" },
+        { mark: "running (4/0/0/4)", at: "health:status", until: "health:networks" },
+        { mark: "NETWORKS", at: "health:networks", until: "health:mesh" },
+        { mark: "MESH SERVICES", at: "health:mesh", until: "health2:Further" },
+        { out: CLUSTER_BOTTOM, at: "health2:Further" },
+        { mark: "MOUNTS", at: "health2:mounts", until: "health2:nodes" },
+        { mark: "NODES", at: "health2:nodes", until: "svc:All" },
+        { mark: "running", at: "svc:running", until: "svc:worker" },
+        { mark: "slurmd ✗", at: "svc:slurmd", delay: -0.1, until: "svc2:services" },
+        { mark: "SERVICES", at: "svc2:services" },
+      ],
+    })
+    .slide({
+      chapter: "Read the logs",
+      title: "sind logs NODE [SERVICE]",
+      say: [
+        { id: "logs", mood: "neutral" },
+        { id: "logs2", mood: "neutral", cues: { streaming: "smug" } },
+      ],
+      bullets: [
+        { icon: "docker", title: "Container logs", text: "sind logs controller", at: "logs:container" },
+        { icon: "job", title: "A service's journal", text: "sind logs controller slurmctld", at: "logs2:journal" },
+        { icon: "terminal", title: "Keep watching", text: "sind logs worker-0 slurmd --follow", at: "logs2:follow" },
+      ],
+    })
+    .terminal({
+      chapter: "Inspect resources",
+      say: [
+        { id: "res", mood: "neutral" },
+        { id: "json", mood: "smug", gap: 0.8 },
+      ],
+      steps: [
+        { cmd: "sind get networks", at: "res:Here" },
+        { out: NETWORKS, after: 0.25 },
+        { cmd: "sind get volumes", after: 0.9 },
+        { out: VOLUMES, after: 0.25 },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "check", title: "Host, cluster, logs", text: "sind doctor · sind get cluster · sind logs", at: "take:host" },
+        { icon: "nodes", title: "Read the SERVICES column", text: "STATUS only covers the containers", at: "take:services" },
+        { icon: "terminal", title: "-o json for scripts", text: "on every sind get command", at: "take:JSON" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "Node Arguments", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
