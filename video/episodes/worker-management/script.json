@@ -1,0 +1,17 @@
+{
+  "voice": "sindy",
+  "lines": [
+    {"id": "intro", "text": "Hi, I'm Sindy! Let's grow and shrink a running cluster."},
+    {"id": "why", "text": "Your test needs more nodes, or you want to see what happens when one leaves. sind adds and removes workers while the cluster keeps running."},
+    {"id": "add", "text": "Run sind create worker, and you get one more worker, just like the newest one."},
+    {"id": "count", "text": "The count flag adds several at once. Here, three more."},
+    {"id": "flow", "text": "For each managed worker, sind creates the container, adds a node definition, reconfigures slurmctld, and then starts slurmd on it."},
+    {"id": "retry", "text": "If a step fails, sind removes the new containers, so you can simply try again."},
+    {"id": "newest", "text": "New workers copy the newest worker: its image, its CPU and memory limits, and its capabilities and devices."},
+    {"id": "flags", "text": "Each flag you give replaces the inherited value. This worker gets a CPU limit of two, and one gigabyte of memory."},
+    {"id": "remove", "text": "To remove workers, give sind delete worker a node set, here workers two to four."},
+    {"id": "remove2", "text": "sind takes them out of the Slurm configuration first, and then deletes their containers."},
+    {"id": "take", "text": "So: create worker copies the newest worker, flags override what it inherits, and delete worker updates Slurm before it removes the containers."},
+    {"id": "outro", "text": "Next up: Power Control, where nodes crash on purpose. See you there!"}
+  ]
+}

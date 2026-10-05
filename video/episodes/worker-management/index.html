@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Worker Management</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Worker Management: docs/content/usage/worker-management.md. Commands are
+  // copied from its Examples; the workflow and the inherited settings follow
+  // "Managed worker workflow" and "Defaults from the newest worker".
+  const tl = gsap.timeline({ paused: true });
+  // One session on a cluster that starts with worker-0: the adds create
+  // worker-1, worker-2 to worker-4 and worker-5; the second terminal shows
+  // them again and removes the three that --count 3 added.
+  const adds = [
+    { cmd: "sind create worker", at: "add:Run" },
+    { prompt: true, after: 0.8 },
+    { cmd: "sind create worker --count 3", at: "count:count" },
+    { prompt: true, after: 0.7 },
+  ];
+  Episode.create({ tl, id: "worker-management", title: "Worker Management: add and remove workers", series: "Worker Management" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Usage", title: "Worker Management", say: "intro" })
+    .talk({
+      chapter: "Grow and shrink",
+      kicker: "Usage",
+      title: "Grow and shrink a cluster",
+      sub: "Add workers to a running cluster, or take them away, with one command each.",
+      chips: ["sind create worker", "sind delete worker"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "neutral", cues: { adds: "happy" }, look: { adds: "camera" } },
+    })
+    .terminal({
+      chapter: "Add workers",
+      say: [
+        { id: "add", mood: "happy" },
+        { id: "count", mood: "smug", gap: 0.5 },
+      ],
+      steps: adds,
+    })
+    .slide({
+      chapter: "What sind does",
+      title: "For each managed worker, sind…",
+      say: [
+        { id: "flow", mood: "neutral", cues: { starts: "happy" } },
+        { id: "retry", mood: "thinking", cues: { simply: "smug" } },
+      ],
+      bullets: [
+        { icon: "nodes", title: "Creates the container", text: "with the inherited or given settings", at: "flow:creates" },
+        { icon: "job", title: "Adds the node definition", text: "to sind-nodes.conf", at: "flow:adds" },
+        { icon: "gear", title: "Reconfigures slurmctld", text: "scontrol reconfigure", at: "flow:reconfigures" },
+        { icon: "check", title: "Starts slurmd", text: "on the new node", at: "flow:starts" },
+      ],
+    })
+    .slide({
+      chapter: "Like the newest worker",
+      title: "New workers copy the newest",
+      say: { id: "newest", mood: "neutral" },
+      bullets: [
+        { icon: "docker", title: "Its image", text: "by ID, even if the tag has moved since", at: "newest:image" },
+        { icon: "gear", title: "CPU and memory limits", text: "and the /tmp size", at: "newest:CPU" },
+        { icon: "lock", title: "Capabilities and devices", text: "and security options", at: "newest:capabilities" },
+      ],
+    })
+    .terminal({
+      chapter: "Override and remove",
+      say: [
+        { id: "flags", mood: "neutral", cues: { This: "happy" } },
+        { id: "remove", mood: "neutral" },
+        { id: "remove2", mood: "happy" },
+      ],
+      steps: [
+        ...adds,
+        { cmd: "sind create worker --cpus 2 --memory 1g", at: "flags:This" },
+        { prompt: true, after: 0.7 },
+        { cmd: "sind delete worker worker-[2-4]", at: "remove:sind" },
+        { prompt: true, after: 0.7 },
+        { mark: "worker-[2-4]", at: "remove:two", until: "remove2:sind" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "nodes", title: "sind create worker", text: "copies the newest worker; --count adds several", at: "take:create" },
+        { icon: "gear", title: "Flags override", text: "--cpus, --memory and the rest replace what it inherits", at: "take:flags" },
+        { icon: "check", title: "sind delete worker NODES", text: "out of Slurm first, then the containers go", at: "take:delete" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "Power Control", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
