@@ -6,6 +6,8 @@ description: "Official images and custom image requirements"
 toc: true
 ---
 
+{{< video "building-images" >}}
+
 ## Official images
 
 sind publishes a multi-role node image for each supported Slurm release line to `ghcr.io/gsi-hpc/sind-node`:
