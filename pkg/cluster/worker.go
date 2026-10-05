@@ -433,14 +433,24 @@ func resolveWorkerInfra(ctx context.Context, client *docker.Client, meshMgr *mes
 	return
 }
 
-// checkWorkerImage pulls an image given with --image when opts.Pull asks
-// for it, once, and checks it for managed workers of a cluster whose Slurm
-// version sind knows: it runs slurmctld -V in the image and refuses a
-// version other than the cluster's, as slurmd may not be newer than
-// slurmctld and sind labels every node with the cluster's version.
+// checkWorkerImage pulls an image given with --image, once: when opts.Pull
+// asks for it, or else when the daemon does not have it, so that no worker
+// container's docker create pulls it (see startPull). It then checks the
+// image for managed workers of a cluster whose Slurm version sind knows:
+// it runs slurmctld -V in the image and refuses a version other than the
+// cluster's, as slurmd may not be newer than slurmctld and sind labels
+// every node with the cluster's version.
 func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAddOptions, managed bool, clusterVersion string) error {
-	if opts.Pull {
-		if err := pullImages(ctx, client, []string{opts.Image}); err != nil {
+	if opts.Image != "" {
+		images := []string{opts.Image}
+		var err error
+		if !opts.Pull {
+			images, err = missingImages(ctx, client, images)
+		}
+		if err == nil && len(images) > 0 {
+			err = pullImages(ctx, client, images)
+		}
+		if err != nil {
 			return err
 		}
 	}

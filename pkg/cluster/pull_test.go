@@ -155,3 +155,107 @@ func TestWorkerAdd_PullFails(t *testing.T) {
 		assert.NotEqual(t, "create", c.Args[0])
 	}
 }
+
+// imageExistsOnCall answers ImageExists: the daemon has every image but
+// missing, and docker pull succeeds.
+func imageExistsOnCall(t *testing.T, missing ...string) func(args []string, _ string) (mock.Result, bool) {
+	return func(args []string, _ string) (mock.Result, bool) {
+		switch {
+		case isImageExists(args) && slices.Contains(missing, args[4]):
+			return mock.Result{Stderr: "Error: No such image: " + args[4] + "\n", Err: notFoundErr(t)}, true
+		case args[0] == "pull":
+			return mock.Result{}, true
+		}
+		return mock.Result{}, false
+	}
+}
+
+func TestCreate_PullsMissingImages(t *testing.T) {
+	// Without --pull, the images the daemon does not have are pulled once,
+	// before any container runs one, so that no node's docker create pulls.
+	pipes := &mock.Pipes{}
+	defer pipes.CloseAll()
+
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), imageExistsOnCall(t, "other:2"))
+	m.OnStart = pipes.OnStart
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	cfg := createCfg()
+	cfg.Nodes = append(cfg.Nodes, config.Node{Role: config.RoleWorker, Count: 2, Image: "other:2", CPUs: 1, Memory: "1g", TmpSize: "1g"})
+	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	require.NoError(t, err)
+
+	var pulls []string
+	lastPull, firstUse := -1, -1
+	for i, c := range m.Calls {
+		a := c.Args
+		switch {
+		case a[0] == "pull":
+			pulls = append(pulls, strings.Join(a, " "))
+			lastPull = i
+		case (a[0] == "run" || a[0] == "create") && firstUse < 0:
+			firstUse = i
+		}
+	}
+	assert.Equal(t, []string{"pull --quiet other:2"}, pulls, "only the missing image is pulled")
+	assert.Less(t, lastPull, firstUse, "the missing image is pulled before a container runs an image")
+	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "--format", "{{.Id}}", "img:1"))
+	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "--format", "{{.Id}}", "other:2"))
+}
+
+func TestCreate_ImageInspectFails(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+		if isImageExists(args) {
+			return mock.Result{Stderr: "Cannot connect to the Docker daemon\n", Err: fmt.Errorf("exit status 1")}, true
+		}
+		return mock.Result{}, false
+	})
+	client := docker.NewClient(&m)
+	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
+
+	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
+	require.ErrorContains(t, err, "inspecting image img:1: exit status 1")
+	for _, c := range m.Calls {
+		a := c.Args
+		assert.False(t, a[0] == "run" || a[0] == "create" || a[0] == "pull", "%v", a)
+	}
+}
+
+func TestWorkerAdd_PullsMissingImage(t *testing.T) {
+	// An --image the daemon does not have is pulled once without --pull.
+	var m mock.Executor
+	m.OnCall = workerAddOnCall(t)
+	client := docker.NewClient(&m)
+
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
+		ClusterName: "dev", Count: 2, Image: "custom:v3",
+	}, time.Millisecond)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "--format", "{{.Id}}", "custom:v3"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "custom:v3"))
+}
+
+func TestWorkerAdd_LocalImageNotPulled(t *testing.T) {
+	var m mock.Executor
+	onCall := workerAddOnCall(t)
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if isImageExists(args) {
+			return mock.Result{Stdout: "sha256:local\n"}
+		}
+		return onCall(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
+		ClusterName: "dev", Count: 1, Image: "custom:v3",
+	}, time.Millisecond)
+	require.NoError(t, err)
+
+	assert.Zero(t, countCalls(m.Calls, "pull"))
+}
