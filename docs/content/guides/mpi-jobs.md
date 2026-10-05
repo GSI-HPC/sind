@@ -6,6 +6,8 @@ description: "Compile and run multi-node MPI programs with OpenMPI and PMIx"
 toc: true
 ---
 
+{{< video "mpi-jobs" >}}
+
 The default sind-node image ships with a full MPI stack (OpenMPI, PMIx, PRRTE, UCX) and Slurm configured with `MpiDefault=pmix`. This guide walks through compiling and running a simple MPI program across multiple nodes.
 
 ## Create a multi-node cluster
