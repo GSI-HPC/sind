@@ -1,0 +1,20 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's put sind into your CI pipeline." },
+    { "id": "why", "text": "Your code submits Slurm jobs, so every CI run should test it against a real cluster. How do you get one on a plain runner?" },
+    { "id": "action", "text": "On GitHub, the sind action does both steps for you: install sind, and create your clusters in the workflow." },
+    { "id": "runners", "text": "Standard Ubuntu runners on x sixty-four or ARM do the job: no sudo, no privileged containers, no custom images." },
+    { "id": "other", "text": "Elsewhere, any CI with a rootful Docker daemon will do. Download the release binary, and verify its provenance with the GitHub CLI." },
+    { "id": "doctor", "text": "Then sind doctor checks the prerequisites, and sind create cluster builds the cluster from your config." },
+    { "id": "realm", "text": "Jobs that share a Docker daemon, as on a self-hosted runner, should each use their own realm, with the sind realm variable." },
+    { "id": "lock", "text": "Within one realm, the lock stops jobs from breaking each other's mesh, but a delete cluster all in one job would remove the others' clusters too." },
+    { "id": "data", "text": "Every node mounts the workspace at the data directory. Files root writes there belong to root, so a cleanup step may need sudo." },
+    { "id": "volume", "text": "A data volume keeps the workspace out of the cluster." },
+    { "id": "untrusted", "text": "And treat a cluster config like a script: don't create clusters from configs that untrusted pull requests can change." },
+    { "id": "failure", "text": "Last, node failure tests. Freeze, cut or shut down a worker, and the test waits until slurmctld marks it down." },
+    { "id": "timeout", "text": "With the default timeout, that takes about five minutes, so lower the slurmd timeout to thirty seconds." },
+    { "id": "takeaway", "text": "So: the action or a verified binary, one realm per job, and a short slurmd timeout for failure tests." },
+    { "id": "outro", "text": "Next up, the controller failover guide. See you there!" }
+  ]
+}
