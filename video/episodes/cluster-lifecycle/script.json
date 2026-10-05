@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    {"id": "intro", "text": "Hi, I'm Sindy! Let's create, list and delete clusters."},
+    {"id": "why", "text": "You want a fresh cluster for every test, and a clean machine afterwards. Which clusters are running, and how do you clean them up?"},
+    {"id": "usecase", "text": "Say two clusters are running, and you want to rebuild one of them with a new layout."},
+    {"id": "list", "text": "First, sind get clusters shows both, with their nodes, Slurm versions and status."},
+    {"id": "list2", "text": "The nodes column counts submitters, controllers, db nodes and workers. So dev has a database node."},
+    {"id": "delete", "text": "Now, sind delete cluster dev removes that cluster: its containers, networks and volumes."},
+    {"id": "create", "text": "Then create it again, with a new layout piped in: one controller and three workers."},
+    {"id": "steps", "text": "sind sets up the network, DNS and SSH if needed, generates the munge key and Slurm configuration, and starts all nodes in parallel."},
+    {"id": "wait", "text": "Then it waits until every node is ready, up to five minutes by default. The wait flag changes that."},
+    {"id": "all", "text": "Done for the day? The all flag deletes every cluster at once, and with the last one, the shared mesh."},
+    {"id": "safe", "text": "And deleting twice is safe: a cluster that's already gone is no error."},
+    {"id": "take", "text": "So: get clusters shows what runs, delete and create rebuild one, and the all flag clears up everything."},
+    {"id": "outro", "text": "Next up: Node Access, getting onto your nodes. See you there!"}
+  ]
+}

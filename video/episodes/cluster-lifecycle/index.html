@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Cluster Lifecycle</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+  /* Show "<<" and "--" as typed, not as JetBrains Mono ligatures. */
+  .term-body { font-variant-ligatures: none; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Cluster Lifecycle: docs/content/usage/cluster-lifecycle.md. Terminal
+  // content is copied from that page; keep both in sync. The session starts
+  // with the two clusters of the page's sind get clusters sample, rebuilds dev
+  // from the page's stdin example, deletes everything and then deletes dev
+  // once more, which the page says is not an error.
+  const tl = gsap.timeline({ paused: true });
+  const getClusters = [
+    "NAME      NODES (S/C/D/W)   SLURM     STATUS",
+    "default   4 (1/1/0/2)       26.05.4   running",
+    "dev       4 (0/1/1/2)       25.11.8   running",
+  ].join("\n");
+  const rebuild = "sind create cluster --config - << 'EOF'\nkind: Cluster\nname: dev\nnodes:\n  - controller\n  - worker: 3\nEOF";
+  // The session so far, already typed when a later terminal scene opens.
+  const history = (upTo) => [
+    { cmd: "sind get clusters", at: "list:sind" },
+    { out: getClusters, at: "list:shows" },
+    { cmd: "sind delete cluster dev", at: "delete:sind" },
+    { cmd: rebuild, at: "create:Then" },
+  ].slice(0, upTo);
+  Episode.create({ tl, id: "cluster-lifecycle", title: "Cluster Lifecycle: create, list, delete", series: "Cluster Lifecycle" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Usage", title: "Cluster Lifecycle", say: "intro" })
+    .talk({
+      chapter: "Clusters come and go",
+      kicker: "Usage",
+      title: "Clusters come and go",
+      sub: "Create one for a test, see what runs, and delete it when you're done.",
+      chips: ["create", "get clusters", "delete"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "why", mood: "happy" },
+        { id: "usecase", mood: "thinking" },
+      ],
+    })
+    .terminal({
+      chapter: "List clusters",
+      say: [
+        { id: "list", mood: "neutral" },
+        { id: "list2", mood: "neutral", cues: { database: "happy" } },
+      ],
+      steps: [
+        ...history(2),
+        { mark: "NODES (S/C/D/W)", at: "list2:nodes#0", until: "list2:So" },
+        { mark: "(0/1/1/2)", at: "list2:database" },
+      ],
+    })
+    .terminal({
+      wide: true,
+      chapter: "Delete and recreate",
+      say: [
+        { id: "delete", mood: "neutral" },
+        { id: "create", mood: "happy", gap: 0.4 },
+      ],
+      steps: [
+        ...history(4),
+        { ff: "⏩ fast-forward", after: 0.4, hold: 1.6 },
+        { prompt: true, after: 0.9 },
+      ],
+    })
+    .slide({
+      chapter: "What happens during creation",
+      title: "What happens during creation",
+      say: [
+        { id: "steps", mood: "neutral" },
+        { id: "wait", mood: "neutral", cues: { changes: "smug" } },
+      ],
+      bullets: [
+        { icon: "network", title: "Mesh and cluster network", text: "network, DNS and SSH, created or started if needed", at: "steps:network" },
+        { icon: "key", title: "Munge key and slurm.conf", text: "generated for this cluster", at: "steps:munge" },
+        { icon: "nodes", title: "All node containers", text: "started in parallel", at: "steps:parallel" },
+        { icon: "check", title: "Wait until ready", text: "systemd, sshd, Slurm daemons; --wait, 5m by default", at: "wait:waits" },
+      ],
+    })
+    .terminal({
+      wide: true,
+      chapter: "Delete everything",
+      say: [
+        { id: "all", mood: "happy", cues: { mesh: "joy" } },
+        { id: "safe", mood: "smug", gap: 0.5 },
+      ],
+      steps: [
+        ...history(4),
+        { cmd: "sind delete cluster --all", at: "all:all" },
+        { prompt: true, after: 1.2 },
+        { cmd: "sind delete cluster dev", at: "safe:twice" },
+        { prompt: true, after: 0.6 },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "terminal", title: "sind get clusters", text: "nodes per role, Slurm version and status", at: "take:get" },
+        { icon: "nodes", title: "Delete, then create anew", text: "a new layout, piped in on stdin", at: "take:rebuild" },
+        { icon: "check", title: "delete cluster --all", text: "every cluster, then the mesh; deleting twice is safe", at: "take:all" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "Node Access", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
