@@ -6,6 +6,8 @@ description: "Using sind in GitHub Actions and other CI systems"
 toc: true
 ---
 
+{{< video "ci-cd" >}}
+
 ## GitHub Action
 
 The [sind-action](https://github.com/GSI-HPC/sind-action) GitHub Action installs sind and creates clusters in your workflow. sind runs on standard GitHub-hosted Ubuntu runners, x64 (`ubuntu-latest`) and ARM64 (`ubuntu-24.04-arm`), with the runner's Docker daemon — no sudo, privileged containers or custom runner images required.
