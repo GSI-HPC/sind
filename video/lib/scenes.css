@@ -93,7 +93,7 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .term-bar { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 22px; background: #111a2c; border-bottom: 2px solid #1c2740; }
 .term-bar i { width: 16px; height: 16px; border-radius: 50%; display: block; }
 .term-bar .title { margin-left: 18px; font-family: "JetBrains Mono", monospace; font-size: 22px; color: var(--muted); }
-.term-body { padding: 26px 34px; font-family: "JetBrains Mono", monospace; font-size: 34px; line-height: 1.55; color: #e2e8f0; white-space: pre; }
+.term-body { padding: 26px 34px; font-family: "JetBrains Mono", monospace; font-size: 34px; line-height: 1.55; color: #e2e8f0; white-space: pre; font-variant-ligatures: none; }
 .term-prompt { color: var(--teal); font-weight: 700; }
 .term-out { color: #a3b3c9; }
 .term-cursor { display: inline-block; width: 0.47em; height: 1em; margin-left: 0.06em; vertical-align: -0.18em; background: var(--mint); }
@@ -115,7 +115,7 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 .scene-intro .wordmark { font-size: 190px; line-height: 1; }
 .scene-intro .ep { display: flex; flex-direction: column; gap: 14px; margin-top: 30px; }
 .scene-intro .ep .kicker { font-size: 30px; }
-.scene-intro .ep .headline { font-size: 84px; }
+.scene-intro .ep .headline { font-size: 84px; max-width: 880px; }
 .scene-intro .disclosure { left: 150px; right: auto; }
 
 /* Outro scene. */
