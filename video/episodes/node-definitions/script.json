@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's define the nodes of a cluster." },
+    { "id": "why", "text": "Your site has more than a controller and a worker? The nodes list picks the roles, the number of workers, and what each node gets." },
+    { "id": "roles1", "text": "There are four roles. Exactly one controller runs slurmctld, and one or more workers run slurmd." },
+    { "id": "roles2", "text": "A db node adds accounting, with MariaDB and slurmdbd. A submitter has the client commands, for submitting jobs. Both are optional." },
+    { "id": "short1", "text": "When a node needs only a role and a count, the shorthand is enough: a bare role, or a role with a count." },
+    { "id": "short2", "text": "It means the same as the full form, and both can be mixed in one list." },
+    { "id": "managed", "text": "Workers are managed by default: sind starts slurmd and adds them to the Slurm configuration." },
+    { "id": "unmanaged", "text": "With managed set to false, a worker is just a container, to test how nodes register, or join later." },
+    { "id": "caps", "text": "Nodes get no extra privileges by default. For FUSE file systems, for example, grant a capability and a device to the nodes that need them." },
+    { "id": "later1", "text": "You can add workers later, too. Run sind create worker with the count and unmanaged flags for two unmanaged workers." },
+    { "id": "later2", "text": "New workers copy the capabilities and devices of the newest worker, unless flags replace them." },
+    { "id": "takeaway", "text": "So: one controller, one or more workers, and an optional db node and submitter. Shorthand for the simple cases, and privileges only where needed." },
+    { "id": "outro", "text": "Next up: realms, to run clusters side by side. See you there!" }
+  ]
+}

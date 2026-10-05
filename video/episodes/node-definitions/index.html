@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Node Definitions</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Node Definitions: docs/content/configuration/node-definitions.md. The YAML
+  // in the code panels (Shorthand syntax, Managed vs unmanaged workers,
+  // Capabilities and devices) and both terminal commands are copied from that
+  // page; the roles diagram follows its Node roles table.
+  const lines = (...l) => l.join("\n");
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "node-definitions", title: "Node Definitions: roles, workers and privileges", series: "Node Definitions" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Configuration", title: "Node Definitions", say: "intro" })
+    .talk({
+      chapter: "Why node definitions",
+      kicker: "Configuration",
+      title: "Shape your cluster",
+      sub: "Roles, worker counts and per-node settings, in the nodes list.",
+      chips: ["4 roles", "Shorthand or full form"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "neutral", cues: { picks: "happy" } },
+    })
+    .diagram({
+      chapter: "Four roles",
+      title: "Four roles",
+      say: [{ id: "roles1" }, { id: "roles2", cues: { optional: "happy" } }],
+      grid: [2, 2],
+      nodeWidth: 440,
+      nodes: [
+        { id: "ctld", title: "controller", text: "slurmctld · exactly 1", icon: "server", pos: [0, 0], accent: true, at: "roles1:controller" },
+        { id: "worker", title: "worker", text: "slurmd · 1 or more", icon: "nodes", pos: [1, 0], at: "roles1:workers" },
+        { id: "db", title: "db", text: "mariadb, slurmdbd · 0–1", icon: "db", pos: [0, 1], at: "roles2:db" },
+        { id: "sub", title: "submitter", text: "clients only · 0–1", icon: "terminal", pos: [1, 1], at: "roles2:submitter" },
+      ],
+      edges: [
+        { from: "ctld", to: "worker", label: "jobs", at: "roles1:slurmd" },
+        { from: "ctld", to: "db", label: "accounting", at: "roles2:MariaDB" },
+        { from: "sub", to: "ctld", label: "sbatch", at: "roles2:submitting" },
+      ],
+      pulse: [
+        { node: "db", at: "roles2:optional" },
+        { node: "sub", at: "roles2:optional+0.2" },
+      ],
+    });
+
+  ep.code({
+    chapter: "Shorthand syntax",
+    title: "Shorthand syntax",
+    wide: true,
+    panels: [
+      { file: "shorthand", lang: "yaml", text: lines("nodes:", "  - controller               # bare role string", "  - submitter", "  - worker: 3                # role with count") },
+      { file: "full form", lang: "yaml", text: lines("nodes:", "  - role: controller", "  - role: submitter", "  - role: worker", "    count: 3") },
+    ],
+    say: [{ id: "short1" }, { id: "short2", cues: { mixed: "smug" } }],
+    reveal: [
+      { lines: [1, 4], at: "short1:shorthand" },
+      { panel: 1, lines: [1, 5], at: "short2:full" },
+    ],
+    marks: [
+      { text: "  - controller ", at: "short1:bare", until: "short2:full" },
+      { text: "  - worker: 3", at: "short1:count#1", until: "short2:full" },
+    ],
+    notes: [
+      { icon: "job", text: "shorthand: a bare role string, or a role with a count", at: "short1:bare" },
+      { icon: "check", text: "the same nodes in both forms, and both can be mixed in one list", at: "short2:mixed" },
+    ],
+  });
+
+  ep.code({
+    chapter: "Managed and unmanaged",
+    title: "Managed and unmanaged workers",
+    file: "cluster.yaml",
+    lang: "yaml",
+    text: lines("nodes:", "  - role: worker", "    count: 3              # 3 managed workers", "", "  - role: worker", "    count: 2", "    managed: false        # 2 unmanaged workers"),
+    say: [{ id: "managed" }, { id: "unmanaged", cues: { join: "smug" } }],
+    reveal: [
+      { lines: [1, 3], at: "managed:Workers" },
+      { lines: [5, 7], at: "unmanaged:false" },
+    ],
+    marks: [
+      { text: "# 3 managed workers", at: "managed:default", until: "unmanaged:false" },
+      { text: "    managed: false", at: "unmanaged:false" },
+    ],
+    notes: [
+      { icon: "check", text: "managed: sind starts slurmd and adds the node to sind-nodes.conf", at: "managed:starts" },
+      { icon: "nodes", text: "managed: false: a container only, no slurmd, not in the Slurm configuration", at: "unmanaged:container" },
+    ],
+  });
+
+  ep.code({
+    chapter: "Capabilities and devices",
+    title: "Capabilities and devices",
+    file: "cluster.yaml",
+    lang: "yaml",
+    text: lines("nodes:", "  - role: controller", "  - role: worker", "    count: 3", "    capAdd:", "      - SYS_ADMIN", "    devices:", "      - /dev/fuse"),
+    say: { id: "caps", cues: { need: "concerned" } },
+    marks: [
+      { text: "      - SYS_ADMIN", at: "caps:capability" },
+      { text: "      - /dev/fuse", at: "caps:device" },
+    ],
+    notes: [
+      { icon: "lock", text: "capability names as in Docker, without the CAP_ prefix", at: "caps:capability" },
+      { warn: true, text: "These fields can give a node root access to the host.", at: "caps:need" },
+    ],
+  });
+
+  ep.terminal({
+    chapter: "Add workers later",
+    say: [{ id: "later1", mood: "happy" }, { id: "later2", mood: "neutral" }],
+    steps: [
+      { cmd: "sind create worker --count 2 --unmanaged", at: "later1:Run" },
+      { prompt: true, after: 0.7 },
+      { cmd: "sind create worker --cap-add SYS_ADMIN --device /dev/fuse", at: "later2:capabilities" },
+      { prompt: true, after: 0.7 },
+    ],
+  });
+
+  ep.slide({
+    chapter: "Takeaways",
+    title: "Takeaways",
+    say: { id: "takeaway", cues: { privileges: "smug" } },
+    bullets: [
+      { icon: "nodes", title: "One controller, one or more workers", text: "plus an optional db node and submitter", at: "takeaway:controller" },
+      { icon: "job", title: "Shorthand for role and count", text: "the full form for everything else", at: "takeaway:Shorthand" },
+      { icon: "lock", title: "Privileges only where needed", text: "capAdd and devices on the nodes that need them", at: "takeaway:privileges" },
+    ],
+  });
+
+  ep.outro({ chapter: "Wrap-up", next: "Realms", say: "outro" }).done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
