@@ -6,6 +6,8 @@ description: "Cluster health, logs, and resource inspection"
 toc: true
 ---
 
+{{< video "diagnostics" >}}
+
 ## Doctor
 
 ```bash
