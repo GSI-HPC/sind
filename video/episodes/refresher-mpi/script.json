@@ -1,0 +1,16 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! This refresher is about MPI ranks and srun." },
+    { "id": "hook", "text": "One program, on many nodes at once: how does that work?" },
+    { "id": "usecase", "text": "Say your simulation needs three nodes. Like many parallel codes, it uses MPI, the Message Passing Interface." },
+    { "id": "ranks", "text": "An MPI program runs as several copies of itself, called ranks. Each rank has a number, starting from zero." },
+    { "id": "size", "text": "Every rank knows its own number and the total, and uses them to pick its share of the work." },
+    { "id": "messages", "text": "Ranks on different nodes share no memory, so they cooperate by sending messages over the network." },
+    { "id": "alloc", "text": "For your simulation, Slurm first allocates three nodes to the job. Then srun starts one task per rank on them." },
+    { "id": "pmix", "text": "Through PMIx, each task learns its rank, the total, and how to reach the others." },
+    { "id": "alone", "text": "That's why srun alone can launch an MPI program, with no mpirun in between." },
+    { "id": "takeaway", "text": "In short: a rank is one process, ranks talk by messages, and srun starts one task per rank." },
+    { "id": "outro", "text": "Next up: episode four, Test your job scripts before the queue. See you there!" }
+  ]
+}
