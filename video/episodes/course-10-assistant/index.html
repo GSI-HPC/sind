@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind course 10: Let your assistant drive</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
+  /* Custom scenes: the tool table and a stylized chat. */
+  .tools { position: absolute; left: 120px; top: 280px; width: 1320px; display: flex; flex-direction: column; gap: 10px; }
+  .trow { display: grid; grid-template-columns: 500px 1fr 200px; align-items: center; height: 62px; padding: 0 26px; border-radius: 16px; background: rgba(30, 41, 59, 0.75); border: 2px solid var(--line); }
+  .trow .n { font-family: "JetBrains Mono", monospace; font-size: 28px; color: #fff; }
+  .trow .d { font-size: 26px; color: var(--muted); }
+  .trow.hot { border-color: var(--teal); background: #12303a; }
+  .tag { justify-self: end; padding: 4px 16px; border-radius: 999px; font-size: 22px; font-weight: 700; white-space: nowrap; }
+  .tag.ro { color: var(--mint); border: 2px solid rgba(94, 234, 212, 0.55); background: rgba(20, 184, 166, 0.14); }
+  .tag.de { color: #fcd34d; border: 2px solid rgba(251, 191, 36, 0.6); background: rgba(251, 191, 36, 0.12); }
+  .trow .tag, .chat .msg, .chat .call, .chat-note { opacity: 0; }
+
+  .chat { position: absolute; left: 100px; top: 150px; width: 1340px; height: 700px; border-radius: 22px; background: #0b1220; border: 2px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); overflow: hidden; }
+  .chat-bar { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 22px; background: #111a2c; border-bottom: 2px solid #1c2740; font-size: 22px; font-weight: 600; color: var(--muted); }
+  .chat-body { position: absolute; left: 0; right: 0; top: 58px; bottom: 0; padding: 30px 44px; display: flex; flex-direction: column; gap: 18px; }
+  .msg { align-self: flex-end; max-width: 1180px; padding: 20px 30px; border-radius: 28px 28px 8px 28px; background: rgba(20, 184, 166, 0.18); border: 2px solid var(--teal); font-size: 36px; font-weight: 600; line-height: 1.3; color: #fff; }
+  .msg .who { display: block; margin-bottom: 6px; font-size: 20px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mint); }
+  .call { align-self: flex-start; display: flex; align-items: center; gap: 20px; padding: 14px 24px 14px 18px; border-radius: 18px; background: #16213a; border: 2px solid var(--line); }
+  .call .icon { flex: none; width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center; background: rgba(20, 184, 166, 0.16); }
+  .call .icon svg { width: 32px; height: 32px; }
+  .call .lbl { font-size: 22px; font-weight: 600; color: var(--muted); }
+  .call .n { font-family: "JetBrains Mono", monospace; font-size: 32px; color: #fff; }
+  .chat-note { position: absolute; left: 44px; right: 44px; bottom: 30px; display: flex; align-items: center; gap: 18px; padding: 16px 24px; border-radius: 16px; border: 2px dashed rgba(94, 234, 212, 0.45); font-size: 26px; color: var(--muted); }
+  .chat-note code { font-family: "JetBrains Mono", monospace; font-size: 26px; color: var(--mint); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Course 10 · Let your assistant drive: docs/content/course/10-assistant.md.
+  // Terminal content and the MCP config are copied from that page's Commands
+  // section, which copies them from docs/content/guides/mcp.md (setup, tools,
+  // HTTP mode) and docs/content/usage/exit-status.md (sind exec, MCP tools).
+  // The chat scenes show only user requests and tool names from guides/mcp.md,
+  // never tool results. The refresher cut condenses refresher-mcp.
+  const SERIES = "Course 10";
+  // A chat bubble for the assistant, so it does not share the user icon with "You".
+  Episode.ICON_PATHS.chat = '<path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H10l-5 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 12.5h5"/>';
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const chapterHTML = (label) => `<div class="chapter"><span class="dot"></span>${SERIES}<b> · ${esc(label)}</b></div>`;
+  const iconHTML = (name) => Episode.icon(name).outerHTML;
+
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "course-10-assistant", title: "10 · Let your assistant drive", series: SERIES })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "The sind course · 10", title: "Let your assistant drive", say: "intro" })
+    .talk({
+      chapter: "Ask, and it builds",
+      kicker: "Your AI assistant",
+      title: "Ask for a cluster",
+      sub: "Your assistant creates it, checks its status and manages its nodes, through sind's MCP server.",
+      chips: ["MCP server", "Every command a tool", "HTTP mode"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "hook", mood: "neutral", cues: { Why: "smug" }, look: { Why: "camera" } },
+    })
+    .slide({
+      chapter: "The use case",
+      title: "Your assistant, your cluster",
+      say: [{ id: "usecase", mood: "neutral" }, { id: "want", mood: "neutral" }, { id: "need", mood: "happy", cues: { MCP: "smug" } }],
+      bullets: [
+        { icon: "user", title: "You, in your editor", text: "Claude, VS Code Copilot or Cursor beside you", at: "usecase:editor" },
+        { icon: "nodes", title: "Create a cluster", text: "without leaving the chat", at: "want:create" },
+        { icon: "check", title: "Check its status", text: "health, nodes, logs", at: "want:status" },
+        { icon: "gear", title: "Manage its nodes", text: "add workers, shut down, reboot", at: "want:manage" },
+      ],
+    })
+    .diagram({
+      chapter: "Refresher: What MCP is",
+      label: "Refresher · What MCP is",
+      title: "What MCP is",
+      say: [
+        { id: "r1", mood: "neutral" },
+        { id: "r2", mood: "neutral" },
+        { id: "r3", mood: "neutral", cues: { approve: "thinking", result: "happy" } },
+        { id: "r4", mood: "neutral", cues: { both: "smug" } },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "ai", title: "Assistant", text: "MCP client", icon: "chat", pos: [0, 1], at: "r1:assistant" },
+        { id: "sind", title: "sind", text: "MCP server", icon: "server", pos: [2, 1], accent: true, at: "r1:servers" },
+        { id: "you", title: "You", icon: "user", pos: [0, 0], ghost: true, at: "r3:request" },
+        { id: "docker", title: "Docker", text: "your clusters", icon: "docker", pos: [2, 0], at: "r3:calls+0.6" },
+      ],
+      edges: [
+        { from: "sind", to: "ai", label: "tools", bend: 140, at: "r2:describes" },
+        { from: "you", to: "ai", label: "request", accent: true, at: "r3:request+0.3" },
+        { from: "ai", to: "sind", label: "call", bend: 140, accent: true, at: "r3:calls" },
+        { from: "sind", to: "docker", label: "runs", at: "r3:calls+0.6" },
+        { from: "ai", to: "sind", label: "stdio · HTTP", arrow: "both", at: "r4:standard" },
+      ],
+      pulse: [
+        { node: "you", at: "r3:approve" },
+        { node: "ai", at: "r3:result" },
+      ],
+    })
+    .terminal({
+      chapter: "Connect your assistant",
+      say: [{ id: "enable", mood: "happy" }, { id: "editors", mood: "neutral" }],
+      steps: [
+        { cmd: "sind mcp claude enable", at: "enable:Run" },
+        { prompt: true, after: 0.6 },
+        { cmd: "sind mcp vscode enable", at: "editors:VS" },
+        { prompt: true, after: 0.4 },
+        { cmd: "sind mcp cursor enable", after: 0.3 },
+        { prompt: true, after: 0.5 },
+      ],
+    })
+    // The manual configuration from guides/mcp.md (JSON: no colours).
+    .code({
+      chapter: "Configure by hand",
+      title: "Manual configuration",
+      say: { id: "manual", mood: "neutral", cues: { start: "smug" } },
+      file: "your editor's MCP config",
+      lang: "json",
+      text: ["{", '  "mcpServers": {', '    "sind": {', '      "command": "sind",', '      "args": ["mcp", "start"]', "    }", "  }", "}"].join("\n"),
+      marks: [{ text: '"args"', at: "manual:start" }],
+      notes: [{ icon: "terminal", text: "sind mcp start: the tools over stdio", at: "manual:serves" }],
+    })
+    .terminal({
+      chapter: "Every command a tool",
+      label: "List the tools",
+      say: { id: "tools", mood: "neutral" },
+      steps: [{ cmd: "sind mcp tools", at: "tools:sind" }, { prompt: true, after: 0.6 }],
+    });
+
+  // The tool table from guides/mcp.md, with the hints the page names:
+  // get tools read-only; create, delete, exec and power shutdown/reboot destructive.
+  {
+    const { el, t } = ep.custom("tools", { shot: "cornerR" });
+    const rows = [
+      ["sind_create_cluster", "Create a Slurm cluster", "de"],
+      ["sind_create_worker", "Add worker nodes to a cluster", "de"],
+      ["sind_delete_cluster", "Delete a cluster", "de"],
+      ["sind_get_cluster", "Show cluster health status", "ro"],
+      ["sind_get_nodes", "List nodes", "ro"],
+      ["sind_get_realms", "List all realms", "ro"],
+      ["sind_power_reboot", "Graceful reboot", "de"],
+      ["sind_exec", "Run a command on submitter or controller", "de"],
+    ];
+    const tag = (k) => `<span class="tag ${k}">${k === "ro" ? "read-only" : "destructive"}</span>`;
+    el.innerHTML = `<div class="bg-glow"></div>${chapterHTML("Every command a tool")}<div class="slide-title">sind_&lt;command&gt;_&lt;subcommand&gt;</div><div class="tools">${rows
+      .map(([n, d, k]) => `<div class="trow" data-k="${k}"><span class="n">${n}</span><span class="d">${esc(d)}</span>${tag(k)}</div>`)
+      .join("")}</div>`;
+    el.querySelector(".slide-title").style.fontFamily = '"JetBrains Mono", monospace';
+    el.querySelector(".slide-title").style.fontSize = "60px";
+    el.querySelector(".slide-title").style.top = "160px";
+    const trs = [...el.querySelectorAll(".trow")];
+    Scenes.enter(tl, el.querySelector(".slide-title"), t + 0.5);
+    ep.P.wait(0.6);
+    ep.say([{ id: "names", mood: "neutral" }, { id: "marks", mood: "neutral", cues: { destructive: "thinking" } }, { id: "ask", mood: "happy" }], "neutral");
+    Scenes.enter(tl, trs, ep.time("names:becomes") - 0.2, { y: 20, stagger: 0.12 });
+    ep.glance(ep.time("names:becomes"), 1.2, -0.8, 0);
+    const hot = (i, a, b) => {
+      tl.fromTo(trs[i], { borderColor: "#334155" }, { borderColor: "#14b8a6", duration: 0.3 }, ep.time(a));
+      tl.to(trs[i], { borderColor: "#334155", duration: 0.3 }, ep.time(b));
+    };
+    hot(0, "names:create", "names:nodes");
+    hot(4, "names:nodes", "marks:Every");
+    tl.fromTo(trs.filter((r) => r.dataset.k === "ro").map((r) => r.querySelector(".tag")), { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.35, stagger: 0.08 }, ep.time("marks:read") - 0.15);
+    tl.fromTo(trs.filter((r) => r.dataset.k === "de").map((r) => r.querySelector(".tag")), { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.35, stagger: 0.08 }, ep.time("marks:destructive") - 0.15);
+    ep.glance(ep.time("marks:read"), 1.0, -0.4, 0);
+  }
+
+  ep.slide({
+    chapter: "What stays out",
+    title: "Not offered as tools",
+    say: { id: "out", mood: "neutral" },
+    bullets: [
+      { icon: "terminal", title: "sind enter, sind ssh", text: "they need an interactive terminal", at: "out:enter" },
+      { icon: "lock", title: "get ssh-private-key, get auth-key", text: "they print secrets", at: "out:secrets" },
+      { icon: "job", title: "Help, completion, sind mcp", text: "and command groups such as sind get", at: "out:help" },
+    ],
+  });
+
+  // A stylized exchange: the user's request and the tools the assistant
+  // calls, from guides/mcp.md. No tool results are shown.
+  function chat(o) {
+    const { el, t } = ep.custom("chat", { chapter: o.chapter, shot: "cornerR" });
+    const calls = o.calls
+      .map((c) => `<div class="call"><div class="icon">${Episode.icon("gear").innerHTML}</div><div><div class="lbl">${c.lbl || "calls the tool"}</div><div class="n">${c.name}</div></div><span class="tag ${c.k}">${c.k === "ro" ? "read-only" : "destructive"}</span></div>`)
+      .join("");
+    el.innerHTML = `<div class="bg-glow"></div>${chapterHTML(o.chapter)}<div class="chat"><div class="chat-bar">${iconHTML("chat").replace('class="icon"', 'class="icon" style="width:30px;height:30px"')}Assistant chat</div><div class="chat-body"><div class="msg"><span class="who">You</span>${esc(o.ask)}</div>${calls}</div>${o.note ? `<div class="chat-note">${o.note}</div>` : ""}</div>`;
+    el.querySelectorAll(".call .icon svg, .chat-bar .icon svg").forEach((s) => s.setAttribute("style", "width:100%;height:100%"));
+    Scenes.enter(tl, el.querySelector(".chat"), t + 0.4, { y: 40 });
+    const msg = el.querySelector(".msg");
+    const items = [...el.querySelectorAll(".call")];
+    const note = el.querySelector(".chat-note");
+    ep.P.wait(0.6);
+    ep.say(o.say, "neutral");
+    const pop = (x, at) => {
+      tl.fromTo(x, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, ep.time(at) - 0.15);
+      ep.glance(at, 1.0, -0.6, 0);
+    };
+    pop(msg, o.askAt);
+    o.calls.forEach((c, i) => pop(items[i], c.at));
+    if (note) pop(note, o.noteAt);
+  }
+
+  chat({
+    chapter: "Build a cluster",
+    ask: "Create a cluster for me and show me its nodes.",
+    askAt: "ask1:ask",
+    calls: [{ name: "sind_create_cluster", k: "de", at: "call1:picks" }, { name: "sind_get_nodes", k: "ro", at: "call2:calls" }],
+    note: `Each call returns <code>stdout</code> · <code>stderr</code> · <code>exitCode</code>`,
+    noteAt: "result:hands",
+    say: [{ id: "ask1", mood: "happy" }, { id: "call1", mood: "neutral", cues: { destructive: "thinking" } }, { id: "call2", mood: "neutral", cues: { JSON: "happy" } }, "result"],
+  });
+
+  chat({
+    chapter: "Debug with it",
+    ask: "My jobs aren't starting. What's wrong with the cluster?",
+    askAt: "ask2:ask",
+    calls: [
+      { name: "sind_get_cluster", k: "ro", at: "diag:get" },
+      { name: "sind_logs", k: "ro", at: "diag:logs" },
+      { name: "sind_doctor", k: "ro", at: "diag:doctor" },
+      { name: "sind_power_reboot", k: "de", lbl: "asks to call", at: "fix:power" },
+    ],
+    say: [{ id: "ask2", mood: "concerned" }, { id: "diag", mood: "thinking" }, { id: "fix", mood: "neutral", cues: { check: "happy" } }],
+  });
+
+  ep.terminal({
+    chapter: "Exit codes in tool calls",
+    say: [{ id: "exec", mood: "neutral", cues: { forty: "happy" } }, { id: "codes", mood: "neutral", cues: { retry: "smug" }, gap: 0.6 }],
+    steps: [
+      { cmd: "sind exec -- sh -c 'exit 42'", at: "exec:sind" },
+      { prompt: true, after: 0.5 },
+      { cmd: "echo $?", after: 0.3 },
+      { out: "42", at: "exec:forty", delay: -0.1 },
+      { mark: "42", at: "codes:status" },
+    ],
+  })
+    .terminal({
+      wide: true,
+      chapter: "Serve over HTTP",
+      say: [{ id: "http", mood: "neutral" }, { id: "token", mood: "neutral", cues: { without: "smug" } }, { id: "loop", mood: "neutral" }],
+      steps: [
+        { cmd: "sind mcp stream --port 8080", at: "http:sind" },
+        {
+          out: [
+            "MCP server listening on http://127.0.0.1:8080/",
+            "Bearer token in /home/alice/.local/state/sind/mcp-token (new at every start; set SIND_MCP_TOKEN to keep one)",
+            'Client config: {"type": "http", "url": "http://127.0.0.1:8080/", "headers": {"Authorization": "Bearer <token>"}}',
+          ].join("\n"),
+          at: "token:output",
+          running: true,
+        },
+        { mark: "/home/alice/.local/state/sind/mcp-token", at: "token:where", until: "token:client" },
+        { mark: "Client config:", at: "token:client", until: "loop:loopback" },
+        { mark: "127.0.0.1", at: "loop:loopback" },
+      ],
+    })
+    .slide({
+      chapter: "Stay in charge",
+      title: "Not a sandbox",
+      say: [{ id: "safe", mood: "concerned" }, { id: "safe2", mood: "neutral" }, { id: "safe3", mood: "neutral", cues: { these: "happy" } }],
+      bullets: [
+        { icon: "warn", title: "Your Docker access", text: "sind_exec runs any command inside a cluster", at: "safe:Docker" },
+        { icon: "check", title: "Read the flags, then approve", text: "create calls decide what runs on your host", at: "safe2:flags" },
+        { icon: "disk", title: "data: \"volume\"", text: "keeps your host files out of /data", at: "safe2:volume" },
+        { icon: "lock", title: "Only where you'd run sind", text: "the same trust as running it yourself", at: "safe3:agent" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "terminal", title: "One command connects", text: "sind mcp claude enable, or vscode, or cursor", at: "take:hooks" },
+        { icon: "nodes", title: "Every command is a tool", text: "marked read-only or destructive", at: "take:tool" },
+        { icon: "check", title: "You stay in charge", text: "approve destructive calls, read the exit code", at: "take:charge" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", title: "Thanks for taking the course!", next: "Pick a guide", say: { id: "outro", mood: "joy" } })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
