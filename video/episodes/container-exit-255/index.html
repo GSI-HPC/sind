@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Container exits with code 255</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
+  /* The exit code at the end of each Symptom line. */
+  .exit { color: #fbbf24; font-weight: 700; border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Container exits with code 255: docs/content/troubleshooting/container-exit-255.md.
+  // The error messages and the two code blocks (Diagnosis, Fix) are copied
+  // verbatim from that page into code panels, which check compares with the
+  // page; keep both in sync. The page shows no command for the errors and
+  // gives the command output as comments, so there is no terminal scene.
+  // The exit codes in the Symptom lines are coloured after the code scene.
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "container-exit-255", title: "Container exits with code 255: the inotify limit", series: "Container exits with code 255" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Troubleshooting", title: "Container exits with code 255", say: "intro" })
+    .talk({
+      chapter: "When it happens",
+      kicker: "Troubleshooting",
+      title: "Nodes that crash at start",
+      sub: "Many nodes: some containers start, others exit within the first second.",
+      chips: ["8+ nodes", "exit code 255", "inotify"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [{ id: "why", mood: "concerned" }, { id: "why2", mood: "neutral", cues: { fix: "happy" } }],
+    })
+    // Symptom: the two error messages from the page, one per code block there.
+    .code({
+      chapter: "Symptom",
+      title: "The error",
+      wide: true,
+      say: [{ id: "sym", mood: "neutral" }, { id: "sym2", mood: "thinking" }],
+      file: "Symptom",
+      lang: "text",
+      text: [
+        "waiting for worker-5: node sind-dev-worker-5 not ready: probe container: container sind-dev-worker-5 is exited (exit code 255)",
+        "",
+        "waiting for worker-5: node sind-dev-worker-5 not ready: container sind-dev-worker-5 died: exitCode=255",
+      ].join("\n"),
+      reveal: [
+        { lines: [1, 1], at: "sym:error" },
+        { lines: [3, 3], at: "sym2:died" },
+      ],
+      marks: [
+        { line: 1, at: "sym:exit", until: "sym2:died" },
+        { line: 3, at: "sym2:died" },
+      ],
+      notes: [
+        { icon: "warn", text: "“is exited”: already exited when sind first checked it", at: "sym2:already" },
+        { icon: "warn", text: "“died”: died while sind was waiting for it", at: "sym2:died" },
+      ],
+    });
+  // The exit code sits at the far right of each long line: colour it, and
+  // light it up as Sindy names it.
+  {
+    const txt = [...ep.root.querySelectorAll(".scene-code")].pop().querySelectorAll(".code-txt");
+    for (const [i, code] of [[0, "exit code 255"], [2, "exitCode=255"]]) txt[i].innerHTML = txt[i].innerHTML.replace(code, `<b class="exit">${code}</b>`);
+    const codes = [...ep.root.querySelectorAll(".exit")];
+    tl.fromTo(codes[0], { backgroundColor: "rgba(251, 191, 36, 0)" }, { backgroundColor: "rgba(251, 191, 36, 0.28)", duration: 0.3, immediateRender: false }, ep.time("sym:exit") - 0.1);
+    tl.fromTo(codes[1], { backgroundColor: "rgba(251, 191, 36, 0)" }, { backgroundColor: "rgba(251, 191, 36, 0.28)", duration: 0.3, immediateRender: false }, ep.time("sym2:died") + 0.2);
+  }
+
+  ep
+    .slide({
+      chapter: "Cause",
+      title: "What exit code 255 means",
+      say: [
+        { id: "cause1", mood: "neutral" },
+        { id: "cause2", mood: "thinking" },
+      ],
+      bullets: [
+        { icon: "gear", title: "systemd failed at start", text: "PID 1 inside the container", at: "cause1:systemd" },
+        { icon: "lock", title: "Too few inotify instances", text: "a per-user Linux limit, set too low", at: "cause2:inotify" },
+      ],
+    })
+    .diagram({
+      chapter: "Out of inotify instances",
+      shot: "mini",
+      title: "Out of inotify instances",
+      say: [
+        { id: "cause3", mood: "neutral" },
+        { id: "cause4", mood: "concerned" },
+        { id: "cause5", mood: "neutral" },
+      ],
+      grid: [4, 2],
+      nodeWidth: 330,
+      nodes: [
+        { id: "limit", title: "inotify limit", text: "per user, often 128", icon: "lock", pos: [1.5, 0.5], accent: true, at: "cause3:Every" },
+        { id: "runtime", title: "containerd", text: "watches cgroups", icon: "docker", pos: [0, 0], at: "cause3:containerd" },
+        { id: "systemd", title: "systemd", text: "PID 1 in every node", icon: "gear", pos: [0, 1], at: "cause3:systemd" },
+        { id: "ok", title: "Some nodes", text: "start fine", icon: "check", pos: [3, 0], at: "cause4:Once#0" },
+        { id: "fail", title: "Others", text: "exit with code 255", icon: "warn", pos: [3, 1], at: "cause4:exit" },
+      ],
+      edges: [
+        { from: "runtime", to: "limit", label: "uses", at: "cause3:watches" },
+        { from: "systemd", to: "limit", label: "needs", at: "cause3:needs" },
+        { from: "limit", to: "ok", at: "cause4:Once#0+0.2" },
+        { from: "limit", to: "fail", label: "used up", dashed: true, accent: true, at: "cause4:used" },
+      ],
+      pulse: [
+        { node: "limit", at: "cause4:used" },
+        { node: "limit", at: "cause5:hundred" },
+      ],
+    })
+    // Diagnosis: the page's code block, comments and all.
+    .code({
+      chapter: "Diagnosis",
+      title: "Check the limit",
+      wide: true,
+      say: [{ id: "diag", mood: "neutral", cues: { hundred: "happy" } }, { id: "diag2", mood: "neutral", cues: { Too: "concerned" } }],
+      file: "Diagnosis",
+      lang: "sh",
+      text: [
+        "# Current limit",
+        "cat /proc/sys/fs/inotify/max_user_instances",
+        "# 128",
+        "",
+        "# Check containerd logs for inotify errors",
+        'journalctl -u docker --since "5 minutes ago" | grep inotify',
+        "# error from *cgroupsv2.Manager.EventChan: failed to create inotify fd: too many open files",
+      ].join("\n"),
+      reveal: [
+        { lines: [1, 2], at: "diag:read" },
+        { lines: [3, 3], at: "diag:Here" },
+        { lines: [4, 6], at: "diag2:search" },
+        { lines: [7, 7], at: "diag2:Too" },
+      ],
+      marks: [
+        { line: 3, at: "diag:hundred", until: "diag2:Then" },
+        { line: 7, at: "diag2:Too" },
+      ],
+    })
+    // Fix: the page's code block.
+    .code({
+      chapter: "Fix",
+      title: "Raise the limit",
+      wide: true,
+      say: [{ id: "fix1", mood: "happy" }, { id: "fix2", mood: "neutral" }, { id: "fix3", mood: "neutral" }, { id: "fix4", mood: "happy", cues: { immediately: "joy" } }],
+      file: "Fix",
+      lang: "sh",
+      text: [
+        "# Temporary (resets on reboot)",
+        "sudo sysctl fs.inotify.max_user_instances=1024",
+        "",
+        "# Persistent",
+        'echo "fs.inotify.max_user_instances = 1024" | sudo tee /etc/sysctl.d/99-sind.conf',
+        "sudo sysctl --system",
+      ].join("\n"),
+      marks: [
+        { line: 1, at: "fix2:first", until: "fix3:keep" },
+        { line: 2, at: "fix2:first", until: "fix3:keep" },
+        { line: 4, at: "fix3:write", until: "fix3:reload" },
+        { line: 5, at: "fix3:write", until: "fix3:reload" },
+        { line: 6, at: "fix3:reload", until: "fix4:Docker" },
+      ],
+      notes: [
+        { icon: "nodes", text: "1024 supports about 100 concurrent containers", at: "fix1:value" },
+        { icon: "check", text: "No restart of Docker or running containers", at: "fix4:restart" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "warn", title: "Exit code 255: out of inotify instances", text: "systemd, PID 1, cannot start in new containers", at: "take:points" },
+        { icon: "check", title: "Check the limit", text: "cat /proc/sys/fs/inotify/max_user_instances", at: "take:Check" },
+        { icon: "lock", title: "Raise it, and make it stick", text: "1024, in /etc/sysctl.d/99-sind.conf", at: "take:raise" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "Diagnostics", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
