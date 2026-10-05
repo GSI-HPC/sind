@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's bring CVMFS software into a sind cluster." },
+    { "id": "why", "text": "Your jobs load their software from CVMFS. So how do you get it onto every node of a test cluster?" },
+    { "id": "cases", "text": "sind covers two use cases. Consume it, so jobs read from it, or provision it, to test the tooling that installs the client." },
+    { "id": "config", "text": "To consume it, set the cvmfs flag in the storage section. The nodes need no extra privileges." },
+    { "id": "host", "text": "If the client runs on your host, check its mount first. Here it's shared, the default on systemd hosts." },
+    { "id": "create", "text": "Next, create the cluster from that file." },
+    { "id": "early", "text": "And sind tries the mount before it creates any node, so a broken setup fails early." },
+    { "id": "backends", "text": "sind picks the backend: a Docker volume plugin named cvmfs if one is installed, otherwise the mount on the host." },
+    { "id": "mount", "text": "Every node gets it read-only, including workers added later. Repositories appear on first access, so there's no list to configure." },
+    { "id": "provision", "text": "To test your provisioning instead, leave storage unset, and let the client run inside the nodes." },
+    { "id": "privs", "text": "Those nodes need an extra capability and the fuse device, and on AppArmor hosts, an unconfined profile." },
+    { "id": "takeaway", "text": "In short: one setting mounts CVMFS on every node, sind picks the backend, and provisioning tests run the client inside the nodes." },
+    { "id": "outro", "text": "Next up: users and identity. See you there!" }
+  ]
+}
