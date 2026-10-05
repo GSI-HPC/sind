@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Cluster Configuration</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
+  /* Bullet titles that are config keys. */
+  .keys .bullet:nth-child(-n+3) .t1 { font-family: "JetBrains Mono", monospace; font-weight: 400; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Cluster Configuration: docs/content/configuration/cluster-config.md. No
+  // terminal; the files in the code scenes are copied from that page (Minimal
+  // configuration, Full example without its blank lines inside nodes, Slurm
+  // section), the bullets and notes paraphrase its Defaults section and Trust.
+  const lines = (...l) => l.join("\n");
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "cluster-config", title: "Cluster Configuration: one YAML file per cluster", series: "Cluster Configuration" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Configuration", title: "Cluster Configuration", say: "intro" })
+    .talk({
+      chapter: "Why a config file",
+      kicker: "Configuration",
+      title: "One file, one cluster",
+      sub: "Nodes, limits, storage, users and Slurm settings, in one YAML file.",
+      chips: ["One YAML file", "Nodes, limits", "Slurm settings"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "thinking", cues: { one: "happy" } },
+    })
+    .code({
+      chapter: "The smallest config",
+      title: "The smallest config",
+      file: "cluster.yaml",
+      lang: "yaml",
+      text: lines(
+        "kind: Cluster",
+        "name: default",
+        "defaults:",
+        "  image: ghcr.io/gsi-hpc/sind-node:v0.11.0  # the image of your sind release",
+        "  cpus: 1",
+        "  memory: 512m",
+        "  tmpSize: 256m",
+        "nodes:",
+        "  - role: controller",
+        "  - role: worker"
+      ),
+      say: [{ id: "minimal" }, { id: "expanded", cues: { worker: "happy" } }],
+      reveal: [{ lines: [2, 10], at: "expanded:fills" }],
+      marks: [
+        { text: "kind: Cluster", at: "minimal:kind", until: "expanded:fills" },
+        { text: "name: default", at: "expanded:name", until: "expanded:image" },
+        { text: "  image:", at: "expanded:image", until: "expanded:one#0" },
+        { text: "  cpus: 1", at: "expanded:one#0", until: "expanded:controller" },
+        { text: "  memory: 512m", at: "expanded:five", until: "expanded:controller" },
+        { text: "  - role: controller", at: "expanded:controller" },
+        { text: "  - role: worker", at: "expanded:worker" },
+      ],
+      notes: [{ icon: "check", text: "the same as the fully expanded form", at: "expanded:fills" }],
+    })
+    .code({
+      chapter: "A full example",
+      title: "A full example",
+      wide: true,
+      panels: [
+        {
+          file: "cluster.yaml",
+          lang: "yaml",
+          text: lines(
+            "kind: Cluster",
+            "name: test-cluster",
+            "",
+            "defaults:",
+            "  image: ghcr.io/gsi-hpc/sind-node:latest",
+            "  cpus: 1",
+            "  memory: 512m",
+            "  tmpSize: 256m",
+            "",
+            "storage:",
+            "  dataStorage:",
+            "    type: volume",
+            "    mountPath: /data"
+          ),
+        },
+        {
+          file: "cluster.yaml, continued",
+          lang: "yaml",
+          text: lines("groups:", "  - name: hpc", "    gid: 3000", "", "users:", "  - alice", "  - name: bob", "    uid: 2001", "    group: hpc", "    accounts: [physics]", "", "accounts:", "  - physics"),
+        },
+      ],
+      say: [{ id: "defaults" }, { id: "storage" }, { id: "users" }, { id: "trust", mood: "concerned", cues: { image: "neutral" } }],
+      reveal: [
+        { lines: [4, 8], at: "defaults:defaults" },
+        { lines: [10, 13], at: "storage:storage" },
+        { panel: 1, lines: [1, 13], at: "users:groups" },
+      ],
+      marks: [
+        { text: "    type: volume", at: "storage:Docker", until: "users:groups" },
+        { text: "  image: ghcr.io/gsi-hpc/sind-node:latest", at: "trust:image" },
+      ],
+      notes: [{ warn: true, text: "As trusted as a script: a config can run any image and mount any host directory", at: "trust:trusted" }],
+    })
+    .code({
+      label: "A full example",
+      title: "A full example, continued",
+      panels: [
+        {
+          file: "cluster.yaml, continued",
+          lang: "yaml",
+          text: lines("slurm:", "  main: |", "    SelectType=select/cons_tres", "    SelectTypeParameters=CR_Core_Memory", "  cgroup: |", "    ConstrainRAMSpace=yes", "  slurmdbd: |", "    PurgeJobAfter=1month"),
+        },
+        {
+          file: "cluster.yaml, continued",
+          lang: "yaml",
+          text: lines(
+            "nodes:",
+            "  - role: controller",
+            "    cpus: 2",
+            "    memory: 1g",
+            "    tmpSize: 512m",
+            "  - role: db",
+            "  - role: submitter",
+            "  - role: worker",
+            "    count: 3",
+            "    cpus: 2",
+            "    memory: 1g",
+            "  - role: worker",
+            "    count: 2",
+            "    managed: false"
+          ),
+        },
+      ],
+      say: [{ id: "slurm" }, { id: "nodes", cues: { unmanaged: "smug" } }],
+      reveal: [
+        { lines: [1, 8], at: "slurm:slurm" },
+        { panel: 1, lines: [1, 7], at: "nodes:nodes" },
+        { panel: 1, lines: [8, 14], at: "nodes:three" },
+      ],
+      marks: [{ text: "    managed: false", at: "nodes:unmanaged" }],
+    })
+    .slide({
+      chapter: "Limits Slurm sees",
+      title: "Limits Slurm sees",
+      say: [{ id: "limits", cues: { exactly: "smug" } }, { id: "memory", cues: { raise: "thinking" } }],
+      bullets: [
+        { icon: "gear", title: "cpus", text: "CPU limit per container; a managed worker's Slurm CPUs", at: "limits:CPU" },
+        { icon: "nodes", title: "memory", text: "limit without swap; a managed worker's Slurm RealMemory", at: "limits:memory" },
+        { icon: "disk", title: "tmpSize", text: "tmpfs for /tmp; files there count against memory", at: "memory:temporary" },
+        { icon: "warn", title: "Raise memory for big jobs", text: "Slurm is told the whole limit", at: "memory:raise" },
+      ],
+    });
+  [...ep.root.querySelectorAll(".scene-slide")].pop().classList.add("keys");
+
+  ep.code({
+    chapter: "The slurm section",
+    title: "The slurm section",
+    panels: [
+      { file: "string form", lang: "yaml", text: lines("slurm:", "  main: |", "    SelectType=select/cons_tres", "    SelectTypeParameters=CR_Core_Memory", "  cgroup: |", "    ConstrainRAMSpace=yes") },
+      { file: "map form", lang: "yaml", text: lines("slurm:", "  main:", "    scheduling: |", "      SchedulerType=sched/backfill", "      SchedulerParameters=bf_continue", "    resources: |", "      SelectType=select/cons_tres") },
+    ],
+    say: [{ id: "string" }, { id: "map", gap: 0.6 }],
+    reveal: [
+      { lines: [1, 6], at: "string:block" },
+      { panel: 1, lines: [1, 7], at: "map:map" },
+    ],
+    notes: [
+      { icon: "job", text: "string form: appended to the config file", at: "string:added" },
+      { icon: "nodes", text: "map form: named fragments in a .conf.d/ directory", at: "map:fragments" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "Takeaways",
+    title: "Takeaways",
+    say: { id: "takeaway", mood: "happy", cues: { trusted: "concerned" } },
+    bullets: [
+      { icon: "job", title: "kind: Cluster is a complete config", text: "sind fills in the defaults", at: "takeaway:line" },
+      { icon: "gear", title: "Limits are what Slurm sees", text: "cpus and memory become CPUs and RealMemory", at: "takeaway:limits" },
+      { icon: "lock", title: "A config is as trusted as a script", text: "it can run any image and mount any host directory", at: "takeaway:trusted" },
+    ],
+  });
+
+  ep.outro({ chapter: "Wrap-up", next: "Node Definitions", say: "outro" }).done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

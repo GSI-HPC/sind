@@ -1,0 +1,21 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's open the cluster configuration file." },
+    { "id": "why", "text": "Do your tests need more than the defaults? More nodes, a database, users, or your own Slurm settings: one YAML file describes it all." },
+    { "id": "minimal", "text": "The smallest config is a single line: kind Cluster." },
+    { "id": "expanded", "text": "sind fills in the rest: the name default, the image of your sind release, one CPU and five hundred twelve megabytes per node, and a controller with one worker." },
+    { "id": "defaults", "text": "A bigger config uses more sections. The defaults section applies to every node, unless the node sets its own value." },
+    { "id": "storage", "text": "The storage section sets up the shared data directory, here as a Docker volume." },
+    { "id": "users", "text": "The groups, users and accounts sections add Linux users and Slurm accounts." },
+    { "id": "trust", "text": "Careful, though: a config is as trusted as a script. It can run any image and mount any host directory." },
+    { "id": "slurm", "text": "The slurm section adds your own lines to the generated configuration." },
+    { "id": "nodes", "text": "And the nodes section lists the roles: a bigger controller, a db node, a submitter, three workers, and two unmanaged ones." },
+    { "id": "limits", "text": "Every node is a container with a CPU and memory limit. For a managed worker, Slurm is told exactly these numbers." },
+    { "id": "memory", "text": "Memory covers the whole node: the jobs, its services and its temporary files. So raise it for jobs that need a lot." },
+    { "id": "string", "text": "In the slurm section, a block of text is added to the matching file: here slurm.conf and the cgroup config." },
+    { "id": "map", "text": "A map of named blocks becomes separate fragments instead, in a directory of their own." },
+    { "id": "takeaway", "text": "So: one line is a complete config, limits are what Slurm sees, and a config is as trusted as a script." },
+    { "id": "outro", "text": "Next up, the node definitions in detail. See you there!" }
+  ]
+}
