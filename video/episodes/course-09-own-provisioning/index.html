@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind course 09: Bring your own provisioning</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Course 09, Bring your own provisioning: docs/content/course/09-own-provisioning.md.
+  // Commands, config and output are copied from guides/unmanaged-cluster.md
+  // (config, create, provisioning by hand, Ansible inventory) and
+  // container-images/building-images.md (container settings), via the course
+  // page's Commands section; keep all of them in sync. The refresher cut
+  // follows introduction/_index.md (system containers),
+  // architecture/overview.md (systemd as PID 1) and usage/power-control.md
+  // (clean shutdown on the stop signal); its full version is the
+  // refresher-systemd episode.
+
+  const SERIES = "Course 09";
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "course-09-own-provisioning", title: "09 · Bring your own provisioning", series: SERIES })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "The sind course · 09", title: "Bring your own provisioning", say: "intro" })
+    .talk({
+      chapter: "Your roles, fresh nodes",
+      kicker: "Config management",
+      title: "Test your Slurm provisioning",
+      sub: "Fresh nodes for your Ansible roles or Chef cookbooks, from your own image if you like.",
+      chips: ["Unmanaged", "Ansible or Chef", "Own images"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "hook", mood: "thinking", cues: { scratch: "concerned" } },
+        { id: "usecase", mood: "neutral", cues: { often: "happy" } },
+        { id: "need", mood: "happy" },
+      ],
+    })
+    // The refresher cut in two pictures: an application container, then a
+    // sind node with systemd as PID 1.
+    .diagram({
+      chapter: "Refresher: systemd as PID 1",
+      label: "Refresher · systemd as PID 1",
+      title: "One program as PID 1",
+      say: [
+        { id: "rpid", mood: "happy", cues: { process: "neutral" } },
+        { id: "rapp", mood: "neutral" },
+      ],
+      grid: [2, 2],
+      nodeWidth: 340,
+      nodes: [
+        { id: "app", title: "PID 1", text: "one program", icon: "job", pos: [0, 0], at: "rpid:PID" },
+        { id: "appx", title: "it exits", text: "the container stops", icon: "warn", ghost: true, pos: [0, 1], at: "rapp:exits" },
+        { id: "svc", title: "Services", text: "no manager", icon: "gear", ghost: true, pos: [1, 0], at: "rapp:service" },
+        { id: "ssh", title: "SSH", text: "no daemon", icon: "lock", ghost: true, pos: [1, 1], at: "rapp:SSH" },
+      ],
+      groups: [{ id: "A", label: "app container", around: ["app", "appx", "svc", "ssh"], at: "rpid:container#0" }],
+      edges: [{ from: "app", to: "appx", at: "rapp:exits" }],
+    })
+    .diagram({
+      label: "Refresher · systemd as PID 1",
+      title: "systemd as PID 1",
+      say: [
+        { id: "rsys", mood: "neutral", cues: { supervises: "happy" } },
+        { id: "rstop", mood: "neutral", cues: { real: "smug" } },
+      ],
+      grid: [4, 3],
+      nodes: [
+        { id: "sd", title: "systemd", text: "PID 1", icon: "gear", accent: true, pos: [1, 0], at: "rsys:systemd" },
+        { id: "mu", title: "munge", text: "service", icon: "key", pos: [0, 1], at: "rsys:munge" },
+        { id: "ss", title: "sshd", text: "service", icon: "lock", pos: [2, 1], at: "rsys:sshd" },
+        { id: "sl", title: "slurmd", text: "after munge", icon: "server", pos: [0, 2], at: "rsys:dependency" },
+        { id: "tool", title: "Ansible · Chef", text: "a real machine", icon: "terminal", width: 300, pos: [3, 2], at: "rstop:provisioning" },
+      ],
+      groups: [{ id: "N", label: "sind node", around: ["sd", "mu", "ss", "sl"], accent: true, at: "rsys:sind" }],
+      edges: [
+        { from: "sd", to: "mu", at: "rsys:starts" },
+        { from: "sd", to: "ss", at: "rsys:starts+0.2" },
+        { from: "mu", to: "sl", dashed: true, at: "rsys:dependency" },
+        { from: "tool", to: "N", accent: true, at: "rstop:node" },
+      ],
+      pulse: [{ node: "sd", at: "rsys:supervises" }, { node: "sd", at: "rstop:shuts" }],
+    })
+    .diagram({
+      chapter: "Unmanaged: who does what",
+      title: "Unmanaged: who does what",
+      say: [
+        { id: "managed", mood: "neutral" },
+        { id: "unmanaged", mood: "neutral", cues: { included: "happy" } },
+        { id: "yours", mood: "neutral", cues: { yours: "smug" } },
+      ],
+      grid: [2, 2],
+      nodes: [
+        { id: "c1", title: "Containers", text: "networks · DNS · SSH", icon: "docker", width: 380, pos: [0, 0], at: "managed:containers" },
+        { id: "c2", title: "munge", text: "shared key, running", icon: "key", width: 380, pos: [0, 1], at: "managed:munge" },
+        { id: "y1", title: "Slurm config", text: "/etc/slurm, empty", code: true, icon: "job", width: 380, pos: [1, 0], at: "yours:configuration" },
+        { id: "y2", title: "Slurm daemons", text: "slurmctld · slurmd", icon: "server", width: 380, pos: [1, 1], at: "yours:slurmctld" },
+      ],
+      groups: [
+        { id: "S", label: "sind sets up", around: ["c1", "c2"], at: "unmanaged:keeps" },
+        { id: "Y", label: "your provisioning", around: ["y1", "y2"], accent: true, at: "yours:yours" },
+      ],
+      pulse: [{ node: "y1", at: "yours:empty" }, { node: "y2", at: "yours:started" }],
+    });
+
+  ep.code({
+    chapter: "managed: false",
+    title: "managed: false",
+    file: "unmanaged.yaml",
+    lang: "yaml",
+    say: [{ id: "config", mood: "neutral", cues: { unmanaged: "happy" } }, { id: "reject", mood: "thinking" }],
+    text: ["kind: Cluster", "name: dev", "nodes:", "  - role: controller", "    managed: false", "  - role: submitter", "  - role: worker", "    count: 2"].join("\n"),
+    marks: [
+      { line: 4, at: "config:managed" },
+      { line: 5, at: "config:managed" },
+      { line: 6, at: "config:whole" },
+      { line: 7, at: "config:whole" },
+      { line: 8, at: "config:whole" },
+    ],
+  });
+
+  ep.terminal({
+    chapter: "Create the cluster",
+    say: [{ id: "create", mood: "happy" }, { id: "stock", mood: "neutral" }],
+    steps: [
+      { cmd: "sind create cluster --config unmanaged.yaml", at: "create:create" },
+      { ff: "⏩ fast-forward", after: 0.2, hold: 0.9 },
+      { prompt: true, at: "create:done" },
+    ],
+  });
+
+  ep.code({
+    chapter: "Write slurm.conf",
+    title: "Provision Slurm by hand",
+    file: "write slurm.conf on the controller",
+    lang: "sh",
+    say: [{ id: "heredoc", mood: "neutral" }, { id: "shared", mood: "neutral" }],
+    text: [
+      "sind ssh controller.dev -- 'cat > /etc/slurm/slurm.conf' <<'EOF'",
+      "ClusterName=dev",
+      "SlurmctldHost=controller",
+      "SlurmUser=slurm",
+      "StateSaveLocation=/var/spool/slurmctld",
+      "SlurmdSpoolDir=/var/spool/slurmd",
+      "ProctrackType=proctrack/cgroup",
+      "TaskPlugin=task/cgroup",
+      "ReturnToService=2",
+      "NodeName=worker-[0-1] CPUs=1 State=UNKNOWN",
+      "PartitionName=all Nodes=ALL Default=YES MaxTime=INFINITE State=UP",
+      "EOF",
+    ].join("\n"),
+    marks: [
+      { text: "=", at: "heredoc:slurm.conf", until: "heredoc:written" },
+      { line: 1, at: "heredoc:written", until: "shared:Slurm" },
+    ],
+    notes: [{ icon: "disk", text: "/etc/slurm: one volume, writable on the controllers only", at: "shared:volume" }],
+  });
+
+  // The commands that start Slurm, as "what you run": the page shows no
+  // output for the srun at the end, so this is a code panel, not a terminal.
+  ep.code({
+    wide: true,
+    chapter: "Start the daemons",
+    title: "Start the daemons",
+    file: "then start Slurm",
+    lang: "sh",
+    say: [{ id: "start", mood: "neutral" }, { id: "workers", mood: "happy", gap: 0.8 }],
+    text: [
+      "sind ssh controller.dev -- 'echo CgroupPlugin=autodetect > /etc/slurm/cgroup.conf'",
+      "sind ssh controller.dev -- systemctl start slurmctld",
+      "sind ssh worker-0.dev -- systemctl start slurmd",
+      "sind ssh worker-1.dev -- systemctl start slurmd",
+      "sind exec dev -- srun -N2 hostname",
+    ].join("\n"),
+    marks: [
+      { line: 1, at: "start:cgroup", until: "start:slurmctld" },
+      { line: 2, at: "start:slurmctld", until: "workers:slurmd" },
+      { line: 3, at: "workers:slurmd" },
+      { line: 4, at: "workers:slurmd" },
+      { line: 5, at: "workers:srun" },
+    ],
+  });
+
+  ep.code({
+    chapter: "Ansible and Chef",
+    title: "Nodes as SSH hosts",
+    file: "Ansible inventory",
+    lang: "text",
+    say: [{ id: "ansible", mood: "neutral", cues: { name: "happy" } }, { id: "inventory", mood: "neutral" }],
+    text: [
+      "[slurm_controller]",
+      "controller.dev.sind.sind",
+      "",
+      "[slurm_submitter]",
+      "submitter.dev.sind.sind",
+      "",
+      "[slurm_workers]",
+      "worker-0.dev.sind.sind",
+      "worker-1.dev.sind.sind",
+    ].join("\n"),
+    marks: [
+      { text: ".sind.sind", at: "ansible:name", until: "inventory:controller" },
+      { text: "controller", at: "inventory:controller", until: "inventory:submitter" },
+      { text: "submitter", at: "inventory:submitter", until: "inventory:workers" },
+      { text: "worker", at: "inventory:workers" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "Keep in mind",
+    title: "Keep in mind",
+    say: [
+      { id: "keep1", mood: "thinking", cues: { Write: "neutral" } },
+      { id: "keep2", mood: "concerned", cues: { alone: "neutral" } },
+      { id: "keep3", mood: "neutral" },
+    ],
+    bullets: [
+      { icon: "job", title: "Write Slurm files on a controller", text: "/etc/slurm is read-only on the other nodes", at: "keep1:Write" },
+      { icon: "key", title: "munge is sind's", text: "/etc/munge is read-only · sind get auth-key dev", at: "keep2:munge" },
+      { icon: "check", title: "Check Slurm itself", text: "sind exec dev -- sinfo · sind logs controller.dev slurmctld", at: "keep3:Check" },
+    ],
+  })
+    .slide({
+      chapter: "Your own node image",
+      title: "Your own node image",
+      say: [
+        { id: "ownimage", mood: "happy", cues: { needs: "neutral" } },
+        { id: "services", mood: "neutral" },
+        { id: "noslurm", mood: "smug" },
+      ],
+      bullets: [
+        { icon: "gear", title: "systemd as init", text: "at /sbin/init, plus /bin/sh for sind's short entrypoint", at: "ownimage:systemd" },
+        { icon: "lock", title: "sshd and munge, enabled", text: "no SSH host keys: each node generates its own", at: "services:enabled" },
+        { icon: "nodes", title: "Slurm is optional", text: "on an unmanaged cluster, your provisioning installs it", at: "noslurm:leave" },
+      ],
+    });
+
+  ep.code({
+    chapter: "Container settings",
+    title: "Container settings",
+    file: "Dockerfile",
+    lang: "sh",
+    say: { id: "dockerfile", mood: "neutral", cues: { volumes: "happy" }, gap: 0.6 },
+    text: ['VOLUME ["/etc/slurm", "/etc/munge", "/data"]', "STOPSIGNAL SIGRTMIN+3", 'CMD ["/sbin/init"]'].join("\n"),
+    marks: [
+      { text: "STOPSIGNAL", at: "dockerfile:stop", until: "dockerfile:volumes" },
+      { text: "VOLUME", at: "dockerfile:volumes" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "Takeaways",
+    title: "Takeaways",
+    say: { id: "takeaway", mood: "happy" },
+    bullets: [
+      { icon: "gear", title: "managed: false", text: "sind brings the nodes, your tooling brings Slurm", at: "takeaway:managed" },
+      { icon: "terminal", title: "Recipes reach every node over SSH", text: "as root, with sind's exported SSH config", at: "takeaway:recipes" },
+      { icon: "docker", title: "Your own image", text: "systemd, sshd, munge and STOPSIGNAL SIGRTMIN+3", at: "takeaway:image" },
+    ],
+  })
+    .outro({ chapter: "Wrap-up", next: "10 · Let your assistant drive", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
