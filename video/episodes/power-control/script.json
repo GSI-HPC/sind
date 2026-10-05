@@ -1,0 +1,19 @@
+{
+  "voice": "sindy",
+  "lines": [
+    {"id": "intro", "text": "Hi, I'm Sindy! Today, we pull the plug on some nodes."},
+    {"id": "why", "text": "What happens to your jobs when a node crashes, hangs or reboots? With sind power, you find out on purpose, and watch Slurm react."},
+    {"id": "clean", "text": "Shutdown and reboot let systemd stop a node cleanly. Cut and cycle kill it at once, like pulling the plug."},
+    {"id": "start", "text": "Power on starts it again. And freeze suspends all its processes: Docker still lists the node as running, but it stops responding."},
+    {"id": "cut", "text": "Say your cluster has four workers. Run sind power cut on all of them, and they're gone in an instant."},
+    {"id": "on", "text": "sind power on starts them again, and points their DNS records at their current addresses."},
+    {"id": "freeze", "text": "Now freeze worker zero. It ignores SSH and Slurm alike."},
+    {"id": "thaw", "text": "Later, sind power unfreeze lets it carry on."},
+    {"id": "notice", "text": "Slurm notices a lost node only when it stops answering pings. It shows as idle star first, and as down about five minutes later."},
+    {"id": "back", "text": "Once slurmd registers again, after unfreeze or power on, the node returns to service by itself."},
+    {"id": "fast", "text": "Five minutes is a long wait in a test. So set a shorter slurmd timeout, in the main section of your cluster config."},
+    {"id": "fast2", "text": "slurmctld pings about every third of the timeout, so a lost worker now goes down within about thirty to forty seconds."},
+    {"id": "take", "text": "So: each power action is a Docker operation, Slurm spots lost nodes through missed pings, and a lower timeout makes tests quick."},
+    {"id": "outro", "text": "Now go break something, on purpose! Next up: Diagnostics. See you there!"}
+  ]
+}
