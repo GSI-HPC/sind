@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind refresher: Node states</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Refresher, Node states: docs/content/course/refreshers.md#node-states
+  // (shortened in course/07-failure-drills.md). No terminal: the states and
+  // timeouts come from docs/content/usage/power-control.md (Node failure
+  // detection: idle*, DOWN, SlurmdTimeout, ReturnToService=2),
+  // architecture/slurm-config.md and well-established Slurm behaviour (mixed,
+  // allocated, drain, ReturnToService's default).
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "refresher-node-states", title: "Refresher: Node states", series: "Refresher" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Refresher", title: "Node states", say: "intro" })
+    .talk({
+      chapter: "What sinfo is telling you",
+      kicker: "Refresher",
+      title: "What is sinfo telling you?",
+      sub: "Idle, mixed, allocated, down and drained: what each state means, and how a node gets there.",
+      chips: ["Idle and busy", "Down", "Drained"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "hook", mood: "thinking" },
+    })
+    .diagram({
+      chapter: "Busy or not",
+      title: "Idle, mixed, allocated",
+      say: { id: "busy", mood: "neutral" },
+      grid: [3, 1],
+      nodeWidth: 300,
+      nodes: [
+        { id: "idle", title: "idle", text: "no jobs", icon: "check", pos: [0, 0], at: "busy:idle" },
+        { id: "mixed", title: "mixed", text: "some CPUs busy", icon: "job", pos: [1, 0], at: "busy:mixed" },
+        { id: "alloc", title: "allocated", text: "all CPUs busy", icon: "job", pos: [2, 0], accent: true, at: "busy:allocated" },
+      ],
+      edges: [
+        { from: "idle", to: "mixed", at: "busy:mixed+0.3" },
+        { from: "mixed", to: "alloc", at: "busy:allocated+0.3" },
+      ],
+    })
+    .diagram({
+      chapter: "When a node goes quiet",
+      title: "When a node goes quiet",
+      shot: "mini",
+      say: [
+        { id: "ping", mood: "neutral" },
+        { id: "down", mood: "neutral", cues: { kills: "concerned" } },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "idle", title: "idle", text: "in service", icon: "check", pos: [-0.1, 0], at: "ping:every" },
+        { id: "star", title: "idle*", text: "not responding", icon: "warn", pos: [1, 0], width: 280, at: "ping:misses" },
+        { id: "down", title: "DOWN", text: "out of service", icon: "warn", pos: [2.1, 0], width: 280, at: "down:timeout" },
+      ],
+      edges: [
+        { from: "idle", to: "star", label: "missed ping", at: "ping:ping#1" },
+        { from: "star", to: "down", label: "SlurmdTimeout", at: "down:slurmctld" },
+      ],
+      pulse: [
+        { node: "star", at: "ping:star#0" },
+        { node: "down", at: "down:down" },
+      ],
+    })
+    .diagram({
+      chapter: "Coming back",
+      title: "Coming back",
+      shot: "mini",
+      say: [
+        { id: "back", mood: "neutral", cues: { straight: "happy" } },
+        { id: "admin", mood: "thinking" },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "idle", title: "idle", text: "in service", icon: "check", pos: [-0.1, 0] },
+        { id: "star", title: "idle*", text: "not responding", icon: "warn", pos: [1, 0], width: 280 },
+        { id: "down", title: "DOWN", text: "out of service", icon: "warn", pos: [2.1, 0], width: 280 },
+        { id: "reg", title: "slurmd registers", text: "ReturnToService=2", code: true, icon: "server", ghost: true, width: 400, pos: [1, 1], at: "back:registers" },
+      ],
+      edges: [
+        { from: "idle", to: "star" },
+        { from: "star", to: "down" },
+        { from: "down", to: "reg", accent: true, dashed: true, at: "back:again" },
+        { from: "reg", to: "idle", accent: true, dashed: true, at: "back:straight" },
+        { from: "down", to: "idle", label: "Slurm default: admin resumes", dashed: true, bend: 170, at: "admin:default" },
+      ],
+      pulse: [
+        { node: "idle", at: "back:back" },
+        { node: "down", at: "admin:admin" },
+      ],
+    })
+    .diagram({
+      chapter: "Draining on purpose",
+      title: "Draining on purpose",
+      shot: "mini",
+      say: [
+        { id: "drain", mood: "neutral" },
+        { id: "drained", mood: "neutral", cues: { resumes: "happy" } },
+      ],
+      grid: [3, 2],
+      nodeWidth: 280,
+      nodes: [
+        { id: "alloc", title: "allocated", text: "running jobs", icon: "job", pos: [-0.1, 0], at: "drain:Draining" },
+        { id: "draining", title: "draining", text: "no new jobs", icon: "gear", pos: [1, 0], at: "drain:planned" },
+        { id: "drained", title: "drained", text: "no jobs at all", icon: "gear", pos: [2.1, 0], accent: true, at: "drained:Once" },
+        { id: "idle", title: "idle", text: "back in service", icon: "check", pos: [1, 1], at: "drained:resumes" },
+      ],
+      edges: [
+        { from: "alloc", to: "draining", label: "drain", at: "drain:out" },
+        { from: "draining", to: "drained", label: "jobs done", at: "drained:done" },
+        { from: "drained", to: "idle", label: "resume", accent: true, at: "drained:resumes+0.3" },
+      ],
+      pulse: [
+        { node: "draining", at: "drained:draining" },
+        { node: "drained", at: "drained:drained" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "sum", mood: "neutral" },
+      bullets: [
+        { icon: "warn", title: "idle*: not responding", text: "a missed ping, then DOWN after SlurmdTimeout", at: "sum:star" },
+        { icon: "server", title: "DOWN: out of service", text: "back when slurmd registers, with ReturnToService=2", at: "sum:down" },
+        { icon: "gear", title: "drained: out on purpose", text: "running jobs finish first, then an admin resumes it", at: "sum:drained" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "07 · Failure drills", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
