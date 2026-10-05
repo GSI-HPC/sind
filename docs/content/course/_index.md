@@ -5,7 +5,7 @@ icon: "smart_display"
 description: "Learn sind in short videos: a numbered course, refreshers, and a clip on each guide"
 ---
 
-Learn sind from Sindy, the course's virtual presenter, as she builds clusters, runs jobs and breaks things on purpose. Every video has captions and chapters, and every command in it is on the page under the video, ready to copy.
+Learn sind from Sindy, the course's virtual presenter, as she builds clusters, runs jobs and breaks things on purpose. Every video has captions and chapters, and every command in it is on the episode's page, ready to copy.
 
 - **The course:** ten numbered episodes of a few minutes each, from the first cluster to CI pipelines and AI assistants. Each episode stands on its own; the numbers suggest an order, not a prerequisite.
 - **[Refreshers]({{< relref "refreshers" >}}):** about a minute of background each, on Slurm, Docker networks, MPI, accounting and more. Shortened versions also appear in the course episodes.
@@ -25,7 +25,7 @@ Learn sind from Sindy, the course's virtual presenter, as she builds clusters, r
 | 04 | [Test your job scripts before the queue]({{< relref "04-job-scripts" >}}) | The data directory, sbatch and srun, MPI across workers | MPI ranks and srun |
 | 05 | [Model your site]({{< relref "05-model-your-site" >}}) | A config file: nodes, limits, users and accounts, CVMFS | Accounting and associations |
 | 06 | [Rehearse a change]({{< relref "06-rehearse-a-change" >}}) | A slurm.conf change, or the next Slurm release, before production gets it | slurm.conf on one screen |
-| 07 | [Failure drills]({{< relref "07-failure-drills" >}}) | Power off, freeze, scale, fail over, and watch Slurm react | Node states |
+| 07 | [Failure drills]({{< relref "07-failure-drills" >}}) | Power off, freeze, scale and fail over, and see how Slurm notices | Node states |
 | 08 | [Slurm in your pipeline]({{< relref "08-slurm-in-ci" >}}) | sind-action, realms for parallel jobs, fast failure tests | |
 | 09 | [Bring your own provisioning]({{< relref "09-own-provisioning" >}}) | Unmanaged clusters for Ansible or Chef, custom node images | systemd as PID 1 |
 | 10 | [Let your assistant drive]({{< relref "10-assistant" >}}) | MCP, and an AI assistant that builds and debugs a cluster | What MCP is |
