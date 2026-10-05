@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind refresher: systemd as PID 1</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Refresher, systemd as PID 1: docs/content/course/refreshers.md
+  // ("systemd as PID 1"). Background from introduction/_index.md (system
+  // containers), architecture/overview.md (container-per-node, systemd as
+  // PID 1) and usage/power-control.md (the stop signal and a clean shutdown);
+  // no terminal. Its shortened cut is the refresher chapter of
+  // course-09-own-provisioning (docs/content/course/09-own-provisioning.md).
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "refresher-systemd", title: "Refresher: systemd as PID 1", series: "Refresher" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Refresher", title: "systemd as PID 1", say: "intro" })
+    .talk({
+      chapter: "One program or a whole system",
+      kicker: "Refresher",
+      title: "Why does a sind node run systemd?",
+      sub: "Most containers run one program. A sind node runs a whole system, like a real machine.",
+      chips: ["PID 1", "Services", "Clean shutdown"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "hook", mood: "thinking" },
+        { id: "usecase", mood: "neutral", cues: { lone: "smug" } },
+      ],
+    })
+    .diagram({
+      chapter: "An application container",
+      title: "One program as PID 1",
+      say: [
+        { id: "pid1", mood: "neutral" },
+        { id: "exits", mood: "concerned" },
+      ],
+      grid: [2, 2],
+      nodes: [
+        { id: "app", title: "PID 1", text: "the app itself", icon: "job", width: 320, pos: [0, 0], at: "pid1:PID" },
+        { id: "appx", title: "it exits", text: "the container stops", icon: "warn", ghost: true, width: 320, pos: [0, 1], at: "exits:exits" },
+        { id: "none", title: "service manager", text: "none inside", icon: "gear", ghost: true, width: 360, pos: [1, 0.5], at: "exits:service" },
+      ],
+      groups: [{ id: "A", label: "application container", around: ["app", "appx"], at: "pid1:application" }],
+      edges: [{ from: "app", to: "appx", at: "exits:exits" }],
+      pulse: [{ node: "app", at: "pid1:server" }],
+    })
+    .diagram({
+      chapter: "A system container",
+      title: "systemd as PID 1",
+      shot: "mini",
+      say: [
+        { id: "system", mood: "happy", cues: { machine: "neutral" } },
+        { id: "deps", mood: "neutral", cues: { supervises: "happy" } },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "sd", title: "systemd", text: "PID 1", icon: "gear", accent: true, pos: [1, 0], at: "system:systemd" },
+        { id: "mu", title: "munge", text: "service", icon: "key", pos: [0, 1], at: "deps:munge" },
+        { id: "sl", title: "Slurm daemons", text: "service", icon: "server", width: 340, pos: [1, 1], at: "deps:Slurm" },
+        { id: "ss", title: "sshd", text: "service", icon: "lock", pos: [2, 1], at: "deps:sshd" },
+      ],
+      groups: [{ id: "N", label: "sind node", around: ["sd", "mu", "sl", "ss"], accent: true, at: "system:container" }],
+      edges: [
+        { from: "sd", to: "mu", at: "deps:services" },
+        { from: "sd", to: "sl", at: "deps:services+0.15" },
+        { from: "sd", to: "ss", at: "deps:services+0.3" },
+        { from: "sl", to: "mu", label: "after", dashed: true, at: "deps:dependencies" },
+      ],
+      pulse: [{ node: "sd", at: "deps:supervises" }],
+    })
+    .diagram({
+      chapter: "A clean stop, real services",
+      title: "A clean stop, real services",
+      shot: "mini",
+      say: [
+        { id: "stop", mood: "neutral", cues: { cleanly: "smug" } },
+        { id: "tools", mood: "happy", gap: 0.4 },
+      ],
+      grid: [4, 2],
+      nodes: [
+        { id: "sd", title: "systemd", text: "PID 1", icon: "gear", accent: true, pos: [2.5, 0] },
+        { id: "svc", title: "services", text: "munge · sshd · Slurm", icon: "server", width: 340, pos: [2.5, 1] },
+        { id: "stop", title: "docker stop", text: "the stop signal", icon: "docker", width: 300, pos: [0.5, 0], at: "stop:Docker" },
+        { id: "tool", title: "Ansible · Chef", text: "Puppet · Salt", icon: "terminal", width: 300, pos: [0.5, 1], at: "tools:Ansible" },
+      ],
+      groups: [{ id: "N", label: "sind node", around: ["sd", "svc"], accent: true }],
+      edges: [
+        { from: "sd", to: "svc" },
+        { from: "stop", to: "sd", label: "SIGRTMIN+3", at: "stop:signal" },
+        { from: "tool", to: "svc", label: "manage", accent: true, at: "tools:manage" },
+      ],
+      pulse: [
+        { node: "sd", at: "stop:shutdown" },
+        { node: "svc", at: "stop:cleanly" },
+        { node: "svc", at: "tools:metal" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "job", title: "An app container runs one program", text: "when it exits, the container stops", at: "take:app" },
+        { icon: "gear", title: "A sind node runs systemd as PID 1", text: "services, dependencies, supervision, clean shutdown", at: "take:systemd" },
+        { icon: "terminal", title: "Real services for your tools", text: "Ansible, Chef, Puppet or Salt, as on bare metal", at: "take:tools" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "09 · Bring your own provisioning", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
