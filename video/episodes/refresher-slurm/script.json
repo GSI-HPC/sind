@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Here's Slurm in ninety seconds." },
+    { "id": "hook", "text": "Ever wondered what happens between typing sbatch and your job running on a node?" },
+    { "id": "usecase", "text": "Let's meet every piece of a Slurm cluster, from the queue to the nodes." },
+    { "id": "ctl", "text": "At the center is the controller. Its daemon, slurmctld, keeps the queue and decides where each job runs." },
+    { "id": "nodes", "text": "Each compute node runs slurmd, which starts the jobs the controller sends it." },
+    { "id": "submit", "text": "You submit a script with sbatch, or run a command with srun. The job waits in the queue until nodes are free." },
+    { "id": "part", "text": "Nodes are grouped into partitions, queues with their own limits, like a short one and a long one." },
+    { "id": "munge", "text": "And munge proves who sent each message, using a key all nodes share." },
+    { "id": "acct", "text": "Optionally, slurmdbd records each job in a database, for accounting." },
+    { "id": "map", "text": "In sind, every node is a container: the controller runs slurmctld, workers run slurmd, and an optional db node runs slurmdbd." },
+    { "id": "map2", "text": "An optional submitter is a job submission node, with the Slurm commands but usually no daemon." },
+    { "id": "take", "text": "So: slurmctld decides, slurmd runs the jobs, and munge vouches for every message." },
+    { "id": "outro", "text": "Next up: episode one, Why Slurm in Docker. See you there!" }
+  ]
+}

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind refresher: Slurm in 90 seconds</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Refresher, Slurm in 90 seconds: docs/content/course/refreshers.md
+  // ("Slurm in 90 seconds"). General Slurm background, no terminal; the sind
+  // roles follow docs/content/configuration/node-definitions.md (Node roles)
+  // and the default partition docs/content/architecture/slurm-config.md. Its
+  // shortened cut is the refresher chapter of course-01-why-slurm-in-docker
+  // (docs/content/course/01-why-slurm-in-docker.md).
+  const tl = gsap.timeline({ paused: true });
+  Episode.create({ tl, id: "refresher-slurm", title: "Refresher: Slurm in 90 seconds", series: "Refresher" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Refresher", title: "Slurm in 90 seconds", say: "intro" })
+    .talk({
+      chapter: "From sbatch to a node",
+      kicker: "Refresher",
+      title: "What happens after sbatch?",
+      sub: "Meet every piece of a Slurm cluster, from the queue to the nodes.",
+      chips: ["slurmctld", "slurmd", "munge"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "hook", mood: "thinking" },
+        { id: "usecase", mood: "happy" },
+      ],
+    })
+    .diagram({
+      chapter: "Controller, nodes and the queue",
+      title: "A job's way through Slurm",
+      shot: "mini",
+      say: [
+        { id: "ctl", mood: "neutral" },
+        { id: "nodes", mood: "neutral" },
+        { id: "submit", mood: "neutral", cues: { free: "happy" } },
+      ],
+      grid: [4, 2],
+      nodes: [
+        { id: "ctl", title: "controller", text: "slurmctld · queue", icon: "server", pos: [1.5, 0.5], width: 300, accent: true, at: "ctl:controller" },
+        { id: "n1", title: "compute node", text: "slurmd", icon: "nodes", pos: [3, 0], width: 320, at: "nodes:compute" },
+        { id: "n2", title: "compute node", text: "slurmd", icon: "nodes", pos: [3, 1], width: 320, at: "nodes:compute+0.2" },
+        { id: "you", title: "you", text: "a job script", icon: "user", pos: [0, 0.5], width: 240, ghost: true, at: "submit:You" },
+      ],
+      edges: [
+        { from: "ctl", to: "n1", label: "start job", at: "nodes:starts" },
+        { from: "ctl", to: "n2", at: "nodes:starts+0.2" },
+        { from: "you", to: "ctl", label: "sbatch · srun", accent: true, at: "submit:sbatch" },
+      ],
+      pulse: [
+        { node: "ctl", at: "ctl:decides" },
+        { node: "ctl", at: "submit:queue" },
+        { node: "n1", at: "submit:free" },
+      ],
+    })
+    .diagram({
+      chapter: "Partitions, munge and accounting",
+      title: "Partitions, trust and records",
+      say: [
+        { id: "part", mood: "neutral" },
+        { id: "munge", mood: "neutral", cues: { share: "smug" } },
+        { id: "acct", mood: "neutral" },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "ctl", title: "controller", text: "slurmctld", icon: "server", pos: [0, 0], accent: true },
+        { id: "n1", title: "node", text: "slurmd", icon: "nodes", pos: [1, 0], width: 240, at: "part:Nodes" },
+        { id: "n2", title: "node", text: "slurmd", icon: "nodes", pos: [2, 0], width: 240, at: "part:Nodes" },
+        { id: "n3", title: "node", text: "slurmd", icon: "nodes", pos: [1, 1], width: 240, at: "part:Nodes" },
+        { id: "n4", title: "node", text: "slurmd", icon: "nodes", pos: [2, 1], width: 240, at: "part:Nodes" },
+        { id: "db", title: "accounting", text: "slurmdbd", icon: "db", pos: [0, 1], width: 300, ghost: true, at: "acct:slurmdbd" },
+      ],
+      groups: [
+        { id: "short", label: "partition short", around: ["n1", "n2"], at: "part:short" },
+        { id: "long", label: "partition long", around: ["n3", "n4"], at: "part:long" },
+        { id: "munge", label: "munge · one shared key", around: ["ctl", "n1", "n2", "n3", "n4", "db"], pad: 48, accent: true, at: "munge:munge" },
+      ],
+      edges: [{ from: "ctl", to: "db", label: "job records", dashed: true, at: "acct:records" }],
+      pulse: [{ node: "db", at: "acct:accounting" }],
+    })
+    .slide({
+      chapter: "Slurm roles in sind",
+      title: "In sind, one container per node",
+      say: [
+        { id: "map", mood: "happy" },
+        { id: "map2", mood: "neutral" },
+      ],
+      bullets: [
+        { icon: "server", title: "controller", text: "slurmctld · exactly one", at: "map:controller" },
+        { icon: "nodes", title: "worker", text: "slurmd · one or more, in the default partition all", at: "map:workers" },
+        { icon: "db", title: "db", text: "MariaDB and slurmdbd · optional", at: "map:db" },
+        { icon: "user", title: "submitter", text: "job submission node, clients only · optional", at: "map2:submitter" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy", cues: { vouches: "smug" } },
+      bullets: [
+        { icon: "server", title: "slurmctld decides", text: "it keeps the queue and picks the nodes", at: "take:decides" },
+        { icon: "nodes", title: "slurmd runs the jobs", text: "one on every compute node", at: "take:runs" },
+        { icon: "key", title: "munge vouches", text: "one shared key for the whole cluster", at: "take:vouches" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "01 · Why Slurm in Docker?", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
