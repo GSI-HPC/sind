@@ -25,19 +25,18 @@
   // copied from that page; keep both in sync.
   const tl = gsap.timeline({ paused: true });
   Episode.create({ tl, id: "quickstart", title: "Quickstart: your first Slurm cluster", series: "Quickstart" })
-    .intro({ chapter: "Hi, I'm Sindy", kicker: "Getting started", title: "Quickstart", say: "intro" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Getting Started", title: "Quickstart", say: "intro" })
     .talk({
       chapter: "What you'll build",
-      kicker: "Getting started",
+      kicker: "Getting Started",
       title: "Your first Slurm cluster",
-      sub: "One command, about a minute, nothing to install on the host but Docker.",
-      chips: ["Requires Docker", "~1 min", "1 controller + 1 worker"],
+      sub: "One command on your own machine, with nothing but Docker and sind.",
+      chips: ["Docker + sind", "1 controller + 1 worker"],
       nameTag: { name: "Sindy", role: "your sind guide" },
-      say: { id: "welcome", cues: { Docker: "happy" }, look: { complete: 0.35, It: "camera" } },
+      say: { id: "welcome", mood: "thinking", cues: { build: "neutral", Docker: "happy" }, look: { complete: 0.35, All: "camera" } },
     })
     .slide({
       chapter: "What sind sets up",
-      label: "What sind does",
       title: "One command sets up…",
       say: "what",
       bullets: [
@@ -48,11 +47,10 @@
     })
     .terminal({
       chapter: "Create and check a cluster",
-      label: "Create a cluster",
       say: [{ id: "create", mood: "happy" }, { id: "check", mood: "smug", cues: { Now: "neutral", running: "joy" } }],
       steps: [
         { cmd: "sind create cluster", at: "create:Run" },
-        { ff: "⏩ ~40 s later", after: 0.5, hold: 1.8 },
+        { ff: "⏩ fast-forward", after: 0.5, hold: 1.8 },
         { prompt: true, after: 0.9 },
         { cmd: "sind get clusters", at: "check:Now" },
         { out: "NAME      NODES (S/C/D/A/W)   SLURM     STATUS\ndefault   2 (0/1/0/0/1)       26.05.4   running", at: "check:shows" },
@@ -71,10 +69,20 @@
             "sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running",
             "sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running",
           ].join("\n"),
-          at: "nodes:lists",
+          at: "nodes:shows",
         },
-        { mark: "controller.default.sind.sind", at: "nodes:host", until: "nodes:IP" },
+        { mark: "controller.default.sind.sind", at: "nodes:DNS", until: "nodes:IP" },
         { mark: "172.19.0.2", at: "nodes:IP" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "take", mood: "happy" },
+      bullets: [
+        { icon: "terminal", title: "One command", text: "sind create cluster: one controller, one worker", at: "take:command" },
+        { icon: "check", title: "Silent on success", text: "no output means it worked", at: "take:output" },
+        { icon: "nodes", title: "sind get clusters, sind get nodes", text: "status, DNS names and IP addresses", at: "take:get" },
       ],
     })
     .outro({ chapter: "Wrap-up", next: "Cluster Configuration", say: "outro" })
