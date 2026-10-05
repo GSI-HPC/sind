@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind course 01: Why Slurm in Docker?</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Course 01: docs/content/course/01-why-slurm-in-docker.md (its Commands
+  // section holds every command and output shown here). Terminal content is
+  // copied from docs/content/getting-started/quickstart.md; the pitch follows
+  // docs/content/introduction/_index.md and docs/content/architecture/overview.md,
+  // and the slide on what create does the steps listed in the quickstart.
+  const tl = gsap.timeline({ paused: true });
+  // The cluster created in the first terminal scene: already typed when the
+  // second one continues the session.
+  const created = () => [
+    { cmd: "sind create cluster", at: "demo1:Run" },
+    { ff: "⏩ fast-forward", at: "demo1:Run+1.1", hold: 1.8 },
+    { prompt: true, at: "demo1:Run+2.0" },
+  ];
+  Episode.create({ tl, id: "course-01-why-slurm-in-docker", title: "01 · Why Slurm in Docker?", series: "Course 01" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "The sind course · 01", title: "Why Slurm in Docker?", say: "intro" })
+    .talk({
+      chapter: "Where do you test?",
+      kicker: "Safe testing",
+      title: "Where do you test a job script?",
+      sub: "A production cluster is slow to try things on, and risky to change.",
+      chips: ["Queue waits", "Risky changes", "Setup effort"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: [
+        { id: "hook", mood: "thinking", cues: { see: "happy" } },
+        { id: "hook2", mood: "neutral", cues: { risk: "concerned" } },
+      ],
+    })
+    .slide({
+      chapter: "Who needs a test cluster",
+      title: "Who needs a test cluster?",
+      say: [
+        { id: "who1", mood: "neutral" },
+        { id: "who2", mood: "neutral", cues: { same: "happy" } },
+        { id: "who3", mood: "neutral", cues: { safe: "smug" } },
+      ],
+      bullets: [
+        { icon: "job", title: "Research software engineers", text: "test job scripts before the queue", at: "who1:Research" },
+        { icon: "gear", title: "Admins", text: "rehearse a change before production gets it", at: "who1:Admins" },
+        { icon: "terminal", title: "Developers", text: "run a real Slurm in their CI pipelines", at: "who2:Developers" },
+        { icon: "user", title: "Trainers", text: "give every participant the same setup", at: "who2:trainer" },
+      ],
+    })
+    .slide({
+      chapter: "The usual options",
+      title: "The usual options",
+      mood: "thinking",
+      say: [
+        { id: "opt1", mood: "thinking" },
+        { id: "opt2", mood: "thinking", cues: { maintenance: "concerned" } },
+      ],
+      bullets: [
+        { icon: "server", title: "The production queue", text: "slow to test on, risky to change", at: "opt1:production" },
+        { icon: "host", title: "Dedicated machines or VMs", text: "hardware and provisioning", at: "opt1:machines" },
+        { icon: "docker", title: "Vagrant or Docker Compose", text: "significant configuration effort and maintenance", at: "opt2:Vagrant" },
+      ],
+    })
+    .diagram({
+      chapter: "Refresher: Slurm in a nutshell",
+      label: "Refresher · Slurm in a nutshell",
+      title: "Slurm in a nutshell",
+      say: [
+        { id: "r1", mood: "neutral" },
+        { id: "r2", mood: "neutral", cues: { runs: "happy" } },
+        { id: "r3", mood: "neutral", cues: { trust: "smug" } },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "you", title: "You", text: "sbatch · srun", icon: "user", pos: [-0.2, 0.5], ghost: true, at: "r2:submit" },
+        { id: "ctl", title: "controller", text: "slurmctld · queue", icon: "server", pos: [1.1, 0.5], width: 300, accent: true, at: "r1:controller" },
+        { id: "n1", title: "compute node", text: "slurmd", icon: "nodes", pos: [2, 0], width: 330, at: "r1:compute" },
+        { id: "n2", title: "compute node", text: "slurmd", icon: "nodes", pos: [2, 1], width: 330, at: "r1:compute" },
+      ],
+      groups: [{ id: "cluster", label: "munge · one shared key", around: ["ctl", "n1", "n2"], at: "r3:munge" }],
+      edges: [
+        { from: "you", to: "ctl", label: "job", accent: true, at: "r2:sbatch" },
+        { from: "ctl", to: "n1", at: "r2:free" },
+        { from: "ctl", to: "n2", at: "r2:free" },
+      ],
+      pulse: [
+        { node: "ctl", at: "r2:queue" },
+        { node: "n1", at: "r2:runs" },
+      ],
+    })
+    .diagram({
+      chapter: "One container per node",
+      title: "One container per node",
+      say: [
+        { id: "idea1", mood: "neutral", cues: { machine: "happy" } },
+        { id: "idea2", mood: "neutral", cues: { bare: "smug" } },
+      ],
+      grid: [3, 1],
+      nodes: [
+        { id: "c0", title: "controller", text: "systemd · munge · sshd", icon: "server", pos: [0, 0], width: 360, at: "idea1:container" },
+        { id: "w0", title: "worker-0", text: "systemd · munge · sshd", icon: "nodes", pos: [1, 0], width: 360, at: "idea1:container+0.15" },
+        { id: "w1", title: "worker-1", text: "systemd · munge · sshd", icon: "nodes", pos: [2, 0], width: 360, at: "idea1:container+0.3" },
+      ],
+      groups: [{ id: "docker", label: "Docker · your machine", around: ["c0", "w0", "w1"], accent: true, at: "idea1:machine" }],
+      pulse: [
+        { node: "c0", at: "idea2:systemd" },
+        { node: "w0", at: "idea2:systemd+0.15" },
+        { node: "w1", at: "idea2:systemd+0.3" },
+      ],
+    })
+    .diagram({
+      chapter: "Modelled on kind",
+      title: "A command line modelled on kind",
+      say: [
+        { id: "idea3", mood: "neutral", cues: { "Docker#1": "happy" } },
+        { id: "idea4", mood: "neutral", cues: { "side#1": "happy" } },
+      ],
+      grid: [3, 2],
+      nodes: [
+        { id: "cli", title: "sind", text: "modelled on kind", icon: "terminal", pos: [1, 0], width: 330, accent: true, at: "idea3:command" },
+        { id: "c0", title: "controller", text: "systemd · munge · sshd", icon: "server", pos: [0, 1], width: 360 },
+        { id: "w0", title: "worker-0", text: "systemd · munge · sshd", icon: "nodes", pos: [1, 1], width: 360 },
+        { id: "w1", title: "worker-1", text: "systemd · munge · sshd", icon: "nodes", pos: [2, 1], width: 360 },
+        { id: "more", title: "+ workers", text: "added while it runs", icon: "nodes", pos: [0, 0], width: 330, ghost: true, at: "idea4:workers" },
+        { id: "dev", title: "+ clusters", text: "side by side", icon: "network", pos: [2, 0], width: 330, ghost: true, at: "idea4:several" },
+      ],
+      groups: [{ id: "docker", label: "Docker · your machine", around: ["c0", "w0", "w1"], accent: true }],
+      edges: [{ from: "cli", to: "docker", label: "create · get · delete", accent: true, at: "idea3:kind" }],
+    })
+    .terminal({
+      wide: true,
+      chapter: "A cluster in one command",
+      say: { id: "demo1", mood: "happy", cues: { up: "joy" } },
+      steps: created(),
+    })
+    .slide({
+      chapter: "Behind one command",
+      title: "What sind create cluster did",
+      say: { id: "demo1b", mood: "neutral", cues: { ready: "happy" } },
+      bullets: [
+        { icon: "network", title: "A network and volumes", text: "for this cluster", at: "demo1b:network" },
+        { icon: "key", title: "The munge key and slurm.conf", text: "generated for the cluster", at: "demo1b:munge" },
+        { icon: "nodes", title: "The node containers", text: "the controller and the worker", at: "demo1b:containers" },
+        { icon: "check", title: "Every node ready", text: "then the prompt comes back", at: "demo1b:ready" },
+      ],
+    })
+    .terminal({
+      wide: true,
+      chapter: "List the nodes, delete the cluster",
+      say: [
+        { id: "demo2", mood: "neutral" },
+        { id: "demo3", mood: "happy" },
+        { id: "demo4", mood: "neutral", cues: { gone: "joy" }, gap: 0.6 },
+      ],
+      steps: [
+        // The same session: the cluster was created in the previous scene.
+        ...created(),
+        { cmd: "sind get nodes", at: "demo2:sind" },
+        {
+          out: [
+            "CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS",
+            "sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running",
+            "sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running",
+          ].join("\n"),
+          at: "demo2:lists",
+        },
+        { mark: "sind-default-controller", at: "demo2:controller", until: "demo4:Done" },
+        { mark: "sind-default-worker-0", at: "demo2:worker", until: "demo4:Done" },
+        { cmd: "sind delete cluster default", at: "demo4:sind" },
+        { prompt: true, after: 0.9 },
+      ],
+    })
+    .slide({
+      chapter: "The trade-off",
+      title: "The trade-off",
+      say: [
+        { id: "trade1", mood: "thinking", cues: { ease: "happy" } },
+        { id: "trade3", mood: "neutral", cues: { clean: "happy" } },
+        { id: "trade2", mood: "neutral", cues: { point: "smug" } },
+      ],
+      bullets: [
+        { icon: "warn", title: "Gives up some flexibility", text: "configured once at creation, not kept in sync", at: "trade1:flexibility" },
+        { icon: "check", title: "Gains ease of use and speed", text: "a single command, a working cluster", at: "trade1:ease" },
+        { icon: "nodes", title: "Clean, identical clusters", text: "for every team member and every CI run", at: "trade3:clean" },
+        { icon: "job", title: "Made for development and testing", text: "not for running production", at: "trade2:development" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: [
+        { id: "take1", mood: "happy" },
+        { id: "take2", mood: "happy", cues: { testing: "joy" } },
+      ],
+      bullets: [
+        { icon: "nodes", title: "One container per node", text: "with systemd inside, like bare metal", at: "take1:container" },
+        { icon: "terminal", title: "One command to a cluster", text: "and one to delete it", at: "take2:command" },
+        { icon: "check", title: "Made for testing", text: "job scripts, config changes and CI", at: "take2:testing" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "02 · Your first cluster", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
