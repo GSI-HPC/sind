@@ -106,7 +106,7 @@ Pick scenes by what the viewer needs to see:
 | `slide` | a concept or a list of steps | at most 4 bullets, each landing on a cue word said in the narration |
 | `diagram` | how parts relate: networks, components, what talks to what | up to about 8 nodes on a grid; build it up on cue words, nodes before the edges between them |
 | `code` | a config or source file from the page, built up or highlighted on cue | copy the file verbatim (`check` compares it like output); up to about 14 lines per panel stay readable, `wide: true` for long lines |
-| `terminal` | commands and their output | lines up to about 62 columns keep the full-size font |
+| `terminal` | commands and their output | lines up to about 62 columns keep the full-size font; `running: true` on a server's step leaves out the next prompt |
 | `terminal` with `wide: true` | wider output, e.g. tables like `sind get nodes` | up to 96 columns at full size |
 | `outro` | always last | `next` per series; for a guide clip, the title of the page to read next: the page's own "going further" link, else the next page in the docs navigation |
 | `custom(kind, o)` | anything else (a table, a chat, a comparison) | see "Custom scenes" below |

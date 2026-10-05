@@ -135,7 +135,8 @@ offset, or plain seconds. Terminal steps take `at` (absolute) or `after`
 (seconds after the previous step; a typed command ends when its last character
 is typed): `{ cmd }`, `{ out }`, `{ prompt: true }` (a fresh prompt after a
 silent command), `{ ff: "⏩ ~40 s later", hold }`, `{ mark: "text", until }`
-(highlight), `{ clear: true }`.
+(highlight), `{ clear: true }`. `running: true` on a step leaves out the fresh
+prompt after it, for a command that keeps running, such as a server.
 
 ## Results
 

@@ -195,8 +195,12 @@
       let typing = false;
       let ff = null;
       const marks = [];
+      let running = false;
       for (const s of sorted) {
         if (s.at > t) break;
+        // A command that keeps running (a server) gets no fresh prompt;
+        // marks and badges on its output keep it that way.
+        if (s.cmd != null || s.out != null || s.prompt) running = !!s.running;
         if (s.clear) lines.length = 0;
         // A finished silent command: show a fresh, empty prompt.
         if (s.prompt) lines.push({ kind: "cmd", text: "", idle: true });
@@ -215,7 +219,7 @@
       }
       const last = lines[lines.length - 1];
       // Once output follows a command, show a fresh prompt.
-      if (!last || last.kind === "out") lines.push({ kind: "cmd", text: "" });
+      if (!running && (!last || last.kind === "out")) lines.push({ kind: "cmd", text: "" });
       const cursorOn = typing || Math.floor(t * 1.8) % 2 === 0;
       const view = lines.slice(-rows);
       const key = JSON.stringify([view, cursorOn, ff, marks]);
