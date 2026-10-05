@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's find out what MCP is." },
+    { "id": "hook", "text": "You ask your AI assistant for a Slurm cluster, and it runs sind for you. How does it do that?" },
+    { "id": "why2", "text": "It needs a way to find the right tool, call it, and bring back what happened. That's MCP, the Model Context Protocol, an open standard." },
+    { "id": "roles", "text": "Your assistant app runs an MCP client. It connects to servers, and each server offers its own tools." },
+    { "id": "list", "text": "The client asks each server for its tools, each with a name, a description, and the arguments it takes." },
+    { "id": "hints", "text": "A tool can also say whether it only reads, or changes things, so the client knows when to ask you." },
+    { "id": "ask", "text": "Now you ask for something. The model decides a tool would help, and picks one." },
+    { "id": "approve", "text": "Your client can show you the call, and wait for your approval." },
+    { "id": "run", "text": "The server runs the tool, and the result flows back into the answer." },
+    { "id": "stdio", "text": "Over standard input and output, the client starts the server itself, so only that client can talk to it." },
+    { "id": "http", "text": "Over HTTP, the server listens on a port, so several clients can share it, and sind asks for a token with every request." },
+    { "id": "take", "text": "So: servers describe their tools, the client can ask you first, and over HTTP, sind wants a token." },
+    { "id": "outro", "text": "Next up: episode ten, Let your assistant drive. See you there!" }
+  ]
+}
