@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind Users and Identity</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
+  /* Bullet titles that are commands, or identity mode names. */
+  .cmds .bullet .t1 { font-family: "JetBrains Mono", monospace; font-size: 31px; font-weight: 400; }
+  .keys .bullet .t1 { font-family: "JetBrains Mono", monospace; font-weight: 400; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // Users and Identity: docs/content/guides/users.md. No terminal; the YAML,
+  // the account tree, what the example tests, the user commands and the
+  // identity modes all come from that page.
+  const lines = (...l) => l.join("\n");
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "users", title: "Users and Identity: jobs as real users", series: "Users and Identity" })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Guides", title: "Users and Identity", say: "intro" })
+    .talk({
+      chapter: "Why users",
+      kicker: "Guides",
+      title: "Real users, real accounts",
+      sub: "Linux users, Slurm accounts and associations, and where your site resolves them.",
+      chips: ["users and accounts", "3 identity modes"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "neutral", cues: { How: "thinking" } },
+    });
+
+  ep.code({
+    chapter: "Users and accounts",
+    title: "Accounts and enforcement",
+    wide: true,
+    panels: [
+      {
+        file: "cluster.yaml · excerpt",
+        lang: "yaml",
+        text: lines("kind: Cluster", "defaults:", "  cpus: 2", "nodes: [controller, db, submitter, worker: 3]", "slurm:", "  main: |", "    AccountingStorageEnforce=associations,limits"),
+      },
+      {
+        file: "cluster.yaml · excerpt",
+        lang: "yaml",
+        text: lines("accounts:", "  - name: physics", "    limits:", "      GrpTRES: cpu=4", "  - name: theory", "    parent: physics", "    limits:", "      MaxJobs: 1"),
+      },
+    ],
+    say: [{ id: "config1" }, { id: "config2" }],
+    reveal: [
+      { lines: [5, 7], at: "config1:slurm" },
+      { panel: 1, lines: [1, 8], at: "config2:physics" },
+    ],
+    marks: [
+      { text: "nodes: [controller, db", at: "config1:db", until: "config1:slurm" },
+      { text: "AccountingStorageEnforce", at: "config1:enforcement", until: "config2:physics" },
+      { text: "GrpTRES: cpu=4", at: "config2:four" },
+      { text: "MaxJobs: 1", at: "config2:theory" },
+    ],
+  });
+
+  ep.code({
+    label: "Users and accounts",
+    title: "Users and roles",
+    panels: [
+      {
+        file: "cluster.yaml · excerpt",
+        lang: "yaml",
+        text: lines(
+          "groups:",
+          "  - name: physics",
+          "    gid: 3000",
+          "users:",
+          "  - name: alice",
+          "    uid: 2001",
+          "    groups: [physics]",
+          "    accounts: [theory]",
+          "  - name: bob",
+          "    uid: 2002",
+          "    groups: [physics]",
+          "    accounts: [physics, theory]",
+          "    coordinator: [physics]"
+        ),
+      },
+      {
+        file: "cluster.yaml · excerpt",
+        lang: "yaml",
+        text: lines("  - name: carol", "    uid: 2003", "    accounts: [physics]", "    adminLevel: operator", "  - name: dave", "    uid: 2004"),
+      },
+    ],
+    say: [{ id: "config3", cues: { none: "smug" } }, { id: "ids" }],
+    reveal: [
+      { lines: [4, 8], at: "config3:alice" },
+      { lines: [9, 13], at: "config3:bob" },
+      { panel: 1, lines: [1, 4], at: "config3:carol" },
+      { panel: 1, lines: [5, 6], at: "config3:dave" },
+      { lines: [1, 3], at: "ids:groups" },
+    ],
+    marks: [
+      { text: "    coordinator: [physics]", at: "config3:coordinator", until: "ids:Every" },
+      { text: "    adminLevel: operator", at: "config3:operator", until: "ids:Every" },
+      { text: "    uid: 2001", at: "ids:IDs", until: "ids:home#0" },
+      { text: "    gid: 3000", at: "ids:IDs", until: "ids:home#0" },
+    ],
+  });
+
+  ep.diagram({
+    chapter: "The account tree",
+    title: "The account tree",
+    shot: "mini",
+    say: { id: "tree", gap: 1.2 },
+    grid: [4, 4],
+    nodes: [
+      { id: "root", title: "root", text: "account", icon: "job", pos: [0, 1], at: "tree:registered" },
+      { id: "physics", title: "physics", text: "GrpTRES=cpu=4", code: true, icon: "job", pos: [1, 1], width: 300, accent: true, at: "tree:cluster" },
+      { id: "bob", title: "bob", text: "coordinator of physics", icon: "user", pos: [2, 0], width: 360, at: "tree:sind" },
+      { id: "carol", title: "carol", text: "AdminLevel=Operator", code: true, icon: "user", pos: [2, 1], width: 360, at: "tree:sind+0.15" },
+      { id: "theory", title: "theory", text: "MaxJobs=1", code: true, icon: "job", pos: [2, 2], width: 360, accent: true, at: "tree:creates" },
+      { id: "alice", title: "alice", text: "default", icon: "user", pos: [3, 2], at: "tree:account" },
+      { id: "bob2", title: "bob", text: "user", icon: "user", pos: [3, 3], at: "tree:tree" },
+    ],
+    edges: [
+      { from: "root", to: "physics", at: "tree:cluster+0.1" },
+      { from: "physics", to: "bob", at: "tree:sind+0.1" },
+      { from: "physics", to: "carol", at: "tree:sind+0.25" },
+      { from: "physics", to: "theory", at: "tree:creates+0.1" },
+      { from: "theory", to: "alice", at: "tree:account+0.1" },
+      { from: "theory", to: "bob2", at: "tree:tree+0.1" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "What it tests",
+    title: "What this cluster tests",
+    say: [{ id: "tests" }, { id: "dave", mood: "smug", cues: { rejected: "concerned" } }],
+    bullets: [
+      { icon: "user", title: "alice: one job at a time", text: "MaxJobs=1 on theory", at: "tests:alice" },
+      { icon: "nodes", title: "physics: 4 of 6 CPUs", text: "a fifth CPU stays pending with AssocGrpCpuLimit", at: "tests:physics" },
+      { icon: "warn", title: "dave: rejected", text: "Invalid account or account/partition combination specified", at: "dave:rejected" },
+    ],
+  });
+
+  ep.slide({
+    chapter: "Work as a user",
+    title: "Work as a user",
+    say: { id: "asuser", gap: 0.8 },
+    bullets: [
+      { icon: "terminal", title: "sind ssh alice@submitter -- sbatch --wrap hostname", text: "alice submits a batch job on the submitter", at: "asuser:ssh" },
+      { icon: "terminal", title: "sind exec --user alice -- squeue", text: "squeue as alice, on the submitter", at: "asuser:exec" },
+      { icon: "terminal", title: "sind enter --user bob", text: "a shell as bob, in his home directory", at: "asuser:enter" },
+    ],
+  });
+  [...ep.root.querySelectorAll(".scene-slide")].pop().classList.add("cmds");
+
+  ep.slide({
+    chapter: "Identity modes",
+    title: "Identity modes",
+    say: [{ id: "identity" }, { id: "identity2", cues: { Pick: "happy" } }],
+    bullets: [
+      { icon: "nodes", title: "local (default)", text: "Linux accounts on every node · for sites where every node has LDAP or SSSD", at: "identity:local" },
+      { icon: "server", title: "nssSlurm", text: "not on workers · for sites where compute nodes have no directory service", at: "identity2:nssSlurm" },
+      { icon: "lock", title: "clientIds", text: "the login node · for sites where only login nodes have a directory service", at: "identity2:clientIds" },
+    ],
+  });
+  [...ep.root.querySelectorAll(".scene-slide")].pop().classList.add("keys");
+
+  ep.slide({
+    chapter: "Takeaways",
+    title: "Takeaways",
+    say: { id: "takeaway", cues: { mirror: "happy" } },
+    bullets: [
+      { icon: "user", title: "Users and accounts in the config", text: "users, groups and accounts, with limits and roles", at: "takeaway:users" },
+      { icon: "lock", title: "Enforcement makes limits bite", text: "AccountingStorageEnforce=associations,limits", at: "takeaway:enforcement" },
+      { icon: "server", title: "Mirror the identity mode of your site", text: "local, nssSlurm or clientIds", at: "takeaway:mirror" },
+    ],
+  });
+
+  ep.outro({ chapter: "Wrap-up", next: "Design Overview", say: "outro" }).done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
