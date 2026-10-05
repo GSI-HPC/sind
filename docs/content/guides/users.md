@@ -6,6 +6,8 @@ description: "Run jobs as regular users with Slurm accounts, and test where your
 toc: true
 ---
 
+{{< video "users" >}}
+
 sind runs everything as root unless the cluster config declares users. With [`users`, `groups`]({{< relref "/configuration/cluster-config#users-section" >}}) and [`accounts`]({{< relref "/configuration/cluster-config#accounts-section" >}}), a cluster gets Linux user accounts, Slurm accounts and associations. The [identity mode]({{< relref "/configuration/cluster-config#identity-section" >}}) decides which nodes have the Linux accounts, to mirror how a site resolves its users.
 
 ## Users and accounts
