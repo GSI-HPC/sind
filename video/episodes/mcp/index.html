@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"captions","type":"boolean","label":"Burned-in captions","default":true}]'>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>sind MCP Integration</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/sindy.js"></script>
+<script src="vendor/scenes.js"></script>
+<script src="vendor/episode.js"></script>
+<script src="assets/voice/lines.js"></script>
+<link rel="stylesheet" href="vendor/scenes.css" />
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700 800; src: url("vendor/fonts/inter-800.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
+  /* Custom scene: the tool table from the page, with the hints it names. */
+  .slide-title.mono { font-family: "JetBrains Mono", monospace; font-size: 60px; top: 160px; }
+  .tools { position: absolute; left: 120px; top: 290px; width: 1320px; display: flex; flex-direction: column; gap: 12px; }
+  .trow { display: grid; grid-template-columns: 500px 1fr 200px; align-items: center; height: 70px; padding: 0 26px; border-radius: 16px; background: rgba(30, 41, 59, 0.75); border: 2px solid var(--line); }
+  .trow .n { font-family: "JetBrains Mono", monospace; font-size: 30px; color: #fff; }
+  .trow .d { font-size: 28px; color: var(--muted); }
+  .tag { justify-self: end; padding: 4px 16px; border-radius: 999px; font-size: 22px; font-weight: 700; white-space: nowrap; opacity: 0; }
+  .tag.ro { color: var(--mint); border: 2px solid rgba(94, 234, 212, 0.55); background: rgba(20, 184, 166, 0.14); }
+  .tag.de { color: #fcd34d; border: 2px solid rgba(251, 191, 36, 0.6); background: rgba(251, 191, 36, 0.12); }
+  .tools-foot { position: absolute; left: 120px; top: 800px; font-size: 28px; color: var(--muted); }
+  .tools-foot span { font-family: "JetBrains Mono", monospace; color: var(--mint); margin-right: 8px; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080"></div>
+<script>
+  // MCP Integration: docs/content/guides/mcp.md. Commands, output, the manual
+  // configuration and the tool table are copied from that page (Quick setup,
+  // Manual configuration, Available tools, HTTP mode); keep both in sync.
+  const SERIES = "MCP Integration";
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const chapterHTML = (label) => `<div class="chapter"><span class="dot"></span>${SERIES}<b> · ${esc(label)}</b></div>`;
+
+  const tl = gsap.timeline({ paused: true });
+  const ep = Episode.create({ tl, id: "mcp", title: "MCP Integration: sind as tools for your AI assistant", series: SERIES })
+    .intro({ chapter: "Hi, I'm Sindy", kicker: "Guides", title: "MCP Integration", say: "intro" })
+    .talk({
+      chapter: "Why MCP",
+      kicker: "Guides",
+      title: "sind, driven by your assistant",
+      sub: "A built-in MCP server exposes sind's commands as tools for AI assistants.",
+      chips: ["Claude", "VS Code Copilot", "Cursor"],
+      nameTag: { name: "Sindy", role: "your sind guide" },
+      say: { id: "why", mood: "thinking", cues: { With: "neutral", can: "happy" } },
+    })
+    .terminal({
+      chapter: "Register sind",
+      say: [{ id: "setup", mood: "happy" }, { id: "editors", mood: "neutral" }],
+      steps: [
+        { cmd: "sind mcp claude enable", at: "setup:sind#0" },
+        { prompt: true, after: 0.6 },
+        { cmd: "sind mcp vscode enable", at: "editors:VS" },
+        { prompt: true, after: 0.3 },
+        { cmd: "sind mcp cursor enable", after: 0.3 },
+        { prompt: true, after: 0.3 },
+      ],
+    })
+    .code({
+      chapter: "Manual configuration",
+      title: "Or by hand",
+      file: "MCP config of your editor",
+      lang: "json",
+      text: ["{", '  "mcpServers": {', '    "sind": {', '      "command": "sind",', '      "args": ["mcp", "start"]', "    }", "  }", "}"].join("\n"),
+      say: { id: "manual", mood: "neutral", gap: 0.4 },
+      marks: [
+        { text: '"sind": {', at: "manual:entry", until: "manual:runs" },
+        { text: '"command"', at: "manual:runs" },
+        { text: '"args"', at: "manual:runs" },
+      ],
+    });
+
+  // The tool table from the page. Hints as the page names them: get tools
+  // read-only; create, delete, exec and power shutdown/reboot destructive.
+  {
+    const { el, t } = ep.custom("tools", { chapter: "Commands as tools", shot: "cornerR" });
+    const rows = [
+      ["sind_create_cluster", "Create a Slurm cluster", "de"],
+      ["sind_delete_cluster", "Delete a cluster", "de"],
+      ["sind_get_cluster", "Show cluster health status", "ro"],
+      ["sind_get_nodes", "List nodes", "ro"],
+      ["sind_power_shutdown", "Graceful shutdown", "de"],
+      ["sind_exec", "Run a command on submitter or controller", "de"],
+    ];
+    const tag = (k) => `<span class="tag ${k}">${k === "ro" ? "read-only" : "destructive"}</span>`;
+    el.innerHTML = `<div class="bg-glow"></div>${chapterHTML("Commands as tools")}<div class="slide-title mono">sind_&lt;command&gt;_&lt;subcommand&gt;</div><div class="tools">${rows
+      .map(([n, d, k]) => `<div class="trow" data-k="${k}"><span class="n">${n}</span><span class="d">${esc(d)}</span>${tag(k)}</div>`)
+      .join("")}</div><div class="tools-foot"><span>$ sind mcp tools</span> → mcp-tools.json</div>`;
+    const trs = [...el.querySelectorAll(".trow")];
+    Scenes.enter(tl, el.querySelector(".slide-title"), t + 0.5);
+    ep.P.wait(0.6);
+    ep.say([{ id: "tools", mood: "neutral", cues: { except: "thinking" } }, { id: "names", mood: "neutral" }, { id: "marks", mood: "neutral", cues: { destructive: "thinking" } }, { id: "ask", mood: "happy" }], "neutral");
+    Scenes.enter(tl, trs, ep.time("tools:becomes") - 0.2, { y: 20, stagger: 0.12 });
+    ep.glance(ep.time("tools:becomes"), 1.2, -0.8, 0);
+    tl.fromTo(trs[0], { borderColor: "#334155" }, { borderColor: "#14b8a6", duration: 0.3 }, ep.time("names:create"));
+    tl.to(trs[0], { borderColor: "#334155", duration: 0.3 }, ep.time("names:exports"));
+    Scenes.enter(tl, el.querySelector(".tools-foot"), ep.time("names:exports") - 0.2, { y: 16 });
+    const pop = (k, at) => tl.fromTo(trs.filter((r) => r.dataset.k === k).map((r) => r.querySelector(".tag")), { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.35, stagger: 0.08 }, ep.time(at) - 0.15);
+    pop("ro", "marks:read");
+    pop("de", "marks:destructive");
+    ep.glance(ep.time("marks:read"), 1.0, -0.4, 0);
+  }
+
+  ep.terminal({
+    wide: true,
+    chapter: "HTTP mode",
+    say: [{ id: "http", mood: "neutral" }, { id: "token", mood: "neutral", cues: { never: "smug" } }],
+    steps: [
+      { cmd: "sind mcp stream --port 8080", at: "http:sind" },
+      {
+        out: [
+          "MCP server listening on http://127.0.0.1:8080/",
+          "Bearer token in /home/alice/.local/state/sind/mcp-token (new at every start; set SIND_MCP_TOKEN to keep one)",
+          'Client config: {"type": "http", "url": "http://127.0.0.1:8080/", "headers": {"Authorization": "Bearer <token>"}}',
+        ].join("\n"),
+        at: "http:HTTP",
+        running: true,
+      },
+      { mark: "/home/alice/.local/state/sind/mcp-token", at: "token:file", until: "token:client" },
+      { mark: "Client config:", at: "token:client" },
+    ],
+  })
+    .slide({
+      chapter: "Security",
+      title: "Not a sandbox",
+      say: [{ id: "safe", mood: "concerned" }, { id: "safe2", mood: "neutral" }, { id: "safe3", mood: "neutral", cues: { trust: "happy" } }],
+      bullets: [
+        { icon: "warn", title: "Your Docker access", text: "sind_exec runs any command inside a cluster", at: "safe:Docker" },
+        { icon: "check", title: "Read the flags, then approve", text: "create calls decide what runs on your host", at: "safe2:flags" },
+        { icon: "disk", title: "data: \"volume\"", text: "keeps your host files out of /data", at: "safe2:volume" },
+        { icon: "lock", title: "Only where you'd trust it", text: "to run sind as you", at: "safe3:agent" },
+      ],
+    })
+    .slide({
+      chapter: "Takeaways",
+      title: "Takeaways",
+      say: { id: "takeaway", mood: "neutral", cues: { approving: "happy" } },
+      bullets: [
+        { icon: "terminal", title: "sind mcp claude enable", text: "or vscode, cursor, or the config entry by hand", at: "takeaway:command" },
+        { icon: "check", title: "Commands as tools", text: "marked read-only or destructive", at: "takeaway:hint" },
+        { icon: "lock", title: "Not a sandbox", text: "read a create call's flags before you approve it", at: "takeaway:read" },
+      ],
+    })
+    .outro({ chapter: "Wrap-up", next: "CI/CD", say: "outro" })
+    .done();
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

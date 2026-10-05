@@ -1,0 +1,21 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Today, sind meets your AI assistant." },
+    { "id": "why", "text": "Wish your AI assistant could create and check Slurm clusters for you, not just write code? With the MCP server built into sind, it can." },
+    { "id": "setup", "text": "Setup takes one command: sind mcp claude enable registers sind with Claude Desktop." },
+    { "id": "editors", "text": "For VS Code or Cursor, use their names instead, and disable takes it back." },
+    { "id": "manual", "text": "Or register it by hand, with this entry in the MCP config of your editor. It runs sind mcp start." },
+    { "id": "tools", "text": "Almost every sind command becomes a tool, except the interactive ones and those that print secrets." },
+    { "id": "names", "text": "Tools are named after their commands, like sind create cluster, and sind mcp tools exports the full list." },
+    { "id": "marks", "text": "Each tool also carries a hint. Get tools are marked read-only, while exec, the create and delete tools and most power tools are marked destructive." },
+    { "id": "ask", "text": "So your client can pause for your approval first." },
+    { "id": "http", "text": "One server for several clients? sind mcp stream serves it over HTTP, on port eighty eighty." },
+    { "id": "token", "text": "Every request needs a bearer token. The stream shows the file that holds it, but never the token itself, then a client config you can paste." },
+    { "id": "safe", "text": "A word of caution: this server is no sandbox. Every tool runs sind with your own Docker access." },
+    { "id": "safe2", "text": "Approve a create call only after reading its flags, and set data to volume, so your host files stay out." },
+    { "id": "safe3", "text": "Give an agent these tools only where you'd trust it to run sind as you." },
+    { "id": "takeaway", "text": "So: one command hooks sind into your editor, every tool carries a hint for your client, and you read create calls before approving them." },
+    { "id": "outro", "text": "Next up, the guide for CI pipelines. See you there!" }
+  ]
+}
