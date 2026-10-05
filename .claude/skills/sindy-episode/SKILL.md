@@ -40,12 +40,18 @@ The video course (`docs/content/course/_index.md`) has three series:
 `series: "Course NN"` for a course episode, and `title: "Refresher: <topic>"`
 and `series: "Refresher"` for a refresher.
 
-Every episode opens with why (a hook in the viewer's words, then one use case
-that it carries through) and closes with up to three takeaways and the outro.
-Course episodes stand on their own: they say early what they need and create
-the cluster they use, and each carries one refresher as a 20 to 45 s chapter
-`Refresher: <topic>`. Refreshers explain background with diagrams and slides
-and show sind commands only where a docs page has them.
+Every episode opens with why: the `intro` line greets and names the topic,
+and the `talk` scene (Sindy's name tag, up to three topic chips) states the
+hook as the viewer's problem rather than a definition, and the use case the
+episode carries through. It closes with a slide titled `Takeaways` (two or
+three bullets that recap what the episode showed, never a new fact), then the
+outro, whose line names what comes next. Course episodes stand on their own:
+they say early what they need and create the cluster they use, their talk
+kicker names the use case, and those that the course homepage lists with a
+refresher carry it as a 20 to 45 s chapter `Refresher: <topic>`. Refreshers
+explain background with diagrams and slides and show sind commands only where
+a docs page has them. Guide clips and course episodes cover some of the same
+ground; they never share lines word for word.
 
 ## Setup
 
@@ -79,9 +85,12 @@ count divided by 2.4, plus 4 seconds.
 Collect every command and output you want to show **verbatim from the page**.
 Never invent, adjust or "complete" terminal output: the page's samples are
 what maintainers keep in sync with real runs and review, and an episode must
-not be the one place where sind looks different. If a command
+not be the one place where sind looks different. If a sind command
 has no output on the page, show it without output (sind is silent on
 success), or ask the maintainer for real output and add it to the page first.
+A command that does print something (`srun hostname`, `sbatch`, `sind
+doctor`) but has no output on the page must not end a terminal as if it were
+silent or hung: show it in a `code` panel as what you run, or leave it out.
 Showing a subset of output lines is fine; every shown line stays whole.
 
 Commands in one terminal must form one believable session. A page's examples
