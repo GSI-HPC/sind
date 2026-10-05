@@ -6,6 +6,8 @@ description: "Isolated mesh namespaces for parallel environments"
 toc: true
 ---
 
+{{< video "realms" >}}
+
 ## Overview
 
 A **realm** is a namespace that isolates all sind resources — mesh network, DNS, SSH, and cluster resources. Different realms have completely separate infrastructure and cannot see each other.
