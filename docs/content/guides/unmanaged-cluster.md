@@ -6,6 +6,8 @@ description: "Leave Slurm to your own tooling: test Chef or Ansible provisioning
 toc: true
 ---
 
+{{< video "unmanaged-cluster" >}}
+
 An unmanaged cluster gives you sind's nodes (systemd containers with networking, DNS, SSH access and a shared munge key) and leaves Slurm to you. Use it to test Chef or Ansible code that provisions Slurm end to end, or to debug a configuration by running `slurmctld -Dvvvvvv` by hand.
 
 ## Create an unmanaged cluster
