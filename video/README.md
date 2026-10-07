@@ -21,8 +21,9 @@ episodes/<id>/     ──  lib/episode.js (scenes: intro, talk, slide, diagram, 
                                                          ▼
                                    HyperFrames (headless Chrome + FFmpeg) ──► MP4
                                                          │
-                                         tools/publish.mjs ──► docs: web MP4, poster,
-                                                               WebVTT captions, chapters
+                                         tools/publish.mjs ──► docs: WebM (AV1, Opus),
+                                                               poster, WebVTT captions,
+                                                               chapters
 ```
 
 - **Avatar** (`lib/sindy.js`): a vector anime rig drawn in SVG. Every frame is
@@ -174,7 +175,8 @@ without changing episode scripts.
 While developing an episode, render it locally (a laptop or a Claude Code
 cloud session); the docs workflow renders the published version.
 
-Requirements: Node.js 22+, Python 3.10 to 3.13, FFmpeg with libx264, and Hugo
+Requirements: Node.js 22+, Python 3.10 to 3.13, FFmpeg with libx264 (for
+HyperFrames) and libsvtav1 and libopus (for the docs encode), and Hugo
 0.156 or newer for the docs preview. HyperFrames downloads its own Chrome. If
 any of these get in the way, see [Pitfalls](#pitfalls).
 
@@ -269,10 +271,21 @@ one (about 2-3× real time on a 4 vCPU runner). Changing `lib/` re-renders every
 episode, and so does a run after the cache was evicted (7 days unused).
 Rendered files are never committed; locally they are git-ignored.
 
-**Size.** The web encode (H.264 CRF 28, `-tune animation`) takes about 4 MB
-per minute; the 45-second pilot is 2.7 MB. Ten 3-minute guides are about
-120 MB per docs version, well under the 1 GB GitHub Pages site limit. The
-100 GB/month soft bandwidth limit allows roughly 8,000 full views a month.
+**Format.** The docs get AV1 video and Opus audio in WebM: free codecs that
+Chrome, Edge and Firefox decode without extra packages, also on distributions
+that ship no H.264 decoder, such as Fedora. Safari plays AV1 only on Apple
+devices with an AV1 hardware decoder; elsewhere the shortcode shows a note
+with a download link instead of the player. On the quickstart, SVT-AV1
+(preset 10, CRF 40, visual tuning) came out smaller than the H.264 encode it
+replaced (CRF 28, `-tune animation`) and closer to the master (SSIM 0.9958
+against 0.9951), and encodes at about 0.85× real time on 4 vCPUs; VP9 needed
+50% more bytes for the same quality and encoded three times slower.
+
+**Size.** The web encode takes about 4 MB per minute, so the 77 minutes of
+the video course are about 320 MB per docs version: `main` and `next` each
+carry a copy, against GitHub Pages' 1 GB site limit. The 100 GB/month soft
+bandwidth limit allows roughly 300 viewings of the whole course a month;
+players load nothing until they start (`preload="none"`).
 
 **Fallback.** If Pages turns out too small, upload release episodes to
 YouTube and point the shortcode at a privacy-enhanced embed. Note that every
@@ -308,11 +321,13 @@ Roadblocks met while building this pipeline, and their fixes.
 - **pip refuses the system Python** ("externally-managed-environment", PEP 668,
   e.g. Ubuntu 24.04): use the venv. Activate it in every new shell before
   `episode voice`, `publish` or `ci`, which run `python3`.
-- **FFmpeg without libx264**: HyperFrames and the web encode need it; check
-  with `ffmpeg -hide_banner -encoders | grep libx264`. Fedora's default
-  `ffmpeg-free` lacks it (enable RPM Fusion, then `sudo dnf swap ffmpeg-free
-  ffmpeg --allowerasing`), and mise's `ffmpeg` comes from conda and may lack it
-  too. Pitch-shifted voice presets also need the `rubberband` filter.
+- **FFmpeg without libx264, libsvtav1 or libopus**: HyperFrames renders with
+  libx264, the docs encode needs libsvtav1 and libopus; check with `ffmpeg
+  -hide_banner -encoders | grep -E 'libx264|libsvtav1|libopus'`. Fedora's
+  default `ffmpeg-free` lacks libx264 (enable RPM Fusion, then `sudo dnf swap
+  ffmpeg-free ffmpeg --allowerasing`), and mise's `ffmpeg` comes from conda
+  and may lack it too. Pitch-shifted voice presets also need the `rubberband`
+  filter.
 - **`hyperframes doctor` shows ✗** for whisper-cpp, TTS (Kokoro) and MusicGen:
   optional HyperFrames features this pipeline does not use. The Kokoro check
   is about `hyperframes tts`, not `voice/`.
@@ -336,9 +351,8 @@ Roadblocks met while building this pipeline, and their fixes.
 - `npx hyperframes browser ensure` works there; alternatively point
   `HYPERFRAMES_BROWSER_PATH` at the preinstalled
   `/opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell`.
-- Playwright's open-source Chromium cannot decode H.264, so a docs page tested
-  there shows a spinner instead of playing the video. Chrome, Firefox, Safari
-  and Edge play it.
+- Playwright's open-source Chromium plays the docs' AV1 video, but cannot
+  decode the H.264 renders in `renders/`; open those with a desktop player.
 - The agent cannot listen: voice, pronunciation and pacing need a human ear.
 
 ### Authoring episodes

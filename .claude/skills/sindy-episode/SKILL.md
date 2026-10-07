@@ -63,7 +63,7 @@ python3 --version          # kokoro-onnx needs 3.10 to 3.13; else make a venv fr
 pip install -r voice/requirements.txt
 npm run voice:setup        # Kokoro model, about 350 MB, into ~/.cache/sindy-voice
 npx hyperframes browser ensure
-ffmpeg -hide_banner -encoders | grep libx264
+ffmpeg -hide_banner -encoders | grep -E 'libx264|libsvtav1|libopus'
 export HYPERFRAMES_NO_TELEMETRY=1
 ```
 

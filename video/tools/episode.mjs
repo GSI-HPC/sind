@@ -5,7 +5,7 @@
 //   node tools/episode.mjs lint    <id|--all>             hyperframes lint
 //   node tools/episode.mjs check   <id|--all> [--quick]   timeline, warnings, docs drift, lint, stills
 //   node tools/episode.mjs render  <id|--all> [--draft]   renders/<id>.mp4 with burned-in captions
-//   node tools/episode.mjs publish <id|--all>             web MP4, poster, VTT, manifest into ../docs
+//   node tools/episode.mjs publish <id|--all>             web WebM (AV1, Opus), poster, VTT, manifest into ../docs
 //   node tools/episode.mjs hash    <id|--all>             input hash that identifies a render
 //   node tools/episode.mjs ci      <id|--all> --store <dir> [--used <file>]
 //
@@ -277,7 +277,7 @@ for (const id of ids) {
       }
       mkdirSync(docsOut.static, { recursive: true });
       mkdirSync(docsOut.data, { recursive: true });
-      for (const ext of ["mp4", "jpg", "vtt"]) cpSync(path.join(entry, `${id}.${ext}`), path.join(docsOut.static, `${id}.${ext}`));
+      for (const ext of ["webm", "jpg", "vtt"]) cpSync(path.join(entry, `${id}.${ext}`), path.join(docsOut.static, `${id}.${ext}`));
       cpSync(path.join(entry, `${id}.json`), path.join(docsOut.data, `${id}.json`));
       if (opt.used) appendFileSync(opt.used, key + "\n");
       break;

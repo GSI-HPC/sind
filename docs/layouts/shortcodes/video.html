@@ -2,19 +2,23 @@
   Embed a Sindy video episode: {{< video "quickstart" >}}
 
   The docs workflow renders the episode (video/tools/episode.mjs ci) into
-  static/videos/<id>.{mp4,jpg,vtt} and data/videos/<id>.json before building.
-  Without those files (e.g. a local build without the video pipeline), the
-  shortcode renders nothing.
+  static/videos/<id>.{webm,jpg,vtt} and data/videos/<id>.json before building.
+  The video is AV1 with Opus audio in WebM, free codecs that browsers decode
+  without extra packages; a browser that cannot decode AV1 (Safari without
+  an AV1 hardware decoder) gets a note with a download link instead of a
+  player that never starts. Without those files (e.g. a local build without
+  the video pipeline), the shortcode renders nothing.
 */ -}}
 {{- $id := .Get 0 -}}
 {{- $meta := index (hugo.Data.videos | default dict) $id -}}
-{{- if and $meta (fileExists (printf "static/videos/%s.mp4" $id)) -}}
+{{- if and $meta (fileExists (printf "static/videos/%s.webm" $id)) -}}
 {{- $base := printf "videos/%s" $id -}}
 <figure class="sind-video" id="video-{{ $id }}">
   <video controls preload="none" playsinline poster="{{ printf "%s.jpg" $base | relURL }}" aria-label="{{ $meta.title }}">
-    <source src="{{ printf "%s.mp4" $base | relURL }}" type="video/mp4">
+    <source src="{{ printf "%s.webm" $base | relURL }}" type='video/webm; codecs="av01.0.08M.08, opus"'>
     <track kind="captions" src="{{ printf "%s.vtt" $base | relURL }}" srclang="en" label="English" default>
   </video>
+  <p class="sind-video-unsupported" hidden>This browser cannot play AV1 video, which Chrome, Edge and Firefox can. <a href="{{ printf "%s.webm" $base | relURL }}" download>Download the video</a> to watch it in another player.</p>
   <figcaption>
     <div class="sind-video-title"><strong>{{ $meta.title }}</strong><span>{{ $meta.length }} · presented by Sindy, an AI-voiced virtual presenter</span></div>
     {{- with $meta.chapters }}
@@ -35,6 +39,12 @@
     var v = b.closest(".sind-video").querySelector("video");
     v.currentTime = Number(b.dataset.t);
     v.play();
+  });
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".sind-video").forEach(function (f) {
+      var source = f.querySelector("source");
+      if (!f.querySelector("video").canPlayType(source.type)) f.querySelector(".sind-video-unsupported").hidden = false;
+    });
   });
 </script>
 {{- end }}
