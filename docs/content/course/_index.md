@@ -2,14 +2,14 @@
 weight: 70
 title: "Video Course"
 icon: "smart_display"
-description: "Learn sind in short videos: a numbered course, refreshers, and a clip on each guide"
+description: "Learn sind in short videos: a numbered course, refreshers, and clips on the guide pages"
 ---
 
 Learn sind from Sindy, the course's virtual presenter, as she builds clusters, runs jobs and breaks things on purpose. Every video has captions and chapters, and every command in it is on the episode's page, ready to copy.
 
 - **The course:** ten numbered episodes of a few minutes each, from the first cluster to CI pipelines and AI assistants. Each episode stands on its own; the numbers suggest an order, not a prerequisite.
 - **[Refreshers]({{< relref "refreshers" >}}):** about a minute of background each, on Slurm, Docker networks, MPI, accounting and more. Shortened versions also appear in the course episodes.
-- **Guide clips:** a short video at the top of each hands-on guide, showing that page in action.
+- **Guide clips:** a short video at the top of most hands-on guides, showing that page in action.
 
 ## Start here
 
@@ -44,7 +44,7 @@ These guide pages open with a clip of one to two minutes:
 
 | Section | Pages |
 | --- | --- |
-| Getting Started | [Installation]({{< relref "/getting-started/installation" >}}), [Quickstart]({{< relref "/getting-started/quickstart" >}}) |
+| Getting Started | [Installation]({{< relref "/getting-started/installation" >}}) |
 | Configuration | [Cluster Configuration]({{< relref "/configuration/cluster-config" >}}), [Node Definitions]({{< relref "/configuration/node-definitions" >}}), [Realms]({{< relref "/configuration/realms" >}}) |
 | Usage | [Cluster Lifecycle]({{< relref "/usage/cluster-lifecycle" >}}), [Node Access]({{< relref "/usage/node-access" >}}), [Worker Management]({{< relref "/usage/worker-management" >}}), [Power Control]({{< relref "/usage/power-control" >}}), [Diagnostics]({{< relref "/usage/diagnostics" >}}) |
 | Guides | [Running MPI Jobs]({{< relref "/guides/mpi-jobs" >}}), [CI/CD]({{< relref "/guides/ci-cd" >}}), [Controller Failover]({{< relref "/guides/controller-failover" >}}), [Unmanaged Cluster]({{< relref "/guides/unmanaged-cluster" >}}), [Using CVMFS]({{< relref "/guides/cvmfs" >}}), [MCP Integration]({{< relref "/guides/mcp" >}}), [Users and Identity]({{< relref "/guides/users" >}}) |

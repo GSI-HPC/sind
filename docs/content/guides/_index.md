@@ -5,4 +5,4 @@ icon: "menu_book"
 description: "Task-oriented walkthroughs for common workflows"
 ---
 
-Applied guides that show how to use sind for specific tasks and integrations. Each guide opens with a short clip, and the [Video Course]({{< relref "/course" >}}) puts the guides into context.
+Applied guides that show how to use sind for specific tasks and integrations. Most guides open with a short clip, and the [Video Course]({{< relref "/course" >}}) puts the guides into context.
