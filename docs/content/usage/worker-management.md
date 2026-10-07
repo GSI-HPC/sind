@@ -22,14 +22,14 @@ sind create worker [CLUSTER] [FLAGS]
 | `--unmanaged` | `false` | Don't start slurmd, don't add to slurm.conf (implied on unmanaged clusters) |
 | `--pull` | `false` | Pull the `--image` once before creating containers; needs `--image` |
 | `--wait` | `5m` | How long to wait for the new workers to become ready, counted from when their containers have started; `0` for no limit |
-| `--cap-add` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`) |
-| `--cap-drop` | the newest worker's, else none | Drop Linux capability (repeatable) |
-| `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`) |
-| `--security-opt` | the newest worker's, else none | Security option (repeatable) |
+| `--cap-add` | the newest worker's, else none | Add Linux capability (repeatable; e.g. `SYS_ADMIN`); `--cap-add=` for none |
+| `--cap-drop` | the newest worker's, else none | Drop Linux capability (repeatable); `--cap-drop=` for none |
+| `--device` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`); `--device=` for none |
+| `--security-opt` | the newest worker's, else none | Security option (repeatable); `--security-opt=` for none |
 
 ### Defaults from the newest worker
 
-New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list.
+New workers look like the cluster's newest worker: the one with the highest index among the workers managed like the new ones, or among all workers if none is. sind reads its image, CPU and memory limits, `/tmp` size, capabilities, devices and security options from Docker, so `sind create worker` on a cluster created with `cpus: 2`, `memory: 1g` or `capAdd: [SYS_ADMIN]` and `devices: [/dev/fuse]` adds workers with the same settings, and the same `CPUs` and `RealMemory` in `sind-nodes.conf`. Each flag you give replaces the inherited value; `--cap-add`, `--cap-drop`, `--device` and `--security-opt` replace the whole inherited list. Give one empty to add workers without any, e.g. `sind create worker --device=` on a cluster whose workers have `/dev/fuse`.
 
 Not inherited:
 

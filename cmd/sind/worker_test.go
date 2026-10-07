@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,6 +57,64 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 			assert.Empty(t, m.Calls, "no docker call")
 		})
 	}
+}
+
+func TestListFlag(t *testing.T) {
+	// A list flag that is not given inherits the newest worker's list
+	// (nil); one given only empty asks for none (an empty list).
+	tests := []struct {
+		args []string
+		want []string
+	}{
+		{nil, nil},
+		{[]string{"--device="}, []string{}},
+		{[]string{"--device", ""}, []string{}},
+		{[]string{"--device=/dev/fuse,/dev/kvm"}, []string{"/dev/fuse", "/dev/kvm"}},
+		{[]string{"--device=/dev/fuse", "--device="}, []string{"/dev/fuse"}},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			c, _, err := NewRootCommand().Find([]string{"create", "worker"})
+			require.NoError(t, err)
+			require.NoError(t, c.Flags().Parse(tt.args))
+
+			got := listFlag(c, "device")
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.want == nil, got == nil, "nil only when the flag is not given")
+		})
+	}
+}
+
+func TestCreateWorkerOptions_Lists(t *testing.T) {
+	// The list flags reach WorkerAdd as nil when not given, so the new
+	// workers inherit the newest worker's lists, and as an empty list when
+	// given empty, which asks for none.
+	parse := func(t *testing.T, args ...string) cluster.WorkerAddOptions {
+		t.Helper()
+		c, _, err := NewRootCommand().Find([]string{"create", "worker"})
+		require.NoError(t, err)
+		require.NoError(t, c.Flags().Parse(args))
+		opts, err := createWorkerOptions(c, "dev")
+		require.NoError(t, err)
+		return opts
+	}
+
+	opts := parse(t, "--count", "2")
+	assert.Equal(t, "dev", opts.ClusterName)
+	assert.Equal(t, 2, opts.Count)
+	assert.Nil(t, opts.CapAdd)
+	assert.Nil(t, opts.CapDrop)
+	assert.Nil(t, opts.Devices)
+	assert.Nil(t, opts.SecurityOpt)
+
+	opts = parse(t, "--cap-add=", "--cap-drop=MKNOD", "--device", "", "--security-opt=")
+	assert.Equal(t, []string{}, opts.CapAdd)
+	assert.NotNil(t, opts.CapAdd)
+	assert.Equal(t, []string{"MKNOD"}, opts.CapDrop)
+	assert.Equal(t, []string{}, opts.Devices)
+	assert.NotNil(t, opts.Devices)
+	assert.Equal(t, []string{}, opts.SecurityOpt)
+	assert.NotNil(t, opts.SecurityOpt)
 }
 
 func TestCreateWorker_FlagHelpNamesDefaults(t *testing.T) {

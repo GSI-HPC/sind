@@ -162,11 +162,11 @@ func forceJSONOutput(ctx context.Context, req *mcp.CallToolRequest, in ophis.Too
 
 // refuseFlagArgs returns a middleware that refuses a tool call whose
 // positional arguments hold a flag, and otherwise calls next, or the tool
-// itself when next is nil. ophis puts the arguments after the flags on the
-// command line, so a flag among them would get past the input schema: -v,
-// --follow, or a -o that overrides the -o json forceJSONOutput sets. exec
-// passes everything after its own "--" to the node, so only the arguments
-// before it are checked.
+// itself when next is nil, with the flags of emptyListsAsNone. ophis puts
+// the arguments after the flags on the command line, so a flag among them
+// would get past the input schema: -v, --follow, or a -o that overrides the
+// -o json forceJSONOutput sets. exec passes everything after its own "--"
+// to the node, so only the arguments before it are checked.
 func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput, run ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
 		for _, arg := range in.Args {
@@ -177,11 +177,34 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 				return nil, ophis.ToolOutput{}, fmt.Errorf("argument %q is a flag; pass flags in \"flags\"", arg)
 			}
 		}
+		in.Flags = emptyListsAsNone(in.Flags)
 		if next == nil {
 			return run(ctx, req, in)
 		}
 		return next(ctx, req, in, run)
 	}
+}
+
+// emptyListsAsNone returns flags with each empty array replaced by an
+// array of one empty string, which ophis passes as the flag given empty
+// (--device ""): for an empty array it passes no flag at all, and a list
+// flag of create worker that is not given inherits the newest worker's
+// list instead of asking for none (see listFlag). It copies flags rather
+// than change them.
+func emptyListsAsNone(flags map[string]any) map[string]any {
+	var out map[string]any
+	for name, value := range flags {
+		if items, ok := value.([]any); ok && len(items) == 0 {
+			if out == nil {
+				out = maps.Clone(flags)
+			}
+			out[name] = []any{""}
+		}
+	}
+	if out == nil {
+		return flags
+	}
+	return out
 }
 
 // commandPath returns the path of cmd below the root, e.g. "get auth-key".

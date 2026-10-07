@@ -25,7 +25,9 @@ import (
 // WorkerAddOptions holds the parameters for adding worker nodes to a cluster.
 // The image, resources and privileges are the new workers' shape: each one
 // left at its zero value is taken from the cluster's newest worker (see
-// workerShape).
+// workerShape). For the lists CapAdd, CapDrop, Devices and SecurityOpt, the
+// zero value is nil: an empty list that is not nil replaces the newest
+// worker's list too, so the new workers get none.
 type WorkerAddOptions struct {
 	ClusterName string
 	Count       int // 0 or less adds one worker
@@ -648,9 +650,10 @@ func (s workerShape) override(opts WorkerAddOptions) workerShape {
 	}
 }
 
-// orList returns list, or fallback when list is empty.
+// orList returns list, or fallback when list is nil. An empty list that is
+// not nil is returned as it is: it asks for none.
 func orList(list, fallback []string) []string {
-	if len(list) > 0 {
+	if list != nil {
 		return list
 	}
 	return fallback

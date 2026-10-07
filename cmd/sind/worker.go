@@ -35,13 +35,26 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd.Flags().String("tmp-size", "", fmt.Sprintf("/tmp tmpfs size (default: the newest worker's, else %s)", config.DefaultTmpSize))
 	cmd.Flags().Bool("unmanaged", false, "don't start slurmd, don't add to slurm.conf")
 	cmd.Flags().Bool("pull", false, "pull the --image before creating containers")
-	cmd.Flags().StringSlice("cap-add", nil, "add Linux capabilities, e.g. SYS_ADMIN (default: the newest worker's)")
-	cmd.Flags().StringSlice("cap-drop", nil, "drop Linux capabilities (default: the newest worker's)")
-	cmd.Flags().StringSlice("device", nil, "host devices to expose, e.g. /dev/fuse (default: the newest worker's)")
-	cmd.Flags().StringSlice("security-opt", nil, "security options (default: the newest worker's)")
+	cmd.Flags().StringSlice("cap-add", nil, "add Linux capabilities, e.g. SYS_ADMIN; --cap-add= for none (default: the newest worker's)")
+	cmd.Flags().StringSlice("cap-drop", nil, "drop Linux capabilities; --cap-drop= for none (default: the newest worker's)")
+	cmd.Flags().StringSlice("device", nil, "host devices to expose, e.g. /dev/fuse; --device= for none (default: the newest worker's)")
+	cmd.Flags().StringSlice("security-opt", nil, "security options; --security-opt= for none (default: the newest worker's)")
 	addWaitFlag(cmd)
 
 	return cmd
+}
+
+// listFlag returns the values of a repeatable flag, nil when it is not
+// given and an empty list when it is given only empty (--device=), which
+// replaces the newest worker's list with none (see
+// cluster.WorkerAddOptions). pflag's GetStringSlice returns an empty list,
+// not nil, in both cases.
+func listFlag(cmd *cobra.Command, name string) []string {
+	if !cmd.Flags().Changed(name) {
+		return nil
+	}
+	values, _ := cmd.Flags().GetStringSlice(name)
+	return values
 }
 
 // checkCreateWorkerFlags rejects flag values create worker cannot act on as
@@ -53,10 +66,12 @@ func checkCreateWorkerFlags(opts cluster.WorkerAddOptions) error {
 	return usage(opts.Check())
 }
 
-func runCreateWorker(cmd *cobra.Command, clusterName string) error {
+// createWorkerOptions returns the options of create worker's flags, with a
+// nil list for each list flag that is not given (see listFlag).
+func createWorkerOptions(cmd *cobra.Command, clusterName string) (cluster.WorkerAddOptions, error) {
 	wait, err := waitFlag(cmd)
 	if err != nil {
-		return err
+		return cluster.WorkerAddOptions{}, err
 	}
 	count, _ := cmd.Flags().GetInt("count")
 	image, _ := cmd.Flags().GetString("image")
@@ -65,12 +80,12 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 	tmpSize, _ := cmd.Flags().GetString("tmp-size")
 	unmanaged, _ := cmd.Flags().GetBool("unmanaged")
 	pull, _ := cmd.Flags().GetBool("pull")
-	capAdd, _ := cmd.Flags().GetStringSlice("cap-add")
-	capDrop, _ := cmd.Flags().GetStringSlice("cap-drop")
-	devices, _ := cmd.Flags().GetStringSlice("device")
-	securityOpt, _ := cmd.Flags().GetStringSlice("security-opt")
+	capAdd := listFlag(cmd, "cap-add")
+	capDrop := listFlag(cmd, "cap-drop")
+	devices := listFlag(cmd, "device")
+	securityOpt := listFlag(cmd, "security-opt")
 
-	opts := cluster.WorkerAddOptions{
+	return cluster.WorkerAddOptions{
 		ClusterName: clusterName,
 		Count:       count,
 		Image:       image,
@@ -84,6 +99,13 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		Devices:     devices,
 		SecurityOpt: securityOpt,
 		Wait:        wait,
+	}, nil
+}
+
+func runCreateWorker(cmd *cobra.Command, clusterName string) error {
+	opts, err := createWorkerOptions(cmd, clusterName)
+	if err != nil {
+		return err
 	}
 	if err := checkCreateWorkerFlags(opts); err != nil {
 		return err

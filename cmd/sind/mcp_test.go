@@ -264,6 +264,24 @@ func TestRefuseFlagArgs(t *testing.T) {
 	require.Error(t, call(withJSON, "sind_get_nodes", "-o", "human"))
 	require.NoError(t, call(withJSON, "sind_get_nodes", "dev"))
 	assert.Equal(t, map[string]any{"output": "json"}, called.Flags)
+
+	// An empty array reaches the tool as the flag given empty.
+	flags := map[string]any{"device": []any{}, "cap-add": []any{"SYS_ADMIN"}, "count": float64(2)}
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "sind_create_worker"}}
+	_, _, err := plain(t.Context(), req, ophis.ToolInput{Flags: flags, Args: []string{"dev"}}, run)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"device": []any{""}, "cap-add": []any{"SYS_ADMIN"}, "count": float64(2)}, called.Flags)
+}
+
+func TestEmptyListsAsNone(t *testing.T) {
+	flags := map[string]any{"device": []any{}, "security-opt": []any{}, "cap-drop": []any{"MKNOD"}, "unmanaged": true}
+	got := emptyListsAsNone(flags)
+	assert.Equal(t, map[string]any{"device": []any{""}, "security-opt": []any{""}, "cap-drop": []any{"MKNOD"}, "unmanaged": true}, got)
+	assert.Equal(t, []any{}, flags["device"], "the caller's flags are left alone")
+
+	unchanged := map[string]any{"cap-add": []any{"SYS_ADMIN"}}
+	assert.Equal(t, unchanged, emptyListsAsNone(unchanged))
+	assert.Nil(t, emptyListsAsNone(nil))
 }
 
 // syncBuffer is a bytes.Buffer that a command goroutine writes while the
