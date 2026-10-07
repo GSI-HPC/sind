@@ -715,6 +715,45 @@ func TestWorkerAdd_OptionsOverrideShape(t *testing.T) {
 	assert.Equal(t, []string{"writable-cgroups=true", "label=disable", "no-new-privileges"}, testutil.ArgValues(args, "--security-opt"))
 }
 
+func TestWorkerAdd_EmptyListsClearShape(t *testing.T) {
+	// An empty list that is not nil replaces the inherited one with none.
+	// What sind adds by itself stays: its security options, and SYS_NICE
+	// on a managed worker of a cluster with task/affinity.
+	hostConfig := testWorkerHostConfig()
+	hostConfig.CapAdd = []string{"CAP_SYS_NICE", "CAP_SYS_ADMIN"}
+	hostConfig.CapDrop = []string{"CAP_NET_RAW"}
+	hostConfig.Devices = []docker.DeviceMapping{{PathOnHost: "/dev/fuse", PathInContainer: "/dev/fuse", CgroupPermissions: "rwm"}}
+	hostConfig.SecurityOpt = append(hostConfig.SecurityOpt, "apparmor=unconfined")
+	base := workerAddOnCall(t)
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		switch {
+		case args[0] == "inspect" && args[1] == "sind-dev-worker-0":
+			return mock.Result{Stdout: nodeInspectJSON(t, args[1], nodeInspect{Image: testWorkerImageID, HostConfig: hostConfig})}
+		case slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}):
+			return mock.Result{Stdout: "ClusterName=dev\nTaskPlugin=task/cgroup,task/affinity\ninclude /etc/slurm/sind-nodes.conf\n"}
+		}
+		return base(args, stdin)
+	}
+	client := docker.NewClient(&m)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
+		ClusterName: "dev", Count: 1,
+		CapAdd: []string{}, CapDrop: []string{}, Devices: []string{}, SecurityOpt: []string{},
+	}, time.Millisecond)
+	require.NoError(t, err)
+
+	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
+	require.True(t, ok)
+	assert.Equal(t, []string{"SYS_NICE"}, testutil.ArgValues(args, "--cap-add"), "sind's SYS_NICE only")
+	assert.Empty(t, testutil.ArgValues(args, "--cap-drop"))
+	assert.Empty(t, testutil.ArgValues(args, "--device"))
+	assert.Equal(t, []string{"writable-cgroups=true", "label=disable"}, testutil.ArgValues(args, "--security-opt"))
+}
+
 func TestWorkerAdd_NoWorkerUsesControllerImageAndDefaults(t *testing.T) {
 	// The first worker of a cluster without one gets the controller's
 	// image, by ID, and the built-in resources.
