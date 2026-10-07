@@ -3,8 +3,9 @@ name: Deploy docs
 # Builds the release docs (main, at /) and the preview docs (next, at /next/)
 # together and deploys them as one Pages artifact, so no gh-pages branch
 # accumulates history. Video episodes (video/README.md) are rendered here into
-# each checkout's docs/ before Hugo runs. Renders are cached by a hash of their
-# inputs, so only new or changed episodes are rendered.
+# each checkout's docs/ before Hugo runs, by the avatars library's render
+# action: renders are cached per render hash, in the cache scope of the branch
+# that ran, so a run on next renders only new or changed episodes.
 
 on:
   push:
@@ -43,55 +44,34 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Restore rendered episodes
-        id: episodes
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          path: video-store
-          key: video-episodes-${{ hashFiles('main/video/episodes/**', 'main/video/lib/**', 'main/video/voice/**', 'main/video/tools/**', 'main/video/package-lock.json', 'next/video/episodes/**', 'next/video/lib/**', 'next/video/voice/**', 'next/video/tools/**', 'next/video/package-lock.json') }}
-          restore-keys: video-episodes-
+          node-version: 22
 
-      - name: Install FFmpeg
-        if: steps.episodes.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - name: Install the video toolchain of main
+        if: hashFiles('main/video/avatars.json') != ''
+        run: npm ci --no-audit --no-fund --prefix main/video
 
-      - name: Set up Python
-        if: steps.episodes.outputs.cache-hit != 'true'
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Render the episodes of main
+        if: hashFiles('main/video/avatars.json') != ''
+        uses: dennisklein/avatars/integrations/github/render@26f196a28c8df28675ae2fe92cbfad1b0e33efb4 # v0.1.0
         with:
-          python-version: "3.12"
+          project: main/video
+          store: .avatars-store-main
+          cache-key-prefix: sind-videos-main
 
-      - name: Restore voice model
-        if: steps.episodes.outputs.cache-hit != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Install the video toolchain of next
+        if: hashFiles('next/video/avatars.json') != ''
+        run: npm ci --no-audit --no-fund --prefix next/video
+
+      - name: Render the episodes of next
+        if: hashFiles('next/video/avatars.json') != ''
+        uses: dennisklein/avatars/integrations/github/render@26f196a28c8df28675ae2fe92cbfad1b0e33efb4 # v0.1.0
         with:
-          path: ~/.cache/sindy-voice
-          key: sindy-voice-kokoro-v1.0
-
-      - name: Render video episodes
-        env:
-          CACHE_HIT: ${{ steps.episodes.outputs.cache-hit }}
-          HYPERFRAMES_NO_TELEMETRY: "1"
-        run: |
-          mkdir -p video-store
-          : > video-used.txt
-          for branch in main next; do
-            [ -d "$branch/video/episodes" ] || continue
-            if [ "$CACHE_HIT" != "true" ]; then
-              (cd "$branch/video" && npm ci --no-audit --no-fund)
-              pip install --quiet -r "$branch/video/voice/requirements.txt"
-              python3 "$branch/video/voice/sindy_voice.py" setup
-            fi
-            node "$branch/video/tools/episode.mjs" ci --all \
-              --store "$GITHUB_WORKSPACE/video-store" --used "$GITHUB_WORKSPACE/video-used.txt"
-          done
-          # Keep only the renders that main or next still use.
-          for entry in video-store/*; do
-            [ -e "$entry" ] || continue
-            grep -qx "$(basename "$entry")" video-used.txt || rm -rf "$entry"
-          done
+          project: next/video
+          store: .avatars-store-next
+          cache-key-prefix: sind-videos-next
 
       - name: Install Hugo
         uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3.2.1
