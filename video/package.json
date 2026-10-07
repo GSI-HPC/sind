@@ -1,20 +1,18 @@
 {
   "name": "sind-video",
   "private": true,
-  "description": "Sindy: AI-presented tutorial videos for sind, rendered with HyperFrames",
+  "type": "module",
+  "description": "Tutorial videos of sind, presented by Sindy, made with the avatars library",
   "license": "LGPL-3.0-or-later",
+  "engines": { "node": ">=22" },
   "scripts": {
-    "episode": "node tools/episode.mjs",
-    "vendor": "node tools/sync-vendor.mjs",
-    "voice:setup": "python3 voice/sindy_voice.py setup",
-    "voice:samples": "python3 voice/sindy_voice.py samples -o renders/voice-samples",
-    "sheet": "node tools/shot.mjs sindy/sheet.html sindy/sheet.png mode=expr"
+    "voice-setup": "avatars voice-setup",
+    "validate": "avatars validate",
+    "voice": "avatars voice --all",
+    "check": "avatars check --all",
+    "render": "avatars render --all"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
-    "gsap": "^3.15.0",
-    "hyperframes": "0.8.115",
-    "puppeteer-core": "^25.12.0"
+    "@dennisklein/avatars": "github:dennisklein/avatars#semver:^0.1"
   }
 }

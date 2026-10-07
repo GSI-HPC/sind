@@ -5,11 +5,9 @@
 <meta name="viewport" content="width=1920, height=1080" />
 <title>sind course 07: Failure drills</title>
 <script src="vendor/gsap.min.js"></script>
-<script src="vendor/sindy.js"></script>
-<script src="vendor/scenes.js"></script>
-<script src="vendor/episode.js"></script>
+<script src="vendor/avatars.js"></script>
 <script src="assets/voice/lines.js"></script>
-<link rel="stylesheet" href="vendor/scenes.css" />
+<link rel="stylesheet" href="vendor/avatars.css" />
 <style>
   @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
@@ -17,15 +15,15 @@
   @font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("vendor/fonts/jetbrains-mono-400.woff2") format("woff2"); }
   @font-face { font-family: "JetBrains Mono"; font-weight: 700; src: url("vendor/fonts/jetbrains-mono-700.woff2") format("woff2"); }
   /* Node-state strip beside a drill terminal, between the terminal and Sindy. */
-  .nstrip { position: absolute; left: 1476px; top: 150px; width: 396px; padding: 22px 22px 24px; border-radius: 22px; background: rgba(22, 33, 58, 0.94); border: 2px solid var(--line); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4); opacity: 0; }
-  .nstrip .hd { font-size: 22px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+  .nstrip { position: absolute; left: 1476px; top: 150px; width: 396px; padding: 22px 22px 24px; border-radius: 22px; background: rgba(22, 33, 58, 0.94); border: 2px solid var(--av-color-border); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4); opacity: 0; }
+  .nstrip .hd { font-size: 22px; font-weight: 600; color: var(--av-color-text-muted); letter-spacing: 0.02em; }
   .nstrip .nd { margin-top: 4px; font-family: "JetBrains Mono", monospace; font-size: 28px; font-weight: 700; color: #fff; }
-  .nstrip .st { display: flex; align-items: center; gap: 14px; height: 58px; margin-top: 12px; padding: 0 16px; border-radius: 14px; border: 2px solid var(--line); background: rgba(15, 23, 42, 0.6); opacity: 0.25; }
-  .nstrip .st i { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--teal); }
+  .nstrip .st { display: flex; align-items: center; gap: 14px; height: 58px; margin-top: 12px; padding: 0 16px; border-radius: 14px; border: 2px solid var(--av-color-border); background: rgba(15, 23, 42, 0.6); opacity: 0.25; }
+  .nstrip .st i { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--av-color-accent); }
   .nstrip .st.warn i { background: #fbbf24; }
   .nstrip .st.bad i { background: #f87171; }
   .nstrip .st b { font-family: "JetBrains Mono", monospace; font-size: 27px; font-weight: 700; color: #fff; }
-  .nstrip .st span { font-size: 21px; color: var(--muted); white-space: nowrap; }
+  .nstrip .st span { font-size: 21px; color: var(--av-color-text-muted); white-space: nowrap; }
 </style>
 </head>
 <body>

@@ -5,11 +5,9 @@
 <meta name="viewport" content="width=1920, height=1080" />
 <title>Refresher: slurm.conf on one screen</title>
 <script src="vendor/gsap.min.js"></script>
-<script src="vendor/sindy.js"></script>
-<script src="vendor/scenes.js"></script>
-<script src="vendor/episode.js"></script>
+<script src="vendor/avatars.js"></script>
 <script src="assets/voice/lines.js"></script>
-<link rel="stylesheet" href="vendor/scenes.css" />
+<link rel="stylesheet" href="vendor/avatars.css" />
 <style>
   @font-face { font-family: "Inter"; font-weight: 400; src: url("vendor/fonts/inter-400.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-weight: 600; src: url("vendor/fonts/inter-600.woff2") format("woff2"); }
@@ -19,9 +17,9 @@
 
   /* The kinds of lines: a label and a line from a generated file. */
   .lines { position: absolute; left: 120px; top: 290px; width: 1240px; display: flex; flex-direction: column; gap: 20px; }
-  .lrow { display: flex; flex-direction: column; gap: 8px; padding: 16px 30px 18px; border-radius: 18px; background: rgba(30, 41, 59, 0.75); border: 2px solid var(--line); }
-  .lk { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 700; color: var(--mint); text-transform: uppercase; letter-spacing: 0.1em; }
-  .lk i { width: 11px; height: 11px; border-radius: 3px; background: var(--teal); display: block; }
+  .lrow { display: flex; flex-direction: column; gap: 8px; padding: 16px 30px 18px; border-radius: 18px; background: rgba(30, 41, 59, 0.75); border: 2px solid var(--av-color-border); }
+  .lk { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 700; color: var(--av-color-accent-soft); text-transform: uppercase; letter-spacing: 0.1em; }
+  .lk i { width: 11px; height: 11px; border-radius: 3px; background: var(--av-color-accent); display: block; }
   .lv { font-family: "JetBrains Mono", monospace; font-size: 30px; color: #fff; white-space: pre; }
   .mk { border-radius: 6px; padding: 0 2px; margin: 0 -2px; }
 </style>

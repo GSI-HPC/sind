@@ -1,0 +1,11 @@
+{
+  "cast": { "host": { "avatar": "sindy", "look": "hoodie" } },
+  "theme": "midnight",
+  "format": "landscape-1080p",
+  "brand": "brand/brand.json",
+  "lexicons": ["en-us/core", "en-us/hpc", "./lexicon.json"],
+  "icons": ["core", "tech"],
+  "grounding": { "sources": ["../docs/content"], "embed": "{{< video \"{id}\" >}}" },
+  "checks": ["checks/course.mjs"],
+  "publish": { "static": "../docs/static/videos", "data": "../docs/data/videos" }
+}
