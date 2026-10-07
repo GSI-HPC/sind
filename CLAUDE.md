@@ -68,14 +68,16 @@ flags and output samples, config schema, labels, versions. `next` publishes a pr
 docs site; `main` publishes the release docs. `.github/workflows/docs.yml` builds both
 into one Pages artifact (`main` at `/`, `next` at `/next/`).
 
-Guides can embed a video episode with `{{< video "<id>" >}}`. Episodes live in
-`video/episodes/<id>/` (see `video/README.md`); the docs workflow renders them, so never
+Guides can embed a video episode with `{{< video "<id>" >}}`. `video/` is a project of
+the [avatars](https://github.com/dennisklein/avatars) library (see `video/README.md`)
+with the episodes in `video/episodes/<id>/`; the docs workflow renders them, so never
 commit rendered files. When a guide with an episode changes, check the episode
-(`npm run episode -- check <id>`) and update it in the same PR. The video course pages
-(`docs/content/course/`) copy commands and output from the reference pages; when those
-change, update the course pages and their episodes too.
-`.claude/skills/sindy-episode` covers making and updating episodes,
-`.claude/skills/sindy-voice` their narration.
+(`npx avatars check <id>` in `video/`) and update it in the same PR. The video course
+pages (`docs/content/course/`) copy commands and output from the reference pages; when
+those change, update the course pages and their episodes too (`video/checks/course.mjs`
+warns about stale copies). `.claude/skills/sindy-episode` has sind's series and
+conventions; the library's `avatars-episode` and `avatars-voice` skills (the plugin
+that `.claude/settings.json` enables) cover making, voicing and checking episodes.
 
 ## Commits
 

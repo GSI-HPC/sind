@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "avatars": {
+      "source": { "source": "github", "repo": "dennisklein/avatars", "ref": "v0.1.0" }
+    }
+  },
+  "enabledPlugins": {
+    "avatars@avatars": true
+  }
+}
