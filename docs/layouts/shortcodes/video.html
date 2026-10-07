@@ -1,28 +1,84 @@
 {{- /*
-  Embed a Sindy video episode: {{< video "quickstart" >}}
+  Play a published avatars episode: {{< video "quickstart" >}}
 
-  The docs workflow renders the episode (video/tools/episode.mjs ci) into
-  static/videos/<id>.{webm,jpg,vtt} and data/videos/<id>.json before building.
-  The video is AV1 with Opus audio in WebM, free codecs that browsers decode
-  without extra packages; a browser that cannot decode AV1 (Safari without
-  an AV1 hardware decoder) gets a note with a download link instead of a
-  player that never starts. Without those files (e.g. a local build without
-  the video pipeline), the shortcode renders nothing.
+  `avatars publish` and `avatars ci` write the episode's manifest to
+  data/videos/<id>.json and its video, poster and WebVTT captions to
+  static/videos/<id>.{webm,jpg,vtt}. The video is AV1 with Opus audio in
+  WebM, free codecs that browsers decode without extra packages; a browser
+  that cannot decode AV1 (Safari without an AV1 hardware decoder) gets a note
+  with a download link instead of a player that never starts. Until the
+  manifest and the video both exist, as in a local build without renders,
+  the shortcode renders nothing.
+
+  Site params, all optional (defaults shown; README.md explains them):
+
+    [params.avatars]
+      data = "videos"        # data key of the manifests; "/" nests (data/a/b/)
+      static = "videos"      # path of the media under staticDir and on the site
+      staticDir = "static"   # the site directory that holds the static files
+      stylesheet = true      # link avatars/video.css once per page
+    [params.avatars.captions]
+      lang = "en"
+      label = "English"
 */ -}}
 {{- $id := .Get 0 -}}
-{{- $meta := index (hugo.Data.videos | default dict) $id -}}
-{{- if and $meta (fileExists (printf "static/videos/%s.webm" $id)) -}}
-{{- $base := printf "videos/%s" $id -}}
-<figure class="sind-video" id="video-{{ $id }}">
-  <video controls preload="none" playsinline poster="{{ printf "%s.jpg" $base | relURL }}" aria-label="{{ $meta.title }}">
+{{- if not $id }}{{ errorf "the video shortcode needs an episode id: %s" .Position }}{{ end -}}
+{{- $p := site.Params.avatars | default dict -}}
+{{- $captions := $p.captions | default dict -}}
+{{- /* hugo.Data replaced site.Data in Hugo 0.156.0. */ -}}
+{{- $data := dict -}}
+{{- if ge hugo.Version "0.156.0" }}{{ $data = hugo.Data }}{{ else }}{{ $data = site.Data }}{{ end -}}
+{{- range split (strings.Trim ($p.data | default "videos") "/") "/" }}{{ $data = index ($data | default dict) . }}{{ end -}}
+{{- $meta := index ($data | default dict) $id -}}
+{{- $static := strings.Trim ($p.static | default "videos") "/" -}}
+{{- $dir := path.Join ($p.staticDir | default "static") $static -}}
+{{- if and $meta (fileExists (path.Join $dir (printf "%s.webm" $id))) -}}
+{{- $base := path.Join $static $id -}}
+{{- $poster := path.Join $dir (printf "%s.jpg" $id) -}}
+{{- $size := false -}}
+{{- if fileExists $poster }}{{ $size = images.Config $poster }}{{ end -}}
+{{- $presenter := $meta.presenter | default dict -}}
+{{- $by := $presenter.disclosure | default $presenter.name -}}
+
+{{- /* The stylesheet and the script (chapter buttons, the note where AV1
+       cannot play), before the first video of a page. */ -}}
+{{- if not (.Page.Store.Get "avatarsVideo") }}
+{{- .Page.Store.Set "avatarsVideo" true }}
+{{- if or (not (isset $p "stylesheet")) $p.stylesheet }}
+{{- with resources.Get "avatars/video.css" }}
+{{- $css := . | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+{{- else }}
+{{- errorf "the video shortcode: assets/avatars/video.css is missing; copy or mount it, or set params.avatars.stylesheet = false" }}
+{{- end }}
+{{- end }}
+<script>
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest(".av-video-chapters button");
+    if (!b) return;
+    var v = b.closest(".av-video").querySelector("video");
+    v.currentTime = Number(b.dataset.t);
+    var played = v.play();
+    if (played) played.catch(function () {});
+  });
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".av-video").forEach(function (f) {
+      var source = f.querySelector("source");
+      if (!f.querySelector("video").canPlayType(source.type)) f.querySelector(".av-video-unsupported").hidden = false;
+    });
+  });
+</script>
+{{- end }}
+<figure class="av-video" id="video-{{ $id }}">
+  <video controls preload="none" playsinline{{ with $size }} poster="{{ printf "%s.jpg" $base | relURL }}" width="{{ .Width }}" height="{{ .Height }}"{{ end }} aria-label="{{ $meta.title }}">
     <source src="{{ printf "%s.webm" $base | relURL }}" type='video/webm; codecs="av01.0.08M.08, opus"'>
-    <track kind="captions" src="{{ printf "%s.vtt" $base | relURL }}" srclang="en" label="English" default>
+    <track kind="captions" src="{{ printf "%s.vtt" $base | relURL }}" srclang="{{ $captions.lang | default "en" }}" label="{{ $captions.label | default "English" }}" default>
   </video>
-  <p class="sind-video-unsupported" hidden>This browser cannot play AV1 video, which Chrome, Edge and Firefox can. <a href="{{ printf "%s.webm" $base | relURL }}" download>Download the video</a> to watch it in another player.</p>
+  <p class="av-video-unsupported" hidden>This browser cannot play AV1 video, which Chrome, Edge and Firefox can. <a href="{{ printf "%s.webm" $base | relURL }}" download>Download the video</a> to watch it in another player.</p>
   <figcaption>
-    <div class="sind-video-title"><strong>{{ $meta.title }}</strong><span>{{ $meta.length }} · presented by Sindy, an AI-voiced virtual presenter</span></div>
+    <div class="av-video-title"><strong>{{ $meta.title }}</strong><span>{{ $meta.length }}{{ with $by }} · {{ . }}{{ end }}</span></div>
     {{- with $meta.chapters }}
-    <ol class="sind-video-chapters">
+    <ol class="av-video-chapters">
       {{- range . }}
       <li><button type="button" data-t="{{ .start }}">{{ .time }}</button>{{ .title }}</li>
       {{- end }}
@@ -30,22 +86,4 @@
     {{- end }}
   </figcaption>
 </figure>
-{{- if not (.Page.Store.Get "sindVideoScript") }}
-{{- .Page.Store.Set "sindVideoScript" true }}
-<script>
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest(".sind-video-chapters button");
-    if (!b) return;
-    var v = b.closest(".sind-video").querySelector("video");
-    v.currentTime = Number(b.dataset.t);
-    v.play();
-  });
-  document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll(".sind-video").forEach(function (f) {
-      var source = f.querySelector("source");
-      if (!f.querySelector("video").canPlayType(source.type)) f.querySelector(".sind-video-unsupported").hidden = false;
-    });
-  });
-</script>
-{{- end }}
 {{- end -}}

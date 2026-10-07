@@ -1,0 +1,95 @@
+/* SPDX-FileCopyrightText: 2026 Dennis Klein <d.klein@gsi.de> */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* The player of the video shortcode (layouts/shortcodes/video.html).
+   Colours are custom properties whose fallbacks derive from the text colour,
+   so the player suits light and dark themes as it is; a site sets them on
+   .av-video or :root to follow its own palette:
+
+     --av-video-accent   chapter buttons            (default: the text colour)
+     --av-video-border   the outline of the figure
+     --av-video-bg       the caption area
+     --av-video-muted    length and presenter line
+     --av-video-screen   the player before the poster loads (default: black)
+     --av-video-radius   corner radius              (default: 12px) */
+
+.av-video {
+  margin: 1.25rem 0 2rem;
+  border: 1px solid var(--av-video-border, color-mix(in srgb, currentColor 20%, transparent));
+  border-radius: var(--av-video-radius, 12px);
+  overflow: hidden;
+  background: var(--av-video-bg, color-mix(in srgb, currentColor 5%, transparent));
+}
+
+.av-video video {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* A portrait format stays within the window, pillarboxed. */
+  max-height: 85vh;
+  background: var(--av-video-screen, #000);
+}
+
+/* With width and height (from the poster), the browser keeps their ratio. */
+.av-video video:not([width]) {
+  aspect-ratio: 16 / 9;
+}
+
+.av-video figcaption {
+  padding: 0.75rem 1rem 0.9rem;
+}
+
+/* Shown instead of playing where the browser cannot decode AV1. */
+.av-video-unsupported {
+  margin: 0;
+  padding: 0.75rem 1rem 0;
+  font-size: 0.9rem;
+}
+
+.av-video-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+}
+
+.av-video-title span {
+  color: var(--av-video-muted, color-mix(in srgb, currentColor 70%, transparent));
+  font-size: 0.875rem;
+}
+
+/* Two classes, to win over a theme's list styles. */
+.av-video .av-video-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.av-video .av-video-chapters li {
+  margin: 0;
+}
+
+.av-video .av-video-chapters button {
+  margin-right: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--av-video-accent, currentColor) 60%, transparent);
+  border-radius: 4px;
+  background: none;
+  color: var(--av-video-accent, currentColor);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.av-video .av-video-chapters button:hover {
+  background: color-mix(in srgb, var(--av-video-accent, currentColor) 12%, transparent);
+}
+
+.av-video .av-video-chapters button:focus-visible {
+  outline: 2px solid var(--av-video-accent, currentColor);
+  outline-offset: 2px;
+}
