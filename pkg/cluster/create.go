@@ -58,23 +58,59 @@ func pullImages(ctx context.Context, client *docker.Client, images []string) err
 	return g.Wait()
 }
 
-// imagePull is the --pull of a Create: the steps that run an image wait for
-// it, the others run alongside.
+// missingImages returns the images the daemon does not have, in order.
+func missingImages(ctx context.Context, client *docker.Client, images []string) ([]string, error) {
+	local := make([]bool, len(images))
+	g, gctx := errgroup.WithContext(ctx)
+	for i, image := range images {
+		g.Go(func() error {
+			exists, err := client.ImageExists(gctx, image)
+			if err != nil {
+				return fmt.Errorf("inspecting image %s: %w", image, err)
+			}
+			local[i] = exists
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	var missing []string
+	for i, image := range images {
+		if !local[i] {
+			missing = append(missing, image)
+		}
+	}
+	return missing, nil
+}
+
+// imagePull is the image pull of a Create: the steps that run an image wait
+// for it, the others run alongside.
 type imagePull struct {
 	done chan struct{}
 	err  error
 }
 
-// startPull pulls images in g. Without images the pull is done at once.
-func startPull(ctx context.Context, g *errgroup.Group, client *docker.Client, images []string) *imagePull {
+// startPull pulls images in g: all of them with all (--pull), else those
+// the daemon does not have. Pulling the missing images up front keeps the
+// pulls out of the node containers' docker create, where each would hold
+// one of the client's docker call slots for as long as it pulls, and so
+// keep the readiness probes of nodes that have started from running.
+// Without images the pull is done at once.
+func startPull(ctx context.Context, g *errgroup.Group, client *docker.Client, images []string, all bool) *imagePull {
 	p := &imagePull{done: make(chan struct{})}
 	if len(images) == 0 {
 		close(p.done)
 		return p
 	}
 	g.Go(func() error {
-		p.err = pullImages(ctx, client, images)
-		close(p.done)
+		defer close(p.done)
+		if !all {
+			images, p.err = missingImages(ctx, client, images)
+		}
+		if p.err == nil && len(images) > 0 {
+			p.err = pullImages(ctx, client, images)
+		}
 		return p.err
 	})
 	return p
@@ -168,16 +204,17 @@ type nodeResult struct {
 //	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┤
 //	├ DetectCVMFS (storage.cvmfs only) ─────────────────┼→ setupNodes
 //	├ CheckNsdelegate ──────────────────────────────────┤
-//	└ pullImages (cfg.Pull only) ───────────────────────┘
+//	└ pullImages (missing images; all with cfg.Pull) ───┘
 //	                        │
 //	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only)
 //	                        │
 //	                    *Cluster
 //
-// With cfg.Pull, each distinct image is pulled once, concurrently, and the
-// steps that run one (the helpers of createResources, the Slurm version,
-// DetectCVMFS, CheckNsdelegate) wait for the pull; nothing is created with
-// --pull always. A failed check rolls back what the other branches have
+// Each distinct image the daemon does not have, or with cfg.Pull each
+// distinct image, is pulled once, concurrently, and the steps that run one
+// (the helpers of createResources, the Slurm version, DetectCVMFS,
+// CheckNsdelegate) wait for the pull; nothing is created with --pull
+// always, and no node container's docker create pulls (see startPull). A failed check rolls back what the other branches have
 // created by then; no node container exists yet.
 //
 // An unmanaged cluster (managed: false on the controller) gets the same
@@ -239,11 +276,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	var dnsIP, sshPubKey, slurmVersion string
 	prepGroup, prepCtx := errgroup.WithContext(ctx)
-	var images []string
-	if cfg.Pull {
-		images = clusterImages(cfg)
-	}
-	pull := startPull(prepCtx, prepGroup, client, images)
+	pull := startPull(prepCtx, prepGroup, client, clusterImages(cfg), cfg.Pull)
 
 	// Branch A: preflight → createResources, which connects the SSH relay
 	// to the cluster network. Serialised because createResources only makes

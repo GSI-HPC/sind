@@ -39,6 +39,9 @@ type DockerMonitor struct {
 	containerPrefix string
 }
 
+// maxDockerEventLine is the longest docker events line DockerMonitor reads.
+const maxDockerEventLine = 16 << 20
+
 // NewDockerMonitor creates a monitor for the given cluster. The container
 // prefix is used to extract short node names from full container names.
 func NewDockerMonitor(containerPrefix string) *DockerMonitor {
@@ -54,6 +57,11 @@ func NewDockerMonitor(containerPrefix string) *DockerMonitor {
 func (m *DockerMonitor) Run(ctx context.Context, r io.Reader, ch chan<- Event) error {
 	log := sindlog.From(ctx)
 	scanner := bufio.NewScanner(r)
+	// An event line carries every label of the container, and the
+	// sind.users and sind.groups labels grow with the cluster's users: a
+	// few thousand users exceed bufio's default limit of 64 KiB, which
+	// would end the monitor at a node's first event.
+	scanner.Buffer(make([]byte, 0, 64*1024), maxDockerEventLine)
 
 	for scanner.Scan() {
 		var de dockerEvent

@@ -42,7 +42,7 @@ A cluster without workers gets the controller's image and 1 CPU, `512m` memory a
 
 Without `--image`, new workers run the image the newest worker (or the controller) runs, by its ID: the tag it was created from may since point to another image, even another Slurm release. `--pull` therefore needs `--image`.
 
-With `--image`, sind runs `slurmctld -V` in the image, after pulling it with `--pull`, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.8`.
+With `--image`, sind pulls the image once if the daemon does not have it (with `--pull` in any case), runs `slurmctld -V` in it, and refuses managed workers whose Slurm version is not the cluster's: slurmd must not be newer than slurmctld. To add workers from a moved tag, name the cluster's release, for example `--image ghcr.io/gsi-hpc/sind-node:25.11.8`.
 
 Before it creates a worker container, sind checks that the Docker host still mounts cgroup2 with `nsdelegate`, in a throwaway container of the controller's image, as [`sind create cluster`]({{< relref "/usage/cluster-lifecycle#preflight-checks" >}}) does, and fails with the commands that enable it otherwise.
 

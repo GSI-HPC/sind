@@ -212,25 +212,27 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // DeleteContainers force-removes the given containers in parallel
 // (docker rm -f). A container that is already gone is logged and treated as
 // success — the caller asked for the resource removed, not for a particular
-// state transition.
+// state transition. Like DeleteVolumes, it tries every container even when
+// one fails, so that one failure does not cancel the removals still waiting
+// for a docker call slot, and returns every failure.
 func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
 	log := sindlog.From(ctx)
-	g, gctx := errgroup.WithContext(ctx)
-	for _, c := range containers {
-		g.Go(func() error {
-			err := client.RemoveContainer(gctx, c.Name)
-			if err == nil {
-				return nil
+	errs := make([]error, len(containers))
+	var wg sync.WaitGroup
+	for i, c := range containers {
+		wg.Go(func() {
+			err := client.RemoveContainer(ctx, c.Name)
+			switch {
+			case err == nil:
+			case docker.IsNotFound(err):
+				log.WarnContext(ctx, "container already gone, skipping", "name", string(c.Name))
+			default:
+				errs[i] = fmt.Errorf("removing container %s: %w", c.Name, err)
 			}
-			if docker.IsNotFound(err) {
-				log.WarnContext(gctx, "container already gone, skipping",
-					"name", string(c.Name))
-				return nil
-			}
-			return fmt.Errorf("removing container %s: %w", c.Name, err)
 		})
 	}
-	return g.Wait()
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 // DeleteNetwork removes the cluster network. A network that is already gone

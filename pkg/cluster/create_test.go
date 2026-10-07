@@ -155,6 +155,11 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 			return mock.Result{}
 		}
 
+		// startPull: the daemon has the node images.
+		if isImageExists(args) {
+			return mock.Result{Stdout: "sha256:local\n"}
+		}
+
 		// PreflightCheck: exists checks → "not found"
 		if len(args) >= 2 && args[1] == "inspect" {
 			switch args[0] {
@@ -243,6 +248,12 @@ func happyOnCall(t *testing.T, exitErr *exec.ExitError, override func(args []str
 	}
 }
 
+// isImageExists reports whether args are those of docker.Client.ImageExists,
+// with which startPull finds the images the daemon does not have.
+func isImageExists(args []string) bool {
+	return len(args) == 5 && args[0] == "image" && args[1] == "inspect" && args[2] == "--format" && args[3] == "{{.Id}}"
+}
+
 // createCfg returns a minimal cluster config with 1 controller + 1 managed worker.
 func createCfg() *config.Cluster {
 	return &config.Cluster{
@@ -261,7 +272,7 @@ func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
 
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	require.NoError(t, createResources(t.Context(), client, mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, client, nil)))
+	require.NoError(t, createResources(t.Context(), client, mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, client, nil, false)))
 
 	var created []string
 	for _, c := range m.Calls {
@@ -278,7 +289,7 @@ func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	t.Helper()
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, docker.NewClient(&m), nil)))
+	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, docker.NewClient(&m), nil, false)))
 
 	var created []string
 	for _, c := range m.Calls {
@@ -1382,7 +1393,7 @@ func TestResolveInfra_SSHKeyError(t *testing.T) {
 	cfg := createCfg()
 
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, cfg, startPull(t.Context(), nil, client, nil))
+	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, cfg, startPull(t.Context(), nil, client, nil, false))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reading SSH public key")
@@ -1407,7 +1418,7 @@ func TestResolveInfra_SlurmVersionError(t *testing.T) {
 	client := docker.NewClient(&m)
 
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, createCfg(), startPull(t.Context(), nil, client, nil))
+	_, _, _, err := resolveInfra(t.Context(), client, meshMgr, createCfg(), startPull(t.Context(), nil, client, nil, false))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "discovering Slurm version")

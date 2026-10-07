@@ -122,11 +122,21 @@ func isManagedContainer(c docker.ContainerListEntry) bool {
 
 // removeNodesConf removes node definitions from sind-nodes.conf and
 // reconfigures slurmctld. With none of the nodes in the file, it changes
-// nothing and does not reconfigure.
+// nothing and does not reconfigure. When the update fails, it writes
+// currentConf back: the containers then stay, and a retry finds the nodes
+// in the file again and reconfigures slurmctld, which a file without them
+// would skip.
 func removeNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, currentConf string, shortNames []string) error {
 	updated := slurm.RemoveNodesFromConf(currentConf, shortNames)
 	if updated == currentConf {
 		return nil
 	}
-	return writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
+	err := writeNodesConfAndReconfigure(ctx, client, controllerName, updated)
+	if err == nil {
+		return nil
+	}
+	if rerr := client.ReplaceFile(context.WithoutCancel(ctx), controllerName, slurm.NodesConfPath, currentConf); rerr != nil {
+		return errors.Join(err, fmt.Errorf("restoring sind-nodes.conf: %w", rerr))
+	}
+	return err
 }

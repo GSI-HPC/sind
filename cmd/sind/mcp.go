@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
 	"strconv"
 	"strings"
 
@@ -216,7 +217,37 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 	host.DefValue = mcpStreamHost
 	_ = host.Value.Set(mcpStreamHost)
 	host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
+	withMCPRealm(start)
+	withMCPRealm(stream)
+	noArgs(cmd)
 	return cmd
+}
+
+// withMCPRealm passes the root's --realm on to the sind processes a server
+// command runs for its tool calls, through SIND_REALM: each runs with the
+// call's own flags and this process's environment, so `sind --realm ci
+// mcp start` would otherwise serve the default realm.
+func withMCPRealm(cmd *cobra.Command) {
+	run := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Root().Flags().Changed("realm") {
+			realm, _ := cmd.Root().Flags().GetString("realm")
+			_ = os.Setenv("SIND_REALM", realm)
+		}
+		return run(cmd, args)
+	}
+}
+
+// noArgs makes the commands of ophis's tree that take no arguments refuse
+// them, as sind's own commands do (usageArgs then makes that a usage
+// error): ophis leaves Args unset, which accepts any.
+func noArgs(cmd *cobra.Command) {
+	if cmd.Args == nil && cmd.Runnable() && !cmd.HasSubCommands() {
+		cmd.Args = cobra.NoArgs
+	}
+	for _, sub := range cmd.Commands() {
+		noArgs(sub)
+	}
 }
 
 // withServerVersion makes a server command report sind's version to MCP

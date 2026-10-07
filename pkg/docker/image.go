@@ -22,6 +22,11 @@ func (c *Client) ImageLabels(ctx context.Context, image string) (Labels, bool, e
 	return c.labels(ctx, "image", "inspect", image, "--format", "{{json .Config.Labels}}")
 }
 
+// ImageExists reports whether the daemon has an image, without pulling it.
+func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
+	return c.exists(ctx, "image", "inspect", "--format", "{{.Id}}", image)
+}
+
 // PullImage pulls an image from its registry, also when a copy of it is
 // present.
 func (c *Client) PullImage(ctx context.Context, image string) error {

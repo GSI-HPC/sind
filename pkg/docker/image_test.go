@@ -56,6 +56,26 @@ func TestImageLabels_NotFound(t *testing.T) {
 	assert.Nil(t, labels)
 }
 
+func TestImageExists(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("sha256:abc\n", "", nil)
+	m.AddResult("", "Error: No such image: "+testImage+"\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", "Cannot connect to the Docker daemon\n", &exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	exists, err := c.ImageExists(t.Context(), testImage)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, []string{"image", "inspect", "--format", "{{.Id}}", testImage}, m.Calls[0].Args)
+
+	exists, err = c.ImageExists(t.Context(), testImage)
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	_, err = c.ImageExists(t.Context(), testImage)
+	require.ErrorContains(t, err, "Cannot connect to the Docker daemon")
+}
+
 func TestServerVersion(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("29.3.0\n", "", nil)

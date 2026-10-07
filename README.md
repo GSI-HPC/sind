@@ -16,10 +16,13 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 
 ## Features
 
-- **Multi-node, multi-cluster & multi-realm** — run controller, database, submitter, and worker nodes side by side, or spin up multiple clusters across isolated realms with shared networking
+- **Multi-node, multi-cluster & multi-realm** — run controller, database, REST API, submitter, and worker nodes side by side, or spin up multiple clusters across isolated realms with shared networking
 - **System containers** — full systemd-based nodes that emulate bare metal, compatible with Ansible, Chef, and other config management tools; [unmanaged clusters](https://gsi-hpc.github.io/sind/guides/unmanaged-cluster/) leave Slurm itself to them
 - **Designed for CI/CD** — runs on standard GitHub Actions runners with the runner's Docker daemon, no sudo or privileged containers; [sind-action](https://github.com/GSI-HPC/sind-action) sets up clusters in a single step
 - **Multiple Slurm versions** — [official node images](https://gsi-hpc.github.io/sind/container-images/building-images/#official-images) for the supported Slurm release lines (26.05 and 25.11) on linux/amd64 and linux/arm64, each with a full MPI stack, or bring your own image
+- **Job accounting, users and identity** — a [db node](https://gsi-hpc.github.io/sind/configuration/node-definitions/#database-node) runs MariaDB and slurmdbd; [users, groups and Slurm accounts](https://gsi-hpc.github.io/sind/guides/users/) with limits, and identity modes from local accounts to nss_slurm and auth/slurm
+- **REST API** — slurmrestd on an [api node](https://gsi-hpc.github.io/sind/guides/rest-api/) with JWT authentication (Slurm 26.05)
+- **CVMFS** — [mount `/cvmfs`](https://gsi-hpc.github.io/sind/guides/cvmfs/) read-only on every node, from the Docker host or a volume plugin
 - **Worker lifecycle** — dynamically add and remove worker nodes from running clusters
 - **Power cycle simulation** — shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios
 - **Minimal dependencies** — just Docker and a sind container image; usable as both a CLI tool and a Go library

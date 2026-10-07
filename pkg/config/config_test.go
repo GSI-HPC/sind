@@ -299,6 +299,56 @@ func TestValidate_DataStorage(t *testing.T) {
 	}
 }
 
+func TestValidate_DataMountPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		mountPath string
+		cluster   func(*Cluster)
+		wantErr   string
+	}{
+		{name: "default"},
+		{name: "own path", mountPath: "/scratch"},
+		{name: "config", mountPath: "/etc/slurm", wantErr: "storage.dataStorage.mountPath /etc/slurm is where the nodes mount the Slurm configuration"},
+		{name: "munge key", mountPath: "/etc/munge/", wantErr: "storage.dataStorage.mountPath /etc/munge/ is where the nodes mount the munge key"},
+		{name: "no munge with clientIds", mountPath: "/etc/munge", cluster: func(c *Cluster) {
+			c.Identity.Mode = IdentityClientIDs
+			c.Nodes = append(c.Nodes, Node{Role: RoleSubmitter})
+		}},
+		{name: "tmp", mountPath: "/tmp", wantErr: "is where the nodes mount a tmpfs"},
+		{name: "run", mountPath: "/run", wantErr: "is where the nodes mount a tmpfs"},
+		{name: "run lock", mountPath: "/run//lock", wantErr: "is where the nodes mount a tmpfs"},
+		{name: "home without users", mountPath: "/home"},
+		{name: "home with users", mountPath: "/home", cluster: func(c *Cluster) { c.Users = []User{{Name: "alice"}} },
+			wantErr: "storage.dataStorage.mountPath /home is where the nodes mount the users' home directories"},
+		{name: "cvmfs without storage.cvmfs", mountPath: "/cvmfs"},
+		{name: "cvmfs", mountPath: "/cvmfs", cluster: func(c *Cluster) { c.Storage.CVMFS = true }, wantErr: "is where the nodes mount CVMFS"},
+		{name: "state without a backup controller", mountPath: "/var/spool/slurmctld"},
+		{name: "state", mountPath: "/var/spool/slurmctld", cluster: func(c *Cluster) { c.Nodes[0].BackupController = true },
+			wantErr: "is where the nodes mount the controllers' shared state"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Cluster{
+				Kind:    "Cluster",
+				Name:    DefaultClusterName,
+				Nodes:   []Node{{Role: RoleController}, {Role: RoleWorker}},
+				Storage: Storage{DataStorage: DataStorage{MountPath: tt.mountPath}},
+			}
+			if tt.cluster != nil {
+				tt.cluster(cfg)
+			}
+			cfg.ApplyDefaults()
+			err := cfg.Validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
 func TestCheckCapabilities(t *testing.T) {
 	require.NoError(t, CheckCapabilities("capAdd", []string{"SYS_ADMIN", "ALL"}))
 	require.NoError(t, CheckCapabilities("capAdd", nil))

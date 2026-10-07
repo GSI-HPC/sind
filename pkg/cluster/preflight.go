@@ -27,6 +27,8 @@ var (
 	ErrUsernsRemap = errors.New("the Docker daemon runs with userns-remap")
 	// ErrCgroupV1 is a daemon that runs containers on cgroup v1.
 	ErrCgroupV1 = errors.New("the Docker daemon runs containers on cgroup v1")
+	// ErrDockerTooOld is a Docker Engine older than doctor.MinDockerMajor.
+	ErrDockerTooOld = errors.New("the Docker Engine is too old")
 	// ErrNoNsdelegate is a Docker host whose cgroup2 hierarchy is mounted
 	// without nsdelegate (CheckNsdelegate).
 	ErrNoNsdelegate = errors.New("the Docker host mounts cgroup2 without nsdelegate")
@@ -48,7 +50,11 @@ func CheckDaemon(ctx context.Context, client *docker.Client) error {
 // which Docker refuses on a daemon in rootless mode or with userns-remap,
 // and only at `docker start`: after the images are pulled and the
 // cluster's network and volumes created. A node's entrypoint and systemd
-// need cgroup v2; on cgroup v1 the node never becomes ready.
+// need cgroup v2; on cgroup v1 the node never becomes ready. Docker
+// Engines before doctor.MinDockerMajor know neither writable-cgroups nor
+// the gw-priority of the nodes' network endpoints, and refuse every node
+// at `docker create`. A version that does not parse passes, as `sind
+// doctor` reports it.
 func DaemonSupport(info *docker.DaemonInfo) error {
 	const need = "sind needs a rootful Docker daemon without userns-remap, because Docker refuses the writable cgroups of sind's nodes otherwise"
 	switch {
@@ -58,6 +64,9 @@ func DaemonSupport(info *docker.DaemonInfo) error {
 		return fmt.Errorf("%w; %s", ErrUsernsRemap, need)
 	case info.CgroupVersion != "" && info.CgroupVersion != "2":
 		return fmt.Errorf("%w; sind requires cgroup v2 (the unified hierarchy)", ErrCgroupV1)
+	}
+	if major, _, err := doctor.ParseVersion(info.ServerVersion); err == nil && major < doctor.MinDockerMajor {
+		return fmt.Errorf("%w: %s; sind requires Docker Engine %d.0 or later, for the writable cgroups and network options of its nodes", ErrDockerTooOld, info.ServerVersion, doctor.MinDockerMajor)
 	}
 	return nil
 }

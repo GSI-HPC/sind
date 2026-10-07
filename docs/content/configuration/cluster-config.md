@@ -329,7 +329,7 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `managed` is only valid for controller, db, api and worker nodes
 - With `managed: false` on the controller, no worker, db or api node may set `managed: true` and no `slurm` section may be set
 - `backupController` is only valid for controller nodes
-- The `slurmdbd` section requires a managed `db` node
+- The `slurmdbd` section requires a managed `db` node, and must not set `DbdHost`, `SlurmUser`, `StorageType`, `StorageHost`, `StorageLoc` or `StorageUser`: sind sets up the accounting database on the db node and points slurmdbd at it. An `AuthType` it sets must be the cluster's, `auth/slurm` with identity `clientIds` and `auth/munge` otherwise; with `clientIds`, an `AuthInfo` it sets must list `use_client_ids`
 - With a managed [`api` node]({{< relref "/configuration/node-definitions#api-node" >}}), an `AuthAltTypes` that the `main` or `slurmdbd` section sets must list `auth/jwt`
 - With `backupController`, `slurm.main` must not set `SlurmctldHost` (or its deprecated forms `ControlMachine`, `BackupController`, `BackupAddr`) or `StateSaveLocation`
 - `count` must not be negative; `0` means the default, 1
@@ -337,7 +337,7 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `capAdd`/`capDrop` values must be recognized Linux capability names (e.g. `SYS_ADMIN`, `NET_ADMIN`, `ALL`)
 - `devices` paths must be absolute (start with `/`)
 - `securityOpt` entries must name an option Docker knows, with a value: `label=`, `apparmor=`, `seccomp=`, `no-new-privileges` (value optional), `writable-cgroups=` or `systempaths=`
-- `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute and contain no comma
+- `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute, contain no comma and not be a path where the nodes already mount something: `/etc/slurm`, `/etc/munge` (except with identity `clientIds`), `/tmp`, `/run`, `/run/lock`, `/home` with `users`, `/cvmfs` with `storage.cvmfs`, or `/var/spool/slurmctld` with `backupController`
 - User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647, not 65534 or 65535, and unique, private groups included; a user's `group` and `groups` must be declared in `groups`, and `groups` must not repeat an entry or the primary `group`
 - `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`; an identity parameter that `slurm.main` sets must keep sind's value (see [Identity section](#identity-section))
 - `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; `limits` keys must be among the options in the [Accounts section](#accounts-section), with non-empty values; every account a user names must be declared, at most once in each of `accounts` and `coordinator`; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`

@@ -53,6 +53,14 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 		_ = start.Flags().Set("log-level", logLevel)
 	}
 
+	// Listen first: a stream that cannot have its port must not replace
+	// the token file of the stream that has it.
+	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return fmt.Errorf("listening: %w", err)
+	}
+	defer func() { _ = ln.Close() }()
+
 	token, tokenPath, err := mcpStreamToken()
 	if err != nil {
 		return err
@@ -63,10 +71,6 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 	}
 	defer stop()
 
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
-	if err != nil {
-		return fmt.Errorf("listening: %w", err)
-	}
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	served := make(chan struct{})
 	defer close(served)

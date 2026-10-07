@@ -146,6 +146,34 @@ func (d DataStorage) validate() error {
 	return nil
 }
 
+// validateDataMountPath checks that the data storage's mountPath is not a
+// path where every node already has a mount (see cluster.BuildRunArgs):
+// Docker refuses a container with two mounts at one path.
+func (c *Cluster) validateDataMountPath() error {
+	if c.Storage.DataStorage.MountPath == "" {
+		return nil
+	}
+	mountPath := filepath.Clean(c.Storage.DataStorage.MountPath)
+	for _, m := range []struct {
+		path, what string
+		used       bool
+	}{
+		{"/etc/slurm", "the Slurm configuration", true},
+		{"/etc/munge", "the munge key", c.Identity.Mode != IdentityClientIDs},
+		{"/tmp", "a tmpfs", true},
+		{"/run", "a tmpfs", true},
+		{"/run/lock", "a tmpfs", true},
+		{"/home", "the users' home directories", len(c.Users) > 0},
+		{"/cvmfs", "CVMFS", c.Storage.CVMFS},
+		{"/var/spool/slurmctld", "the controllers' shared state", c.HasBackupController()},
+	} {
+		if m.used && mountPath == m.path {
+			return fmt.Errorf("storage.dataStorage.mountPath %s is where the nodes mount %s", c.Storage.DataStorage.MountPath, m.what)
+		}
+	}
+	return nil
+}
+
 // Storage configures cluster storage options.
 type Storage struct {
 	DataStorage DataStorage `json:"dataStorage,omitempty"`
@@ -406,6 +434,9 @@ func (c *Cluster) Validate() error {
 	if err := c.Storage.DataStorage.validate(); err != nil {
 		return err
 	}
+	if err := c.validateDataMountPath(); err != nil {
+		return err
+	}
 
 	if err := validateUsers(c.Users, c.Groups); err != nil {
 		return err
@@ -417,6 +448,9 @@ func (c *Cluster) Validate() error {
 		return err
 	}
 	if err := c.validateAPI(); err != nil {
+		return err
+	}
+	if err := c.validateSlurmdbd(); err != nil {
 		return err
 	}
 

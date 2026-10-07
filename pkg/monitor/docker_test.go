@@ -47,6 +47,24 @@ func TestDockerMonitor_Run(t *testing.T) {
 	}
 }
 
+// TestDockerMonitor_LongLine checks a line beyond bufio's default limit:
+// the event of a node whose sind.users label lists thousands of users.
+func TestDockerMonitor_LongLine(t *testing.T) {
+	users := strings.Repeat("user:2001:2001,", 10000)
+	input := `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-worker-0","sind.users":"` + users + `"}},"time":1234567890}` + "\n"
+	require.Greater(t, len(input), 64*1024)
+	m := NewDockerMonitor("sind-dev-")
+	ch := make(chan Event, 10)
+
+	err := m.Run(t.Context(), strings.NewReader(input), ch)
+	require.NoError(t, err, "Run")
+	close(ch)
+
+	events := drainEvents(ch)
+	require.Len(t, events, 1)
+	assert.Equal(t, "worker-0", events[0].Node)
+}
+
 func TestDockerMonitor_DieDetail(t *testing.T) {
 	input := `{"Type":"container","Action":"die","Actor":{"Attributes":{"name":"sind-dev-controller","exitCode":"1"}},"time":1234567890}` + "\n"
 	m := NewDockerMonitor("sind-dev-")

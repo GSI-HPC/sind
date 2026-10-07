@@ -21,7 +21,7 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), sind offer
 
 ## Multi-node, multi-cluster & multi-realm
 
-Run controller, database, submitter, and worker nodes side by side — or spin up multiple clusters across isolated realms with shared networking.
+Run controller, database, REST API, submitter, and worker nodes side by side — or spin up multiple clusters across isolated realms with shared networking.
 
 <--->
 
@@ -70,5 +70,29 @@ Built-in [MCP](https://modelcontextprotocol.io/) server lets AI assistants manag
 Official node images for Slurm 26.05 and 25.11 on linux/amd64 and linux/arm64 — or bring your own.
 
 <--->
+
+## Job accounting
+
+A [db node]({{< relref "configuration/node-definitions#database-node" >}}) runs MariaDB and slurmdbd, so `sacct` and `sacctmgr` work as on a production cluster.
+
+{{< /columns >}}
+
+{{< columns >}}
+
+## Users and identity
+
+[Linux users, groups and Slurm accounts]({{< relref "guides/users" >}}) with limits, and identity modes from local accounts to nss_slurm and auth/slurm.
+
+<--->
+
+## REST API
+
+slurmrestd on an [api node]({{< relref "guides/rest-api" >}}) with JWT authentication, for portals, workflow engines and tests (Slurm 26.05).
+
+<--->
+
+## CVMFS
+
+[Mount `/cvmfs`]({{< relref "guides/cvmfs" >}}) read-only on every node, from the Docker host or a Docker volume plugin.
 
 {{< /columns >}}
