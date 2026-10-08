@@ -13,7 +13,7 @@
     { "id": "rf4", "text": "But a single container can join several networks at once, and talk to the containers on each." },
     { "id": "roles1", "text": "Back to sind. In every node container, systemd starts munge and sshd, plus the Slurm daemon that matches the node's role." },
     { "id": "roles2", "text": "Each cluster has one controller, which runs slurmctld, and at least one worker, which runs slurmd." },
-    { "id": "roles3", "text": "Two roles are optional: a db node, with MariaDB and slurmdbd for accounting, and a submitter, a node just for submitting jobs." },
+    { "id": "roles3", "text": "Three roles are optional: a db node, with MariaDB and slurmdbd for accounting, an API node for the REST API, and a submitter, a node just for submitting jobs." },
     { "id": "net1", "text": "Now the picture. The default cluster gets its own bridge network, sind default net. Its controller and worker talk over it by their short names." },
     { "id": "net2", "text": "Every node is also on a second network, the mesh. There's one per realm, a namespace that keeps sind setups apart, and the default realm is called sind." },
     { "id": "helpers", "text": "The mesh carries two helpers, sind DNS and the SSH relay. They arrive with your first cluster, and leave with the last." },

@@ -11,7 +11,7 @@
     { "id": "munge", "text": "And munge proves who sent each message, using a key all nodes share." },
     { "id": "acct", "text": "Optionally, slurmdbd records each job in a database, for accounting." },
     { "id": "map", "text": "In sind, every node is a container: the controller runs slurmctld, workers run slurmd, and an optional db node runs slurmdbd." },
-    { "id": "map2", "text": "An optional submitter is a job submission node, with the Slurm commands but usually no daemon." },
+    { "id": "map2", "text": "An optional submitter is a job submission node, and an optional API node runs slurmrestd, the REST API." },
     { "id": "take", "text": "So: slurmctld decides, slurmd runs the jobs, and munge vouches for every message." },
     { "id": "outro", "text": "Next up: episode one, Why Slurm in Docker. See you there!" }
   ]

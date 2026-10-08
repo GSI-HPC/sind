@@ -105,7 +105,7 @@
         { icon: "docker", title: "One container per node", text: "systemd inside: munge, sshd and Slurm", at: "roles1:container" },
         { icon: "server", title: "controller · exactly one", text: "runs slurmctld", at: "roles2:controller" },
         { icon: "nodes", title: "worker · one or more", text: "runs slurmd", at: "roles2:worker" },
-        { icon: "db", title: "db and submitter · optional", text: "MariaDB and slurmdbd for accounting · a node for submitting jobs", at: "roles3:optional" },
+        { icon: "db", title: "db, api and submitter · optional", text: "MariaDB and slurmdbd · slurmrestd · a node for submitting jobs", at: "roles3:optional" },
       ],
     })
     .diagram({
@@ -246,7 +246,7 @@
         { id: "take2", mood: "happy", cues: { records: "smug" } },
       ],
       bullets: [
-        { icon: "nodes", title: "One container per node", text: "controller, workers, optional db and submitter", at: "take:container" },
+        { icon: "nodes", title: "One container per node", text: "controller, workers, optional db, api and submitter", at: "take:container" },
         { icon: "network", title: "A network per cluster, a mesh per realm", text: "names from sind-dns, shells through sind-ssh", at: "take:mesh" },
         { icon: "terminal", title: "sind get shows every piece", text: "sind get nodes · networks · dns", at: "take2:get" },
       ],

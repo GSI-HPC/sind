@@ -10,7 +10,7 @@ Before you trust a tool with your Docker host, and long before you debug a clust
 
 ## In this episode
 
-- The four node roles, each one container with systemd inside: [Node Definitions]({{< relref "/configuration/node-definitions#node-roles" >}})
+- The five node roles, each one container with systemd inside: [Node Definitions]({{< relref "/configuration/node-definitions#node-roles" >}})
 - The cluster network and the realm's mesh: [Networking]({{< relref "/architecture/networking#cluster-network" >}})
 - Node names from `sind-dns`: [DNS]({{< relref "/architecture/networking#dns" >}})
 - Inspecting nodes, networks and DNS records: [Diagnostics]({{< relref "/usage/diagnostics" >}})

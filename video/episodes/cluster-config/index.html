@@ -114,6 +114,7 @@
     .code({
       label: "A full example",
       title: "A full example, continued",
+      wide: true,
       panels: [
         {
           file: "cluster.yaml, continued",
@@ -130,6 +131,7 @@
             "    memory: 1g",
             "    tmpSize: 512m",
             "  - role: db",
+            "  - role: api                    # slurmrestd, Slurm 26.05 images only",
             "  - role: submitter",
             "  - role: worker",
             "    count: 3",
@@ -144,8 +146,8 @@
       say: [{ id: "slurm" }, { id: "nodes", cues: { unmanaged: "smug" } }],
       reveal: [
         { lines: [1, 8], at: "slurm:slurm" },
-        { panel: 1, lines: [1, 7], at: "nodes:nodes" },
-        { panel: 1, lines: [8, 14], at: "nodes:three" },
+        { panel: 1, lines: [1, 8], at: "nodes:nodes" },
+        { panel: 1, lines: [9, 15], at: "nodes:three" },
       ],
       marks: [{ text: "    managed: false", at: "nodes:unmanaged" }],
     })

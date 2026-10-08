@@ -9,7 +9,7 @@
     { "id": "install", "text": "Install puts it into a bin folder in your home, so you don't need root. Then, run sind doctor." },
     { "id": "doctor", "text": "It looks at four things: your Docker Engine version, the daemon mode, where the daemon lives, and how cgroups are set up." },
     { "id": "needs", "text": "Anything missing comes with fix instructions. Docker Desktop and rootless Docker are not supported." },
-    { "id": "image", "text": "Last, the node image. Add the pull flag to sind create cluster for a fresh copy. Otherwise, Docker reuses the image it pulled for your first cluster." },
+    { "id": "image", "text": "Last, the node image. Add the pull flag to sind create cluster for a fresh copy. Otherwise, sind reuses the image it pulled for your first cluster." },
     { "id": "take", "text": "So: verify the download before you install it, let sind doctor check the host, and your first cluster brings the node image." },
     { "id": "outro", "text": "Next up: the quick start, your first cluster. See you there!" }
   ]

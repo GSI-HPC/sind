@@ -52,8 +52,8 @@ sind get clusters
 ```
 
 ```text
-NAME      NODES (S/C/D/W)   SLURM     STATUS
-default   2 (0/1/0/1)       26.05.4   running
+NAME      NODES (S/C/D/A/W)   SLURM     STATUS
+default   2 (0/1/0/0/1)       26.05.4   running
 ```
 
 ```bash
@@ -106,4 +106,4 @@ sind delete cluster default
 - [Quickstart]({{< relref "/getting-started/quickstart" >}}): the same path on one page, plus scaling up and named clusters
 - [Node Access]({{< relref "/usage/node-access" >}}): `sind enter`, `sind exec`, the data mount and your own `ssh` client
 - [Cluster Lifecycle]({{< relref "/usage/cluster-lifecycle" >}}): named clusters, config files, `--wait` and deleting every cluster
-- Installation, Quickstart, Node Access and Cluster Lifecycle each open with a short clip
+- Installation, Diagnostics, Node Access and Cluster Lifecycle each open with a short clip

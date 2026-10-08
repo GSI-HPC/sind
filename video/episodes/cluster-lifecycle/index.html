@@ -28,9 +28,9 @@
   // once more, which the page says is not an error.
   const tl = gsap.timeline({ paused: true });
   const getClusters = [
-    "NAME      NODES (S/C/D/W)   SLURM     STATUS",
-    "default   4 (1/1/0/2)       26.05.4   running",
-    "dev       4 (0/1/1/2)       25.11.8   running",
+    "NAME      NODES (S/C/D/A/W)   SLURM     STATUS",
+    "default   5 (1/1/0/1/2)       26.05.4   running",
+    "dev       4 (0/1/1/0/2)       25.11.8   running",
   ].join("\n");
   const rebuild = "sind create cluster --config - << 'EOF'\nkind: Cluster\nname: dev\nnodes:\n  - controller\n  - worker: 3\nEOF";
   // The session so far, already typed when a later terminal scene opens.
@@ -62,8 +62,8 @@
       ],
       steps: [
         ...history(2),
-        { mark: "NODES (S/C/D/W)", at: "list2:nodes#0", until: "list2:So" },
-        { mark: "(0/1/1/2)", at: "list2:database" },
+        { mark: "NODES (S/C/D/A/W)", at: "list2:nodes#0", until: "list2:So" },
+        { mark: "(0/1/1/0/2)", at: "list2:database" },
       ],
     })
     .terminal({

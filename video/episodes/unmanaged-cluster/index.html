@@ -58,7 +58,7 @@
         { icon: "docker", title: "Containers, networks, DNS, SSH access", text: "as in a managed cluster", at: "setup:containers" },
         { icon: "key", title: "munge key, munge running", text: "/etc/munge is read-only on every node", at: "setup:munge" },
         { icon: "job", title: "/etc/slurm: empty", text: "one volume, writable on the controllers", at: "notset:configuration" },
-        { icon: "server", title: "slurmctld and slurmd: not started", text: "nor MariaDB and slurmdbd on a db node", at: "notset:daemon" },
+        { icon: "server", title: "slurmctld and slurmd: not started", text: "nor MariaDB, slurmdbd or slurmrestd on db and api nodes", at: "notset:daemon" },
       ],
     })
     .terminal({

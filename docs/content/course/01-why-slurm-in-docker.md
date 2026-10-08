@@ -45,5 +45,5 @@ The controller, the compute nodes, the queue and munge, in one picture. The full
 
 - [Introduction]({{< relref "/introduction" >}}): what sind is and the features behind the pitch
 - [Design Overview]({{< relref "/architecture/overview" >}}): the operational model, container-per-node and the creation flow
-- [Node Definitions]({{< relref "/configuration/node-definitions#node-roles" >}}): the controller, db, submitter and worker roles
-- [Quickstart]({{< relref "/getting-started/quickstart" >}}) and [Installation]({{< relref "/getting-started/installation" >}}): both open with a short clip
+- [Node Definitions]({{< relref "/configuration/node-definitions#node-roles" >}}): the controller, db, api, submitter and worker roles
+- [Quickstart]({{< relref "/getting-started/quickstart" >}}) and [Installation]({{< relref "/getting-started/installation" >}}), which opens with a short clip

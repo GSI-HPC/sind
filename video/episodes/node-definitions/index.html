@@ -32,30 +32,34 @@
       kicker: "Configuration",
       title: "Shape your cluster",
       sub: "Roles, worker counts and per-node settings, in the nodes list.",
-      chips: ["4 roles", "Shorthand or full form"],
+      chips: ["5 roles", "Shorthand or full form"],
       nameTag: { name: "Sindy", role: "your sind guide" },
       say: { id: "why", mood: "neutral", cues: { picks: "happy" } },
     })
     .diagram({
-      chapter: "Four roles",
-      title: "Four roles",
+      chapter: "Five roles",
+      title: "Five roles",
       say: [{ id: "roles1" }, { id: "roles2", cues: { optional: "happy" } }],
-      grid: [2, 2],
-      nodeWidth: 440,
+      grid: [3, 2],
+      shot: "mini",
+      nodeWidth: 400,
       nodes: [
-        { id: "ctld", title: "controller", text: "slurmctld · exactly 1", icon: "server", pos: [0, 0], accent: true, at: "roles1:controller" },
-        { id: "worker", title: "worker", text: "slurmd · 1 or more", icon: "nodes", pos: [1, 0], at: "roles1:workers" },
+        { id: "ctld", title: "controller", text: "slurmctld · exactly 1", icon: "server", pos: [1, 0], accent: true, at: "roles1:controller" },
+        { id: "worker", title: "worker", text: "slurmd · 1 or more", icon: "nodes", pos: [1, 1], at: "roles1:workers" },
         { id: "db", title: "db", text: "mariadb, slurmdbd · 0–1", icon: "db", pos: [0, 1], at: "roles2:db" },
-        { id: "sub", title: "submitter", text: "clients only · 0–1", icon: "terminal", pos: [1, 1], at: "roles2:submitter" },
+        { id: "api", title: "api", text: "slurmrestd · 0–1", icon: "network", pos: [0, 0], at: "roles2:API#0" },
+        { id: "sub", title: "submitter", text: "clients only · 0–1", icon: "terminal", pos: [2, 1], at: "roles2:submitter" },
       ],
       edges: [
         { from: "ctld", to: "worker", label: "jobs", at: "roles1:slurmd" },
         { from: "ctld", to: "db", label: "accounting", at: "roles2:MariaDB" },
+        { from: "api", to: "ctld", label: "REST", at: "roles2:REST" },
         { from: "sub", to: "ctld", label: "sbatch", at: "roles2:submitting" },
       ],
       pulse: [
         { node: "db", at: "roles2:optional" },
-        { node: "sub", at: "roles2:optional+0.2" },
+        { node: "api", at: "roles2:optional+0.2" },
+        { node: "sub", at: "roles2:optional+0.4" },
       ],
     });
 
@@ -136,7 +140,7 @@
     title: "Takeaways",
     say: { id: "takeaway", cues: { privileges: "smug" } },
     bullets: [
-      { icon: "nodes", title: "One controller, one or more workers", text: "plus an optional db node and submitter", at: "takeaway:controller" },
+      { icon: "nodes", title: "One controller, one or more workers", text: "plus optional db, api and submitter nodes", at: "takeaway:controller" },
       { icon: "job", title: "Shorthand for role and count", text: "the full form for everything else", at: "takeaway:Shorthand" },
       { icon: "lock", title: "Privileges only where needed", text: "capAdd and devices on the nodes that need them", at: "takeaway:privileges" },
     ],

@@ -5,7 +5,7 @@
     {"id": "why", "text": "You want a fresh cluster for every test, and a clean machine afterwards. Which clusters are running, and how do you clean them up?"},
     {"id": "usecase", "text": "Say two clusters are running, and you want to rebuild one of them with a new layout."},
     {"id": "list", "text": "First, sind get clusters shows both, with their nodes, Slurm versions and status."},
-    {"id": "list2", "text": "The nodes column counts submitters, controllers, db nodes and workers. So dev has a database node."},
+    {"id": "list2", "text": "The nodes column counts submitters, controllers, db nodes, API nodes and workers. So dev has a database node."},
     {"id": "delete", "text": "Now, sind delete cluster dev removes that cluster: its containers, networks and volumes."},
     {"id": "create", "text": "Then create it again, with a new layout piped in: one controller and three workers."},
     {"id": "steps", "text": "sind sets up the network, DNS and SSH if needed, generates the munge key and Slurm configuration, and starts all nodes in parallel."},

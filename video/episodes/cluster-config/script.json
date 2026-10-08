@@ -10,7 +10,7 @@
     { "id": "users", "text": "The groups, users and accounts sections add Linux users and Slurm accounts." },
     { "id": "trust", "text": "Careful, though: a config is as trusted as a script. It can run any image and mount any host directory." },
     { "id": "slurm", "text": "The slurm section adds your own lines to the generated configuration." },
-    { "id": "nodes", "text": "And the nodes section lists the roles: a bigger controller, a db node, a submitter, three workers, and two unmanaged ones." },
+    { "id": "nodes", "text": "And the nodes section lists the roles: a bigger controller, a db node, an API node, a submitter, three workers, and two unmanaged ones." },
     { "id": "limits", "text": "Every node is a container with a CPU and memory limit. For a managed worker, Slurm is told exactly these numbers." },
     { "id": "memory", "text": "Memory covers the whole node: the jobs, its services and its temporary files. So raise it for jobs that need a lot." },
     { "id": "string", "text": "In the slurm section, a block of text is added to the matching file: here slurm.conf and the cgroup config." },

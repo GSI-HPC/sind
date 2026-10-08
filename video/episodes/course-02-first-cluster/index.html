@@ -118,7 +118,7 @@
         { ff: "⏩ fast-forward", after: 0.5, hold: 1.8 },
         { prompt: true, after: 0.9 },
         { cmd: "sind get clusters", at: "check:sind#1" },
-        { out: "NAME      NODES (S/C/D/W)   SLURM     STATUS\ndefault   2 (0/1/0/1)       26.05.4   running", at: "check:reports" },
+        { out: "NAME      NODES (S/C/D/A/W)   SLURM     STATUS\ndefault   2 (0/1/0/0/1)       26.05.4   running", at: "check:reports" },
         { mark: "running", at: "check:running", delay: -0.1, until: "nodes:sind" },
         { cmd: "sind get nodes", at: "nodes:sind" },
         {
