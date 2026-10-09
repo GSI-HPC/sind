@@ -5,9 +5,40 @@ package cluster
 import (
 	"context"
 	"errors"
+	"io"
 
+	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/go-clikit/progress"
 )
+
+// program names sind in the error a panic in the work of one of its pools
+// becomes, "sind panicked; this is a bug, please report it: ...", and in
+// front of the line that reports the panic, with or without a Bus.
+const program = "sind"
+
+// panicLogKey is the context key of the writer WithPanicLog names.
+type panicLogKey struct{}
+
+// WithPanicLog returns ctx with w as where the pools of the power commands
+// and of DeleteAll write the line and the stack of a panic in the work for
+// one node or cluster while ctx carries no progress Bus, as the command's
+// stderr: with a Bus, they write them to its PanicLog, which a display
+// shows above itself; with neither, to the process's standard error.
+func WithPanicLog(ctx context.Context, w io.Writer) context.Context {
+	return context.WithValue(ctx, panicLogKey{}, w)
+}
+
+// panicLog returns the fanout.MapOptions.PanicLog of a pool that runs
+// under ctx: nil, which is the Bus's PanicLog, when ctx carries a Bus, and
+// the writer WithPanicLog put in ctx otherwise; nil, the process's
+// standard error, without either.
+func panicLog(ctx context.Context) io.Writer {
+	if progress.BusFrom(ctx) != nil {
+		return nil
+	}
+	w, _ := ctx.Value(panicLogKey{}).(io.Writer)
+	return w
+}
 
 // stopped is the error of work that ended because the context it ran
 // under was canceled for another reason than its own failure: a sibling
@@ -69,3 +100,40 @@ func nodeTargets(ctx context.Context, nodes []RunConfig) ([]context.Context, []*
 	}
 	return startTargets(ctx, names, func(i int) string { return string(nodes[i].Role) })
 }
+
+// joinFailures returns the fanout.MapOptions.Summarize of a pool that
+// tries every item and returns the error of each that failed, as wrap
+// words it, joined in the order of the items as errors.Join joins them:
+// nil when none failed. Its progress class is canceled when every item
+// that failed ended canceled, as the end of the context ends them, and the
+// target's otherwise, as fanout.Failure's is; a class of the items' errors
+// does not decide it, since one of them is no more the whole's than
+// another.
+func joinFailures(wrap func(fanout.Failed) error) func(fanout.Summary) error {
+	return func(s fanout.Summary) error {
+		if len(s.Failed) == 0 {
+			return nil
+		}
+		errs := make([]error, len(s.Failed))
+		for i, f := range s.Failed {
+			errs[i] = wrap(f)
+		}
+		class := progress.ClassTarget
+		if s.Canceled {
+			class = progress.ClassCanceled
+		}
+		return poolFailure{error: errors.Join(errs...), class: class}
+	}
+}
+
+// poolFailure is the error of a pool some of whose items failed, as
+// joinFailures makes it: their errors, joined, and the pool's class.
+type poolFailure struct {
+	error
+	class progress.Class
+}
+
+func (e poolFailure) Unwrap() error { return e.error }
+
+// ProgressClass says why the pool failed as a whole.
+func (e poolFailure) ProgressClass() progress.Class { return e.class }

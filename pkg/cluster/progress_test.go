@@ -6,14 +6,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/progress/display"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -357,5 +361,229 @@ step nodes total=2 [fold]: ok
 step slurm total=2 [fold]: ok
   target worker-[1-2] role=worker: ok
     wait ready: ok
+`, withoutCalls(w.Events()))
+}
+
+// A power action is the step its verb names, with a target for each node,
+// named as a node argument names it, here in the cluster dev, and with its
+// role, under which its docker call runs. A node that fails does not stop
+// the others; the error names its container, as before the step.
+func TestPower_ReportsTheNodes(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "ps":
+			return mock.Result{Stdout: powerContainers()}
+		case args[0] == "stop" && args[1] == "sind-dev-worker-0":
+			return mock.Result{Err: errors.New("container already stopped")}
+		}
+		return mock.Result{}
+	}
+
+	err := PowerShutdown(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev", []string{"controller", "worker-0", "worker-1"})
+
+	require.Error(t, err)
+	assert.Equal(t, "stopping sind-dev-worker-0: container already stopped", err.Error())
+	assert.Equal(t, `call docker ps [hidden]: ok
+step stopping total=3 limit=8 [fold]: failed (target): stopping sind-dev-worker-0: container already stopped
+  target controller.dev role=controller: ok
+    call docker stop [hidden]: ok
+  target worker-0.dev role=worker: failed (target): container already stopped
+    call docker stop [hidden]: failed (target): container already stopped
+  target worker-1.dev role=worker: ok
+    call docker stop [hidden]: ok
+`, w.Finish())
+}
+
+// A node of the default cluster is named by its short name, and a node of
+// another cluster with its cluster too, so that a command that acts on
+// both tells them apart: the summary counts worker-0 and worker-0.dev as
+// two nodes.
+func TestPower_TellsTheClustersApart(t *testing.T) {
+	// The summary counts a command that ran a second or longer: each
+	// event is a second after the one before.
+	var clock atomic.Int64
+	summary, capture := &display.Summary{}, &progresstest.Capture{}
+	bus := progress.NewBus(progress.BusOptions{
+		Sinks: []progress.Sink{summary, capture},
+		Now:   func() time.Time { return time.Unix(clock.Add(1), 0) },
+	})
+	ctx, command := progress.Start(progress.WithBus(t.Context(), bus), progress.KindCommand, "power shutdown")
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "ps" && slices.Contains(args, "label="+LabelCluster+"=dev"):
+			return mock.Result{Stdout: powerContainers()}
+		case args[0] == "ps":
+			return mock.Result{Stdout: testutil.NDJSON(testutil.PsEntry{ID: "c4", Names: "sind-default-worker-0",
+				State: "running", Image: "img:1", Labels: "sind.cluster=default,sind.role=worker"})}
+		case args[0] == "stop" && args[1] == "sind-dev-worker-0":
+			return mock.Result{Err: errors.New("container already stopped")}
+		}
+		return mock.Result{}
+	}
+	client := docker.NewClient(&m)
+
+	require.NoError(t, PowerShutdown(ctx, client, mesh.DefaultRealm, config.DefaultClusterName, []string{"worker-0"}))
+	err := PowerShutdown(ctx, client, mesh.DefaultRealm, "dev", []string{"worker-0"})
+	command.End(err)
+
+	require.EqualError(t, err, "stopping sind-dev-worker-0: container already stopped")
+	bus.Close()
+	progresstest.Check(t, capture.Events())
+	assert.Equal(t, `command power shutdown: failed (target): stopping sind-dev-worker-0: container already stopped
+  step stopping total=1 limit=8 [fold]: failed (target): stopping sind-dev-worker-0: container already stopped
+    target worker-0.dev role=worker: failed (target): container already stopped
+  step stopping total=1 limit=8 [fold]: ok
+    target worker-0 role=worker: ok
+`, withoutCalls(capture.Events()))
+	assert.Contains(t, summary.Line(), ": 1 ok, 1 failed")
+}
+
+// The failures of the nodes are joined in the order of the nodes, each
+// naming its container, as errors.Join joined them before the step.
+func TestPower_JoinsTheFailures(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		switch args[0] {
+		case "ps":
+			return mock.Result{Stdout: powerContainers()}
+		case "pause":
+			return mock.Result{Err: fmt.Errorf("%s is not running", args[1])}
+		}
+		return mock.Result{}
+	}
+
+	err := PowerFreeze(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev", []string{"worker-1", "controller", "worker-0"})
+
+	require.Error(t, err)
+	assert.Equal(t, "pausing sind-dev-worker-1: sind-dev-worker-1 is not running\n"+
+		"pausing sind-dev-controller: sind-dev-controller is not running\n"+
+		"pausing sind-dev-worker-0: sind-dev-worker-0 is not running", err.Error())
+	assert.Equal(t, progress.ClassTarget, progress.Classify(err, nil))
+}
+
+// Once the context has ended no node is tried: each fails with the
+// context's error and ends canceled, and so does the step.
+func TestForEachContainer_Interrupted(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	targets := []powerTarget{
+		{container: "sind-dev-worker-0", node: "worker-0", role: "worker"},
+		{container: "sind-dev-worker-1", node: "worker-1", role: "worker"},
+	}
+
+	done, err := forEachContainer(ctx, targets, "stopping", func(context.Context, docker.ContainerName) error {
+		t.Error("a node was tried")
+		return nil
+	})
+
+	assert.Empty(t, done)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, "stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled", err.Error())
+	assert.Equal(t, progress.ClassCanceled, progress.Classify(err, nil))
+	assert.Equal(t, `step stopping total=2 limit=8 [fold]: canceled (canceled): stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled
+  target worker-[0-1] role=worker: canceled (canceled): context canceled
+`, w.Finish())
+}
+
+// A panic in the work for a node becomes that node's error, which names
+// sind whether a Bus is there or not, and the other nodes are done. The
+// line and the stack go to the Bus's panic log with a Bus, and to the
+// writer WithPanicLog names without one, the command's stderr.
+func TestForEachContainer_Panic(t *testing.T) {
+	targets := []powerTarget{
+		{container: "sind-dev-worker-0", node: "worker-0", role: "worker"},
+		{container: "sind-dev-worker-1", node: "worker-1", role: "worker"},
+	}
+	for _, withBus := range []bool{true, false} {
+		t.Run(fmt.Sprintf("a Bus: %v", withBus), func(t *testing.T) {
+			var busLog, ctxLog strings.Builder
+			ctx := WithPanicLog(t.Context(), &ctxLog)
+			if withBus {
+				// The Bus names no program: sind's pools name it.
+				bus := progress.NewBus(progress.BusOptions{PanicLog: &busLog})
+				defer bus.Close()
+				ctx = progress.WithBus(ctx, bus)
+			}
+
+			done, err := forEachContainer(ctx, targets, "stopping", func(_ context.Context, name docker.ContainerName) error {
+				if name == "sind-dev-worker-0" {
+					panic("boom")
+				}
+				return nil
+			})
+
+			assert.Equal(t, targets[1:], done)
+			assert.Equal(t, `stopping sind-dev-worker-0: sind panicked; this is a bug, please report it: "boom"`, err.Error())
+			_, isPanic := errors.AsType[*fanout.PanicError](err)
+			assert.True(t, isPanic, "the panic is in the error")
+			written, unused := &busLog, &ctxLog
+			if !withBus {
+				written, unused = &ctxLog, &busLog
+			}
+			assert.True(t, strings.HasPrefix(written.String(), `sind: panic while working on worker-0: "boom"`+"\ngoroutine "), written.String())
+			assert.Empty(t, unused.String())
+		})
+	}
+}
+
+// Once the context has ended no cluster is tried: each fails with the
+// context's error, worded as when each was tried then and failed at its
+// first lookup, and ends canceled, as the step does.
+func TestDeleteAll_Interrupted(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	f := &realmFake{t: t, clusters: map[string][]string{"dev": {"controller"}, "prod": {"controller"}}}
+	var m mock.Executor
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" && args[len(args)-1] == "label="+LabelCluster {
+			// The interrupt comes while DeleteAll finds the clusters.
+			cancel()
+		} else if args[0] == "ps" {
+			t.Errorf("a cluster was tried: %v", args)
+		}
+		return f.onCall(args, stdin)
+	}
+	c := docker.NewClient(&m)
+
+	err := DeleteAll(ctx, c, mesh.NewManager(c, mesh.DefaultRealm))
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, "deleting cluster dev: listing containers: context canceled\n"+
+		"deleting cluster prod: listing containers: context canceled", err.Error())
+	assert.Equal(t, progress.ClassCanceled, progress.Classify(err, nil))
+	w.Finish()
+	assert.Equal(t, `step clusters total=2 limit=4 [fold]: canceled (canceled): deleting cluster dev: listing containers: context canceled\ndeleting cluster prod: listing containers: context canceled
+  target dev,prod: canceled (canceled): context canceled
+`, withoutCalls(w.Events()))
+}
+
+// delete cluster --all deletes the clusters as the step "clusters", with a
+// target for each; one that fails does not stop the others, and the error
+// names it, as before the step.
+func TestDeleteAll_ReportsTheClusters(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	f := &realmFake{t: t,
+		clusters: map[string][]string{"dev": {"controller", "worker-0"}, "prod": {"controller"}, "test": {"controller"}},
+		fail: func(args []string) bool {
+			return args[0] == "rm" && args[3] == "sind-test-controller"
+		},
+	}
+	var m mock.Executor
+	m.OnCall = f.onCall
+	c := docker.NewClient(&m)
+
+	err := DeleteAll(ctx, c, mesh.NewManager(c, mesh.DefaultRealm))
+
+	require.Error(t, err)
+	assert.Equal(t, "deleting cluster test: removing container sind-test-controller: docker daemon unavailable", err.Error())
+	w.Finish()
+	assert.Equal(t, `step clusters total=3 limit=4 [fold]: failed (target): deleting cluster test: removing container sind-test-controller: docker daemon unavailable
+  target dev,prod: ok
+  target test: failed (target): removing container sind-{}-controller: docker daemon unavailable
 `, withoutCalls(w.Events()))
 }

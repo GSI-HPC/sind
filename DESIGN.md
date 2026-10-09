@@ -159,7 +159,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the log lines a progress display carries and for the progress theme |
 | `github.com/muesli/termenv` | The colour profiles lipgloss reports, which pick how many colours the progress theme draws in |
-| `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log (`progress`, `progress/display`, `progress/cliprogress`, v0.3.0; see Progress Display); escaping of the text sind prints from docker, containers and other clients (`termtext`): the final error line, `Warning:` lines, `get` table cells and `doctor` details |
+| `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log (`progress`, `progress/display`, `progress/cliprogress`, v0.3.0; see Progress Display); the pools of the power commands and `delete cluster --all` (`fanout`); escaping of the text sind prints from docker, containers and other clients (`termtext`): the final error line, `Warning:` lines, `get` table cells and `doctor` details |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands and the progress display |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
@@ -318,7 +318,7 @@ Rules:
 |------|-------|
 | `auto` | `tty` where stderr is a terminal, `TERM` is not `dumb` and stdout goes into no pipe or socket, whose reader (`less`, `grep`) writes to the same terminal; nothing elsewhere |
 | `tty` | The live tree: a few rows at the bottom of the terminal, redrawn as the work goes on, and a line above them for each step once it has finished; the counter's line on a terminal smaller than 40 columns or 8 rows |
-| `counter` | One line, redrawn as the work goes on, with how far each counted step under way has got and how long the command has run |
+| `counter` | One line, redrawn as the work goes on, with how far each counted step under way has got and how long the command has run: `stopping · 9/24 · 8 running · 7 queued · 0:07.3` |
 | `plain` | A line for each step that starts or ends, each wait with a limit as it starts, each target that fails, and every ten seconds for each counted step under way, after the time since the command started and with no escape codes; it needs no terminal |
 | `none` | Nothing |
 
@@ -338,6 +338,7 @@ Rules:
 - The wait `ready` (`probe.UntilReady`) is bounded by what is left until the context's deadline, the `--wait` limit, in whole seconds, and its message names the check that fails now, updated when that changes. Plain lines say when it starts, with its bound, and when it fails or is interrupted.
 - The `nodes` and `slurm` pools stay fail-fast errgroups with the same errors: a node stopped by a sibling's failure or an interrupt ends canceled with its own error as text (`endSpan`), not failed with `signal: killed`; when a db node fails, the nodes not started end canceled with the step.
 - The rollback of a failed `create cluster` or `create worker` is the step `rollback` (`startRollback`, and the removal of a mesh `EnsureMesh` made in `cmd/sind/create.go`), ended ok or with what it could not undo, which is a failure also after an interrupt (`rollbackFailure` classes it by its own error, not by `progressClass`), as the rollback runs on; the command's error and what it logs are the same as without it.
+- The power commands report the step their pool is named by, and `delete cluster --all` the step `clusters`, with a target for each node or cluster (see Power Control and Cluster Management); `delete cluster` and `delete worker` report no step, only their docker calls.
 - The wait for the realm lock is the wait `realm lock`, whose message names the holder of the daemon lock; the `Warning:` line stays (see Realm Advisory Locking).
 - MCP tool calls show no progress and write no events (see MCP Server).
 
@@ -422,7 +423,7 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 - Order: stops/removes containers → disconnects/removes networks → removes volumes
 - The last cluster of a realm takes the mesh with it; its nodes are then not removed from the mesh DNS and `known_hosts` first
 
-`sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure.
+`sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
 Example output:
 
@@ -637,6 +638,8 @@ sind power unfreeze NODES               # resume frozen node
 `docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
 
 A power command runs its Docker calls for the nodes of a cluster in parallel (at most 8 at a time), and handles the clusters of its nodes one after another; `reboot` and `cycle` take every node of a cluster down before they start any of them. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.
+
+The Docker calls of a cluster's nodes run on go-clikit's `fanout.Map` (`forEachContainer`), which a display shows as a step named by what the calls do, `stopping` (shutdown, reboot), `killing` (cut, cycle), `starting` (on, reboot, cycle), `pausing` (freeze) or `unpausing` (unfreeze), with a target for each node, named as a node argument names it (`worker-0` in the default cluster, `worker-0.dev` in another, so that a command that spans clusters tells their nodes apart, in its rows as in its summary), and with its role. Its `Summarize` (`joinFailures`) words each failure as before, `<verb> <container>: <error>`, joined in the order of the nodes, so that the error text and `errors.Is` stay as they were. Once the command is interrupted it starts no further node, and those left out fail with `context canceled`. A panic in the work for one node fails that node, `sind panicked; this is a bug, please report it: ...`, with a line that names the node and the stack on stderr, above a display (the Bus's panic log, or the writer `cluster.WithPanicLog` puts in the context, the command's stderr), and the other nodes finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
 `on`, `reboot` and `cycle` start the realm's mesh DNS and SSH relay first if they are stopped, start the nodes, and then point the started nodes' mesh DNS records at their current cluster network addresses: Docker releases a container's address when it stops and can give it another one on start, for example after `sind create worker` took the address of a node that was powered off. They warn about nodes created with a mesh DNS address the DNS container no longer has. Since they rewrite the realm's Corefile, they take the realm lock.
 

@@ -361,6 +361,40 @@ func TestProgressLeavesStderrAloneWithoutADisplay(t *testing.T) {
 	assert.Empty(t, c.shown(), "displays made")
 }
 
+// A panic in the work for a node fails that node, with the same report on
+// the command's stderr whether an event log, and with it a Bus, is written
+// or not: a line that names sind and the node, the stack, and the error
+// line, which names sind too.
+func TestAPanicInAPoolIsReportedAlikeWithAndWithoutABus(t *testing.T) {
+	onTerminals(t, nil)
+	const report = `sind: panic while working on worker-0: "boom in docker stop"` + "\ngoroutine "
+	const errLine = `ERRO stopping sind-default-worker-0: sind panicked; this is a bug, please report it: "boom in docker stop"` + "\n"
+	for _, tc := range []struct {
+		name  string
+		extra []string
+	}{
+		{"no Bus", []string{"--progress", "none"}},
+		{"an event log", []string{"--progress", "none", "--progress-log", filepath.Join(t.TempDir(), "events.jsonl")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+				if args[0] == "stop" {
+					panic("boom in docker stop")
+				}
+				return mock.Result{Stdout: `{"ID":"c1","Names":"sind-default-worker-0","State":"running"}` + "\n"}
+			}}
+			var stderr bytes.Buffer
+
+			code := run(withClient(t.Context(), docker.NewClient(m)), append(slices.Clone(tc.extra), "power", "shutdown", "worker-0"), &stderr)
+
+			assert.Equal(t, exitFailure, code)
+			assert.True(t, strings.HasPrefix(stderr.String(), report), stderr.String())
+			assert.True(t, strings.HasSuffix(stderr.String(), errLine), stderr.String())
+			assert.Equal(t, 1, strings.Count(stderr.String(), "panic while working on"), stderr.String())
+		})
+	}
+}
+
 // On a terminal the live tree is drawn: the command and how long it has
 // run, and the docker command it waits for once that has run for a
 // second. Once the command has failed the tree is gone, and what is left
@@ -386,8 +420,9 @@ HH:MM:SS.mmm ERRO listing containers: exit status 1: Cannot connect to the Docke
 }
 
 // A command that succeeds leaves no summary: the tree comes off the
-// terminal, and exit status 0 says the rest.
-func TestTheTreeLeavesNothingOnSuccess(t *testing.T) {
+// terminal but for the line of each step it finished, here power cut's
+// step "killing" with its node, and exit status 0 says the rest.
+func TestTheTreeLeavesOnlyItsStepsOnSuccess(t *testing.T) {
 	t.Setenv("TERM", "xterm")
 	c := fakeDisplays(t)
 	screen := &progresstest.Screen{Width: screenWidth}
@@ -405,8 +440,11 @@ func TestTheTreeLeavesNothingOnSuccess(t *testing.T) {
 	code := run(withClient(t.Context(), docker.NewClient(m)), []string{"power", "cut", "worker-0"}, screen)
 
 	assert.Equal(t, exitOK, code)
-	assert.Equal(t, []string{"power cut · 0:01.0\n  docker ps  1.0s\n", "power cut · 0:02.0\n  docker kill  1.0s\n"}, frames)
-	assert.Empty(t, screen.String())
+	assert.Equal(t, []string{
+		"power cut · 0:01.0\n  docker ps  1.0s\n",
+		"power cut · 0:02.0\n  killing  0/1 · 1 running\n    ▸ worker-0  1.0s  docker kill\n",
+	}, frames)
+	assert.Equal(t, "✓ killing  1.0s  1 ok\n", screen.String())
 }
 
 // An event log written to the terminal the tree is drawn on, as

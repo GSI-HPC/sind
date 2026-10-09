@@ -103,6 +103,32 @@ sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
 12:00:34.839 ERRO cluster dev not ready within 12s: waiting for worker-2: node sind-dev-worker-2 not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
 ```
 
+The `power` commands show a step named by what they do, with a target for each node, named as you name it in a node argument (`worker-0`, or `worker-0.dev` in the cluster `dev`): `stopping` (`shutdown`), `killing` (`cut`), `starting` (`on`), `pausing` (`freeze`) or `unpausing` (`unfreeze`); `reboot` shows `stopping` and then `starting`, and `cycle` shows `killing` and then `starting`. A `power reboot` of 24 workers, at most 8 at a time, while it stops them:
+
+```text
+$ sind power reboot worker-[0-23]
+power reboot · 0:07.3
+  stopping  9/24 · 8 running · 7 queued
+    ▸ worker-8  4.2s  docker stop
+    ▸ worker-9  4.1s  docker stop
+    ▸ worker-10  3.4s  docker stop
+    ▸ worker-12  1.2s  docker stop
+    ▸ worker-13  1.2s  docker stop
+    ▸ worker-14  1.2s  docker stop
+    … 2 more running
+    ✓ worker-[0-7,11]
+```
+
+and once it is done:
+
+```text
+$ sind power reboot worker-[0-23]
+✓ stopping  14s  24 ok
+✓ starting  2.2s  24 ok
+```
+
+`sind delete cluster --all` shows the step `clusters`, with a target for each cluster. `sind delete cluster` and `sind delete worker` show no steps, only the docker commands that take a second or longer.
+
 ## Choosing the display
 
 `--progress` chooses what sind shows, and `SIND_PROGRESS` does when the flag is not given:
@@ -111,7 +137,7 @@ sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
 |------|-------|
 | `auto` (default) | the live tree when standard error is a terminal, `TERM` is not `dumb` and standard output goes into no pipe; nothing otherwise |
 | `tty` | the live tree |
-| `counter` | one line, redrawn as the work goes on, with how far each step under way has got and how long the command has run |
+| `counter` | one line, redrawn as the work goes on, with how far each step under way has got and how long the command has run: `stopping · 9/24 · 8 running · 7 queued · 0:07.3` |
 | `plain` | plain lines, one for each thing worth one, for a log as much as a terminal (see [Plain lines](#plain-lines)) |
 | `none` | nothing |
 

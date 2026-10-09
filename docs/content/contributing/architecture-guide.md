@@ -58,7 +58,7 @@ pkg/docker/        Docker CLI wrapper
 
 pkg/cluster/       Cluster operations (orchestration)
   ├── create.go    Cluster creation flow
-  ├── delete.go    Cluster deletion
+  ├── delete.go    Cluster deletion; DeleteAll's pool of clusters (fanout.Map)
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
@@ -74,7 +74,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── cvmfs.go     CVMFS backend detection and mount arguments
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
-  ├── power.go     Power state operations
+  ├── power.go     Power state operations; the pool of each action (fanout.Map)
   ├── node.go      Node initialization and setup
   ├── setup.go     In-container node setup (nss_slurm, slurmrestd, users, SSH) in one docker exec
   ├── discovery.go Cluster/node discovery queries, VolumeType
@@ -84,7 +84,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── logs.go      Log command arg building
   ├── dns.go       Node DNS names and search domain
   ├── naming.go    Resource naming conventions
-  ├── progress.go  Progress span helpers of the pools (startStep, startTargets, nodeTargets, endSpan)
+  ├── progress.go  Progress span helpers of the pools (startStep, startTargets, nodeTargets, endSpan), joinFailures, WithPanicLog
   ├── rollback.go  The rollback step of a failed Create or WorkerAdd
   └── preflight.go Pre-creation validation
 
@@ -142,7 +142,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
 
 The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
-The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
+The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
 
 ## Adding a new CLI command
 
@@ -225,6 +225,7 @@ Work that takes a while reports what it does as progress spans of [go-clikit](ht
 - A step (`progress.KindStep`) is a phase of the command; a step with the `Fold` flag and a `Total` counts its targets (`KindTarget`: a node, an image). A wait (`KindWait`) can have a bound (`progress.Timeout`) and a message that says what it waits for; a call (`KindCall`) is one request, such as a docker command.
 - Announce every target of a counted step queued (`progress.Queued()`) before the first of them runs, then mark each running (`span.Run()`) when its work starts: a pool that starts each target in its own goroutine as it takes its place breaks the counts a display draws, and `progresstest.Check` fails it.
 - `pkg/cluster/progress.go` has the helpers of the pools written by hand: `startStep` starts a step, `startTargets` and `nodeTargets` announce its targets, and `endSpan` ends a span canceled (`stopped`) when a sibling's failure or an interrupt stopped its work, rather than failed with `signal: killed`.
+- A pool that tries every item and keeps going after a failure runs on go-clikit's `fanout.Map`, which announces its targets as `Check` requires, bounds them with `Limit`, and turns a panic in one item into that item's error (`sind panicked; this is a bug, please report it: ...`) with its stack in the Bus's panic log, or without a Bus where `cluster.WithPanicLog` says (`withStderr` sets the command's stderr). The power commands and `DeleteAll` pass `joinFailures` as its `Summarize`, which joins each item's error worded as before, so the error text and `errors.Is` do not change.
 - `cmd/sind` alone decides how the spans are shown: `withProgress` (`progress.go`) runs the command in a span of its own and makes the Bus through go-clikit's `cliprogress` package, with the display `--progress` asks for and the event log `--progress-log` names (which `cliprogress` opens privately), and tears them down before `run` prints the error line.
 - `pkg/` never writes to stdout or stderr: a display owns the bottom rows of the terminal, and only the writers `cmd/sind` hands out, cobra's streams, `stderrFrom(ctx)` and the logger, go above it.
 
