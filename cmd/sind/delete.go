@@ -28,7 +28,7 @@ func newDeleteClusterCommand() *cobra.Command {
 		Short:             "Delete a cluster",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			all, _ := cmd.Flags().GetBool("all")
 			if all {
 				if len(args) > 0 {
@@ -41,7 +41,7 @@ func newDeleteClusterCommand() *cobra.Command {
 				name = args[0]
 			}
 			return runDeleteCluster(cmd, name)
-		},
+		}),
 	}
 
 	cmd.Flags().Bool("all", false, "delete all clusters")

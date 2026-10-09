@@ -19,13 +19,13 @@ func newCreateWorkerCommand() *cobra.Command {
 		Short:             "Add worker nodes to a cluster",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			name := config.DefaultClusterName
 			if len(args) > 0 {
 				name = args[0]
 			}
 			return runCreateWorker(cmd, name)
-		},
+		}),
 	}
 
 	cmd.Flags().Int("count", 1, "number of nodes to add")
@@ -146,9 +146,9 @@ func newDeleteWorkerCommand() *cobra.Command {
 		Short:             "Remove worker nodes from a cluster",
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeNodeNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			return runDeleteWorker(cmd, strings.Join(args, " "))
-		},
+		}),
 	}
 }
 

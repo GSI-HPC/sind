@@ -54,9 +54,9 @@ func newPowerCommand() *cobra.Command {
 			Short:             c.short,
 			Args:              cobra.MinimumNArgs(1),
 			ValidArgsFunction: completeNodeNames,
-			RunE: func(cmd *cobra.Command, args []string) error {
+			RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 				return runPower(cmd, strings.Join(args, " "), fn, locked)
-			},
+			}),
 		})
 	}
 

@@ -89,8 +89,9 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 		},
 	}
 	mgr.HostDNS = true
+	stderr := stderrFrom(ctx)
 	mgr.OnWarning = func(msg string) {
-		_, _ = fmt.Fprintln(os.Stderr, "Warning:", termtext.EscapeLines(msg))
+		_, _ = fmt.Fprintln(stderr, "Warning:", termtext.EscapeLines(msg))
 	}
 	return mgr
 }

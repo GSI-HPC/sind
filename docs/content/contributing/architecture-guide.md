@@ -11,7 +11,7 @@ toc: true
 ```
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
-  ├── root.go      Root command, persistent --realm and -v flags, TraverseChildren
+  ├── root.go      Root command, persistent --realm, --progress, --progress-log and -v flags, TraverseChildren
   ├── context.go   Dependency injection via context
   ├── exitcode.go  Exit statuses, usage errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
@@ -20,6 +20,7 @@ cmd/sind/          CLI commands (cobra)
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
+  ├── progress.go  Progress of create, delete and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── worker.go    Worker create/delete commands
@@ -156,8 +157,9 @@ The `pkg/cmdexec` package provides the executor abstraction at the bottom of the
    ```
 
 5. **Implement the operation** in `pkg/cluster/` (not in `cmd/sind/`)
-6. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
-7. **Write tests** for both the CLI layer and the cluster operation
+6. **Show its progress** if it changes clusters and asks nothing: wrap `RunE` with `withProgress(...)`, and have the operation report its work as progress spans (see [Progress spans](#progress-spans))
+7. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
+8. **Write tests** for both the CLI layer and the cluster operation
 
 The CLI layer should be thin — argument parsing, flag handling, and output formatting. Business logic belongs in `pkg/cluster/`.
 
@@ -196,7 +198,7 @@ ctx = withMeshMgr(ctx, meshMgr)
 ctx = sindlog.With(ctx, logger)     // injected by PersistentPreRunE
 ```
 
-Commands retrieve them with `clientFrom(ctx)` and `meshMgrFrom(ctx, ...)`. The logger is injected automatically by the root command's `PersistentPreRunE` based on the `-v` flag count.
+Commands retrieve them with `clientFrom(ctx)` and `meshMgrFrom(ctx, ...)`. The logger is injected automatically by the root command's `PersistentPreRunE` based on the `-v` flag count; under a progress display, `withProgress` replaces it, and the stderr `withStderr` stored, with writers that go above the display.
 
 ### Structured logging
 
@@ -210,6 +212,15 @@ log.Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
 ```
 
 When no logger is in the context (library use without the CLI), `From` returns a no-op logger. In errgroup goroutines, use `gctx` (not the outer `ctx`) for log calls.
+
+### Progress spans
+
+Work that takes a while reports what it does as progress spans of [go-clikit](https://github.com/GSI-HPC/go-clikit)'s `progress` package, on the context: `progress.Start(ctx, kind, name, opts...)` returns the span's context, under which the spans of the work below it start, and the span, which the work ends with its error (`span.End(err)`). Without a Bus in the context, as for a library caller or a test that watches none, `Start` returns a nil span, and every method of a nil span does nothing, so the code needs no branch for it.
+
+- A step (`progress.KindStep`) is a phase of the command; a step with the `Fold` flag and a `Total` counts its targets (`KindTarget`: a node, an image). A wait (`KindWait`) can have a bound (`progress.Timeout`) and a message that says what it waits for; a call (`KindCall`) is one request, such as a docker command.
+- Announce every target of a counted step queued (`progress.Queued()`) before the first of them runs, then mark each running (`span.Run()`) when its work starts: a pool that starts each target in its own goroutine as it takes its place breaks the counts a display draws, and `progresstest.Check` fails it.
+- `cmd/sind` alone decides how the spans are shown: `withProgress` (`progress.go`) runs the command in a span of its own and makes the Bus through go-clikit's `cliprogress` package, with the display `--progress` asks for and the event log `--progress-log` names (which `cliprogress` opens privately), and tears them down before `run` prints the error line.
+- `pkg/` never writes to stdout or stderr: a display owns the bottom rows of the terminal, and only the writers `cmd/sind` hands out, cobra's streams, `stderrFrom(ctx)` and the logger, go above it.
 
 ### Resource naming
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
@@ -25,16 +26,31 @@ import (
 // daemon lock: the user may have to end the other one, and without -v
 // nothing else would show. The lock's other warnings go there too. What
 // they quote of the holder comes from another client and is escaped.
-func acquireRealmLock(ctx context.Context, realm, stateHome string) (func(), error) {
+//
+// The wait is a progress span too, "realm lock", from the first wait to
+// the moment the lock is taken or the command gives up, whose message
+// names the holder of the daemon lock once it is known.
+func acquireRealmLock(ctx context.Context, realm, stateHome string) (unlock func(), err error) {
 	stderr := stderrFrom(ctx)
+	var wait *progress.Span
+	defer func() { wait.End(err) }()
 	opts := state.LockOptions{
 		Client: clientFrom(ctx),
 		OnWait: func(holder *state.LockHolder) {
 			msg := fmt.Sprintf("Warning: waiting for another sind command in realm %q to finish", realm)
+			var who string
 			if holder != nil {
-				msg += ": " + termtext.EscapeLines(holder.String())
+				who = holder.String()
+				msg += ": " + termtext.EscapeLines(who)
 			}
 			_, _ = fmt.Fprintln(stderr, msg)
+			// LockRealm waits for the file lock, then for the daemon lock,
+			// on the goroutine that called it.
+			if wait == nil {
+				_, wait = progress.Start(ctx, progress.KindWait, "realm lock", progress.Message(who))
+			} else {
+				wait.Update(progress.Message(who))
+			}
 		},
 		OnWarning: func(msg string) {
 			_, _ = fmt.Fprintln(stderr, "Warning:", termtext.EscapeLines(msg))

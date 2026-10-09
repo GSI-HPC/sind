@@ -35,8 +35,9 @@ This covers:
 - the wrong number of arguments, or an argument that is not valid: `sind get cluster a b`, `sind get cluster Not_A_Name`
 - a node argument that does not parse, that names no node, or that names several nodes where one is needed: `sind power on 'worker-['`, `sind power on @compute`, `sind ssh 'worker-[0-1]'`
 - `sind exec` without `--` and a command, and `sind ssh` with a remote command that does not follow `--`: `sind ssh worker-0 hostname`
+- a `--progress` mode sind does not know, or one it cannot show, such as `tty` where standard error is not a terminal, and a `--progress-log` file it cannot use: `sind --progress tree get clusters`, `sind --progress tty create cluster 2>create.log` (see [Progress Display]({{< relref "/usage/progress" >}}))
 
-`SIND_REALM` and the config file are not part of the command line: an invalid one exits `1`.
+`SIND_REALM` and the config file are not part of the command line: an invalid one exits `1`. `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command: with a value sind cannot use, it shows no progress, or writes no event log, and says why in one line when it does not know the mode or cannot use the file.
 
 ## Commands that run a program
 
@@ -54,7 +55,7 @@ $ echo $?
 
 ## Interrupts
 
-The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A `--wait` limit of `sind create cluster` or `sind create worker` that runs out is not an interrupt: the command rolls back the same way and exits `1`. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish.
+The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A `--wait` limit of `sind create cluster` or `sind create worker` that runs out is not an interrupt: the command rolls back the same way and exits `1`. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish. On a terminal, the [progress display]({{< relref "/usage/progress" >}}) says `interrupting` while the cleanup runs, and the summary line it leaves says the command was `canceled`.
 
 ## MCP tools
 

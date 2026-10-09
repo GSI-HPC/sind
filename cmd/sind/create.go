@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -58,13 +59,13 @@ func newCreateClusterCommand() *cobra.Command {
 		Short:             "Create a Slurm cluster",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			var name string
 			if len(args) > 0 {
 				name = args[0]
 			}
 			return runCreateCluster(cmd, name, configFile)
-		},
+		}),
 	}
 
 	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
@@ -81,7 +82,14 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
+	// --config - may read what the user types at the terminal; the
+	// progress display is off it meanwhile.
+	resume := func() {}
+	if configFile == configStdin {
+		resume = progress.Suspend(cmd.Context())
+	}
 	cfg, err := loadConfig(cmd.InOrStdin(), cmd.ErrOrStderr(), configFile)
+	resume()
 	if err != nil {
 		return err
 	}
