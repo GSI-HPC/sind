@@ -4,9 +4,11 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 
@@ -769,6 +771,47 @@ func TestUntilReady_TerminalError(t *testing.T) {
 	assert.Len(t, m.Calls, 1)
 }
 
+// A wait that ends while a probe runs kills the probe's docker call, which
+// then fails with "signal: killed": the wait reports the probe that failed
+// before, not the killed call. A probe that tells the node will never be
+// ready still ends it with its error.
+func TestUntilReady_EndKeepsTheFailingProbe(t *testing.T) {
+	for _, tc := range []struct {
+		name, killed, want string
+	}{
+		{"killed", "", "node sind-dev-controller not ready: context canceled; last probe error: probe munge: munge not ready"},
+		{"terminal", inspectJSON("exited"), "node sind-dev-controller not ready: probe container: container sind-dev-controller is exited (exit code 0)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			inspects := 0
+			m := mock.Executor{OnCall: func([]string, string) mock.Result {
+				inspects++
+				if inspects == 1 {
+					return mock.Result{Stdout: inspectJSON("running")}
+				}
+				cancel()
+				if tc.killed == "" {
+					return mock.Result{Err: errors.New("signal: killed")}
+				}
+				return mock.Result{Stdout: tc.killed}
+			}}
+			probes := []Probe{
+				{Name: "container", Check: ContainerRunning},
+				{Name: "munge", Check: func(context.Context, *docker.Client, docker.ContainerName) error {
+					return errors.New("munge not ready")
+				}},
+			}
+
+			err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
+
+			require.Error(t, err)
+			assert.Equal(t, tc.want, err.Error())
+		})
+	}
+}
+
 func TestContainerRunning_OOMKilled(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(inspectJSONFull("exited", 137, true), "", nil)
@@ -1435,4 +1478,60 @@ func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
 	var te *TerminalError
 	require.ErrorAs(t, err, &te)
 	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled; last probe error: boom", err.Error())
+}
+
+// endsOnDemand is a wait whose deadline passes when end is called, not at
+// a time, so that a test ends it at the point it means to, however slow
+// the machine runs.
+type endsOnDemand struct {
+	context.Context
+	done chan struct{}
+	once sync.Once
+}
+
+func newEndsOnDemand(parent context.Context) *endsOnDemand {
+	return &endsOnDemand{Context: parent, done: make(chan struct{})}
+}
+
+func (c *endsOnDemand) Done() <-chan struct{} { return c.done }
+
+func (c *endsOnDemand) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (c *endsOnDemand) end() { c.once.Do(func() { close(c.done) }) }
+
+// hangsUntilEnd returns a probe that ends the wait ctx as it starts, and
+// runs until the wait has ended, as a docker call that hangs does, and
+// then fails as the killed call does.
+func hangsUntilEnd(ctx *endsOnDemand) Func {
+	return func(probeCtx context.Context, _ *docker.Client, _ docker.ContainerName) error {
+		ctx.end()
+		<-probeCtx.Done()
+		return fmt.Errorf("signal: killed")
+	}
+}
+
+// A probe that hangs until the wait ends, after another probe that failed
+// before has passed, is the one reported, with its own error: the error of
+// the probe that passed says nothing of why the node is not ready.
+func TestUntilReady_EndReportsTheProbeThatHangs(t *testing.T) {
+	ctx := newEndsOnDemand(t.Context())
+	var m mock.Executor
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	probes := []Probe{
+		{Name: "container", Check: ContainerRunning},
+		{Name: "munge", Check: hangsUntilEnd(ctx)},
+	}
+
+	err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, "node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: signal: killed", err.Error())
 }

@@ -124,7 +124,11 @@ const DefaultInterval = 500 * time.Millisecond
 // round runs the probes in order and stops at the first that fails; as
 // nothing tells UntilReady when what a passed probe checks changes, every
 // round starts again from the first probe. On timeout, the error includes
-// the name and message of the last failing probe.
+// the name and message of the probe that was failing: when the end of the
+// wait killed the docker call of the probe that failed last, or of one
+// before it that had passed, what the probe that failed last said, not the
+// killed call; a probe after it, which the round reached as that one
+// passed, with its own error.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	return untilReady(ctx, client, name, probes, interval, nil, "starting readiness probes")
 }
@@ -171,7 +175,10 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 	log.DebugContext(ctx, msg, "node", string(name), "probes", strings.Join(probeNames, ","))
 
 	pr := newProgress(probes, events)
+	// lastErr is the error of the probe that failed last, the probe at
+	// lastAt; -1 for none yet.
 	var lastErr error
+	lastAt := -1
 	for {
 		if pr.died != nil {
 			return pr.died
@@ -182,11 +189,22 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 				continue
 			}
 			if err := p.Check(ctx, client, name); err != nil {
-				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
 				log.Log(ctx, sindlog.LevelTrace, "probe failed", "node", string(name), "probe", p.Name, "err", err)
 				failed = true
 				var te *TerminalError
-				if errors.As(err, &te) {
+				terminal := errors.As(err, &te)
+				if ctx.Err() != nil && i <= lastAt && !terminal {
+					// The wait ended while the probe ran, which killed
+					// its docker call ("signal: killed"): that says
+					// nothing of the node. The error of the probe that
+					// failed last, this one or one after it, does. A
+					// probe after that one reports its own error: the
+					// round got past the one that failed, which passed.
+					break
+				}
+				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
+				lastAt = i
+				if terminal {
 					return fmt.Errorf("node %s not ready: %w", name, lastErr)
 				}
 				break
