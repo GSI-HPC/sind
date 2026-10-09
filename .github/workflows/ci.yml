@@ -163,7 +163,11 @@ jobs:
       - name: Check prerequisites
         run: go run ./cmd/sind doctor
 
+      # The builder's BuildKit image comes from Docker Hub by default; take it
+      # from Google's mirror for the same reason as the tests' images below.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
 
       - name: Build sind-node image
         uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
@@ -182,6 +186,28 @@ jobs:
       # it, so the relay runs that image and nothing is pulled.
       - name: Use the image under test for the SSH relay
         run: docker tag local/sind-node:ci ghcr.io/gsi-hpc/sind-node:latest
+
+      # Docker Hub rate-limits anonymous pulls per IP, which the runners
+      # share, and then refuses the two Docker Hub images the tests run, the
+      # mesh's CoreDNS (pkg/mesh DNSImage) and busybox, with toomanyrequests.
+      # A registry-mirrors entry in daemon.json was not used for those pulls,
+      # so pull both from Google's mirror of Docker Hub and tag them with
+      # their Docker Hub names: present locally, nothing pulls them again.
+      - name: Pull the tests' Docker Hub images from mirror.gcr.io
+        run: |
+          dns=$(sed -n 's/^const DNSImage = "\(.*\)"$/\1/p' pkg/mesh/mesh.go)
+          if [ -z "$dns" ]; then
+            echo "::error::no DNSImage constant in pkg/mesh/mesh.go"
+            exit 1
+          fi
+          for image in "$dns" busybox:latest; do
+            case "$image" in
+              */*) path=$image ;;
+              *) path=library/$image ;;
+            esac
+            docker pull "mirror.gcr.io/$path"
+            docker tag "mirror.gcr.io/$path" "$image"
+          done
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.13.0
