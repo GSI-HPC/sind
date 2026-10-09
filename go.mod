@@ -6,6 +6,7 @@ toolchain go1.27.2
 
 require (
 	github.com/GSI-HPC/go-clikit v0.3.0
+	github.com/GSI-HPC/go-nodeset v1.1.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v1.0.0
 	github.com/mattn/go-isatty v0.0.24

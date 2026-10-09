@@ -147,7 +147,7 @@ func newDeleteWorkerCommand() *cobra.Command {
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeNodeNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDeleteWorker(cmd, strings.Join(args, ","))
+			return runDeleteWorker(cmd, strings.Join(args, " "))
 		},
 	}
 }
@@ -173,8 +173,8 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 
 	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	for clusterName, shortNames := range groupByCluster(targets) {
-		if err := cluster.WorkerRemove(ctx, client, meshMgr, clusterName, shortNames); err != nil {
+	for _, g := range groupByCluster(targets) {
+		if err := cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames); err != nil {
 			return err
 		}
 	}

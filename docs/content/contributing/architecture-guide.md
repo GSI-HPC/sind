@@ -17,7 +17,7 @@ cmd/sind/          CLI commands (cobra)
   ├── logging.go   Logger construction from -v verbosity
   ├── lock.go      Realm lock for mutating commands (pkg/state)
   ├── completion.go Shell completion for cluster/node names
-  ├── nodeargs.go  Node argument parsing
+  ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations
@@ -90,7 +90,6 @@ pkg/doctor/        Host prerequisite checks (Docker version, where the daemon ru
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
-pkg/nodeset/       Nodeset expansion (worker-[0-3])
 pkg/probe/         Node readiness probes
 pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
@@ -130,14 +129,14 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                        → pkg/state   → pkg/docker
                                      → pkg/log
          → pkg/doctor
-         → pkg/nodeset
          → pkg/state
          → github.com/GSI-HPC/go-clikit/termtext
+         → github.com/GSI-HPC/go-nodeset
 ```
 
 `cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit).
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
 ## Adding a new CLI command
 

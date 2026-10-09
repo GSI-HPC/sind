@@ -163,8 +163,9 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
+| `github.com/GSI-HPC/go-nodeset` | Node arguments: ClusterShell node set expressions (ranges, steps, set operators) |
 
-**Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
+**Node sets** in node arguments (e.g., `worker-[0-2,5]!worker-1`) are parsed by go-nodeset, an implementation of the ClusterShell syntax with set operators; see [Node Arguments](#node-arguments).
 
 ### Docker Interaction
 
@@ -233,12 +234,12 @@ sind <verb> <noun> [ARGS] [FLAGS]
 | Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get auth-key` |
 | Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
 | Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
-| Nodeset expansion | bracket patterns | — | `worker-[0-2].dev` |
+| Node sets | ranges and set operators | — | `worker-[0-2].dev`, `worker-[0-3]!worker-2` |
 | Pass-through | after `--` separator | — | `ssh NODE -- cmd`, `exec -- cmd` |
 
 Rules:
 - Cluster names are **always positional**, never flags
-- Node targets support nodeset expansion and comma-separated specs
+- Node targets are node set expressions; a command joins its node arguments with a space, which is a union
 - Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
 
 ### Flag Conventions
@@ -665,7 +666,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 
 ## Node Arguments
 
-Commands accepting node arguments use DNS-style names with optional nodeset expansion.
+Commands accepting node arguments use DNS-style names, written as a node set expression to name several nodes.
 
 ### Format
 
@@ -674,27 +675,36 @@ Commands accepting node arguments use DNS-style names with optional nodeset expa
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `.default` if omitted.
+The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name.
 
-### Nodeset Notation
+### Node Sets
 
-Nodeset notation (as used in Slurm, pdsh, ClusterShell) is supported for specifying multiple nodes:
+Node arguments are node set expressions in ClusterShell's syntax, which Slurm and pdsh users know too, parsed by [go-nodeset](https://github.com/GSI-HPC/go-nodeset), whose [language reference](https://github.com/GSI-HPC/go-nodeset/blob/v1.0.0/doc/language.md) has the full rules:
 
-| Pattern | Expansion |
-|---------|-----------|
+| Expression | Nodes |
+|------------|-------|
 | `worker-[0-3]` | worker-0, worker-1, worker-2, worker-3 |
 | `worker-[0,2,4]` | worker-0, worker-2, worker-4 |
 | `worker-[0-2,5]` | worker-0, worker-1, worker-2, worker-5 |
+| `worker-[0-6/2]` | worker-0, worker-2, worker-4, worker-6 |
 | `worker-[0-1].dev` | worker-0.dev, worker-1.dev |
+| `worker-[0-1].dev[1-2]` | worker-0.dev1, worker-0.dev2, worker-1.dev1, worker-1.dev2 |
+| `controller,worker-0` or `controller worker-0` | controller, worker-0 (union) |
+| `worker-[0-5]!worker-[2-3]` | worker-0, worker-1, worker-4, worker-5 (difference) |
+| `worker-[0-5]&worker-[4-9]` | worker-4, worker-5 (intersection) |
+| `worker-[0-3]^worker-[2-5]` | worker-0, worker-1, worker-4, worker-5 (symmetric difference) |
 
-Multiple nodesets can be comma-separated:
+Rules:
+- Every run of digits in a name is a number, the cluster's included; a bracket may stand for any of them, and the padding and order rules below apply to each.
+- The operators have no precedence: an expression is evaluated left to right, so `worker-[0-9]!worker-[0-4]&worker-[3-6]` is worker-5 and worker-6. `!`, `&` and `^` need an operand on each side; an empty operand of a union is nothing, so `worker-0,` is worker-0.
+- A command joins its node arguments with a space, which is a union, so `sind power on worker-[0-3] '!worker-2'` is one expression. Quote an expression with `!`, `&` or `^` from the shell.
+- Zero padding is not part of a node's identity: `worker-1,worker-01` is one node, and `worker-[1-3]!worker-02` is worker-1 and worker-3. A node keeps the spelling it was first given, and sind looks it up by that spelling. sind names its workers without padding, so `worker-[00-03]` names none of them.
+- The padding of the cluster suffix's numbers is no part of the identity either, but clusters `dev1` and `dev01` are two: an expression whose names differ only in the padding of their cluster (`worker-0.dev1,worker-0.dev01`), which would act on one of the two nodes, is a usage error (`paddingClash` expands each term on its own to see every spelling).
+- The operators compare names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing. Write the suffix the same way throughout an expression.
+- A group (`@name`) is a usage error: sind has no node groups.
+- An expression that names no node is a usage error, and so is one that names more than 2^20 nodes, which go-nodeset refuses before it allocates the names, or a name that begins with `-`, which a command it is passed to could read as an option.
 
-```bash
-sind power shutdown controller,worker-[0-3]
-sind power cycle worker-[0-1].dev,worker-[0-3].default
-```
-
-A pattern expands to at most 2^20 names, matching clusterctl's nodeset, so a pattern such as `worker-[0-99999999]` is rejected before any name is allocated. An expanded name that begins with `-` is rejected, since a command it is passed to could read it as an option.
+sind acts on the nodes in go-nodeset's order: sorted by the name with each number taken as a placeholder that sorts before letters, `-` and `.`, then by number, the last number varying fastest. `worker-10 worker-2.dev controller worker-1` is controller, worker-1, worker-10, worker-2.dev. `power` and `delete worker` take the nodes cluster by cluster, the clusters in the order of their first node.
 
 ### Examples
 
@@ -703,6 +713,8 @@ sind power shutdown controller                    # controller.default
 sind power cycle worker-0                        # worker-0.default
 sind power freeze worker-[0-3].dev               # 4 nodes in dev cluster
 sind power reboot controller,worker-[0-1]        # multiple nodes in default
+sind power on worker-[0-3] '!worker-2'           # 3 nodes in default
+sind delete worker worker-[0-1].dev worker-3.prod  # nodes in two clusters
 ```
 
 ## Configuration Schema

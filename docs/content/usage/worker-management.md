@@ -109,4 +109,4 @@ sind delete worker worker-[2-4]
 sind delete worker worker-[0-1].dev
 ```
 
-See [Node Arguments](../node-arguments/) for the full nodeset expansion syntax.
+See [Node Arguments](../node-arguments/) for the full node set syntax, set operators included.

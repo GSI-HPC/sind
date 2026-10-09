@@ -85,9 +85,10 @@ slurmctld pings about every third of the timeout, so a worker is then `DOWN` wit
 
 ## Node arguments
 
-All power commands accept [nodeset notation](../node-arguments/) for targeting multiple nodes:
+All power commands accept [node set expressions](../node-arguments/) for targeting multiple nodes:
 
 ```bash
 sind power shutdown controller,worker-[0-3]
 sind power cycle worker-[0-1].dev,worker-[0-3].default
+sind power freeze worker-[0-3] '!worker-2'
 ```
