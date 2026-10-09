@@ -24,7 +24,7 @@ When a step is done, the tree leaves one line for it above itself, such as `✓ 
   12:00:00.000 ERRO cluster dev not ready within 12s: ...
   ```
 
-The tree draws nothing in the first second, so a command done by then leaves nothing on the terminal, as before. A step that ends at once leaves no line, and some steps, which sind usually finishes quickly, show only once they have run for a second, and leave a line only when they took that long or failed.
+The tree draws nothing in the first second, so a command done by then leaves nothing on the terminal, as before. A step that ends at once leaves no line, and `mesh` and `preflight`, which sind usually finishes quickly, show only once they have run for a second, and leave a line only when they took that long or failed. Each docker command shows under the step or node it runs for once it has taken a second, such as `worker-1  12.0s  docker exec`.
 
 What the command writes goes above the tree, never into it: `Warning:` lines, the logs that `-v` asks for, and the summary. While another sind command holds the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}), the tree shows the wait below the warning, with the command it waits for when the warning names one:
 
@@ -39,6 +39,69 @@ After Ctrl-C or SIGTERM, the command's row says so while sind cleans up, with ho
 On a terminal, the tree, the counter and the summary line draw in colour: ok in green, failed in red, canceled in amber and running in blue. They use the terminal's own 16 colours where it shows no more, and the marks alone when `NO_COLOR` is set. Where stderr is no terminal, or `TERM` is `dumb`, they write plain text, as a log wants.
 
 The tree draws with ASCII marks (`+`, `x`, `~`, `>`) unless `LC_ALL`, `LC_CTYPE` or `LANG` names a UTF-8 locale. On a terminal smaller than 40 columns or 8 rows it draws the counter's single line instead. A sind started in the background (`&`, or Ctrl-Z and `bg`) draws nothing, so that the shell's prompt stays as it is. `sind create cluster --config -` takes the tree off the terminal while it reads the configuration from standard input.
+
+## What the commands show
+
+`sind create cluster` shows these steps:
+
+| Step | Targets | What it does |
+|------|---------|--------------|
+| `mesh` | `network`, `dns`, `volume`, `relay` | sets up the realm's [mesh]({{< relref "/architecture/networking" >}}); a part in place is skipped, and the rows of `dns` and `relay` show the last line of the pull of their image. A mesh in place leaves no line |
+| `pull images` | one per image | pulls the images the daemon does not have, or every image with `--pull`; each row shows the last line `docker pull` wrote. No step when nothing is pulled |
+| `preflight` | | beside the pull: checks that no resource of the cluster exists yet and that its nodes fit, creates the cluster network and volumes, reads the Slurm version and checks `nsdelegate` |
+| `nodes` | one per node | creates and starts each node, waits until it is `ready` and sets it up (`setup`) |
+| `mesh registration` | | adds the nodes' DNS records and `known_hosts` entries |
+| `slurm` | one per managed node | starts the Slurm daemons, the db node's first, and waits until each is `ready` |
+| `accounts` | | with `accounts`: waits until slurmdbd knows the cluster, then creates the Slurm accounts |
+| `home directories` | | with `users`: creates the home directories |
+| `rollback` | | after a failure or an interrupt: removes what the command created |
+
+`mesh registration`, `slurm` and `home directories` run at the same time, and `accounts` after `slurm`. While a node waits, its row says which check it waits for and how much of the `--wait` limit it has used, `2.4s/5m  ready munge`. `sind create worker` shows `pull images` (for an `--image` the daemon does not have, or with `--pull`), `nodes`, `mesh registration`, `slurm` and `rollback` the same way.
+
+A creation on a host that had neither the mesh nor the images, while the nodes boot:
+
+```text
+$ sind create cluster --config dev.yaml
+✓ mesh  12s  4 ok
+✓ pull images  9.4s  2 ok
+✓ preflight  10s
+create cluster · 0:25.3
+  nodes  0/6 · 6 running
+    ▸ controller  2.4s/5m  ready munge
+    ▸ db  2.4s/5m  ready sshd
+    ▸ worker-0  2.1s  setup
+    ▸ worker-1  2.4s/5m  ready systemd
+    ▸ worker-2  2.4s/5m  ready systemd
+    ▸ worker-3  2.4s/5m  ready sshd
+```
+
+and once it is done:
+
+```text
+$ sind create cluster --config dev.yaml
+✓ mesh  12s  4 ok
+✓ pull images  9.4s  2 ok
+✓ preflight  10s
+✓ nodes  6.3s  6 ok
+✓ mesh registration  0.4s
+✓ slurm  6.0s  6 ok
+✓ accounts  1.7s
+```
+
+The same creation with `--wait 12s`, where `worker-2` does not become ready in time and the two nodes still booting are stopped. A failure row writes the node's own name as `{}`, so that nodes that failed the same way share one row:
+
+```text
+$ sind create cluster --config dev.yaml --wait 12s
+✓ mesh  12s  4 ok
+✓ pull images  9.4s  2 ok
+✓ preflight  10s
+12:00:31.605 ERRO cleaning up partial resources, please wait
+✗ nodes  12s  3 ok, 1 failed, 2 canceled
+  ✗ worker-2  timeout: waiting for {}: node sind-dev-{} not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
+✓ rollback  3.1s
+sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
+12:00:34.839 ERRO cluster dev not ready within 12s: waiting for worker-2: node sind-dev-worker-2 not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
+```
 
 ## Choosing the display
 
@@ -70,11 +133,32 @@ sind: SIND_PROGRESS is "plian"; it takes one of auto, tty, counter, plain, none;
 
 ## Plain lines
 
-`--progress plain` writes a line when a step starts and when it ends, when a wait with a limit starts, when a target fails, and every ten seconds for each step under way that counts its targets. Each line starts with the time since the command started and names what it tells of by its path from the command. Plain lines have no escape codes and need no terminal, so they suit a CI log or a file. The steps the tree shows only after a second get no line.
+`--progress plain` writes a line when a step starts and when it ends, when a wait with a limit starts, when a wait or a target fails, and every ten seconds for each step under way that counts its targets. Each line starts with the time since the command started and names what it tells of by its path from the command. Plain lines have no escape codes and need no terminal, so they suit a CI log or a file. `mesh` and `preflight`, which the tree shows only after a second, get no line, and neither do the docker commands or the lines docker writes. The same creation as above, trimmed to two nodes of each step:
+
+```text
+$ sind create cluster --config dev.yaml --progress plain
+[0:12] create cluster › pull images: start, 2 targets
+[0:21] create cluster › pull images: done in 9.4s: 2 ok
+[0:22] create cluster › nodes: start, 6 targets
+[0:23] create cluster › nodes › worker-0 › ready: waiting 5m0s
+[0:23] create cluster › nodes › controller › ready: waiting 5m0s
+[0:29] create cluster › nodes: done in 6.3s: 6 ok
+[0:29] create cluster › slurm: start, 6 targets
+[0:29] create cluster › mesh registration: start
+[0:29] create cluster › mesh registration: done in 0.4s
+[0:31] create cluster › slurm › db › ready: waiting 4m52s
+[0:33] create cluster › slurm › controller › ready: waiting 4m50s
+[0:35] create cluster › slurm: done in 6.0s: 6 ok
+[0:35] create cluster › accounts: start
+[0:35] create cluster › accounts › ready: waiting 4m48s
+[0:36] create cluster › accounts: done in 1.7s
+```
+
+The waits `ready` say how much of the `--wait` limit they have left.
 
 ## Event log
 
-`--progress-log FILE`, or `SIND_PROGRESS_LOG` when the flag is not given, appends the progress events of the command to FILE, one JSON object per line, in go-clikit's [event log format](https://github.com/GSI-HPC/go-clikit/blob/v0.3.0/doc/event-log.md), version 1: what started and ended when, under which step or target, and how it ended and why. It holds neither the command line nor the environment of the command, and of what the programs sind runs write, only what an error quotes; the `realm lock` wait names the command that holds the lock, its command line and host, as the `Warning:` line does. It works with every `--progress` mode, `none` included, and writes nothing on standard error.
+`--progress-log FILE`, or `SIND_PROGRESS_LOG` when the flag is not given, appends the progress events of the command to FILE, one JSON object per line, in go-clikit's [event log format](https://github.com/GSI-HPC/go-clikit/blob/v0.3.0/doc/event-log.md), version 1: what started and ended when, under which step or target, and how it ended and why, with each docker command by its subcommand alone and its exit code. It holds neither the command line nor the environment of the command, and of what the programs sind runs write, only what an error quotes; the `realm lock` wait names the command that holds the lock, its command line and host, as the `Warning:` line does. It works with every `--progress` mode, `none` included, and writes nothing on standard error.
 
 - sind creates the file readable and writable by you alone (mode `0600`) and appends to it, so the commands of a CI job can share one log; each command's lines carry a `run` of their own.
 - An existing file must be yours, have no other name (no hard link to it) and be readable or writable by nobody else: sind refuses one that is not, and for one that others can read or write says `run chmod 600 FILE`. A symbolic link on the way to it, and a named pipe, must be yours or root's: sind follows no link put at the file's name after it looked, and refuses another user's named pipe at once instead of waiting for someone to read it. `/dev/stderr`, `/dev/stdout` and `/dev/fd/N` are written to where that stream goes; on the terminal the tree is drawn on, the lines go above the tree, as the `-v` logs do.

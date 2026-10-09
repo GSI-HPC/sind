@@ -135,6 +135,19 @@ func (e interrupted) Unwrap() error { return e.error }
 // ProgressClass says that the command was interrupted.
 func (interrupted) ProgressClass() progress.Class { return progress.ClassCanceled }
 
+// rollbackFailed is the error of create cluster's step "rollback" when it
+// could not remove the mesh it made. It is classed by its own error alone,
+// never by progressClass, which calls every failure once the command was
+// interrupted canceled: the rollback runs on after an interrupt, so what
+// it left behind is a failure, not work the interrupt stopped. pkg/cluster
+// ends its rollbacks alike.
+type rollbackFailed struct{ error }
+
+func (e rollbackFailed) Unwrap() error { return e.error }
+
+// ProgressClass is the class of the rollback's error without a fallback.
+func (e rollbackFailed) ProgressClass() progress.Class { return progress.Classify(e.error, nil) }
+
 // progressClass returns the fallback rule of the classes the spans of a
 // command interrupt is the context of end with: once interrupt has ended,
 // every failure is canceled, since a docker call the interrupt killed

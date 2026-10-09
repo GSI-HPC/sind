@@ -78,7 +78,7 @@ func TestCreate_PullsEachImageOnce(t *testing.T) {
 		}
 	}
 	slices.Sort(pulls)
-	assert.Equal(t, []string{"pull --quiet img:1", "pull --quiet other:2"}, pulls)
+	assert.Equal(t, []string{"pull img:1", "pull other:2"}, pulls)
 	assert.Less(t, lastPull, firstUse, "every image is pulled before a container runs it")
 }
 
@@ -131,7 +131,7 @@ func TestWorkerAdd_PullsOnce(t *testing.T) {
 		assert.NotContains(t, c.Args, "--pull", "%v", c.Args)
 		if c.Args[0] == "pull" {
 			pulls++
-			assert.Equal(t, []string{"pull", "--quiet", "img:1"}, c.Args)
+			assert.Equal(t, []string{"pull", "img:1"}, c.Args)
 		}
 	}
 	assert.Equal(t, 1, pulls)
@@ -201,7 +201,7 @@ func TestCreate_PullsMissingImages(t *testing.T) {
 			firstUse = i
 		}
 	}
-	assert.Equal(t, []string{"pull --quiet other:2"}, pulls, "only the missing image is pulled")
+	assert.Equal(t, []string{"pull other:2"}, pulls, "only the missing image is pulled")
 	assert.Less(t, lastPull, firstUse, "the missing image is pulled before a container runs an image")
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "--format", "{{.Id}}", "img:1"))
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "--format", "{{.Id}}", "other:2"))
@@ -238,7 +238,7 @@ func TestWorkerAdd_PullsMissingImage(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "--format", "{{.Id}}", "custom:v3"))
-	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "custom:v3"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "custom:v3"))
 }
 
 func TestWorkerAdd_LocalImageNotPulled(t *testing.T) {

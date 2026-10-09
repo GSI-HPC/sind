@@ -38,7 +38,7 @@ Jobs that share a Docker daemon, such as jobs on one self-hosted runner or jobs 
 
 A CI log is not a terminal, so sind shows no [progress]({{< relref "/usage/progress" >}}) there unless asked: `create`, `delete` and `power` print nothing on success, and their standard error holds what it did before sind had a progress display, so [sind-action](https://github.com/GSI-HPC/sind-action) and scripts that read it see no change. Two settings add to the log:
 
-- `--progress plain`, or `SIND_PROGRESS=plain` for every command of the job, writes a line as each step starts and ends, as a wait with a limit starts and as a target fails, each with the time since the command started (see [Plain lines]({{< relref "/usage/progress#plain-lines" >}})).
+- `--progress plain`, or `SIND_PROGRESS=plain` for every command of the job, writes a line as each step starts and ends, as a wait with a limit starts and as a wait or a target fails, each with the time since the command started (see [Plain lines]({{< relref "/usage/progress#plain-lines" >}})).
 - `--progress-log FILE`, or `SIND_PROGRESS_LOG`, appends every progress event to FILE as a line of JSON, readable by the job's user alone. The commands of a job can share one file, which you can keep as an artifact of a failed run.
 
 ```bash

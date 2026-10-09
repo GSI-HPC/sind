@@ -362,8 +362,9 @@ func TestProgressLeavesStderrAloneWithoutADisplay(t *testing.T) {
 }
 
 // On a terminal the live tree is drawn: the command and how long it has
-// run. Once the command has failed the tree is gone, and what is left is
-// the summary and then the error line.
+// run, and the docker command it waits for once that has run for a
+// second. Once the command has failed the tree is gone, and what is left
+// is the summary and then the error line.
 func TestTheTreeIsDrawnOnATerminal(t *testing.T) {
 	t.Setenv("TERM", "xterm")
 	c := fakeDisplays(t)
@@ -378,7 +379,7 @@ func TestTheTreeIsDrawnOnATerminal(t *testing.T) {
 	code := run(ctx, []string{"power", "cut", "worker-0"}, screen)
 
 	assert.Equal(t, exitFailure, code)
-	assert.Equal(t, []string{"power cut · 0:01.0\n"}, frames)
+	assert.Equal(t, []string{"power cut · 0:01.0\n  docker ps  1.0s\n"}, frames)
 	assert.Equal(t, `sind: power cut: failed in 1.0s
 HH:MM:SS.mmm ERRO listing containers: exit status 1: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
 `, withoutTimestamps(screen.String()))
@@ -404,7 +405,7 @@ func TestTheTreeLeavesNothingOnSuccess(t *testing.T) {
 	code := run(withClient(t.Context(), docker.NewClient(m)), []string{"power", "cut", "worker-0"}, screen)
 
 	assert.Equal(t, exitOK, code)
-	assert.Equal(t, []string{"power cut · 0:01.0\n", "power cut · 0:02.0\n"}, frames)
+	assert.Equal(t, []string{"power cut · 0:01.0\n  docker ps  1.0s\n", "power cut · 0:02.0\n  docker kill  1.0s\n"}, frames)
 	assert.Empty(t, screen.String())
 }
 
@@ -451,8 +452,9 @@ func TestAnEventLogOnTheTerminalOfTheTree(t *testing.T) {
 }
 
 // The wait for the realm lock is drawn with the holder it waits for, under
-// the warning that names it too, which stays. Once the command is
-// interrupted the tree says so, and the summary says it was canceled.
+// the warning that names it too, which stays, and beside it the docker
+// command that polls the lock. Once the command is interrupted the tree
+// says so, and the summary says it was canceled.
 func TestTheTreeShowsTheWaitForTheRealmLock(t *testing.T) {
 	t.Setenv("TERM", "xterm")
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
@@ -489,8 +491,8 @@ func TestTheTreeShowsTheWaitForTheRealmLock(t *testing.T) {
 	warning := `Warning: waiting for another sind command in realm "sind" to finish: sind create cluster (pid 7 on elsewhere, since ` + since + ")\n"
 	holder := "sind create cluster (pid 7 on elsewhere, since " + since + ")"
 	want := []string{
-		warning + "delete cluster · 0:01.0\n  realm lock  1.0s  " + holder + "\n",
-		warning + "delete cluster · interrupting · 0:02.0\n  realm lock  2.0s  " + holder + "\n",
+		warning + "delete cluster · 0:01.0\n  realm lock  1.0s  " + holder + "\n  docker network create  1.0s\n",
+		warning + "delete cluster · interrupting · 0:02.0\n  realm lock  2.0s  " + holder + "\n  docker network inspect  1.0s\n",
 	}
 	assert.Equal(t, want, frames)
 	assert.Equal(t, warning+`sind: delete cluster: canceled in 2.0s
@@ -531,8 +533,25 @@ func TestAcquireRealmLock_WaitIsASpan(t *testing.T) {
 	require.ErrorIs(t, <-done, context.Canceled)
 
 	since := time.Date(2026, 10, 4, 10, 2, 3, 0, time.UTC).Local().Format(time.DateTime)
+	w.Finish()
 	assert.Equal(t, "wait realm lock message=sind create cluster (pid 7 on elsewhere, since "+since+"): canceled (canceled): taking the realm lock on the Docker daemon: context canceled\n",
-		w.Finish())
+		withoutCalls(w.Events()))
+}
+
+// withoutCalls draws the spans of events as progresstest.Capture.Tree
+// does, leaving out the calls and what is under them: the docker commands
+// of a wait that polls, which run as often as the wait takes.
+func withoutCalls(events []progress.Event) string {
+	var c progresstest.Capture
+	calls := map[progress.SpanID]bool{}
+	for _, e := range events {
+		if e.Kind == progress.KindCall || calls[e.Parent] {
+			calls[e.Span] = true
+			continue
+		}
+		c.Handle(e)
+	}
+	return c.Tree()
 }
 
 // The event log is a file of JSON lines readable by its owner alone,

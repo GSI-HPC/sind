@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	spans "github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -163,7 +164,18 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 
 // untilReady is UntilReady with events nil, UntilReadyWithEvents
 // otherwise; it logs msg first.
-func untilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event, msg string) error {
+//
+// The wait is the progress wait "ready", whose message names the probe
+// that fails now, once it changes. It is bounded by the time left until
+// ctx's deadline, when it has one, in whole seconds: a display shows a wait
+// that has the whole --wait limit left as "5m", not "4m59.99s".
+func untilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event, msg string) (err error) {
+	var bound []spans.Option
+	if deadline, ok := ctx.Deadline(); ok {
+		bound = append(bound, spans.Timeout(max(time.Until(deadline).Round(time.Second), 0)))
+	}
+	ctx, wait := spans.Start(ctx, spans.KindWait, "ready", bound...)
+	defer func() { wait.End(err) }()
 	log := sindlog.From(ctx)
 	ticker := time.NewTicker(orDefault(interval))
 	defer ticker.Stop()
@@ -203,6 +215,9 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 					break
 				}
 				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
+				if i != lastAt {
+					wait.Update(spans.Message(p.Name))
+				}
 				lastAt = i
 				if terminal {
 					return fmt.Errorf("node %s not ready: %w", name, lastErr)

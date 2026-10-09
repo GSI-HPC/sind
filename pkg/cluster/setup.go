@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -106,7 +107,13 @@ func nodeSetupSteps(nc RunConfig) []setupStep {
 // steps nodeSetupSteps gives it, and returns the node's ed25519 host key.
 // The realm's SSH public key is an argument of the shell, not part of its
 // script.
-func setupNode(ctx context.Context, client *docker.Client, container docker.ContainerName, nc RunConfig, sshPubKey string) (string, error) {
+//
+// The setup is the progress call "setup", under the node's target, with
+// the docker exec under it; it ends as endSpan ends it, canceled when a
+// sibling's failure or an interrupt stopped it.
+func setupNode(ctx context.Context, client *docker.Client, container docker.ContainerName, nc RunConfig, sshPubKey string) (_ string, err error) {
+	ctx, call := progress.Start(ctx, progress.KindCall, "setup")
+	defer func() { endSpan(ctx, call, err) }()
 	stdout, err := runSetupSteps(ctx, client, container, nodeSetupSteps(nc), strings.TrimSpace(sshPubKey))
 	if err != nil {
 		return "", err

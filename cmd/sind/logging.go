@@ -21,7 +21,7 @@ func newLogger(w io.Writer, verbosity int) *slog.Logger {
 
 // newLogHandler builds the charmbracelet/log handler of newLogger, whose
 // colours follow what w is; a writer that is not the terminal itself, such
-// as a progress display's (startProgress), sets them with
+// as a progress display's (cliprogress.Start), sets them with
 // SetColorProfile.
 func newLogHandler(w io.Writer, verbosity int) *charmlog.Logger {
 	level := charmlog.ErrorLevel

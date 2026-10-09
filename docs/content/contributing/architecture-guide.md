@@ -39,13 +39,14 @@ internal/testutil/ Shared test helpers
   └── client_integration.go NewClient, Realm (integration test variants)
 
 pkg/cmdexec/       Command executor abstraction
-  ├── exec.go      Executor interface, OSExecutor
+  ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)
+  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show
   ├── stream.go    Process, Start (long-lived commands with streamed stdout)
   ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)
 
 pkg/docker/        Docker CLI wrapper
-  ├── client.go    Client type, run/exists helpers
+  ├── client.go    Client type, run/exists helpers, each docker command a hidden progress call
   ├── container.go Container operations
   ├── network.go   Network operations
   ├── volume.go    Volume operations
@@ -83,6 +84,8 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── logs.go      Log command arg building
   ├── dns.go       Node DNS names and search domain
   ├── naming.go    Resource naming conventions
+  ├── progress.go  Progress span helpers of the pools (startStep, startTargets, nodeTargets, endSpan)
+  ├── rollback.go  The rollback step of a failed Create or WorkerAdd
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
@@ -139,6 +142,8 @@ cmd/sind → pkg/cluster → pkg/cmdexec
 
 The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
+The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
+
 ## Adding a new CLI command
 
 1. **Create the command file** in `cmd/sind/` (e.g., `mycommand.go`)
@@ -166,7 +171,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 ## Adding a Docker operation
 
 1. **Add the method** to `pkg/docker/client.go` (or the appropriate resource file)
-2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
+2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both report the command as a hidden progress call named after its subcommand, and both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
 3. **Use strong types**: `ContainerName`, `NetworkName`, `VolumeName`, etc.
 4. **Write unit tests** using `mock.Executor`
 
@@ -219,6 +224,7 @@ Work that takes a while reports what it does as progress spans of [go-clikit](ht
 
 - A step (`progress.KindStep`) is a phase of the command; a step with the `Fold` flag and a `Total` counts its targets (`KindTarget`: a node, an image). A wait (`KindWait`) can have a bound (`progress.Timeout`) and a message that says what it waits for; a call (`KindCall`) is one request, such as a docker command.
 - Announce every target of a counted step queued (`progress.Queued()`) before the first of them runs, then mark each running (`span.Run()`) when its work starts: a pool that starts each target in its own goroutine as it takes its place breaks the counts a display draws, and `progresstest.Check` fails it.
+- `pkg/cluster/progress.go` has the helpers of the pools written by hand: `startStep` starts a step, `startTargets` and `nodeTargets` announce its targets, and `endSpan` ends a span canceled (`stopped`) when a sibling's failure or an interrupt stopped its work, rather than failed with `signal: killed`.
 - `cmd/sind` alone decides how the spans are shown: `withProgress` (`progress.go`) runs the command in a span of its own and makes the Bus through go-clikit's `cliprogress` package, with the display `--progress` asks for and the event log `--progress-log` names (which `cliprogress` opens privately), and tears them down before `run` prints the error line.
 - `pkg/` never writes to stdout or stderr: a display owns the bottom rows of the terminal, and only the writers `cmd/sind` hands out, cobra's streams, `stderrFrom(ctx)` and the logger, go above it.
 

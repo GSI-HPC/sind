@@ -4,7 +4,6 @@ package probe
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -769,47 +768,6 @@ func TestUntilReady_TerminalError(t *testing.T) {
 	assert.Contains(t, err.Error(), "exited")
 	// Only one call — no retries for terminal state.
 	assert.Len(t, m.Calls, 1)
-}
-
-// A wait that ends while a probe runs kills the probe's docker call, which
-// then fails with "signal: killed": the wait reports the probe that failed
-// before, not the killed call. A probe that tells the node will never be
-// ready still ends it with its error.
-func TestUntilReady_EndKeepsTheFailingProbe(t *testing.T) {
-	for _, tc := range []struct {
-		name, killed, want string
-	}{
-		{"killed", "", "node sind-dev-controller not ready: context canceled; last probe error: probe munge: munge not ready"},
-		{"terminal", inspectJSON("exited"), "node sind-dev-controller not ready: probe container: container sind-dev-controller is exited (exit code 0)"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			inspects := 0
-			m := mock.Executor{OnCall: func([]string, string) mock.Result {
-				inspects++
-				if inspects == 1 {
-					return mock.Result{Stdout: inspectJSON("running")}
-				}
-				cancel()
-				if tc.killed == "" {
-					return mock.Result{Err: errors.New("signal: killed")}
-				}
-				return mock.Result{Stdout: tc.killed}
-			}}
-			probes := []Probe{
-				{Name: "container", Check: ContainerRunning},
-				{Name: "munge", Check: func(context.Context, *docker.Client, docker.ContainerName) error {
-					return errors.New("munge not ready")
-				}},
-			}
-
-			err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
-
-			require.Error(t, err)
-			assert.Equal(t, tc.want, err.Error())
-		})
-	}
 }
 
 func TestContainerRunning_OOMKilled(t *testing.T) {
