@@ -2,7 +2,7 @@ module github.com/GSI-HPC/sind
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.27.2
 
 require (
 	github.com/charmbracelet/lipgloss v1.1.0
