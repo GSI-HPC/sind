@@ -46,7 +46,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Unit Test Coverage | go-test-coverage against `.testcoverage.yml`, on the Unit Test job's coverage profile |
 | Vulnerability Check | `govulncheck ./...`: fails on a known vulnerability in code sind calls |
 | Image Targets | lists the bake targets and platforms the Integration Test jobs run (`docker/bake-action/subaction/matrix`) |
-| Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-24.04-arm` for linux/arm64): `sind doctor`, builds that node image with `docker buildx bake`, then `make test-integration` |
+| Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-24.04-arm` for linux/arm64): `sind doctor`, builds that node image with `docker buildx bake` (BuildKit from `mirror.gcr.io`), pulls the Docker Hub images the tests run from `mirror.gcr.io`, then `make test-integration` |
 | Integration Test | passes when every Integration Test (slurm-YY-MM, platform) job passed |
 | Build | `make build` |
 | Release Snapshot | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
@@ -57,6 +57,11 @@ CI runs for every pull request and every push to `main` and `next`.
   `download.schedmd.com ... i/o timeout`, or `git clone ... benmcollins/libjwt` failing
   to connect) is an upstream outage, not this PR's fault. Confirm it by the error naming
   the URL, re-run the job once, and report it if it fails again.
+- Integration Test pulls the Docker Hub images the tests run (the mesh's CoreDNS, which
+  it reads from `pkg/mesh`'s `DNSImage`, and `busybox:latest`) from `mirror.gcr.io` and
+  tags them with their Docker Hub names, so the tests never pull them from Docker Hub.
+  A `toomanyrequests` or an `auth.docker.io` timeout from Docker Hub means the job pulls
+  another Docker Hub image: take it from `mirror.gcr.io` too.
 - A Vulnerability Check failure on a new advisory in a dependency or the Go toolchain
   that this PR does not touch is fixed by bumping that module (`go get <module>@<fixed>`,
   `go mod tidy`) or the toolchain in `go.mod`, in its own commit.
