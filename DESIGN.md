@@ -156,6 +156,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `log/slog` (stdlib) | Structured logging interface |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output |
+| `github.com/GSI-HPC/go-clikit` | Escaping of the text sind prints from docker, containers and other clients (`termtext`): the final error line, `Warning:` lines, `get` table cells and `doctor` details |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |

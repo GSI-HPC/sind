@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
 
@@ -32,12 +32,12 @@ func acquireRealmLock(ctx context.Context, realm, stateHome string) (func(), err
 		OnWait: func(holder *state.LockHolder) {
 			msg := fmt.Sprintf("Warning: waiting for another sind command in realm %q to finish", realm)
 			if holder != nil {
-				msg += ": " + termtext.EscapeText(holder.String())
+				msg += ": " + termtext.EscapeLines(holder.String())
 			}
 			_, _ = fmt.Fprintln(stderr, msg)
 		},
 		OnWarning: func(msg string) {
-			_, _ = fmt.Fprintln(stderr, "Warning:", termtext.EscapeText(msg))
+			_, _ = fmt.Fprintln(stderr, "Warning:", termtext.EscapeLines(msg))
 		},
 	}
 	if stateHome != "" {

@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -96,7 +96,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	}
 	if ds := cfg.Storage.DataStorage; ds.UsesHostPath() {
 		if w := cluster.DataPathWarning(ds.HostPath); w != "" {
-			cmd.PrintErrln("Warning:", termtext.EscapeText(w))
+			cmd.PrintErrln("Warning:", termtext.EscapeLines(w))
 		}
 	}
 
@@ -154,7 +154,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeText(exportErr.Error()))
+			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
 		}
 	}
 

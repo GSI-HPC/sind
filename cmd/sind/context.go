@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -90,7 +90,7 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 	}
 	mgr.HostDNS = true
 	mgr.OnWarning = func(msg string) {
-		_, _ = fmt.Fprintln(os.Stderr, "Warning:", termtext.EscapeText(msg))
+		_, _ = fmt.Fprintln(os.Stderr, "Warning:", termtext.EscapeLines(msg))
 	}
 	return mgr
 }

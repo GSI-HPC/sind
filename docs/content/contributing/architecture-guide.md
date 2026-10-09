@@ -32,8 +32,6 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
-internal/termtext/ Escaping of untrusted text for the terminal (final error line, table cells, doctor details)
-
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Ptr[T]
   ├── client.go    NewClient, Realm (unit test variants)
@@ -134,12 +132,12 @@ cmd/sind → pkg/cluster → pkg/cmdexec
          → pkg/doctor
          → pkg/nodeset
          → pkg/state
-         → internal/termtext
+         → github.com/GSI-HPC/go-clikit/termtext
 ```
 
 `cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit).
 
 ## Adding a new CLI command
 

@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -76,7 +76,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		}
 		return child.code
 	}
-	msg := termtext.EscapeText(err.Error())
+	msg := termtext.EscapeLines(err.Error())
 	log := sindlog.From(cmd.Context())
 	if ctx.Err() != nil {
 		log.ErrorContext(cmd.Context(), "interrupted: "+msg)
