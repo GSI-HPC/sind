@@ -31,12 +31,21 @@ func NewRootCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			applyVerbosity(cmd)
 			cmd.SetContext(withStderr(cmd.Context(), cmd.ErrOrStderr()))
-			return checkRealmFlag(cmd)
+			if err := checkRealmFlag(cmd); err != nil {
+				return err
+			}
+			return checkProgressFlag(cmd)
 		},
 	}
 
 	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
 	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
+	cmd.PersistentFlags().String("progress", "",
+		"how create, delete and power show their progress on standard error: "+progressModes()+
+			" (default: "+envProgress+", else auto, a live tree when standard error is a terminal; plain writes lines for a log)")
+	cmd.PersistentFlags().String("progress-log", "",
+		"append the progress events of create, delete and power to this file, one JSON object per line, "+
+			"created readable by you alone (default: "+envProgressLog+")")
 
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newDeleteCommand())

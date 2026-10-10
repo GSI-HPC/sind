@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -310,7 +310,7 @@ func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *
 // docker wrote, so it is escaped.
 func printChecks(w io.Writer, checks []doctorCheck) {
 	for _, c := range checks {
-		_, _ = fmt.Fprintf(w, "%s %s: %s\n", checkmark(c.Status == checkOK), c.Name, termtext.EscapeText(c.Detail))
+		_, _ = fmt.Fprintf(w, "%s %s: %s\n", checkmark(c.Status == checkOK), c.Name, termtext.EscapeLines(c.Detail))
 		if c.Remediation != "" {
 			_, _ = fmt.Fprintf(w, "\n%s\n\n", c.Remediation)
 		}

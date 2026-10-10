@@ -54,9 +54,9 @@ func newPowerCommand() *cobra.Command {
 			Short:             c.short,
 			Args:              cobra.MinimumNArgs(1),
 			ValidArgsFunction: completeNodeNames,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return runPower(cmd, strings.Join(args, ","), fn, locked)
-			},
+			RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+				return runPower(cmd, strings.Join(args, " "), fn, locked)
+			}),
 		})
 	}
 
@@ -88,8 +88,8 @@ func runPower(cmd *cobra.Command, nodeSpec string, fn powerFunc, locked bool) er
 	// A cluster that fails does not keep the others from their power
 	// action.
 	var errs []error
-	for clusterName, shortNames := range groupByCluster(targets) {
-		errs = append(errs, fn(ctx, client, meshMgr, clusterName, shortNames))
+	for _, g := range groupByCluster(targets) {
+		errs = append(errs, fn(ctx, client, meshMgr, g.Cluster, g.ShortNames))
 	}
 	return errors.Join(errs...)
 }

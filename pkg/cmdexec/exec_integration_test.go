@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,6 +23,49 @@ func TestOSExecutor_SimpleCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", stdout)
 	assert.Empty(t, stderr)
+}
+
+// Under a span that shows lines, the lines a command writes reach the
+// progress sinks, each with its stream, and the command's output is kept
+// as without a span.
+func TestOSExecutor_ShowsLines(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	ctx, step := progress.Start(ctx, progress.KindStep, "step", progress.WithFlags(progress.ShowLines))
+	var e cmdexec.OSExecutor
+	stdout, stderr, err := e.Run(ctx, "sh", "-c", "echo out; echo err >&2")
+	step.End(err)
+	require.NoError(t, err)
+	assert.Equal(t, "out\n", stdout)
+	assert.Equal(t, "err\n", stderr)
+	var lines []string
+	for _, ev := range w.Events() {
+		if ev.Type == progress.TypeLine {
+			lines = append(lines, ev.Stream.String()+" "+ev.Text)
+		}
+	}
+	assert.ElementsMatch(t, []string{"stdout out", "stderr err"}, lines)
+	assert.Equal(t, "step step [show-lines]: ok\n", w.Finish())
+}
+
+// A command whose standard output is data shows the lines of its standard
+// error alone, and its output is kept as without a span.
+func TestOSExecutor_ShowsNoLinesOfData(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	ctx, step := progress.Start(ctx, progress.KindStep, "step", progress.WithFlags(progress.ShowLines))
+	var e cmdexec.OSExecutor
+	stdout, stderr, err := e.Run(cmdexec.WithStdoutAsData(ctx), "sh", "-c", "echo '[{\"Id\": 1}]'; echo pulling >&2")
+	step.End(err)
+	require.NoError(t, err)
+	assert.Equal(t, "[{\"Id\": 1}]\n", stdout)
+	assert.Equal(t, "pulling\n", stderr)
+	var lines []string
+	for _, ev := range w.Events() {
+		if ev.Type == progress.TypeLine {
+			lines = append(lines, ev.Stream.String()+" "+ev.Text)
+		}
+	}
+	assert.Equal(t, []string{"stderr pulling"}, lines)
+	w.Finish()
 }
 
 func TestOSExecutor_CapturesStderr(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -70,7 +71,14 @@ const deleteAllConcurrency = 4
 //
 // A cluster that fails to delete does not stop the others. The mesh then
 // stays for what is left, the clusters that were deleted are deregistered
-// from it, and DeleteAll returns the failures, joined.
+// from it, and DeleteAll returns the failures, joined. Once ctx has ended
+// no further cluster is tried, and those left out fail with the context's
+// error, worded as "deleting cluster <name>: listing containers: <err>",
+// as when they were tried and failed at their first lookup; a panic while
+// deleting a cluster becomes that cluster's error.
+//
+// The clusters are the progress step "clusters", with a target for each
+// (fanout.Map).
 func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -80,35 +88,45 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return err
 	}
 
+	// started says which clusters Map started on; it leaves out those it
+	// had not started once ctx has ended. Each is written by the worker of
+	// its cluster, and read once Map has every worker's result.
+	index := make(map[string]int, len(names))
+	for i, name := range names {
+		index[name] = i
+	}
+	started := make([]bool, len(names))
+
 	// The mesh goes too, so the clusters skip mesh deregistration, and
 	// with it the read-modify-write of the realm's Corefile and
 	// known_hosts that must not run concurrently.
-	deleted := make([]*Resources, len(names))
-	errs := make([]error, len(names))
-	var g errgroup.Group
-	g.SetLimit(deleteAllConcurrency)
-	for i, name := range names {
-		g.Go(func() error {
-			log.InfoContext(ctx, "deleting cluster", "name", name)
-			res, err := ListClusterResources(ctx, client, realm, name)
-			if err == nil {
-				err = removeClusterResources(ctx, client, meshMgr, name, res, false)
+	deleted, err := fanout.Map(ctx, names, fanout.MapOptions[string]{
+		Step:     "clusters",
+		Limit:    deleteAllConcurrency,
+		Program:  program,
+		PanicLog: panicLog(ctx),
+		Summarize: joinFailures(func(f fanout.Failed) error {
+			if !started[index[f.Name]] {
+				// Worded as when every cluster was tried: one tried once
+				// ctx had ended failed at its first lookup.
+				return fmt.Errorf("deleting cluster %s: listing containers: %w", f.Name, f.Err)
 			}
-			if err != nil {
-				errs[i] = fmt.Errorf("deleting cluster %s: %w", name, err)
-				return nil
-			}
-			deleted[i] = res
-			return nil
-		})
-	}
-	_ = g.Wait() // the goroutines report through errs
-
-	if err := errors.Join(errs...); err != nil {
+			return fmt.Errorf("deleting cluster %s: %w", f.Name, f.Err)
+		}),
+	}, func(ctx context.Context, name string) (*Resources, error) {
+		started[index[name]] = true
+		log.InfoContext(ctx, "deleting cluster", "name", name)
+		res, err := ListClusterResources(ctx, client, realm, name)
+		if err != nil {
+			return nil, err
+		}
+		return res, removeClusterResources(ctx, client, meshMgr, name, res, false)
+	})
+	if err != nil {
 		var hostnames []string
-		for i, res := range deleted {
-			if res != nil {
-				hostnames = append(hostnames, meshHostnames(realm, names[i], res.Containers)...)
+		for i, d := range deleted {
+			if d.Err == nil {
+				hostnames = append(hostnames, meshHostnames(realm, names[i], d.Value.Containers)...)
 			}
 		}
 		deregisterHostnames(ctx, meshMgr, hostnames)

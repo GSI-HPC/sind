@@ -24,7 +24,7 @@ sind power <action> NODES
 
 `docker stop` sends the image's stop signal. The sind-node images set `SIGRTMIN+3`, which makes systemd shut the node down cleanly. A custom image needs the same [stop signal]({{< relref "/container-images/building-images#container-settings" >}}): without it the node gets SIGTERM, which systemd does not treat as a shutdown request, and Docker kills it after 10 seconds.
 
-A power command acts on the nodes of each cluster in parallel, and on several clusters one after another; `reboot` and `cycle` take every node of a cluster down before they start any. A node whose Docker call fails does not stop the others: the command reports every failed node and exits non-zero.
+A power command acts on the nodes of each cluster in parallel, at most 8 at a time, and on several clusters one after another; `reboot` and `cycle` take every node of a cluster down before they start any. A node whose Docker call fails does not stop the others: the command reports every failed node and exits non-zero. So does a node whose work hits a bug in sind: the error says `sind panicked; this is a bug, please report it`, with the details on stderr, and the command exits 1. After Ctrl-C, a power command starts no further node. On a terminal, the [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}) shows the nodes as they are stopped, killed, started, paused or unpaused.
 
 ## Examples
 
@@ -85,9 +85,10 @@ slurmctld pings about every third of the timeout, so a worker is then `DOWN` wit
 
 ## Node arguments
 
-All power commands accept [nodeset notation](../node-arguments/) for targeting multiple nodes:
+All power commands accept [node set expressions](../node-arguments/) for targeting multiple nodes:
 
 ```bash
 sind power shutdown controller,worker-[0-3]
 sind power cycle worker-[0-1].dev,worker-[0-3].default
+sind power freeze worker-[0-3] '!worker-2'
 ```

@@ -200,7 +200,7 @@ nodes:
       - NET_ADMIN    # workers get both SYS_ADMIN and NET_ADMIN
 ```
 
-With `-v`, `sind create cluster` and `sind create worker` log an `extra privileges` notice at the info level for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). Without `-v` nothing is shown: like every successful mutation, creation is silent.
+With `-v`, `sind create cluster` and `sind create worker` log an `extra privileges` notice at the info level for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). Without `-v` it is not shown: it is no warning, and a creation that succeeds prints nothing but, on a terminal, the lines its [progress display]({{< relref "/usage/progress" >}}) leaves.
 
 `securityOpt` entries must name an option Docker knows (`label`, `apparmor`, `seccomp`, `no-new-privileges`, `writable-cgroups` or `systempaths`); sind rejects others before it creates any container, and Docker checks the values.
 

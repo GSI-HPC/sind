@@ -88,8 +88,10 @@ func TestEnsureSSH_KeysIntoExistingRelay(t *testing.T) {
 	f.withMesh(DefaultRealm, docker.StateRunning)
 	mgr := NewManager(c, DefaultRealm)
 
-	require.NoError(t, mgr.ensureSSH(t.Context(), "10.0.0.2", true))
+	changed, err := mgr.ensureSSH(t.Context(), "10.0.0.2", true)
 
+	require.NoError(t, err)
+	assert.True(t, changed, "the keys changed the relay")
 	assert.Contains(t, f.containers["sind-ssh"].files, "/root/.ssh/id_ed25519")
 }
 
@@ -97,8 +99,10 @@ func TestEnsureSSH_Creates(t *testing.T) {
 	_, c, m := newFakeDocker(t)
 	mgr := NewManager(c, DefaultRealm)
 
-	require.NoError(t, mgr.ensureSSH(t.Context(), "10.0.0.2", false))
+	changed, err := mgr.ensureSSH(t.Context(), "10.0.0.2", false)
 
+	require.NoError(t, err)
+	assert.True(t, changed)
 	create := m.Calls[indexOf(t, m, "create")].Args
 	assert.Equal(t, []string{"create", "--name", string(SSHContainerName), "--network", string(NetworkName), "--dns", "10.0.0.2",
 		"-v", string(SSHVolumeName) + ":/root/.ssh"}, create[:9])

@@ -144,6 +144,8 @@ Library contract of `cluster.Create`: the caller sets up the mesh (`mesh.Manager
 
 Errors that a library caller branches on wrap exported sentinels, so `errors.Is` tells them apart without matching messages: `cluster.ErrClusterExists` (preflight conflicts), `ErrClusterNotFound` (a cluster or its controller is missing), `ErrNodeNotFound`, `ErrNodesConfMissing` (managed workers without `sind-nodes.conf`), `ErrNotReady` (the `--wait` limit ran out) and `ErrNetworkFull` (the nodes do not fit on the realm's mesh or the cluster network, see Limits). When `Create` or `WorkerAdd` fails and its rollback fails too, the returned error joins the rollback's failures to the original one (`errors.Join`), so the caller learns that resources were left behind.
 
+The operations report their progress as go-clikit spans on the context they are given (see Progress Display): a library caller that puts a progress Bus in it (`progress.WithBus`) gets the spans the CLI draws, and without one every span is a no-op.
+
 ### Go Dependencies
 
 sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.io/)'s approach of favoring simplicity and compatibility.
@@ -155,15 +157,18 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `sigs.k8s.io/yaml` | YAML configuration parsing |
 | `log/slog` (stdlib) | Structured logging interface |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
-| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output |
-| `github.com/mattn/go-isatty` | TTY detection for interactive commands |
+| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the log lines a progress display carries and for the progress theme |
+| `github.com/muesli/termenv` | The colour profiles lipgloss reports, which pick how many colours the progress theme draws in |
+| `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log (`progress`, `progress/display`, `progress/cliprogress`, v0.3.0; see Progress Display); the pools of the power commands and `delete cluster --all` (`fanout`); escaping of the text sind prints from docker, containers and other clients (`termtext`): the final error line, `Warning:` lines, `get` table cells and `doctor` details |
+| `github.com/mattn/go-isatty` | TTY detection for interactive commands and the progress display |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
+| `github.com/GSI-HPC/go-nodeset` | Node arguments: ClusterShell node set expressions (ranges, steps, set operators) |
 
-**Nodeset expansion** (e.g., `worker-[0-2,5]` → individual hostnames) is implemented internally rather than using an external library, keeping the dependency footprint small.
+**Node sets** in node arguments (e.g., `worker-[0-2,5]!worker-1`) are parsed by go-nodeset, an implementation of the ClusterShell syntax with set operators; see [Node Arguments](#node-arguments).
 
 ### Docker Interaction
 
@@ -176,6 +181,8 @@ sind interacts with Docker by **shelling out to the `docker` CLI** rather than u
 sind wraps command execution in a thin abstraction layer (`pkg/cmdexec`) using Go's `os/exec` package, with proper output handling and error reporting. The executor interface is shared across `pkg/docker`, `pkg/mesh`, and `pkg/cluster`.
 
 A `docker.Client` runs at most 16 docker commands at once (`docker.MaxConcurrentCalls`); the others wait for a free slot. Creating a cluster probes every node in its own goroutine, and the bound keeps a large cluster from forking hundreds of docker processes that compete with the booting nodes for the daemon. It limits the commands, not the per-node goroutines, so every node still boots at once. Long-lived streams (`docker events`, `busctl monitor`) take no slot.
+
+Each docker command of a `docker.Client` is also a hidden progress call (see Progress Display), named after its subcommand, with the verb of a management command (`docker exec`, `docker network create`) and never its arguments: queued while it waits for a slot, running once it has one, and ended with docker's exit code when it failed. `cmdexec.OSExecutor` tees what a command writes through `progress.Tee`, so that a span that shows lines, a target of `pull images` or a part of the mesh, shows the newest line docker wrote: its standard error, and its standard output only for `docker pull`, which writes its status there; every other command writes data there, an ID, a name or the JSON of `inspect`, which `docker.Client` marks as such (`cmdexec.WithStdoutAsData`), so that the row of the relay shows the pull its `docker create` makes and not the container's ID. `docker pull` runs without `--quiet` for that, and its output is still not kept.
 
 **Runtime support:** Docker only. Support for alternative runtimes (Podman, nerdctl) may be added later via a provider abstraction pattern.
 
@@ -232,12 +239,12 @@ sind <verb> <noun> [ARGS] [FLAGS]
 | Cluster name | `[NAME]` or `[CLUSTER]` | `"default"` | `get cluster`, `enter`, `get auth-key` |
 | Node targets | `NODES` (required) | — | `power shutdown`, `delete worker` |
 | Node format | `shortname.cluster` | cluster defaults to `"default"` | `worker-0.dev`, `controller` |
-| Nodeset expansion | bracket patterns | — | `worker-[0-2].dev` |
+| Node sets | ranges and set operators | — | `worker-[0-2].dev`, `worker-[0-3]!worker-2` |
 | Pass-through | after `--` separator | — | `ssh NODE -- cmd`, `exec -- cmd` |
 
 Rules:
 - Cluster names are **always positional**, never flags
-- Node targets support nodeset expansion and comma-separated specs
+- Node targets are node set expressions; a command joins its node arguments with a space, which is a union
 - Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
 
 ### Flag Conventions
@@ -245,9 +252,9 @@ Rules:
 - **Long-form only** by default; add short flags (`-f`) only for frequently-typed flags
 - **Kebab-case** for multi-word flags: `--tmp-size`, `--cap-add`
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
-- **One persistent root flag**: `--realm` (inherited by every subcommand)
+- **Three persistent root flags**: `--realm`, `--progress` and `--progress-log` (inherited by every subcommand). `PersistentPreRunE` checks `--realm` and `--progress` for every command before it acts (`checkRealmFlag`, `checkProgressFlag`), so a value that is not valid is a usage error even for a command that does not use it; `--progress-log` is opened only by the commands that show progress, as opening it creates the file
 - **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
-- `ssh` passes its arguments through to SSH, so `--realm` and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's, and an argument that begins with `--` before the `--` separator is a usage error, as SSH has no long options. `exec` parses its own flags up to its `--`
+- `ssh` passes its arguments through to SSH, so the root flags and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's, and an argument that begins with `--` before the `--` separator is a usage error, as SSH has no long options. `exec` parses its own flags up to its `--`
 
 ### Output Conventions
 
@@ -256,32 +263,36 @@ Rules:
 | List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
 | Single value (`get auth-key`) | raw value, one line | stdout |
 | Checks (`doctor`) | one ✓/✗ line per check, fix instructions below a check that did not pass | stdout |
-| Mutations (`create`, `delete`, `power`) | silent on success | — |
+| Mutations (`create`, `delete`, `power`) | nothing on success where stderr is not a terminal; on a terminal, their progress display (see Progress Display) | stderr |
 | Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
 | Logs (`-v`) | structured key=value, colorized on TTYs | stderr |
+| Progress (`--progress`) | live tree, counter or plain lines; a summary line for a command that failed or was interrupted | stderr |
 
 Rules:
-- Mutations are silent — `exit 0` is the confirmation; use `-v` for progress
+- Mutations are silent where stderr is not a terminal, unless `--progress plain` asks for lines — `exit 0` is the confirmation; use `-v` for logs. On a terminal they draw their progress, which leaves one line for each step they finished and, when they fail, a summary line (see Progress Display); without a display, stderr carries byte for byte what it would without progress
 - Errors are always visible (slog error level is always enabled, even without `-v`), except that `ssh`, `exec`, `enter` and `logs` add none when the program they run fails: it writes its own
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. The cells of `get` tables (`cell`), whose text comes from labels, containers and docker, and the details of `doctor` checks are escaped the same way; a table cell also shows tab and newline as `\t` and `\n`, which would otherwise start a column or a row. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
-- Unicode checkmarks (✓/✗) only in `get cluster`, `get node` and `doctor` output
+- Unicode checkmarks (✓/✗) only in `get cluster`, `get node` and `doctor` output, and in the progress display, which draws ASCII marks unless the locale is UTF-8
 - All `get` subcommands and `doctor` accept `--output|-o {human,json}`; default is `human`
 
 Exit status and signals:
 - `0` on success, `1` on failure, `2` for a usage error, `130` when SIGINT or SIGTERM interrupted the command (`cmd/sind/exitcode.go`). Scripts branch on them, so a status may be added but never renumbered
-- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`
+- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, `--progress`, `--progress-log`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`; `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command (see Progress Display)
 - `ssh`, `exec`, `enter` and `logs` exit with the status of the docker command they run, which `docker exec` takes from the command it ran (for `ssh`, from `ssh` and the remote command), and print no error line. A docker killed by signal N exits 128 + N, as a shell reports it, except SIGINT and SIGTERM, which exit `130` like an interrupted sind: they reach docker when sent to sind's process group, and the status must not depend on which process ends first
 - SIGTERM exits `130`, not `143`, so that callers check one status for "interrupted", as in clusterctl
 - A `--wait` limit that runs out is a failure, not an interrupt: `create cluster` and `create worker` exit `1`
 - The first SIGINT or SIGTERM cancels the command's context; deferred cleanup (e.g. the rollback of a failed `create cluster`) still runs under `context.WithoutCancel`, bounded at 5 minutes, and a cleanup step that fails is added to the command's error
 - The signal handler is removed before the context is cancelled, so a second signal gets the default action and ends sind at once, even during a hung cleanup
+- On a terminal, the progress display says `interrupting` once the first signal has arrived, and the summary line says the command was `canceled`
 
 ### Logging Conventions
 
 Logging uses `pkg/log` with context-based injection. Silent by default. All log lines include millisecond timestamps (`HH:MM:SS.mmm`) for timing analysis.
+
+Logs and progress are separate channels: the logger writes the records `-v` asks for, and a progress display shows the spans the work reports (see Progress Display). Under a display the logger is rebuilt on the display's terminal (`Terminal.Lines`), so every record, from whatever goroutine, is written whole above the display and never into it, in the colours of the real stderr; without one it writes to stderr as before.
 
 | Level | Flag | What to log |
 |-------|------|------------|
@@ -295,6 +306,41 @@ Rules:
 - In errgroup goroutines, log with `gctx` not the outer `ctx`
 - Log messages use lowercase, present tense: "creating network", not "Created network"
 - Include identifying attrs: `"node", shortName`, `"name", netName`, `"service", svcName`
+- What a user watches while a command runs is a progress span, not a log line: a display shows spans, and `-v` shows logs
+
+### Progress Display
+
+`create cluster`, `create worker`, `delete cluster` (also `--all`), `delete worker` and the `power` commands show their progress on stderr while they run, with the `progress`, `progress/display` and `progress/cliprogress` packages of [go-clikit](https://github.com/GSI-HPC/go-clikit) v0.3.0, as clusterctl does. `withProgress` (`cmd/sind/progress.go`) decorates their `RunE`: the command runs in a progress span of its own, named by its path below the root (`create cluster`), and the code it calls in `pkg/` reports its work under that span as steps, targets, waits and calls (`progress.Start` on the command's context; without a Bus in the context, as for a library caller, every span is a no-op). `ssh`, `enter`, `exec`, `logs`, `mcp`, `get`, `doctor`, `version` and `completion` never show progress.
+
+`--progress MODE`, else `SIND_PROGRESS`, else `auto`, says how stderr shows it:
+
+| Mode | Shows |
+|------|-------|
+| `auto` | `tty` where stderr is a terminal, `TERM` is not `dumb` and stdout goes into no pipe or socket, whose reader (`less`, `grep`) writes to the same terminal; nothing elsewhere |
+| `tty` | The live tree: a few rows at the bottom of the terminal, redrawn as the work goes on, and a line above them for each step once it has finished; the counter's line on a terminal smaller than 40 columns or 8 rows |
+| `counter` | One line, redrawn as the work goes on, with how far each counted step under way has got and how long the command has run: `stopping · 9/24 · 8 running · 7 queued · 0:07.3` |
+| `plain` | A line for each step that starts or ends, each wait with a limit as it starts, each target that fails, and every ten seconds for each counted step under way, after the time since the command started and with no escape codes; it needs no terminal |
+| `none` | Nothing |
+
+- `--progress tty` or `counter` where neither can be drawn, as stderr is not a terminal or `TERM` is `dumb`, is a usage error, so that whoever asked learns why nothing shows, and so is a mode `--progress` does not take; `checkProgressFlag` refuses both in `PersistentPreRunE`, before any command acts, also one that shows no progress.
+- `SIND_PROGRESS` is set once, in a profile or for a CI job, and inherited by commands that never asked, so it fails no command: `tty` or `counter` where neither can be drawn shows nothing, and a value sind does not take shows nothing and says so in one line on stderr (`sind: SIND_PROGRESS is "plian"; it takes one of auto, tty, counter, plain, none; no progress is shown`). Only a command that shows progress reads it.
+- Without a display (`none`, and `auto` where stderr is not a terminal: a pipe, a file, a CI log, sind-action, an MCP tool call), sind makes no progress Bus unless an event log is asked for, and stderr carries byte for byte what it would without progress.
+- The tree and the counter draw nothing in their first second: a command done by then leaves nothing on the terminal. A hidden span, such as a docker command (a call named after its subcommand, `docker exec`), is drawn only once it has run for a second. Only steps leave a line, with their targets that failed below it: a hidden step only when it failed or took a second or longer, and no step that ends well within a tenth of a second with nothing drawn below it.
+- On success the tree leaves only the lines of its finished steps, the counter nothing and `plain` its lines, and `exit 0` says the rest. A command that failed or was interrupted after a second or longer also gets, under any display, a summary line (`display.Summary`) below the display and above the final error line: `sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled`. The Bus, the display, the event log and the summary live inside the decorated `RunE`, which takes them down before it returns, and so before `run` prints the error line: cobra does not run `PersistentPostRunE` for a command that failed.
+- Under a display, everything the command writes goes through the display's `Terminal`, which takes the tree or the counter off first: cobra's stderr (`Warning:` lines, help), stdout when it is the same terminal, the context's stderr (`withStderr`: the warnings of the realm lock and the mesh) and the logger (see Logging Conventions). Nothing in `pkg/` writes to a stream itself.
+- On a terminal the displays and the summary draw go-clikit's Classic theme: its marks in green, red, amber and blue, `⋅` and `⋯` as separators, and a mark in front of the summary (`sind: ✗ create cluster: failed in 38s: ...`). It draws in 256 colours, in the terminal's own 16 where the colour profile of stderr shows no more, and in its marks alone under `NO_COLOR` (`progressTheme`, from the profile lipgloss reads for the logger). Off a terminal, and on one whose `TERM` is `dumb`, the displays draw plain text, as the lines then go to a log.
+- The tree draws ASCII marks unless `LC_ALL`, `LC_CTYPE` or `LANG` names UTF-8 (`cliprogress.UTF8Locale`). It draws its clocks in tenths of a second, `0:41.3` for the command and `4.2s` for a running step, so that every frame differs while anything runs; the summary and the durations of finished steps keep their formats. go-clikit asks the terminal for its size at each frame and draws nothing in the background of a terminal (`cliprogress.TerminalSize`, `cliprogress.InForeground`); sind passes both the stream and decides nothing about them.
+- Once the first SIGINT or SIGTERM has arrived, the command's row says `interrupting`, with how many running targets will stop and how many queued ones will not start, and every span that fails from then on ends canceled (`progressClass`), as a docker command the interrupt killed fails with `signal: killed` alone. Otherwise a usage error is of the class `usage`, `cluster.ErrNotReady` (`--wait`) a `timeout`, and any other failure the target's.
+- `create cluster --config -` takes the display off the terminal while it reads stdin, which may be the terminal (`progress.Suspend`).
+- `--progress-log FILE`, else `SIND_PROGRESS_LOG`, appends the command's events to FILE as JSON lines, go-clikit's [event log](https://github.com/GSI-HPC/go-clikit/blob/v0.3.0/doc/event-log.md) version 1 (`progress.NewLog`, with sind's version), with any mode, `none` included, and writes nothing on stderr. `cliprogress` opens it privately: it creates the file with mode `0600` and appends to it (`O_APPEND`), so that the commands of a CI job can share one log, each a `run` of its own, and refuses a file that is not the user's, that others can read or write (`run chmod 600 <path>`), that has other names (`<path> has other names than this one (N hard links)`), or that a link or a named pipe of another user leads to; it writes `/dev/stdout`, `/dev/stderr`, `/dev/fd/N` and `/proc/self/fd/N` through a duplicate of that descriptor. A log on the file the display draws on, such as `/dev/stderr` on the terminal, goes through the display's `Terminal`, so that its lines, written from the log's goroutine, land above the display and never in it. A log the flag names that cannot be used is a usage error before the command acts; one the variable names is a note on stderr, and no log. `--progress-log ""` writes no log even when the variable names one. A log that cannot be written once the command runs fails nothing, and sind says once that it stops short.
+- `TRACEPARENT` and `TRACESTATE` name the W3C trace the event log continues (`progress.ParseTraceContext`). A command that makes a Bus, as it shows progress or writes an event log, takes both out of its environment (`takeTraceContext`, from `cliprogress.Options.Trace`), so docker and the other programs it runs inherit neither: sind sends its spans nowhere else, and a child that ran under one would hang what it traces under a parent no tracing system holds. Without a Bus sind has no spans, and the programs it runs inherit both, so that their spans belong under the caller's.
+- `create cluster` reports, under its command span: the hidden step `mesh` (`mesh.Manager.EnsureMesh`), with a target for each part, `network`, `dns`, `volume` and `relay`, announced queued before the first runs, skipped as `exists` or `running` when it had nothing to do, so that a mesh in place leaves nothing, and showing in the row of the DNS container and of the relay the lines of the pull their `docker create` makes; `pull images`, only when sind pulls, with a target for each image that shows the lines of `docker pull`; the hidden step `preflight` beside it (the checks, `createResources`, `resolveInfra`, `DetectCVMFS`, `CheckNsdelegate`), canceled when the pull failed, and failed when the inspection of the images that comes before any pull did, as no step shows that one; `nodes`, with a target for each node (its short name and role) and under it the node's docker calls, its wait `ready` and its call `setup` (`setupNode`); then `mesh registration`, `slurm` (a target for each managed node, the db node's announced with the others), `accounts` (with `accounts`) and `home directories` (with `users`). `create worker` reports `pull images`, `nodes`, `mesh registration` and `slurm` the same way.
+- The wait `ready` (`probe.UntilReady`) is bounded by what is left until the context's deadline, the `--wait` limit, in whole seconds, and its message names the check that fails now, updated when that changes. Plain lines say when it starts, with its bound, and when it fails or is interrupted.
+- The `nodes` and `slurm` pools stay fail-fast errgroups with the same errors: a node stopped by a sibling's failure or an interrupt ends canceled with its own error as text (`endSpan`), not failed with `signal: killed`; when a db node fails, the nodes not started end canceled with the step.
+- The rollback of a failed `create cluster` or `create worker` is the step `rollback` (`startRollback`, and the removal of a mesh `EnsureMesh` made in `cmd/sind/create.go`), ended ok or with what it could not undo, which is a failure also after an interrupt (`rollbackFailure` classes it by its own error, not by `progressClass`), as the rollback runs on; the command's error and what it logs are the same as without it.
+- The power commands report the step their pool is named by, and `delete cluster --all` the step `clusters`, with a target for each node or cluster (see Power Control and Cluster Management); `delete cluster` and `delete worker` report no step, only their docker calls.
+- The wait for the realm lock is the wait `realm lock`, whose message names the holder of the daemon lock; the `Warning:` line stays (see Realm Advisory Locking).
+- MCP tool calls show no progress and write no events (see MCP Server).
 
 ### Shell Completion
 
@@ -315,12 +361,13 @@ When introducing a new command:
 2. **Args**: cluster as optional positional (default "default"), nodes as required positional
 3. **Flags**: long-form, kebab-case, minimal short flags
 4. **Completion**: add `ValidArgsFunction` for cluster/node args
-5. **Output**: table for lists, confirmation for mutations, silence for passthrough
+5. **Output**: table for lists, nothing on success for mutations but their progress display, silence for passthrough
 6. **Logging**: info for phases, debug for operations, trace for raw commands
 7. **Errors**: wrap with `fmt.Errorf("context: %w", err)`, no error prefixes; an argument or flag value that is not valid returns `usage(err)` or `usagef(...)`, so that it exits 2 (`Args` checks are wrapped already)
 8. **Tests**: unit test with mock executor, integration test in lifecycle test
 9. **MCP**: classify the command in `mcpEffects`, or list it in `mcpExcluded` (`cmd/sind/mcp.go`)
-10. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
+10. **Progress**: a command that changes clusters and asks nothing wraps its `RunE` with `withProgress`, and the work it calls reports its steps, targets and waits as progress spans, every target of a counted step announced queued before the first of them runs (see Progress Display)
+11. **Docs**: update DESIGN.md CLI Commands section, update docs/content/
 
 ## Testing
 
@@ -376,7 +423,7 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 - Order: stops/removes containers → disconnects/removes networks → removes volumes
 - The last cluster of a realm takes the mesh with it; its nodes are then not removed from the mesh DNS and `known_hosts` first
 
-`sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure.
+`sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
 Example output:
 
@@ -539,7 +586,7 @@ Before it creates a worker container, sind checks that the Docker host mounts cg
 
 `--count` must be at least 1 and `--cpus` must not be negative. These, `--pull` without `--image`, and `--cap-add`, `--cap-drop`, `--device`, `--security-opt`, `--memory` and `--tmp-size`, which are checked like the config's `capAdd`, `capDrop`, `devices`, `securityOpt`, `memory` and `tmpSize`, are usage errors that sind reports before it takes the realm lock or creates any container. Once it has found the cluster's controller, and before it starts a stopped mesh or creates a worker, sind refuses workers that would not fit on the realm's mesh or the cluster network (see Limits under Networking), with exit status 1.
 
-With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: mutations stay silent by default.
+With `-v`, `sind create cluster` and `sind create worker` log an info-level `extra privileges` notice for each node that gets extra capabilities, devices or security options, or bind-mounts host directories (the data directory, the host's `/cvmfs`). It is not a warning: a mutation writes nothing on success but, on a terminal, what its progress display leaves.
 
 Examples:
 
@@ -591,6 +638,8 @@ sind power unfreeze NODES               # resume frozen node
 `docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
 
 A power command runs its Docker calls for the nodes of a cluster in parallel (at most 8 at a time), and handles the clusters of its nodes one after another; `reboot` and `cycle` take every node of a cluster down before they start any of them. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.
+
+The Docker calls of a cluster's nodes run on go-clikit's `fanout.Map` (`forEachContainer`), which a display shows as a step named by what the calls do, `stopping` (shutdown, reboot), `killing` (cut, cycle), `starting` (on, reboot, cycle), `pausing` (freeze) or `unpausing` (unfreeze), with a target for each node, named as a node argument names it (`worker-0` in the default cluster, `worker-0.dev` in another, so that a command that spans clusters tells their nodes apart, in its rows as in its summary), and with its role. Its `Summarize` (`joinFailures`) words each failure as before, `<verb> <container>: <error>`, joined in the order of the nodes, so that the error text and `errors.Is` stay as they were. Once the command is interrupted it starts no further node, and those left out fail with `context canceled`. A panic in the work for one node fails that node, `sind panicked; this is a bug, please report it: ...`, with a line that names the node and the stack on stderr, above a display (the Bus's panic log, or the writer `cluster.WithPanicLog` puts in the context, the command's stderr), and the other nodes finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
 `on`, `reboot` and `cycle` start the realm's mesh DNS and SSH relay first if they are stopped, start the nodes, and then point the started nodes' mesh DNS records at their current cluster network addresses: Docker releases a container's address when it stops and can give it another one on start, for example after `sind create worker` took the address of a node that was powered off. They warn about nodes created with a mesh DNS address the DNS container no longer has. Since they rewrite the realm's Corefile, they take the realm lock.
 
@@ -658,13 +707,14 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get auth-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `power on`, `power unfreeze`) or destructive (`destructiveHint: true`: `create`, `delete`, `exec`, and the other `power` actions). `create cluster` and `create worker` count as destructive because their flags choose the image a node runs as root, capabilities, devices, security options, a config file and a host directory mounted read-write: one call can run code with host-root power. A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
-- Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument) and `logs --follow` (it never ends, and a tool returns its output only when the command exits).
+- Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument), `logs --follow` (it never ends, and a tool returns its output only when the command exits), and `--progress` and `--progress-log` (a tool's output is no terminal, and holds no progress and no events).
+- `sind mcp start` and `sind mcp stream` set `SIND_PROGRESS=none` and unset `SIND_PROGRESS_LOG` for the sind processes they run (`withoutProgress`), which inherit the server's environment: a `SIND_PROGRESS=plain` set for the user's shell would add its lines to every tool's output, a `SIND_PROGRESS_LOG` of `/dev/stderr` its events, and one that cannot be opened a note.
 - A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
 - A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`, and `sind_exec` returns the status of the command it ran.
 
 ## Node Arguments
 
-Commands accepting node arguments use DNS-style names with optional nodeset expansion.
+Commands accepting node arguments use DNS-style names, written as a node set expression to name several nodes.
 
 ### Format
 
@@ -673,27 +723,36 @@ Commands accepting node arguments use DNS-style names with optional nodeset expa
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `.default` if omitted.
+The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name.
 
-### Nodeset Notation
+### Node Sets
 
-Nodeset notation (as used in Slurm, pdsh, ClusterShell) is supported for specifying multiple nodes:
+Node arguments are node set expressions in ClusterShell's syntax, which Slurm and pdsh users know too, parsed by [go-nodeset](https://github.com/GSI-HPC/go-nodeset), whose [language reference](https://github.com/GSI-HPC/go-nodeset/blob/v1.0.0/doc/language.md) has the full rules:
 
-| Pattern | Expansion |
-|---------|-----------|
+| Expression | Nodes |
+|------------|-------|
 | `worker-[0-3]` | worker-0, worker-1, worker-2, worker-3 |
 | `worker-[0,2,4]` | worker-0, worker-2, worker-4 |
 | `worker-[0-2,5]` | worker-0, worker-1, worker-2, worker-5 |
+| `worker-[0-6/2]` | worker-0, worker-2, worker-4, worker-6 |
 | `worker-[0-1].dev` | worker-0.dev, worker-1.dev |
+| `worker-[0-1].dev[1-2]` | worker-0.dev1, worker-0.dev2, worker-1.dev1, worker-1.dev2 |
+| `controller,worker-0` or `controller worker-0` | controller, worker-0 (union) |
+| `worker-[0-5]!worker-[2-3]` | worker-0, worker-1, worker-4, worker-5 (difference) |
+| `worker-[0-5]&worker-[4-9]` | worker-4, worker-5 (intersection) |
+| `worker-[0-3]^worker-[2-5]` | worker-0, worker-1, worker-4, worker-5 (symmetric difference) |
 
-Multiple nodesets can be comma-separated:
+Rules:
+- Every run of digits in a name is a number, the cluster's included; a bracket may stand for any of them, and the padding and order rules below apply to each.
+- The operators have no precedence: an expression is evaluated left to right, so `worker-[0-9]!worker-[0-4]&worker-[3-6]` is worker-5 and worker-6. `!`, `&` and `^` need an operand on each side; an empty operand of a union is nothing, so `worker-0,` is worker-0.
+- A command joins its node arguments with a space, which is a union, so `sind power on worker-[0-3] '!worker-2'` is one expression. Quote an expression with `!`, `&` or `^` from the shell.
+- Zero padding is not part of a node's identity: `worker-1,worker-01` is one node, and `worker-[1-3]!worker-02` is worker-1 and worker-3. A node keeps the spelling it was first given, and sind looks it up by that spelling. sind names its workers without padding, so `worker-[00-03]` names none of them.
+- The padding of the cluster suffix's numbers is no part of the identity either, but clusters `dev1` and `dev01` are two: an expression whose names differ only in the padding of their cluster (`worker-0.dev1,worker-0.dev01`), which would act on one of the two nodes, is a usage error (`paddingClash` expands each term on its own to see every spelling).
+- The operators compare names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing. Write the suffix the same way throughout an expression.
+- A group (`@name`) is a usage error: sind has no node groups.
+- An expression that names no node is a usage error, and so is one that names more than 2^20 nodes, which go-nodeset refuses before it allocates the names, or a name that begins with `-`, which a command it is passed to could read as an option.
 
-```bash
-sind power shutdown controller,worker-[0-3]
-sind power cycle worker-[0-1].dev,worker-[0-3].default
-```
-
-A pattern expands to at most 2^20 names, matching clusterctl's nodeset, so a pattern such as `worker-[0-99999999]` is rejected before any name is allocated. An expanded name that begins with `-` is rejected, since a command it is passed to could read it as an option.
+sind acts on the nodes in go-nodeset's order: sorted by the name with each number taken as a placeholder that sorts before letters, `-` and `.`, then by number, the last number varying fastest. `worker-10 worker-2.dev controller worker-1` is controller, worker-1, worker-10, worker-2.dev. `power` and `delete worker` take the nodes cluster by cluster, the clusters in the order of their first node.
 
 ### Examples
 
@@ -702,6 +761,8 @@ sind power shutdown controller                    # controller.default
 sind power cycle worker-0                        # worker-0.default
 sind power freeze worker-[0-3].dev               # 4 nodes in dev cluster
 sind power reboot controller,worker-[0-1]        # multiple nodes in default
+sind power on worker-[0-3] '!worker-2'           # 3 nodes in default
+sind delete worker worker-[0-1].dev worker-3.prod  # nodes in two clusters
 ```
 
 ## Configuration Schema
@@ -1865,6 +1926,7 @@ Alternatives that were rejected:
 - If another operation holds the file lock, sind prints `Warning: waiting for another sind command in realm "<realm>" to finish` to stderr, at every verbosity, and blocks until the lock is released: waiting is a state the user may have to act on, so it is not left to `-v`
 - If another client holds the daemon lock, the warning names it from the lock's labels, e.g. `Warning: waiting for another sind command in realm "sind" to finish: sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03)`, with the time the daemon created the lock in local time. sind tries again at intervals that double from 100 ms to 2 s; waiting clients take a freed lock in no particular order. What the warnings quote of the labels is escaped, as another client wrote it
 - The waits have no timeout; context cancellation (e.g., Ctrl+C, SIGTERM) ends them
+- The wait is also the progress wait `realm lock`, from the first wait until sind takes the lock or gives up, whose message names the holder of the daemon lock once it is known: on a terminal, the progress display shows it below the `Warning:` line, which stays
 - Lock is released when the operation completes, success or failure, after the rollback of a failed `create cluster`, and after Ctrl+C or SIGTERM: sind removes the daemon lock by its network ID, so that it never removes another client's lock, with a context that the interrupt does not cancel, for at most 30 s, and then releases the file lock. If the removal fails, sind warns `Warning: releasing the realm lock: <error>; remove it with: docker network rm <realm>-lock`
 
 ### Stale daemon locks

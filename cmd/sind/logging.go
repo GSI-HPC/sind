@@ -16,6 +16,14 @@ import (
 // At verbosity 0, only errors are shown. Higher levels add info, debug, and trace output.
 // Uses charmbracelet/log for colorized, human-friendly output on TTYs.
 func newLogger(w io.Writer, verbosity int) *slog.Logger {
+	return slog.New(newLogHandler(w, verbosity))
+}
+
+// newLogHandler builds the charmbracelet/log handler of newLogger, whose
+// colours follow what w is; a writer that is not the terminal itself, such
+// as a progress display's (cliprogress.Start), sets them with
+// SetColorProfile.
+func newLogHandler(w io.Writer, verbosity int) *charmlog.Logger {
 	level := charmlog.ErrorLevel
 	switch {
 	case verbosity >= 3:
@@ -39,5 +47,5 @@ func newLogger(w io.Writer, verbosity int) *slog.Logger {
 		MaxWidth(4)
 	handler.SetStyles(styles)
 
-	return slog.New(handler)
+	return handler
 }

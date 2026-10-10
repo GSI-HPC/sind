@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -56,6 +56,10 @@ func interruptContext() (context.Context, context.CancelFunc) {
 // The error is written to stderr escaped: it can quote what docker or a
 // container wrote, and the logger quotes attribute values but not the
 // message, so a control sequence in it would otherwise reach the terminal.
+//
+// A command that showed its progress has taken the display off the
+// terminal, and written its summary, by the time cmd.Execute returns
+// (withProgress), so the error line comes last and is not drawn over.
 func run(ctx context.Context, args []string, stderr io.Writer) int {
 	cmd := NewRootCommand()
 	cmd.SetArgs(args)
@@ -76,7 +80,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		}
 		return child.code
 	}
-	msg := termtext.EscapeText(err.Error())
+	msg := termtext.EscapeLines(err.Error())
 	log := sindlog.From(cmd.Context())
 	if ctx.Err() != nil {
 		log.ErrorContext(cmd.Context(), "interrupted: "+msg)

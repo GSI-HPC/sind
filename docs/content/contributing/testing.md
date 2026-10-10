@@ -97,6 +97,34 @@ client := docker.NewClient(rec)
 t.Log(rec.Dump())
 ```
 
+## Progress spans and displays
+
+The `progress/progresstest` package of [go-clikit](https://github.com/GSI-HPC/go-clikit) tests the progress spans that code reports (see [Progress spans]({{< relref "/contributing/architecture-guide#progress-spans" >}})):
+
+```go
+ctx, w := progresstest.Watch(t.Context(), t)
+
+_, err := WorkerAdd(ctx, client, meshMgr, WorkerAddOptions{ClusterName: "dev", Count: 2}, interval)
+
+require.NoError(t, err)
+w.Finish()
+assert.Equal(t, `step mesh registration: ok
+step nodes total=2 [fold]: ok
+  target worker-[1-2] role=worker: ok
+    wait ready: ok
+step slurm total=2 [fold]: ok
+  target worker-[1-2] role=worker: ok
+    wait ready: ok
+`, withoutCalls(w.Events()))
+```
+
+- `Watch` gives the test a context with a Bus of its own. `Finish` runs `progresstest.Check` on the events, closes the Bus and returns the spans as a tree that does not depend on the order in which concurrent work ran; a test that does not call `Finish` is checked when it ends. `Check` fails the test for every promise the spans break: each span starts and ends once, under a parent that is still open; the targets of a counted step are all announced queued before the first of them runs, and as many end as its `Total`; no more run at once than its `Limit`; no text holds what a terminal would act on.
+- In `cmd/sind`, pass `progresstest.Classify(progressClass(ctx))`, so that the spans get the classes sind's own Bus gives them.
+- Every docker command is a call in the tree. `withoutCalls`, a helper in the progress tests of `cmd/sind`, `pkg/cluster` and `pkg/mesh`, draws the tree without the calls and what is under them, for a test whose point is not how often a wait polls.
+- Without `Watch` the context has no Bus, every span does nothing, and a test sees what it saw before sind reported progress.
+
+The display tests in `cmd/sind` replace the seams that `cmd/sind/progress.go` keeps as package variables: `onTerminal` and `intoPipe` (what a stream is), `terminalSize` and `inForeground` (asked at each frame), `displayClock`, and `startRun`, which makes the Bus and the display of a command (`cliprogress.Start`). `onTerminals` makes the streams a test names terminals, 160 columns by 40 rows with sind in the foreground; `fakeDisplays` makes each display without starting it (`cliprogress.Options.Manual`), on a clock that moves a second each time the test calls `draw`, so a test draws every frame itself on a `progresstest.Screen` and compares what the screen shows. `TestMain` unsets `SIND_PROGRESS` and `SIND_PROGRESS_LOG`, so that a developer's own settings reach no test.
+
 ## Integration test isolation
 
 Integration tests use unique realms to avoid resource conflicts when running in parallel. Each test gets a random realm from `testutil.Realm`, which appends eight random hex digits to a prefix:

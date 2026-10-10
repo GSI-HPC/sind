@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 
@@ -1435,4 +1436,60 @@ func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
 	var te *TerminalError
 	require.ErrorAs(t, err, &te)
 	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled; last probe error: boom", err.Error())
+}
+
+// endsOnDemand is a wait whose deadline passes when end is called, not at
+// a time, so that a test ends it at the point it means to, however slow
+// the machine runs.
+type endsOnDemand struct {
+	context.Context
+	done chan struct{}
+	once sync.Once
+}
+
+func newEndsOnDemand(parent context.Context) *endsOnDemand {
+	return &endsOnDemand{Context: parent, done: make(chan struct{})}
+}
+
+func (c *endsOnDemand) Done() <-chan struct{} { return c.done }
+
+func (c *endsOnDemand) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (c *endsOnDemand) end() { c.once.Do(func() { close(c.done) }) }
+
+// hangsUntilEnd returns a probe that ends the wait ctx as it starts, and
+// runs until the wait has ended, as a docker call that hangs does, and
+// then fails as the killed call does.
+func hangsUntilEnd(ctx *endsOnDemand) Func {
+	return func(probeCtx context.Context, _ *docker.Client, _ docker.ContainerName) error {
+		ctx.end()
+		<-probeCtx.Done()
+		return fmt.Errorf("signal: killed")
+	}
+}
+
+// A probe that hangs until the wait ends, after another probe that failed
+// before has passed, is the one reported, with its own error: the error of
+// the probe that passed says nothing of why the node is not ready.
+func TestUntilReady_EndReportsTheProbeThatHangs(t *testing.T) {
+	ctx := newEndsOnDemand(t.Context())
+	var m mock.Executor
+	m.AddResult(inspectJSON("created"), "", nil)
+	m.AddResult(inspectJSON("running"), "", nil)
+	probes := []Probe{
+		{Name: "container", Check: ContainerRunning},
+		{Name: "munge", Check: hangsUntilEnd(ctx)},
+	}
+
+	err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, "node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: signal: killed", err.Error())
 }

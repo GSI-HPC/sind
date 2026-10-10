@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -139,6 +140,10 @@ var mcpExcludedFlags = map[string]bool{
 	// logs --follow never ends, and a tool's output is returned only when
 	// the command exits.
 	"follow": true,
+	// A tool's output is no terminal, and holds no progress and no
+	// events (withoutProgress).
+	"progress":     true,
+	"progress-log": true,
 }
 
 // isMCPFlag reports whether a flag is offered in a tool's input schema.
@@ -242,6 +247,8 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 	host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
 	withMCPRealm(start)
 	withMCPRealm(stream)
+	withoutProgress(start)
+	withoutProgress(stream)
 	noArgs(cmd)
 	return cmd
 }
@@ -257,6 +264,22 @@ func withMCPRealm(cmd *cobra.Command) {
 			realm, _ := cmd.Root().Flags().GetString("realm")
 			_ = os.Setenv("SIND_REALM", realm)
 		}
+		return run(cmd, args)
+	}
+}
+
+// withoutProgress has the sind processes a server command runs for its
+// tool calls show no progress and write no event log, through
+// SIND_PROGRESS=none and no SIND_PROGRESS_LOG: they run with this
+// process's environment, and a SIND_PROGRESS=plain set for the user's
+// shell would add its lines to every tool's output, a SIND_PROGRESS_LOG of
+// /dev/stderr its events, and one that cannot be opened a note. Their
+// stderr is no terminal, so nothing else would draw.
+func withoutProgress(cmd *cobra.Command) {
+	run := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		_ = os.Setenv(envProgress, cliprogress.ModeNone.String())
+		_ = os.Unsetenv(envProgressLog)
 		return run(cmd, args)
 	}
 }

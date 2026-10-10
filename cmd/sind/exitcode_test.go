@@ -56,6 +56,12 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"get", "node", "worker-0.dev.sind.sind"}, "not the FQDN"},
 		{[]string{"get", "node", "worker-0.Not_A_Name"}, `invalid node name "worker-0.Not_A_Name"`},
 		{[]string{"power", "on", "worker-["}, "expanding nodes"},
+		{[]string{"power", "on", "@compute"}, "expanding nodes: group @compute: sind has no node groups"},
+		// The arguments are joined with a space, so an operator may start
+		// one: a comma would leave the ! without a left operand.
+		{[]string{"power", "on", "worker-0", "!worker-0"}, `expanding nodes: "worker-0 !worker-0" names no node`},
+		{[]string{"delete", "worker", "worker-[0-1]", "!", "worker-[0-1]"}, `expanding nodes: "worker-[0-1] ! worker-[0-1]" names no node`},
+		{[]string{"ssh", "worker-0 worker-1"}, "ssh requires exactly one node, got 2"},
 		{[]string{"delete", "worker", ".dev"}, `invalid node name ".dev"`},
 		{[]string{"delete", "cluster", "--all", "dev"}, "--all does not accept arguments"},
 		{[]string{"logs", "worker-[0-1]"}, "logs requires exactly one node, got 2"},

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/afero"
@@ -19,13 +19,13 @@ func newCreateWorkerCommand() *cobra.Command {
 		Short:             "Add worker nodes to a cluster",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			name := config.DefaultClusterName
 			if len(args) > 0 {
 				name = args[0]
 			}
 			return runCreateWorker(cmd, name)
-		},
+		}),
 	}
 
 	cmd.Flags().Int("count", 1, "number of nodes to add")
@@ -133,7 +133,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeText(exportErr.Error()))
+			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
 		}
 	}
 
@@ -146,9 +146,9 @@ func newDeleteWorkerCommand() *cobra.Command {
 		Short:             "Remove worker nodes from a cluster",
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeNodeNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDeleteWorker(cmd, strings.Join(args, ","))
-		},
+		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+			return runDeleteWorker(cmd, strings.Join(args, " "))
+		}),
 	}
 }
 
@@ -173,15 +173,15 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 
 	meshMgr := meshMgrFrom(ctx, client, realm)
 
-	for clusterName, shortNames := range groupByCluster(targets) {
-		if err := cluster.WorkerRemove(ctx, client, meshMgr, clusterName, shortNames); err != nil {
+	for _, g := range groupByCluster(targets) {
+		if err := cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames); err != nil {
 			return err
 		}
 	}
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeText(exportErr.Error()))
+			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
 		}
 	}
 

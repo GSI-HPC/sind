@@ -51,20 +51,22 @@ func (m *Manager) ensureSSHVolume(ctx context.Context) (bool, error) {
 }
 
 // ensureSSH creates the SSH relay container if it does not exist yet, or
-// starts it when it is stopped. The container runs on the mesh network
-// with the SSH volume mounted at /root/.ssh, so that ssh finds the keypair
-// and known_hosts, and resolves names through the mesh DNS at dnsIP.
+// starts it when it is stopped, and reports whether it changed the relay.
+// The container runs on the mesh network with the SSH volume mounted at
+// /root/.ssh, so that ssh finds the keypair and known_hosts, and resolves
+// names through the mesh DNS at dnsIP.
 //
 // writeKeys generates an ed25519 keypair and writes it, with an empty
 // known_hosts, into the volume through the relay: id_ed25519 (private key),
 // id_ed25519.pub (public key) and known_hosts. A new relay gets them before
 // it starts.
-func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) error {
+func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (bool, error) {
 	name := m.SSHContainerName()
 	info, err := m.inspectIfExists(ctx, name)
 	if err != nil {
-		return fmt.Errorf("checking SSH container: %w", err)
+		return false, fmt.Errorf("checking SSH container: %w", err)
 	}
+	changed := info == nil || writeKeys || info.Status != docker.StateRunning
 
 	if info == nil {
 		sshArgs := []string{
@@ -79,22 +81,22 @@ func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) e
 		}
 		sshArgs = append(sshArgs, SSHImage(), "sleep", "infinity")
 		if _, err := m.Docker.CreateContainer(ctx, sshArgs...); err != nil {
-			return fmt.Errorf("creating SSH container: %w", err)
+			return false, fmt.Errorf("creating SSH container: %w", err)
 		}
 		info = &docker.ContainerInfo{Name: name, Status: docker.StateCreated}
 	}
 
 	if writeKeys {
 		if err := m.writeSSHKeys(ctx); err != nil {
-			return err
+			return false, err
 		}
 	}
 
 	if err := m.startSSH(ctx, info); err != nil {
-		return err
+		return false, err
 	}
 	m.WarnStaleDNS(ctx, dnsIP, info)
-	return nil
+	return changed, nil
 }
 
 // writeSSHKeys generates the realm's keypair and copies it, with an empty
