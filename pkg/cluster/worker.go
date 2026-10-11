@@ -277,16 +277,22 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}
 		if retErr != nil && needsCleanup {
 			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
-			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
-			defer cancel()
+			cleanupCtx, endRollback := startRollback(ctx)
+			var rollbackErrs []error
+			failed := func(err error) {
+				err = fmt.Errorf("rolling back: %w", err)
+				rollbackErrs = append(rollbackErrs, err)
+				retErr = errors.Join(retErr, err)
+			}
 			if confUpdated {
 				if err := revertNodesConf(cleanupCtx, client, controllerName, nodesConf); err != nil {
-					retErr = errors.Join(retErr, fmt.Errorf("rolling back: %w", err))
+					failed(err)
 				}
 			}
 			if err := cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs); err != nil {
-				retErr = errors.Join(retErr, fmt.Errorf("rolling back: %w", err))
+				failed(err)
 			}
+			endRollback(errors.Join(rollbackErrs...))
 		}
 	}()
 

@@ -23,6 +23,14 @@ import (
 // test where the system gives none.
 func openPTY(t *testing.T) *os.File {
 	t.Helper()
+	_, pts := openPTYPair(t)
+	return pts
+}
+
+// openPTYPair returns both ends of a new pseudo-terminal, the master and
+// the terminal, and skips the test where the system gives none.
+func openPTYPair(t *testing.T) (ptmx, pts *os.File) {
+	t.Helper()
 	ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		t.Skipf("no pseudo-terminal: %v", err)
@@ -36,12 +44,12 @@ func openPTY(t *testing.T) *os.File {
 	if err != nil {
 		t.Skipf("numbering the pseudo-terminal: %v", err)
 	}
-	pts, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", n), os.O_RDWR|syscall.O_NOCTTY, 0)
+	pts, err = os.OpenFile(fmt.Sprintf("/dev/pts/%d", n), os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		t.Skipf("opening the pseudo-terminal: %v", err)
 	}
 	t.Cleanup(func() { _ = pts.Close() })
-	return pts
+	return ptmx, pts
 }
 
 // sshDockerArgs runs sind with args, stdin and stdout, and returns the

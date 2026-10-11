@@ -155,7 +155,7 @@ A development build reports the output of `git describe`, such as `0.10.0-3-gabc
 
 ## Verbose logging
 
-By default, sind operates silently — only command output and errors are shown. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
+By default, sind logs only errors. Besides them it shows only command output and, on a terminal, the [progress]({{< relref "/usage/progress" >}}) of `create`, `delete` and `power`. The `-v` flag enables structured log output on stderr for debugging and troubleshooting.
 
 ```bash
 sind -v  create cluster          # info: phase summaries
@@ -165,19 +165,22 @@ sind -vvv create cluster         # trace: docker commands, probe retries
 
 | Flag | Level | What's logged |
 |------|-------|---------------|
-| (none) | error | Errors only — commands are silent on success |
+| (none) | error | Errors only |
 | `-v` | info | Phase transitions: "creating cluster", "nodes ready", "slurm services enabled" |
 | `-vv` | debug | Individual operations: "waiting for node", "starting readiness probes", "enabling slurm service" |
 | `-vvv` | trace | Docker commands, probe retry attempts with error details |
 
-Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe.
+Log output goes to stderr in structured `key=value` format with timestamps and colorized levels on interactive terminals, keeping stdout clean for parseable output. Colors are automatically disabled when stderr is redirected to a file or pipe. On a terminal, the log lines of `create`, `delete` and `power` go above their progress display, never into it.
 
 ```bash
 # Capture logs while piping output
 sind -v get auth-key 2>create.log | base64 -d > munge.key
 
-# Watch creation progress
+# Log each operation of a creation
 sind -vv create cluster --config cluster.yaml
+
+# Follow a creation as plain lines, without a terminal
+sind create cluster --config cluster.yaml --progress plain 2>&1 | tee create.log
 ```
 
 Example output at `-vv` (colorized on interactive terminals):
@@ -198,7 +201,7 @@ Example output at `-vv` (colorized on interactive terminals):
 00:13:32.608 INFO slurm services enabled
 ```
 
-`-v` is a global flag and may come before or after the subcommand (`sind -v create cluster`, `sind create cluster -v`). `sind ssh` passes its arguments through to SSH, so for it `-v` must come first: `sind -v ssh worker-0` logs sind's steps, while `sind ssh -v worker-0` makes SSH verbose. The same holds for `--realm`. `sind exec` takes both anywhere before its `--`.
+`-v` is a global flag and may come before or after the subcommand (`sind -v create cluster`, `sind create cluster -v`). `sind ssh` passes its arguments through to SSH, so for it `-v` must come first: `sind -v ssh worker-0` logs sind's steps, while `sind ssh -v worker-0` makes SSH verbose. The same holds for `--realm`, `--progress` and `--progress-log`. `sind exec` takes them anywhere before its `--`.
 
 ## JSON output
 

@@ -28,9 +28,11 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 }
 
 // PullImage pulls an image from its registry, also when a copy of it is
-// present.
+// present. What docker pull writes is not kept; a progress span that shows
+// lines, as the targets of the pull images step do, shows the newest of
+// its status lines (one per layer and change, no bars without a terminal).
 func (c *Client) PullImage(ctx context.Context, image string) error {
-	_, _, err := c.run(ctx, "pull", "--quiet", image)
+	_, _, err := c.run(ctx, "pull", image)
 	return err
 }
 

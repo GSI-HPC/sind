@@ -12,7 +12,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -686,17 +686,14 @@ func formatSlurmVersion(version string) string {
 	return cell(version)
 }
 
-// cellReplacer shows the tab and newline that termtext.EscapeText keeps:
-// in a table cell they would start a column or a row of their own.
-var cellReplacer = strings.NewReplacer("\t", `\t`, "\n", `\n`)
-
 // cell makes text that came from a container, a label or docker safe to
 // print as a table cell. An image can set labels and print what sind
 // reads, so such text may hold control sequences that retitle the
 // terminal or write its clipboard; they are shown escaped (\x1b), as on
-// the final error line.
+// the final error line. Tab and newline are shown escaped too (\t, \n): in
+// a table cell they would start a column or a row of their own.
 func cell[S ~string](s S) string {
-	return cellReplacer.Replace(termtext.EscapeText(string(s)))
+	return termtext.Escape(string(s))
 }
 
 func checkmark(ok bool) string {

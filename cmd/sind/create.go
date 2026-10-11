@@ -12,7 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -58,13 +59,13 @@ func newCreateClusterCommand() *cobra.Command {
 		Short:             "Create a Slurm cluster",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			var name string
 			if len(args) > 0 {
 				name = args[0]
 			}
 			return runCreateCluster(cmd, name, configFile)
-		},
+		}),
 	}
 
 	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
@@ -81,7 +82,14 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
+	// --config - may read what the user types at the terminal; the
+	// progress display is off it meanwhile.
+	resume := func() {}
+	if configFile == configStdin {
+		resume = progress.Suspend(cmd.Context())
+	}
 	cfg, err := loadConfig(cmd.InOrStdin(), cmd.ErrOrStderr(), configFile)
+	resume()
 	if err != nil {
 		return err
 	}
@@ -96,7 +104,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	}
 	if ds := cfg.Storage.DataStorage; ds.UsesHostPath() {
 		if w := cluster.DataPathWarning(ds.HostPath); w != "" {
-			cmd.PrintErrln("Warning:", termtext.EscapeText(w))
+			cmd.PrintErrln("Warning:", termtext.EscapeLines(w))
 		}
 	}
 
@@ -137,11 +145,16 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	meshMgr.Pull = pull
 	if err := meshMgr.EnsureMesh(ctx); err != nil {
 		if meshMgr.Created() {
+			// The cleanup is the progress step "rollback", as
+			// cluster.Create's is.
 			log := sindlog.From(ctx)
 			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
-			cleanupCtx := context.WithoutCancel(ctx)
+			cleanupCtx, rollback := progress.Start(context.WithoutCancel(ctx), progress.KindStep, "rollback")
 			if cleanupErr := meshMgr.CleanupMesh(cleanupCtx); cleanupErr != nil {
+				rollback.End(rollbackFailed{cleanupErr})
 				log.ErrorContext(ctx, "mesh cleanup failed", "error", cleanupErr)
+			} else {
+				rollback.End(nil)
 			}
 		}
 		return fmt.Errorf("setting up mesh: %w", err)
@@ -154,7 +167,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	if dir, dirErr := sindStateDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeText(exportErr.Error()))
+			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
 		}
 	}
 

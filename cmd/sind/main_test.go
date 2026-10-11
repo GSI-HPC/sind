@@ -53,8 +53,9 @@ var fakeDockerSignals = map[string]syscall.Signal{
 
 // TestMain runs the tests without the caller's sind settings: an exported
 // SIND_REALM, as sind-action sets it in CI, would move every command into
-// another realm than the one the tests expect, and XDG_STATE_HOME would
-// point the state directory at the developer's own. A test that needs one
+// another realm than the one the tests expect, XDG_STATE_HOME would
+// point the state directory at the developer's own, and SIND_PROGRESS=plain
+// would add progress lines to stderr. A test that needs one
 // of them sets it with t.Setenv.
 //
 // Adapted from GSI-HPC/clusterctl internal/cli/main_test.go.
@@ -73,7 +74,7 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	}
-	for _, name := range []string{"SIND_REALM", "XDG_STATE_HOME"} {
+	for _, name := range []string{"SIND_REALM", "XDG_STATE_HOME", envProgress, envProgressLog} {
 		_ = os.Unsetenv(name)
 	}
 	os.Exit(m.Run())

@@ -1424,7 +1424,7 @@ func TestWorkerAdd_ExplicitImagePull(t *testing.T) {
 	}, time.Millisecond)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "custom:v2"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "custom:v2"))
 	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "custom:v2", "slurmctld", "-V"))
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
@@ -1517,7 +1517,7 @@ func TestWorkerAdd_ExplicitImageUnmanaged(t *testing.T) {
 	for _, c := range m.Calls {
 		assert.False(t, c.Args[0] == "run" && slices.Contains(c.Args, "plain:1"), "no version check: %v", c.Args)
 	}
-	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "plain:1"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "plain:1"))
 	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
 	require.True(t, ok)
 	assert.NotContains(t, args, "--pull")

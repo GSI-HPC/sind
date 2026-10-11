@@ -34,6 +34,8 @@ sind will:
 4. Start all node containers
 5. Wait for all nodes to become ready
 
+On a terminal, sind shows its progress while it works and leaves a line for each step it finished; where standard error is not a terminal, it prints nothing on success. See [Progress Display]({{< relref "/usage/progress" >}}).
+
 ## Check cluster status
 
 ```bash

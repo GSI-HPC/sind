@@ -76,6 +76,8 @@ If another operation already holds the lock, sind prints `Warning: waiting for a
 Warning: waiting for another sind command in realm "sind" to finish: sind create cluster dev (pid 4242 on build-07, since 2026-10-04 10:02:03)
 ```
 
+On a terminal, the [progress display]({{< relref "/usage/progress" >}}) shows the wait as `realm lock`, with how long it has lasted and, for another client's lock, the command it waits for, below the warning, which stays.
+
 The wait has no timeout; Ctrl+C ends it. sind releases the lock when the command ends, also when it fails or is interrupted with Ctrl+C or SIGTERM.
 
 A command killed with SIGKILL leaves the daemon lock behind. When the killed command ran on the same host, in the same container and since the last boot, the next sind command finds that its process is gone, removes the lock and says so (`Warning: removing the realm lock of ..., which no longer runs`). A lock from another host or container is never removed automatically, as its command may still be running; after a minute of waiting, sind prints the command that removes it:

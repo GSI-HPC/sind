@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -133,31 +134,66 @@ func (m *Manager) ComposeProject() string {
 //	        └→ volume ─┘
 //
 // The DNS container starts before the relay, which resolves through it.
-func (m *Manager) EnsureMesh(ctx context.Context) error {
+//
+// EnsureMesh reports its work as the hidden progress step "mesh", with a
+// target for each part: "network", "dns", "volume" and "relay", each
+// skipped with the reason "exists" or "running" when it had nothing to do,
+// so that a mesh in place leaves no trace on a display. The step shows in
+// the row of a part the newest line its docker commands write to standard
+// error, not the data they write to standard output (see docker.Client):
+// the docker create of the DNS container and of the relay writes the lines
+// of the pull of its image there when the daemon does not have it. A part
+// not seen to because one before it failed ends canceled with the step.
+func (m *Manager) EnsureMesh(ctx context.Context) (err error) {
+	ctx, step := progress.Start(ctx, progress.KindStep, "mesh",
+		progress.WithFlags(progress.Hidden|progress.Fold|progress.ShowLines), progress.Total(4))
+	defer func() { step.End(err) }()
 	log := sindlog.From(ctx)
 	log.InfoContext(ctx, "ensuring mesh infrastructure", "realm", m.Realm)
-	pinnedIP, err := m.ensureMeshNetwork(ctx)
+
+	// The DNS container and the volume are seen to at once, in a group
+	// that stops one when the other fails; every part is announced before
+	// the first runs.
+	g, gctx := errgroup.WithContext(ctx)
+	network := startPart(ctx, partNetwork)
+	dns := startPart(gctx, partDNS)
+	volume := startPart(gctx, partVolume)
+	relay := startPart(ctx, partRelay)
+
+	var pinnedIP string
+	err = network.run(skipExists, func(ctx context.Context) (bool, error) {
+		ip, err := m.ensureMeshNetwork(ctx)
+		pinnedIP = ip
+		return m.created, err
+	})
 	if err != nil {
+		_ = g.Wait() // releases gctx, under which nothing ran
 		return err
 	}
 
 	var dnsIP string
 	var volumeCreated bool
-	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		ip, err := m.ensureDNS(gctx, pinnedIP)
-		dnsIP = ip
-		return err
+		return dns.run(skipRunning, func(ctx context.Context) (bool, error) {
+			ip, changed, err := m.ensureDNS(ctx, pinnedIP)
+			dnsIP = ip
+			return changed, err
+		})
 	})
 	g.Go(func() error {
-		created, err := m.ensureSSHVolume(gctx)
-		volumeCreated = created
-		return err
+		return volume.run(skipExists, func(ctx context.Context) (bool, error) {
+			created, err := m.ensureSSHVolume(ctx)
+			volumeCreated = created
+			return created, err
+		})
 	})
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	if err := m.ensureSSH(ctx, dnsIP, volumeCreated); err != nil {
+	err = relay.run(skipRunning, func(ctx context.Context) (bool, error) {
+		return m.ensureSSH(ctx, dnsIP, volumeCreated)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -521,24 +557,25 @@ func isSubnetTaken(err error) bool {
 }
 
 // ensureDNS creates the mesh DNS container if it does not exist yet, or
-// starts it when it is stopped, and returns its address on the mesh network.
-// The container runs CoreDNS on the mesh network, serving <realm>.sind
-// records from inline hosts entries in the Corefile. A new container gets
-// the address pinnedIP, unless it is empty.
-func (m *Manager) ensureDNS(ctx context.Context, pinnedIP string) (string, error) {
+// starts it when it is stopped, and returns its address on the mesh network,
+// and whether it did either. The container runs CoreDNS on the mesh network,
+// serving <realm>.sind records from inline hosts entries in the Corefile. A
+// new container gets the address pinnedIP, unless it is empty.
+func (m *Manager) ensureDNS(ctx context.Context, pinnedIP string) (string, bool, error) {
 	info, err := m.inspectIfExists(ctx, m.DNSContainerName())
 	if err != nil {
-		return "", fmt.Errorf("checking DNS container: %w", err)
+		return "", false, fmt.Errorf("checking DNS container: %w", err)
 	}
+	changed := info == nil || info.Status != docker.StateRunning
 	if info == nil {
 		info, err = m.createDNS(ctx, pinnedIP)
 	} else {
 		info, err = m.startDNS(ctx, info)
 	}
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return info.IPs[m.NetworkName()], nil
+	return info.IPs[m.NetworkName()], changed, nil
 }
 
 // createDNS creates and starts the mesh DNS container with an empty

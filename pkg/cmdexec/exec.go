@@ -8,6 +8,8 @@ import (
 	"context"
 	"io"
 	"os/exec"
+
+	"github.com/GSI-HPC/go-clikit/progress"
 )
 
 // Executor runs external commands and captures their output.
@@ -34,8 +36,15 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = stdin
 	var outBuf, errBuf bytes.Buffer
+	// Under a progress span that shows lines, such as the target of an
+	// image docker pulls, its display shows the newest line the command
+	// wrote, of standard error alone when standard output is data
+	// (WithStdoutAsData); otherwise Tee returns the buffer itself.
 	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
+	if !StdoutIsData(ctx) {
+		cmd.Stdout = progress.Tee(ctx, &outBuf, progress.Stdout, nil)
+	}
+	cmd.Stderr = progress.Tee(ctx, &errBuf, progress.Stderr, nil)
 	err := cmd.Run()
 	return outBuf.String(), errBuf.String(), WrapExitError(err, errBuf.String())
 }

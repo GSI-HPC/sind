@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
@@ -85,21 +86,76 @@ func (c *Client) acquire(ctx context.Context) (release func(), err error) {
 
 func (c *Client) run(ctx context.Context, args ...string) (string, string, error) {
 	sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
-	release, err := c.acquire(ctx)
-	if err != nil {
-		return "", "", err
-	}
-	defer release()
-	return c.Executor.Run(ctx, c.Command, args...)
+	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
+		return c.Executor.Run(ctx, c.Command, args...)
+	})
 }
 
 func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
+	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
+		return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
+	})
+}
+
+// call runs the docker command args with exec once it has a slot, and
+// reports it as a hidden progress call named after it (see callName),
+// which a display draws only when it takes a second or longer: queued
+// while it waits for the slot, running from when it has one, and ended
+// with the command's exit code when docker exited with an error. Lines of
+// the command's output reach the display through the executor (see
+// cmdexec.OSExecutor), as the context passed to exec carries the call:
+// those of its standard error, and of its standard output only for docker
+// pull, which writes its status there. Every other command writes data
+// there, a container's ID, a name or the JSON of inspect, which is no line
+// for a row that shows what a pull does (cmdexec.WithStdoutAsData).
+func (c *Client) call(ctx context.Context, args []string, exec func(context.Context) (string, string, error)) (string, string, error) {
+	name := callName(args)
+	ctx, span := progress.Start(ctx, progress.KindCall, name, progress.Queued(), progress.WithFlags(progress.Hidden))
 	release, err := c.acquire(ctx)
 	if err != nil {
+		span.End(err)
 		return "", "", err
 	}
 	defer release()
-	return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)
+	span.Run()
+	runCtx := ctx
+	if name != "docker pull" && name != "docker image pull" {
+		runCtx = cmdexec.WithStdoutAsData(ctx)
+	}
+	stdout, stderr, err := exec(runCtx)
+	var end []progress.Option
+	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok {
+		end = append(end, progress.Exit(exitErr.ExitCode()))
+	}
+	span.End(err, end...)
+	return stdout, stderr, err
+}
+
+// callName names the progress call of the docker command args by what it
+// does, never by what it does it to: docker and the subcommand, with the
+// verb of a management command, as "docker network create"; no container
+// name, path or script.
+func callName(args []string) string {
+	if len(args) == 0 {
+		return "docker"
+	}
+	name := "docker " + args[0]
+	if managementCommands[args[0]] && len(args) > 1 && !strings.HasPrefix(args[1], "-") {
+		name += " " + args[1]
+	}
+	return name
+}
+
+// managementCommands are the docker subcommands whose next word is the
+// verb, as in docker network create.
+var managementCommands = map[string]bool{
+	"container": true,
+	"context":   true,
+	"image":     true,
+	"network":   true,
+	"plugin":    true,
+	"system":    true,
+	"volume":    true,
 }
 
 // SortedLabelFlags returns --label k=v flag pairs in sorted key order.

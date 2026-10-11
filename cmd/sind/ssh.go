@@ -165,15 +165,19 @@ func newExecCommand() *cobra.Command {
 
 func runExec(cmd *cobra.Command, args []string) error {
 	// Parse exec's own flags, which end at the --, so that --realm, -v,
-	// --user and --help also work after "exec", as in the "exec --realm R
-	// CLUSTER -- COMMAND" the MCP server runs.
+	// --progress, --user and --help also work after "exec", as in the
+	// "exec --realm R CLUSTER -- COMMAND" the MCP server runs.
 	flags := cmd.Flags()
-	flags.AddFlagSet(cmd.InheritedFlags()) // --realm and -v
+	flags.AddFlagSet(cmd.InheritedFlags()) // --realm, --progress and -v
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if help, _ := flags.GetBool("help"); help {
 		return cmd.Help()
+	}
+	// PersistentPreRunE checked --progress before these flags were parsed.
+	if err := checkProgressFlag(cmd); err != nil {
+		return err
 	}
 	applyVerbosity(cmd)
 

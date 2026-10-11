@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	spans "github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -124,7 +125,11 @@ const DefaultInterval = 500 * time.Millisecond
 // round runs the probes in order and stops at the first that fails; as
 // nothing tells UntilReady when what a passed probe checks changes, every
 // round starts again from the first probe. On timeout, the error includes
-// the name and message of the last failing probe.
+// the name and message of the probe that was failing: when the end of the
+// wait killed the docker call of the probe that failed last, or of one
+// before it that had passed, what the probe that failed last said, not the
+// killed call; a probe after it, which the round reached as that one
+// passed, with its own error.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	return untilReady(ctx, client, name, probes, interval, nil, "starting readiness probes")
 }
@@ -159,7 +164,18 @@ func UntilReadyWithEvents(ctx context.Context, client *docker.Client, name docke
 
 // untilReady is UntilReady with events nil, UntilReadyWithEvents
 // otherwise; it logs msg first.
-func untilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event, msg string) error {
+//
+// The wait is the progress wait "ready", whose message names the probe
+// that fails now, once it changes. It is bounded by the time left until
+// ctx's deadline, when it has one, in whole seconds: a display shows a wait
+// that has the whole --wait limit left as "5m", not "4m59.99s".
+func untilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration, events <-chan monitor.Event, msg string) (err error) {
+	var bound []spans.Option
+	if deadline, ok := ctx.Deadline(); ok {
+		bound = append(bound, spans.Timeout(max(time.Until(deadline).Round(time.Second), 0)))
+	}
+	ctx, wait := spans.Start(ctx, spans.KindWait, "ready", bound...)
+	defer func() { wait.End(err) }()
 	log := sindlog.From(ctx)
 	ticker := time.NewTicker(orDefault(interval))
 	defer ticker.Stop()
@@ -171,7 +187,10 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 	log.DebugContext(ctx, msg, "node", string(name), "probes", strings.Join(probeNames, ","))
 
 	pr := newProgress(probes, events)
+	// lastErr is the error of the probe that failed last, the probe at
+	// lastAt; -1 for none yet.
 	var lastErr error
+	lastAt := -1
 	for {
 		if pr.died != nil {
 			return pr.died
@@ -182,11 +201,25 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 				continue
 			}
 			if err := p.Check(ctx, client, name); err != nil {
-				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
 				log.Log(ctx, sindlog.LevelTrace, "probe failed", "node", string(name), "probe", p.Name, "err", err)
 				failed = true
 				var te *TerminalError
-				if errors.As(err, &te) {
+				terminal := errors.As(err, &te)
+				if ctx.Err() != nil && i <= lastAt && !terminal {
+					// The wait ended while the probe ran, which killed
+					// its docker call ("signal: killed"): that says
+					// nothing of the node. The error of the probe that
+					// failed last, this one or one after it, does. A
+					// probe after that one reports its own error: the
+					// round got past the one that failed, which passed.
+					break
+				}
+				lastErr = fmt.Errorf("probe %s: %w", p.Name, err)
+				if i != lastAt {
+					wait.Update(spans.Message(p.Name))
+				}
+				lastAt = i
+				if terminal {
 					return fmt.Errorf("node %s not ready: %w", name, lastErr)
 				}
 				break

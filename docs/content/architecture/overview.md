@@ -62,6 +62,8 @@ Creating and deleting clusters and workers acquire a per-realm lock to serialize
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
 - If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it.
 
+The creation reports these phases as the steps of its [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}): `mesh` (`EnsureMesh`), `pull images`, `preflight` (the four branches above), `nodes` (`setupNodes`, a target for each node), `mesh registration` (`registerMesh`), `slurm` (`enableSlurm`, a target for each managed node), `accounts` (`createSlurmAccounts`), `home directories` (`createHomes`) and, after a failure, `rollback`.
+
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 
 Mesh registration (batch DNS ║ known_hosts), Slurm enablement and the home directories run concurrently after all nodes are ready. Slurm resolves the nodes' short hostnames on the cluster network, which the nodes join with gateway priority ahead of the mesh (see [Networking]({{< relref "/architecture/networking#cluster-network" >}})), so it does not wait for the mesh DNS records.

@@ -57,6 +57,8 @@ EOF
 4. All node containers start in parallel
 5. sind waits for each node to become ready (systemd, sshd, Slurm daemons)
 
+On a terminal, sind shows these steps as it goes, and leaves a line for each one it finished (see [Progress Display]({{< relref "/usage/progress#what-the-commands-show" >}})).
+
 `--wait` limits how long sind waits for the nodes, the Slurm daemons and, with `accounts`, for slurmdbd to register the cluster. Each node's limit counts from when its container has started, so pulling the image does not count against it: sind pulls the images it does not have, once each, before it creates the first node. A container that exits, or a munge, slurmctld, slurmd, sackd, slurmrestd or slurmdbd unit that fails, ends the wait at once with the tail of the unit's journal.
 
 If a node is not ready within `--wait`, or a check fails for good, the command fails with exit status 1 and names the node and the last check that failed, for example:
@@ -65,7 +67,7 @@ If a node is not ready within `--wait`, or a check fails for good, the command f
 12:00:00.000 ERRO cluster dev not ready within 5m0s: waiting for worker-0: node sind-dev-worker-0 not ready: context deadline exceeded; last probe error: probe munge: munge not ready: activating
 ```
 
-sind then removes the resources it created, including a mesh that this invocation set up and no other cluster uses. If that cleanup fails too, the error says so after the original one; use `sind delete cluster` to remove what is left. On a slow host or CI runner, raise the limit, e.g. `--wait 15m`, or use `--wait 0` to wait until interrupted.
+sind then removes the resources it created, including a mesh that this invocation set up and no other cluster uses, which a progress display shows as the step `rollback`. If that cleanup fails too, the error says so after the original one; use `sind delete cluster` to remove what is left. On a slow host or CI runner, raise the limit, e.g. `--wait 15m`, or use `--wait 0` to wait until interrupted.
 
 Ctrl-C (SIGINT) or SIGTERM, as sent by `timeout` or `docker stop`, stops the creation and runs the same cleanup; sind then exits with status 130 (see [Exit Status]({{< relref "/usage/exit-status" >}})). A second signal ends sind at once, without waiting for the cleanup to finish.
 
@@ -114,4 +116,4 @@ sind delete cluster --all
 
 When the last cluster is deleted, sind also removes the shared mesh infrastructure (DNS, SSH, mesh network).
 
-`--all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the labels of their containers, networks and volumes, and also removes a mesh that no cluster is left in, as after a create that was killed. A cluster that fails to delete does not stop the others: sind deletes the rest, keeps the mesh, and exits non-zero naming the failed cluster.
+`--all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the labels of their containers, networks and volumes, and also removes a mesh that no cluster is left in, as after a create that was killed. A cluster that fails to delete does not stop the others: sind deletes the rest, keeps the mesh, and exits non-zero naming the failed cluster. So does a cluster whose deletion hits a bug in sind: its error says `sind panicked; this is a bug, please report it`, with the details on stderr, and the command exits 1. sind deletes at most four clusters at a time, and after Ctrl-C it starts no further one. On a terminal, the [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}) shows them as the step `clusters`.

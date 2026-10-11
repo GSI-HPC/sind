@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -43,13 +44,20 @@ func clusterImages(cfg *config.Cluster) []string {
 	return images
 }
 
-// pullImages pulls each image once, concurrently.
-func pullImages(ctx context.Context, client *docker.Client, images []string) error {
+// pullImages pulls each image once, concurrently. It reports the pulls as
+// the progress step "pull images", with a target for each image that shows
+// the lines docker pull writes.
+func pullImages(ctx context.Context, client *docker.Client, images []string) (err error) {
 	sindlog.From(ctx).InfoContext(ctx, "pulling images", "images", strings.Join(images, ","))
+	ctx, end := startStep(ctx, "pull images", progress.WithFlags(progress.Fold|progress.ShowLines), progress.Total(len(images)))
+	defer func() { end(err) }()
 	g, gctx := errgroup.WithContext(ctx)
-	for _, image := range images {
-		g.Go(func() error {
-			if err := client.PullImage(gctx, image); err != nil {
+	ctxs, targets := startTargets(gctx, images, func(int) string { return "" })
+	for i, image := range images {
+		g.Go(func() (err error) {
+			targets[i].Run()
+			defer func() { endSpan(gctx, targets[i], err) }()
+			if err := client.PullImage(ctxs[i], image); err != nil {
 				return fmt.Errorf("pulling %s: %w", image, err)
 			}
 			return nil
@@ -85,10 +93,13 @@ func missingImages(ctx context.Context, client *docker.Client, images []string) 
 }
 
 // imagePull is the image pull of a Create: the steps that run an image wait
-// for it, the others run alongside.
+// for it, the others run alongside. pulled says whether the step "pull
+// images" ran, which err is the error of when it failed; an err without it
+// is that of the inspection of the images.
 type imagePull struct {
-	done chan struct{}
-	err  error
+	done   chan struct{}
+	err    error
+	pulled bool
 }
 
 // startPull pulls images in g: all of them with all (--pull), else those
@@ -109,6 +120,7 @@ func startPull(ctx context.Context, g *errgroup.Group, client *docker.Client, im
 			images, p.err = missingImages(ctx, client, images)
 		}
 		if p.err == nil && len(images) > 0 {
+			p.pulled = true
 			p.err = pullImages(ctx, client, images)
 		}
 		return p.err
@@ -232,7 +244,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// when this invocation created it and no other cluster uses it.
 	// WithoutCancel keeps the cleanup running when the parent context is
 	// cancelled (e.g. Ctrl+C), and rollbackTimeout bounds it. Its failures
-	// are joined to the error.
+	// are joined to the error. It is the progress step "rollback".
 	resourcesCreated := false
 	defer func() {
 		if retErr == nil {
@@ -245,8 +257,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return
 		}
 		log.ErrorContext(ctx, "cleaning up partial resources, please wait")
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
-		defer cancel()
+		cleanupCtx, endRollback := startRollback(ctx)
 		errs := []error{retErr}
 		removeMesh := rollbackRemovesMesh(cleanupCtx, client, meshMgr, cfg.Name, resourcesCreated)
 		if resourcesCreated {
@@ -262,6 +273,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 				errs = append(errs, fmt.Errorf("rolling back: removing the mesh: %w", err))
 			}
 		}
+		endRollback(errors.Join(errs[1:]...))
 		if len(errs) > 1 {
 			retErr = errors.Join(errs...)
 		}
@@ -275,8 +287,12 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 
 	var dnsIP, sshPubKey, slurmVersion string
-	prepGroup, prepCtx := errgroup.WithContext(ctx)
-	pull := startPull(prepCtx, prepGroup, client, clusterImages(cfg), cfg.Pull)
+	prepGroup, pullCtx := errgroup.WithContext(ctx)
+	pull := startPull(pullCtx, prepGroup, client, clusterImages(cfg), cfg.Pull)
+	// The checks and the resources are the hidden progress step
+	// "preflight", which a display shows only once it has run for a
+	// second; the pull is a step of its own beside it.
+	prepCtx, preflight := progress.Start(pullCtx, progress.KindStep, "preflight", progress.WithFlags(progress.Hidden))
 
 	// Branch A: preflight → createResources, which connects the SSH relay
 	// to the cluster network. Serialised because createResources only makes
@@ -341,7 +357,16 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return nil
 	})
 
-	if err := prepGroup.Wait(); err != nil {
+	err := prepGroup.Wait()
+	if pull.pulled && pull.err != nil && errors.Is(err, pull.err) {
+		// The checks stopped because the pull failed, which the step
+		// "pull images" shows; an inspection of the images that failed
+		// before it is the preflight's failure.
+		preflight.End(stopped{err})
+	} else {
+		preflight.End(err)
+	}
+	if err != nil {
 		return nil, err
 	}
 
@@ -386,7 +411,10 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			if !cfg.UsesAccounts() {
 				return nil
 			}
-			if err := createSlurmAccounts(gctx, client, realm, cfg, readinessInterval, watcher); err != nil {
+			actx, end := startStep(gctx, "accounts")
+			err := createSlurmAccounts(actx, client, realm, cfg, readinessInterval, watcher)
+			end(err)
+			if err != nil {
 				return err
 			}
 			log.InfoContext(gctx, "slurm accounts created", "accounts", len(cfg.Accounts))
@@ -396,7 +424,10 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	if users := NewLinuxUsers(cfg).Users; len(users) > 0 {
 		g.Go(func() error {
 			controller := ContainerName(realm, cfg.Name, string(config.RoleController))
-			return createHomes(gctx, client, controller, users, sshPubKey)
+			hctx, end := startStep(gctx, "home directories")
+			err := createHomes(hctx, client, controller, users, sshPubKey)
+			end(err)
+			return err
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -549,21 +580,32 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 //
 // With identity clientIds munge is masked, so there is no munge to wait for.
 // rd bounds each node's steps after its container has started.
-func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, rd *readiness, watcher *monitor.Watcher) ([]nodeResult, error) {
+//
+// The nodes are the progress step "nodes", with a target for each node,
+// all announced before the first node starts, and under it the node's
+// docker calls, its wait "ready" and its call "setup". The first node that
+// fails cancels the others, whose targets end canceled.
+func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, realm, clusterName, sshPubKey string, nodeConfigs []RunConfig, rd *readiness, watcher *monitor.Watcher) (_ []nodeResult, err error) {
 	log := sindlog.From(ctx)
 	results := make([]nodeResult, len(nodeConfigs))
 
+	ctx, end := startStep(ctx, "nodes", progress.WithFlags(progress.Fold), progress.Total(len(nodeConfigs)))
+	defer func() { end(err) }()
 	g, gctx := errgroup.WithContext(ctx)
+	ctxs, targets := nodeTargets(gctx, nodeConfigs)
 	for i, nc := range nodeConfigs {
-		g.Go(func() error {
+		g.Go(func() (err error) {
+			targets[i].Run()
+			defer func() { endSpan(gctx, targets[i], err) }()
+			tctx := ctxs[i]
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
 
-			if _, err := CreateNode(gctx, client, meshMgr, nc); err != nil {
+			if _, err := CreateNode(tctx, client, meshMgr, nc); err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 			// The wait limit counts from here, after the image pull
 			// that docker create may have made.
-			nctx, cancel := rd.nodeContext(gctx)
+			nctx, cancel := rd.nodeContext(tctx)
 			defer cancel()
 
 			if watcher != nil {
@@ -630,8 +672,11 @@ func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurm
 }
 
 // registerNodes registers DNS records and known_hosts entries for all nodes
-// in batch, and returns the resulting Node list.
-func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig, results []nodeResult) ([]*Node, error) {
+// in batch, and returns the resulting Node list. It is the progress step
+// "mesh registration".
+func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig, results []nodeResult) (_ []*Node, err error) {
+	ctx, end := startStep(ctx, "mesh registration")
+	defer func() { end(err) }()
 	dnsRecords := make([]mesh.DNSRecord, len(nodeConfigs))
 	hostEntries := make([]mesh.KnownHostEntry, len(nodeConfigs))
 	nodes := make([]*Node, len(nodeConfigs))
@@ -695,41 +740,66 @@ func registerNodes(ctx context.Context, meshMgr *mesh.Manager, clusterName strin
 //	│ wait slurmctld     │ │ wait slurmd          │ │ wait slurmrestd     │
 //	└─────────┬──────────┘ └──────────┬───────────┘ └──────────┬──────────┘
 //	          └───────────────────────┼────────────────────────┘
-func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) error {
+//
+// The services are the progress step "slurm", with a target for each node
+// it enables one on, all announced before the db node starts.
+func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName string, nodeConfigs []RunConfig, interval time.Duration, watcher *monitor.Watcher) (err error) {
 	log := sindlog.From(ctx)
 
+	var dbNodes, nodes []RunConfig
+	var services []probe.Service
 	for _, nc := range nodeConfigs {
-		if nc.Role != config.RoleDB || !nc.Managed {
+		if !nc.Managed {
 			continue
 		}
-		containerName := ContainerName(realm, clusterName, nc.ShortName)
-		log.DebugContext(ctx, "enabling accounting services", "node", nc.ShortName)
-		if err := enableDBNode(ctx, client, containerName, nc.ShortName, nc.StoragePass); err != nil {
-			return err
+		if nc.Role == config.RoleDB {
+			dbNodes = append(dbNodes, nc)
+			continue
 		}
-		slurmdbdProbe := probe.ForService(probe.ServiceSlurmdbd)
-		if err := waitReady(ctx, client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher); err != nil {
+		if service, ok := nodeSlurmService(nc); ok {
+			nodes = append(nodes, nc)
+			services = append(services, service)
+		}
+	}
+
+	ctx, end := startStep(ctx, "slurm", progress.WithFlags(progress.Fold), progress.Total(len(dbNodes)+len(nodes)))
+	defer func() { end(err) }()
+	// The group's context is made before the db nodes start, for their
+	// targets to be announced with the others'.
+	g, gctx := errgroup.WithContext(ctx)
+	dbCtxs, dbTargets := nodeTargets(ctx, dbNodes)
+	ctxs, targets := nodeTargets(gctx, nodes)
+
+	for i, nc := range dbNodes {
+		dbTargets[i].Run()
+		containerName := ContainerName(realm, clusterName, nc.ShortName)
+		log.DebugContext(dbCtxs[i], "enabling accounting services", "node", nc.ShortName)
+		err := enableDBNode(dbCtxs[i], client, containerName, nc.ShortName, nc.StoragePass)
+		if err == nil {
+			slurmdbdProbe := probe.ForService(probe.ServiceSlurmdbd)
+			err = waitReady(dbCtxs[i], client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher)
+		}
+		endSpan(ctx, dbTargets[i], err)
+		if err != nil {
+			// Nothing runs in g yet: Wait only releases its context. The
+			// nodes that did not start end canceled with the step.
+			_ = g.Wait()
 			return err
 		}
 	}
 
-	g, gctx := errgroup.WithContext(ctx)
-	for _, nc := range nodeConfigs {
-		if !nc.Managed || nc.Role == config.RoleDB {
-			continue
-		}
-		service, ok := nodeSlurmService(nc)
-		if !ok {
-			continue
-		}
+	for i, nc := range nodes {
+		service := services[i]
 		slurmProbe := probe.ForService(service)
-		g.Go(func() error {
+		g.Go(func() (err error) {
+			targets[i].Run()
+			defer func() { endSpan(gctx, targets[i], err) }()
 			containerName := ContainerName(realm, clusterName, nc.ShortName)
-			log.DebugContext(gctx, "enabling slurm service", "node", nc.ShortName, "service", service)
-			if err := enableService(gctx, client, containerName, nc.ShortName, service); err != nil {
+			log.DebugContext(ctxs[i], "enabling slurm service", "node", nc.ShortName, "service", service)
+			if err := enableService(ctxs[i], client, containerName, nc.ShortName, service); err != nil {
 				return err
 			}
-			return waitReady(gctx, client, containerName, []probe.Probe{slurmProbe}, interval, watcher)
+			return waitReady(ctxs[i], client, containerName, []probe.Probe{slurmProbe}, interval, watcher)
 		})
 	}
 	return g.Wait()

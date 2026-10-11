@@ -11,15 +11,16 @@ toc: true
 ```
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
-  ├── root.go      Root command, persistent --realm and -v flags, TraverseChildren
+  ├── root.go      Root command, persistent --realm, --progress, --progress-log and -v flags, TraverseChildren
   ├── context.go   Dependency injection via context
   ├── exitcode.go  Exit statuses, usage errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
   ├── lock.go      Realm lock for mutating commands (pkg/state)
   ├── completion.go Shell completion for cluster/node names
-  ├── nodeargs.go  Node argument parsing
+  ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
+  ├── progress.go  Progress of create, delete and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── worker.go    Worker create/delete commands
@@ -32,21 +33,20 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
-internal/termtext/ Escaping of untrusted text for the terminal (final error line, table cells, doctor details)
-
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Ptr[T]
   ├── client.go    NewClient, Realm (unit test variants)
   └── client_integration.go NewClient, Realm (integration test variants)
 
 pkg/cmdexec/       Command executor abstraction
-  ├── exec.go      Executor interface, OSExecutor
+  ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)
+  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show
   ├── stream.go    Process, Start (long-lived commands with streamed stdout)
   ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)
 
 pkg/docker/        Docker CLI wrapper
-  ├── client.go    Client type, run/exists helpers
+  ├── client.go    Client type, run/exists helpers, each docker command a hidden progress call
   ├── container.go Container operations
   ├── network.go   Network operations
   ├── volume.go    Volume operations
@@ -58,7 +58,7 @@ pkg/docker/        Docker CLI wrapper
 
 pkg/cluster/       Cluster operations (orchestration)
   ├── create.go    Cluster creation flow
-  ├── delete.go    Cluster deletion
+  ├── delete.go    Cluster deletion; DeleteAll's pool of clusters (fanout.Map)
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
@@ -74,7 +74,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── cvmfs.go     CVMFS backend detection and mount arguments
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
-  ├── power.go     Power state operations
+  ├── power.go     Power state operations; the pool of each action (fanout.Map)
   ├── node.go      Node initialization and setup
   ├── setup.go     In-container node setup (nss_slurm, slurmrestd, users, SSH) in one docker exec
   ├── discovery.go Cluster/node discovery queries, VolumeType
@@ -84,6 +84,8 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── logs.go      Log command arg building
   ├── dns.go       Node DNS names and search domain
   ├── naming.go    Resource naming conventions
+  ├── progress.go  Progress span helpers of the pools (startStep, startTargets, nodeTargets, endSpan), joinFailures, WithPanicLog
+  ├── rollback.go  The rollback step of a failed Create or WorkerAdd
   └── preflight.go Pre-creation validation
 
 pkg/config/        YAML configuration parsing and validation
@@ -92,7 +94,6 @@ pkg/doctor/        Host prerequisite checks (Docker version, where the daemon ru
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
-pkg/nodeset/       Nodeset expansion (worker-[0-3])
 pkg/probe/         Node readiness probes
 pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
@@ -132,14 +133,16 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                        → pkg/state   → pkg/docker
                                      → pkg/log
          → pkg/doctor
-         → pkg/nodeset
          → pkg/state
-         → internal/termtext
+         → github.com/GSI-HPC/go-clikit/termtext
+         → github.com/GSI-HPC/go-nodeset
 ```
 
 `cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `internal/termtext` is a leaf used only by `cmd/sind` to escape the final error line, `get` table cells and `doctor` details; it is adapted from clusterctl and meant to be replaced by the shared go-clikit termtext package.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. `pkg/retry` is a leaf helper used wherever dockerd async cleanup requires retry. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
+
+The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
 
 ## Adding a new CLI command
 
@@ -159,15 +162,16 @@ The `pkg/cmdexec` package provides the executor abstraction at the bottom of the
    ```
 
 5. **Implement the operation** in `pkg/cluster/` (not in `cmd/sind/`)
-6. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
-7. **Write tests** for both the CLI layer and the cluster operation
+6. **Show its progress** if it changes clusters and asks nothing: wrap `RunE` with `withProgress(...)`, and have the operation report its work as progress spans (see [Progress spans](#progress-spans))
+7. **Classify it for MCP** in `mcpEffects` (read-only, additive or destructive), or list it in `mcpExcluded` if it is interactive or prints a secret (`cmd/sind/mcp.go`); a unit test fails for an unclassified tool
+8. **Write tests** for both the CLI layer and the cluster operation
 
 The CLI layer should be thin — argument parsing, flag handling, and output formatting. Business logic belongs in `pkg/cluster/`.
 
 ## Adding a Docker operation
 
 1. **Add the method** to `pkg/docker/client.go` (or the appropriate resource file)
-2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
+2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both report the command as a hidden progress call named after its subcommand, and both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
 3. **Use strong types**: `ContainerName`, `NetworkName`, `VolumeName`, etc.
 4. **Write unit tests** using `mock.Executor`
 
@@ -199,7 +203,7 @@ ctx = withMeshMgr(ctx, meshMgr)
 ctx = sindlog.With(ctx, logger)     // injected by PersistentPreRunE
 ```
 
-Commands retrieve them with `clientFrom(ctx)` and `meshMgrFrom(ctx, ...)`. The logger is injected automatically by the root command's `PersistentPreRunE` based on the `-v` flag count.
+Commands retrieve them with `clientFrom(ctx)` and `meshMgrFrom(ctx, ...)`. The logger is injected automatically by the root command's `PersistentPreRunE` based on the `-v` flag count; under a progress display, `withProgress` replaces it, and the stderr `withStderr` stored, with writers that go above the display.
 
 ### Structured logging
 
@@ -213,6 +217,17 @@ log.Log(ctx, sindlog.LevelTrace, "docker", "cmd", strings.Join(args, " "))
 ```
 
 When no logger is in the context (library use without the CLI), `From` returns a no-op logger. In errgroup goroutines, use `gctx` (not the outer `ctx`) for log calls.
+
+### Progress spans
+
+Work that takes a while reports what it does as progress spans of [go-clikit](https://github.com/GSI-HPC/go-clikit)'s `progress` package, on the context: `progress.Start(ctx, kind, name, opts...)` returns the span's context, under which the spans of the work below it start, and the span, which the work ends with its error (`span.End(err)`). Without a Bus in the context, as for a library caller or a test that watches none, `Start` returns a nil span, and every method of a nil span does nothing, so the code needs no branch for it.
+
+- A step (`progress.KindStep`) is a phase of the command; a step with the `Fold` flag and a `Total` counts its targets (`KindTarget`: a node, an image). A wait (`KindWait`) can have a bound (`progress.Timeout`) and a message that says what it waits for; a call (`KindCall`) is one request, such as a docker command.
+- Announce every target of a counted step queued (`progress.Queued()`) before the first of them runs, then mark each running (`span.Run()`) when its work starts: a pool that starts each target in its own goroutine as it takes its place breaks the counts a display draws, and `progresstest.Check` fails it.
+- `pkg/cluster/progress.go` has the helpers of the pools written by hand: `startStep` starts a step, `startTargets` and `nodeTargets` announce its targets, and `endSpan` ends a span canceled (`stopped`) when a sibling's failure or an interrupt stopped its work, rather than failed with `signal: killed`.
+- A pool that tries every item and keeps going after a failure runs on go-clikit's `fanout.Map`, which announces its targets as `Check` requires, bounds them with `Limit`, and turns a panic in one item into that item's error (`sind panicked; this is a bug, please report it: ...`) with its stack in the Bus's panic log, or without a Bus where `cluster.WithPanicLog` says (`withStderr` sets the command's stderr). The power commands and `DeleteAll` pass `joinFailures` as its `Summarize`, which joins each item's error worded as before, so the error text and `errors.Is` do not change.
+- `cmd/sind` alone decides how the spans are shown: `withProgress` (`progress.go`) runs the command in a span of its own and makes the Bus through go-clikit's `cliprogress` package, with the display `--progress` asks for and the event log `--progress-log` names (which `cliprogress` opens privately), and tears them down before `run` prints the error line.
+- `pkg/` never writes to stdout or stderr: a display owns the bottom rows of the terminal, and only the writers `cmd/sind` hands out, cobra's streams, `stderrFrom(ctx)` and the logger, go above it.
 
 ### Resource naming
 

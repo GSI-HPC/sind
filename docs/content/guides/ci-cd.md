@@ -34,6 +34,21 @@ sind runs on the Docker host. A job whose `DOCKER_HOST` points at a daemon elsew
 
 Jobs that share a Docker daemon, such as jobs on one self-hosted runner or jobs that mount the host's Docker socket, should each use their own realm (`SIND_REALM`). sind's realm lock keeps jobs in one realm from breaking each other's mesh, but a job's `sind delete cluster --all` would delete the other jobs' clusters too. A sind command killed while it held the lock, as by a job timeout, leaves the lock network `<realm>-lock` behind; a later sind command of the job, such as the cleanup step's, finds that the killed command no longer runs and removes it, as long as it runs on the same runner and in the same job container (see [Realms]({{< relref "/configuration/realms#advisory-locking" >}})). Each realm's mesh and each cluster take one network from the daemon's default address pools, which a stock daemon fills at about 30 networks; a runner that hosts many such jobs at once needs smaller pools (see [Limits]({{< relref "/architecture/networking#limits" >}})).
 
+## Progress in CI logs
+
+A CI log is not a terminal, so sind shows no [progress]({{< relref "/usage/progress" >}}) there unless asked: `create`, `delete` and `power` print nothing on success, and their standard error holds what it did before sind had a progress display, so [sind-action](https://github.com/GSI-HPC/sind-action) and scripts that read it see no change. Two settings add to the log:
+
+- `--progress plain`, or `SIND_PROGRESS=plain` for every command of the job, writes a line as each step starts and ends, as a wait with a limit starts and as a wait or a target fails, each with the time since the command started (see [Plain lines]({{< relref "/usage/progress#plain-lines" >}})).
+- `--progress-log FILE`, or `SIND_PROGRESS_LOG`, appends every progress event to FILE as a line of JSON, readable by the job's user alone. The commands of a job can share one file, which you can keep as an artifact of a failed run.
+
+```bash
+export SIND_PROGRESS=plain
+export SIND_PROGRESS_LOG="$PWD/sind-events.jsonl"
+./sind create cluster --config cluster.yml
+```
+
+`SIND_PROGRESS=tty` or `counter` fails no command where there is no terminal; it shows nothing. `--progress tty` or `counter` on the command line is a usage error there, exit status 2.
+
 ## Data directory
 
 By default every node mounts the job's working directory, usually the checked-out workspace, read-write at `/data` (see [Data mount]({{< relref "/usage/node-access#data-mount" >}})). Files that root writes there from a node belong to root on the runner, so a later step that cleans the workspace may need `sudo`. `--data volume`, or `storage.dataStorage.type: volume` in the config, keeps the workspace out of the cluster.

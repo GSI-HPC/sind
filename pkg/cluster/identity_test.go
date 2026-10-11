@@ -630,7 +630,7 @@ func TestWorkerAdd_IdentityImagePulled(t *testing.T) {
 	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "img:2", Pull: true}, time.Millisecond)
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, countCalls(m.Calls, "pull", "--quiet", "img:2"))
+	assert.Equal(t, 1, countCalls(m.Calls, "pull", "img:2"))
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "img:2"))
 }
 

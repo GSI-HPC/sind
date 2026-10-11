@@ -118,7 +118,7 @@ func TestPullImage(t *testing.T) {
 	c := NewClient(&m)
 
 	require.NoError(t, c.PullImage(t.Context(), "ghcr.io/gsi-hpc/sind-node:latest"))
-	assert.Equal(t, []string{"pull", "--quiet", "ghcr.io/gsi-hpc/sind-node:latest"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"pull", "ghcr.io/gsi-hpc/sind-node:latest"}, m.Calls[0].Args)
 
 	err := c.PullImage(t.Context(), "ghcr.io/gsi-hpc/sind-node:nope")
 	require.Error(t, err)

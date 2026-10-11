@@ -9,7 +9,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/GSI-HPC/sind/internal/termtext"
+	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -29,9 +30,11 @@ const (
 )
 
 // withStderr stores the command's error stream in the context, for the
-// warnings that code without the command at hand prints.
+// warnings that code without the command at hand prints, and for the stack
+// of a panic that a pool of pkg/cluster turned into a node's error while
+// the context carries no progress Bus (cluster.WithPanicLog).
 func withStderr(ctx context.Context, w io.Writer) context.Context {
-	return context.WithValue(ctx, stderrKey, w)
+	return cluster.WithPanicLog(context.WithValue(ctx, stderrKey, w), w)
 }
 
 // stderrFrom retrieves the error stream from the context, falling back to
@@ -89,8 +92,9 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 		},
 	}
 	mgr.HostDNS = true
+	stderr := stderrFrom(ctx)
 	mgr.OnWarning = func(msg string) {
-		_, _ = fmt.Fprintln(os.Stderr, "Warning:", termtext.EscapeText(msg))
+		_, _ = fmt.Fprintln(stderr, "Warning:", termtext.EscapeLines(msg))
 	}
 	return mgr
 }
