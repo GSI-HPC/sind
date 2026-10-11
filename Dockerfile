@@ -375,6 +375,13 @@ RUN systemctl mask \
 RUN mkdir -p /etc/systemd/journald.conf.d && \
     printf '[Journal]\nRuntimeMaxUse=32M\nSystemMaxUse=64M\n' > /etc/systemd/journald.conf.d/50-sind.conf
 
+# MariaDB writes its error log to stderr, which systemd sends to the journal,
+# like the Slurm daemons. Rocky's mariadb-server.cnf sets
+# log-error=/var/log/mariadb/mariadb.log; skip-log-error unsets it, and
+# mariadb-sind.cnf sorts after it.
+RUN printf '[mysqld]\nskip-log-error\n' > /etc/my.cnf.d/mariadb-sind.cnf && \
+    test "$(my_print_defaults --mysqld | grep -E -- '^--(skip-)?log[-_]error' | tail -n 1)" = --skip-log-error
+
 # Initialise MariaDB's data directory with the script mariadb.service runs
 # before its first start, which then finds it initialised: a db node's first
 # start then skips mariadb-install-db and the script's one-second sleep.

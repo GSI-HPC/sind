@@ -311,6 +311,7 @@ sind logs controller slurmctld
 sind logs worker-0 slurmd --follow
 sind logs submitter sackd             # identity clientIds
 sind logs db slurmdbd
+sind logs db mariadb
 sind logs api slurmrestd
 ```
 

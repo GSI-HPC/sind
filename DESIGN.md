@@ -660,6 +660,7 @@ sind logs controller --follow          # tail container logs
 sind logs controller slurmctld         # slurmctld journal logs
 sind logs worker-0 slurmd --follow    # follow slurmd logs
 sind logs db slurmdbd                  # slurmdbd journal logs on the db node
+sind logs db mariadb                   # MariaDB's own messages: the image logs them to the journal
 sind logs api slurmrestd               # slurmrestd journal logs on the api node
 ```
 
@@ -1668,6 +1669,7 @@ The generic image:
 - Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
 - Contains the Slurm daemons (slurmctld, slurmdbd, slurmd, and from Slurm 26.05 on slurmrestd), munge, sshd, MariaDB and a full MPI stack
 - MariaDB's data directory is initialised at build time, so the first `systemctl enable --now mariadb` on a db node skips `mariadb-install-db`
+- MariaDB writes its error log to the journal, like the Slurm daemons: `/etc/my.cnf.d/mariadb-sind.cnf` sets `skip-log-error`, which unsets the `log-error=/var/log/mariadb/mariadb.log` of Rocky Linux's `mariadb-server.cnf`, so `sind logs db mariadb` shows MariaDB's own messages and `/var/log/mariadb/mariadb.log` stays empty
 - Slurm is built with `--with-pmix` for native PMIx job launch support
 - Ships what the identity modes need (see Identity Modes): nss_slurm as `/usr/lib64/libnss_slurm.so.2`, built from Slurm's `contribs/nss_slurm`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x (`--with-jwt`), and the `serializer/json` plugin they load (`--with-json`); and `sackd`. The build fails without them
 - Ships slurmrestd from Slurm 26.05 on, built with Rocky Linux's llhttp (`llhttp-devel` from CRB at build time, `llhttp` at run time), with its JWT plugin (`rest_auth_jwt.so`), its systemd unit and a `slurmrestd` system user, created after `slurm` so that `slurm` keeps its uid. Slurm 25.11's configure knows only the nodejs http-parser, which upstream archived and Rocky Linux 10 does not package, so the 25.11 images have no slurmrestd; one Dockerfile builds both, and its build check requires slurmrestd unless `slurmctld -V` reports 25.x
