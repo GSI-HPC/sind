@@ -37,6 +37,9 @@ var (
 	// than slurm.MonitoringMinVersion, or a missing plugin (Create,
 	// WorkerAdd).
 	ErrImageUnsupported = errors.New("image unsupported")
+	// ErrNoMonitoring reports that the realm has no monitoring stack
+	// (GetMonitoring).
+	ErrNoMonitoring = errors.New("no monitoring stack")
 )
 
 // rollbackTimeout bounds the rollback of a failed Create or WorkerAdd. The

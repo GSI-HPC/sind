@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
@@ -110,11 +112,26 @@ type NetworkHealth struct {
 	ClusterDriver  string `json:"cluster_driver"`  // cluster network driver (e.g. "bridge")
 	ClusterSubnet  string `json:"cluster_subnet"`  // cluster network subnet
 	ClusterGateway string `json:"cluster_gateway"` // cluster network gateway
+
+	// The realm's monitoring stack, when it has one: whether each of its
+	// services is ready (see observability.Manager.Status).
+	Grafana    *bool `json:"grafana_ok,omitempty"`
+	Prometheus *bool `json:"prometheus_ok,omitempty"`
+	Loki       *bool `json:"loki_ok,omitempty"`
+	Alloy      *bool `json:"alloy_ok,omitempty"`
+}
+
+// StackHealth returns the readiness fields of the monitoring stack's
+// services, in the order of observability.Services.
+func (h *NetworkHealth) StackHealth() []*bool {
+	return []*bool{h.Grafana, h.Prometheus, h.Loki, h.Alloy}
 }
 
 // GetNetworkHealth checks the health of mesh, DNS, SSH relay, and cluster
-// networking. The DNS and SSH relay containers count as healthy only while
-// they run: after a host reboot they exist but are stopped.
+// networking, and of the realm's monitoring stack when it has one. The DNS
+// and SSH relay containers count as healthy only while they run: after a
+// host reboot they exist but are stopped. The stack's services count as
+// healthy when they are ready.
 func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, clusterName string) (*NetworkHealth, error) {
 	// nil Docker client: only realm-derived names are needed here.
 	meshMgr := mesh.NewManager(nil, realm)
@@ -158,15 +175,30 @@ func GetNetworkHealth(ctx context.Context, client *docker.Client, realm, cluster
 		return nil, fmt.Errorf("checking cluster network: %w", err)
 	}
 
+	stack, found, err := observability.NewManager(client, realm).Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		fields := []**bool{&health.Grafana, &health.Prometheus, &health.Loki, &health.Alloy}
+		for i, st := range stack {
+			// Without Grafana to run the readiness checks, a running
+			// container counts as healthy.
+			ok := st.Ready || !st.Checked && st.State == docker.StateRunning
+			*fields[i] = &ok
+		}
+	}
+
 	return health, nil
 }
 
 // MountPoint describes a volume or bind mount on cluster containers.
 type MountPoint struct {
-	Path   string             `json:"path"`   // mount path inside the container (e.g. "/etc/slurm")
-	Source string             `json:"source"` // volume name or host path
-	Type   config.StorageType `json:"type"`   // "volume" or "hostPath"
-	OK     bool               `json:"ok"`     // true if the Docker volume exists (always true for hostPath)
+	Path    string             `json:"path"`              // mount path inside the container (e.g. "/etc/slurm")
+	Source  string             `json:"source"`            // volume name or host path
+	Subpath string             `json:"subpath,omitempty"` // the volume's directory the nodes mount theirs in, for the journal volume
+	Type    config.StorageType `json:"type"`              // "volume" or "hostPath"
+	OK      bool               `json:"ok"`                // true if the Docker volume exists (always true for hostPath)
 }
 
 // GetMountPoints returns the mount points for a cluster, checking volume
@@ -243,7 +275,38 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 		break
 	}
 
+	// The realm's journal volume, on a monitored cluster: each node
+	// mounts its own directory, under the cluster's.
+	if journal, ok := journalMount(realm, clusterName, containers); ok {
+		var err error
+		if journal.OK, err = client.VolumeExists(ctx, docker.VolumeName(journal.Source)); err != nil {
+			return nil, fmt.Errorf("checking volumes: %w", err)
+		}
+		mounts = append(mounts, journal)
+	}
+
 	return mounts, nil
+}
+
+// journalMount returns the journal mount of a monitored cluster's nodes
+// (see Monitored), with the cluster's directory of the volume as the
+// subpath: docker inspect's top-level Mounts hide a volume's subpath, so
+// the node's host configuration tells it.
+func journalMount(realm, clusterName string, containers []*docker.ContainerInfo) (MountPoint, bool) {
+	journal := observability.JournalVolume(realm)
+	for _, c := range containers {
+		if !Monitored(realm, c) {
+			continue
+		}
+		subpath := clusterName
+		for _, m := range c.HostConfig.Mounts {
+			if m.Type == docker.MountVolume && m.Source == string(journal) && m.VolumeOptions.Subpath != "" {
+				subpath = path.Dir(m.VolumeOptions.Subpath)
+			}
+		}
+		return MountPoint{Path: observability.NodeJournalDir, Source: string(journal), Subpath: subpath, Type: config.StorageVolume}, true
+	}
+	return MountPoint{}, false
 }
 
 // dataMount returns the data mount of the first node that has one: the
@@ -280,6 +343,7 @@ type Status struct {
 	Name         string         `json:"name"`
 	SlurmVersion string         `json:"slurm_version"`
 	State        State          `json:"status"`
+	Monitoring   bool           `json:"monitoring"` // the realm's monitoring stack collects the cluster (see Monitored)
 	Nodes        []*NodeStatus  `json:"nodes"`
 	Network      *NetworkHealth `json:"network"`
 	Mounts       []MountPoint   `json:"mounts"`
@@ -400,6 +464,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 		Name:         clusterName,
 		SlurmVersion: slurmVersion,
 		State:        aggregateState(states),
+		Monitoring:   slices.ContainsFunc(infos, func(info *docker.ContainerInfo) bool { return Monitored(realm, info) }),
 		Nodes:        nodes,
 		Network:      network,
 		Mounts:       mounts,

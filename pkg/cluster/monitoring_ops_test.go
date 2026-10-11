@@ -11,6 +11,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -242,4 +243,130 @@ func TestDelete_Monitored(t *testing.T) {
 
 	f.fail["ps -a --no-trunc --format json --filter label=sind.realm=sind --filter label=sind.role --filter volume="] = mock.Result{Err: testutil.ExitCode1(t)}
 	require.ErrorContains(t, Delete(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev"), "listing monitored nodes")
+}
+
+// --- Status ---
+
+// meshHealthOnCall answers GetNetworkHealth's inspects of a running mesh
+// and cluster network.
+func meshHealthOnCall(t *testing.T) func([]string, string) mock.Result {
+	return func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "network" && args[1] == "inspect":
+			return mock.Result{Stdout: netInspect(args[2], "172.19.0.0/16", "172.19.0.1")}
+		case args[0] == "inspect":
+			return mock.Result{Stdout: meshContainerInspect(args[1], "running")}
+		}
+		t.Errorf("unexpected call %v", args)
+		return mock.Result{Err: testutil.ExitCode1(t)}
+	}
+}
+
+func TestGetNetworkHealth_MonitoringStack(t *testing.T) {
+	f := newStackFake(t).withStack()
+	f.containers["sind-alloy"].state = docker.StateExited
+	client := docker.NewClient(&mock.Executor{OnCall: stackFirst(f, meshHealthOnCall(t))})
+
+	health, err := GetNetworkHealth(t.Context(), client, "sind", "dev")
+	require.NoError(t, err)
+	ready := func(b *bool) bool { require.NotNil(t, b); return *b }
+	assert.True(t, ready(health.Grafana))
+	assert.True(t, ready(health.Prometheus))
+	assert.True(t, ready(health.Loki))
+	assert.False(t, ready(health.Alloy))
+	assert.Equal(t, []*bool{health.Grafana, health.Prometheus, health.Loki, health.Alloy}, health.StackHealth())
+
+	b, err := json.Marshal(health)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"grafana_ok":true`)
+	assert.Contains(t, string(b), `"alloy_ok":false`)
+
+	// Without Grafana to check them, running services count as healthy.
+	f.containers["sind-grafana"].state = docker.StateExited
+	health, err = GetNetworkHealth(t.Context(), client, "sind", "dev")
+	require.NoError(t, err)
+	assert.False(t, ready(health.Grafana))
+	assert.True(t, ready(health.Prometheus))
+	assert.True(t, ready(health.Loki))
+	assert.False(t, ready(health.Alloy))
+
+	f.fail["ps"] = mock.Result{Err: testutil.ExitCode1(t)}
+	_, err = GetNetworkHealth(t.Context(), client, "sind", "dev")
+	require.ErrorContains(t, err, "listing the monitoring containers")
+}
+
+func TestGetNetworkHealth_NoStackOmitsFields(t *testing.T) {
+	f := newStackFake(t)
+	client := docker.NewClient(&mock.Executor{OnCall: stackFirst(f, meshHealthOnCall(t))})
+	health, err := GetNetworkHealth(t.Context(), client, "sind", "dev")
+	require.NoError(t, err)
+	b, err := json.Marshal(health)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "grafana_ok")
+}
+
+// monitoredInfo returns the docker inspect result of a node of cluster dev
+// that mounts its journal directory, with the subpath in its host
+// configuration when subpath is not empty.
+func monitoredInfo(shortName, subpath string) *docker.ContainerInfo {
+	info := &docker.ContainerInfo{
+		Name:   ContainerName("sind", "dev", shortName),
+		Mounts: []docker.Mount{{Type: docker.MountVolume, Name: "sind-journal", Destination: "/var/log/journal"}},
+	}
+	if subpath != "" {
+		info.HostConfig.Mounts = []docker.HostMount{
+			{Type: docker.MountVolume, Source: "sind-dev-config", Target: "/etc/slurm"},
+			{Type: docker.MountVolume, Source: "sind-journal", Target: "/var/log/journal", VolumeOptions: docker.VolumeOptions{Subpath: subpath}},
+		}
+	}
+	return info
+}
+
+func TestGetMountPoints_Journal(t *testing.T) {
+	f := newStackFake(t).withStack()
+	base := func(args []string, _ string) mock.Result {
+		if args[0] == "volume" && args[1] == "ls" {
+			return volumeLs("sind-dev-config", "sind-dev-munge", "sind-dev-data")
+		}
+		t.Errorf("unexpected call %v", args)
+		return mock.Result{Err: testutil.ExitCode1(t)}
+	}
+	client := docker.NewClient(&mock.Executor{OnCall: stackFirst(f, base)})
+
+	mounts, err := GetMountPoints(t.Context(), client, "sind", "dev", []*docker.ContainerInfo{{Name: "sind-dev-db"}, monitoredInfo("controller", "dev/controller")})
+	require.NoError(t, err)
+	assert.Equal(t, MountPoint{Path: "/var/log/journal", Source: "sind-journal", Subpath: "dev", Type: config.StorageVolume, OK: true}, mounts[len(mounts)-1])
+
+	// Without the subpath, the cluster's directory is assumed.
+	delete(f.volumes, "sind-journal")
+	mounts, err = GetMountPoints(t.Context(), client, "sind", "dev", []*docker.ContainerInfo{monitoredInfo("controller", "")})
+	require.NoError(t, err)
+	assert.Equal(t, MountPoint{Path: "/var/log/journal", Source: "sind-journal", Subpath: "dev", Type: config.StorageVolume}, mounts[len(mounts)-1])
+
+	f.fail["volume inspect sind-journal"] = mock.Result{Stderr: "permission denied\n", Err: testutil.ExitCode1(t)}
+	_, err = GetMountPoints(t.Context(), client, "sind", "dev", []*docker.ContainerInfo{monitoredInfo("controller", "")})
+	require.ErrorContains(t, err, "checking volumes")
+}
+
+func TestGetStatus_Monitoring(t *testing.T) {
+	f := newStackFake(t).withStack()
+	base := fullStatusOnCall(t)
+	m := &mock.Executor{OnCall: stackFirst(f, func(args []string, stdin string) mock.Result {
+		r := base(args, stdin)
+		if args[0] != "inspect" {
+			return r
+		}
+		var infos []map[string]any
+		require.NoError(t, json.Unmarshal([]byte(r.Stdout), &infos))
+		for _, info := range infos {
+			info["Mounts"] = []map[string]string{{"Type": "volume", "Name": "sind-journal", "Destination": "/var/log/journal"}}
+		}
+		b, _ := json.Marshal(infos)
+		return mock.Result{Stdout: string(b)}
+	})}
+	status, err := GetStatus(t.Context(), docker.NewClient(m), "sind", "dev")
+	require.NoError(t, err)
+	assert.True(t, status.Monitoring)
+	assert.Equal(t, "sind-journal", status.Mounts[len(status.Mounts)-1].Source)
+	require.NotNil(t, status.Network.Grafana)
 }

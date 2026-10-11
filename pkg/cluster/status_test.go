@@ -412,6 +412,7 @@ func TestGetNetworkHealth_AllHealthy(t *testing.T) {
 	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)               // InspectContainer: sind-dns
 	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)               // InspectContainer: sind-ssh
 	m.AddResult(netInspect("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // InspectNetwork: cluster
+	m.AddResult("", "", nil)                                                        // ListContainers: no monitoring stack
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -440,6 +441,7 @@ func TestGetNetworkHealth_NoneExist(t *testing.T) {
 	m.AddResult("", "Error: No such container\n", notFound) // dns
 	m.AddResult("", "Error: No such container\n", notFound) // ssh
 	m.AddResult("", "Error: No such network\n", notFound)   // cluster net
+	m.AddResult("", "", nil)                                // ListContainers: no monitoring stack
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -462,6 +464,7 @@ func TestGetNetworkHealth_PartialHealth(t *testing.T) {
 	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
 	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)            // inspect ssh
 	m.AddResult("", "Error: No such network\n", notFound)                        // cluster net missing
+	m.AddResult("", "", nil)                                                     // ListContainers: no monitoring stack
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -481,6 +484,7 @@ func TestGetNetworkHealth_MeshStopped(t *testing.T) {
 	m.AddResult(meshContainerInspect("sind-dns", "exited"), "", nil)
 	m.AddResult(meshContainerInspect("sind-ssh", "exited"), "", nil)
 	m.AddResult(netInspect("sind-dev-net", "172.18.0.0/16", "172.18.0.1"), "", nil)
+	m.AddResult("", "", nil) // ListContainers: no monitoring stack
 	c := docker.NewClient(&m)
 
 	health, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -547,6 +551,7 @@ func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
 	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)                   // inspect dns
 	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)                   // inspect ssh
 	m.AddResult(netInspect("sind-default-net", "172.18.0.0/16", "172.18.0.1"), "", nil) // inspect cluster
+	m.AddResult("", "", nil)                                                            // ListContainers: no monitoring stack
 	c := docker.NewClient(&m)
 
 	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "default")

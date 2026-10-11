@@ -312,6 +312,11 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 	case "create":
 		f.volumes[name] = true
 		return mock.Result{}, true
+	case "inspect":
+		if !f.volumes[name] {
+			return notFound(testutil.NoSuchVolume(name)), true
+		}
+		return mock.Result{Stdout: "[{}]"}, true
 	case "rm":
 		if !f.volumes[name] {
 			return notFound(testutil.NoSuchVolume(name)), true
@@ -721,4 +726,42 @@ func TestProbeMonitoringImages(t *testing.T) {
 		_, err := probeMonitoringImages(t.Context(), client, meshMgr, createCfg())
 		require.ErrorContains(t, err, "probing image img:1")
 	})
+}
+
+func TestGetMonitoring(t *testing.T) {
+	f := newStackFake(t)
+	client, _ := f.client()
+
+	_, err := GetMonitoring(t.Context(), client, "sind")
+	require.ErrorIs(t, err, ErrNoMonitoring)
+	require.EqualError(t, err, `no monitoring stack in realm "sind"`)
+
+	f.withStack()
+	f.containers["sind-alloy"].state = docker.StateExited
+	ctl := monitoredNode("prod", "controller", "controller")
+	ctl.Labels[LabelSlurmVersion] = "26.05.4"
+	f.nodes = []docker.ContainerListEntry{monitoredNode("prod", "worker-0", "worker"), ctl, monitoredNode("dev", "controller", "controller")}
+
+	m, err := GetMonitoring(t.Context(), client, "sind")
+	require.NoError(t, err)
+	assert.Equal(t, "sind", m.Realm)
+	require.Len(t, m.Services, 4)
+	assert.Equal(t, MonitoringService{
+		Name: observability.ServiceGrafana, Container: "sind-grafana", IP: f.containers["sind-grafana"].ip,
+		URL: "http://grafana.sind.sind:3000", State: docker.StateRunning, Ready: true, Checked: true,
+	}, m.Services[0])
+	assert.Equal(t, "", m.Services[3].URL, "a stopped Alloy has no address")
+	assert.Equal(t, []MonitoredCluster{{Name: "dev", Nodes: 1}, {Name: "prod", Nodes: 2, SlurmVersion: "26.05.4"}}, m.Clusters)
+
+	f.containers["sind-alloy"].state = docker.StateRunning
+	m, err = GetMonitoring(t.Context(), client, "sind")
+	require.NoError(t, err)
+	assert.Equal(t, "http://"+f.containers["sind-alloy"].ip+":12345", m.Services[3].URL)
+
+	f.fail["ps -a --no-trunc --format json --filter label=sind.realm"] = mock.Result{Err: testutil.ExitCode1(t)}
+	_, err = GetMonitoring(t.Context(), client, "sind")
+	require.ErrorContains(t, err, "listing monitored nodes")
+	f.fail["ps"] = mock.Result{Err: testutil.ExitCode1(t)}
+	_, err = GetMonitoring(t.Context(), client, "sind")
+	require.ErrorContains(t, err, "listing the monitoring containers")
 }

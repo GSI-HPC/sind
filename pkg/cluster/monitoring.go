@@ -361,3 +361,73 @@ func probeMonitoringImages(ctx context.Context, client *docker.Client, meshMgr *
 	sindlog.From(ctx).DebugContext(ctx, "images can serve monitoring", "images", len(probes))
 	return infos[0].Version, nil
 }
+
+// MonitoringService is a service of the realm's monitoring stack.
+type MonitoringService struct {
+	Name      observability.Service `json:"name"`
+	Container docker.ContainerName  `json:"container"`
+	Image     string                `json:"image"`
+	IP        string                `json:"ip"`  // on the mesh, empty while stopped
+	URL       string                `json:"url"` // by mesh DNS name; by IP for Alloy, which has none
+	State     docker.ContainerState `json:"status"`
+	Ready     bool                  `json:"ready"`
+	Checked   bool                  `json:"checked"` // whether Ready was checked, which needs Grafana running
+}
+
+// MonitoredCluster is a cluster the realm's monitoring stack collects.
+type MonitoredCluster struct {
+	Name         string `json:"name"`
+	Nodes        int    `json:"nodes"`
+	SlurmVersion string `json:"slurm_version"`
+}
+
+// Monitoring is the state of a realm's monitoring stack.
+type Monitoring struct {
+	Realm    string              `json:"realm"`
+	Services []MonitoringService `json:"services"`
+	Clusters []MonitoredCluster  `json:"clusters"`
+}
+
+// GetMonitoring returns the state of the realm's monitoring stack: its
+// services, and the clusters whose nodes mount the realm's journal
+// volume, sorted by name. A realm without a stack fails with
+// ErrNoMonitoring.
+func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*Monitoring, error) {
+	stack := observability.NewManager(client, realm)
+	statuses, found, err := stack.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errorWith(ErrNoMonitoring, "no monitoring stack in realm %q", realm)
+	}
+	containers, err := monitoredContainers(ctx, client, realm, "")
+	if err != nil {
+		return nil, err
+	}
+	m := &Monitoring{Realm: realm, Services: make([]MonitoringService, len(statuses)), Clusters: []MonitoredCluster{}}
+	for i, st := range statuses {
+		svc := MonitoringService{Name: st.Service, Container: st.Container, Image: st.Image, IP: st.IP, State: st.State, Ready: st.Ready, Checked: st.Checked}
+		switch {
+		case st.DNSName != "":
+			svc.URL = "http://" + st.DNSName + ":" + st.Port
+		case st.IP != "":
+			svc.URL = "http://" + st.IP + ":" + st.Port
+		}
+		m.Services[i] = svc
+	}
+	for _, c := range containers {
+		name := c.Labels[LabelCluster]
+		i := slices.IndexFunc(m.Clusters, func(mc MonitoredCluster) bool { return mc.Name == name })
+		if i < 0 {
+			m.Clusters = append(m.Clusters, MonitoredCluster{Name: name})
+			i = len(m.Clusters) - 1
+		}
+		m.Clusters[i].Nodes++
+		if v := c.Labels[LabelSlurmVersion]; v != "" && config.Role(c.Labels[LabelRole]) == config.RoleController {
+			m.Clusters[i].SlurmVersion = v
+		}
+	}
+	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return strings.Compare(a.Name, b.Name) })
+	return m, nil
+}
