@@ -188,10 +188,11 @@ jobs:
         run: docker tag local/sind-node:ci ghcr.io/gsi-hpc/sind-node:latest
 
       # Docker Hub rate-limits anonymous pulls per IP, which the runners
-      # share, and then refuses the two Docker Hub images the tests run, the
-      # mesh's CoreDNS (pkg/mesh DNSImage) and busybox, with toomanyrequests.
-      # A registry-mirrors entry in daemon.json was not used for those pulls,
-      # so pull both from Google's mirror of Docker Hub and tag them with
+      # share, and then refuses the Docker Hub images the tests run, the
+      # mesh's CoreDNS (pkg/mesh DNSImage), the monitoring stack's four
+      # (pkg/observability) and busybox, with toomanyrequests. A
+      # registry-mirrors entry in daemon.json was not used for those pulls,
+      # so pull them from Google's mirror of Docker Hub and tag them with
       # their Docker Hub names: present locally, nothing pulls them again.
       - name: Pull the tests' Docker Hub images from mirror.gcr.io
         run: |
@@ -200,7 +201,13 @@ jobs:
             echo "::error::no DNSImage constant in pkg/mesh/mesh.go"
             exit 1
           fi
-          for image in "$dns" busybox:latest; do
+          stack=$(sed -n 's/^\t[A-Za-z]*Image *= "\(.*\)"$/\1/p' pkg/observability/observability.go)
+          if [ "$(echo "$stack" | wc -w)" -ne 4 ]; then
+            echo "::error::expected four image constants in pkg/observability/observability.go, found: $stack"
+            exit 1
+          fi
+          # shellcheck disable=SC2086 # one word per image
+          for image in "$dns" $stack busybox:latest; do
             case "$image" in
               */*) path=$image ;;
               *) path=library/$image ;;
