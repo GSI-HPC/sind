@@ -417,3 +417,15 @@ func TestGenerateSectionConf(t *testing.T) {
 		assert.Equal(t, "include /etc/slurm/gres.conf.d/gpu.conf\n", conf)
 	})
 }
+
+func TestGenerateSlurmConf_Metrics(t *testing.T) {
+	conf := GenerateSlurmConf("dev", config.Section{}, ConfOptions{Accounting: true, Metrics: true})
+	assert.Contains(t, conf, "JobAcctGatherType=jobacct_gather/cgroup\n\nMetricsType=metrics/openmetrics\n\ninclude ")
+
+	// Without monitoring, no MetricsType.
+	assert.NotContains(t, GenerateSlurmConf("dev", config.Section{}, ConfOptions{}), "MetricsType")
+
+	// A MetricsType that slurm.main sets is not written twice.
+	conf = GenerateSlurmConf("dev", config.Section{Content: "MetricsType=metrics/openmetrics\n"}, ConfOptions{Metrics: true})
+	assert.Equal(t, 1, strings.Count(conf, "MetricsType="))
+}
