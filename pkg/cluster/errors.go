@@ -32,6 +32,11 @@ var (
 	// networks of at most docker.MaxBridgeEndpoints containers
 	// (PreflightCheck, Create, WorkerAdd).
 	ErrNetworkFull = errors.New("network full")
+	// ErrImageUnsupported reports that a monitored cluster's image cannot
+	// serve the HTTP endpoints the monitoring stack uses: a Slurm older
+	// than slurm.MonitoringMinVersion, or a missing plugin (Create,
+	// WorkerAdd).
+	ErrImageUnsupported = errors.New("image unsupported")
 )
 
 // rollbackTimeout bounds the rollback of a failed Create or WorkerAdd. The

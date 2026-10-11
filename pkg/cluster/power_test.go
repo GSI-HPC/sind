@@ -225,7 +225,7 @@ func powerOnCall(t *testing.T, handle func(args []string, stdin string) (mock.Re
 		switch {
 		case args[0] == "ps":
 			return mock.Result{Stdout: powerContainers()}
-		case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh"):
+		case args[0] == "inspect" && (args[1] == "sind-dns" || args[1] == "sind-ssh" || isStackContainer(args[1])):
 			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: testutil.ExitCode1(t)}
 		case args[0] == "stop", args[0] == "kill", args[0] == "start":
 			return mock.Result{}

@@ -30,10 +30,10 @@ import (
 //
 //	HasOtherClusters?
 //	      │
-//	deleteClusterResources   deregisters from the mesh only if other clusters remain
+//	deleteClusterResources   deregisters from the mesh and the monitoring stack only if other clusters remain
 //	      │
 //	    yes → done
-//	    no  → CleanupMesh
+//	    no  → cleanupRealm (monitoring stack containers → mesh → stack volumes)
 //
 // Whether other clusters remain does not depend on this cluster's
 // containers, so Delete settles it first: when the mesh goes too, removing
@@ -58,7 +58,21 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return nil
 	}
 	log.InfoContext(ctx, "last cluster deleted, cleaning up mesh")
-	return meshMgr.CleanupMesh(ctx)
+	return cleanupRealm(ctx, client, meshMgr)
+}
+
+// cleanupRealm removes a realm's shared resources once its last cluster is
+// gone: the monitoring stack's containers, which hold endpoints on the mesh
+// network, then the mesh, then the stack's volumes and the journal volume,
+// which Docker removes only once no container references them.
+func cleanupRealm(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+	if err := removeMonitoringContainers(ctx, client, meshMgr.Realm); err != nil {
+		return err
+	}
+	if err := meshMgr.CleanupMesh(ctx); err != nil {
+		return err
+	}
+	return removeMonitoringVolumes(ctx, client, meshMgr.Realm)
 }
 
 // deleteAllConcurrency bounds how many clusters DeleteAll deletes at once.
@@ -130,11 +144,14 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			}
 		}
 		deregisterHostnames(ctx, meshMgr, hostnames)
+		// The clusters went in parallel, without a sync each: one sync
+		// takes the deleted ones out of the monitoring stack, if any.
+		forgetMonitoredNodes(ctx, client, meshMgr, "")
 		return err
 	}
 
 	log.InfoContext(ctx, "all clusters deleted, cleaning up mesh")
-	return meshMgr.CleanupMesh(ctx)
+	return cleanupRealm(ctx, client, meshMgr)
 }
 
 // realmClusterNames returns the names of the realm's clusters, sorted:
@@ -196,14 +213,23 @@ func deleteClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 }
 
 // removeClusterResources removes the cluster resources that res lists, and
-// with deregister first the nodes' DNS records and known_hosts entries.
+// with deregister first the nodes' DNS records and known_hosts entries, and
+// last, for a monitored cluster, its nodes from the realm's monitoring
+// stack and their journals (see forgetMonitoredNodes).
 func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, res *Resources, deregister bool) error {
 	log := sindlog.From(ctx)
 
 	// Remove DNS records and known_hosts entries before deleting containers.
 	// Failures are logged inside DeregisterMesh; the teardown continues.
+	// The realm's monitoring stack stays too: whether it collects the
+	// cluster is told by its containers, so before they go.
+	monitored := false
 	if deregister {
 		_ = DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
+		var err error
+		if monitored, err = clusterMonitored(ctx, client, meshMgr.Realm, clusterName); err != nil {
+			return err
+		}
 	}
 
 	log.DebugContext(ctx, "removing containers", "count", len(res.Containers))
@@ -224,6 +250,9 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 		return err
 	}
 
+	if monitored {
+		forgetMonitoredNodes(ctx, client, meshMgr, clusterName)
+	}
 	return nil
 }
 

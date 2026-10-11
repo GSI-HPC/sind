@@ -16,6 +16,7 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/monitor"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
@@ -213,12 +214,14 @@ type nodeResult struct {
 // rolls back and returns an error that wraps ErrNotReady.
 //
 //	┌ PreflightCheck → createResources ─────────────────┐
-//	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┤
+//	├ resolveInfra (DNS IP ║ SSH key ║ Slurm version) ──┤  (version from the image probe with monitoring)
 //	├ DetectCVMFS (storage.cvmfs only) ─────────────────┼→ setupNodes
 //	├ CheckNsdelegate ──────────────────────────────────┤
 //	└ pullImages (missing images; all with cfg.Pull) ───┘
 //	                        │
-//	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only)
+//	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only) ║ ensureMonitoring (monitoring only)
+//	                        │
+//	              registerStackDNS (monitoring only)
 //	                        │
 //	                    *Cluster
 //
@@ -228,6 +231,14 @@ type nodeResult struct {
 // CheckNsdelegate) wait for the pull; nothing is created with --pull
 // always, and no node container's docker create pulls (see startPull). A failed check rolls back what the other branches have
 // created by then; no node container exists yet.
+//
+// A monitored cluster (monitoring) gets its images probed for the HTTP
+// endpoints the monitoring stack scrapes, which also gives the Slurm
+// version, the stack's images pulled, its nodes' journal directories made,
+// and in the last phase the realm's monitoring stack created or started
+// and synced with the new nodes, and slurmctld's HTTP endpoints checked
+// once it is ready. A failed create removes the stack when it made it and
+// no other cluster of the realm is monitored.
 //
 // An unmanaged cluster (managed: false on the controller) gets the same
 // containers, volumes and munge key, but sind writes no Slurm configuration,
@@ -246,6 +257,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	// cancelled (e.g. Ctrl+C), and rollbackTimeout bounds it. Its failures
 	// are joined to the error. It is the progress step "rollback".
 	resourcesCreated := false
+	stackCreated := false
 	defer func() {
 		if retErr == nil {
 			return
@@ -267,10 +279,24 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 				errs = append(errs, fmt.Errorf("rolling back: removing cluster resources (sind delete cluster removes what is left): %w", err))
 			}
 		}
+		// The monitoring stack goes with the mesh, or when this create
+		// made it and no other cluster is monitored; its containers
+		// before the mesh network, its volumes after them.
+		removeStack := removeMesh || stackCreated && !rollbackKeepsStack(cleanupCtx, client, realm, cfg.Name)
+		if removeStack {
+			if err := removeMonitoringContainers(cleanupCtx, client, realm); err != nil {
+				errs = append(errs, fmt.Errorf("rolling back: %w", err))
+			}
+		}
 		if removeMesh {
 			log.DebugContext(ctx, "removing mesh created by this invocation")
 			if err := meshMgr.CleanupMesh(cleanupCtx); err != nil {
 				errs = append(errs, fmt.Errorf("rolling back: removing the mesh: %w", err))
+			}
+		}
+		if removeStack {
+			if err := removeMonitoringVolumes(cleanupCtx, client, realm); err != nil {
+				errs = append(errs, fmt.Errorf("rolling back: %w", err))
 			}
 		}
 		endRollback(errors.Join(errs[1:]...))
@@ -288,7 +314,11 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 
 	var dnsIP, sshPubKey, slurmVersion string
 	prepGroup, pullCtx := errgroup.WithContext(ctx)
-	pull := startPull(pullCtx, prepGroup, client, clusterImages(cfg), cfg.Pull)
+	images := clusterImages(cfg)
+	if cfg.Monitoring {
+		images = append(images, observability.Images()...)
+	}
+	pull := startPull(pullCtx, prepGroup, client, images, cfg.Pull)
 	// The checks and the resources are the hidden progress step
 	// "preflight", which a display shows only once it has run for a
 	// second; the pull is a step of its own beside it.
@@ -430,8 +460,22 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return err
 		})
 	}
+	if cfg.Monitoring {
+		g.Go(func() error {
+			created, err := ensureMonitoring(gctx, client, meshMgr)
+			stackCreated = created
+			return err
+		})
+	}
 	if err := g.Wait(); err != nil {
 		return nil, err
+	}
+	// The stack's DNS names go into the Corefile after the nodes': two
+	// read-modify-writes of it must not run at once.
+	if cfg.Monitoring {
+		if err := registerStackDNS(readyCtx, client, meshMgr); err != nil {
+			return nil, err
+		}
 	}
 
 	return cluster, nil
@@ -458,6 +502,18 @@ func rollbackRemovesMesh(ctx context.Context, client *docker.Client, meshMgr *me
 	return !inUse
 }
 
+// rollbackKeepsStack reports whether a failed Create keeps the monitoring
+// stack it created: when another cluster of the realm is monitored, or
+// when that cannot be told.
+func rollbackKeepsStack(ctx context.Context, client *docker.Client, realm, clusterName string) bool {
+	other, err := otherMonitoredClusters(ctx, client, realm, clusterName)
+	if err != nil {
+		sindlog.From(ctx).ErrorContext(ctx, "keeping the monitoring stack", "error", err)
+		return true
+	}
+	return other
+}
+
 // resolveMeshInfra starts the realm's mesh DNS and SSH relay if they are
 // stopped, and returns the DNS IP and the SSH public key.
 func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) (dnsIP, sshPubKey string, err error) {
@@ -478,7 +534,9 @@ func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.
 // resolveInfra fetches mesh details and the Slurm version concurrently.
 // The version stays empty for an unmanaged cluster: sind does not know which
 // Slurm it runs, as the provisioning under test may install another one than
-// the image ships. The version check waits for pull.
+// the image ships. The version check waits for pull. On a monitored cluster
+// the image probe (see probeMonitoringImages) replaces it: it reads the
+// version too.
 //
 //	┌──────────┐  ┌──────────┐  ┌──────────────┐
 //	│  DNS IP  │  │ SSH key  │  │Slurm version │
@@ -493,7 +551,19 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client, meshMgr)
 		return meshErr
 	})
-	if cfg.Managed() {
+	if cfg.Monitoring {
+		g.Go(func() error {
+			if err := pull.wait(gctx); err != nil {
+				return err
+			}
+			ver, err := probeMonitoringImages(gctx, client, meshMgr, cfg)
+			if err != nil {
+				return err
+			}
+			slurmVersion = ver
+			return nil
+		})
+	} else if cfg.Managed() {
 		g.Go(func() error {
 			if err := pull.wait(gctx); err != nil {
 				return err
@@ -516,7 +586,10 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // The helpers that write the config and the munge key run the controller's
 // image, so they wait for pull.
 //
-//	(network → relay connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only)
+// On a monitored cluster it also creates the realm's journal volume, and
+// makes the nodes' directories in it (resetClusterJournals).
+//
+//	(network → relay connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only) ║ (journal vol → journal dirs, monitoring only)
 func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, relay docker.ContainerName, pull *imagePull) error {
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
@@ -564,6 +637,17 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 	}
 	if len(cfg.Users) > 0 {
 		g.Go(func() error { return CreateClusterVolume(gctx, client, realm, cfg.Name, VolumeHome) })
+	}
+	if cfg.Monitoring {
+		g.Go(func() error {
+			if err := createJournalVolume(gctx, client, realm); err != nil {
+				return err
+			}
+			if err := pull.wait(gctx); err != nil {
+				return err
+			}
+			return resetClusterJournals(gctx, client, realm, cfg.Name, image, NodeShortNames(cfg.Nodes))
+		})
 	}
 	return g.Wait()
 }
@@ -799,10 +883,28 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 			if err := enableService(ctxs[i], client, containerName, nc.ShortName, service); err != nil {
 				return err
 			}
-			return waitReady(ctxs[i], client, containerName, []probe.Probe{slurmProbe}, interval, watcher)
+			if err := waitReady(ctxs[i], client, containerName, []probe.Probe{slurmProbe}, interval, watcher); err != nil {
+				return err
+			}
+			if !nc.Monitoring || service != probe.ServiceSlurmctld {
+				return nil
+			}
+			return waitReady(ctxs[i], client, containerName, []probe.Probe{slurmctldHTTPProbe(nc.ShortName)}, interval, watcher)
 		})
 	}
 	return g.Wait()
+}
+
+// slurmctldHTTPProbe returns the check that a monitored cluster's slurmctld
+// serves the HTTP endpoints the monitoring stack scrapes: /metrics/nodes on
+// the primary controller, /livez on the backup, whose standby slurmctld
+// redirects the metrics to the controller in control.
+func slurmctldHTTPProbe(shortName string) probe.Probe {
+	path := "/metrics/nodes"
+	if shortName == ControllerBackupShortName {
+		path = "/livez"
+	}
+	return probe.Probe{Name: "slurmctld HTTP", Check: probe.SlurmctldHTTP(path)}
 }
 
 // enableService enables and starts a systemd unit on a node. When the unit

@@ -803,6 +803,8 @@ func (f *realmFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{Stdout: dnsRunningInspectJSON}
 	case joined == "inspect sind-ssh":
 		return mock.Result{Stdout: sshRunningInspectJSON}
+	case args[0] == "inspect" && isStackContainer(args[1]):
+		return notFound
 	case args[0] == "exec":
 		return mock.Result{}
 	}
@@ -847,7 +849,10 @@ func TestDeleteAll(t *testing.T) {
 		"sind-ssh", "sind-dns", "sind-mesh", "sind-ssh-config",
 	})
 	assert.Empty(t, meshUpdates(&m), "no deregistration from a mesh that goes")
-	assert.Equal(t, "volume rm sind-ssh-config", strings.Join(m.Calls[len(m.Calls)-1].Args, " "), "mesh removed last")
+	n := len(m.Calls)
+	assert.Equal(t, "volume rm sind-ssh-config", strings.Join(m.Calls[n-2].Args, " "), "mesh removed after the clusters")
+	assert.Equal(t, "volume ls --format json --filter label=com.docker.compose.project=sind-mesh", strings.Join(m.Calls[n-1].Args, " "),
+		"the monitoring volumes after the mesh")
 }
 
 // TestDeleteAll_MeshOnly covers a realm left with a mesh and no cluster, as
