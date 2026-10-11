@@ -6,6 +6,8 @@ description: "Prerequisites and installation instructions"
 toc: true
 ---
 
+{{< video "installation" >}}
+
 ## Install
 
 {{< tabs "install" >}}
