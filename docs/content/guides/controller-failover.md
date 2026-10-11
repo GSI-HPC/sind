@@ -6,6 +6,8 @@ description: "Run a primary/backup slurmctld pair and trigger graceful or outage
 toc: true
 ---
 
+{{< video "controller-failover" >}}
+
 sind can run Slurm's active/passive controller setup: a primary `slurmctld` on `controller` and a backup `slurmctld` on `controller-backup`. This guide shows how to create the pair, check which controller is in control, and trigger a failover gracefully or by simulating an outage.
 
 ## Create a cluster with a backup controller

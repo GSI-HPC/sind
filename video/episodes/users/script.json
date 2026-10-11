@@ -1,0 +1,19 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's run jobs as real users." },
+    { "id": "why", "text": "At your site, jobs run as real users, under Slurm accounts with limits. How do you test that on a cluster where root does everything?" },
+    { "id": "config1", "text": "Here's the example. A db node keeps the accounts, and the slurm section turns on enforcement of associations and limits." },
+    { "id": "config2", "text": "physics, the parent account, caps its jobs at four CPUs together. Its child, theory, allows only one running job per user." },
+    { "id": "config3", "text": "alice, bob and carol get Slurm accounts, and two of them get roles: coordinator and operator. dave gets none." },
+    { "id": "ids", "text": "Every node gets the users and groups with the same IDs, and each user a home on the shared home volume." },
+    { "id": "tree", "text": "Once slurmctld has registered the cluster, sind creates this account tree with sacctmgr." },
+    { "id": "tests", "text": "So this cluster tests your limits: alice gets one job at a time, and physics stops at four CPUs, out of six." },
+    { "id": "dave", "text": "dave has no association, so his sbatch is rejected outright." },
+    { "id": "asuser", "text": "To act as a user, log in with sind ssh and a user name, or pass the user flag to sind exec or sind enter." },
+    { "id": "identity", "text": "The identity mode decides which nodes have the Linux accounts. local, the default, puts them on every node." },
+    { "id": "identity2", "text": "With nssSlurm, the workers don't have them, and with clientIds, only the login node does. Pick the one your site runs." },
+    { "id": "takeaway", "text": "So: declare users and accounts in the config, turn on enforcement, and mirror the identity mode of your site." },
+    { "id": "outro", "text": "Next up, the design overview. See you there!" }
+  ]
+}

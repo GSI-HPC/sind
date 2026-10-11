@@ -6,6 +6,8 @@ description: "Mount CVMFS repositories on the nodes, or test how your tooling pr
 toc: true
 ---
 
+{{< video "cvmfs" >}}
+
 [CernVM-FS](https://cvmfs.readthedocs.io) (CVMFS) serves software repositories read-only under `/cvmfs`. sind supports two use cases:
 
 - **Consume CVMFS**: jobs on the cluster read software from `/cvmfs`. With `storage.cvmfs: true`, sind mounts CVMFS from the Docker host or from a Docker volume plugin. The nodes need no extra privileges.

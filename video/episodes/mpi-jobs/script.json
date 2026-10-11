@@ -1,0 +1,20 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's run an MPI program across several nodes." },
+    { "id": "why", "text": "MPI codes need more than one node to test, and you'd rather not wait for the production cluster. sind gives you three workers in Docker." },
+    { "id": "stack", "text": "The default node image ships a full MPI stack, with Open MPI, PMIx and UCX, and Slurm launches with PMIx." },
+    { "id": "create", "text": "First, a cluster with three workers. Run sind create cluster with this configuration." },
+    { "id": "code1", "text": "Here's the program, a hello world in C." },
+    { "id": "code2", "text": "Every rank looks up its own number, and how many ranks there are in total." },
+    { "id": "code3", "text": "After a barrier, where all ranks wait for each other, every rank prints one line with its host name." },
+    { "id": "compile", "text": "Build it with mpicc, the compiler wrapper that adds the MPI flags for you." },
+    { "id": "run", "text": "Then srun launches one task per worker node." },
+    { "id": "result", "text": "Three ranks, one per worker! The order of the lines may vary." },
+    { "id": "pmix", "text": "Notice: srun got no MPI option. PMIx is already the default in the slurm.conf that sind generates." },
+    { "id": "batch", "text": "The same program also runs as a batch job. This script asks for three nodes, one task per node, and calls srun." },
+    { "id": "submit", "text": "You hand it to sbatch with the wait flag, which returns once the job has ended. Then cat prints its output file." },
+    { "id": "takeaway", "text": "So, the MPI stack is built in, srun needs no extra flags, and batch jobs work the same way." },
+    { "id": "outro", "text": "Next up, the MCP integration guide. See you there!" }
+  ]
+}

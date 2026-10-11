@@ -1,0 +1,19 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's give Slurm a spare controller." },
+    { "id": "why", "text": "Planning a backup slurmctld for your site? Rehearse the failover here first, and watch the backup take over when the primary fails." },
+    { "id": "config", "text": "This cluster config asks for a backup controller next to the primary, and two workers." },
+    { "id": "setup", "text": "sind adds controller backup next to controller, and lists both in slurm.conf, with a slurmctld timeout of twenty seconds." },
+    { "id": "setup2", "text": "Both mount one shared state volume, and the backup takes over when the primary stops responding for that long." },
+    { "id": "create", "text": "Create it with sind create cluster. It waits until both controllers answer." },
+    { "id": "show", "text": "sind get cluster now shows which controller is primary and which is backup. The star marks the one in control." },
+    { "id": "ping", "text": "Inside the cluster, scontrol ping reports both daemons as up." },
+    { "id": "takeover", "text": "Graceful first: scontrol takeover asks the backup to step in, and jobs are kept, thanks to the shared state volume." },
+    { "id": "handback", "text": "To hand back, start slurmctld on the primary again. It tells the backup to step down, and takes charge." },
+    { "id": "cut", "text": "Now an outage: sind power cut crashes the primary host, and after twenty seconds of silence, the backup takes over." },
+    { "id": "on", "text": "Power it back on, and its slurmctld takes over again." },
+    { "id": "takeaway", "text": "So: one config line adds the backup, scontrol takeover hands over gracefully, and sind power cut simulates an outage." },
+    { "id": "outro", "text": "Next up, the unmanaged cluster guide. See you there!" }
+  ]
+}
