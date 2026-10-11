@@ -6,6 +6,8 @@ description: "SSH, interactive shells, and command execution"
 toc: true
 ---
 
+{{< video "node-access" >}}
+
 ## ssh
 
 ```bash

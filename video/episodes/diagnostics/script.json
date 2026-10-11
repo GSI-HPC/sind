@@ -1,0 +1,19 @@
+{
+  "voice": "sindy",
+  "lines": [
+    {"id": "intro", "text": "Hi, I'm Sindy! This one is about diagnostics."},
+    {"id": "why", "text": "A job never starts, or a node stops answering. Where do you look first? Let's go from the host to the logs, step by step."},
+    {"id": "doctor", "text": "Start with the host. sind doctor checks Docker, cgroups, the inotify limit and host DNS."},
+    {"id": "doctorok", "text": "Every check passes here, so the host is fine. When one fails, doctor tells you how to fix it."},
+    {"id": "health", "text": "Next, the cluster. sind get cluster shows its status, its networks and the mesh services."},
+    {"id": "health2", "text": "Further down come the mounts and the nodes, each with its services."},
+    {"id": "svc", "text": "All four containers are running. But look at worker one: slurmd has failed!"},
+    {"id": "svc2", "text": "The status only covers the containers, so always check the services column too."},
+    {"id": "logs", "text": "Then read the logs. Give sind logs a node, for example the controller, and you get its container output."},
+    {"id": "logs2", "text": "Add a service, like slurmctld, to read its journal. The follow flag keeps it streaming."},
+    {"id": "res", "text": "For the raw resources, there's a get command for each. Here they are for a cluster named default."},
+    {"id": "json", "text": "And every get command prints JSON with the output flag, ready for your scripts."},
+    {"id": "take", "text": "So: check the host, then the cluster, then the logs. Read the services, not just the status, and use JSON for your scripts."},
+    {"id": "outro", "text": "Happy debugging! Next up: Node Arguments. See you there!"}
+  ]
+}

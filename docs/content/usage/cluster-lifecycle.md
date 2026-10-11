@@ -6,6 +6,8 @@ description: "Creating, listing, and deleting clusters"
 toc: true
 ---
 
+{{< video "cluster-lifecycle" >}}
+
 ## Create a cluster
 
 ```bash

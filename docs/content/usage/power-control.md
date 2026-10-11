@@ -6,6 +6,8 @@ description: "Simulate power events on cluster nodes"
 toc: true
 ---
 
+{{< video "power-control" >}}
+
 ## Commands
 
 ```bash

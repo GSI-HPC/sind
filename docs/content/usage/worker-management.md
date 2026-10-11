@@ -6,6 +6,8 @@ description: "Dynamically adding and removing worker nodes"
 toc: true
 ---
 
+{{< video "worker-management" >}}
+
 ## Add workers
 
 ```bash
