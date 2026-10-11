@@ -327,6 +327,35 @@ accounts:
 	assert.Contains(t, stderr, "Warning: Slurm does not enforce the accounts' limits (physics: MaxJobs): slurm.main does not set AccountingStorageEnforce; add AccountingStorageEnforce=associations,limits to it\n")
 }
 
+func TestCreateCluster_MonitoringFlag(t *testing.T) {
+	// --monitoring adds to the config's monitoring before validation:
+	// an unmanaged config fails like monitoring: true in the file, as a
+	// config error (exit 1), before the realm is resolved and before any
+	// docker call. --monitoring=false leaves the config's setting alone.
+	t.Setenv("SIND_REALM", "BAD")
+	dir := t.TempDir()
+	unmanaged := filepath.Join(dir, "unmanaged.yaml")
+	require.NoError(t, os.WriteFile(unmanaged, []byte("kind: Cluster\nnodes:\n  - role: controller\n    managed: false\n  - role: worker\n"), 0o644))
+	monitored := filepath.Join(dir, "monitored.yaml")
+	require.NoError(t, os.WriteFile(monitored, []byte("kind: Cluster\nmonitoring: true\nnodes:\n  - role: controller\n    managed: false\n  - role: worker\n"), 0o644))
+
+	for _, args := range [][]string{
+		{"--monitoring", "--config", unmanaged},
+		{"--monitoring=false", "--config", monitored},
+	} {
+		var m mock.Executor
+		_, _, err := executeWithMock(&m, append([]string{"create", "cluster"}, args...)...)
+		require.EqualError(t, err, "monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", "%v", args)
+		assert.False(t, isUsageError(err))
+		assert.Empty(t, m.Calls)
+	}
+
+	var m mock.Executor
+	_, _, err := executeWithMock(&m, "create", "cluster", "--monitoring=false", "--config", unmanaged)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "monitoring")
+}
+
 func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {
 	_, _, err := executeCommand("create", "cluster", "name", "extra")
 	assert.Error(t, err)
