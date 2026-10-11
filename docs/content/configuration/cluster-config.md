@@ -6,6 +6,8 @@ description: "YAML configuration schema reference"
 toc: true
 ---
 
+{{< video "cluster-config" >}}
+
 ## Minimal configuration
 
 The simplest valid configuration creates a cluster with one controller and one worker using the default image:

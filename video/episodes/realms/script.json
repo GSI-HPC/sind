@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! This one is about realms." },
+    { "id": "why", "text": "Two CI jobs on one machine, and both want a cluster called default? Without realms, they'd collide on the same names." },
+    { "id": "what", "text": "A realm is a namespace for everything sind creates: the mesh, DNS, SSH, and every cluster." },
+    { "id": "prefix", "text": "Its name goes in front of every resource. The default realm is called sind, so you get names like sind mesh." },
+    { "id": "apart", "text": "Another realm gets its own copies, and even its own lock. Realms never wait for each other, and can't see each other at all." },
+    { "id": "demo", "text": "Here, the dev and staging realms each create a cluster called app, side by side, with no conflict." },
+    { "id": "down", "text": "And each one is deleted on its own, without touching the other." },
+    { "id": "prec1", "text": "sind picks the realm in this order: first the realm flag, then the sind realm environment variable." },
+    { "id": "prec2", "text": "Next, a realm in the configuration file, which only sind create cluster reads. And last, the default, sind." },
+    { "id": "pass1", "text": "That third one has a catch. Here, the configuration file sets a realm of its own." },
+    { "id": "pass2", "text": "The commands that follow don't read that file, so pass them the same realm, or they look in another one." },
+    { "id": "take", "text": "So: one realm per parallel job, passed to every command, and no waiting on another realm's lock." },
+    { "id": "outro", "text": "Next up: the cluster lifecycle. See you there!" }
+  ]
+}
