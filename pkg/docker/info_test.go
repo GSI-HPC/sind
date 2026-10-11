@@ -42,6 +42,7 @@ func TestInfo(t *testing.T) {
 	assert.Equal(t, &DaemonInfo{
 		ServerVersion:   "29.1.0",
 		CgroupVersion:   "2",
+		CgroupDriver:    "systemd",
 		SecurityOptions: []string{"name=seccomp,profile=builtin", "name=cgroupns"},
 		OperatingSystem: "Ubuntu 24.04.3 LTS",
 		Name:            "runner",

@@ -18,6 +18,10 @@ type DaemonInfo struct {
 	ServerVersion string `json:"ServerVersion"`
 	// CgroupVersion is the cgroup version containers run on, "1" or "2".
 	CgroupVersion string `json:"CgroupVersion"`
+	// CgroupDriver is how the daemon places containers in cgroups:
+	// "systemd" (/system.slice/docker-<id>.scope) or "cgroupfs"
+	// (/docker/<id>).
+	CgroupDriver string `json:"CgroupDriver"`
 	// SecurityOptions lists the daemon's security features, one entry per
 	// feature, e.g. "name=seccomp,profile=builtin", "name=rootless" or
 	// "name=userns".

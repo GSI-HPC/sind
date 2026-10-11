@@ -159,7 +159,24 @@ type HostConfig struct {
 	CapDrop     []string          `json:"CapDrop"`
 	Devices     []DeviceMapping   `json:"Devices"`
 	SecurityOpt []string          `json:"SecurityOpt"`
-	DNS         []string          `json:"Dns"` // --dns
+	DNS         []string          `json:"Dns"`    // --dns
+	Mounts      []HostMount       `json:"Mounts"` // --mount, as given; docker inspect's top-level Mounts hide a volume's subpath
+}
+
+// HostMount is a mount given with --mount, as the container's host
+// configuration records it.
+type HostMount struct {
+	Type          MountType     `json:"Type"`
+	Source        string        `json:"Source"` // the volume name, or the host path of a bind mount
+	Target        string        `json:"Target"`
+	ReadOnly      bool          `json:"ReadOnly"`
+	VolumeOptions VolumeOptions `json:"VolumeOptions"`
+}
+
+// VolumeOptions are the options of a volume mount given with --mount.
+type VolumeOptions struct {
+	NoCopy  bool   `json:"NoCopy"`
+	Subpath string `json:"Subpath"` // volume-subpath: the directory of the volume that is mounted
 }
 
 // DeviceMapping is a host device exposed to a container (--device).

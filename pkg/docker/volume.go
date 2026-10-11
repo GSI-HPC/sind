@@ -4,6 +4,7 @@ package docker
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -86,4 +87,30 @@ func (c *Client) ListVolumes(ctx context.Context, filters ...string) ([]VolumeLi
 		})
 	}
 	return entries, nil
+}
+
+// VolumeMount returns the --mount value that mounts the volume source at
+// target: with subpath, only that directory of the volume, which must exist
+// when the container starts (volume-subpath, Docker 26 and later, which
+// -v cannot express), read-only with readOnly, and with noCopy without
+// Docker copying the image's files at target into an empty volume. Docker
+// reads the value as a CSV record, so a field with a comma or a quote is
+// quoted.
+func VolumeMount(source VolumeName, target, subpath string, readOnly, noCopy bool) string {
+	fields := []string{"type=volume", "source=" + string(source), "target=" + target}
+	if subpath != "" {
+		fields = append(fields, "volume-subpath="+subpath)
+	}
+	if readOnly {
+		fields = append(fields, "readonly")
+	}
+	if noCopy {
+		fields = append(fields, "volume-nocopy")
+	}
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	// Writing to a strings.Builder cannot fail.
+	_ = w.Write(fields)
+	w.Flush()
+	return strings.TrimSuffix(b.String(), "\n")
 }
