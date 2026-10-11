@@ -19,6 +19,7 @@ A CLI tool for running local Slurm clusters using Docker containers, inspired by
 - OpenMPI 5.0 (with PMIx 6.x, PRRTE 4.x, UCX 1.20)
 - libjwt 1.x, for Slurm's `auth/slurm` (identity `clientIds`)
 - llhttp (Rocky Linux 10), for slurmrestd on the `api` node (Slurm 26.05 and later)
+- Monitoring (opt-in, see Monitoring): Slurm 26.05 and later; Grafana Alloy 1.20, Prometheus 3.15, Loki 3.7 and Grafana 13.2, pinned in `pkg/observability`
 
 ## Overview
 
@@ -60,8 +61,11 @@ With `--pull`, sind pulls each distinct image of the cluster's nodes once (`dock
 6. Create home volume (`users` only)
 7. Detect the CVMFS backend (`storage.cvmfs` only; see CVMFS Mount)
 8. Check that the Docker host mounts cgroup2 with `nsdelegate` (`cluster.CheckNsdelegate`)
+9. Create the realm's journal volume `<realm>-journal` (if not exists) → make the nodes' journal directories in it (`monitoring` only; see Monitoring)
 
 The nsdelegate check runs `cat /proc/self/mounts` in a throwaway container of the controller's image (`--network none`, and `--entrypoint cat`, as a custom image may set an entrypoint) and fails with the commands that enable the option, the ones `sind doctor` prints. It reads the kernel the daemon runs on, wherever that is: `nsdelegate` is an option of the whole cgroup2 hierarchy (the kernel's `cgroup-v2.rst` calls it system wide, set only by a mount or remount in the init namespace and ignored on other mounts), and the kernel lists it in every cgroup2 mount, including the one Docker gives each container in its own cgroup namespace. Without the check, a host without `nsdelegate` gets as far as the nodes and fails later, as a node or Slurm daemon that does not become ready. The check runs alongside the other steps of this phase, after the pull with `--pull`, so a create that passes it waits for no extra container start; a create that fails it rolls back the network, volumes and helper containers made by then, before any node container exists. Running it before them instead would make every create wait for a container start, for a failure that is rare: systemd mounts cgroup2 with `nsdelegate` by default.
+
+A monitored cluster (`monitoring: true`) adds three things to this phase. The pull takes the monitoring stack's four images along with the node images, the missing ones or with `--pull` all of them, so that Phase 4 and its `--wait` limit do not wait for a download. The image probe replaces the Slurm version check: one throwaway container per distinct image that runs slurmctld or a managed slurmd, or a managed db node's MariaDB, checks that the image can serve the HTTP endpoints the stack uses and reports the Slurm version (see Monitoring), and an image that cannot fails the create with `cluster.ErrImageUnsupported` before any node container exists. And step 9 runs the journal helper, `<realm>-<cluster>-journal-helper`, a throwaway container of the controller's image without a network, which removes what an earlier cluster of the name left in `<cluster>/` of the journal volume and makes an empty directory `<cluster>/<node>` for each node; it runs after the preflight check, which rejects a cluster that exists, so it never clears a live cluster's journals.
 
 **Phase 3: Node Containers**
 1. Create and start each node container in parallel, on its cluster network and the realm's mesh (see Cluster Network)
@@ -75,7 +79,7 @@ The nsdelegate check runs `cat /proc/self/mounts` in a throwaway container of th
 
 The script writes a marker line to stderr before each step, so that a failure names its step and shows what that step wrote, with the exit status of the command that failed (`node worker-0: adding users: exit status 9: groupadd: group 'munge' already exists`). It runs after the node's readiness wait, as ssh-keyscan needs sshd, and nss_slurm and the users are in place before Phase 4 starts the Slurm daemons and creates the Slurm accounts. A node takes the same docker calls from `docker create` to its host key whatever its role or identity mode: create, start, the readiness probes, an inspect for its addresses (alongside the setup) and the setup exec.
 
-Every node container starts with a short `/bin/sh` entrypoint instead of the image's own entrypoint or command. As PID 1, it moves itself into `init.scope`, enables each controller of the container's root cgroup in its `cgroup.subtree_control`, and execs `/sbin/init`. `docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and a process there makes systemd's own attempt to enable them fail (cgroup v2's no internal processes rule). An exec of sind's that landed before systemd had enabled controllers would otherwise leave every unit without them, including `Delegate=yes` daemons such as slurmd.
+Every node container starts with a short `/bin/sh` entrypoint instead of the image's own entrypoint or command. As PID 1, it moves itself into `init.scope`, enables each controller of the container's root cgroup in its `cgroup.subtree_control`, and execs `/sbin/init`. On a monitored cluster it first writes the journald drop-in `/etc/systemd/journald.conf.d/zz-sind-monitoring.conf` with `SystemMaxUse=64M`, and the node mounts its directory of the journal volume at `/var/log/journal` (see Monitoring). `docker exec` puts its process in the container's root cgroup unless that cgroup has controllers enabled, and a process there makes systemd's own attempt to enable them fail (cgroup v2's no internal processes rule). An exec of sind's that landed before systemd had enabled controllers would otherwise leave every unit without them, including `Delegate=yes` daemons such as slurmd.
 
 There is no barrier between node creation and readiness probing — each node's goroutine creates its container, starts a systemd monitor, and begins probing in a single pipeline. This allows early-starting nodes to be probed while later nodes are still being created.
 
@@ -105,6 +109,7 @@ While systemd boots, a round then costs one `docker exec`, the systemd check, in
 | sshd listening | Port 22 accepting connections |
 | munge ready | munge service active (not with identity `clientIds`, which masks munge) |
 | slurmctld ready | `scontrol ping` reports this controller UP (controllers of managed clusters; each controller of a backup pair is checked for its own host); while it does not, a failed slurmctld unit ends the wait |
+| slurmctld HTTP | `GET /metrics/nodes` on port 6817 answers 2xx on `controller`, `GET /livez` on `controller-backup`, whose standby slurmctld redirects the metrics (monitored clusters only, after slurmctld ready). The request goes through bash's `/dev/tcp`, as the sshd check does; a failure names `CommunicationParameters` and `SlurmctldDebug`, as slurmctld logs a missing HTTP parser only at debug level |
 | slurmd ready | slurmd service active (managed workers only) |
 | sackd ready | sackd service active (the submitter of a managed cluster with identity `clientIds`) |
 | slurmrestd ready | slurmrestd service active and port 6820 accepting connections (managed api node) |
@@ -119,9 +124,11 @@ When a check fails for good, or the limit runs out, `sind create cluster` remove
 
 **Phase 4: Mesh Registration, Slurm and Home Directories** (concurrent)
 
-After all nodes are ready, sind runs mesh registration (batch DNS ║ known_hosts), Slurm enablement and, with `users`, the creation of the home directories concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network, which nodes join with gateway priority 1 so that it answers before the mesh (see Cluster Network). The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
+After all nodes are ready, sind runs mesh registration (batch DNS ║ known_hosts), Slurm enablement, with `users` the creation of the home directories and, with `monitoring`, the monitoring stack (the progress step `monitoring`: create or start the realm's stack, wait until it is ready, and sync Alloy with the new nodes) concurrently. This is safe because Slurm uses short hostnames (`controller`, `worker-0`) resolved by Docker's embedded DNS on the cluster network, which nodes join with gateway priority 1 so that it answers before the mesh (see Cluster Network). The mesh DNS records (`*.cluster.realm.sind`) are only used for SSH relay access and host-side resolution. Unmanaged clusters skip Slurm enablement.
 
 With a managed db node, Slurm enablement starts on the db node: mariadb, the accounting database and user, then slurmdbd, which must be active before slurmctld and slurmd are enabled (in parallel, as without a db node). slurmrestd on a managed api node, and sackd on the submitter with identity `clientIds`, are enabled alongside slurmctld and slurmd. slurmctld registers the cluster with slurmdbd when it starts (see Database Node). With `accounts`, sind then waits until `sacctmgr show cluster` lists the cluster and creates the Slurm accounts and associations (see Slurm Accounts).
+
+On a monitored cluster, the stack's mesh DNS names (`grafana.<realm>.sind`, `prometheus.<realm>.sind`, `loki.<realm>.sind`) are registered once the concurrent group has finished: `AddDNSRecords` reads, edits and rewrites the Corefile, and the realm lock serializes commands but not the goroutines of one, so a second writer running beside the nodes' registration would lose one set of records.
 
 ### Design Goals
 
@@ -142,7 +149,7 @@ The CLI command structure is reflected in the library API, allowing programmatic
 
 Library contract of `cluster.Create`: the caller sets up the mesh (`mesh.Manager.EnsureMesh`) and applies the config's defaults (`config.Cluster.ApplyDefaults`); `Create` validates the config itself before it creates anything, and refuses a config `realm` other than its `mesh.Manager`'s realm, the realm it creates the cluster in. The CLI resolves the realm first and sets it on the config.
 
-Errors that a library caller branches on wrap exported sentinels, so `errors.Is` tells them apart without matching messages: `cluster.ErrClusterExists` (preflight conflicts), `ErrClusterNotFound` (a cluster or its controller is missing), `ErrNodeNotFound`, `ErrNodesConfMissing` (managed workers without `sind-nodes.conf`), `ErrNotReady` (the `--wait` limit ran out) and `ErrNetworkFull` (the nodes do not fit on the realm's mesh or the cluster network, see Limits). When `Create` or `WorkerAdd` fails and its rollback fails too, the returned error joins the rollback's failures to the original one (`errors.Join`), so the caller learns that resources were left behind.
+Errors that a library caller branches on wrap exported sentinels, so `errors.Is` tells them apart without matching messages: `cluster.ErrClusterExists` (preflight conflicts), `ErrClusterNotFound` (a cluster or its controller is missing), `ErrNodeNotFound`, `ErrNodesConfMissing` (managed workers without `sind-nodes.conf`), `ErrNotReady` (the `--wait` limit ran out), `ErrNetworkFull` (the nodes do not fit on the realm's mesh or the cluster network, see Limits), `ErrImageUnsupported` (an image of a monitored cluster cannot serve the HTTP endpoints the monitoring stack uses) and `ErrNoMonitoring` (`GetMonitoring` in a realm without a monitoring stack). When `Create` or `WorkerAdd` fails and its rollback fails too, the returned error joins the rollback's failures to the original one (`errors.Join`), so the caller learns that resources were left behind.
 
 The operations report their progress as go-clikit spans on the context they are given (see Progress Display): a library caller that puts a progress Bus in it (`progress.WithBus`) gets the spans the CLI draws, and without one every span is a no-op.
 
@@ -334,7 +341,7 @@ Rules:
 - `create cluster --config -` takes the display off the terminal while it reads stdin, which may be the terminal (`progress.Suspend`).
 - `--progress-log FILE`, else `SIND_PROGRESS_LOG`, appends the command's events to FILE as JSON lines, go-clikit's [event log](https://github.com/GSI-HPC/go-clikit/blob/v0.3.0/doc/event-log.md) version 1 (`progress.NewLog`, with sind's version), with any mode, `none` included, and writes nothing on stderr. `cliprogress` opens it privately: it creates the file with mode `0600` and appends to it (`O_APPEND`), so that the commands of a CI job can share one log, each a `run` of its own, and refuses a file that is not the user's, that others can read or write (`run chmod 600 <path>`), that has other names (`<path> has other names than this one (N hard links)`), or that a link or a named pipe of another user leads to; it writes `/dev/stdout`, `/dev/stderr`, `/dev/fd/N` and `/proc/self/fd/N` through a duplicate of that descriptor. A log on the file the display draws on, such as `/dev/stderr` on the terminal, goes through the display's `Terminal`, so that its lines, written from the log's goroutine, land above the display and never in it. A log the flag names that cannot be used is a usage error before the command acts; one the variable names is a note on stderr, and no log. `--progress-log ""` writes no log even when the variable names one. A log that cannot be written once the command runs fails nothing, and sind says once that it stops short.
 - `TRACEPARENT` and `TRACESTATE` name the W3C trace the event log continues (`progress.ParseTraceContext`). A command that makes a Bus, as it shows progress or writes an event log, takes both out of its environment (`takeTraceContext`, from `cliprogress.Options.Trace`), so docker and the other programs it runs inherit neither: sind sends its spans nowhere else, and a child that ran under one would hang what it traces under a parent no tracing system holds. Without a Bus sind has no spans, and the programs it runs inherit both, so that their spans belong under the caller's.
-- `create cluster` reports, under its command span: the hidden step `mesh` (`mesh.Manager.EnsureMesh`), with a target for each part, `network`, `dns`, `volume` and `relay`, announced queued before the first runs, skipped as `exists` or `running` when it had nothing to do, so that a mesh in place leaves nothing, and showing in the row of the DNS container and of the relay the lines of the pull their `docker create` makes; `pull images`, only when sind pulls, with a target for each image that shows the lines of `docker pull`; the hidden step `preflight` beside it (the checks, `createResources`, `resolveInfra`, `DetectCVMFS`, `CheckNsdelegate`), canceled when the pull failed, and failed when the inspection of the images that comes before any pull did, as no step shows that one; `nodes`, with a target for each node (its short name and role) and under it the node's docker calls, its wait `ready` and its call `setup` (`setupNode`); then `mesh registration`, `slurm` (a target for each managed node, the db node's announced with the others), `accounts` (with `accounts`) and `home directories` (with `users`). `create worker` reports `pull images`, `nodes`, `mesh registration` and `slurm` the same way.
+- `create cluster` reports, under its command span: the hidden step `mesh` (`mesh.Manager.EnsureMesh`), with a target for each part, `network`, `dns`, `volume` and `relay`, announced queued before the first runs, skipped as `exists` or `running` when it had nothing to do, so that a mesh in place leaves nothing, and showing in the row of the DNS container and of the relay the lines of the pull their `docker create` makes; `pull images`, only when sind pulls, with a target for each image that shows the lines of `docker pull`; the hidden step `preflight` beside it (the checks, `createResources`, `resolveInfra`, `DetectCVMFS`, `CheckNsdelegate`), canceled when the pull failed, and failed when the inspection of the images that comes before any pull did, as no step shows that one; `nodes`, with a target for each node (its short name and role) and under it the node's docker calls, its wait `ready` and its call `setup` (`setupNode`); then `mesh registration`, `slurm` (a target for each managed node, the db node's announced with the others), `accounts` (with `accounts`), `home directories` (with `users`) and `monitoring` (with `monitoring`: the realm's monitoring stack and the sync of Alloy). `create worker` reports `pull images`, `nodes`, `mesh registration` and `slurm` the same way, and on a monitored cluster `monitoring` before `nodes`.
 - The wait `ready` (`probe.UntilReady`) is bounded by what is left until the context's deadline, the `--wait` limit, in whole seconds, and its message names the check that fails now, updated when that changes. Plain lines say when it starts, with its bound, and when it fails or is interrupted.
 - The `nodes` and `slurm` pools stay fail-fast errgroups with the same errors: a node stopped by a sibling's failure or an interrupt ends canceled with its own error as text (`endSpan`), not failed with `signal: killed`; when a db node fails, the nodes not started end canceled with the step.
 - The rollback of a failed `create cluster` or `create worker` is the step `rollback` (`startRollback`, and the removal of a mesh `EnsureMesh` made in `cmd/sind/create.go`), ended ok or with what it could not undo, which is a failure also after an interrupt (`rollbackFailure` classes it by its own error, not by `progressClass`), as the rollback runs on; the command's error and what it logs are the same as without it.
@@ -388,7 +395,7 @@ Development follows Test-Driven Development (TDD) style:
 ### Cluster Management
 
 ```bash
-sind create cluster [NAME] [--config FILE] [--data PATH] [--pull] [--wait DURATION]
+sind create cluster [NAME] [--config FILE] [--data PATH] [--pull] [--monitoring] [--wait DURATION]
 sind delete cluster [NAME]
 sind delete cluster --all
 sind get cluster [NAME]
@@ -399,6 +406,7 @@ sind get networks
 sind get realms
 sind get volumes
 sind get mesh
+sind get monitoring
 sind get dns
 sind get ssh-config
 sind get ssh-private-key
@@ -412,6 +420,8 @@ All `get` subcommands accept `--output|-o {human,json}`. The default is `human` 
 NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which then lists the nodes of every cluster.
 
 `sind create cluster` reads its configuration from `--config FILE`, or from stdin with `--config -`, where empty input is an error. Without `--config` it creates the default cluster (1 controller + 1 worker). Reading a stdin that is not a terminal without `--config -` is deprecated in v0.11.0 and will be removed: until then sind still reads it, but first writes a deprecation `Warning:` to stderr, since it waits for the end of that input, and takes empty input for the default cluster. A wrapper that hands sind a pipe it does not mean as the configuration (e.g. `ssh HOST sind create cluster`, or a `while read` loop) redirects stdin from `/dev/null`.
+
+`--monitoring` collects the cluster's metrics and logs in the realm's monitoring stack (see Monitoring). It is ORed into the config's `monitoring` key before validation: either turns monitoring on, and `--monitoring=false` does not turn off a config's `monitoring: true`. With an unmanaged config it fails like the key does, with exit status 1, as the conflict is with the config file.
 
 `sind create cluster` validates the environment before creating, failing if conflicting resources (containers, networks, volumes with matching names) already exist, or if the nodes would not fit on the realm's mesh or the cluster network, Docker bridge networks of at most 1,023 containers (see Limits under Networking).
 
@@ -490,7 +500,27 @@ worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd 
 worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
 ```
 
-`MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart).
+`MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart). When the realm has a monitoring stack, `MESH SERVICES` adds a row for each of its four containers, with ✓ while the service is ready (its readiness endpoint, see Monitoring), and the JSON output adds `grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` next to `dns_ok` and `ssh_ok`; without a stack the rows and the fields are left out. The JSON output has `"monitoring": true|false` at the top: whether a node of the cluster mounts the realm's journal volume.
+
+```
+MESH SERVICES
+NAME         CONTAINER         STATUS
+dns          sind-dns          ✓
+ssh          sind-ssh          ✓
+grafana      sind-grafana      ✓
+prometheus   sind-prometheus   ✓
+loki         sind-loki         ✓
+alloy        sind-alloy        ✓
+
+MOUNTS
+MOUNT              SOURCE                    TYPE       STATUS
+/etc/slurm         sind-dev-config           volume     ✓
+/etc/munge         sind-dev-munge            volume     ✓
+/data              /home/user/project        hostPath   ✓
+/var/log/journal   sind-journal:dev/<node>   volume     ✓
+```
+
+A monitored cluster lists the journal mount under `MOUNTS`: the realm's journal volume, and the cluster's directory in it, where each node mounts its own (`subpath` in the JSON output, `dev`). `docker inspect`'s top-level `Mounts` hide a volume's subpath, so sind reads it from the nodes' `HostConfig.Mounts`.
 
 The data row (`/data`, or the configured mount point) shows what Docker mounts there on the nodes, as `docker inspect` reports it: the bind-mounted host directory or the volume. Clusters with `users` add `/home`, the home volume `<realm>-<cluster>-home`, to `MOUNTS`. With `storage.cvmfs`, `MOUNTS` adds `/cvmfs`: source `cvmfs` of type `volume` for the volume plugin, whose status tells whether Docker finds the plugin volume, or source `/cvmfs` of type `hostPath`.
 
@@ -521,6 +551,37 @@ sshd        ✓
 ```
 
 A controller of a backup pair gets an `HA` column between `ROLE` and `FQDN` (`primary` or `backup`, with `*` on the controller in control), as in `sind get cluster`.
+
+### Monitoring Stack
+
+`sind get monitoring` shows the realm's monitoring stack (see Monitoring): each service's container, address and state, and the clusters it collects.
+
+```
+$ sind get monitoring
+SERVICE      CONTAINER         ADDRESS                            STATUS
+grafana      sind-grafana      http://grafana.sind.sind:3000      running
+prometheus   sind-prometheus   http://prometheus.sind.sind:9090   running
+loki         sind-loki         http://loki.sind.sind:3100         running
+alloy        sind-alloy        http://172.18.0.9:12345            running
+
+CLUSTERS
+NAME      NODES   SLURM
+default   3       26.05.4
+dev       5       26.05.4
+```
+
+`ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
+
+```json
+{
+  "realm": "sind",
+  "services": [
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.3",
+     "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
+  ],
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.4"}]
+}
+```
 
 ### Host Diagnostics
 
@@ -850,6 +911,8 @@ users:                                   # Linux accounts on every node (default
 
 identity: local                          # local | nssSlurm | clientIds, or {mode, controllerUsers} (see Identity Modes)
 
+monitoring: true                         # collect metrics and logs in the realm's monitoring stack (default: false; Slurm 26.05+)
+
 accounts:                                # Slurm accounts (needs a managed db node, default: none)
   - name: physics
     parent: root                         # default: root; any account declared before
@@ -1000,6 +1063,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `users`, `groups` - a name or an object; user and group names start with a lowercase letter or `_`, hold only lowercase letters, digits, `_` and `-`, and have at most 32 characters; `uid` and `gid` are between 1000 and 2147483647 and not 65534 (`nobody` in the image) or 65535 (the 16-bit -1); no two users share a name or `uid`, no two groups (private ones included) a name or `gid`; a user's `group` and `groups` are declared in `groups`, and `groups` repeats neither an entry nor `group`
 - `identity` - `local`, `nssSlurm` or `clientIds`, or an object with `mode` and `controllerUsers`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` only with `clientIds`; a `LaunchParameters`, `AuthType`, `CredType` or `AuthInfo` that `slurm.main` sets for the mode lists sind's value (see Identity Modes)
 - with a managed api node, an `AuthAltTypes` that `slurm.main` or `slurm.slurmdbd` sets lists `auth/jwt` (or `jwt`); `AuthAltParameters` there is not checked (see API Node)
+- `monitoring` - requires a managed controller; `slurm.main` must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers` (the collector has no token), and with `PrivateData` it must set `MetricsParameters=ignore_private_data` (see Monitoring)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
 
@@ -1056,7 +1120,7 @@ nodes:
 - sind creates the network, the volumes (config, munge, data, and state with `backupController`), the munge key and every container, `controller-backup` included, with the usual mounts: `/etc/slurm` rw on the controllers and ro elsewhere, like an NFS share, and `/etc/munge` ro.
 - It writes nothing to `/etc/slurm`, does not discover the Slurm version (`sind.slurm.version` is set empty, overriding the image's label of that name; `SLURM` shows `-`), and enables no Slurm daemon. Nodes are ready once container, systemd, sshd and munge are.
 - Every node is labelled `sind.managed=false`. Workers default to unmanaged; a worker with `managed: true` is rejected, and so is any `slurm` section.
-- Identity `nssSlurm` and `clientIds` are rejected, and so are `accounts` and the users' `accounts`, `coordinator` and `adminLevel`, which need a managed db node (see Identity Modes and Slurm Accounts). `users` and `groups` work as with identity `local`: every node gets them and, with `users`, mounts the home volume.
+- Identity `nssSlurm` and `clientIds` are rejected, and so are `accounts` and the users' `accounts`, `coordinator` and `adminLevel`, which need a managed db node (see Identity Modes and Slurm Accounts), and `monitoring`, which needs the slurm.conf sind writes (`monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster`, from the key and from `--monitoring` alike). `users` and `groups` work as with identity `local`: every node gets them and, with `users`, mounts the home volume.
 - `sind create worker` adds unmanaged workers with or without `--unmanaged`. `sind delete worker` never edits the Slurm configuration or runs `scontrol`, whatever files `/etc/slurm` holds.
 - `sind get cluster` and `sind get node` list only munge and sshd, report `"managed": false`, and show no HA status. Without a submitter, `sind enter` and `sind exec` target `controller` if it runs, otherwise `controller-backup`.
 - With `backupController`, both controllers mount the state volume at `/var/spool/slurmctld`. For sind's names to match the user's pair, point `StateSaveLocation` there and list `SlurmctldHost=controller` before `SlurmctldHost=controller-backup`.
@@ -1239,8 +1303,9 @@ nodes: [controller, db, api, worker: 2]
 | Home volume (`users` only) | `<realm>-<cluster>-home` | `sind-dev-home` |
 | Config helper (temporary, managed clusters only) | `<realm>-<cluster>-config-helper` | `sind-dev-config-helper` |
 | Munge helper (temporary, not with identity `clientIds`) | `<realm>-<cluster>-munge-helper` | `sind-dev-munge-helper` |
+| Journal helper (temporary, `monitoring` only) | `<realm>-<cluster>-journal-helper` | `sind-dev-journal-helper` |
 
-The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, using the controller's image, and are removed once the files are written. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
+The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, and the realm's journal volume while it makes the nodes' journal directories, using the controller's image, and are removed once they are done. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
 
 ### Global Resources (Mesh)
 
@@ -1252,6 +1317,21 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys copied in through `<realm>-ssh` before it first starts) |
 
 The mesh images do not follow `defaults.image`: the relay needs the `ssh` client and `bash` of sind's own node image, which custom images need not have. CoreDNS is pinned to a release; bump `DNSImage` in `pkg/mesh` by hand. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers; an existing mesh keeps its containers, and their images, until the realm's last cluster is deleted. `CleanupMesh` also removes a `<realm>-ssh-keygen` container, the key helper of earlier sind versions, if one is left over.
+
+### Monitoring Stack
+
+A realm with a monitored cluster has one monitoring stack (see Monitoring):
+
+| Type | Name Pattern | Example | Image |
+|------|-------------|---------|-------|
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.3` |
+| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.0` |
+| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.8` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.20.1` |
+| Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
+| Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
+
+The names have two parts, so they never equal a cluster's `<realm>-<cluster>-<type>` resources, and no cluster name has to be reserved. The images are pinned constants in `pkg/observability` (`GrafanaImage`, `PrometheusImage`, `LokiImage`, `AlloyImage`), each bumped on its own by hand; they do not follow `defaults.image`. Grafana must be the standard image: its Prometheus and Loki datasources ship only in the standard image's bundled plugins, which the `-slim` image would download at start, and it is the only one of the four with `curl`, which sind runs there to reach the others. A create that makes the stack pulls its images in Phase 2 with the node images; an existing stack keeps its containers, and their images, until it is removed or recreated (see Monitoring).
 
 ### Realm Lock
 
@@ -1275,6 +1355,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — | — |
 | `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw | rw (`users` only) |
 | `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro | ro (`storage.cvmfs` only) |
+| `<realm>-journal`, subpath `<cluster>/<node>` | `/var/log/journal` | rw | rw | rw | rw | rw (`monitoring` only) |
 | tmpfs | `/tmp` | per-node | per-node | per-node | per-node | per-node |
 
 ### Mount Options
@@ -1294,6 +1375,7 @@ Container mount flags:
 -v <realm>-<cluster>-home:/home:rw            # all nodes, users only
 --mount type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly     # storage.cvmfs: plugin
 --mount type=bind,source=/cvmfs,target=/cvmfs,readonly,bind-propagation=rslave  # storage.cvmfs: host
+--mount type=volume,source=<realm>-journal,target=/var/log/journal,volume-subpath=<cluster>/<node>  # monitoring
 --tmpfs /tmp:rw,nosuid,nodev,size=256m     # tmpSize
 --tmpfs /run:exec,mode=755,size=64m        # systemd runtime, volatile journal
 --tmpfs /run/lock                          # systemd lock files
@@ -1396,6 +1478,7 @@ sind applies labels to containers for filtering and metadata:
 | `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, space-separated `name:uid:gid` entries (gid of the primary group); empty without `users` |
 | `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, space-separated `name:gid` entries with `:member+member...` for supplementary members; empty without `users` and `groups` |
 | `sind.identity` | `clientIds` | The identity mode: `local`, `nssSlurm` or `clientIds` |
+| `sind.monitoring` | `true` | Whether the node's cluster is monitored: `true` or `false`. For listings and filters only: what decides is the node's mount of the realm's journal volume, which an image cannot forge (see Monitoring) |
 
 Every node container gets each of these labels, with an empty value where there is nothing to
 record. Docker merges the image's labels into the container's, so a label sind left out could come
@@ -1404,6 +1487,8 @@ bind-mount the host's root directory on a cluster that uses the data volume. Nod
 earlier sind versions lack some of the labels; sind reads a missing label like an empty one.
 
 Every node container, the mesh's DNS and SSH containers, and every network and volume but the realm lock also carry Docker Compose labels (`com.docker.compose.*`), so Compose-aware tools group them. The project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh). A container's service is its role (`dns` or `ssh` in the mesh) and its container number is 1, N+1 for `worker-N` and 2 for `controller-backup`; networks and volumes name themselves `net`, `mesh`, the volume type (`config`, `munge`, `data`, `state`, `home`) or `ssh-config`.
+
+The monitoring stack's containers carry only the Compose labels of the mesh's project, `<realm>-mesh`, with their service (`grafana`, `prometheus`, `loki`, `alloy`) and container number 1, like the DNS and SSH containers, and `sind.observability.version`, the fingerprint of the stack sind created them with (see Monitoring). They have no `sind.realm`: a container with it and without `sind.cluster` counts as another cluster to `HasOtherClusters`, so the stack would keep the mesh, and itself, after the last cluster is deleted, and `sind get realms` would list a realm that has only a stack. The stack's volumes and the journal volume carry `sind.realm` and the Compose labels of `<realm>-mesh`, naming themselves after their service or `journal`.
 
 ### Enter and Exec
 
@@ -1433,7 +1518,7 @@ All nodes of a realm also join its shared mesh network, which carries the realm'
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and the SSH relay `sind-ssh` |
 | Subsequent clusters | Connects cluster nodes to `sind-mesh`, updates DNS |
 | Cluster deleted | Disconnects cluster nodes, updates DNS (unless it is the last cluster) |
-| Last cluster deleted | Removes `sind-dns`, `sind-ssh` and the `sind-mesh` network |
+| Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns`, `sind-ssh` and the `sind-mesh` network, then the stack's volumes |
 
 The mesh does not route traffic between clusters by DNS name: the mesh DNS records point at cluster network addresses, which the SSH relay (on every cluster network) and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name (`sind-dev-controller`).
 
@@ -1460,6 +1545,8 @@ The DNS container's address is pinned for the life of the mesh (see Host Reboot 
 
 The DNS container is lightweight and does not run systemd/sshd.
 
+A realm with a monitoring stack also has `grafana.<realm>.sind`, `prometheus.<realm>.sind` and `loki.<realm>.sind`, at the services' mesh addresses: the stack runs on the mesh only (see Monitoring).
+
 sind keeps the records in the Corefile's `hosts` block and writes them when it creates or deletes nodes, and when `sind power on`, `reboot` and `cycle` start nodes, as a node can get another address on each start. A running CoreDNS reloads the Corefile on `SIGUSR1` (`docker kill -s USR1`), without dropping queries; a stopped DNS container is started instead. The write and the reload ignore Ctrl+C, and so does the rewrite of `known_hosts`, whose `cat >` truncates the file first. Each realm-wide file has one writer at a time (the realm lock); the Corefile and `known_hosts` updates run in parallel, as they live in different containers.
 
 #### Host DNS Resolution
@@ -1476,6 +1563,8 @@ resolvectl domain <bridge> ~<realm>.sind default.<realm>.sind
 ### Host Reboot and Docker Daemon Restart
 
 sind sets no restart policy: nodes keep the power state `sind power` gave them, and after a host reboot or a Docker daemon restart the mesh containers and the nodes stay stopped. `sind get cluster` shows a stopped DNS container or relay with ✗. `sind power on` starts the realm's DNS container, then the relay, then the nodes, re-registers the nodes' DNS records, and reapplies host DNS; `sind create cluster` and `sind create worker` also start a stopped mesh, DNS first, and so do `sind delete cluster` and `sind delete worker` before they remove nodes from a mesh that stays: `known_hosts` is read and written with `docker exec` in the relay.
+
+The monitoring stack has no restart policy either. `sind power on`, `reboot` and `cycle` start its stopped containers after the nodes, wait until it is ready and register its DNS names again; Alloy's configuration stays, as the nodes keep their container IDs. A monitored `sind create cluster` and `sind create worker` on a monitored cluster start it too, and so do `sind delete cluster` and `sind delete worker` of a monitored cluster before they sync Alloy. `sind get cluster` shows a stopped service with ✗, and `sind get monitoring` with its state.
 
 The DNS container's address is fixed into every node's and the relay's `--dns` when Docker creates them, and Docker does not keep a stopped container's address: a container that starts first can take it. sind therefore pins the address. A new mesh network gets a user-configured subnet, as Docker accepts `--ip` only on such a network, with the subnet's lower half as its `--ip-range`, the range Docker takes the addresses of the nodes and the relay from. The DNS container is created with `--ip` at the subnet's last address before the broadcast address (`172.18.255.254` in `172.18.0.0/16`), which no other container gets, so it has that address again in whatever order the containers start. The mesh network records it in the label `sind.dns.ip`; a DNS container removed by hand is created again at that address.
 
@@ -1627,6 +1716,155 @@ ssh -L 8080:localhost:80 controller.default.sind.sind   # port forwarding to the
 
 sind updates these files automatically when clusters or nodes are created/deleted, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file. The files are the invoking user's, so only that user's commands update them: in a realm shared with other clients of the daemon, their creates and deletes do not reach them.
 
+## Monitoring
+
+`monitoring: true` in the cluster config, or `sind create cluster --monitoring`, collects a managed cluster's Slurm metrics, its nodes' resource use and their journals into a monitoring stack that belongs to the realm: Grafana Alloy collects, Prometheus stores the metrics, Loki the logs, and Grafana shows them, as four containers on the realm's mesh network (`pkg/observability`). The first monitored cluster creates the stack, the realm's last cluster takes it along with the mesh, and the monitored clusters of a realm share it. Clusters without the setting get no extra mounts, an unchanged `slurm.conf`, and in a realm without a stack no extra docker calls; in a realm with one they are not collected.
+
+The setting is fixed for the cluster's life, like `managed`: the journal mounts and `slurm.conf` are made when the nodes are created. `sind create worker` takes it from the cluster, which is monitored when its controller mounts the realm's journal volume, and has no flag of its own. A config with `monitoring` fails to parse in sind versions before the key, as unknown keys are errors.
+
+### Stack
+
+| Service | Container | Port | Address | Memory | Data volume |
+|---------|-----------|------|---------|--------|-------------|
+| Grafana | `<realm>-grafana` | 3000 | pinned, DNS address - 1; `grafana.<realm>.sind` | `1g` | `<realm>-grafana` at `/var/lib/grafana` |
+| Prometheus | `<realm>-prometheus` | 9090 | pinned, DNS address - 2; `prometheus.<realm>.sind` | `1g` | `<realm>-prometheus` at `/prometheus` |
+| Loki | `<realm>-loki` | 3100 | pinned, DNS address - 3; `loki.<realm>.sind` | `1g` | `<realm>-loki` at `/loki` |
+| Alloy | `<realm>-alloy` | 12345 | dynamic, no DNS name | `512m` | `<realm>-alloy` at `/var/lib/alloy/data` |
+
+Images and names are listed under Docker Resources. Grafana, Prometheus and Loki take the addresses just below the mesh DNS container's (`mesh.ServiceIP`): like it, they lie in the upper half of the mesh subnet, outside the `--ip-range`, so no other container takes them while the stack is stopped. A mesh without a pinned DNS address (see Host Reboot and Docker Daemon Restart) gives them dynamic addresses, which sind registers again whenever it starts the stack. No port is published, so realms and CI jobs never compete for port 3000.
+
+- **Alloy** runs `run /etc/alloy/sind.alloy --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data --disable-reporting`: it listens on the mesh, as its default `127.0.0.1` would hide `/-/ready` and `/-/reload`, and reports no usage. It runs as root (`--user 0:0`), in the host's cgroup namespace (`--cgroupns host`) with the host's `/sys/fs/cgroup` mounted read-only, so that its embedded cAdvisor reads the nodes' cgroups, and mounts the journal volume at `/var/log/sind`, whose journal files are `root:systemd-journal 0640` and whose directories it clears and removes; `--security-opt label=disable` exempts it from SELinux labeling, which would deny both. It needs no Docker socket.
+- **Prometheus** runs with `--config.file=/etc/prometheus/sind.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=7d --storage.tsdb.retention.size=2GB --web.enable-remote-write-receiver`. It scrapes nothing itself: Alloy writes every series through the remote-write receiver.
+- **Loki** runs `-config.file=/etc/loki/sind.yaml`, the image's single-process configuration with filesystem storage on its volume, plus the compactor's retention of 168 hours (the stock configuration keeps logs forever), `log_level: warn` and no usage reports.
+- **Grafana** runs the standard image with its provisioning (`/etc/grafana/provisioning`): Prometheus and Loki as datasources with the fixed UIDs `sind-prometheus` and `sind-loki`, which the dashboards refer to, not editable; and a dashboard provider for the sind dashboards in the folder `sind`, with `allowUiUpdates: false` and `disableDeletion: true`, so they can be copied but not changed in place. The Slurm cluster dashboard is the home dashboard (`GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH`). Dashboards refresh at most every 15 s, the shortest scrape interval (`GF_DASHBOARDS_MIN_REFRESH_INTERVAL=15s`): a faster refresh shows nothing new and only loads Grafana.
+
+sind copies each service's configuration into its container with `docker cp` before the first start, as it does the Corefile. The dashboards are part of the sind binary, so a stack created by a newer sind gets that version's dashboards.
+
+Grafana is open to whoever reaches it: there is no data or access to protect. Its environment makes every visitor an anonymous org Admin, with no login at all, and keeps it from fetching anything:
+
+```
+GF_AUTH_ANONYMOUS_ENABLED=true
+GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+GF_AUTH_DISABLE_LOGIN_FORM=true
+GF_AUTH_DISABLE_LOGIN=true                     # no password login: admin/admin is unusable
+GF_AUTH_BASIC_ENABLED=false
+GF_AUTH_DISABLE_SIGNOUT_MENU=true
+GF_PLUGINS_PREINSTALL_DISABLED=true            # no plugin downloads at start: offline and pinned
+GF_PLUGINS_PLUGIN_ADMIN_ENABLED=false
+GF_PLUGINS_PUBLIC_KEY_RETRIEVAL_DISABLED=true
+GF_ANALYTICS_REPORTING_ENABLED=false
+GF_ANALYTICS_CHECK_FOR_UPDATES=false
+GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
+GF_ANALYTICS_FEEDBACK_LINKS_ENABLED=false
+GF_NEWS_NEWS_FEED_ENABLED=false
+GF_SECURITY_DISABLE_GRAVATAR=true
+GF_SNAPSHOTS_EXTERNAL_ENABLED=false            # no publishing to an external snapshot service
+```
+
+An org Admin can use Explore, edit dashboards and datasources and create service account tokens, but not install plugins or change server settings other than SMTP. Anyone who reaches the mesh, local users of the host and jobs on the nodes alike, acts as that Admin, and can point a new datasource at any address the Grafana container reaches. Prometheus and Loki are unauthenticated on the mesh as well. With plugin preinstallation off, the Logs and Metrics Drilldown apps are absent; Explore remains.
+
+From the host, Grafana is at `http://grafana.<realm>.sind:3000` when host DNS works (see Host DNS Resolution), otherwise at the address `sind get monitoring -o json` prints. For a Docker host reached over SSH, `ssh -L 3000:grafana.sind.sind:3000 devbox` (or the address) forwards it.
+
+### Collection
+
+sind generates Alloy's whole configuration from Docker state: the realm's node containers (with `sind.role`) that mount its journal volume, and the daemon's cgroup driver (`docker info`). It writes `/etc/alloy/sind.alloy` with `docker cp` and asks Alloy to reload it with `POST /-/reload`, through `curl` in the Grafana container, as Alloy's image has no `curl`; the endpoint returns Alloy's error where `SIGHUP` would only log it. Every sync rewrites the file whole, so no state is kept and nothing is left to repair after an interrupted command. Alloy reaches the nodes by container name (`sind-dev-controller`), which Docker's DNS resolves to their mesh addresses; the `*.<realm>.sind` names point at cluster network addresses that the mesh does not reach.
+
+| Source | Alloy component | Target | Interval |
+|--------|-----------------|--------|----------|
+| Slurm metrics | `prometheus.scrape` per endpoint | `/metrics/jobs`, `/metrics/nodes`, `/metrics/partitions` and `/metrics/scheduler` on port 6817 of each managed controller | 30 s |
+| Slurm users and accounts | `prometheus.scrape` | `/metrics/jobs-users-accts` on the same | 60 s |
+| Slurm daemon health | `prometheus.exporter.blackbox` | slurmctld `/livez` and `/readyz` (6817) on managed controllers, slurmd `/readyz` (6818) on managed workers, a TCP connect to slurmdbd (6819) on a managed db node | 15 s |
+| Containers and units | `prometheus.exporter.cadvisor` | each monitored node's cgroup and the cgroups below it | 15 s |
+| Logs | `loki.source.journal`, one per node | `/var/log/sind/<cluster>/<node>` | as written |
+
+- The metrics scrapes do not follow redirects: a standby slurmctld answers `/metrics/*` with 303, so its `up` is 0, and `up == 1` marks the controller in control, steadily through reconfigures, unlike `/readyz`. Following the redirect would be wrong, as its `controller` resolves on the mesh to any cluster's controller.
+- slurmdbd serves no HTTP, hence the TCP probe. sackd, slurmrestd, munge, sshd and MariaDB get no probe: each unit runs in a cgroup of its own, whose use cAdvisor reports.
+- cAdvisor runs with `docker_only = false` and `raw_cgroup_prefix_allowlist` listing each node's cgroup, `/system.slice/docker-<id>.scope` under the systemd cgroup driver and `/docker/<id>` under cgroupfs, from the container IDs. A relabeling generated with it maps the cgroup path to `cluster`, `node` and `role`, the rest of the path to `cgroup`, a `job_<id>` in it to `job_id`, and a `<unit>.service` at its end to `unit`; series of other cgroups are dropped.
+- Each journal source sets `unit` from `_SYSTEMD_UNIT`, or `UNIT` for PID 1's messages about a unit ("Started", "Failed with result"), as `journalctl -u` and so `sind logs` show them, and `level` from the journal priority. journald files every stderr line of a service at priority info, so for the Slurm daemons' units (slurmctld, slurmd, slurmdbd, sackd, slurmrestd) the level is parsed from the message (`fatal:` becomes `crit`, `error:` `err`, `warning:` and `debug...:` stay), and for `mariadb.service` from `[ERROR]`, `[Warning]` and `[Note]` (`err`, `warning`, `info`).
+- Every series and log line carries `realm`, `cluster`, `node` and `role` (the probes also `service` and `check`), so a dashboard can link a panel to the matching logs.
+- Component names are `n_<cluster>__<node>` with `-` turned into `_`, as Alloy labels must be identifiers and cluster names may start with a digit. They stay the same across sind versions: Alloy keys a journal's read position by them.
+
+What a node gets depends only on its role and its `sind.managed` label (`observability.Collect`):
+
+| Node | Journal | cgroups | Slurm metrics | Health probe | Image probe |
+|------|---------|---------|---------------|--------------|-------------|
+| controller, controller-backup | yes | yes | 5 endpoints; a standby's `up` is 0 | slurmctld `/livez`, `/readyz` | yes, with slurmctld (replaces `slurmctld -V`) |
+| managed worker | yes | yes | no (slurmd has none) | slurmd `/readyz` | its image, with slurmd |
+| managed db | yes, slurmdbd and MariaDB included | yes | no | slurmdbd TCP | MariaDB's error log setting only |
+| api, submitter | yes | yes | no | no | no |
+| unmanaged worker, db or api node | yes | yes | no | no | no |
+| any node of an unmanaged cluster | rejected by validation | | | | |
+
+Unmanaged nodes in a managed cluster exist to test someone's provisioning, so their logs and resource use are worth collecting; Slurm probes there would only show sind's own daemons as down.
+
+### Nodes of a monitored cluster
+
+- `slurm.conf` gets `MetricsType=metrics/openmetrics`, unless `slurm.main` sets it (see slurm.conf).
+- Every node mounts its own directory of the realm's journal volume at `/var/log/journal` (`--mount type=volume,source=<realm>-journal,target=/var/log/journal,volume-subpath=<cluster>/<node>`; `-v` cannot mount a subpath). With the directory present, journald's default `Storage=auto` writes a persistent journal there, into a `<machine-id>/` it creates. A directory per node, not per cluster, is needed: the nodes of an image very likely share the machine ID baked into it, and in one directory they would all write the same `<machine-id>/system.journal`. The subpath must exist when the container is created: `sind create cluster` makes it with the journal helper (see Container Startup), `sind create worker` with `docker exec` in Alloy.
+- The node entrypoint writes `/etc/systemd/journald.conf.d/zz-sind-monitoring.conf` with `SystemMaxUse=64M` before it execs `/sbin/init`. journald sorts the drop-ins of `/etc`, `/run` and `/usr/lib` by name and the last wins, so the `zz-` name also replaces a cap that a custom image, or the provisioning under test on an unmanaged node, sets; without it, an image without a cap could write up to 4 GB per node to the shared volume.
+- The journal moves from the `/run` tmpfs, which counts against the node's memory, to the volume on the host's disk, up to 64 MB per node until the stack goes. It survives `sind power reboot` and `cycle`, so `sind logs` on a monitored node also shows its earlier runs.
+- A node name can come back, as a cluster deleted and created again or a worker removed and added again. The journal helper empties `<cluster>/` at `sind create cluster`, and `sind create worker` empties `<cluster>/<node>/`, so neither `sind logs` nor Loki shows the earlier node's journal again.
+- Every node gets the label `sind.monitoring`, `true` or `false`, for listings and filters. Docker merges an image's labels into a container's, so an image could carry it; what decides whether a node is collected, and whether a cluster is monitored (its controller), is the node's mount of `<realm>-journal`, which an image cannot forge.
+- Nothing else runs in the node: no agent, and no extra docker call per node.
+
+### Checks
+
+A monitored cluster is checked at three points: its config before any docker call, its images before any node exists, and slurmctld's HTTP endpoint once Slurm runs.
+
+The config checks are in `config.Validate` (see Validation Rules), so library callers of `cluster.Create` get them too: monitoring needs a managed controller, and `slurm.main` must not keep the collector from slurmctld's metrics with another `MetricsType`, `CommunicationParameters=disable_http`, `MetricsAuthUsers` (the collector has no JWT) or `PrivateData` without `MetricsParameters=ignore_private_data`. The CLI ORs `--monitoring` into the config before `Validate`, so a monitored unmanaged config fails before the realm lock is taken.
+
+Slurm 26.05 and later serve HTTP on slurmctld's and slurmd's RPC ports, telling it apart from RPC by a connection's first bytes, once an HTTP parser, a URL parser and a TLS plugin load; with HTTP on, they also load an HTTP authentication and a data parser plugin, and abort without them. The HTTP parser is built only when configure finds its library, and without one Slurm logs only at debug level that HTTP is disabled. The image probe (`slurm.ProbeImage`) therefore runs one throwaway container per distinct image (`--network none --entrypoint /bin/sh`) in Phase 2, after the pull: the controllers' image with slurmctld, each managed worker group's image with slurmd (both in one run when they share an image), and a managed db node's image for MariaDB's error log setting. The run reports each daemon's version, the plugin directories (`PluginDir` from `slurm.main`, else the directory of the `libslurmfull` the first daemon links, which is Slurm's plugin directory whatever `--libdir` an image used, else the usual ones that exist), the plugin files of the needed types in them and whether their libraries resolve (`ldd`), and with a db node `my_print_defaults --mysqld`'s last log-error option. The image is untrusted: every line of the output must have one of the expected forms, with versions, paths and file names of the expected shapes, or the probe fails. The run of the controllers' image also gives the Slurm version, replacing `slurmctld -V` (see Slurm Version Discovery).
+
+`ImageInfo.MonitoringProblems` lists what keeps an image from serving the endpoints, and the create fails with `cluster.ErrImageUnsupported` naming every problem, before any node container exists:
+
+| Check | Passes when | Otherwise |
+|-------|-------------|-----------|
+| Daemon | the image has the daemon | `has no slurmd` |
+| Version | `slurm X.Y.Z` with X.Y at least 26.05; 26.05 pre-releases count | `image ghcr.io/gsi-hpc/sind-node:25.11 cannot serve monitoring: Slurm 25.11.8 is older than 26.05, which monitoring needs` |
+| Plugin directory | `PluginDir` is set, `ldd` finds `libslurmfull`, or a usual directory exists | `cannot find Slurm's plugin directory; set PluginDir in slurm.main` |
+| HTTP parser, URL parser, TLS, HTTP authentication, data parser | a plugin of each type whose libraries resolve | `Slurm has no HTTP parser plugin in /usr/lib64/slurm; build it with --with-llhttp-parser`, or `Slurm's <plugin> in <dir> cannot load: a library it needs is missing` |
+| OpenMetrics (controllers' image only) | `metrics_openmetrics.so`, loadable | the same forms |
+| MariaDB error log (managed db image) | `--skip-log-error` is the last log-error option, or there is none | a warning only: `MariaDB writes its error log to a file, which monitoring does not collect; add skip-log-error to a my.cnf.d file` |
+
+`sind create worker` on a monitored cluster probes the image of new managed workers the same way, with slurmd, whether it comes from `--image` or from the newest worker; unmanaged workers are not probed.
+
+The probe cannot see everything: a plugin can fail at start, and edited configuration shapes the result. Readiness therefore adds the `slurmctld HTTP` check on monitored clusters, after slurmctld is ready (see Readiness Checks): `GET /metrics/nodes` on port 6817 must answer 2xx on `controller`, and `GET /livez` on `controller-backup`, whose standby slurmctld redirects the metrics.
+
+### Lifecycle
+
+Every command below holds the realm lock, so the stack needs no locking of its own.
+
+| Command | Effect on monitoring |
+|---------|----------------------|
+| `create cluster`, monitored | Validation; in Phase 2 the stack's images pulled with the node images, the image probe, the journal volume and the nodes' directories; in Phase 3 the nodes mount them; in Phase 4 the stack created, or started or upgraded, waited for and synced with the new nodes, beside the Slurm daemons, and its DNS names registered after the nodes' (see Container Startup) |
+| `create cluster`, not monitored | Nothing; a stack of the realm is left as it is, stopped or not |
+| `create worker` on a monitored cluster | The image probe for managed workers; before the workers exist, the stack started, or created again if it was removed, and its DNS names registered, and the workers' journal directories emptied or made with `docker exec` in Alloy; after Slurm, a sync. A failed create worker takes the workers out of the stack again |
+| `delete worker` of monitored workers | After the containers are gone: the stack started if stopped, a sync, then the workers' directories removed |
+| `delete cluster`, monitored, not the realm's last | After the containers are gone: the stack started if stopped, a sync, then the cluster's directory removed. The collected metrics and logs stay until retention or the stack's removal; the stack stays while the realm has a cluster, monitored or not |
+| `delete cluster` of the realm's last cluster, and `--all` | The stack's containers removed, then the mesh, whose network must have no endpoints left, then the stack's volumes and the journal volume, which Docker removes only once no container refers to them. `--all` deletes clusters in parallel without a sync each; when a cluster fails to delete and the mesh stays, one sync takes the deleted ones out of the stack |
+| `power on`, `reboot`, `cycle` | The stack's stopped containers started after the nodes, waited for, and their DNS names registered again; container IDs do not change, so Alloy's configuration stays |
+| `power shutdown`, `cut`, `freeze`, `unfreeze` | Nothing: probes and `up` show the node down, a frozen one timing out |
+
+The failures that come after the work is done, in `delete worker`, `delete cluster` and the rollback of `create worker`, are warnings: Alloy reads what is gone until the next sync, and a directory left behind is emptied when a node of its name comes back, or goes with the stack. A failed `create cluster` removes the stack when the mesh goes too, or when the create made the stack and no other cluster of the realm is monitored; its containers before the mesh, its volumes after it.
+
+The stack is ready when Grafana's `/api/health`, Prometheus's `/-/ready`, Loki's `/ready` and Alloy's `/-/ready` answer, which sind checks with `curl` in the Grafana container, Grafana first. sind waits for it within `--wait`, and at most two minutes (`observability.DefaultReadyTimeout`), so tests and CI jobs can query the stack once the create returns.
+
+Each stack container carries `sind.observability.version`, a fingerprint of the stack sind creates: the first 16 hex digits of a SHA-256 over every service's container arguments (images, environment, mounts, memory caps, commands) and the files sind provisions it with (Prometheus's and Loki's configuration, Grafana's provisioning and dashboards), but not Alloy's configuration, which each sync rewrites. When `sind create cluster` or `sind create worker` finds a container with another fingerprint, as after a sind upgrade that changed an image, a configuration or a dashboard, it removes the container and creates it again, keeping its volume, so the stack never runs one sind version's configuration with another's images.
+
+### Dashboards
+
+The dashboards are generated in `pkg/observability` for sind's labels and versioned with sind, provisioned into the folder `sind`. Each has a realm and a cluster variable; the logs dashboard filters further.
+
+| Dashboard | Built from | Shows |
+|-----------|------------|-------|
+| Slurm cluster (home) | OpenMetrics | The controller in control; nodes, idle and down or draining nodes, running and pending jobs; jobs and nodes by state; CPUs and memory allocated against allocatable; pending, running and allocated CPUs per partition; scheduler and backfill cycles, queues and slurmctld threads |
+| Nodes | cAdvisor and OpenMetrics | Per node: the container's CPU, memory, processes and disk I/O next to what Slurm has allocated on it; CPU and memory per unit. Slurm reports allocation per node and states per cluster only |
+| Service health | probes, metrics scrape and Loki | The Slurm daemons' probes as a node by service matrix and their durations; which controller is in control, from the scrape's `up`; errors and warnings per unit, and the latest ones, Slurm, MariaDB and systemd alike |
+| Users and accounts | OpenMetrics and cAdvisor | Running and pending jobs and allocated CPUs per user and per account; CPU and memory per running job, from its cgroup on the workers |
+| Logs | Loki | The nodes' journals, filtered by node, unit, level and a search text, with the log volume by level. The other dashboards link their node panels into it |
+
+Slurm reports memory in MiB, as `slurm.conf` states `RealMemory`, whatever the `_bytes` in its metric names says; the panels say so. Job history, efficiency and timelines as `sacct` shows them need accounting data, which no metric carries.
+
 ## Command Routing
 
 Interactive sessions are routed based on cluster configuration:
@@ -1709,6 +1947,8 @@ The identity modes `nssSlurm` and `clientIds` need more from the image: see the 
 
 The Slurm requirements apply to managed clusters only. sind neither runs nor queries Slurm on an unmanaged cluster, so its image may leave Slurm for the provisioning under test to install.
 
+**With monitoring** (see Monitoring): the controllers' image and the image of each managed worker group need Slurm 26.05 or later with the plugins its daemons serve HTTP with, in the plugin directory (`PluginDir`, else the directory of the `libslurmfull` the daemon links): an HTTP parser (`http_parser_*.so`, built with `--with-llhttp-parser` or `--with-libhttp-parser`), a URL parser, a TLS plugin, an HTTP authentication plugin and a data parser, and on the controllers `metrics_openmetrics.so`, each with its libraries resolving; the probe needs `/bin/sh`, `ldd`, `awk` and `grep` there. Every node's journald must keep the persistent journal under `/var/log/journal` (`Storage=auto` or `persistent`), and the Slurm daemons must log to the journal (stderr or syslog, as Slurm's own units do), not only to a file. On a managed db node's image, MariaDB's error log must go to the journal too (`skip-log-error`; Debian-family packages leave it unset): `my_print_defaults` must report `--skip-log-error` as the last log-error option, or none; otherwise `sind create cluster` warns that MariaDB's log is not collected. sind writes a journald drop-in that caps the persistent journal at 64 MB, `zz-sind-monitoring.conf`, whose name sorts after the drop-ins images usually ship, so it also replaces a cap the image sets.
+
 **With users** (managed or unmanaged): the nodes that get the users need `groupadd`/`useradd` and `/bin/bash`, the controller `/etc/skel`; the image must have no user or group with a declared name or ID, and IDs from 1000 up, which sind assigns, must be free unless the configuration sets them.
 
 The repository's `Dockerfile`, which builds the official images, serves as the reference.
@@ -1771,6 +2011,8 @@ DefMemPerCPU=<the smallest RealMemory/CPUs of the managed workers>
 
 <accounting parameters: a managed db node (see Database Node)>
 
+<metrics parameters: monitoring, MetricsType=metrics/openmetrics (see Monitoring)>
+
 <slurm.main: its content, or an include line per fragment>
 include /etc/slurm/sind-nodes.conf
 ```
@@ -1825,7 +2067,7 @@ Users may:
 
 sind does not manage Slurm versions directly—the version is implicit in the chosen container images. sind discovers the Slurm version of the controller's image to show it in CLI output (the `SLURM` column, `slurm_version` in JSON) and to label the node containers with it. The generated configuration does not depend on the version.
 
-sind skips the discovery for unmanaged clusters: the Slurm the user provisions may differ from the one in the image.
+sind skips the discovery for unmanaged clusters: the Slurm the user provisions may differ from the one in the image. On a monitored cluster, the image probe replaces it (see Monitoring): its run of the controllers' image reports the version too, so a cluster whose nodes share one image starts no extra container.
 
 ### Discovery Method
 
@@ -1871,6 +2113,8 @@ Examples (custom realm `ci-42`):
 - `worker-0.dev.ci-42.sind`
 
 Within a cluster, short names resolve via the search domain: a node in the `dev` cluster of realm `sind` can reach `controller` without the full `controller.dev.sind.sind`.
+
+A realm's monitoring stack takes the names `grafana.<realm>.sind`, `prometheus.<realm>.sind` and `loki.<realm>.sind` (see Monitoring). They have no cluster part, so they cannot clash with a node's name.
 
 ## Realm Advisory Locking
 

@@ -24,8 +24,9 @@ toc: true
 | Home volume (`users` only) | `<realm>-<cluster>-home` | `sind-dev-home` |
 | Config helper (temporary, managed clusters only) | `<realm>-<cluster>-config-helper` | `sind-dev-config-helper` |
 | Munge helper (temporary, not with identity `clientIds`) | `<realm>-<cluster>-munge-helper` | `sind-dev-munge-helper` |
+| Journal helper (temporary, `monitoring` only) | `<realm>-<cluster>-journal-helper` | `sind-dev-journal-helper` |
 
-The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, using the controller's image, and are removed once the files are written. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
+The helpers mount the config and munge volumes while `sind create cluster` writes the Slurm configuration and the munge key into them, and the realm's journal volume while it makes an empty journal directory for each node of a monitored cluster, using the controller's image, and are removed once they are done. They carry the `sind.realm` and `sind.cluster` labels, so `sind delete cluster` removes one that an interrupted create left behind (`docker ps -a`).
 
 With identity `clientIds` there is no munge volume: the authentication secret, `slurm.key`, is on the config volume (see [Slurm Configuration]({{< relref "/architecture/slurm-config#slurmkey" >}})).
 
@@ -41,6 +42,23 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys written once, through the SSH container before it first starts) |
 
 The mesh images do not follow `defaults.image`: the SSH relay runs sind's default node image, which has the `ssh` client and `bash` it needs (custom node images need not), and CoreDNS comes from Docker Hub. `sind get mesh` shows the images the mesh containers run. `--pull` pulls the mesh images when `sind create cluster` creates the mesh containers. An existing mesh keeps its containers and images until the realm's last cluster is deleted.
+
+## Monitoring stack
+
+A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also has:
+
+| Type | Name pattern | Example | Image |
+|------|-------------|---------|-------|
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.3` |
+| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.0` |
+| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.8` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.20.1` |
+| Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
+| Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
+
+The stack runs on the mesh network only. Grafana, Prometheus and Loki have fixed addresses just below the DNS container's and the DNS names `grafana.<realm>.sind`, `prometheus.<realm>.sind` and `loki.<realm>.sind`; Alloy has neither. Prometheus and Loki are capped at 1 GB of memory, Grafana and Alloy at 512 MB. Alloy runs as root in the host's cgroup namespace, with the host's `/sys/fs/cgroup` mounted read-only and the journal volume at `/var/log/sind`, so that it reads the nodes' cgroups and journals; it needs no Docker socket.
+
+The images do not follow `defaults.image`. sind pins each of them and pulls them with the node images when a monitored `sind create cluster` creates the stack. An existing stack keeps its containers and images until the realm's last cluster is deleted, or until a newer sind replaces the containers, keeping the volumes, because their images, configuration or dashboards changed. Deleting the realm's last cluster removes the stack's containers, then the mesh, then the stack's volumes and the journal volume.
 
 ## Realm lock
 
@@ -62,6 +80,7 @@ Besides `sind.realm`, its labels name the command that holds it (`sind.lock.comm
 | `<realm>-<cluster>-state` | `/var/spool/slurmctld` | rw (backup controller pairs only) | — | — | — | — |
 | `<realm>-<cluster>-home` | `/home` | rw | rw | rw | rw | rw (`users` only) |
 | `cvmfs` plugin volume or host `/cvmfs` | `/cvmfs` | ro | ro | ro | ro | ro (`storage.cvmfs` only) |
+| `<realm>-journal`, directory `<cluster>/<node>` | `/var/log/journal` | rw | rw | rw | rw | rw (`monitoring` only) |
 | tmpfs | `/tmp` | configurable | configurable | configurable | configurable | configurable |
 | tmpfs | `/run` | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m | exec,mode=755,size=64m |
 | tmpfs | `/run/lock` | — | — | — | — | — |
@@ -93,6 +112,16 @@ With `dataStorage.type: hostPath`, or by default through `sind create cluster --
 
 The directory must exist on the Docker host: unlike `-v`, `--mount` fails on a missing source instead of creating it as an empty, root-owned directory.
 
+### Journal
+
+On a [monitored]({{< relref "/guides/monitoring" >}}) cluster, every node mounts its own directory of the realm's journal volume, where journald writes the node's persistent journal and Alloy reads it:
+
+```
+--mount type=volume,source=sind-journal,target=/var/log/journal,volume-subpath=dev/worker-0
+```
+
+The node's entrypoint caps that journal at 64 MB with the journald drop-in `/etc/systemd/journald.conf.d/zz-sind-monitoring.conf`.
+
 ### CVMFS
 
 With `storage.cvmfs: true`, every node mounts CVMFS read-only at `/cvmfs`, from the `cvmfs` Docker volume plugin when it is installed and enabled, otherwise from the Docker host's `/cvmfs` as a slave mount, so repositories the host's autofs mounts on demand appear in the nodes:
@@ -121,9 +150,10 @@ sind applies labels to containers for filtering and metadata:
 | `sind.users` | `alice:1000:1000 bob:2001:3000` | The cluster users, as space-separated `name:uid:gid` entries; empty without `users` |
 | `sind.groups` | `alice:1000 hpc:3000:carol` | The cluster groups, private groups included, as space-separated `name:gid` entries with `:member+member...` for supplementary members; empty without `users` and `groups` |
 | `sind.identity` | `clientIds` | The identity mode: `local`, `nssSlurm` or `clientIds` |
+| `sind.monitoring` | `true` | Whether the node's cluster is [monitored]({{< relref "/guides/monitoring" >}}): `true` or `false`. For listings and filters only: sind tells a monitored node by its mount of the realm's journal volume, which an image cannot forge |
 
 Every node container gets all of these labels, empty where there is nothing to record. Docker merges the image's labels into the container's, so a label sind left out could otherwise come from the node image.
 
-A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network, the SSH volume and the realm lock carry `sind.realm` only. `sind get networks` and `sind get volumes` find resources by these labels, leaving out the realm lock. `sind delete cluster --all` finds clusters by them and by the labels of their containers, which also covers clusters made before sind labelled networks and volumes (v0.9.0).
+A cluster's network and volumes carry `sind.realm` and `sind.cluster`; the mesh network, the SSH volume, the monitoring stack's volumes and the realm lock carry `sind.realm` only. The monitoring stack's containers carry no `sind.realm`, so that they do not count as a cluster of the realm, only the Compose labels and `sind.observability.version`, a fingerprint of their images, configuration and dashboards. `sind get networks` and `sind get volumes` find resources by these labels, leaving out the realm lock. `sind delete cluster --all` finds clusters by them and by the labels of their containers, which also covers clusters made before sind labelled networks and volumes (v0.9.0).
 
-Every node container, the mesh's DNS and SSH containers, and every network and volume but the realm lock also carry Docker Compose labels, so Compose-aware tools group them: the project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh), the service is the node's role (`dns` or `ssh` in the mesh), the container number is 1, or N+1 for `worker-N` and 2 for `controller-backup`, and networks and volumes name themselves `net`, `mesh`, the volume type or `ssh-config`.
+Every node container, the mesh's DNS and SSH containers, the monitoring stack's containers, and every network and volume but the realm lock also carry Docker Compose labels, so Compose-aware tools group them: the project is `<realm>-<cluster>` (`<realm>-mesh` for the mesh), the service is the node's role (`dns`, `ssh` or the monitoring stack's `grafana`, `prometheus`, `loki` and `alloy` in the mesh), the container number is 1, or N+1 for `worker-N` and 2 for `controller-backup`, and networks and volumes name themselves `net`, `mesh`, the volume type, `ssh-config`, the monitoring service or `journal`.

@@ -62,7 +62,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── get.go       Listing clusters, nodes, networks, volumes
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
-  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNetworkFull), rollback bound
+  ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNoMonitoring), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
@@ -72,6 +72,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── users.go     Linux users and groups, their labels, home directories
   ├── identity.go  Identity modes: nss_slurm on workers, sackd on the submitter
   ├── cvmfs.go     CVMFS backend detection and mount arguments
+  ├── monitoring.go Monitored clusters: image probe, journal volume and helper, the realm's stack (GetMonitoring)
   ├── worker.go    Worker add
   ├── worker_remove.go Worker remove
   ├── power.go     Power state operations; the pool of each action (fanout.Map)
@@ -94,6 +95,8 @@ pkg/doctor/        Host prerequisite checks (Docker version, where the daemon ru
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
+pkg/observability/ The realm's monitoring stack (Alloy, Prometheus, Loki, Grafana): containers,
+                   configuration, Alloy config generation, dashboards
 pkg/probe/         Node readiness probes
 pkg/retry/         Bounded exponential-backoff helper
 pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing, version
@@ -121,6 +124,12 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
                                      → pkg/log
+                       → pkg/observability → pkg/config
+                                           → pkg/docker
+                                           → pkg/log
+                                           → pkg/mesh
+                                           → pkg/probe
+                                           → pkg/retry
                        → pkg/probe   → pkg/docker
                                      → pkg/config
                                      → pkg/log
@@ -133,6 +142,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                        → pkg/state   → pkg/docker
                                      → pkg/log
          → pkg/doctor
+         → pkg/observability
          → pkg/state
          → github.com/GSI-HPC/go-clikit/termtext
          → github.com/GSI-HPC/go-nodeset

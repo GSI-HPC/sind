@@ -55,6 +55,10 @@ By default every node mounts the job's working directory, usually the checked-ou
 
 The directory is resolved on the Docker host. When the CI job runs in a container that shares the host's Docker socket, the job's paths do not exist there and `sind create cluster` fails; use `--data volume` in that case.
 
+## Monitoring
+
+A cluster with [`monitoring: true`]({{< relref "/guides/monitoring" >}}) collects Slurm's metrics, the nodes' resource use and their journals into Prometheus and Loki, which a later step of the job can query by the addresses `sind get monitoring -o json` prints, for example to save the Slurm daemons' errors of a failed run as an artifact (see [In CI]({{< relref "/guides/monitoring#in-ci" >}})). The stack publishes no host port, so parallel jobs in their own realms each get one without colliding. Its four images come from Docker Hub and are pulled with the node images when a job creates the stack.
+
 ## Untrusted changes
 
 A cluster config is as trusted as a script with the runner's Docker access (see [Trust]({{< relref "/configuration/cluster-config#trust" >}})): do not create clusters from configs that untrusted pull requests can change in a `pull_request_target` or other privileged workflow.

@@ -105,6 +105,7 @@ nodes:
 | `groups` | no | — | Linux groups for the users |
 | `accounts` | no | — | Slurm accounts, with a managed db node |
 | `identity` | no | `local` | Which nodes get the users, and how Slurm authenticates them |
+| `monitoring` | no | `false` | Collect the cluster's metrics and logs in the realm's monitoring stack (see [Monitoring](#monitoring)) |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
 Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`. A cluster may not be named `ssh`, as its config volume would be the realm's SSH volume, `<realm>-ssh-config`. With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), the cluster name has at most 40 characters, Slurm's limit for clusters with accounting: slurmdbd builds the names of the cluster's database tables from it.
@@ -261,6 +262,16 @@ identity:
 
 The `slurm.conf` parameters are set unless the [`main` section](#slurm-section) sets them. A value set there must keep sind's, or validation fails: `LaunchParameters` must list `enable_nss_slurm`, and with `clientIds` `AuthInfo` must list `use_client_ids`, `AuthType` be `auth/slurm` and `CredType` `cred/slurm`. Unmanaged nodes, such as `managed: false` workers, get the Linux accounts in every mode. `nssSlurm` and `clientIds` need a managed cluster, and managed workers whose image has nss_slurm (`libnss_slurm.so.2`), as the official images do. Official images cached before identity modes existed lack it under the same tags; sind refuses such a cached image before it creates anything, and `--pull` fetches a current one. See [Users and Identity]({{< relref "/guides/users" >}}) for how each mode resolves users, and how to choose one. With an [`api` node]({{< relref "/configuration/node-definitions#api-node" >}}) and `clientIds`, sind also lets REST API tokens carry the user's identity (`use_jwt_client_ids`); see [REST API]({{< relref "/guides/rest-api#identity-modes" >}}).
 
+## Monitoring
+
+`monitoring: true` sends the cluster's Slurm metrics, its nodes' resource use and their journals to the realm's monitoring stack, Prometheus, Loki and Grafana with Grafana Alloy collecting, which the first monitored cluster of the realm creates:
+
+```yaml
+monitoring: true    # default: false
+```
+
+`sind create cluster --monitoring` does the same, also on top of a config; `--monitoring=false` does not turn off `monitoring: true`. The setting is fixed for the cluster's life, and workers added with `sind create worker` follow it. It needs a managed cluster and images with Slurm 26.05 or later and its HTTP parser plugin, as the official 26.05 images have; `sind create cluster` checks the images before it creates any node. On a monitored cluster sind sets `MetricsType=metrics/openmetrics` in `slurm.conf`, unless the [`main` section](#slurm-section) sets it, and every node mounts its journal directory from the realm's volume `<realm>-journal`. See [Monitoring]({{< relref "/guides/monitoring" >}}).
+
 ## Slurm section
 
 The `slurm` section extends the generated Slurm configuration. Each key maps to a config file:
@@ -340,5 +351,6 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `storage.dataStorage.type` must be `volume` or `hostPath`; `hostPath` requires a `hostPath`, and `mountPath` must be absolute, contain no comma and not be a path where the nodes already mount something: `/etc/slurm`, `/etc/munge` (except with identity `clientIds`), `/tmp`, `/run`, `/run/lock`, `/home` with `users`, `/cvmfs` with `storage.cvmfs`, or `/var/spool/slurmctld` with `backupController`
 - User and group names must be valid (see [Users section](#users-section)) and unique; `uid` and `gid` must be between 1000 and 2147483647, not 65534 or 65535, and unique, private groups included; a user's `group` and `groups` must be declared in `groups`, and `groups` must not repeat an entry or the primary `group`
 - `identity` must be `local`, `nssSlurm` or `clientIds`; `nssSlurm` and `clientIds` require a managed cluster; `controllerUsers` is only valid with `clientIds`; an identity parameter that `slurm.main` sets must keep sind's value (see [Identity section](#identity-section))
+- `monitoring` requires a managed controller; with it, the `main` section must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers`, and with `PrivateData` it must set `MetricsParameters=ignore_private_data`, so that the monitoring stack can read slurmctld's metrics without a token
 - `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; `limits` keys must be among the options in the [Accounts section](#accounts-section), with non-empty values; every account a user names must be declared, at most once in each of `accounts` and `coordinator`; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - Unknown keys are rejected
