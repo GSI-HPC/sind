@@ -20,10 +20,11 @@ Thumbs.db
 dist/
 .hugo_build.lock
 
-# Agents (shared skills under .claude/skills/ are tracked)
+# Agents (shared skills and settings under .claude/ are tracked)
 .serena/
 .claude/*
 !.claude/skills/
+!.claude/settings.json
 
 PLAN*.md
 CLAUDE.local.md

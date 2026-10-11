@@ -1,0 +1,9 @@
+{
+  "name": "sind",
+  "wordmark": "sind",
+  "tagline": "SLURM · IN · DOCKER",
+  "role": "your sind guide",
+  "links": [["Docs", "gsi-hpc.github.io/sind"], ["Code", "github.com/GSI-HPC/sind"]],
+  "marks": { "logo": "logo.svg", "emblem": "emblem.svg", "badge": "emblem-badge.svg" },
+  "tokens": { "intro": { "wordmark-gap": { "$value": "0" } } }
+}

@@ -1,12 +1,13 @@
 {
   "voice": "sindy",
   "lines": [
-    { "id": "intro", "text": "Hi, I'm Sindy! Welcome to sind, Slurm in Docker." },
-    { "id": "welcome", "text": "In this quick start, we'll create a complete Slurm cluster on your own machine. It takes about a minute, and all you need is Docker." },
+    { "id": "intro", "text": "Hi, I'm Sindy! Welcome to sind, Slurm in Docker, and to your first cluster." },
+    { "id": "welcome", "text": "Want to try Slurm, but there's no cluster at hand? Let's build a complete one on your own machine. All you need is Docker and sind." },
     { "id": "what", "text": "With one command, sind sets up the network, DNS and SSH, generates the munge key and Slurm configuration, and starts every node as a container." },
-    { "id": "create", "text": "Let's try it! Run sind create cluster, and you get a cluster named default, with one controller and one worker." },
-    { "id": "check", "text": "sind stays quiet when everything works. Now, sind get clusters shows that it's up and running." },
-    { "id": "nodes", "text": "For more detail, sind get nodes lists every node container, with its host name and IP address." },
-    { "id": "outro", "text": "That's it! Your cluster is ready for jobs. See you in the next guide!" }
+    { "id": "create", "text": "Let's try it! Run sind create cluster, no arguments needed. Out comes a cluster called default: one controller, one worker." },
+    { "id": "check", "text": "No news is good news: sind prints nothing on success. Now, sind get clusters shows it up and running." },
+    { "id": "nodes", "text": "One level deeper, sind get nodes shows the container behind each node, with its DNS name and IP address." },
+    { "id": "take", "text": "To recap: one command builds the cluster, no output means it worked, and sind get shows what's running." },
+    { "id": "outro", "text": "Your cluster is ready for jobs! Next up: cluster configuration. See you there!" }
   ]
 }
