@@ -1,0 +1,18 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's fit slurm.conf on one screen." },
+    { "id": "hook", "text": "What tells Slurm which nodes your cluster has, and where its controller runs?" },
+    { "id": "why", "text": "A text file, slurm.conf. A handful of its lines define the whole cluster, and you can learn to spot them at any site." },
+    { "id": "ctl", "text": "SlurmctldHost names the host where the controller runs." },
+    { "id": "nodes", "text": "NodeName lines describe the compute nodes, with their CPUs and memory." },
+    { "id": "parts", "text": "PartitionName lines group nodes into partitions, the queues that jobs are submitted to." },
+    { "id": "incl", "text": "And an include line pulls in another file, as if its lines stood right there." },
+    { "id": "split", "text": "sind splits these lines over two files. slurm.conf holds the cluster-wide settings, and ends with an include." },
+    { "id": "nodesfile", "text": "The included file, sind nodes dot conf, has a NodeName line for each worker sind manages, and the partition all." },
+    { "id": "rewrites", "text": "sind rewrites it when you add or remove workers, and leaves slurm.conf as it was created." },
+    { "id": "yours", "text": "Your own slurm.conf lines, from the main section of the cluster config, go just before that include." },
+    { "id": "takeaway", "text": "So: a controller line, node and partition lines, and includes to split them up." },
+    { "id": "outro", "text": "Next up: episode six, Rehearse a change. See you there!" }
+  ]
+}

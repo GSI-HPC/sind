@@ -1,0 +1,16 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Time for a refresher on Slurm node states." },
+    { "id": "hook", "text": "Why does sinfo show idle star? And why does a node stay down after it came back?" },
+    { "id": "busy", "text": "A node with no jobs is idle. When jobs use some of its CPUs, it's mixed, and with all of them, allocated." },
+    { "id": "ping", "text": "slurmctld pings every slurmd. A node that misses a ping gets a star: idle star means idle, but not responding." },
+    { "id": "down", "text": "If it stays silent for the slurmd timeout, slurmctld marks it down, which kills its jobs and keeps new ones away." },
+    { "id": "back", "text": "When slurmd registers again, the return to service setting decides. sind sets it so the node comes straight back." },
+    { "id": "admin", "text": "With the Slurm default, an admin has to resume it with scontrol." },
+    { "id": "drain", "text": "Draining is the planned way out. Running jobs finish, but no new ones start." },
+    { "id": "drained", "text": "While jobs still run, it's draining. Once they're done, it's drained, until an admin resumes it." },
+    { "id": "sum", "text": "So: a star means not responding, down means out of service, and drained means taken out on purpose." },
+    { "id": "outro", "text": "Next up: episode seven, Failure drills. See you there!" }
+  ]
+}

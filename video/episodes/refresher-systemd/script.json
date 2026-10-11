@@ -1,0 +1,16 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Our topic today: systemd as PID one." },
+    { "id": "hook", "text": "Most containers run just one program. So why does a sind node run systemd?" },
+    { "id": "usecase", "text": "Say your Ansible role enables munge and restarts it. That needs a service manager, not a lone program." },
+    { "id": "pid1", "text": "In every container, the first process gets PID one. In an application container, that's the app itself, say a web server." },
+    { "id": "exits", "text": "When it exits, the container stops. And there's no service manager inside." },
+    { "id": "system", "text": "A sind node is a system container instead. Its first process is systemd, the init system of a Linux machine." },
+    { "id": "deps", "text": "systemd runs munge, sshd and the Slurm daemons as services, starts them in the order their dependencies need, and supervises them." },
+    { "id": "stop", "text": "When Docker stops the node, it sends the signal that systemd takes as a shutdown request, so every service stops cleanly." },
+    { "id": "tools", "text": "That's why Ansible, Chef, Puppet or Salt can manage sind nodes, just like bare metal." },
+    { "id": "take", "text": "So: an app container runs one program, a sind node runs systemd, and your tools find real services." },
+    { "id": "outro", "text": "Next up: episode nine, Bring your own provisioning. See you there!" }
+  ]
+}

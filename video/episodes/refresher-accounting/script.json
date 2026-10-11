@@ -1,0 +1,17 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Today's refresher: Slurm accounting and associations." },
+    { "id": "hook", "text": "Where does sacct find jobs that left the queue long ago? And why does Slurm reject a job for an invalid account?" },
+    { "id": "records", "text": "slurmctld sends a record of every job to slurmdbd, the accounting daemon, which keeps them in a database, such as MariaDB." },
+    { "id": "sacct", "text": "sacct reads the records back, even for jobs that finished long ago." },
+    { "id": "assoc", "text": "The database also holds the associations. An association ties a user to an account, on a cluster." },
+    { "id": "tree", "text": "Accounts form a tree under root, and one user can belong to several of them." },
+    { "id": "limits", "text": "Associations carry limits, like a cap on running jobs, or on CPUs for a whole account." },
+    { "id": "limits2", "text": "A cap on an account covers everything below it, and per-user caps like MaxJobs pass down to its users." },
+    { "id": "sacctmgr", "text": "sacctmgr manages all of it: accounts, users, coordinators and their limits." },
+    { "id": "enforce", "text": "But limits only bite with enforcement. One setting in slurm.conf rejects jobs without an association, and applies the limits." },
+    { "id": "sum", "text": "So: slurmdbd keeps the records, associations link users to accounts and carry limits, and enforcement makes them count." },
+    { "id": "outro", "text": "Next up: episode five, Model your site. See you there!" }
+  ]
+}
