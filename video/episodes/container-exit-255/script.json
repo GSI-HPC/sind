@@ -1,0 +1,23 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Let's fix a cluster that won't come up." },
+    { "id": "why", "text": "You create a cluster with many nodes, and it fails. Some containers start fine, others crash within the first second." },
+    { "id": "why2", "text": "It typically happens at eight nodes or more. Let's find out why, and fix it." },
+    { "id": "sym", "text": "The error names the node that never got ready, and exit code two fifty-five." },
+    { "id": "sym2", "text": "It reads one way if the container had already exited when sind checked, and another if it died while sind was waiting." },
+    { "id": "cause1", "text": "Exit code two fifty-five means that systemd, PID 1 inside the container, failed during early start-up." },
+    { "id": "cause2", "text": "The most common cause is a Linux limit that's too low: the number of inotify instances per user." },
+    { "id": "cause3", "text": "Every container uses several, for the cgroup events that containerd watches, and systemd inside needs them too." },
+    { "id": "cause4", "text": "Once the limit is used up, new containers can't start systemd, and exit at once." },
+    { "id": "cause5", "text": "Many distributions default to a hundred and twenty-eight, enough for roughly ten to thirteen systemd containers." },
+    { "id": "diag", "text": "To check, read the current limit. Here, it's a hundred and twenty-eight." },
+    { "id": "diag2", "text": "Then search the Docker logs for inotify errors. Too many open files means the limit ran out." },
+    { "id": "fix1", "text": "The fix: raise the limit. A value of ten twenty-four supports about a hundred containers." },
+    { "id": "fix2", "text": "The first command sets it right away, until the next reboot." },
+    { "id": "fix3", "text": "To keep it, write the setting to a file, and reload all settings." },
+    { "id": "fix4", "text": "Docker needs no restart: new containers get the new limit immediately." },
+    { "id": "take", "text": "So: exit code two fifty-five points to the inotify limit. Check it, raise it, and make the new value stick." },
+    { "id": "outro", "text": "sind doctor checks this limit for you: next up, Diagnostics. See you there!" }
+  ]
+}
