@@ -1,0 +1,31 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Welcome to the sind course. Let's start with the big question: why run Slurm in Docker?" },
+    { "id": "hook", "text": "Picture this: you've just written a new job script, and you'd like to see it run before it meets the real cluster." },
+    { "id": "hook2", "text": "But on a production cluster, every quick test waits in the queue. And trying out a configuration change there puts everyone's jobs at risk." },
+    { "id": "who1", "text": "Research software engineers want to test job scripts like yours. Admins want to rehearse a change before production gets it." },
+    { "id": "who2", "text": "Developers want a real Slurm in their CI pipelines. And a trainer wants every participant in a course to get the same setup." },
+    { "id": "who3", "text": "Whoever you are, you need the same thing: a real Slurm cluster that's quick to make, and safe to break." },
+    { "id": "opt1", "text": "Usually, the choices are the production queue, or dedicated machines and VMs that someone has to provision." },
+    { "id": "opt2", "text": "Tools like Vagrant and Docker Compose can get you there, but they demand real configuration effort, and maintenance." },
+    { "id": "r1", "text": "First, a quick refresher. A Slurm cluster has a controller, running slurmctld, and compute nodes, each running slurmd." },
+    { "id": "r2", "text": "You submit a job with sbatch or srun. It waits in the queue until a node is free, and then slurmd runs it." },
+    { "id": "r3", "text": "Behind the scenes, munge vouches for every message, so the daemons can trust each other." },
+    { "id": "idea1", "text": "Now, the idea behind sind. Every Slurm node becomes its own Docker container, right on your machine." },
+    { "id": "idea2", "text": "Inside each one, systemd boots first, so munge, SSH and the Slurm daemons start just like on bare metal." },
+    { "id": "idea3", "text": "Its command line is modelled on kind, the Kubernetes in Docker tool. All you need is sind and Docker." },
+    { "id": "idea4", "text": "Need more? Add workers to a running cluster, or run several clusters side by side." },
+    { "id": "demo1", "text": "Let's see it in action. Run sind create cluster, and seconds later, a controller and a worker are up." },
+    { "id": "demo1b", "text": "Behind it, sind creates a network and volumes, generates the munge key and slurm.conf, starts the node containers, and waits until they're all ready." },
+    { "id": "demo2", "text": "Then sind get nodes lists the node containers: one for the controller, and one for worker zero." },
+    { "id": "demo3", "text": "Each one has its own host name and IP address, just like a real machine." },
+    { "id": "demo4", "text": "Done testing? sind delete cluster, and it's gone." },
+    { "id": "trade1", "text": "Of course, there's a trade-off. sind gives up some flexibility, in return for ease of use and speed." },
+    { "id": "trade3", "text": "What you get back: every cluster starts clean and identical, for each person on your team and for every CI run." },
+    { "id": "trade2", "text": "It's a tool for development and testing, not a controller for production clusters. And that's exactly the point." },
+    { "id": "take1", "text": "So, three things to remember. Every node is a container, with systemd inside." },
+    { "id": "take2", "text": "One command creates a cluster, and one deletes it. And it's made for testing, from job scripts to CI." },
+    { "id": "outro", "text": "Next up: your first cluster, from the install to your first job. See you there!" }
+  ]
+}

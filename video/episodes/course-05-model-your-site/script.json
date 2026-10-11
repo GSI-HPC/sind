@@ -1,0 +1,33 @@
+{
+  "voice": "sindy",
+  "lines": [
+    { "id": "intro", "text": "Hi, I'm Sindy! Today, we build a cluster that looks like your site." },
+    { "id": "hook", "text": "A fresh sind cluster runs everything as root, with no Slurm accounts and no job limits. Your site has both, so a job that passes here can still fail there." },
+    { "id": "usecase", "text": "Say you're an admin or a research software engineer, and you want a cluster shaped like your site to test against." },
+    { "id": "plan", "text": "We'll write one config file in four steps: the nodes, their limits, users with Slurm accounts, and software from CVMFS. Then we create the cluster." },
+    { "id": "needs", "text": "All you need is sind and Docker, plus CVMFS on the Docker host for the last step." },
+    { "id": "nodes", "text": "Every config starts with kind Cluster. The nodes line lists the roles: a controller, a db node for accounting, a submitter as the login node, and three workers." },
+    { "id": "limits", "text": "The defaults section sets limits for every node, here two CPUs each. Memory works the same way, and is five hundred twelve megabytes unless you set it." },
+    { "id": "slurmsees", "text": "On a managed worker, Slurm sees the same numbers, as the CPUs and memory of the node." },
+    { "id": "r1", "text": "First, a word on Slurm accounting. slurmctld reports every job to slurmdbd, on the db node, which keeps the records in a database." },
+    { "id": "r2", "text": "An association ties a user to an account, on a cluster. It can carry limits, like a cap on jobs, or on CPUs." },
+    { "id": "r3", "text": "sacctmgr manages accounts and associations. But Slurm only applies the limits when enforcement is on." },
+    { "id": "enforce", "text": "So let's turn it on. The slurm section appends a line to slurm.conf that enforces associations and limits." },
+    { "id": "accounts", "text": "Accounts form a tree: physics may use four CPUs in total, and theory, one level down, lets each user run a single job at a time." },
+    { "id": "group", "text": "The Linux group physics just shares the name with the account. The two are unrelated." },
+    { "id": "users", "text": "Every node gets these users, with matching identifiers, and a shared home. alice works in theory, bob in both accounts, coordinating physics, and carol is an operator." },
+    { "id": "dave", "text": "And dave? No account at all. Keep an eye on him." },
+    { "id": "cvmfs", "text": "Last, the software. Set CVMFS to true under storage, and every node mounts it read-only, even workers you add later." },
+    { "id": "backend", "text": "Repositories mount on demand, as on bare metal. They come from the Docker host, or from a CVMFS volume plugin." },
+    { "id": "backend2", "text": "Without either one, leave the storage section out." },
+    { "id": "create", "text": "The file is ready. Run sind create cluster with the config flag, and the prompt returns once everything is in place." },
+    { "id": "asuser", "text": "To work as a user, put the name in front of the node for sind ssh, or use the user flag of sind exec and sind enter." },
+    { "id": "tree", "text": "Under the hood, sind waited until slurmctld had registered the cluster, then built this tree with sacctmgr." },
+    { "id": "tree2", "text": "physics carries the CPU limit, theory the job limit, and bob shows up twice, once in each account." },
+    { "id": "tests", "text": "With enforcement on, the cluster tests your policy. alice can run one job at a time." },
+    { "id": "cpus", "text": "All of physics shares four of the six CPUs, so a job that would need a fifth CPU stays pending in squeue." },
+    { "id": "davefail", "text": "And dave gets nowhere: Slurm rejects his sbatch. No account, no association, no job!" },
+    { "id": "takeaway", "text": "So, one file models your site. Accounts need a db node, limits need enforcement, and CVMFS comes from the host or a plugin." },
+    { "id": "outro", "text": "Next up: rehearse a change, before production sees it. See you there!" }
+  ]
+}
