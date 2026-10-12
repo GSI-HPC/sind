@@ -52,6 +52,10 @@ An [api node]({{< relref "/guides/rest-api" >}}) runs slurmrestd, Slurm's REST A
 
 With `storage.cvmfs`, every node [mounts `/cvmfs`]({{< relref "/guides/cvmfs" >}}) read-only, from the Docker host or a CVMFS Docker volume plugin, and repositories mount on demand as on bare metal.
 
+### Monitoring
+
+With `monitoring: true`, or `sind create cluster --monitoring`, a [monitoring stack]({{< relref "/guides/monitoring" >}}) of Prometheus, Loki and Grafana collects the cluster's Slurm metrics, its nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05). The stack is shared by the realm's clusters.
+
 ### Power cycle simulation
 
 Shutdown, reboot, freeze, and power-cycle individual nodes to simulate real-world failure scenarios. Validate your fault-tolerance strategies before they matter.

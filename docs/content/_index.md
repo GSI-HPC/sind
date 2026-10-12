@@ -96,3 +96,23 @@ slurmrestd on an [api node]({{< relref "guides/rest-api" >}}) with JWT authentic
 [Mount `/cvmfs`]({{< relref "guides/cvmfs" >}}) read-only on every node, from the Docker host or a Docker volume plugin.
 
 {{< /columns >}}
+
+{{< columns >}}
+
+## Monitoring
+
+An opt-in [Prometheus, Loki and Grafana stack]({{< relref "guides/monitoring" >}}) per realm collects Slurm's metrics, the nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05).
+
+<--->
+
+## Live progress
+
+[Create, delete and power]({{< relref "usage/progress" >}}) draw a live tree of their steps on a terminal, and write plain lines or a JSON event log for CI.
+
+<--->
+
+## Node expressions
+
+[Node arguments]({{< relref "usage/node-arguments" >}}) take ranges with steps and set operators, such as `worker-[0-6/2]` or `worker-[0-3]!worker-2`.
+
+{{< /columns >}}
