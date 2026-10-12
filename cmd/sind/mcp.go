@@ -184,11 +184,39 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 			}
 		}
 		in.Flags = emptyListsAsNone(in.Flags)
+		if mcpRunsToCompletion(req.Params.Name) {
+			ctx = context.WithoutCancel(ctx)
+		}
 		if next == nil {
 			return run(ctx, req, in)
 		}
 		return next(ctx, req, in, run)
 	}
+}
+
+// mcpRunsToCompletion reports whether the tool changes state and so runs
+// on after its call is cancelled or its client disconnects. ophis ends a
+// tool's sind process with SIGKILL when the call's context ends, which
+// skips the rollback of a failed create and leaves partial resources, the
+// realm lock and orphaned docker children behind. Run to completion, the
+// command finishes or rolls back on its own, bounded by its own timeouts
+// (--wait), and the client gets no result. Read-only tools and exec keep
+// their cancellation: exec runs a command in a node that nothing rolls
+// back, and a client that stops waiting for it means to stop it.
+func mcpRunsToCompletion(tool string) bool {
+	for path, effect := range mcpEffects {
+		if mcpToolName(path) == tool {
+			return effect != readOnly && path != "exec"
+		}
+	}
+	return false
+}
+
+// mcpToolName returns the name ophis gives the tool of a command path:
+// "create cluster" is "sind_create_cluster", "get ssh-config" is
+// "sind_get_ssh-config".
+func mcpToolName(path string) string {
+	return "sind_" + strings.ReplaceAll(path, " ", "_")
 }
 
 // emptyListsAsNone returns flags with each empty array replaced by an
