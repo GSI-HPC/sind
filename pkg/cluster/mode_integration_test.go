@@ -780,6 +780,16 @@ nodes:
 	require.NoError(t, err)
 	assert.Contains(t, out, "include /etc/slurm/slurmdbd.conf.d/debug.conf")
 
+	// slurmdbd and MariaDB log their own messages to the journal: slurmdbd
+	// in the foreground writes them to stderr, and the image unsets
+	// MariaDB's error log file (skip-log-error).
+	out, err = c.Exec(ctx, db, "journalctl", "-u", "slurmdbd", "--no-pager", "-o", "cat")
+	require.NoError(t, err)
+	assert.Contains(t, out, "slurmdbd version")
+	out, err = c.Exec(ctx, db, "journalctl", "-u", "mariadb", "--no-pager", "-o", "cat")
+	require.NoError(t, err)
+	assert.Contains(t, out, "ready for connections")
+
 	// MariaDB's slurm account authenticates with unix_socket: the OS user
 	// slurm, which slurmdbd runs as, logs in as it; no other user does,
 	// not even root.

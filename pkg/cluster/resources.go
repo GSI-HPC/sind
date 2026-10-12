@@ -116,6 +116,7 @@ func WriteClusterConfig(ctx context.Context, client *docker.Client, realm string
 		Identity:         cfg.Identity.Mode,
 		JWT:              hasAPI,
 		DefMemPerCPU:     slurm.DefMemPerCPU(workers),
+		Metrics:          cfg.Monitoring,
 	}
 	files := docker.FileContents{
 		"slurm.conf":        []byte(slurm.GenerateSlurmConf(cfg.Name, cfg.Slurm.Main, confOpts)),

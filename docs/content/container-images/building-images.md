@@ -55,9 +55,10 @@ Every official image:
 - Builds Slurm, OpenMPI, PMIx, PRRTE, UCX and libjwt from source
 - Contains the Slurm daemons (slurmctld, slurmdbd, slurmd, and from Slurm 26.05 on slurmrestd), munge, sshd, MariaDB and a full MPI stack
 - Ships MariaDB's data directory initialised, so the first start of MariaDB on a db node skips `mariadb-install-db`
+- Sends MariaDB's error log to the journal (`skip-log-error` in `/etc/my.cnf.d/mariadb-sind.cnf`), so `sind logs db mariadb` shows MariaDB's own messages, as `sind logs db slurmdbd` does slurmdbd's
 - Slurm is built with PMIx support (`--with-pmix`) for native PMIx job launch
 - Includes nss_slurm, Slurm's NSS module for job users, as `/usr/lib64/libnss_slurm.so.2`; Slurm's `auth/slurm` and `cred/slurm` plugins, built with libjwt 1.x, and the `serializer/json` plugin they need, built with json-c; and `sackd`, Slurm's authentication daemon for login nodes
-- From Slurm 26.05 on, includes slurmrestd, Slurm's REST API daemon, built with Rocky Linux's llhttp, with its JWT plugin and a `slurmrestd` user to run it as. Slurm 25.11 builds slurmrestd only with the archived nodejs http-parser, which Rocky Linux 10 does not package, so the 25.11 images have none
+- From Slurm 26.05 on, includes slurmrestd, Slurm's REST API daemon, built with Rocky Linux's llhttp, with its JWT plugin and a `slurmrestd` user to run it as. Slurm 25.11 builds slurmrestd only with the archived nodejs http-parser, which Rocky Linux 10 does not package, so the 25.11 images have none. The same HTTP parser lets slurmctld and slurmd of the 26.05 images serve the HTTP endpoints [monitoring]({{< relref "/guides/monitoring" >}}) uses, so only they can be monitored
 - OpenMPI is built with external PMIx, PRRTE, UCX, hwloc, and libevent
 - Uses systemd as init (PID 1), with the journal capped at 32 MB in `/run`, which counts against the node's memory limit, and 64 MB on disk
 
@@ -114,6 +115,16 @@ With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), on
 - The nodes that get the users need `groupadd` and `useradd` (shadow-utils), and `/bin/bash`, the users' login shell, which `sind ssh USER@NODE` and `sind enter --user` log in with
 - The controller needs `/etc/skel`, from which sind creates the home directories
 - No user or group in the image may have a declared name or ID. sind assigns IDs from 1000 up, so an image with an account at 1000 or above, such as Ubuntu's `ubuntu` user and group at 1000, needs explicit `uid` and `gid` values it does not use
+
+### With monitoring
+
+A [monitored]({{< relref "/guides/monitoring" >}}) cluster needs more from the images of its controllers and managed workers, which `sind create cluster` and `sind create worker` check in a throwaway container before they create any node:
+
+- Slurm 26.05 or later, whose slurmctld and slurmd serve HTTP on their ports
+- In Slurm's plugin directory (`PluginDir` in the [`main` section]({{< relref "/configuration/cluster-config#slurm-section" >}}), or else the directory of the `libslurmfull` the daemon links), with all their libraries installed: an HTTP parser plugin (`http_parser_*.so`, which Slurm builds only with `--with-llhttp-parser` or `--with-libhttp-parser`), a URL parser (`url_parser_*.so`), a TLS plugin (`tls_*.so`), an HTTP authentication plugin (`http_auth_*.so`) and a data parser (`data_parser_*.so`); on the controllers also the OpenMetrics plugin, `metrics_openmetrics.so`. Slurm builds all but the HTTP parser by default
+- `/bin/sh`, `ldd`, `awk` and `grep`, which the check runs
+
+On every node, journald must write a persistent journal to `/var/log/journal` (the default `Storage=auto`, or `persistent`), and the Slurm daemons must log to the journal, through stderr or syslog as Slurm's own units do, not only to a file. sind caps the journal at 64 MB with a drop-in that sorts after the image's own. On a managed db node, MariaDB's error log must go to the journal too: an image whose `my.cnf` sets `log-error` needs `skip-log-error` after it, as the official images have (Debian-family packages leave it unset). Otherwise `sind create cluster` warns that MariaDB's messages are not collected.
 
 ### Container settings
 

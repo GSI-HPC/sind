@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
 	"github.com/spf13/cobra"
 )
@@ -39,6 +41,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetDNSCommand())
 	cmd.AddCommand(newGetSSHConfigCommand())
 	cmd.AddCommand(newGetMeshCommand())
+	cmd.AddCommand(newGetMonitoringCommand())
 	cmd.AddCommand(newGetSSHPrivateKeyCommand())
 	cmd.AddCommand(newGetSSHPublicKeyCommand())
 	cmd.AddCommand(newGetSSHKnownHostsCommand())
@@ -541,6 +544,72 @@ func runGetMesh(cmd *cobra.Command) error {
 	return w.Flush()
 }
 
+func newGetMonitoringCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "monitoring",
+		Short: "Show the realm's monitoring stack",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetMonitoring(cmd)
+		},
+	}
+}
+
+func runGetMonitoring(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
+	client := clientFrom(cmd.Context())
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	m, err := cluster.GetMonitoring(cmd.Context(), client, realm)
+	if err != nil {
+		return err
+	}
+
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), m)
+	}
+
+	out := cmd.OutOrStdout()
+	w := newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "SERVICE\tCONTAINER\tADDRESS\tSTATUS")
+	for _, s := range m.Services {
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(cmp.Or(s.URL, "-")), formatServiceState(s))
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "CLUSTERS")
+	w = newTabWriter(out)
+	_, _ = fmt.Fprintln(w, "NAME\tNODES\tSLURM")
+	for _, c := range m.Clusters {
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n", cell(c.Name), c.Nodes, formatSlurmVersion(c.SlurmVersion))
+	}
+	return w.Flush()
+}
+
+// formatServiceState renders a monitoring service's state in words, as the
+// CLI guidelines keep ✓/✗ to get cluster, get node and doctor: the
+// container's state, "not ready" when it runs but its readiness check
+// fails, "unchecked" when it runs but Grafana, which runs the check, does
+// not, and "missing" when the container does not exist.
+func formatServiceState(s cluster.MonitoringService) string {
+	switch {
+	case s.State == "":
+		return "missing"
+	case s.State == docker.StateRunning && !s.Checked:
+		return "unchecked"
+	case s.State == docker.StateRunning && !s.Ready:
+		return "not ready"
+	}
+	return cell(s.State)
+}
+
 func newGetClusterCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "cluster [NAME]",
@@ -604,6 +673,12 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	_, _ = fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
 	_, _ = fmt.Fprintf(w, "dns\t%s\t%s\n", cell(net.DNSName), checkmark(net.DNS))
 	_, _ = fmt.Fprintf(w, "ssh\t%s\t%s\n", cell(net.SSHName), checkmark(net.SSH))
+	for i, ready := range net.StackHealth() {
+		if ready != nil {
+			s := observability.Services[i]
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", s, observability.ContainerName(realm, s), checkmark(*ready))
+		}
+	}
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -614,7 +689,11 @@ func runGetCluster(cmd *cobra.Command, name string) error {
 	w = newTabWriter(out)
 	_, _ = fmt.Fprintln(w, "MOUNT\tSOURCE\tTYPE\tSTATUS")
 	for _, m := range status.Mounts {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(m.Path), cell(m.Source), cell(m.Type), checkmark(m.OK))
+		source := m.Source
+		if m.Subpath != "" {
+			source += ":" + m.Subpath + "/<node>"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(m.Path), cell(source), cell(m.Type), checkmark(m.OK))
 	}
 	if err := w.Flush(); err != nil {
 		return err

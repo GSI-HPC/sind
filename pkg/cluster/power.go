@@ -46,6 +46,7 @@ func PowerCut(ctx context.Context, client *docker.Client, realm, clusterName str
 // the realm's mesh DNS and SSH relay if they are stopped, as after a host
 // reboot, and afterwards points the started nodes' mesh DNS records at their
 // addresses: Docker can give a node another address each time it starts.
+// A stopped monitoring stack of the realm starts with the nodes.
 func PowerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
 	targets, err := resolveTargets(ctx, client, meshMgr.Realm, clusterName, shortNames)
 	if err != nil {
@@ -99,7 +100,10 @@ func powerRestart(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 }
 
 // powerOn starts the realm's mesh if needed, then the given containers, and
-// re-registers the mesh DNS records of the ones that started.
+// re-registers the mesh DNS records of the ones that started. Last it
+// starts the realm's monitoring stack if it is stopped, and re-registers
+// its DNS names (see startMonitoring); container IDs stay the same, so
+// Alloy's configuration does too.
 func powerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, targets []powerTarget) error {
 	if len(targets) == 0 {
 		return nil
@@ -116,7 +120,14 @@ func powerOn(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, 
 	for i, t := range started {
 		containers[i] = t.container
 	}
-	return errors.Join(startErr, refreshDNSRecords(ctx, client, meshMgr, clusterName, containers, dnsIP))
+	dnsErr := refreshDNSRecords(ctx, client, meshMgr, clusterName, containers, dnsIP)
+	// The Corefile takes one change at a time: the stack's names after
+	// the nodes'.
+	var stackErr error
+	if _, err := startMonitoring(ctx, client, meshMgr); err != nil {
+		stackErr = fmt.Errorf("starting the monitoring stack: %w", err)
+	}
+	return errors.Join(startErr, dnsErr, stackErr)
 }
 
 // refreshDNSRecords points the mesh DNS records of the given running nodes

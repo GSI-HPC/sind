@@ -60,6 +60,7 @@ var mcpEffects = map[string]mcpEffect{
 	"get clusters":        readOnly,
 	"get dns":             readOnly,
 	"get mesh":            readOnly,
+	"get monitoring":      readOnly,
 	"get networks":        readOnly,
 	"get node":            readOnly,
 	"get nodes":           readOnly,

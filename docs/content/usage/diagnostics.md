@@ -262,6 +262,26 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok` and `ssh_ok` in the JSON output). After a host reboot or a Docker daemon restart they exist but are stopped; `sind power on` starts them again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
 
+When the realm has a [monitoring stack]({{< relref "/guides/monitoring" >}}), `MESH SERVICES` adds its four containers, each with ✓ while the service answers its readiness check, or while its container runs when Grafana, which runs the checks, does not (`grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` in the JSON output, which leaves them out without a stack). A monitored cluster lists its journal mount under `MOUNTS`: the realm's journal volume and the cluster's directory in it, in which each node mounts its own (`"subpath": "dev"` in the JSON output). The JSON output has `"monitoring": true` for a monitored cluster.
+
+```
+MESH SERVICES
+NAME         CONTAINER         STATUS
+dns          sind-dns          ✓
+ssh          sind-ssh          ✓
+grafana      sind-grafana      ✓
+prometheus   sind-prometheus   ✓
+loki         sind-loki         ✓
+alloy        sind-alloy        ✓
+
+MOUNTS
+MOUNT              SOURCE                    TYPE       STATUS
+/etc/slurm         sind-dev-config           volume     ✓
+/etc/munge         sind-dev-munge            volume     ✓
+/data              /home/user/project        hostPath   ✓
+/var/log/journal   sind-journal:dev/<node>   volume     ✓
+```
+
 The cluster status reflects container health only. A running cluster can still have failing services — check the `SERVICES` column in the `NODES` table for individual service health (e.g. `slurmctld ✗`).
 
 A managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) lists `slurmrestd`. Nodes where sind does not manage Slurm (unmanaged workers, db and api nodes, and every node of an [unmanaged cluster]({{< relref "/guides/unmanaged-cluster" >}})) list only `munge` and `sshd`. With [identity `clientIds`]({{< relref "/guides/users#clientids" >}}), no node lists `munge`, as auth/slurm replaces it, and the submitter lists `sackd`; `MOUNTS` has no `/etc/munge`. The JSON output marks each node with `"managed": true|false`, as does `sind get node -o json`.
@@ -311,6 +331,7 @@ sind logs controller slurmctld
 sind logs worker-0 slurmd --follow
 sind logs submitter sackd             # identity clientIds
 sind logs db slurmdbd
+sind logs db mariadb
 sind logs api slurmrestd
 ```
 
@@ -406,6 +427,42 @@ sind get mesh
 Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a kind cluster's CoreDNS, can forward the `<realm>.sind` zone to it; it is empty while the DNS container is stopped.
 
 If no mesh has been created yet, the command returns a friendly `no mesh found for realm "<name>"` error.
+
+## Monitoring stack
+
+```bash
+sind get monitoring
+```
+
+Shows the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}): each service's container, address and state, and the clusters it collects, with their number of monitored nodes and their Slurm version.
+
+```
+SERVICE      CONTAINER         ADDRESS                            STATUS
+grafana      sind-grafana      http://grafana.sind.sind:3000      running
+prometheus   sind-prometheus   http://prometheus.sind.sind:9090   running
+loki         sind-loki         http://loki.sind.sind:3100         running
+alloy        sind-alloy        http://172.18.0.9:12345            running
+
+CLUSTERS
+NAME      NODES   SLURM
+default   3       26.05.4
+dev       5       26.05.4
+```
+
+`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):
+
+```json
+{
+  "realm": "sind",
+  "services": [
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.3",
+     "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
+  ],
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.4"}]
+}
+```
+
+In a realm without a stack, the command fails with `no monitoring stack in realm "<name>"` and exit status 1.
 
 ## SSH credentials
 

@@ -271,3 +271,11 @@ func TestListVolumes_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, entries)
 }
+
+func TestVolumeMount(t *testing.T) {
+	assert.Equal(t, "type=volume,source=v,target=/t", VolumeMount("v", "/t", "", false, false))
+	assert.Equal(t, "type=volume,source=sind-journal,target=/var/log/journal,volume-subpath=dev/worker-0",
+		VolumeMount("sind-journal", "/var/log/journal", "dev/worker-0", false, false))
+	assert.Equal(t, "type=volume,source=v,target=/t,readonly,volume-nocopy", VolumeMount("v", "/t", "", true, true))
+	assert.Equal(t, `type=volume,source=v,"target=/a,b"`, VolumeMount("v", "/a,b", "", false, false))
+}

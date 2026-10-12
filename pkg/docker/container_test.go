@@ -474,7 +474,8 @@ func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
     "CapAdd": ["CAP_SYS_ADMIN"],
     "CapDrop": null,
     "Devices": [{"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"}],
-    "SecurityOpt": ["writable-cgroups=true", "label=disable"]
+    "SecurityOpt": ["writable-cgroups=true", "label=disable"],
+    "Mounts": [{"Type": "volume", "Source": "sind-journal", "Target": "/var/log/journal", "VolumeOptions": {"Subpath": "dev/worker-0"}}]
   },
   "NetworkSettings": {"Networks": {}}
 }]`, "", nil)
@@ -491,6 +492,10 @@ func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
 		CapAdd:      []string{"CAP_SYS_ADMIN"},
 		Devices:     []DeviceMapping{{PathOnHost: "/dev/fuse", PathInContainer: "/dev/fuse", CgroupPermissions: "rwm"}},
 		SecurityOpt: []string{"writable-cgroups=true", "label=disable"},
+		Mounts: []HostMount{{
+			Type: MountVolume, Source: "sind-journal", Target: "/var/log/journal",
+			VolumeOptions: VolumeOptions{Subpath: "dev/worker-0"},
+		}},
 	}, info.HostConfig)
 }
 

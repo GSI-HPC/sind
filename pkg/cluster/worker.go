@@ -18,6 +18,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"golang.org/x/sync/errgroup"
 )
@@ -88,13 +89,18 @@ func (o WorkerAddOptions) Check() error {
 //     the cluster network (see checkBridgePorts), sind-nodes.conf present
 //  2. Inspect the controller and the newest worker, for the cluster's
 //     settings and the new workers' shape
-//  3. Check an explicit image: its Slurm version, its identity support;
+//  3. Check an explicit image: its Slurm version, its identity support,
+//     and on a monitored cluster a managed worker's HTTP endpoint;
 //     meanwhile check the Docker host for nsdelegate (CheckNsdelegate) in
 //     a container of the controller's image
-//  4. Create worker container(s)
+//  4. On a monitored cluster, create or start the monitoring stack and
+//     make the workers' journal directories; create worker container(s)
 //  5. Wait for readiness, inject SSH keys, collect host keys
 //  6. Register DNS + known_hosts, while sind-nodes.conf gets the new nodes,
 //     slurmctld is reconfigured and slurmd starts on the new nodes
+//
+// On a monitored cluster the workers then join the monitoring stack (see
+// syncMonitoring).
 //
 // For unmanaged workers (Unmanaged=true), the Slurm steps are skipped.
 // Workers added to an unmanaged cluster are always unmanaged. A failure
@@ -220,6 +226,14 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if err := checkWorkerImage(ctx, client, opts, managed, slurmVersion); err != nil {
 		return nil, err
 	}
+	// The workers of a monitored cluster are monitored too: a managed
+	// worker's slurmd must serve the HTTP endpoint the stack probes.
+	monitored := Monitored(realm, infra.controller)
+	if monitored && managed {
+		if err := probeWorkerImage(ctx, client, shape.Image, slurmConf); err != nil {
+			return nil, err
+		}
+	}
 	// A local image may be from before identity modes.
 	if managed && identity.UsesNSSSlurm() {
 		if err := checkIdentityImage(ctx, client, shape.Image, identity.Mode); err != nil {
@@ -257,12 +271,22 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			Identity:        identity.Mode,
 			NSSSlurm:        managed && identity.UsesNSSSlurm(),
 			TaskAffinity:    taskAffinity,
+			Monitoring:      monitored,
 		}
 	}
 	logExtraPrivileges(ctx, nodeConfigs)
 
 	if err := nsdelegate.Wait(); err != nil {
 		return nil, err
+	}
+
+	// The new workers' journal directories must exist before their
+	// containers, which mount them; the stack makes them, so it runs
+	// first, created again if someone removed it.
+	if monitored {
+		if err := prepareMonitoredWorkers(ctx, client, meshMgr, opts.ClusterName, nodeConfigs); err != nil {
+			return nil, err
+		}
 	}
 
 	// From this point on, worker containers, and their NodeName lines in
@@ -291,6 +315,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			}
 			if err := cleanupWorkers(cleanupCtx, client, meshMgr, realm, opts.ClusterName, nodeConfigs); err != nil {
 				failed(err)
+			}
+			if monitored {
+				forgetMonitoredNodes(cleanupCtx, client, meshMgr, opts.ClusterName, workerNames(nodeConfigs)...)
 			}
 			endRollback(errors.Join(rollbackErrs...))
 		}
@@ -333,9 +360,54 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
+	if monitored {
+		if err := syncMonitoring(readyCtx, client, realm); err != nil {
+			return nil, fmt.Errorf("adding the workers to the monitoring stack: %w", err)
+		}
+	}
 
 	needsCleanup = false
 	return nodes, nil
+}
+
+// probeWorkerImage checks that the image of new managed workers of a
+// monitored cluster serves slurmd's HTTP endpoint (see
+// slurm.ImageInfo.MonitoringProblems), looking for plugins in the
+// PluginDir slurmConf sets.
+func probeWorkerImage(ctx context.Context, client *docker.Client, image string, slurmConf config.Section) error {
+	pluginDir, _ := slurmConf.Parameter("PluginDir")
+	req := slurm.ProbeRequest{Daemons: []string{slurm.Slurmd}, PluginDir: pluginDir}
+	info, err := slurm.ProbeImage(ctx, client, image, req)
+	if err != nil {
+		return err
+	}
+	if problems := info.MonitoringProblems(req); len(problems) > 0 {
+		return errorWith(ErrImageUnsupported, "image %s cannot serve monitoring: %s", image, strings.Join(problems, "; "))
+	}
+	return nil
+}
+
+// prepareMonitoredWorkers sees to the realm's monitoring stack before new
+// workers of a monitored cluster are created: it creates or starts it (see
+// ensureMonitoring), registers its DNS names, and empties or makes the
+// workers' journal directories.
+func prepareMonitoredWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, nodeConfigs []RunConfig) error {
+	if _, err := ensureMonitoring(ctx, client, meshMgr); err != nil {
+		return err
+	}
+	if err := registerStackDNS(ctx, client, meshMgr); err != nil {
+		return err
+	}
+	return observability.NewManager(client, meshMgr.Realm).ResetJournals(ctx, clusterName, workerNames(nodeConfigs)...)
+}
+
+// workerNames returns the short names of nodes.
+func workerNames(nodeConfigs []RunConfig) []string {
+	names := make([]string, len(nodeConfigs))
+	for i, nc := range nodeConfigs {
+		names[i] = nc.ShortName
+	}
+	return names
 }
 
 // --- Unexported helpers ---

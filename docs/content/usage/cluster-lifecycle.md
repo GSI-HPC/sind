@@ -9,7 +9,7 @@ toc: true
 ## Create a cluster
 
 ```bash
-sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--wait DURATION]
+sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--monitoring] [--wait DURATION]
 ```
 
 | Argument/Flag | Default | Description |
@@ -18,6 +18,7 @@ sind create cluster [NAME] [--config FILE] [--pull] [--data PATH|volume] [--wait
 | `--config` | — | Path to YAML configuration file, or `-` to read it from stdin |
 | `--pull` | `false` | Pull each image of the cluster once before creating containers |
 | `--data` | `.` | Host directory to mount at `/data` on all nodes, or `volume` to use a Docker volume. Ignored if the config sets `storage.dataStorage.type` or `hostPath`. |
+| `--monitoring` | `false` | Collect the cluster's metrics and logs in the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}); adds to the config's `monitoring`, which `--monitoring=false` does not turn off |
 | `--wait` | `5m` | How long to wait for the nodes and Slurm to become ready, counted from when the node containers have started; `0` for no limit |
 
 Without `--config`, sind creates a minimal cluster (1 controller + 1 worker) using the default image. `--config -` reads the configuration from stdin; empty input is then an error.

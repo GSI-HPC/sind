@@ -86,6 +86,7 @@ func TestMCPTools_Set(t *testing.T) {
 		"sind_get_clusters",
 		"sind_get_dns",
 		"sind_get_mesh",
+		"sind_get_monitoring",
 		"sind_get_networks",
 		"sind_get_node",
 		"sind_get_nodes",
@@ -136,7 +137,7 @@ func TestMCPTools_NoOutputFlag(t *testing.T) {
 			assert.NotContains(t, tool.InputSchema.Properties.Flags.Properties, "output", name)
 		}
 	}
-	assert.Equal(t, 12, get)
+	assert.Equal(t, 13, get)
 	assert.NotContains(t, tools["sind_doctor"].InputSchema.Properties.Flags.Properties, "output")
 }
 
@@ -222,7 +223,7 @@ func TestMCPServer_VersionAndTools(t *testing.T) {
 
 	tools, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
-	assert.Len(t, tools.Tools, 27)
+	assert.Len(t, tools.Tools, 28)
 	for _, tool := range tools.Tools {
 		require.NotNil(t, tool.Annotations, tool.Name)
 	}
@@ -409,7 +410,7 @@ func TestMCPStream_RequiresToken(t *testing.T) {
 
 	tools, err := session.ListTools(t.Context(), nil)
 	require.NoError(t, err)
-	assert.Len(t, tools.Tools, 27)
+	assert.Len(t, tools.Tools, 28)
 	for _, tool := range tools.Tools {
 		if tool.Name == "sind_create_worker" {
 			require.NotNil(t, tool.Annotations.DestructiveHint)

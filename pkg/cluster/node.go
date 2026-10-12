@@ -17,6 +17,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 )
 
@@ -61,6 +62,11 @@ const (
 	// LabelIdentity records the identity mode (identity) of the cluster:
 	// local, nssSlurm or clientIds.
 	LabelIdentity = "sind.identity"
+	// LabelMonitoring records whether the node's cluster is monitored
+	// (monitoring): "true" or "false". It is for listings and filters
+	// only: an image could carry it too, so what decides is the node's
+	// mount of the realm's journal volume (see Monitored).
+	LabelMonitoring = "sind.monitoring"
 )
 
 // IdentityFromLabels returns the identity mode a node container's
@@ -167,6 +173,12 @@ type RunConfig struct {
 	// enables task/affinity (see slurm.TaskAffinity): they get
 	// TaskAffinityCapability.
 	TaskAffinity bool
+
+	// Monitoring is set on every node of a monitored cluster: the node
+	// mounts its directory of the realm's journal volume at
+	// /var/log/journal, where journald writes a persistent journal that
+	// the monitoring stack reads, capped by JournalCap.
+	Monitoring bool
 }
 
 // clusterNetworkSpec returns the --network value that attaches a node to its
@@ -260,6 +272,13 @@ func BuildRunArgs(cfg RunConfig) []string {
 	// CVMFS, read-only at /cvmfs (storage.cvmfs)
 	args = append(args, cvmfsMountArgs(cfg.CVMFS)...)
 
+	// The node's journal directory on the realm's journal volume
+	// (monitoring). The subpath exists: Create and WorkerAdd make it first.
+	if cfg.Monitoring {
+		subpath := observability.JournalSubpath(cfg.ClusterName, cfg.ShortName)
+		args = append(args, "--mount", docker.VolumeMount(observability.JournalVolume(cfg.Realm), observability.NodeJournalDir, subpath, false, false))
+	}
+
 	// tmpfs mounts: /tmp for user data, /run and /run/lock for systemd
 	args = append(args,
 		"--tmpfs", "/tmp:rw,nosuid,nodev,size="+cfg.TmpSize,
@@ -319,6 +338,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 		identity = config.IdentityLocal
 	}
 	labels[LabelIdentity] = string(identity)
+	labels[LabelMonitoring] = strconv.FormatBool(cfg.Monitoring)
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
@@ -335,6 +355,9 @@ func BuildRunArgs(cfg RunConfig) []string {
 	entrypoint := NodeEntrypoint
 	if cfg.Identity == config.IdentityClientIDs {
 		entrypoint = MaskMunge + entrypoint
+	}
+	if cfg.Monitoring {
+		entrypoint = JournalCap + entrypoint
 	}
 	args = append(args, cfg.Image, "-c", entrypoint)
 
@@ -359,6 +382,14 @@ func bindMount(source, target string) string {
 // clientIds: it masks munge.service before systemd starts, as auth/slurm
 // replaces munge and the node has no munge key.
 const MaskMunge = "ln -sf /dev/null /etc/systemd/system/munge.service\n"
+
+// JournalCap is the line the node entrypoint starts with on a monitored
+// cluster: it caps the node's persistent journal on the shared journal
+// volume at 64 MB before journald starts, in a drop-in whose name sorts
+// after those images usually ship, so that it wins over a custom image's
+// cap or the lack of one (journald's default allows up to 4 GB).
+const JournalCap = "mkdir -p /etc/systemd/journald.conf.d && " +
+	"printf '[Journal]\\nSystemMaxUse=64M\\n' > /etc/systemd/journald.conf.d/zz-sind-monitoring.conf\n"
 
 // NodeEntrypoint is the shell script every node container starts with, as
 // PID 1, before it execs systemd. It moves itself into init.scope and enables
@@ -405,7 +436,8 @@ func CreateNode(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 // with (see DetectCVMFS), empty for none. The identity mode decides which
 // nodes get the cluster users and groups (see nodeGetsUsers) and which
 // resolve them with nss_slurm. Managed workers get TaskAffinity when the
-// slurm.conf sind generates enables task/affinity.
+// slurm.conf sind generates enables task/affinity. Every node of a monitored
+// cluster gets Monitoring.
 func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmfs config.StorageType) []RunConfig {
 	var configs []RunConfig
 	users := NewLinuxUsers(cfg)
@@ -453,6 +485,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				Users:           users,
 				AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, nodeManaged, hasSubmitter),
 				Identity:        cfg.Identity.Mode,
+				Monitoring:      cfg.Monitoring,
 			}
 			if n.Role == config.RoleDB && nodeManaged {
 				base.StoragePass = slurmdbdStoragePass(cfg.Slurm.Slurmdbd)
@@ -500,6 +533,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 					Identity:        cfg.Identity.Mode,
 					NSSSlurm:        isManaged && cfg.Identity.UsesNSSSlurm(),
 					TaskAffinity:    isManaged && taskAffinity,
+					Monitoring:      cfg.Monitoring,
 				})
 				workerIdx++
 			}

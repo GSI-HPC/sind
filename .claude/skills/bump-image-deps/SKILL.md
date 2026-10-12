@@ -27,6 +27,24 @@ release notes for Corefile or `SIGUSR1` reload changes, and update the tag in
 `DESIGN.md`, `docs/content/architecture/docker-resources.md` and
 `docs/content/getting-started/installation.md`.
 
+The monitoring stack's images are not part of the node image either: `GrafanaImage`,
+`PrometheusImage`, `LokiImage` and `AlloyImage` in `pkg/observability/observability.go`
+pin `grafana/grafana`, `prom/prometheus`, `grafana/loki` and `grafana/alloy`. Bump each
+one on its own, in a commit of its own, and read its release notes for changes to what
+sind generates or relies on: Alloy's configuration syntax and components
+(`pkg/observability/alloy.go`, golden file `testdata/sind.alloy`), Prometheus's flags and
+remote-write receiver, Loki's configuration, and Grafana's environment variables,
+provisioning, bundled datasource plugins, anonymous access and dashboard JSON. Keep
+Grafana on the standard image (not `-slim`) and no variant suffix on any of them. A bump
+changes the stack's fingerprint, so existing stacks are recreated at the next monitored
+create. The monitoring integration test, `TestMonitoring` in
+`pkg/cluster/monitoring_integration_test.go`, is the real check (CI, as it needs Docker);
+`.github/workflows/ci.yml` reads the four `<Name>Image = "<image>"` lines with `sed`
+to pull the images from Google's mirror, so keep that form.
+Update the tag in `DESIGN.md` (Supported Versions and the Monitoring Stack table),
+`docs/content/architecture/docker-resources.md` and the offline preload list in
+`docs/content/getting-started/installation.md`.
+
 sind discovers the Slurm version from the image at runtime (`slurmctld -V` in an
 ephemeral container, see `pkg/slurm/version.go`), so a bump needs no Go code changes,
 only the files below. With Docker, `docker run --rm <new image> slurmctld -V` must print

@@ -24,9 +24,11 @@ Every node also joins its realm's mesh network, which carries the realm's DNS se
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and `sind-ssh` |
 | Subsequent clusters | Connects nodes to `sind-mesh`, updates DNS |
 | Cluster deleted | Disconnects nodes, updates DNS (unless it was the last cluster) |
-| Last cluster deleted | Removes `sind-dns`, `sind-ssh`, and `sind-mesh` |
+| Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns`, `sind-ssh`, and `sind-mesh`, then the stack's volumes |
 
 The mesh does not route traffic between clusters by their DNS names: the `*.<realm>.sind` names resolve to cluster network addresses (see below), which the SSH relay and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name, such as `sind-dev-controller`.
+
+A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also runs its monitoring stack on the mesh: `sind-grafana`, `sind-prometheus`, `sind-loki` and `sind-alloy`. Alloy reaches the nodes by container name, too. Grafana, Prometheus and Loki get the three addresses just below the DNS container's (`172.18.255.253`, `.252` and `.251` in `172.18.0.0/16`), which, like the DNS container's, no other container takes, and Alloy a dynamic one. On a mesh without a pinned DNS address all four get dynamic addresses.
 
 ## DNS
 
@@ -54,13 +56,21 @@ Within a cluster, short names work via the search domain: a node in the `dev` cl
 
 DNS records use each node's **cluster network IP** (not mesh network IP), so the SSH relay and the host reach the nodes through the cluster's network.
 
+With a monitoring stack, the DNS also names its services at their mesh addresses, as they join no cluster network:
+
+```
+grafana.<realm>.sind    → Grafana, port 3000
+prometheus.<realm>.sind → Prometheus, port 9090
+loki.<realm>.sind       → Loki, port 3100
+```
+
 sind writes the records when it creates or deletes nodes, and again when `sind power on`, `reboot` or `cycle` start nodes: Docker can give a node another address each time it starts. CoreDNS reloads its configuration in place on `SIGUSR1`, without dropping queries.
 
 The DNS container is lightweight — no systemd or sshd.
 
 ### After a host reboot or a Docker daemon restart
 
-sind sets no restart policy, so the mesh containers and the nodes stay stopped after a host reboot or a Docker daemon restart. `sind get cluster` then shows `dns` and `ssh` with ✗. `sind power on` starts them again: first the realm's DNS container, then the SSH relay, then the nodes, whose DNS records it points at their new addresses. It also applies host DNS again. `sind create cluster` and `sind create worker` start a stopped mesh too, and so do `sind delete cluster` and `sind delete worker` when they remove nodes from a mesh that other clusters keep, so that the nodes leave the relay's `known_hosts` as well as the DNS records.
+sind sets no restart policy, so the mesh containers and the nodes stay stopped after a host reboot or a Docker daemon restart. `sind get cluster` then shows `dns` and `ssh` with ✗. `sind power on` starts them again: first the realm's DNS container, then the SSH relay, then the nodes, whose DNS records it points at their new addresses. It also applies host DNS again, and last starts a stopped monitoring stack and registers its DNS names again. `sind create cluster` and `sind create worker` start a stopped mesh too, and so do `sind delete cluster` and `sind delete worker` when they remove nodes from a mesh that other clusters keep, so that the nodes leave the relay's `known_hosts` as well as the DNS records.
 
 ```bash
 sind power on controller,worker-[0-1]
@@ -77,6 +87,7 @@ When systemd-resolved is available on the host, sind configures it to route `*.<
 ```bash
 ping controller.default.sind.sind
 resolvectl query worker-0.dev.sind.sind
+xdg-open http://grafana.sind.sind:3000   # the realm's Grafana, with monitoring
 ```
 
 sind also sets the search domain `default.<realm>.sind` on the mesh bridge, in every realm, so that bare hostnames resolve to the realm's `default` cluster:

@@ -259,6 +259,10 @@ type Cluster struct {
 	Accounts []Account `json:"accounts,omitempty"`
 	Identity Identity  `json:"identity,omitempty"`
 	Nodes    []Node    `json:"nodes,omitempty"`
+	// Monitoring collects the cluster's Slurm metrics, container resource
+	// use and logs into the realm's monitoring stack. It needs a managed
+	// cluster, and is fixed for the cluster's life.
+	Monitoring bool `json:"monitoring,omitempty"`
 
 	// Pull is a runtime flag (not part of the config file) that forces
 	// fresh image pulls when creating containers.
@@ -453,6 +457,9 @@ func (c *Cluster) Validate() error {
 	if err := c.validateSlurmdbd(); err != nil {
 		return err
 	}
+	if err := c.validateMonitoring(); err != nil {
+		return err
+	}
 
 	for _, n := range c.Nodes {
 		if err := CheckCapabilities("capAdd", n.CapAdd); err != nil {
@@ -491,6 +498,9 @@ func (c *Cluster) Validate() error {
 			if !s.section.IsEmpty() {
 				return fmt.Errorf("slurm %s requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", s.name)
 			}
+		}
+		if c.Monitoring {
+			return fmt.Errorf("monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster")
 		}
 	}
 

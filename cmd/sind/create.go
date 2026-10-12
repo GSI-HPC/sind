@@ -71,6 +71,7 @@ func newCreateClusterCommand() *cobra.Command {
 	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
 	cmd.Flags().String("data", ".", `host directory to mount as /data (use "volume" for Docker volume)`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
+	cmd.Flags().Bool("monitoring", false, "collect the cluster's metrics and logs in the realm's monitoring stack (adds to the config's monitoring)")
 	addWaitFlag(cmd)
 
 	return cmd
@@ -111,6 +112,10 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	pull, _ := cmd.Flags().GetBool("pull")
 	cfg.Pull = pull
 	cfg.Wait = wait
+	// --monitoring=false leaves a config's monitoring: true alone.
+	if monitoring, _ := cmd.Flags().GetBool("monitoring"); monitoring {
+		cfg.Monitoring = true
+	}
 
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {

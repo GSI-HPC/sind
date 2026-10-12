@@ -27,6 +27,8 @@ import (
 //  2. Update sind-nodes.conf to remove the node definitions and
 //     reconfigure slurmctld, while DNS + known_hosts are deregistered
 //  3. Stop + remove containers
+//  4. On a monitored cluster, sync the monitoring stack and remove the
+//     workers' journal directories (see forgetMonitoredNodes)
 //
 // For unmanaged nodes, and every node of an unmanaged cluster, step 1 and
 // the Slurm part of step 2 are skipped: the Slurm configuration of an
@@ -110,8 +112,27 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		return err
 	}
 
+	// Which of the workers the monitoring stack collects is told by their
+	// containers, so before they go.
+	monitored, err := monitoredContainers(ctx, client, realm, clusterName)
+	if err != nil {
+		return err
+	}
+	var forget []string
+	for _, c := range targets {
+		if slices.ContainsFunc(monitored, func(m docker.ContainerListEntry) bool { return m.Name == c.Name }) {
+			forget = append(forget, strings.TrimPrefix(string(c.Name), ContainerPrefix(realm, clusterName)))
+		}
+	}
+
 	// Stop + remove containers.
-	return DeleteContainers(ctx, client, targets)
+	if err := DeleteContainers(ctx, client, targets); err != nil {
+		return err
+	}
+	if len(forget) > 0 {
+		forgetMonitoredNodes(ctx, client, meshMgr, clusterName, forget...)
+	}
+	return nil
 }
 
 // isManagedContainer reports whether sind manages Slurm on a node container

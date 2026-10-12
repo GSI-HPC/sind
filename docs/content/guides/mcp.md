@@ -82,6 +82,7 @@ This exports the tool definitions to `mcp-tools.json`. The tools follow the nami
 | `sind_get_nodes` | List nodes |
 | `sind_get_realms` | List all realms |
 | `sind_get_mesh` | Show mesh infrastructure info |
+| `sind_get_monitoring` | Show the realm's monitoring stack |
 | `sind_power_shutdown` | Graceful shutdown |
 | `sind_power_reboot` | Graceful reboot |
 | `sind_exec` | Run a command on submitter or controller |

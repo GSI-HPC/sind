@@ -54,9 +54,10 @@ The tree draws with ASCII marks (`+`, `x`, `~`, `>`) unless `LC_ALL`, `LC_CTYPE`
 | `slurm` | one per managed node | starts the Slurm daemons, the db node's first, and waits until each is `ready` |
 | `accounts` | | with `accounts`: waits until slurmdbd knows the cluster, then creates the Slurm accounts |
 | `home directories` | | with `users`: creates the home directories |
+| `monitoring` | | with `monitoring`: creates or starts the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}), waits until it is ready and adds the new nodes to it |
 | `rollback` | | after a failure or an interrupt: removes what the command created |
 
-`mesh registration`, `slurm` and `home directories` run at the same time, and `accounts` after `slurm`. While a node waits, its row says which check it waits for and how much of the `--wait` limit it has used, `2.4s/5m  ready munge`. `sind create worker` shows `pull images` (for an `--image` the daemon does not have, or with `--pull`), `nodes`, `mesh registration`, `slurm` and `rollback` the same way.
+`mesh registration`, `slurm`, `home directories` and `monitoring` run at the same time, and `accounts` after `slurm`. While a node waits, its row says which check it waits for and how much of the `--wait` limit it has used, `2.4s/5m  ready munge`. `sind create worker` shows `pull images` (for an `--image` the daemon does not have, or with `--pull`), `nodes`, `mesh registration`, `slurm` and `rollback` the same way, and on a monitored cluster `monitoring` before `nodes`.
 
 A creation on a host that had neither the mesh nor the images, while the nodes boot:
 
