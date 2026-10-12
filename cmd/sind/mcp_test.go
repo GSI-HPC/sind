@@ -433,6 +433,43 @@ func TestMCPStream_RequiresToken(t *testing.T) {
 	assert.NoError(t, stop(), "a stopped stream exits 0")
 }
 
+// TestRefuseFlagArgs_RunsToCompletion checks that the tools that change
+// state keep running when their call is cancelled, and the others do not.
+func TestRefuseFlagArgs_RunsToCompletion(t *testing.T) {
+	var cancelable bool
+	run := func(ctx context.Context, _ *mcp.CallToolRequest, _ ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		cancelable = ctx.Done() != nil
+		return nil, ophis.ToolOutput{}, nil
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	for tool, want := range map[string]bool{
+		"sind_create_cluster": true,
+		"sind_create_worker":  true,
+		"sind_delete_cluster": true,
+		"sind_delete_worker":  true,
+		"sind_power_on":       true,
+		"sind_power_cut":      true,
+		"sind_exec":           false,
+		"sind_logs":           false,
+		"sind_get_ssh-config": false,
+		"sind_doctor":         false,
+		"sind_no_such_tool":   false,
+	} {
+		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tool}}
+		_, _, err := refuseFlagArgs(nil)(ctx, req, ophis.ToolInput{}, run)
+		require.NoError(t, err, tool)
+		assert.Equal(t, !want, cancelable, tool)
+	}
+}
+
+func TestWaitUntil(*testing.T) {
+	done := make(chan struct{})
+	close(done)
+	waitUntil(done, time.Hour)
+	waitUntil(make(chan struct{}), time.Millisecond)
+}
+
 func TestMCPStream_TokenFromEnv(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)

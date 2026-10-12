@@ -34,6 +34,18 @@ const mcpTokenFile = "mcp-token"
 // in flight.
 const mcpShutdownTimeout = 5 * time.Second
 
+// waitUntil waits for done to close, for at most d. A tool call that runs to
+// completion after its client is gone (mcpRunsToCompletion) must not hold
+// up the shutdown of the stream.
+func waitUntil(done <-chan struct{}, d time.Duration) {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+	}
+}
+
 // runMCPStream serves sind's MCP tools over streamable HTTP, on --host and
 // --port, to clients that send the bearer token from mcpStreamToken.
 //
@@ -170,7 +182,7 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 	}()
 	stopInner := func() {
 		cancel()
-		<-served
+		waitUntil(served, mcpShutdownTimeout)
 	}
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "sind-mcp-stream"}, nil)
