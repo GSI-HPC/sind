@@ -424,7 +424,7 @@ Without `--type` it prints the cluster's main key: `slurm.key` with identity `cl
 sind get mesh
 ```
 
-Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a kind cluster's CoreDNS, can forward the `<realm>.sind` zone to it; it is empty while the DNS container is stopped.
+Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a [kind cluster]({{< relref "/guides/kind" >}})'s CoreDNS, can forward the `<realm>.sind` zone to it; it is empty while the DNS container is stopped.
 
 If no mesh has been created yet, the command returns a friendly `no mesh found for realm "<name>"` error.
 

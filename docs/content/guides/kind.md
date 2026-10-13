@@ -1,0 +1,122 @@
+---
+weight: 360
+title: "Connecting kind"
+icon: "lan"
+description: "Reaching sind nodes by name and over SSH from the pods of a kind cluster"
+toc: true
+---
+
+A [kind](https://kind.sigs.k8s.io/) cluster runs on its own Docker network, so its pods can neither resolve nor reach the nodes of a sind cluster. This guide connects one kind cluster to every cluster of a sind realm: the kind nodes join the realm's networks, CoreDNS forwards the realm's zone to sind's DNS server, and a Kubernetes secret holds sind's SSH key, so that a pod can run Slurm commands on a controller over SSH.
+
+The commands below need `kind`, `kubectl` and `jq`. They read every name and address from sind, so they work for any realm and any number of clusters.
+
+## Create the clusters
+
+```bash
+sind create cluster alpha
+sind create cluster beta
+kind create cluster --name bridge
+```
+
+The sind clusters share the realm's mesh, whose DNS server holds the records of both: `<node>.<cluster>.<realm>.sind`, e.g. `controller.alpha.sind.sind`.
+
+## Read the mesh
+
+`sind get mesh -o json` gives the mesh network, the DNS server's address and zone, and the image of the SSH relay, which has an SSH client:
+
+```bash
+mesh=$(sind get mesh -o json)
+mesh_net=$(jq -r .network <<<"$mesh")
+dns_ip=$(jq -r .dns_ip <<<"$mesh")
+dns_zone=$(jq -r .dns_zone <<<"$mesh")
+ssh_image=$(jq -r .ssh_image <<<"$mesh")
+```
+
+The DNS address stays the same for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so CoreDNS can keep forwarding to it.
+
+## Attach the kind nodes
+
+A kind node needs the mesh network to reach the DNS server, and each cluster network to reach the addresses that DNS answers with. `sind get networks` lists them all:
+
+```bash
+for node in $(kind get nodes --name bridge); do
+  for net in $(sind get networks -o json | jq -r '.[].name'); do
+    docker network connect "$net" "$node"
+  done
+done
+```
+
+A cluster created later needs its network attached as well.
+
+## Forward the realm's zone
+
+CoreDNS in kind forwards every name it does not serve to Docker's embedded DNS, which knows nothing of the realm's zone. A server block for the zone sends those names to sind's DNS server instead. This adds one in front of kind's own Corefile:
+
+```bash
+corefile=$(kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}')
+kubectl -n kube-system create configmap coredns --dry-run=client -o yaml \
+  --from-literal=Corefile="${dns_zone}:53 {
+    errors
+    cache 30
+    forward . ${dns_ip}
+}
+${corefile}" | kubectl apply -f -
+kubectl -n kube-system rollout restart deployment coredns
+kubectl -n kube-system rollout status deployment coredns
+```
+
+## Hand over the SSH key
+
+The realm's private key and `known_hosts` go into a secret:
+
+```bash
+kubectl create secret generic sind-ssh \
+  --from-file=id_ed25519=<(sind get ssh-private-key) \
+  --from-file=known_hosts=<(sind get ssh-known-hosts)
+```
+
+`known_hosts` lists the nodes that exist when it is read. Create the secret again after adding nodes or clusters.
+
+## Run a Slurm command from a pod
+
+The pod runs the SSH relay's image, which kind loads from the host:
+
+```bash
+kind load docker-image "$ssh_image" --name bridge
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sinfo
+spec:
+  restartPolicy: Never
+  dnsConfig:
+    options: [{name: ndots, value: "1"}]
+  containers:
+  - name: ssh
+    image: ${ssh_image}
+    imagePullPolicy: Never
+    command: [ssh, -o, StrictHostKeyChecking=yes,
+      -o, UserKnownHostsFile=/ssh/known_hosts, -i, /ssh/id_ed25519,
+      root@controller.alpha.${dns_zone}, sinfo]
+    volumeMounts: [{name: ssh, mountPath: /ssh, readOnly: true}]
+  volumes:
+  - name: ssh
+    secret: {secretName: sind-ssh, defaultMode: 0400}
+EOF
+kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/sinfo
+kubectl logs sinfo
+```
+
+`ndots: 1` matters. Kubernetes sets `ndots:5` in a pod's `/etc/resolv.conf`, so the resolver tries a name with fewer than five dots, such as `controller.alpha.sind.sind`, with each of the cluster's search domains first. Some resolvers, musl's among them, then time out before they try the name as it is.
+
+`kubectl wait` and `kubectl logs` read the output reliably; `kubectl run -i --rm` can lose it when the container ends before kubectl attaches.
+
+## Tear down
+
+```bash
+kind delete cluster --name bridge
+sind delete cluster --all
+```
+
+The order does not matter. `sind delete cluster` disconnects every container still attached to the networks it removes, kind nodes included, and leaves the containers themselves alone: Docker does not remove a network with active endpoints.
