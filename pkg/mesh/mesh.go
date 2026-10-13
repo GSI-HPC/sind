@@ -350,6 +350,11 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		return err
 	}
 
+	// Containers outside sind, such as kind nodes, may have been attached
+	// to the mesh to reach its DNS server.
+	if err := m.Docker.DisconnectAll(ctx, m.NetworkName()); err != nil {
+		return fmt.Errorf("detaching containers from mesh network: %w", err)
+	}
 	if err := m.removeNetworkIfExists(ctx, m.NetworkName()); err != nil {
 		return fmt.Errorf("removing mesh network: %w", err)
 	}

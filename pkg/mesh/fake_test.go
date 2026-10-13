@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/netip"
 	"path"
+	"slices"
 	"strings"
 	"testing"
 
@@ -226,11 +227,43 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		}
 		out, _ := json.Marshal(nw.labels)
 		return mock.Result{Stdout: string(out) + "\n"}
+	case len(args) == 5 && joined == "network inspect "+args[2]+" --format {{json .Containers}}":
+		if _, ok := f.networks[args[2]]; !ok {
+			return notFound(f.t, testutil.NoSuchNetwork(args[2]))
+		}
+		endpoints := map[string]map[string]string{}
+		for name, c := range f.containers {
+			if slices.Contains(c.networks, args[2]) {
+				endpoints["id-"+name] = map[string]string{"Name": name}
+			}
+		}
+		out, _ := json.Marshal(endpoints)
+		return mock.Result{Stdout: string(out) + "\n"}
+	case len(args) == 4 && joined == "network disconnect "+args[2]+" "+last:
+		c, ok := f.containers[last]
+		if !ok {
+			return notFound(f.t, testutil.NoSuchContainer(last))
+		}
+		i := slices.Index(c.networks, args[2])
+		if i < 0 {
+			return mock.Result{Stderr: "Error response from daemon: container " + last + " is not connected to network " + args[2] + "\n", Err: testutil.ExitCode1(f.t)}
+		}
+		c.networks = slices.Delete(c.networks, i, i+1)
+		if ip, ok := c.ips[args[2]]; ok {
+			f.release(map[string]string{args[2]: ip})
+			delete(c.ips, args[2])
+		}
+		return mock.Result{}
 	case strings.HasPrefix(joined, "network create "):
 		return f.createNetwork(args[2:])
 	case joined == "network rm "+last:
 		if _, ok := f.networks[last]; !ok {
 			return notFound(f.t, testutil.NoSuchNetwork(last))
+		}
+		for name, c := range f.containers {
+			if slices.Contains(c.networks, last) {
+				return mock.Result{Stderr: "Error response from daemon: error while removing network: network " + last + " has active endpoints (name:\"" + name + "\")\n", Err: testutil.ExitCode1(f.t)}
+			}
 		}
 		delete(f.networks, last)
 		return mock.Result{}

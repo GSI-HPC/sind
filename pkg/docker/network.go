@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -168,6 +169,51 @@ func (c *Client) ConnectNetwork(ctx context.Context, network NetworkName, contai
 func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, container ContainerName) error {
 	_, _, err := c.run(ctx, "network", "disconnect", string(network), string(container))
 	return err
+}
+
+// NetworkContainers returns the names of the containers attached to a
+// network, sorted. The error for a missing network satisfies IsNotFound.
+func (c *Client) NetworkContainers(ctx context.Context, name NetworkName) ([]ContainerName, error) {
+	stdout, _, err := c.run(ctx, "network", "inspect", string(name), "--format", "{{json .Containers}}")
+	if err != nil {
+		return nil, err
+	}
+	stdout = strings.TrimSpace(stdout)
+	if stdout == "" {
+		return nil, nil
+	}
+	var endpoints map[string]struct {
+		Name string `json:"Name"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &endpoints); err != nil {
+		return nil, fmt.Errorf("parsing network inspect output: %w", err)
+	}
+	names := make([]ContainerName, 0, len(endpoints))
+	for _, e := range endpoints {
+		names = append(names, ContainerName(e.Name))
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+// DisconnectAll disconnects every container still attached to a network,
+// such as one a user attached with docker network connect, because Docker
+// does not remove a network with active endpoints. A missing network, or a
+// container removed meanwhile, is not an error.
+func (c *Client) DisconnectAll(ctx context.Context, name NetworkName) error {
+	containers, err := c.NetworkContainers(ctx, name)
+	if err != nil {
+		if IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	for _, ctr := range containers {
+		if err := c.DisconnectNetwork(ctx, name, ctr); err != nil && !IsNotFound(err) {
+			return fmt.Errorf("disconnecting %s: %w", ctr, err)
+		}
+	}
+	return nil
 }
 
 // NetworkInfo holds detailed information about a Docker network. Subnet,

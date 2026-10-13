@@ -1457,9 +1457,9 @@ func TestCleanupMesh(t *testing.T) {
 	assert.Empty(t, f.networks)
 	assert.Empty(t, f.volumes)
 
-	// The containers go first (in any order), then the network, then the
-	// volume.
-	require.Len(t, m.Calls, 5)
+	// The containers go first (in any order), then whatever else is still
+	// attached to the network, then the network, then the volume.
+	require.Len(t, m.Calls, 6)
 	var removed []string
 	for _, call := range m.Calls[:3] {
 		removed = append(removed, strings.Join(call.Args, " "))
@@ -1467,8 +1467,28 @@ func TestCleanupMesh(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"rm -f -v sind-ssh-keygen", "rm -f -v sind-ssh", "rm -f -v sind-dns",
 	}, removed)
-	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[3].Args)
-	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[4].Args)
+	assert.Equal(t, []string{"network", "inspect", string(NetworkName), "--format", "{{json .Containers}}"}, m.Calls[3].Args)
+	assert.Equal(t, []string{"network", "rm", string(NetworkName)}, m.Calls[4].Args)
+	assert.Equal(t, []string{"volume", "rm", string(SSHVolumeName)}, m.Calls[5].Args)
+}
+
+// TestCleanupMesh_ForeignContainer covers a container outside sind, such as
+// a kind node, that was attached to the mesh to reach its DNS server: it is
+// detached so that the network can go, and it is not removed.
+func TestCleanupMesh_ForeignContainer(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateRunning)
+	f.containers["kind-control-plane"] = &fakeContainer{state: docker.StateCreated, networks: []string{"kind", string(NetworkName)}}
+	require.NoError(t, f.start("kind-control-plane"))
+	mgr := NewManager(c, DefaultRealm)
+
+	err := mgr.CleanupMesh(t.Context())
+	require.NoError(t, err)
+
+	assert.NotContains(t, f.networks, string(NetworkName))
+	require.Contains(t, f.containers, "kind-control-plane")
+	assert.Equal(t, []string{"kind"}, f.containers["kind-control-plane"].networks)
+	assert.Equal(t, []string{"network disconnect sind-mesh kind-control-plane"}, calls(m, "network disconnect"))
 }
 
 func TestCleanupMesh_NoneExist(t *testing.T) {
@@ -1477,7 +1497,7 @@ func TestCleanupMesh_NoneExist(t *testing.T) {
 
 	err := mgr.CleanupMesh(t.Context())
 	require.NoError(t, err)
-	assert.Len(t, m.Calls, 5)
+	assert.Len(t, m.Calls, 6)
 }
 
 func TestCleanupMesh_Errors(t *testing.T) {
@@ -1488,6 +1508,7 @@ func TestCleanupMesh_Errors(t *testing.T) {
 		{"rm -f -v sind-ssh-keygen", "removing SSH keygen container"},
 		{"rm -f -v sind-ssh", "removing SSH container"},
 		{"rm -f -v sind-dns", "removing DNS container"},
+		{"network inspect", "detaching containers from mesh network"},
 		{"network rm", "removing mesh network"},
 		{"volume rm", "removing SSH volume"},
 	}

@@ -238,7 +238,11 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	}
 
 	if res.NetworkExists {
-		_ = client.DisconnectNetwork(ctx, res.Network, meshMgr.SSHContainerName())
+		// The mesh's SSH relay joins every cluster network, and containers
+		// outside sind, such as kind nodes, may have been attached to it.
+		if err := client.DisconnectAll(ctx, res.Network); err != nil {
+			return fmt.Errorf("detaching containers from network %s: %w", res.Network, err)
+		}
 		log.DebugContext(ctx, "removing network", "name", string(res.Network))
 		if err := DeleteNetwork(ctx, client, res.Network); err != nil {
 			return err
