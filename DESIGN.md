@@ -398,6 +398,7 @@ Development follows Test-Driven Development (TDD) style:
 sind create cluster [NAME] [--config FILE] [--data PATH] [--pull] [--monitoring] [--wait DURATION]
 sind delete cluster [NAME]
 sind delete cluster --all
+sind delete realm
 sind get cluster [NAME]
 sind get clusters
 sind get node NODE[.CLUSTER]
@@ -436,6 +437,8 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 - The last cluster of a realm takes the mesh with it; its nodes are then not removed from the mesh DNS and `known_hosts` first
 
 `sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
+
+`sind delete realm` deletes everything sind made for the realm: every cluster, the mesh, the monitoring stack and the exported SSH configuration, as `sind delete cluster --all` does, and fails the same way. It takes the realm from `--realm`, `SIND_REALM` or the default, as every command does, and no arguments. Containers outside sind attached to the realm's networks are detached, not removed.
 
 Example output:
 

@@ -18,6 +18,7 @@ func newDeleteCommand() *cobra.Command {
 
 	cmd.AddCommand(newDeleteClusterCommand())
 	cmd.AddCommand(newDeleteWorkerCommand())
+	cmd.AddCommand(newDeleteRealmCommand())
 
 	return cmd
 }
@@ -47,6 +48,19 @@ func newDeleteClusterCommand() *cobra.Command {
 	cmd.Flags().Bool("all", false, "delete all clusters")
 
 	return cmd
+}
+
+func newDeleteRealmCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "realm",
+		Short: "Delete every cluster of the realm and its mesh",
+		Long: "Delete every cluster of the realm (--realm, SIND_REALM or the default), its mesh, its monitoring stack " +
+			"and its exported SSH configuration. Containers outside sind attached to the realm's networks are detached, not removed.",
+		Args: cobra.NoArgs,
+		RunE: withProgress(func(cmd *cobra.Command, _ []string) error {
+			return runDeleteClustersAll(cmd)
+		}),
+	}
 }
 
 func runDeleteCluster(cmd *cobra.Command, name string) error {

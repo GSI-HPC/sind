@@ -75,6 +75,7 @@ var mcpEffects = map[string]mcpEffect{
 	"create cluster":      destructive,
 	"create worker":       destructive,
 	"delete cluster":      destructive,
+	"delete realm":        destructive,
 	"delete worker":       destructive,
 	"exec":                destructive,
 	"power cut":           destructive,
