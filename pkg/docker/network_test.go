@@ -302,6 +302,48 @@ func TestNetworkConnectDisconnectLifecycle(t *testing.T) {
 	t.Logf("docker I/O:\n%s", rec.Dump())
 }
 
+// TestDisconnectAllLifecycle covers a network that a running container
+// still joins: Docker removes it only after DisconnectAll.
+func TestDisconnectAllLifecycle(t *testing.T) {
+	t.Parallel()
+	c, rec := newTestClient(t)
+	ctx := t.Context()
+	net := itNetworkName("detach")
+	ctr := itContainerName("detach")
+
+	if !rec.IsIntegration() {
+		rec.AddResult("net-id\n", "", nil)                                        // create network
+		rec.AddResult("ctr-id\n", "", nil)                                        // run container
+		rec.AddResult(`{"ctr-id":{"Name":"`+string(ctr)+`"}}`+"\n", "", nil)      // list endpoints
+		rec.AddResult(`{"ctr-id":{"Name":"`+string(ctr)+`"}}`+"\n", "", nil)      // DisconnectAll: list
+		rec.AddResult("", "", nil)                                                // DisconnectAll: disconnect
+		rec.AddResult(string(net)+"\n", "", nil)                                  // rm network
+		rec.AddResult(string(ctr)+"\n", "", nil)                                  // kill (cleanup)
+		rec.AddResult(string(ctr)+"\n", "", nil)                                  // rm (cleanup)
+		rec.AddResult("", "Error response from daemon: network not found\n", nil) // rm network (cleanup)
+	}
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = c.KillContainer(bg, ctr)
+		_ = c.RemoveContainer(bg, ctr)
+		_ = c.RemoveNetwork(bg, net)
+	})
+
+	_, err := c.CreateNetwork(ctx, net, nil)
+	require.NoError(t, err)
+	_, err = c.RunContainer(ctx, "--name", string(ctr), "--network", string(net), "busybox:latest", "sleep", "60")
+	require.NoError(t, err)
+
+	names, err := c.NetworkContainers(ctx, net)
+	require.NoError(t, err)
+	assert.Equal(t, []ContainerName{ctr}, names)
+
+	require.NoError(t, c.DisconnectAll(ctx, net))
+	require.NoError(t, c.RemoveNetwork(ctx, net))
+
+	t.Logf("docker I/O:\n%s", rec.Dump())
+}
+
 func TestNetworkLabels(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(`{"sind.cluster":"dev","sind.realm":"sind"}`+"\n", "", nil)
@@ -545,6 +587,107 @@ func TestDisconnectNetwork_Error(t *testing.T) {
 
 	err := c.DisconnectNetwork(t.Context(), testNetworkName, testContainerName)
 	assert.Error(t, err)
+}
+
+// --- NetworkContainers ---
+
+func TestNetworkContainers(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"b1":{"Name":"sind-ssh","EndpointID":"e1"},"a2":{"Name":"kind-control-plane","EndpointID":"e2"}}`+"\n", "", nil)
+	c := NewClient(&m)
+
+	names, err := c.NetworkContainers(t.Context(), testNetworkName)
+	require.NoError(t, err)
+	assert.Equal(t, []ContainerName{"kind-control-plane", "sind-ssh"}, names)
+	require.Len(t, m.Calls, 1)
+	assert.Equal(t, []string{"network", "inspect", string(testNetworkName), "--format", "{{json .Containers}}"}, m.Calls[0].Args)
+}
+
+func TestNetworkContainers_None(t *testing.T) {
+	for _, stdout := range []string{"{}\n", "null\n", ""} {
+		var m mock.Executor
+		m.AddResult(stdout, "", nil)
+		c := NewClient(&m)
+
+		names, err := c.NetworkContainers(t.Context(), testNetworkName)
+		require.NoError(t, err)
+		assert.Empty(t, names, "stdout %q", stdout)
+	}
+}
+
+func TestNetworkContainers_Error(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("daemon unreachable"))
+	c := NewClient(&m)
+
+	_, err := c.NetworkContainers(t.Context(), testNetworkName)
+	require.Error(t, err)
+}
+
+func TestNetworkContainers_BadJSON(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("not json\n", "", nil)
+	c := NewClient(&m)
+
+	_, err := c.NetworkContainers(t.Context(), testNetworkName)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing network inspect output")
+}
+
+// --- DisconnectAll ---
+
+func TestDisconnectAll(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"a":{"Name":"kind-control-plane"},"b":{"Name":"sind-ssh"}}`+"\n", "", nil)
+	m.AddResult("", "", nil)
+	m.AddResult("", "", nil)
+	c := NewClient(&m)
+
+	err := c.DisconnectAll(t.Context(), testNetworkName)
+	require.NoError(t, err)
+	require.Len(t, m.Calls, 3)
+	assert.Equal(t, []string{"network", "disconnect", string(testNetworkName), "kind-control-plane"}, m.Calls[1].Args)
+	assert.Equal(t, []string{"network", "disconnect", string(testNetworkName), "sind-ssh"}, m.Calls[2].Args)
+}
+
+func TestDisconnectAll_NetworkGone(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", exitError(t, 1, "Error response from daemon: network "+string(testNetworkName)+" not found\n"))
+	c := NewClient(&m)
+
+	err := c.DisconnectAll(t.Context(), testNetworkName)
+	require.NoError(t, err)
+	assert.Len(t, m.Calls, 1)
+}
+
+func TestDisconnectAll_InspectError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", fmt.Errorf("daemon unreachable"))
+	c := NewClient(&m)
+
+	err := c.DisconnectAll(t.Context(), testNetworkName)
+	require.Error(t, err)
+}
+
+func TestDisconnectAll_ContainerGone(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"a":{"Name":"kind-control-plane"}}`+"\n", "", nil)
+	m.AddResult("", "", exitError(t, 1, "Error response from daemon: No such container: kind-control-plane\n"))
+	c := NewClient(&m)
+
+	err := c.DisconnectAll(t.Context(), testNetworkName)
+	require.NoError(t, err)
+}
+
+func TestDisconnectAll_DisconnectError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"a":{"Name":"kind-control-plane"}}`+"\n", "", nil)
+	m.AddResult("", "", fmt.Errorf("daemon unreachable"))
+	c := NewClient(&m)
+
+	err := c.DisconnectAll(t.Context(), testNetworkName)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "disconnecting kind-control-plane")
 }
 
 // --- InspectNetwork ---

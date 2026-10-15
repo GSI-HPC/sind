@@ -24,7 +24,7 @@ Every node also joins its realm's mesh network, which carries the realm's DNS se
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and `sind-ssh` |
 | Subsequent clusters | Connects nodes to `sind-mesh`, updates DNS |
 | Cluster deleted | Disconnects nodes, updates DNS (unless it was the last cluster) |
-| Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns`, `sind-ssh`, and `sind-mesh`, then the stack's volumes |
+| Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns` and `sind-ssh`, detaches any other container from `sind-mesh` and removes it, then the stack's volumes |
 
 The mesh does not route traffic between clusters by their DNS names: the `*.<realm>.sind` names resolve to cluster network addresses (see below), which the SSH relay and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name, such as `sind-dev-controller`.
 
@@ -192,7 +192,7 @@ The `sind-ssh-config` volume contains:
 | Cluster created | Connects `sind-ssh` to cluster network |
 | Node created | Public key injected, host key collected and added to `known_hosts` |
 | Node deleted | Entry removed from `known_hosts` |
-| Cluster deleted | Disconnects `sind-ssh` from cluster network |
+| Cluster deleted | Disconnects `sind-ssh`, and any other container still attached, from the cluster network |
 | Last cluster deleted | SSH container and volume removed |
 
 The SSH relay connects to each cluster network so it can reach nodes at their cluster network IPs (which are the addresses registered in DNS).

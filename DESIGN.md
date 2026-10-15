@@ -431,6 +431,7 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 - Removes all matching Docker resources regardless of state
 - Updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes
 - Order: stops/removes containers → disconnects/removes networks → removes volumes
+- Before it removes a network, it disconnects every container still attached: the SSH relay, and containers outside sind that were attached with `docker network connect`, such as kind nodes. Those are detached, not removed, as Docker does not remove a network with active endpoints
 - The last cluster of a realm takes the mesh with it; its nodes are then not removed from the mesh DNS and `known_hosts` first
 
 `sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
@@ -1519,7 +1520,7 @@ All nodes of a realm also join its shared mesh network, which carries the realm'
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and the SSH relay `sind-ssh` |
 | Subsequent clusters | Connects cluster nodes to `sind-mesh`, updates DNS |
 | Cluster deleted | Disconnects cluster nodes, updates DNS (unless it is the last cluster) |
-| Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns`, `sind-ssh` and the `sind-mesh` network, then the stack's volumes |
+| Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns` and `sind-ssh`, detaches any other container from `sind-mesh` and removes it, then the stack's volumes |
 
 The mesh does not route traffic between clusters by DNS name: the mesh DNS records point at cluster network addresses, which the SSH relay (on every cluster network) and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name (`sind-dev-controller`).
 
