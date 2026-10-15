@@ -338,7 +338,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		}
 		log.DebugContext(prepCtx, "preflight check passed")
 		resourcesCreated = true
-		if err := createResources(prepCtx, client, realm, cfg, meshMgr.SSHContainerName(), pull); err != nil {
+		if err := createResources(prepCtx, client, meshMgr, cfg, pull); err != nil {
 			return err
 		}
 		log.DebugContext(prepCtx, "cluster resources created")
@@ -589,8 +589,9 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 // On a monitored cluster it also creates the realm's journal volume, and
 // makes the nodes' directories in it (resetClusterJournals).
 //
-//	(network → relay connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only) ║ (journal vol → journal dirs, monitoring only)
-func createResources(ctx context.Context, client *docker.Client, realm string, cfg *config.Cluster, relay docker.ContainerName, pull *imagePull) error {
+//	(network → relay connect → external containers connect) ║ (config vol → write config, managed only) ║ (munge vol → write munge key, not clientIds) ║ data vol ║ state vol (backup pair only) ║ home vol (users only) ║ (journal vol → journal dirs, monitoring only)
+func createResources(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cfg *config.Cluster, pull *imagePull) error {
+	realm := meshMgr.Realm
 	image := controllerImage(cfg)
 	mungeKey := slurm.GenerateMungeKey()
 
@@ -599,9 +600,10 @@ func createResources(ctx context.Context, client *docker.Client, realm string, c
 		if err := CreateClusterNetwork(gctx, client, realm, cfg.Name); err != nil {
 			return err
 		}
-		if err := client.ConnectNetwork(gctx, NetworkName(realm, cfg.Name), relay); err != nil {
+		if err := client.ConnectNetwork(gctx, NetworkName(realm, cfg.Name), meshMgr.SSHContainerName()); err != nil {
 			return fmt.Errorf("connecting SSH relay to cluster network: %w", err)
 		}
+		ConnectExternal(gctx, client, meshMgr, NetworkName(realm, cfg.Name))
 		return nil
 	})
 	g.Go(func() error {

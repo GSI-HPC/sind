@@ -22,13 +22,17 @@ Every node also joins its realm's mesh network, which carries the realm's DNS se
 | Event | Result |
 |-------|--------|
 | First cluster created | Creates `sind-mesh` network, starts `sind-dns` and `sind-ssh` |
-| Subsequent clusters | Connects nodes to `sind-mesh`, updates DNS |
+| Subsequent clusters | Connects nodes to `sind-mesh`, updates DNS, connects [external containers](#external-containers) to the new cluster network |
 | Cluster deleted | Disconnects nodes, updates DNS (unless it was the last cluster) |
 | Last cluster deleted | Removes the monitoring stack's containers, if any, then `sind-dns` and `sind-ssh`, detaches any other container from `sind-mesh` and removes it, then the stack's volumes |
 
 The mesh does not route traffic between clusters by their DNS names: the `*.<realm>.sind` names resolve to cluster network addresses (see below), which the SSH relay and the host reach, but the nodes of other clusters do not, as Docker isolates bridge networks from each other. Nodes of different clusters reach each other on the mesh by container name, such as `sind-dev-controller`.
 
 A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also runs its monitoring stack on the mesh: `sind-grafana`, `sind-prometheus`, `sind-loki` and `sind-alloy`. Alloy reaches the nodes by container name, too. Grafana, Prometheus and Loki get the three addresses just below the DNS container's (`172.18.255.253`, `.252` and `.251` in `172.18.0.0/16`), which, like the DNS container's, no other container takes, and Alloy a dynamic one. On a mesh without a pinned DNS address all four get dynamic addresses.
+
+### External containers
+
+Containers outside sind, such as [kind nodes]({{< relref "/guides/kind" >}}), reach a realm's nodes by joining its networks: the mesh, for the DNS server, and every cluster network, for the addresses DNS answers with. `sind connect container` attaches them to all of them, and `sind disconnect container` detaches them. sind keeps no list: any container on the mesh that sind did not make counts as connected, whether `sind connect container` or `docker network connect` put it there. `sind create cluster` connects them to the new cluster network, warning about one it cannot connect, and deleting a cluster or the realm detaches them before it removes the networks.
 
 ## DNS
 

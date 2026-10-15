@@ -49,6 +49,8 @@ func NewRootCommand() *cobra.Command {
 
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newDeleteCommand())
+	cmd.AddCommand(newConnectCommand())
+	cmd.AddCommand(newDisconnectCommand())
 	cmd.AddCommand(newGetCommand())
 	cmd.AddCommand(newPowerCommand())
 	cmd.AddCommand(newSSHCommand())

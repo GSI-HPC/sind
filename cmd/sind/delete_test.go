@@ -38,6 +38,11 @@ func TestDeleteCluster_AllRejectsArgs(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestDeleteRealm_RejectsArgs(t *testing.T) {
+	_, _, err := executeCommand("delete", "realm", "extra")
+	assert.Error(t, err)
+}
+
 // --- Integration ---
 
 func TestDeleteClusterLifecycle(t *testing.T) {

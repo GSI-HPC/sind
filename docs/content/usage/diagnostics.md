@@ -428,6 +428,24 @@ Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image
 
 If no mesh has been created yet, the command returns a friendly `no mesh found for realm "<name>"` error.
 
+## CoreDNS stub zone
+
+```bash
+sind get coredns-config
+```
+
+Prints a CoreDNS server block that forwards the realm's zone to the mesh DNS server, for a DNS server outside sind, such as the CoreDNS of a [kind cluster]({{< relref "/guides/kind" >}}):
+
+```
+sind.sind:53 {
+    errors
+    cache 30
+    forward . 172.16.1.2
+}
+```
+
+`-o json` returns the zone, the server address and the block, e.g. `{"zone": "sind.sind", "server": "172.16.1.2", "corefile": "..."}`. The command fails while the DNS container is stopped, as it then has no address.
+
 ## Monitoring stack
 
 ```bash

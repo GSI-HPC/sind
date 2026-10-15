@@ -41,6 +41,7 @@ func newGetCommand() *cobra.Command {
 	cmd.AddCommand(newGetDNSCommand())
 	cmd.AddCommand(newGetSSHConfigCommand())
 	cmd.AddCommand(newGetMeshCommand())
+	cmd.AddCommand(newGetCoreDNSConfigCommand())
 	cmd.AddCommand(newGetMonitoringCommand())
 	cmd.AddCommand(newGetSSHPrivateKeyCommand())
 	cmd.AddCommand(newGetSSHPublicKeyCommand())
@@ -542,6 +543,37 @@ func runGetMesh(cmd *cobra.Command) error {
 	_, _ = fmt.Fprintf(w, "ssh-volume\t%s\n", cell(info.SSHVolume))
 	_, _ = fmt.Fprintf(w, "ssh-image\t%s\n", cell(info.SSHImage))
 	return w.Flush()
+}
+
+func newGetCoreDNSConfigCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "coredns-config",
+		Short: "Output a CoreDNS server block that forwards the realm's zone to the mesh DNS server",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runGetCoreDNSConfig(cmd)
+		},
+	}
+}
+
+func runGetCoreDNSConfig(cmd *cobra.Command) error {
+	if err := validateOutputFlag(cmd); err != nil {
+		return err
+	}
+	client := clientFrom(cmd.Context())
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	stub, err := meshMgrFrom(cmd.Context(), client, realm).GetCoreDNSStub(cmd.Context())
+	if err != nil {
+		return err
+	}
+	if isJSONOutput(cmd) {
+		return writeJSON(cmd.OutOrStdout(), stub)
+	}
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), stub.Corefile)
+	return nil
 }
 
 func newGetMonitoringCommand() *cobra.Command {

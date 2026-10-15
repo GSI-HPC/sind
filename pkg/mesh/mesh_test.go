@@ -1671,6 +1671,37 @@ func TestGetInfo_NoMesh(t *testing.T) {
 	assert.Contains(t, err.Error(), DefaultRealm)
 }
 
+// --- GetCoreDNSStub ---
+
+func TestGetCoreDNSStub(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh("ci", docker.StateRunning)
+	mgr := NewManager(c, "ci")
+
+	stub, err := mgr.GetCoreDNSStub(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "ci.sind", stub.Zone)
+	assert.Equal(t, "10.0.0.2", stub.Server)
+	assert.Equal(t, "ci.sind:53 {\n    errors\n    cache 30\n    forward . 10.0.0.2\n}\n", stub.Corefile)
+}
+
+func TestGetCoreDNSStub_Stopped(t *testing.T) {
+	f, c, _ := newFakeDocker(t)
+	f.withMesh(DefaultRealm, docker.StateExited)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetCoreDNSStub(t.Context())
+	require.ErrorContains(t, err, "the mesh DNS container sind-dns is not running")
+}
+
+func TestGetCoreDNSStub_NoMesh(t *testing.T) {
+	_, c, _ := newFakeDocker(t)
+	mgr := NewManager(c, DefaultRealm)
+
+	_, err := mgr.GetCoreDNSStub(t.Context())
+	require.ErrorContains(t, err, "no mesh found for realm")
+}
+
 func TestGetInfo_InspectErrors(t *testing.T) {
 	for _, tt := range []struct{ fail, match string }{
 		{"inspect sind-dns", "inspecting DNS container"},
