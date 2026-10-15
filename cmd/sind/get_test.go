@@ -620,6 +620,51 @@ func TestGetMesh_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// --- CoreDNS config ---
+
+func TestGetCoreDNSConfig_RejectsArgs(t *testing.T) {
+	_, _, err := executeCommand("get", "coredns-config", "extra")
+	assert.Error(t, err)
+}
+
+func TestGetCoreDNSConfig_Output(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = meshInspectCall
+
+	stdout, _, err := executeWithMock(&m, "get", "coredns-config")
+	require.NoError(t, err)
+	assert.Equal(t, "sind.sind:53 {\n    errors\n    cache 30\n    forward . 10.0.0.2\n}\n", stdout)
+}
+
+func TestGetCoreDNSConfig_JSON(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = meshInspectCall
+
+	stdout, _, err := executeWithMock(&m, "get", "coredns-config", "-o", "json")
+	require.NoError(t, err)
+
+	var got mesh.CoreDNSStub
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	assert.Equal(t, "sind.sind", got.Zone)
+	assert.Equal(t, "10.0.0.2", got.Server)
+	assert.Contains(t, got.Corefile, "forward . 10.0.0.2")
+}
+
+func TestGetCoreDNSConfig_Error(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func([]string, string) mock.Result {
+		return mock.Result{Err: fmt.Errorf("docker daemon unreachable")}
+	}
+
+	_, _, err := executeWithMock(&m, "get", "coredns-config")
+	assert.Error(t, err)
+}
+
+func TestGetCoreDNSConfig_BadOutput(t *testing.T) {
+	_, _, err := executeCommand("get", "coredns-config", "-o", "yaml")
+	assert.Error(t, err)
+}
+
 // --- SSH keys ---
 
 func TestGetSSHPrivateKey_CommandExists(t *testing.T) {

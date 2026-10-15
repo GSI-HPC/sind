@@ -58,6 +58,7 @@ var mcpEffects = map[string]mcpEffect{
 	"logs":                readOnly,
 	"get cluster":         readOnly,
 	"get clusters":        readOnly,
+	"get coredns-config":  readOnly,
 	"get dns":             readOnly,
 	"get mesh":            readOnly,
 	"get monitoring":      readOnly,

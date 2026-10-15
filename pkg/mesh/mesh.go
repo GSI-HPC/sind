@@ -807,6 +807,37 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	return info, nil
 }
 
+// CoreDNSStub is a CoreDNS server block that forwards the realm's zone to
+// the mesh DNS server, for a DNS server outside sind such as the CoreDNS of
+// a kind cluster.
+type CoreDNSStub struct {
+	Zone     string `json:"zone"`
+	Server   string `json:"server"` // the mesh DNS server's address
+	Corefile string `json:"corefile"`
+}
+
+// GetCoreDNSStub returns the CoreDNS server block that forwards the realm's
+// zone to the mesh DNS server. It fails while the DNS container is stopped,
+// which then has no address.
+func (m *Manager) GetCoreDNSStub(ctx context.Context) (*CoreDNSStub, error) {
+	info, err := m.GetInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if info.DNSIP == "" {
+		return nil, fmt.Errorf("the mesh DNS container %s is not running, so it has no address", info.DNSContainer)
+	}
+	return &CoreDNSStub{
+		Zone:   info.DNSZone,
+		Server: info.DNSIP,
+		Corefile: info.DNSZone + ":53 {\n" +
+			"    errors\n" +
+			"    cache 30\n" +
+			"    forward . " + info.DNSIP + "\n" +
+			"}\n",
+	}, nil
+}
+
 // DNSRecord represents a single A record in the mesh DNS.
 type DNSRecord struct {
 	Hostname string `json:"hostname"`

@@ -406,6 +406,7 @@ sind get networks
 sind get realms
 sind get volumes
 sind get mesh
+sind get coredns-config
 sind get monitoring
 sind get dns
 sind get ssh-config
@@ -735,6 +736,7 @@ sind get realms                        # list active realms
 sind get auth-key [CLUSTER] [--type T] # output a Slurm authentication key (base64)
 sind get ssh-config                    # show SSH config path for Include
 sind get mesh                          # show mesh infrastructure info
+sind get coredns-config                # output a CoreDNS server block for the realm's zone
 sind get dns                           # list mesh DNS records
 sind get ssh-private-key               # output SSH private key
 sind get ssh-public-key                # output SSH public key
@@ -748,6 +750,18 @@ sind get ssh-known-hosts               # output SSH known_hosts
 `sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
 
 `sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. The DNS IP is the DNS container's address while it runs, which stays the same for the life of a mesh that pins it (see Host Reboot and Docker Daemon Restart). The images are the ones the mesh containers run, which can be older than the ones a new mesh gets. Useful for external consumers that need to connect to sind networks.
+
+`sind get coredns-config` outputs a CoreDNS server block that forwards the realm's zone (`<realm>.sind`) to the mesh DNS server, for a DNS server outside sind such as a kind cluster's CoreDNS:
+
+```
+sind.sind:53 {
+    errors
+    cache 30
+    forward . 172.16.1.2
+}
+```
+
+`-o json` returns `{"zone": ..., "server": ..., "corefile": ...}`. It fails while the DNS container is stopped, which then has no address.
 
 `sind get ssh-private-key`, `sind get ssh-public-key`, and `sind get ssh-known-hosts` dump SSH credentials to stdout. This replaces the need to extract files from Docker volumes.
 
