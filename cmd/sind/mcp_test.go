@@ -76,11 +76,13 @@ func TestMCPTools_Set(t *testing.T) {
 	}
 	slices.Sort(names)
 	assert.Equal(t, []string{
+		"sind_connect_container",
 		"sind_create_cluster",
 		"sind_create_worker",
 		"sind_delete_cluster",
 		"sind_delete_realm",
 		"sind_delete_worker",
+		"sind_disconnect_container",
 		"sind_doctor",
 		"sind_exec",
 		"sind_get_cluster",
@@ -225,7 +227,7 @@ func TestMCPServer_VersionAndTools(t *testing.T) {
 
 	tools, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
-	assert.Len(t, tools.Tools, 30)
+	assert.Len(t, tools.Tools, 32)
 	for _, tool := range tools.Tools {
 		require.NotNil(t, tool.Annotations, tool.Name)
 	}
@@ -412,7 +414,7 @@ func TestMCPStream_RequiresToken(t *testing.T) {
 
 	tools, err := session.ListTools(t.Context(), nil)
 	require.NoError(t, err)
-	assert.Len(t, tools.Tools, 30)
+	assert.Len(t, tools.Tools, 32)
 	for _, tool := range tools.Tools {
 		if tool.Name == "sind_create_worker" {
 			require.NotNil(t, tool.Annotations.DestructiveHint)

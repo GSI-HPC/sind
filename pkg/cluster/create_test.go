@@ -272,7 +272,7 @@ func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
 
 	cfg := createCfg()
 	cfg.Nodes[0].BackupController = true
-	require.NoError(t, createResources(t.Context(), client, mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, client, nil, false)))
+	require.NoError(t, createResources(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), cfg, startPull(t.Context(), nil, client, nil, false)))
 
 	var created []string
 	for _, c := range m.Calls {
@@ -289,7 +289,7 @@ func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	t.Helper()
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
-	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg, "sind-ssh", startPull(t.Context(), nil, docker.NewClient(&m), nil, false)))
+	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.NewManager(docker.NewClient(&m), mesh.DefaultRealm), cfg, startPull(t.Context(), nil, docker.NewClient(&m), nil, false)))
 
 	var created []string
 	for _, c := range m.Calls {
@@ -849,14 +849,15 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 	require.Error(t, err)
 	// Verify cleanup ran: look for "docker ps" calls from diagnostics and
 	// deleteClusterResources. Preflight calls ps twice, for conflicts and
-	// bridge ports, hence 4 total.
+	// bridge ports, and createResources once, for the external containers
+	// to connect, hence 5 total.
 	var psCalls int
 	for _, call := range m.Calls {
 		if len(call.Args) > 0 && call.Args[0] == "ps" {
 			psCalls++
 		}
 	}
-	assert.Equal(t, 4, psCalls, "preflight (2) + diagnostics + deletion each call ListContainers")
+	assert.Equal(t, 5, psCalls, "preflight (2) + external containers + diagnostics + deletion each call ListContainers")
 }
 
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {

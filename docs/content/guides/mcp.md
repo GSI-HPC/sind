@@ -59,7 +59,7 @@ The tools take the same arguments and flags as the commands, except `-v`, `sind 
 
 Tool calls show no [progress]({{< relref "/usage/progress" >}}) and write no event log: the server runs them with `SIND_PROGRESS=none` and without `SIND_PROGRESS_LOG`, whatever its own environment says, so a tool's stderr holds what the command writes without progress.
 
-Each tool tells the client what it does, so that the client can decide when to ask before calling it: the `get` tools, `sind_logs`, `sind_doctor` and `sind_version` are marked read-only; `sind_power_on` and `sind_power_unfreeze` only restore; `sind_create_*`, `sind_delete_*`, `sind_exec` and the other `sind_power_*` tools are marked destructive. The create tools are destructive because their flags decide what runs on your Docker host (see [Security](#security)).
+Each tool tells the client what it does, so that the client can decide when to ask before calling it: the `get` tools, `sind_logs`, `sind_doctor` and `sind_version` are marked read-only; `sind_power_on`, `sind_power_unfreeze` and `sind_connect_container` only restore or add; `sind_create_*`, `sind_delete_*`, `sind_disconnect_container`, `sind_exec` and the other `sind_power_*` tools are marked destructive. The create tools are destructive because their flags decide what runs on your Docker host (see [Security](#security)).
 
 The `sind_get_*` tools and `sind_doctor` always return JSON: the server runs them with `-o json`, so they take no `-o` flag.
 

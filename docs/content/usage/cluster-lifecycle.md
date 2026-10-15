@@ -102,7 +102,7 @@ sind delete cluster [NAME]
 
 Deleting is idempotent — deleting a non-existent cluster is not an error. sind handles partial or broken clusters (e.g., from a failed creation).
 
-Deletion order: stops/removes containers, disconnects/removes networks, removes volumes. Containers outside sind attached to its networks with `docker network connect`, such as [kind nodes]({{< relref "/guides/kind" >}}), are disconnected first, not removed. sind also updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes.
+Deletion order: stops/removes containers, disconnects/removes networks, removes volumes. Containers outside sind attached to its networks, such as [kind nodes]({{< relref "/guides/kind" >}}), are disconnected first, not removed. sind also updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes.
 
 ```bash
 # Delete the default cluster
@@ -127,3 +127,12 @@ sind --realm ci-42 delete realm
 ```
 
 Deletes everything sind made for the realm, as `sind delete cluster --all` does: every cluster, the mesh, the [monitoring stack]({{< relref "/guides/monitoring" >}}) and the exported SSH configuration. The realm is the one `--realm`, `SIND_REALM` or the default names. External containers attached to the realm's networks are detached, not removed.
+
+## Connect containers outside sind
+
+```bash
+sind connect container CONTAINER...
+sind disconnect container CONTAINER...
+```
+
+`sind connect container` attaches containers that sind did not make, such as [kind nodes]({{< relref "/guides/kind" >}}), to the realm's mesh network and every cluster network, so that they resolve the realm's names through its DNS server and reach its nodes. Clusters created later are connected to them too: sind counts every container on the mesh that is not its own as connected. `sind disconnect container` detaches them from every network of the realm. Deleting a cluster or the realm detaches them as well, and never removes them. Both commands fail for a container that does not exist or that sind made.
