@@ -32,7 +32,7 @@ Checks system prerequisites and reports pass/fail for each:
 | inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
+The results go to stdout, so they can be piped or filtered, with `✓` for a passed check, `✗` for a failed one and `!` for a warning; only the error line naming the failed checks, as the output prints them, goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
 
 ```
 ✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ...
@@ -70,7 +70,7 @@ sind runs on the Docker host itself. Docker Desktop, whose daemon runs in a VM, 
 For a daemon elsewhere, the check is a warning that says why, with the way back to a local daemon:
 
 ```
-✗ Docker host: not this machine: docker context "build" connects to ssh://ci@build-host, not a unix socket (unsupported)
+! Docker host: not this machine: docker context "build" connects to ssh://ci@build-host, not a unix socket (unsupported)
 
 sind expects to run on the Docker host: --data paths, host DNS for the
 *.sind names and the inotify check refer to this machine, the nodes to the
