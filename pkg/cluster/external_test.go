@@ -179,7 +179,8 @@ func TestConnect_Errors(t *testing.T) {
 		name, container, fail, match string
 	}{
 		{"list networks", "kind-control-plane", "network ls", "listing networks"},
-		{"missing container", "kind-gone", "", "inspecting containers"},
+		{"inspect", "kind-control-plane", "inspect", "inspecting containers"},
+		{"missing container", "kind-gone", "", `container "kind-gone" not found`},
 		{"sind node", "sind-dev-controller", "", "sind-dev-controller is a sind container"},
 		{"monitoring container", "sind-prometheus", "", "sind-prometheus is a sind container"},
 		{"connect", "kind-control-plane", "network connect", "connecting kind-control-plane to sind-mesh"},
@@ -195,6 +196,29 @@ func TestConnect_Errors(t *testing.T) {
 			require.ErrorContains(t, err, tt.match)
 		})
 	}
+}
+
+// TestDisconnect_MissingContainer checks that the error names the container
+// that is missing among several, in sind's words rather than docker's.
+func TestDisconnect_MissingContainer(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.containers["kind-worker"] = externalContainer{networks: []string{"kind"}}
+
+	err := Disconnect(t.Context(), c, mesh.NewManager(c, "sind"), "kind-worker", "kind-gone")
+
+	require.EqualError(t, err, `container "kind-gone" not found`)
+}
+
+// TestDisconnect_MissingContainerGoneMeanwhile checks that the inspect error
+// stands when every container exists on a second look.
+func TestDisconnect_MissingContainerGoneMeanwhile(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.containers["kind-worker"] = externalContainer{networks: []string{"kind"}}
+	f.fail["inspect kind-worker kind-control-plane"] = mock.Result{Stderr: testutil.NoSuchContainer("kind-worker"), Err: notFoundErr(t)}
+
+	err := Disconnect(t.Context(), c, mesh.NewManager(c, "sind"), "kind-worker", "kind-control-plane")
+
+	require.ErrorContains(t, err, "inspecting containers")
 }
 
 func TestDisconnect(t *testing.T) {
