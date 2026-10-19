@@ -38,32 +38,32 @@ func TestParse_UsersErrors(t *testing.T) {
 		{
 			name:    "unknown user field",
 			input:   "kind: Cluster\nusers:\n  - name: alice\n    shell: /bin/zsh",
-			wantErr: `user must be a name or an object: json: unknown field "shell"`,
+			wantErr: "line 4: users[0].shell: unknown key (valid: name, uid,",
 		},
 		{
 			name:    "user is a list",
 			input:   "kind: Cluster\nusers:\n  - [alice]",
-			wantErr: "user must be a name or an object",
+			wantErr: "users[0]: expected an object, got a list",
 		},
 		{
 			name:    "uid is not a number",
 			input:   "kind: Cluster\nusers:\n  - name: alice\n    uid: high",
-			wantErr: "user must be a name or an object",
+			wantErr: "users[0].uid: expected a whole number, got a string",
 		},
 		{
 			name:    "groups is not a list",
 			input:   "kind: Cluster\nusers:\n  - name: alice\n    groups: hpc",
-			wantErr: "user must be a name or an object",
+			wantErr: "users[0].groups: expected a list, got a string",
 		},
 		{
 			name:    "unknown group field",
 			input:   "kind: Cluster\ngroups:\n  - name: hpc\n    members: [alice]",
-			wantErr: `group must be a name or an object with name and gid: json: unknown field "members"`,
+			wantErr: "groups[0].members: unknown key (valid: name, gid)",
 		},
 		{
 			name:    "gid is not a number",
 			input:   "kind: Cluster\ngroups:\n  - name: hpc\n    gid: high",
-			wantErr: "group must be a name or an object with name and gid",
+			wantErr: "groups[0].gid: expected a whole number, got a string",
 		},
 	}
 	for _, tt := range tests {

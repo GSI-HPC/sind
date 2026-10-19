@@ -610,11 +610,18 @@ func Parse(data []byte) (*Cluster, error) {
 		return nil, fmt.Errorf("empty configuration")
 	}
 
-	var cfg Cluster
-	if err := yaml.UnmarshalStrict(data, &cfg); err != nil {
+	if err := checkSyntax(data); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
+	var cfg Cluster
+	if err := yaml.UnmarshalStrict(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", plainError(err))
+	}
+
+	if cfg.Kind == "" {
+		return nil, fmt.Errorf(`kind is required: add "kind: Cluster"`)
+	}
 	if cfg.Kind != "Cluster" {
 		return nil, fmt.Errorf(`kind must be "Cluster", got %q`, cfg.Kind)
 	}

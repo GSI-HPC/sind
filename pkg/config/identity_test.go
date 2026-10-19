@@ -35,8 +35,8 @@ func TestParse_IdentityErrors(t *testing.T) {
 		input   string
 		wantErr string
 	}{
-		{"unknown field", "kind: Cluster\nidentity:\n  mode: clientIds\n  auth: slurm", `identity must be a mode or an object with mode and controllerUsers: json: unknown field "auth"`},
-		{"list", "kind: Cluster\nidentity: [nssSlurm]", "identity must be a mode or an object with mode and controllerUsers"},
+		{"unknown field", "kind: Cluster\nidentity:\n  mode: clientIds\n  auth: slurm", "line 4: identity.auth: unknown key (valid: mode, controllerUsers)"},
+		{"list", "kind: Cluster\nidentity: [nssSlurm]", "line 2: identity: expected an object, got a list"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
