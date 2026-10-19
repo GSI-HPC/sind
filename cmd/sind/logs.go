@@ -18,23 +18,33 @@ With a SERVICE argument, shows journalctl output for that systemd unit.`,
 		Args:              cobra.RangeArgs(1, 2),
 		ValidArgsFunction: completeLogsArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			follow, _ := cmd.Flags().GetBool("follow")
-			return runLogs(cmd, args, follow)
+			return runLogs(cmd, args)
 		},
 	}
 
 	cmd.Flags().BoolP("follow", "f", false, "follow log output")
+	cmd.Flags().IntP("tail", "n", 0, "show only the last N lines (0 shows none)")
 
 	return cmd
 }
 
-func runLogs(cmd *cobra.Command, args []string, follow bool) error {
+func runLogs(cmd *cobra.Command, args []string) error {
 	targets, err := parseNodeArgs(args[0])
 	if err != nil {
 		return err
 	}
 	if len(targets) != 1 {
 		return usagef("logs requires exactly one node, got %d", len(targets))
+	}
+
+	opts := cluster.LogOptions{}
+	opts.Follow, _ = cmd.Flags().GetBool("follow")
+	if cmd.Flags().Changed("tail") {
+		tail, _ := cmd.Flags().GetInt("tail")
+		if tail < 0 {
+			return usagef("--tail must not be negative, got %d", tail)
+		}
+		opts.Tail = &tail
 	}
 
 	node := targets[0]
@@ -50,9 +60,9 @@ func runLogs(cmd *cobra.Command, args []string, follow bool) error {
 	}
 	var dockerArgs []string
 	if len(args) == 2 {
-		dockerArgs = cluster.ServiceLogArgs(realm, node.ShortName, node.Cluster, args[1], follow)
+		dockerArgs = cluster.ServiceLogArgs(realm, node.ShortName, node.Cluster, args[1], opts)
 	} else {
-		dockerArgs = cluster.ContainerLogArgs(realm, node.ShortName, node.Cluster, follow)
+		dockerArgs = cluster.ContainerLogArgs(realm, node.ShortName, node.Cluster, opts)
 	}
 
 	return dockerExec(cmd, dockerArgs)

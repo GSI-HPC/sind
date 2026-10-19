@@ -721,8 +721,8 @@ slurmctld learns that a frozen, cut or shut down worker is gone only from failed
 ### Logs
 
 ```bash
-sind logs NODE [--follow|-f]           # container logs (stdout/stderr)
-sind logs NODE SERVICE [--follow|-f]   # journalctl for specific service
+sind logs NODE [--follow|-f] [--tail|-n N]          # container logs (stdout/stderr)
+sind logs NODE SERVICE [--follow|-f] [--tail|-n N]  # journalctl for specific service
 ```
 
 Examples:

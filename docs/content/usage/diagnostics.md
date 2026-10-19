@@ -316,7 +316,7 @@ Controllers of a backup pair get the same `HA` column as in `sind get cluster`.
 ## Logs
 
 ```bash
-sind logs NODE [SERVICE] [--follow|-f]
+sind logs NODE [SERVICE] [--follow|-f] [--tail|-n N]
 ```
 
 Without a `SERVICE` argument, shows container logs (stdout/stderr). With a service name, shows journalctl output for that systemd unit.
@@ -325,6 +325,7 @@ Without a `SERVICE` argument, shows container logs (stdout/stderr). With a servi
 # Container logs
 sind logs controller
 sind logs controller --follow
+sind logs controller --tail 50        # only the last 50 lines
 
 # Service logs
 sind logs controller slurmctld

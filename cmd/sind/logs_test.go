@@ -68,3 +68,18 @@ func TestLogs_MissingNode(t *testing.T) {
 		})
 	}
 }
+
+func TestLogs_HasTailFlag(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"logs"})
+	require.NoError(t, err)
+	f := c.Flags().Lookup("tail")
+	require.NotNil(t, f)
+	assert.Equal(t, "n", f.Shorthand)
+}
+
+func TestLogs_NegativeTail(t *testing.T) {
+	_, _, err := executeCommand("logs", "controller", "--tail", "-1")
+	require.Error(t, err)
+	assert.True(t, isUsageError(err))
+}
