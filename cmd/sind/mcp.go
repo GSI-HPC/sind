@@ -253,7 +253,8 @@ func commandPath(cmd *cobra.Command) string {
 // newMCPCommand returns the `sind mcp` command group, which serves sind's
 // commands as MCP tools through ophis. `sind mcp stream` keeps ophis's
 // flags but runs sind's own HTTP server, which requires a bearer token
-// (runMCPStream).
+// (runMCPStream), and the editor commands are sind's own
+// (newMCPEditorCommand).
 func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 	cmd := ophis.Command(cfg)
 	var start, stream *cobra.Command
@@ -264,7 +265,12 @@ func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 			start = sub
 		case "stream":
 			stream = sub
+		case "claude", "vscode", "cursor":
+			cmd.RemoveCommand(sub)
 		}
+	}
+	for _, e := range mcpEditors {
+		cmd.AddCommand(newMCPEditorCommand(e))
 	}
 	stream.Long = `Serve sind's MCP tools over streamable HTTP. Every request needs the
 header "Authorization: Bearer <token>". The token is ` + mcpTokenEnv + ` or, when

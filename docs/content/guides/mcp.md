@@ -29,7 +29,9 @@ sind mcp vscode disable
 sind mcp cursor disable
 ```
 
-`sind mcp <editor> list` shows the MCP servers registered with that editor. `enable` takes `--server-name`, `--log-level`, `--config-path` and `--env KEY=VALUE` (e.g. `--env SIND_REALM=ci` to serve another realm; `sind --realm ci mcp start` does the same for a server you start yourself), and for VS Code and Cursor `--workspace` to register sind in the workspace settings instead; see `sind mcp <editor> enable --help`.
+`enable` adds an entry named `sind` that runs `sind mcp start` and changes nothing else in the editor's configuration: its other settings, the other servers, comments and formatting stay. The entry runs sind by the absolute path of the binary you ran `enable` with, so run `enable` again after you move sind or install it somewhere else. `disable` removes the entry, and fails if there is none. Before either changes the file, it copies it to `<file>.<YYYYMMDD-HHMMSS>.bak` next to it; a backup is never overwritten.
+
+`sind mcp <editor> list` shows the MCP servers registered with that editor, each with its command or URL. `enable` takes `--server-name` (default `sind`), `--log-level`, `--config-path` and `--env KEY=VALUE`, and for VS Code and Cursor `--workspace` to register sind in the workspace settings (`.vscode/mcp.json`, `.cursor/mcp.json`) instead; see `sind mcp <editor> enable --help`. `--env SIND_REALM=ci` serves another realm; `sind --realm ci mcp start` does the same for a server you start yourself.
 
 ## Manual configuration
 

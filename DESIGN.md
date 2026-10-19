@@ -169,6 +169,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log (`progress`, `progress/display`, `progress/cliprogress`, v0.3.0; see Progress Display); the pools of the power commands and `delete cluster --all` (`fanout`); escaping of the text sind prints from docker, containers and other clients (`termtext`): the final error line, `Warning:` lines, `get` table cells and `doctor` details |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands and the progress display |
 | `github.com/njayp/ophis` | MCP server framework |
+| `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
@@ -782,6 +783,13 @@ sind mcp {claude,vscode,cursor} {enable,disable,list}  # register sind with an e
 ```
 
 The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
+
+The editor commands are sind's own (`cmd/sind/mcpeditor.go`, `internal/mcpconfig`), not ophis's, which rewrite the whole file from the fields they know (dropping the editor's other settings and the other servers' fields) and fail on a JSONC file:
+
+- They edit the editor's configuration in place, as JSON with comments and trailing commas (`github.com/tailscale/hujson`): only the entry of sind's server changes, and the editor's other settings, the other servers, comments and indentation stay. The servers are the members of `mcpServers` (Claude Desktop, Cursor) or `servers` (VS Code). A file that does not exist is created, readable by its owner alone, as an entry's `env` can hold secrets; one that exists keeps its permissions, and a symbolic link is followed to the file it points to.
+- `enable` adds or replaces the entry `--server-name` (default `sind`): `command` is the absolute path of the running sind binary (`os.Executable`), `args` is `["mcp", "start"]` plus `--log-level`, `env` is `--env`, and VS Code and Cursor get `"type": "stdio"`. `disable` removes the entry and fails (exit 1) when there is none. `list` prints a `NAME`/`COMMAND` table (the command and its arguments, or the URL of an HTTP server), without the servers' environment.
+- Before it changes a file that exists, `enable` or `disable` copies it to `<file>.<YYYYMMDD-HHMMSS>.bak` next to it (`-1`, `-2` … appended if that exists), so no backup is ever overwritten; `-v` logs its path. An unchanged file is not written and gets no backup. The new file replaces the old one through a temporary file and a rename.
+- The default files are `claude_desktop_config.json` in `Claude/` of the user configuration directory (`os.UserConfigDir`: `$XDG_CONFIG_HOME` or `~/.config` on Linux), `Code/User/mcp.json` there for VS Code, and `~/.cursor/mcp.json`; `--workspace` (VS Code, Cursor) selects `.vscode/mcp.json` or `.cursor/mcp.json` in the working directory, and `--config-path` any file.
 
 - The server reports itself as `sind` with the version `sind version` prints.
 - `--realm` on `sind mcp start` or `sind mcp stream` applies to every tool call: the server sets `SIND_REALM` for the sind processes it runs, which take the call's flags and the server's environment. The `mcp` commands take no arguments: an extra one is a usage error.
