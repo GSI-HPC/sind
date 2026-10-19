@@ -66,7 +66,7 @@ func newGetClustersCommand() *cobra.Command {
 func newGetNodesCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "nodes [CLUSTER]",
-		Short:             "List nodes",
+		Short:             "List the nodes of a cluster, or of every cluster of the realm",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
