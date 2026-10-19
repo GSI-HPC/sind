@@ -55,6 +55,12 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"--realm", "Not_A_Realm", "get", "clusters"}, `--realm: invalid realm name "Not_A_Realm"`},
 		{[]string{"get", "node", "worker-0.dev.sind.sind"}, "not the FQDN"},
 		{[]string{"get", "node", "worker-0.Not_A_Name"}, `invalid node name "worker-0.Not_A_Name"`},
+		{[]string{"power", "on", "controller.default.sind.sind"}, `not the FQDN "controller.default.sind.sind"`},
+		{[]string{"delete", "worker", "worker-0.default.sind.sind"}, `not the FQDN "worker-0.default.sind.sind"`},
+		{[]string{"logs", "controller.default.sind.sind"}, `not the FQDN "controller.default.sind.sind"`},
+		{[]string{"ssh", "worker-0.default.sind.sind"}, `not the FQDN "worker-0.default.sind.sind"`},
+		{[]string{"power", "on", "a.b.c"}, `invalid node name "a.b.c": want NODE[.CLUSTER]`},
+		{[]string{"power", "on", "Worker-0"}, `invalid node name "Worker-0": it has uppercase letters`},
 		{[]string{"power", "on", "worker-["}, "expanding nodes"},
 		{[]string{"power", "on", "@compute"}, "expanding nodes: group @compute: sind has no node groups"},
 		// The arguments are joined with a space, so an operator may start
