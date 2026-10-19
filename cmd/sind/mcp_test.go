@@ -278,6 +278,34 @@ func TestRefuseFlagArgs(t *testing.T) {
 	assert.Equal(t, map[string]any{"device": []any{""}, "cap-add": []any{"SYS_ADMIN"}, "count": float64(2)}, called.Flags)
 }
 
+func TestFailedAsError(t *testing.T) {
+	call := func(res *mcp.CallToolResult, out ophis.ToolOutput, err error) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		run := func(context.Context, *mcp.CallToolRequest, ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+			return res, out, err
+		}
+		return failedAsError(run)(t.Context(), &mcp.CallToolRequest{}, ophis.ToolInput{})
+	}
+
+	res, _, err := call(nil, ophis.ToolOutput{StdOut: "ok"}, nil)
+	require.NoError(t, err)
+	assert.Nil(t, res, "a successful call is left alone")
+
+	res, out, err := call(nil, ophis.ToolOutput{ExitCode: 1, StdErr: "boom"}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.True(t, res.IsError)
+	assert.Equal(t, 1, out.ExitCode)
+
+	kept := &mcp.CallToolResult{}
+	res, _, err = call(kept, ophis.ToolOutput{ExitCode: 2}, nil)
+	require.NoError(t, err)
+	assert.Same(t, kept, res)
+	assert.True(t, res.IsError)
+
+	_, _, err = call(nil, ophis.ToolOutput{ExitCode: 1}, assert.AnError)
+	assert.ErrorIs(t, err, assert.AnError)
+}
+
 func TestEmptyListsAsNone(t *testing.T) {
 	flags := map[string]any{"device": []any{}, "security-opt": []any{}, "cap-drop": []any{"MKNOD"}, "unmanaged": true}
 	got := emptyListsAsNone(flags)

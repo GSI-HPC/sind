@@ -191,10 +191,29 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 		if mcpRunsToCompletion(req.Params.Name) {
 			ctx = context.WithoutCancel(ctx)
 		}
+		run = failedAsError(run)
 		if next == nil {
 			return run(ctx, req, in)
 		}
 		return next(ctx, req, in, run)
+	}
+}
+
+// failedAsError wraps a tool run so that a command that exits non-zero
+// comes back as an error result (isError: true). ophis returns it as an
+// ordinary result with the exit code in the output, and clients that key
+// on isError would take the failure for a success.
+func failedAsError(run ophis.ExecuteFunc) ophis.ExecuteFunc {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		res, out, err := run(ctx, req, in)
+		if err != nil || out.ExitCode == 0 {
+			return res, out, err
+		}
+		if res == nil {
+			res = &mcp.CallToolResult{}
+		}
+		res.IsError = true
+		return res, out, nil
 	}
 }
 

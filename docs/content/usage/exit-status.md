@@ -59,4 +59,4 @@ The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the 
 
 ## MCP tools
 
-A tool call of the [MCP server]({{< relref "/guides/mcp" >}}) returns the command's exit status as `exitCode`, next to its stdout and stderr: a tool call whose arguments sind rejects reads `2`, and `sind_exec` returns the status of the command it ran.
+A tool call of the [MCP server]({{< relref "/guides/mcp" >}}) returns the command's exit status as `exitCode`, next to its stdout and stderr: a tool call whose arguments sind rejects reads `2`, and `sind_exec` returns the status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`).
