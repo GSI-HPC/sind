@@ -97,7 +97,7 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	printMCPStreamHint(cmd, "http://"+ln.Addr().String()+"/", tokenPath)
+	printMCPStreamHint(cmd, streamURL(ln.Addr()), tokenPath)
 	if err := server.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -118,12 +118,31 @@ func printMCPStreamHint(cmd *cobra.Command, url, tokenPath string) {
 	_, _ = fmt.Fprintf(w, "Client config: {\"type\": \"http\", \"url\": %q, \"headers\": {\"Authorization\": \"Bearer <token>\"}}\n", url)
 }
 
+// mcpMinTokenLength is the shortest SIND_MCP_TOKEN the stream accepts: the
+// token is the only thing between a network and the user's Docker access
+// when --host opens the stream to it.
+const mcpMinTokenLength = 16
+
+// streamURL returns the URL a client connects to for the address the stream
+// listens on. A wildcard address (--host 0.0.0.0) is not one a client can
+// connect to, so it becomes localhost.
+func streamURL(addr net.Addr) string {
+	tcp, ok := addr.(*net.TCPAddr)
+	if !ok || !tcp.IP.IsUnspecified() {
+		return "http://" + addr.String() + "/"
+	}
+	return "http://" + net.JoinHostPort("localhost", strconv.Itoa(tcp.Port)) + "/"
+}
+
 // mcpStreamToken returns the bearer token the stream requires: the value of
 // SIND_MCP_TOKEN or, when it is not set, a new random token (crypto/rand),
 // which it writes to mcpTokenFile in sind's state directory, readable by
 // the user alone, and whose path it returns.
 func mcpStreamToken() (token, path string, err error) {
 	if token := os.Getenv(mcpTokenEnv); token != "" {
+		if len(token) < mcpMinTokenLength {
+			return "", "", fmt.Errorf("%s: a token has at least %d characters, e.g. from openssl rand -hex 32", mcpTokenEnv, mcpMinTokenLength)
+		}
 		for _, c := range []byte(token) {
 			if c <= ' ' || c > '~' {
 				return "", "", fmt.Errorf("%s: a token is printable ASCII without spaces", mcpTokenEnv)

@@ -505,19 +505,19 @@ func TestWaitUntil(*testing.T) {
 func TestMCPStream_TokenFromEnv(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
-	t.Setenv(mcpTokenEnv, "s3cret-token")
+	t.Setenv(mcpTokenEnv, "s3cret-token-0123456789")
 	url, stderr, stop := startMCPStream(t)
 	defer func() { assert.NoError(t, stop()) }()
 
 	assert.Contains(t, stderr.String(), "Bearer token from "+mcpTokenEnv+"\n")
 	assert.NoFileExists(t, filepath.Join(stateHome, "sind", "mcp-token"))
 	assert.Equal(t, http.StatusUnauthorized, postInitialize(t, url, ""))
-	assert.Equal(t, http.StatusOK, postInitialize(t, url, "Bearer s3cret-token"))
+	assert.Equal(t, http.StatusOK, postInitialize(t, url, "Bearer s3cret-token-0123456789"))
 }
 
 func TestMCPStream_ListenError(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(mcpTokenEnv, "s3cret-token")
+	t.Setenv(mcpTokenEnv, "s3cret-token-0123456789")
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = ln.Close() }()
@@ -552,18 +552,23 @@ func TestMCPStream_ListenErrorKeepsToken(t *testing.T) {
 // TestMCPStream_TokenError checks that a token that cannot be made fails
 // the stream after it has its port, and frees the port.
 func TestMCPStream_TokenError(t *testing.T) {
-	t.Setenv(mcpTokenEnv, "bad token")
+	t.Setenv(mcpTokenEnv, "bad token with spaces")
 	_, _, err := executeCommand("mcp", "stream", "--port", "0")
 	require.ErrorContains(t, err, "a token is printable ASCII without spaces")
 }
 
 func TestMCPStreamToken(t *testing.T) {
 	t.Run("invalid env", func(t *testing.T) {
-		for _, token := range []string{"two words", "tab\there", "nl\n", "ümlaut"} {
+		for _, token := range []string{"two words, long enough", "tab\there-and-more-chars", "nl-and-more-characters\n", "ümlaut-and-more-characters"} {
 			t.Setenv(mcpTokenEnv, token)
 			_, _, err := mcpStreamToken()
 			require.EqualError(t, err, mcpTokenEnv+": a token is printable ASCII without spaces", token)
 		}
+	})
+	t.Run("too short", func(t *testing.T) {
+		t.Setenv(mcpTokenEnv, "a")
+		_, _, err := mcpStreamToken()
+		require.ErrorContains(t, err, "a token has at least 16 characters")
 	})
 	t.Run("new at every start", func(t *testing.T) {
 		stateHome := t.TempDir()
@@ -640,4 +645,16 @@ func TestWithMCPRealm(t *testing.T) {
 	root.SetArgs([]string{"--realm", "ci", "start"})
 	require.NoError(t, root.Execute())
 	assert.Equal(t, "ci", got)
+}
+
+func TestStreamURL(t *testing.T) {
+	for addr, want := range map[string]string{
+		"127.0.0.1:8080": "http://127.0.0.1:8080/",
+		"0.0.0.0:8080":   "http://localhost:8080/",
+		"[::]:8080":      "http://localhost:8080/",
+	} {
+		tcp, err := net.ResolveTCPAddr("tcp", addr)
+		require.NoError(t, err)
+		assert.Equal(t, want, streamURL(tcp), addr)
+	}
 }

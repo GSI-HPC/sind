@@ -114,7 +114,7 @@ claude mcp add --transport http sind http://127.0.0.1:8080/ \
   --header "Authorization: Bearer $(cat ~/.local/state/sind/mcp-token)"
 ```
 
-Set `SIND_MCP_TOKEN` (printable ASCII, no spaces) to keep one token across restarts, for example from a password manager: `SIND_MCP_TOKEN=$(openssl rand -hex 32) sind mcp stream`. The token travels in clear text over HTTP, so pass `--host 0.0.0.0` (all interfaces) only on a network you trust, or put a TLS proxy in front of the stream. `sind mcp start` (stdio) needs no token: only the program that started it can talk to it.
+Set `SIND_MCP_TOKEN` (printable ASCII, no spaces, at least 16 characters) to keep one token across restarts, for example from a password manager: `SIND_MCP_TOKEN=$(openssl rand -hex 32) sind mcp stream`. The token travels in clear text over HTTP, so pass `--host 0.0.0.0` (all interfaces) only on a network you trust, or put a TLS proxy in front of the stream. `sind mcp start` (stdio) needs no token: only the program that started it can talk to it.
 
 ## Security
 
