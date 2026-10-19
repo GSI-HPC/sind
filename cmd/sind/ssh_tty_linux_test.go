@@ -107,6 +107,26 @@ func noStdout(t *testing.T) *os.File {
 	return f
 }
 
+func TestInteractive(t *testing.T) {
+	tty := openPTY(t)
+	for name, tc := range map[string]struct {
+		stdin  io.Reader
+		stdout io.Writer
+		want   bool
+	}{
+		"terminal at both ends": {tty, tty, true},
+		"output captured":       {tty, new(bytes.Buffer), false},
+		"input piped":           {strings.NewReader(""), tty, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := NewRootCommand()
+			cmd.SetIn(tc.stdin)
+			cmd.SetOut(tc.stdout)
+			assert.Equal(t, tc.want, interactive(cmd))
+		})
+	}
+}
+
 func TestStdinIsTTY_Terminal(t *testing.T) {
 	assert.True(t, stdinIsTTY(openPTY(t)))
 }

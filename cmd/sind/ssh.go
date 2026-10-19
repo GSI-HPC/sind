@@ -75,7 +75,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	// line endings and with stderr in stdout, so -t is only for a terminal
 	// at both ends: a script that captures or redirects the output gets it
 	// unchanged even when it runs in an interactive shell.
-	isTTY := stdinIsTTY(cmd.InOrStdin()) && stdoutIsTTY(cmd.OutOrStdout())
+	isTTY := interactive(cmd)
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err
@@ -209,9 +209,17 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	containerName := cluster.ContainerName(realm, clusterName, target)
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, false, command)
+	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, interactive(cmd), command)
 
 	return dockerExec(cmd, dockerArgs)
+}
+
+// interactive reports whether the command talks to a terminal at both ends.
+// Only then does a command get a pseudo-terminal: captured or redirected
+// output must not come back with CRLF line endings. MCP tool calls have no
+// terminal, so they never get one.
+func interactive(cmd *cobra.Command) bool {
+	return stdinIsTTY(cmd.InOrStdin()) && stdoutIsTTY(cmd.OutOrStdout())
 }
 
 // stdinIsTTY reports whether stdin, the command's input, is a terminal. A
