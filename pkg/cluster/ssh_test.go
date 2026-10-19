@@ -351,7 +351,8 @@ func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
 	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no submitter or controller")
+	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
+	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
 func TestEnter_TargetSelection_ListError(t *testing.T) {

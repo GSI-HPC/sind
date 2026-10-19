@@ -285,16 +285,40 @@ func TestGetNodes_WithStatus(t *testing.T) {
 	assert.Equal(t, StatePaused, nodes[2].State)
 }
 
+// TestGetNodes_Empty checks that a cluster whose containers are gone but
+// whose network is left (a partial teardown) lists no nodes, as [] in JSON.
 func TestGetNodes_Empty(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "", nil)
+	m.AddResult(`[{"Id":"abc","Name":"sind-dev-net"}]`, "", nil)
 	c := docker.NewClient(&m)
 
-	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "nonexistent")
+	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	assert.NotNil(t, nodes, "empty result must be [] not nil so json emits []")
 	assert.Empty(t, nodes)
+}
+
+func TestGetNodes_ClusterNotFound(t *testing.T) {
+	c := docker.NewClient(notFoundExecutor(t, mock.Result{}))
+
+	nodes, err := GetNodes(t.Context(), c, "ci-42", "dev")
+
+	require.EqualError(t, err, `cluster "dev" not found in realm "ci-42"`)
+	assert.ErrorIs(t, err, ErrClusterNotFound)
+	assert.Nil(t, nodes)
+}
+
+func TestGetNodes_NetworkError(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
+	c := docker.NewClient(&m)
+
+	_, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
+
+	require.ErrorContains(t, err, "checking cluster network")
 }
 
 func TestGetNodes_Error(t *testing.T) {
@@ -310,12 +334,12 @@ func TestGetNodes_Error(t *testing.T) {
 
 func TestGetNodes_LabelFilter(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "", nil)
+	m.AddResult(psLine("sind", "myCluster", "controller"), "", nil)
 	c := docker.NewClient(&m)
 
 	_, _ = GetNodes(t.Context(), c, mesh.DefaultRealm, "myCluster")
 
-	require.Len(t, m.Calls, 1)
+	require.NotEmpty(t, m.Calls)
 	args := m.Calls[0].Args
 	assert.Contains(t, args, "label=sind.realm=sind")
 	assert.Contains(t, args, "label=sind.cluster=myCluster")
@@ -846,7 +870,8 @@ func TestGetAuthKey_NoContainers(t *testing.T) {
 	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no containers found")
+	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
+	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
 func TestGetAuthKey_ListError(t *testing.T) {

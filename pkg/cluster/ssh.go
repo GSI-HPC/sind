@@ -43,6 +43,9 @@ func EnterTarget(ctx context.Context, client *docker.Client, realm, clusterName 
 	if err != nil {
 		return "", "", fmt.Errorf("listing containers: %w", err)
 	}
+	if len(entries) == 0 {
+		return "", "", clusterNotFound(ctx, client, realm, clusterName)
+	}
 
 	target, node, err := enterTarget(ctx, client, realm, clusterName, entries)
 	if err != nil {

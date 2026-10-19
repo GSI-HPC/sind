@@ -51,6 +51,9 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)
 	}
+	if len(containers) == 0 {
+		return clusterNotFound(ctx, client, realm, clusterName)
+	}
 
 	controller, hasController := findController(containers, realm, clusterName)
 	containerMap := make(map[docker.ContainerName]docker.ContainerListEntry, len(containers))

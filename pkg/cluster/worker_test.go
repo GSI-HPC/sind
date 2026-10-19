@@ -241,7 +241,7 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "controller not found")
+	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
@@ -263,7 +263,7 @@ func TestWorkerAdd_ClusterNotFound_Unmanaged(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "controller not found")
+	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
@@ -918,7 +918,10 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if args[0] == "ps" {
-			return mock.Result{Stdout: ""}
+			return mock.Result{Stdout: testutil.NDJSON(
+				testutil.PsEntry{ID: "w1", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+					Labels: "sind.realm=sind,sind.cluster=dev,sind.role=worker"},
+			)}
 		}
 		return mock.Result{}
 	}
@@ -934,7 +937,7 @@ func TestWorkerAdd_Managed_ControllerNotFound(t *testing.T) {
 	}, time.Millisecond)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "controller not found")
+	assert.EqualError(t, err, `controller not found for cluster "dev"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
 }
 
@@ -1140,6 +1143,16 @@ func TestWorkerRemove_NodeNotFound(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrNodeNotFound)
 	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestWorkerRemove_ClusterNotFound(t *testing.T) {
+	client := docker.NewClient(notFoundExecutor(t, mock.Result{}))
+	mgr := mesh.NewManager(client, "ci-42")
+
+	err := WorkerRemove(t.Context(), client, mgr, "dev", []string{"worker-0"})
+
+	require.ErrorIs(t, err, ErrClusterNotFound)
+	assert.EqualError(t, err, `cluster "dev" not found in realm "ci-42"`)
 }
 
 // --- WorkerRemove (unmanaged) ---

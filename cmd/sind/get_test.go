@@ -183,6 +183,25 @@ func TestGetNodes_Output(t *testing.T) {
 	assert.NotContains(t, stdout, "CLUSTER")
 }
 
+// TestGetNodes_ClusterNotFound checks that a cluster that does not exist is
+// an error in both formats, as it is for get cluster, so that a typo such as
+// get nodes worker-0 (meant get node) is not an empty list.
+func TestGetNodes_ClusterNotFound(t *testing.T) {
+	for _, args := range [][]string{{"get", "nodes", "dev"}, {"get", "nodes", "dev", "-o", "json"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", "", nil)
+			m.AddResult("", "Error: No such network: sind-dev-net\n", testutil.ExitCode1(t))
+
+			stdout, _, err := executeWithMock(&m, args...)
+
+			require.Error(t, err)
+			assert.ErrorContains(t, err, `cluster "dev" not found in realm "sind"`)
+			assert.Empty(t, stdout)
+		})
+	}
+}
+
 func TestGetNodes_AllClusters(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
