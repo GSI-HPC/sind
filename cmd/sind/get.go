@@ -19,6 +19,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -126,7 +127,11 @@ func runGetClusters(cmd *cobra.Command) error {
 			c.State,
 		)
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	noteNone(cmd, len(clusters), "clusters", realm)
+	return nil
 }
 
 func newGetRealmsCommand() *cobra.Command {
@@ -159,7 +164,11 @@ func runGetRealms(cmd *cobra.Command) error {
 	for _, r := range realms {
 		_, _ = fmt.Fprintf(w, "%s\t%d\n", cell(r.Name), r.Clusters)
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	noteNone(cmd, len(realms), "realms", "")
+	return nil
 }
 
 func newGetNodeCommand() *cobra.Command {
@@ -277,7 +286,11 @@ func runGetAllNodes(cmd *cobra.Command) error {
 	for _, n := range nodes {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Cluster), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	noteNone(cmd, len(nodes), "nodes", realm)
+	return nil
 }
 
 func runGetNodes(cmd *cobra.Command, name string) error {
@@ -478,12 +491,19 @@ func newGetSSHConfigCommand() *cobra.Command {
 				return err
 			}
 			p := filepath.Join(dir, "ssh_config")
+			// The path is also right before the file exists, for an
+			// Include; a script that reads the file needs to know.
+			exists, _ := afero.Exists(fsFrom(cmd.Context()), p)
 			if isJSONOutput(cmd) {
 				return writeJSON(cmd.OutOrStdout(), struct {
-					Path string `json:"path"`
-				}{Path: p})
+					Path   string `json:"path"`
+					Exists bool   `json:"exists"`
+				}{Path: p, Exists: exists})
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
+			if !exists {
+				cmd.PrintErrln("Note: the file does not exist yet; sind writes it when a cluster is created in this realm")
+			}
 			return nil
 		},
 	}
@@ -800,6 +820,19 @@ func checkmark(ok bool) string {
 		return "\u2713"
 	}
 	return "\u2717"
+}
+
+// noteNone says on stderr that a table listed nothing, so that a lone header
+// is not mistaken for a failure. Stdout stays the table, for scripts.
+func noteNone(cmd *cobra.Command, n int, what, realm string) {
+	if n > 0 {
+		return
+	}
+	if realm == "" {
+		cmd.PrintErrf("No %s found.\n", what)
+		return
+	}
+	cmd.PrintErrf("No %s found in realm %q.\n", what, realm)
 }
 
 func formatServices(services cluster.ServiceHealth) string {

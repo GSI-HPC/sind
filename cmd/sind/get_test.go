@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1234,4 +1236,43 @@ func TestGetLifecycle(t *testing.T) {
 	stdout, _, err = executeWithRealm(realm, "get", "auth-key", cluster)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "dGVzdC1tdW5nZS1rZXk=") // base64("test-munge-key")
+}
+
+func TestGetSSHConfig_NotYetWritten(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	stdout, stderr, err := executeCommand("get", "ssh-config", "-o", "json")
+
+	require.NoError(t, err)
+	assert.Contains(t, stdout, `"exists": false`)
+	assert.Empty(t, stderr)
+
+	_, stderr, err = executeCommand("get", "ssh-config")
+	require.NoError(t, err)
+	assert.Contains(t, stderr, "Note: the file does not exist yet")
+}
+
+func TestGetSSHConfig_Exists(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	dir := filepath.Join(state, "sind", "sind")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ssh_config"), nil, 0o644))
+
+	stdout, stderr, err := executeCommand("get", "ssh-config", "-o", "json")
+
+	require.NoError(t, err)
+	assert.Contains(t, stdout, `"exists": true`)
+	assert.Empty(t, stderr)
+}
+
+func TestGetClusters_NoneSaysSoOnStderr(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+
+	stdout, stderr, err := executeWithMock(&m, "get", "clusters")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(stdout, "\n"), "only the header")
+	assert.Equal(t, "No clusters found in realm \"sind\".\n", stderr)
 }
