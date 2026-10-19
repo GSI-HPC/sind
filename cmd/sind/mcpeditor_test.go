@@ -94,23 +94,23 @@ func TestMCPEnable_VSCodeWorkspaceWithComments(t *testing.T) {
 
 func TestMCPEnable_Environment(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp.json")
-	_, _, err := executeCommand("mcp", "cursor", "enable", "--config-path", path,
-		"--env", "PATH=/opt/bin", "--log-level", "debug")
+	_, _, err := executeCommand("--realm", "ci", "mcp", "cursor", "enable", "--config-path", path,
+		"--env", "PATH=/opt/bin", "--env", "SIND_REALM=ci", "--log-level", "debug")
 	require.NoError(t, err)
 
 	servers, _ := readMCPConfig(t, path, "mcpServers")
 	assert.Equal(t, "stdio", servers["sind"]["type"])
 	assert.Equal(t, []any{"mcp", "start", "--log-level", "debug"}, servers["sind"]["args"])
-	assert.Equal(t, map[string]any{"PATH": "/opt/bin"}, servers["sind"]["env"])
+	assert.Equal(t, map[string]any{"PATH": "/opt/bin", "SIND_REALM": "ci"}, servers["sind"]["env"])
 	assert.Empty(t, backups(t, path), "a new file needs no backup")
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
-	_, _, err = executeCommand("mcp", "cursor", "enable", "--config-path", path)
+	_, _, err = executeCommand("--realm", "dev", "mcp", "cursor", "enable", "--config-path", path)
 	require.NoError(t, err)
 	servers, _ = readMCPConfig(t, path, "mcpServers")
-	assert.NotContains(t, servers["sind"], "env")
+	assert.Equal(t, map[string]any{"SIND_REALM": "dev"}, servers["sind"]["env"])
 	assert.Equal(t, []any{"mcp", "start"}, servers["sind"]["args"])
 }
 
@@ -120,6 +120,10 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 		args    []string
 		wantErr string
 	}{
+		{
+			[]string{"--realm", "ci", "mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_REALM=dev"},
+			"--realm ci and --env SIND_REALM=dev name different realms",
+		},
 		{
 			[]string{"mcp", "cursor", "enable", "--config-path", path, "--workspace"},
 			"--config-path and --workspace are mutually exclusive",

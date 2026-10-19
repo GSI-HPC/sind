@@ -111,7 +111,8 @@ func newMCPEnableCommand(e mcpEditor) *cobra.Command {
 		Long: `Register sind's MCP server with ` + e.title + `: add an entry that runs
 "sind mcp start", by the absolute path of this sind binary, or replace the
 entry of that name. The rest of the configuration file stays as it is, and
-the file as it was is first copied to <file>.<time>.bak.`,
+the file as it was is first copied to <file>.<time>.bak. The root --realm
+sets SIND_REALM in the entry's environment, so the server serves that realm.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPEnable(cmd, e, f)
@@ -220,8 +221,10 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 }
 
 // mcpEntry returns the entry enable writes: this binary, by its absolute
-// path, running `mcp start`, with the environment of --env.
-func mcpEntry(_ *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpServerEntry, error) {
+// path, running `mcp start`, with the environment of --env and the root's
+// --realm. An editor starts its MCP servers with its own environment, not
+// the shell's, so a realm the entry does not name is the default one.
+func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpServerEntry, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return mcpServerEntry{}, fmt.Errorf("locating the sind binary: %w", err)
@@ -235,6 +238,19 @@ func mcpEntry(_ *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpServerEntry,
 	}
 	if len(f.env) > 0 {
 		entry.Env = f.env
+	}
+	if cmd.Root().Flags().Changed("realm") {
+		realm, err := realmFromFlag(cmd)
+		if err != nil {
+			return mcpServerEntry{}, err
+		}
+		if env, ok := f.env["SIND_REALM"]; ok && env != realm {
+			return mcpServerEntry{}, usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
+		}
+		if entry.Env == nil {
+			entry.Env = map[string]string{}
+		}
+		entry.Env["SIND_REALM"] = realm
 	}
 	return entry, nil
 }
