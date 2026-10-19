@@ -42,6 +42,12 @@ func runLogs(cmd *cobra.Command, args []string, follow bool) error {
 	if err != nil {
 		return err
 	}
+	// docker would answer a missing node with its own error, naming the
+	// internal container.
+	ctx := cmd.Context()
+	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, node.Cluster, node.ShortName); err != nil {
+		return err
+	}
 	var dockerArgs []string
 	if len(args) == 2 {
 		dockerArgs = cluster.ServiceLogArgs(realm, node.ShortName, node.Cluster, args[1], follow)

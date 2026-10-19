@@ -64,6 +64,7 @@ func sshDockerArgs(t *testing.T, stdin io.Reader, stdout io.Writer, args ...stri
 	cmd.SetOut(stdout)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
+	cmd.SetContext(submitterCtx(t.Context()))
 
 	require.NoError(t, cmd.Execute())
 	data, err := os.ReadFile(file)

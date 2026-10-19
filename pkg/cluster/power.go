@@ -233,3 +233,12 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 	}
 	return targets, nil
 }
+
+// CheckNode fails with an error that wraps ErrClusterNotFound for a cluster
+// that has no containers in the realm, and ErrNodeNotFound for a node the
+// cluster does not hold. The commands that hand a node to docker, logs and
+// ssh, call it first: docker's own error would name an internal container.
+func CheckNode(ctx context.Context, client *docker.Client, realm, clusterName, shortName string) error {
+	_, err := resolveTargets(ctx, client, realm, clusterName, []string{shortName})
+	return err
+}

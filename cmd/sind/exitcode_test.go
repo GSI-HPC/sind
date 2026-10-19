@@ -165,11 +165,16 @@ func fakeDockerOnPath(t *testing.T, exit string) string {
 }
 
 // submitterCtx returns a context whose docker client finds the default
-// cluster's submitter, the target of exec and enter.
+// cluster's submitter, the target of exec and enter, and its worker-0.
 func submitterCtx(ctx context.Context) context.Context {
-	var m mock.Executor
-	m.AddResult(`{"ID":"abc","Names":"sind-default-submitter","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=submitter"}`+"\n", "", nil)
-	return withClient(ctx, docker.NewClient(&m))
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[0] != "ps" {
+			return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+		}
+		return mock.Result{Stdout: `{"ID":"abc","Names":"sind-default-submitter","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=submitter"}` + "\n" +
+			`{"ID":"def","Names":"sind-default-worker-0","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=worker"}` + "\n"}
+	}}
+	return withClient(ctx, docker.NewClient(m))
 }
 
 // TestRun_PassesTheChildStatusThrough checks that ssh, exec, enter and logs
@@ -227,7 +232,7 @@ func TestRun_InterruptedChildExits130(t *testing.T) {
 	}()
 	var stderr bytes.Buffer
 
-	code := run(ctx, []string{"ssh", "worker-0", "--", "sleep", "60"}, &stderr)
+	code := run(submitterCtx(ctx), []string{"ssh", "worker-0", "--", "sleep", "60"}, &stderr)
 
 	_, err := os.Stat(started)
 	require.NoError(t, err, "docker was never started")
@@ -241,7 +246,7 @@ func TestRun_DockerThatCannotStartExits1(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var stderr bytes.Buffer
 
-	code := run(noDocker(t.Context()), []string{"ssh", "worker-0", "--", "true"}, &stderr)
+	code := run(submitterCtx(t.Context()), []string{"ssh", "worker-0", "--", "true"}, &stderr)
 
 	assert.Equal(t, exitFailure, code)
 	assert.Contains(t, stderr.String(), "executable file not found")

@@ -80,6 +80,12 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The relay would answer a missing node with ssh's own error, and a
+	// realm without clusters has no relay for docker to exec in.
+	ctx := cmd.Context()
+	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target[0].Cluster, target[0].ShortName); err != nil {
+		return err
+	}
 	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
 	dockerArgs := cluster.BuildSSHArgs(sshContainer, target[0].ShortName, target[0].Cluster, realm, isTTY, sshOptions, command)
 
