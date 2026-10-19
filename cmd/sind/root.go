@@ -53,6 +53,9 @@ func NewRootCommand() *cobra.Command {
 		"append the progress events of create, delete and power to this file, one JSON object per line, "+
 			"created readable by you alone (default: "+envProgressLog+")")
 
+	_ = cmd.RegisterFlagCompletionFunc("realm", completeRealmNames)
+	_ = cmd.RegisterFlagCompletionFunc("progress", cobra.FixedCompletions(progressModeNames(), cobra.ShellCompDirectiveNoFileComp))
+
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newDeleteCommand())
 	cmd.AddCommand(newConnectCommand())

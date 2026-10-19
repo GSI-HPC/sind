@@ -24,11 +24,16 @@ import (
 
 // progressModes returns the words --progress takes, for its help.
 func progressModes() string {
+	return strings.Join(progressModeNames(), ", ")
+}
+
+// progressModeNames returns the values --progress takes.
+func progressModeNames() []string {
 	words := make([]string, 0, len(cliprogress.Modes()))
 	for _, m := range cliprogress.Modes() {
 		words = append(words, m.String())
 	}
-	return strings.Join(words, ", ")
+	return words
 }
 
 // The variables that stand in for --progress and --progress-log when they

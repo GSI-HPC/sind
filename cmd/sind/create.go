@@ -58,7 +58,8 @@ func newCreateClusterCommand() *cobra.Command {
 		Use:               "cluster [NAME] [--config FILE]",
 		Short:             "Create a Slurm cluster",
 		Args:              optionalCluster,
-		ValidArgsFunction: completeClusterNames,
+		// The name is new: the existing ones would conflict.
+		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			var name string
 			if len(args) > 0 {

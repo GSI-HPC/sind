@@ -30,6 +30,7 @@ func newGetCommand() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringP("output", "o", "human", "output format (human|json)")
+	registerOutputCompletion(cmd)
 
 	cmd.AddCommand(newGetClusterCommand())
 	cmd.AddCommand(newGetClustersCommand())

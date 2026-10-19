@@ -125,6 +125,7 @@ func newDoctorCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringP("output", "o", "human", "output format (human|json)")
+	registerOutputCompletion(cmd)
 
 	return cmd
 }
