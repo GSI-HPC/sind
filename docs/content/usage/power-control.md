@@ -14,7 +14,7 @@ sind power <action> NODES
 
 | Command | Description | Docker operation |
 |---------|-------------|-----------------|
-| `shutdown` | Graceful shutdown | `docker stop` (the image's stop signal, `SIGRTMIN+3` for sind-node, then SIGKILL after 10 s) |
+| `shutdown` (alias `off`) | Graceful shutdown | `docker stop` (the image's stop signal, `SIGRTMIN+3` for sind-node, then SIGKILL after 10 s) |
 | `cut` | Hard power off | `docker kill` (immediate SIGKILL) |
 | `on` | Power on | `docker start` |
 | `reboot` | Graceful reboot | `docker stop`, then as `on` |

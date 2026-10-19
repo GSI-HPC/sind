@@ -33,24 +33,28 @@ func newPowerCommand() *cobra.Command {
 	// stopped mesh, and rewrites the nodes' DNS records), so they hold the
 	// realm lock.
 	cmds := []struct {
-		use    string
-		short  string
-		fn     powerFunc
-		locked bool
+		use     string
+		aliases []string
+		short   string
+		fn      powerFunc
+		locked  bool
 	}{
-		{"shutdown NODES", "Graceful shutdown", withRealm(cluster.PowerShutdown), false},
-		{"cut NODES", "Hard power off", withRealm(cluster.PowerCut), false},
-		{"on NODES", "Power on", cluster.PowerOn, true},
-		{"reboot NODES", "Graceful reboot", cluster.PowerReboot, true},
-		{"cycle NODES", "Hard power cycle", cluster.PowerCycle, true},
-		{"freeze NODES", "Simulate unresponsive node", withRealm(cluster.PowerFreeze), false},
-		{"unfreeze NODES", "Resume frozen node", withRealm(cluster.PowerUnfreeze), false},
+		// off is the verb users guess first; without an alias cobra
+		// suggests the opposite action, "on".
+		{"shutdown NODES", []string{"off"}, "Graceful shutdown", withRealm(cluster.PowerShutdown), false},
+		{"cut NODES", nil, "Hard power off", withRealm(cluster.PowerCut), false},
+		{"on NODES", nil, "Power on", cluster.PowerOn, true},
+		{"reboot NODES", nil, "Graceful reboot", cluster.PowerReboot, true},
+		{"cycle NODES", nil, "Hard power cycle", cluster.PowerCycle, true},
+		{"freeze NODES", nil, "Simulate unresponsive node", withRealm(cluster.PowerFreeze), false},
+		{"unfreeze NODES", nil, "Resume frozen node", withRealm(cluster.PowerUnfreeze), false},
 	}
 
 	for _, c := range cmds {
 		fn, locked := c.fn, c.locked
 		cmd.AddCommand(&cobra.Command{
 			Use:               c.use,
+			Aliases:           c.aliases,
 			Short:             c.short,
 			Args:              cobra.MinimumNArgs(1),
 			ValidArgsFunction: completeNodeNames,

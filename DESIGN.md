@@ -687,7 +687,7 @@ Managed nodes require the sind-generated Slurm configuration (see Generated Conf
 ### Power Control
 
 ```bash
-sind power shutdown NODES               # graceful shutdown
+sind power shutdown NODES               # graceful shutdown (alias: off)
 sind power cut NODES                    # hard power off
 sind power on NODES                     # power on
 sind power reboot NODES                 # graceful cycle (shutdown + on)
