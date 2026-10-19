@@ -288,7 +288,7 @@ Rules:
 
 Exit status and signals:
 - `0` on success, `1` on failure, `2` for a usage error, `130` when SIGINT or SIGTERM interrupted the command (`cmd/sind/exitcode.go`). Scripts branch on them, so a status may be added but never renumbered
-- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, `--progress`, `--progress-log`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`; `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command (see Progress Display)
+- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments (the message ends with `(usage: sind power on NODES)`, and the removed `sind status` points to `get cluster`). That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, `--progress`, `--progress-log`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`; `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command (see Progress Display)
 - `ssh`, `exec`, `enter` and `logs` exit with the status of the docker command they run, which `docker exec` takes from the command it ran (for `ssh`, from `ssh` and the remote command), and print no error line. A docker killed by signal N exits 128 + N, as a shell reports it, except SIGINT and SIGTERM, which exit `130` like an interrupted sind: they reach docker when sent to sind's process group, and the status must not depend on which process ends first
 - SIGTERM exits `130`, not `143`, so that callers check one status for "interrupted", as in clusterctl
 - A `--wait` limit that runs out is a failure, not an interrupt: `create cluster` and `create worker` exit `1`
@@ -738,7 +738,7 @@ sind logs api slurmrestd               # slurmrestd journal logs on the api node
 ### Utilities
 
 ```bash
-sind version [--json]                  # print version information
+sind version [--json]                  # print version information (sind --version prints the same line)
 sind doctor [-o json]                  # check host prerequisites
 sind get realms                        # list active realms
 sind get auth-key [CLUSTER] [--type T] # output a Slurm authentication key (base64)

@@ -51,13 +51,18 @@ func runVersion(cmd *cobra.Command) error {
 		return enc.Encode(info)
 	}
 
-	if c != "" && !strings.Contains(full, "-g") {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "sind %s (%s)\n", v, c)
-	} else {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "sind %s\n", v)
-	}
-
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), versionLine())
 	return nil
+}
+
+// versionLine is the line `sind version` and `sind --version` print.
+func versionLine() string {
+	full := resolveVersion()
+	v := strings.TrimPrefix(full, "v")
+	if c := resolveCommit(); c != "" && !strings.Contains(full, "-g") {
+		return fmt.Sprintf("sind %s (%s)", v, c)
+	}
+	return "sind " + v
 }
 
 // resolveVersion returns the version set at build time, or, for a binary

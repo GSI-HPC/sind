@@ -60,8 +60,8 @@ func TestUnknownSubcommand(t *testing.T) {
 		args    []string
 		wantErr string
 	}{
-		{[]string{"status", "default"}, `unknown command "status" for "sind"`},
-		{[]string{"-v", "status"}, `unknown command "status" for "sind"`},
+		{[]string{"status", "default"}, `unknown command "status" for "sind" (it is now "get cluster")`},
+		{[]string{"-v", "status"}, `unknown command "status" for "sind" (it is now "get cluster")`},
 		{[]string{"gte"}, `unknown command "gte" for "sind" (did you mean "get"?)`},
 		{[]string{"get", "clsuter"}, `unknown command "clsuter" for "sind get" (did you mean "cluster"?)`},
 		{[]string{"create", "bogus"}, `unknown command "bogus" for "sind create"`},

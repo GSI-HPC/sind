@@ -137,3 +137,12 @@ func TestVersionCommand_ModuleVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "sind 0.9.0-0.20260927120000-abcdef123456\n", stdout)
 }
+
+func TestVersionFlag(t *testing.T) {
+	setVersion(t, "v1.2.3", "")
+
+	stdout, _, err := executeCommand("--version")
+
+	require.NoError(t, err)
+	assert.Equal(t, "sind 1.2.3\n", stdout)
+}

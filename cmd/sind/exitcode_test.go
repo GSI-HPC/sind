@@ -251,3 +251,18 @@ func TestRun_DockerThatCannotStartExits1(t *testing.T) {
 	assert.Equal(t, exitFailure, code)
 	assert.Contains(t, stderr.String(), "executable file not found")
 }
+
+func TestArityErrorNamesTheUsage(t *testing.T) {
+	_, _, err := executeCommand("power", "on")
+
+	require.Error(t, err)
+	assert.True(t, isUsageError(err))
+	assert.Contains(t, err.Error(), "only received 0 (usage: sind power on NODES)")
+}
+
+func TestRemovedStatusCommandPointsToGetCluster(t *testing.T) {
+	_, _, err := executeCommand("status")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `(it is now "get cluster")`)
+}
