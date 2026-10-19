@@ -207,6 +207,11 @@ func applyDataFlag(cfg *config.Cluster, value string) error {
 	if value == "volume" {
 		return nil
 	}
+	// filepath.Abs("") is the working directory: an unset variable in
+	// --data "$DATA" would mount it read-write into every node.
+	if value == "" {
+		return usagef(`--data must not be empty: give a host directory or "volume"`)
+	}
 	abs, err := filepath.Abs(value)
 	if err != nil {
 		return fmt.Errorf("resolving data path %q: %w", value, err)

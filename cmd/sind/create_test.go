@@ -235,6 +235,17 @@ func TestApplyDataFlag_RelativePath(t *testing.T) {
 	assert.True(t, filepath.IsAbs(cfg.Storage.DataStorage.HostPath), "path should be absolute")
 }
 
+func TestApplyDataFlag_Empty(t *testing.T) {
+	cfg, err := loadConfig(noStdin(t), io.Discard, "")
+	require.NoError(t, err)
+
+	err = applyDataFlag(cfg, "")
+
+	require.Error(t, err)
+	assert.True(t, isUsageError(err))
+	assert.Empty(t, cfg.Storage.DataStorage.HostPath)
+}
+
 func TestApplyDataFlag_Volume(t *testing.T) {
 	cfg, err := loadConfig(noStdin(t), io.Discard, "")
 	require.NoError(t, err)
