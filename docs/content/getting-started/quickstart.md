@@ -10,6 +10,12 @@ toc: true
 
 ## Create a cluster
 
+sind mounts the working directory read-write into every node, and the Slurm jobs write their output there as root. Work in a scratch directory, not in your home directory:
+
+```bash
+mkdir sind-demo && cd sind-demo
+```
+
 The simplest command creates a cluster named `default` with one controller and one worker:
 
 ```bash

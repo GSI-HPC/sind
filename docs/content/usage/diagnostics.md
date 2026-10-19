@@ -131,7 +131,7 @@ sind version
 Prints the version and, for a release build, the commit it was built from:
 
 ```
-sind 0.10.0 (0a57d68)
+sind 0.12.0 (0a57d68)
 ```
 
 `--json` prints all fields as one JSON object, for scripts such as [sind-action](https://github.com/GSI-HPC/sind-action), which reads `version`:
@@ -141,7 +141,7 @@ sind version --json
 ```
 
 ```json
-{"version":"0.10.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}
+{"version":"0.12.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}
 ```
 
 | Field | Description |
@@ -151,7 +151,7 @@ sind version --json
 | `goVersion` | the Go toolchain that built the binary |
 | `platform` | operating system and architecture, `linux/amd64` or `linux/arm64` |
 
-A development build reports the output of `git describe`, such as `0.10.0-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
+A development build reports the output of `git describe`, such as `0.12.0-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
 
 ## Verbose logging
 
@@ -441,11 +441,11 @@ Prints a CoreDNS server block that forwards the realm's zone to the mesh DNS ser
 sind.sind:53 {
     errors
     cache 30
-    forward . 172.16.1.2
+    forward . 172.18.255.254
 }
 ```
 
-`-o json` returns the zone, the server address and the block, e.g. `{"zone": "sind.sind", "server": "172.16.1.2", "corefile": "..."}`. The command fails while the DNS container is stopped, as it then has no address.
+`-o json` returns the zone, the server address and the block, e.g. `{"zone": "sind.sind", "server": "172.18.255.254", "corefile": "..."}`. The command fails while the DNS container is stopped, as it then has no address.
 
 ## Monitoring stack
 

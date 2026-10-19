@@ -29,6 +29,18 @@ Inspired by [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker), **sind** o
 - **Minimal dependencies** — just Docker and a sind container image; usable as both a CLI tool and a Go library
 - **AI-ready via MCP** — built-in [MCP](https://modelcontextprotocol.io/) server lets AI assistants manage your Slurm clusters
 
+## Quick start
+
+With Docker 28 or later on a Linux host with cgroup v2:
+
+```bash
+curl -fLo sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
+sudo install sind /usr/local/bin/sind
+sind create cluster && sind exec -- sinfo
+```
+
+See the [installation guide](https://gsi-hpc.github.io/sind/getting-started/installation/) to verify the download or install on ARM64, and `sind doctor` to check the host.
+
 ## AI disclosure
 
 This project is developed with the help of AI coding tools. Since September 2026, changes written by Anthropic's Claude Code agent are committed as `Claude <noreply@anthropic.com>` and/or carry a `Co-Authored-By: Claude …` trailer; earlier AI-assisted commits are not individually marked.

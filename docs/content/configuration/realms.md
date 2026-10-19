@@ -60,7 +60,7 @@ With realm `ci-42`, resources are prefixed accordingly:
 
 ## Advisory locking
 
-Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm lock to prevent concurrent modifications. Read-only operations (`get`, `logs`, etc.) are not affected. The lock has two parts:
+Mutating operations (`create cluster`, `delete cluster`, `delete realm`, `create worker`, `delete worker`, `connect container`, `disconnect container`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm lock to prevent concurrent modifications. Read-only operations (`get`, `logs`, etc.) are not affected. The lock has two parts:
 
 - A file lock in the invoking user's state directory, which orders that user's commands without asking the Docker daemon:
 

@@ -765,7 +765,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 sind.sind:53 {
     errors
     cache 30
-    forward . 172.16.1.2
+    forward . 172.18.255.254
 }
 ```
 
@@ -2170,9 +2170,10 @@ The file lock stays as the fast path: commands of one user wait for each other i
 ### Protected operations
 
 - `sind create cluster`
-- `sind delete cluster` (single and `--all`)
+- `sind delete cluster` (single and `--all`) and `sind delete realm`
 - `sind create worker`
 - `sind delete worker`
+- `sind connect container` and `sind disconnect container`
 - `sind power on`, `sind power reboot` and `sind power cycle` (they start a stopped mesh and rewrite DNS records)
 
 Read-only operations (`get`, `logs`, `ssh`, etc.) and the other `power` commands do not acquire the lock.
