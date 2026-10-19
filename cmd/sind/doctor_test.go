@@ -119,7 +119,7 @@ func TestDoctorCommand_DockerTooOld(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "docker")
+	assert.Contains(t, err.Error(), "Docker Engine")
 
 	output := out.String()
 	assert.Contains(t, output, "27.5.0")
@@ -140,7 +140,7 @@ func TestDoctorCommand_DockerNotReachable(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "docker")
+	assert.Contains(t, err.Error(), "Docker Engine")
 
 	output := out.String()
 	assert.Contains(t, output, "Docker Engine")
@@ -174,7 +174,7 @@ func TestDoctorCommand_CgroupMissing(t *testing.T) {
 	cmd.SetContext(hermeticDoctorCtxWithMounts(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n"))
 
 	err := cmd.Execute()
-	require.EqualError(t, err, "checks failed: cgroup")
+	require.EqualError(t, err, "checks failed: cgroupv2")
 	assert.Contains(t, out.String(), "cgroupv2: not mounted")
 }
 
@@ -191,7 +191,7 @@ func TestDoctorCommand_CgroupNsdelegateMissing(t *testing.T) {
 		"cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n"))
 
 	err := cmd.Execute()
-	require.EqualError(t, err, "checks failed: cgroup-nsdelegate")
+	require.EqualError(t, err, "checks failed: cgroupv2")
 	assert.Contains(t, out.String(), "nsdelegate not found")
 }
 
@@ -288,8 +288,8 @@ func TestDoctorCommand_WritesToStdout(t *testing.T) {
 	})
 	assert.Equal(t, 1, code)
 	assert.Contains(t, stdout, "✗ Docker Engine: 27.5.0 (requires >= 28.0)\n")
-	assert.Contains(t, stderr.String(), "checks failed: docker")
-	assert.NotContains(t, stderr.String(), "Docker Engine")
+	assert.Contains(t, stderr.String(), "checks failed: Docker Engine")
+	assert.NotContains(t, stderr.String(), "27.5.0")
 }
 
 func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
@@ -298,7 +298,7 @@ func TestDoctorCommand_RemediationBetweenBlankLines(t *testing.T) {
 
 	ctx := hermeticDoctorCtxWithMounts(t, &m, resolvedWithPolkit(true), "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n")
 	out, err := executeDoctor(ctx, t)
-	require.EqualError(t, err, "checks failed: cgroup-nsdelegate")
+	require.EqualError(t, err, "checks failed: cgroupv2")
 	assert.Equal(t, `✓ Docker Engine: 29.0.0 (>= 28.0)
 ✓ Docker daemon: rootful, no userns-remap
 ✓ Docker host: this machine (unix:///var/run/docker.sock)
@@ -325,7 +325,7 @@ func TestDoctorCommand_DNSPolicyNotAuthorized(t *testing.T) {
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, resolvedWithPolkit(false)), t)
 	require.NoError(t, err, "the DNS policy check is advisory")
-	assert.Contains(t, out, "✗ DNS policy: not authorized (optional)\n\nInstall a polkit rule")
+	assert.Contains(t, out, "! DNS policy: not authorized (optional)\n\nInstall a polkit rule")
 	assert.Contains(t, out, "subject.active && subject.local) {")
 	assert.True(t, strings.HasSuffix(out, "RULES\n\n"), out)
 }
@@ -344,7 +344,7 @@ func TestDoctorCommand_DNSPolicyRemoteDaemon(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "ssh://build-host")
 	out, err := executeDoctor(ctx, t)
 	require.NoError(t, err, "the DNS policy check is advisory")
-	assert.Contains(t, out, "✗ DNS policy: not available: the Docker daemon does not run on this machine (optional)\n")
+	assert.Contains(t, out, "! DNS policy: not available: the Docker daemon does not run on this machine (optional)\n")
 	assert.Len(t, sys.Calls, 1, "polkit is not asked")
 }
 
@@ -373,7 +373,7 @@ func TestDoctorCommand_JSONFailures(t *testing.T) {
 
 	ctx := hermeticDoctorCtxWithMounts(t, &m, resolvedWithPolkit(false), "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n")
 	out, err := executeDoctor(ctx, t, "--output", "json")
-	require.EqualError(t, err, "checks failed: docker, cgroup-nsdelegate")
+	require.EqualError(t, err, "checks failed: Docker Engine, cgroupv2")
 
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks), "stdout holds only the JSON document")
@@ -407,7 +407,7 @@ func TestDoctorCommand_DaemonMode(t *testing.T) {
 			m.AddResult(`{"ServerVersion":"29.0.0","CgroupVersion":"2","SecurityOptions":["name=seccomp,profile=builtin","`+tt.option+`"]}`, "", nil)
 
 			out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t, "-o", "json")
-			require.EqualError(t, err, "checks failed: docker-daemon")
+			require.EqualError(t, err, "checks failed: Docker daemon")
 			var checks []doctorCheck
 			require.NoError(t, json.Unmarshal([]byte(out), &checks))
 			require.Len(t, checks, 4)
@@ -422,7 +422,7 @@ func TestDoctorCommand_JSONDockerNotReachable(t *testing.T) {
 
 	ctx := hermeticDoctorCtxWithMounts(t, &m, nil, "tmpfs /tmp tmpfs rw 0 0\n")
 	out, err := executeDoctor(ctx, t, "-o", "json")
-	require.EqualError(t, err, "checks failed: docker, cgroup")
+	require.EqualError(t, err, "checks failed: Docker Engine, cgroupv2")
 
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
@@ -446,7 +446,7 @@ func TestDoctorCommand_CgroupHybrid(t *testing.T) {
 			"cgroup2 /sys/fs/cgroup/unified cgroup2 rw,nsdelegate 0 0\n"+
 			"cgroup /sys/fs/cgroup/memory cgroup rw,memory 0 0\n")
 	out, err := executeDoctor(ctx, t)
-	require.EqualError(t, err, "checks failed: cgroup")
+	require.EqualError(t, err, "checks failed: cgroupv2")
 	assert.Contains(t, out, "✗ cgroupv2: hybrid hierarchy: cgroup2 is mounted at /sys/fs/cgroup/unified, not /sys/fs/cgroup (sind requires cgroupv2)\n\n"+unifiedRemediation+"\n\n")
 }
 
@@ -471,7 +471,7 @@ func TestDoctorCommand_Inotify(t *testing.T) {
 
 	out, err := run(t, "128\n", "")
 	require.NoError(t, err, "the inotify check is advisory")
-	assert.Contains(t, out, "✗ inotify: max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)\n\n"+inotifyRemediation+"\n\n")
+	assert.Contains(t, out, "! inotify: max_user_instances 128 (clusters of 10 or more nodes need 1024; optional)\n\n"+inotifyRemediation+"\n\n")
 
 	out, err = run(t, "8192\n", "unix:///run/docker.sock")
 	require.NoError(t, err)
@@ -506,7 +506,7 @@ func TestDoctorCommand_DaemonCgroupV1(t *testing.T) {
 	m.AddResult(`{"ServerVersion":"29.0.0","CgroupVersion":"1","SecurityOptions":["name=seccomp,profile=builtin"]}`, "", nil)
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t, "-o", "json")
-	require.EqualError(t, err, "checks failed: cgroup")
+	require.EqualError(t, err, "checks failed: cgroupv2")
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
 	require.Len(t, checks, 4)
@@ -522,7 +522,7 @@ func TestDoctorCommand_DockerPermissionDenied(t *testing.T) {
 	m.AddResult("", "permission denied while trying to connect to the Docker daemon socket\x1b]0;x\x07\n", testutil.ExitCode1(t))
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
-	require.EqualError(t, err, "checks failed: docker")
+	require.EqualError(t, err, "checks failed: Docker Engine")
 	assert.Contains(t, out, "✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket\\x1b]0;x\\x07\n"+
 		"\nAdd your user to the docker group, then log in again (or run newgrp docker):\n\nsudo usermod -aG docker $USER\n\n")
 }
@@ -584,7 +584,7 @@ func TestDoctorCommand_DaemonElsewhere(t *testing.T) {
 			wantHost: elsewhere("Docker Desktop runs the daemon in a VM"),
 			wantCgroup: doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not found",
 				Remediation: doctor.NsdelegateRemediation("/sys/fs/cgroup")},
-			wantErr: "checks failed: cgroup-nsdelegate",
+			wantErr: "checks failed: cgroupv2",
 		},
 		{
 			name: "another kernel, probe fails", dockerHost: "unix:///tmp/forwarded.sock",
@@ -594,14 +594,14 @@ func TestDoctorCommand_DaemonElsewhere(t *testing.T) {
 				{Stderr: "docker: Error response from daemon: failed to create task\n\nRun 'docker run --help'\n", Err: testutil.ExitCode1(t)}},
 			wantHost:   elsewhere("the daemon runs kernel 6.12.48+deb13-amd64, this machine 6.8.0-45-generic"),
 			wantCgroup: doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not checked: docker: Error response from daemon: failed to create task"},
-			wantErr:    "checks failed: cgroup",
+			wantErr:    "checks failed: cgroupv2",
 		},
 		{
 			name: "image inspect fails", dockerHost: "ssh://ci@build-host", info: dockerInfo("29.0.0"),
 			results:    []mock.Result{{Stderr: "error during connect: EOF\n", Err: testutil.ExitCode1(t)}},
 			wantHost:   elsewhere("DOCKER_HOST is ssh://ci@build-host, not a unix socket"),
 			wantCgroup: doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not checked: error during connect: EOF"},
-			wantErr:    "checks failed: cgroup",
+			wantErr:    "checks failed: cgroupv2",
 		},
 		{
 			name: "context unknown", info: dockerInfo("29.0.0"),
@@ -658,8 +658,8 @@ func TestDoctorCommand_DaemonElsewhereHuman(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://build-host:2376")
 	out, err := executeDoctor(ctx, t)
 	require.NoError(t, err, "a daemon elsewhere is a warning")
-	assert.Contains(t, out, "✗ Docker host: not this machine: DOCKER_HOST is tcp://build-host:2376, not a unix socket (unsupported)\n\n"+
-		elsewhereRemediation+"\n\n✗ cgroupv2: nsdelegate not checked: ")
+	assert.Contains(t, out, "! Docker host: not this machine: DOCKER_HOST is tcp://build-host:2376, not a unix socket (unsupported)\n\n"+
+		elsewhereRemediation+"\n\n! cgroupv2: nsdelegate not checked: ")
 	assert.Contains(t, elsewhereRemediation, "unset DOCKER_HOST DOCKER_CONTEXT\ndocker context use default")
 }
 
@@ -672,7 +672,7 @@ func TestDoctorCommand_DaemonElsewhereNotReachable(t *testing.T) {
 	ctx := hermeticDoctorCtx(t, &m, nil)
 	t.Setenv("DOCKER_HOST", "tcp://docker.example:2375")
 	out, err := executeDoctor(ctx, t, "-o", "json")
-	require.EqualError(t, err, "checks failed: docker")
+	require.EqualError(t, err, "checks failed: Docker Engine")
 	var checks []doctorCheck
 	require.NoError(t, json.Unmarshal([]byte(out), &checks))
 	require.Len(t, checks, 2)

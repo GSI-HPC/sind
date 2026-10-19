@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -61,7 +62,13 @@ func usagef(format string, args ...any) error {
 func usageArgs(cmd *cobra.Command) {
 	if check := cmd.Args; check != nil {
 		cmd.Args = func(c *cobra.Command, args []string) error {
-			return usage(check(c, args))
+			err := check(c, args)
+			if err != nil && !c.HasSubCommands() && c.Name() != "help" {
+				// cobra's arity messages name neither the argument nor the
+				// command, and the usage block is silenced.
+				err = fmt.Errorf("%w (usage: %s)", err, strings.TrimSuffix(c.UseLine(), " [flags]"))
+			}
+			return usage(err)
 		}
 	}
 	for _, sub := range cmd.Commands() {

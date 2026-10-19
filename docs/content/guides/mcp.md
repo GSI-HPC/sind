@@ -29,7 +29,9 @@ sind mcp vscode disable
 sind mcp cursor disable
 ```
 
-`sind mcp <editor> list` shows the MCP servers registered with that editor. `enable` takes `--server-name`, `--log-level`, `--config-path` and `--env KEY=VALUE` (e.g. `--env SIND_REALM=ci` to serve another realm; `sind --realm ci mcp start` does the same for a server you start yourself), and for VS Code and Cursor `--workspace` to register sind in the workspace settings instead; see `sind mcp <editor> enable --help`.
+`enable` adds an entry named `sind` that runs `sind mcp start` and changes nothing else in the editor's configuration: its other settings, the other servers, comments and formatting stay. The entry runs sind by the absolute path of the binary you ran `enable` with, so run `enable` again after you move sind or install it somewhere else. `disable` removes the entry, and fails if there is none. Before either changes the file, it copies it to `<file>.<YYYYMMDD-HHMMSS>.bak` next to it; a backup is never overwritten.
+
+`sind mcp <editor> list` shows the MCP servers registered with that editor, each with its command or URL. `enable` takes `--server-name` (default `sind`), `--log-level`, `--config-path` and `--env KEY=VALUE`, and for VS Code and Cursor `--workspace` to register sind in the workspace settings (`.vscode/mcp.json`, `.cursor/mcp.json`) instead; see `sind mcp <editor> enable --help`. The editor starts sind with its own environment, not your shell's, so `sind --realm ci mcp claude enable` writes `SIND_REALM=ci` into the entry to serve the realm `ci`, as `sind --realm ci mcp start` does for a server you start yourself.
 
 ## Manual configuration
 
@@ -63,7 +65,7 @@ Each tool tells the client what it does, so that the client can decide when to a
 
 The `sind_get_*` tools and `sind_doctor` always return JSON: the server runs them with `-o json`, so they take no `-o` flag.
 
-Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`, and `sind_exec` returns the exit status of the command it ran; see [Exit Status]({{< relref "/usage/exit-status" >}}).
+Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`, and `sind_exec` returns the exit status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`); see [Exit Status]({{< relref "/usage/exit-status" >}}).
 
 To see the full list:
 
@@ -112,7 +114,7 @@ claude mcp add --transport http sind http://127.0.0.1:8080/ \
   --header "Authorization: Bearer $(cat ~/.local/state/sind/mcp-token)"
 ```
 
-Set `SIND_MCP_TOKEN` (printable ASCII, no spaces) to keep one token across restarts, for example from a password manager: `SIND_MCP_TOKEN=$(openssl rand -hex 32) sind mcp stream`. The token travels in clear text over HTTP, so pass `--host 0.0.0.0` (all interfaces) only on a network you trust, or put a TLS proxy in front of the stream. `sind mcp start` (stdio) needs no token: only the program that started it can talk to it.
+Set `SIND_MCP_TOKEN` (printable ASCII, no spaces, at least 16 characters) to keep one token across restarts, for example from a password manager: `SIND_MCP_TOKEN=$(openssl rand -hex 32) sind mcp stream`. The token travels in clear text over HTTP, so pass `--host 0.0.0.0` (all interfaces) only on a network you trust, or put a TLS proxy in front of the stream. `sind mcp start` (stdio) needs no token: only the program that started it can talk to it.
 
 ## Security
 

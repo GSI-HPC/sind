@@ -30,6 +30,28 @@ func completeClusterNames(cmd *cobra.Command, args []string, _ string) ([]string
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeRealmNames provides shell completion for the --realm flag.
+func completeRealmNames(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	realms, err := cluster.GetRealms(ctx, clientFrom(ctx))
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	names := make([]string, len(realms))
+	for i, r := range realms {
+		names[i] = r.Name
+	}
+	return names, cobra.ShellCompDirectiveNoFileComp
+}
+
+// registerOutputCompletion completes the values of the -o flag of cmd.
+func registerOutputCompletion(cmd *cobra.Command) {
+	_ = cmd.RegisterFlagCompletionFunc("output", cobra.FixedCompletions([]string{outputHuman, outputJSON}, cobra.ShellCompDirectiveNoFileComp))
+}
+
 // completeNodeNames provides shell completion for node name arguments.
 func completeNodeNames(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()

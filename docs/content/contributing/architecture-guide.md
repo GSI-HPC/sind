@@ -23,6 +23,7 @@ cmd/sind/          CLI commands (cobra)
   ├── progress.go  Progress of create, delete and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
+  ├── mcpeditor.go sind mcp <editor> enable/disable/list: register sind's MCP server with Claude Desktop, VS Code, Cursor
   ├── worker.go    Worker create/delete commands
   └── *.go         One file per command group
 
@@ -30,6 +31,8 @@ internal/mock/     Test doubles for cmdexec.Executor
   ├── mock.go      mock.Executor (FIFO + OnCall dispatch)
   ├── recorder.go  mock.Recorder (mock in unit mode, OSExecutor in integration mode)
   └── recording.go mock.RecordingExecutor, RecordedCall
+
+internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) in place, with a backup
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 

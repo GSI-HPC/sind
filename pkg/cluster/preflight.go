@@ -34,15 +34,22 @@ var (
 	ErrNoNsdelegate = errors.New("the Docker host mounts cgroup2 without nsdelegate")
 )
 
+// doctorHint ends the errors of CheckDaemon: `sind doctor` shows the commands
+// that fix what the daemon lacks.
+const doctorHint = "; run `sind doctor` for the fix"
+
 // CheckDaemon asks the Docker daemon what it is and returns DaemonSupport's
-// verdict. Call it before mesh.Manager.EnsureMesh and Create, so that an
+// verdict, with a pointer to `sind doctor`. Call it before mesh.Manager.EnsureMesh and Create, so that an
 // unsupported daemon fails before anything is pulled or created.
 func CheckDaemon(ctx context.Context, client *docker.Client) error {
 	info, err := client.Info(ctx)
 	if err != nil {
-		return fmt.Errorf("querying the Docker daemon: %w", err)
+		return fmt.Errorf("querying the Docker daemon: %w%s", err, doctorHint)
 	}
-	return DaemonSupport(info)
+	if err := DaemonSupport(info); err != nil {
+		return fmt.Errorf("%w%s", err, doctorHint)
+	}
+	return nil
 }
 
 // DaemonSupport returns nil when the daemon that info describes can run

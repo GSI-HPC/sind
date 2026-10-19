@@ -75,6 +75,9 @@ func realmNetworks(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 // not exist or is sind's own.
 func inspectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, names []docker.ContainerName) ([]*docker.ContainerInfo, error) {
 	infos, err := client.InspectContainers(ctx, names...)
+	if docker.IsNotFound(err) {
+		return nil, missingContainer(ctx, client, names, err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("inspecting containers: %w", err)
 	}
@@ -84,6 +87,19 @@ func inspectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 		}
 	}
 	return infos, nil
+}
+
+// missingContainer names the first of names that is not a container, for
+// the error of an inspect that failed with "no such object": docker's own
+// error names it, but in its own words. If every one exists by now, the
+// inspect error stands.
+func missingContainer(ctx context.Context, client *docker.Client, names []docker.ContainerName, inspectErr error) error {
+	for _, name := range names {
+		if _, err := client.InspectContainer(ctx, name); docker.IsNotFound(err) {
+			return fmt.Errorf("container %q not found", name)
+		}
+	}
+	return fmt.Errorf("inspecting containers: %w", inspectErr)
 }
 
 // Connect attaches containers outside sind to the realm's mesh network and

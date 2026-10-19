@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,4 +43,12 @@ func TestGetOutput_RejectsUnknownValue(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `invalid --output value "yaml"`)
+}
+
+func TestWriteJSON_KeepsHTMLCharacters(t *testing.T) {
+	var buf bytes.Buffer
+
+	require.NoError(t, writeJSON(&buf, map[string]string{"detail": "29.8.2 (>= 28.0) & <x>"}))
+
+	assert.Contains(t, buf.String(), `"29.8.2 (>= 28.0) & <x>"`)
 }

@@ -32,7 +32,7 @@ Checks system prerequisites and reports pass/fail for each:
 | inotify | no | `fs.inotify.max_user_instances` of at least 1024, which clusters of 10 or more nodes need |
 | DNS policy | no | polkit authorization for host DNS resolution via systemd-resolved |
 
-The results go to stdout, so they can be piped or filtered; only the error line naming the failed checks goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
+The results go to stdout, so they can be piped or filtered, with `✓` for a passed check, `✗` for a failed one and `!` for a warning; only the error line naming the failed checks, as the output prints them, goes to stderr. When a required check fails, `sind doctor` exits with a non-zero status; for a missing `nsdelegate` it also prints the commands that enable it. When Docker is not reachable, the check quotes the first line of docker's error and, for the common causes, says how to fix them:
 
 ```
 ✗ Docker Engine: not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ...
@@ -70,7 +70,7 @@ sind runs on the Docker host itself. Docker Desktop, whose daemon runs in a VM, 
 For a daemon elsewhere, the check is a warning that says why, with the way back to a local daemon:
 
 ```
-✗ Docker host: not this machine: docker context "build" connects to ssh://ci@build-host, not a unix socket (unsupported)
+! Docker host: not this machine: docker context "build" connects to ssh://ci@build-host, not a unix socket (unsupported)
 
 sind expects to run on the Docker host: --data paths, host DNS for the
 *.sind names and the inotify check refer to this machine, the nodes to the
@@ -131,7 +131,7 @@ sind version
 Prints the version and, for a release build, the commit it was built from:
 
 ```
-sind 0.10.0 (0a57d68)
+sind 0.12.0 (0a57d68)
 ```
 
 `--json` prints all fields as one JSON object, for scripts such as [sind-action](https://github.com/GSI-HPC/sind-action), which reads `version`:
@@ -141,7 +141,7 @@ sind version --json
 ```
 
 ```json
-{"version":"0.10.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}
+{"version":"0.12.0","commit":"0a57d68","goVersion":"go1.26.8","platform":"linux/amd64"}
 ```
 
 | Field | Description |
@@ -151,7 +151,7 @@ sind version --json
 | `goVersion` | the Go toolchain that built the binary |
 | `platform` | operating system and architecture, `linux/amd64` or `linux/arm64` |
 
-A development build reports the output of `git describe`, such as `0.10.0-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
+A development build reports the output of `git describe`, such as `0.12.0-3-gabc1234-dirty`; see [Make targets]({{< relref "/contributing/development-setup#make-targets" >}}) for how `make build`, `go install` and `go build` set the version.
 
 ## Verbose logging
 
@@ -316,7 +316,7 @@ Controllers of a backup pair get the same `HA` column as in `sind get cluster`.
 ## Logs
 
 ```bash
-sind logs NODE [SERVICE] [--follow|-f]
+sind logs NODE [SERVICE] [--follow|-f] [--tail|-n N]
 ```
 
 Without a `SERVICE` argument, shows container logs (stdout/stderr). With a service name, shows journalctl output for that systemd unit.
@@ -325,6 +325,7 @@ Without a `SERVICE` argument, shows container logs (stdout/stderr). With a servi
 # Container logs
 sind logs controller
 sind logs controller --follow
+sind logs controller --tail 50        # only the last 50 lines
 
 # Service logs
 sind logs controller slurmctld
@@ -440,11 +441,11 @@ Prints a CoreDNS server block that forwards the realm's zone to the mesh DNS ser
 sind.sind:53 {
     errors
     cache 30
-    forward . 172.16.1.2
+    forward . 172.18.255.254
 }
 ```
 
-`-o json` returns the zone, the server address and the block, e.g. `{"zone": "sind.sind", "server": "172.16.1.2", "corefile": "..."}`. The command fails while the DNS container is stopped, as it then has no address.
+`-o json` returns the zone, the server address and the block, e.g. `{"zone": "sind.sind", "server": "172.18.255.254", "corefile": "..."}`. The command fails while the DNS container is stopped, as it then has no address.
 
 ## Monitoring stack
 

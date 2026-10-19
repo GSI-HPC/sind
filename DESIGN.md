@@ -169,6 +169,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 | `github.com/GSI-HPC/go-clikit` | Progress spans, their displays and the event log (`progress`, `progress/display`, `progress/cliprogress`, v0.3.0; see Progress Display); the pools of the power commands and `delete cluster --all` (`fanout`); escaping of the text sind prints from docker, containers and other clients (`termtext`): the final error line, `Warning:` lines, `get` table cells and `doctor` details |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands and the progress display |
 | `github.com/njayp/ophis` | MCP server framework |
+| `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
 | `github.com/modelcontextprotocol/go-sdk` | MCP request and result types for the ophis tool middleware; the bearer-token check and HTTP server of `sind mcp stream` |
 | `github.com/spf13/afero` | Filesystem abstraction for testability |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
@@ -269,7 +270,7 @@ Rules:
 |-------------|--------|--------|
 | List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
 | Single value (`get auth-key`) | raw value, one line | stdout |
-| Checks (`doctor`) | one ✓/✗ line per check, fix instructions below a check that did not pass | stdout |
+| Checks (`doctor`) | one ✓/✗/! line per check (`!` for an advisory check that did not pass), fix instructions below a check that did not pass | stdout |
 | Mutations (`create`, `delete`, `power`) | nothing on success where stderr is not a terminal; on a terminal, their progress display (see Progress Display) | stderr |
 | Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
@@ -282,12 +283,12 @@ Rules:
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. The cells of `get` tables (`cell`), whose text comes from labels, containers and docker, and the details of `doctor` checks are escaped the same way; a table cell also shows tab and newline as `\t` and `\n`, which would otherwise start a column or a row. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
-- Unicode checkmarks (✓/✗) only in `get cluster`, `get node` and `doctor` output, and in the progress display, which draws ASCII marks unless the locale is UTF-8
+- Unicode checkmarks (✓/✗; `!` for the warnings of `doctor`) only in `get cluster`, `get node` and `doctor` output, and in the progress display, which draws ASCII marks unless the locale is UTF-8
 - All `get` subcommands and `doctor` accept `--output|-o {human,json}`; default is `human`
 
 Exit status and signals:
 - `0` on success, `1` on failure, `2` for a usage error, `130` when SIGINT or SIGTERM interrupted the command (`cmd/sind/exitcode.go`). Scripts branch on them, so a status may be added but never renumbered
-- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments. That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, `--progress`, `--progress-log`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`; `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command (see Progress Display)
+- A usage error is a command line that sind rejects before it acts: an unknown command or flag, a flag value or argument that is not valid, or the wrong number of arguments (the message ends with `(usage: sind power on NODES)`, and the removed `sind status` points to `get cluster`). That is every pflag parse error, wherever it happens (cobra parses the flags of the parents it traverses without its `FlagErrorFunc`, and `exec` parses its own), every `Args` check (`usageArgs` wraps them all, `requireKnownSubcommand` and `helpTopic` among them), and the checks a command makes of its arguments and flags before it acts, which return `usage(err)`: node arguments, `-o`, `--realm`, `--progress`, `--progress-log`, and the arguments `ssh` and `exec` parse themselves. `SIND_REALM` and the config file are not the command line, so an invalid one exits `1`; `SIND_PROGRESS` and `SIND_PROGRESS_LOG` fail no command (see Progress Display)
 - `ssh`, `exec`, `enter` and `logs` exit with the status of the docker command they run, which `docker exec` takes from the command it ran (for `ssh`, from `ssh` and the remote command), and print no error line. A docker killed by signal N exits 128 + N, as a shell reports it, except SIGINT and SIGTERM, which exit `130` like an interrupted sind: they reach docker when sent to sind's process group, and the status must not depend on which process ends first
 - SIGTERM exits `130`, not `143`, so that callers check one status for "interrupted", as in clusterctl
 - A `--wait` limit that runs out is a failure, not an interrupt: `create cluster` and `create worker` exit `1`
@@ -600,7 +601,7 @@ dev       5       26.05.4
 sind doctor [-o json]                    # check Docker version, mode and host, cgroupv2, inotify, DNS policy
 ```
 
-Checks the Docker Engine version (from `docker info`), that the daemon is rootful and has no `userns-remap` (`cluster.DaemonSupport`; skipped when Docker is not reachable), where the daemon runs (`doctor.LocateDaemon`; skipped when Docker is not reachable), that Docker runs containers on cgroup v2 (`docker info`'s `CgroupVersion`) and the Docker host mounts cgroup2 at `/sys/fs/cgroup` with `nsdelegate` (a hybrid host, whose cgroup2 is at `/sys/fs/cgroup/unified`, fails), that `fs.inotify.max_user_instances` is at least 1024 (advisory; left out when it cannot be read or the daemon runs elsewhere), and that polkit allows host DNS resolution via systemd-resolved (a `warning` without asking polkit when the daemon runs elsewhere: the mesh bridge is on the daemon's host). The results go to stdout, one `✓`/`✗` line per check, with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line naming the failed checks goes to stderr. When Docker is not reachable, the Docker Engine detail is `not reachable: ` and the first line of docker's error (`doctor.DockerUnreachable`), with a remediation for a missing `docker` CLI, a user outside the docker group and a daemon that is not running. Details are escaped in the human output like the final error line, since they can quote docker.
+Checks the Docker Engine version (from `docker info`), that the daemon is rootful and has no `userns-remap` (`cluster.DaemonSupport`; skipped when Docker is not reachable), where the daemon runs (`doctor.LocateDaemon`; skipped when Docker is not reachable), that Docker runs containers on cgroup v2 (`docker info`'s `CgroupVersion`) and the Docker host mounts cgroup2 at `/sys/fs/cgroup` with `nsdelegate` (a hybrid host, whose cgroup2 is at `/sys/fs/cgroup/unified`, fails), that `fs.inotify.max_user_instances` is at least 1024 (advisory; left out when it cannot be read or the daemon runs elsewhere), and that polkit allows host DNS resolution via systemd-resolved (a `warning` without asking polkit when the daemon runs elsewhere: the mesh bridge is on the daemon's host). The results go to stdout, one `✓`, `✗` or `!` line per check (`!` marks a `warning`, an advisory check that did not pass), with the commands that fix a check that did not pass below it. Exits non-zero if any required prerequisite fails, in either output format; the error line names the failed checks as the output prints them (`checks failed: Docker Engine, cgroupv2`) and goes to stderr. When Docker is not reachable, the Docker Engine detail is `not reachable: ` and the first line of docker's error (`doctor.DockerUnreachable`), with a remediation for a missing `docker` CLI, a user outside the docker group and a daemon that is not running. Details are escaped in the human output like the final error line, since they can quote docker.
 
 The `Docker host` check tells whether the daemon runs on the machine sind runs on. It takes the endpoint the docker CLI takes: `DOCKER_HOST`, else the context that `DOCKER_CONTEXT` names, else the current context of the CLI's configuration (`docker context use`), else the default socket; without `DOCKER_HOST`, `docker context inspect` resolves the context, without contacting the daemon (`docker.Client.Endpoint`). The daemon runs elsewhere when that endpoint is not a `unix://` socket (`tcp://`, `ssh://`), when `docker info` reports Docker Desktop (`OperatingSystem` `Docker Desktop` or `Name` `docker-desktop`), whose daemon runs in a VM, or when `docker info`'s `KernelVersion` is not this machine's `/proc/sys/kernel/osrelease`. A container shares its host's kernel, so a CI job in a container that reaches the host's daemon through a mounted socket counts as local, and a socket forwarded from a host with another kernel does not. The check is `ok`, with the endpoint, for a local daemon, and a `warning` that says why, with the way back to a local daemon, otherwise.
 
@@ -686,7 +687,7 @@ Managed nodes require the sind-generated Slurm configuration (see Generated Conf
 ### Power Control
 
 ```bash
-sind power shutdown NODES               # graceful shutdown
+sind power shutdown NODES               # graceful shutdown (alias: off)
 sind power cut NODES                    # hard power off
 sind power on NODES                     # power on
 sind power reboot NODES                 # graceful cycle (shutdown + on)
@@ -720,8 +721,8 @@ slurmctld learns that a frozen, cut or shut down worker is gone only from failed
 ### Logs
 
 ```bash
-sind logs NODE [--follow|-f]           # container logs (stdout/stderr)
-sind logs NODE SERVICE [--follow|-f]   # journalctl for specific service
+sind logs NODE [--follow|-f] [--tail|-n N]          # container logs (stdout/stderr)
+sind logs NODE SERVICE [--follow|-f] [--tail|-n N]  # journalctl for specific service
 ```
 
 Examples:
@@ -737,7 +738,7 @@ sind logs api slurmrestd               # slurmrestd journal logs on the api node
 ### Utilities
 
 ```bash
-sind version [--json]                  # print version information
+sind version [--json]                  # print version information (sind --version prints the same line)
 sind doctor [-o json]                  # check host prerequisites
 sind get realms                        # list active realms
 sind get auth-key [CLUSTER] [--type T] # output a Slurm authentication key (base64)
@@ -754,7 +755,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 
 `sind get auth-key` outputs a key that authenticates the cluster's Slurm traffic, encoded as base64, suitable for injection into external management tooling. `--type` names the Slurm authentication plugin whose key it prints: `munge` (the munge key), `slurm` (`slurm.key`, identity `clientIds`) or `jwt` (`jwt_hs256.key`, which signs the REST API tokens of a cluster with a managed api node; see API Node). Without `--type` it prints the key of the cluster's `AuthType`: `slurm.key` with identity `clientIds`, the munge key otherwise. A type the cluster does not use fails with an error that says why, e.g. `cluster "dev" has no JWT key: sind sets up JWT only for a cluster with a managed api node`; any other value is a usage error. `-o json` returns `{"type": "munge"|"slurm"|"jwt", "key": "<base64>"}`. It replaces `sind get munge-key`, which v0.11.0 removed: `sind get auth-key --type munge` prints the same key. The library takes the type as `cluster.GetAuthKey`'s last argument, empty for the `AuthType`'s key.
 
-`sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes.
+`sind get ssh-config` outputs the path to the SSH config file for the current realm. Add it as an `Include` in `~/.ssh/config` to enable direct SSH access to nodes. The path is printed before the file exists (the first `sind create cluster` of the realm writes it), with a `Note:` on stderr; `-o json` is `{"path": "...", "exists": true|false}`.
 
 `sind get mesh` shows mesh infrastructure info: network name, DNS container/IP/zone/image, SSH container/volume/image. The DNS IP is the DNS container's address while it runs, which stays the same for the life of a mesh that pins it (see Host Reboot and Docker Daemon Restart). The images are the ones the mesh containers run, which can be older than the ones a new mesh gets. Useful for external consumers that need to connect to sind networks.
 
@@ -764,7 +765,7 @@ sind get ssh-known-hosts               # output SSH known_hosts
 sind.sind:53 {
     errors
     cache 30
-    forward . 172.16.1.2
+    forward . 172.18.255.254
 }
 ```
 
@@ -783,11 +784,18 @@ sind mcp {claude,vscode,cursor} {enable,disable,list}  # register sind with an e
 
 The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
 
+The editor commands are sind's own (`cmd/sind/mcpeditor.go`, `internal/mcpconfig`), not ophis's, which rewrite the whole file from the fields they know (dropping the editor's other settings and the other servers' fields) and fail on a JSONC file:
+
+- They edit the editor's configuration in place, as JSON with comments and trailing commas (`github.com/tailscale/hujson`): only the entry of sind's server changes, and the editor's other settings, the other servers, comments and indentation stay. The servers are the members of `mcpServers` (Claude Desktop, Cursor) or `servers` (VS Code). A file that does not exist is created, readable by its owner alone, as an entry's `env` can hold secrets; one that exists keeps its permissions, and a symbolic link is followed to the file it points to.
+- `enable` adds or replaces the entry `--server-name` (default `sind`): `command` is the absolute path of the running sind binary (`os.Executable`), `args` is `["mcp", "start"]` plus `--log-level`, `env` is `--env`, and VS Code and Cursor get `"type": "stdio"`. An editor starts the server with its own environment, so the root `--realm` becomes `SIND_REALM` in `env`; an `--env SIND_REALM` that names another realm is a usage error. `disable` removes the entry and fails (exit 1) when there is none. `list` prints a `NAME`/`COMMAND` table (the command and its arguments, or the URL of an HTTP server), without the servers' environment.
+- Before it changes a file that exists, `enable` or `disable` copies it to `<file>.<YYYYMMDD-HHMMSS>.bak` next to it (`-1`, `-2` … appended if that exists), so no backup is ever overwritten; `-v` logs its path. An unchanged file is not written and gets no backup. The new file replaces the old one through a temporary file and a rename.
+- The default files are `claude_desktop_config.json` in `Claude/` of the user configuration directory (`os.UserConfigDir`: `$XDG_CONFIG_HOME` or `~/.config` on Linux), `Code/User/mcp.json` there for VS Code, and `~/.cursor/mcp.json`; `--workspace` (VS Code, Cursor) selects `.vscode/mcp.json` or `.cursor/mcp.json` in the working directory, and `--config-path` any file.
+
 - The server reports itself as `sind` with the version `sind version` prints.
-- `--realm` on `sind mcp start` or `sind mcp stream` applies to every tool call: the server sets `SIND_REALM` for the sind processes it runs, which take the call's flags and the server's environment. The `mcp` commands take no arguments: an extra one is a usage error.
+- `--realm` on `sind mcp start` or `sind mcp stream` applies to every tool call: the server sets `SIND_REALM` for the sind processes it runs, which take the call's flags and the server's environment; on `sind mcp <editor> enable` it is written to the entry's `env`. The `mcp` commands take no arguments: an extra one is a usage error.
 - ophis passes no flag for an empty array, so a middleware turns it into `[""]`, which ophis passes as the flag given empty (`--device ""`): for `sind_create_worker`, `"device": []` gives the new workers no devices, as `--device=` does, while leaving the flag out inherits the newest worker's.
 
-- `sind mcp stream` listens on `127.0.0.1` by default; `--host 0.0.0.0` opts in to all interfaces. Every request needs `Authorization: Bearer <token>` (go-sdk's `auth.RequireBearerToken`, constant-time comparison), else `401`: loopback keeps out other hosts but not the other users of this one, and every tool runs sind with the Docker access of the user who started the stream. The token is `SIND_MCP_TOKEN` (printable ASCII without spaces) or, when that is unset, a new `crypto/rand` token written at every start to `$XDG_STATE_HOME/sind/mcp-token` (`~/.local/state/sind/mcp-token`), mode `0600`, through a temporary file and a rename. The stream prints the listen URL, where the token is (never the token) and a client configuration to stderr. ophis's own stream has no hook for authentication, so `runMCPStream` (`cmd/sind/mcpstream.go`) replaces its run function and keeps its flags: it runs `sind mcp start`'s ophis server on an in-memory transport, lists its tools through an MCP client session, and serves them from a second MCP server whose handlers forward each call through that session, so ophis still builds every tool and runs every call with sind's selectors and middlewares. Stopped by SIGINT or SIGTERM, it shuts down and exits 0. `sind mcp start` (stdio) is unchanged and needs no token.
+- `sind mcp stream` listens on `127.0.0.1` by default; `--host 0.0.0.0` opts in to all interfaces. Every request needs `Authorization: Bearer <token>` (go-sdk's `auth.RequireBearerToken`, constant-time comparison), else `401`: loopback keeps out other hosts but not the other users of this one, and every tool runs sind with the Docker access of the user who started the stream. The token is `SIND_MCP_TOKEN` (printable ASCII without spaces, at least 16 characters) or, when that is unset, a new `crypto/rand` token written at every start to `$XDG_STATE_HOME/sind/mcp-token` (`~/.local/state/sind/mcp-token`), mode `0600`, through a temporary file and a rename. The stream prints the listen URL, where the token is (never the token) and a client configuration to stderr. ophis's own stream has no hook for authentication, so `runMCPStream` (`cmd/sind/mcpstream.go`) replaces its run function and keeps its flags: it runs `sind mcp start`'s ophis server on an in-memory transport, lists its tools through an MCP client session, and serves them from a second MCP server whose handlers forward each call through that session, so ophis still builds every tool and runs every call with sind's selectors and middlewares. Stopped by SIGINT or SIGTERM, it shuts down and exits 0. `sind mcp start` (stdio) is unchanged and needs no token.
 - Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get auth-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `power on`, `power unfreeze`, `connect container`) or destructive (`destructiveHint: true`: `create`, `delete`, `disconnect container`, `exec`, and the other `power` actions). `create cluster` and `create worker` count as destructive because their flags choose the image a node runs as root, capabilities, devices, security options, a config file and a host directory mounted read-write: one call can run code with host-root power. A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
@@ -795,7 +803,7 @@ The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each too
 - `sind mcp start` and `sind mcp stream` set `SIND_PROGRESS=none` and unset `SIND_PROGRESS_LOG` for the sind processes they run (`withoutProgress`), which inherit the server's environment: a `SIND_PROGRESS=plain` set for the user's shell would add its lines to every tool's output, a `SIND_PROGRESS_LOG` of `/dev/stderr` its events, and one that cannot be opened a note.
 - A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
 - A cancelled call (`notifications/cancelled`) or a client that disconnects ends the call's context, and ophis then ends the tool's sind process with SIGKILL, which would skip the rollback of a failed `create` and leave partial resources, the realm lock and orphaned docker children behind. The tools that change state (`create`, `delete`, `connect`, `disconnect` and `power`) therefore run to completion on a context that ignores the cancellation (`mcpRunsToCompletion`): a cancelled create finishes, or rolls back, on its own, bounded by `--wait`, and the client gets no result. Read-only tools and `exec` stay cancellable. `sind mcp stream` waits at most `mcpShutdownTimeout` (5 s) for the MCP server to stop, so a call still running does not hold up its shutdown; the sind process it started goes on to finish or roll back.
-- A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`, and `sind_exec` returns the status of the command it ran.
+- A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`, and `sind_exec` returns the status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`).
 
 ## Node Arguments
 
@@ -808,7 +816,7 @@ Commands accepting node arguments use DNS-style names, written as a node set exp
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name.
+The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name.
 
 ### Node Sets
 
@@ -1110,7 +1118,7 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 
 sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. The root command checks `--realm` before any command runs (`checkRealmFlag`), so it is a usage error even for a command that uses no realm, such as `version` or `get realms`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
 
-The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when `get cluster` does not find a cluster in its realm, the error names the realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (it exists in realm "ci-42")`).
+The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when a command does not find a cluster in its realm, the error names the clusters the realm holds and the other realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (existing clusters: default; it exists in realm "ci-42")`). Every command that takes a cluster or a node reports a missing cluster this way (`ErrClusterNotFound`, `clusterNotFound`), `get nodes CLUSTER` included, which fails with exit status 1 instead of listing no nodes, and `logs` and `ssh` check the node first (`cluster.CheckNode`), so docker's error with an internal container name never reaches the user. A node missing from an existing cluster is `node "x" not found in cluster "dev"` (`ErrNodeNotFound`).
 
 Resource names join realm and cluster with `-`, so realm `ci` with cluster `42-dev` and realm `ci-42` with cluster `dev` share the names `ci-42-dev-*`. The second `sind create cluster` fails its preflight check, and `sind delete cluster` only removes a network or volume whose `sind.realm` and `sind.cluster` labels, if present, name the cluster being deleted.
 
@@ -2162,9 +2170,10 @@ The file lock stays as the fast path: commands of one user wait for each other i
 ### Protected operations
 
 - `sind create cluster`
-- `sind delete cluster` (single and `--all`)
+- `sind delete cluster` (single and `--all`) and `sind delete realm`
 - `sind create worker`
 - `sind delete worker`
+- `sind connect container` and `sind disconnect container`
 - `sind power on`, `sind power reboot` and `sind power cycle` (they start a stopped mesh and rewrite DNS records)
 
 Read-only operations (`get`, `logs`, `ssh`, etc.) and the other `power` commands do not acquire the lock.

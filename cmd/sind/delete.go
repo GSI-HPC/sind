@@ -45,7 +45,7 @@ func newDeleteClusterCommand() *cobra.Command {
 		}),
 	}
 
-	cmd.Flags().Bool("all", false, "delete all clusters")
+	cmd.Flags().Bool("all", false, "delete all clusters of the realm, and its mesh once the last one is gone")
 
 	return cmd
 }

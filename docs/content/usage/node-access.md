@@ -66,7 +66,7 @@ sind enter dev      # dev cluster
 sind exec [CLUSTER] [--user USER] -- COMMAND [ARGS...]
 ```
 
-Runs a one-shot command on the submitter (or controller). The `--` separator is required. The working directory inside the container is the data mount, as for `enter`.
+Runs a command on the submitter (or controller). The `--` separator is required. With a terminal at both ends, the command gets a pseudo-terminal, as with `ssh`, so `sind exec -- top` and `sind exec -- srun --pty bash` work; with redirected input or output it runs without one. The working directory inside the container is the data mount, as for `enter`.
 
 ```bash
 sind exec -- sinfo

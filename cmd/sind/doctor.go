@@ -125,6 +125,7 @@ func newDoctorCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringP("output", "o", "human", "output format (human|json)")
+	registerOutputCompletion(cmd)
 
 	return cmd
 }
@@ -142,7 +143,6 @@ func runDoctor(cmd *cobra.Command) error {
 	}
 	mgr := meshMgrFrom(ctx, client, realm)
 	var checks []doctorCheck
-	var failures []string
 
 	// Check Docker Engine version.
 	engine := doctorCheck{Name: "Docker Engine", Status: checkFailed}
@@ -154,9 +154,6 @@ func runDoctor(cmd *cobra.Command) error {
 	} else {
 		engine.Status = checkOK
 		engine.Detail = fmt.Sprintf("%s (>= %d.0)", info.ServerVersion, doctor.MinDockerMajor)
-	}
-	if engine.Status == checkFailed {
-		failures = append(failures, "docker")
 	}
 	checks = append(checks, engine)
 
@@ -172,9 +169,6 @@ func runDoctor(cmd *cobra.Command) error {
 			daemon = doctorCheck{Name: "Docker daemon", Status: checkFailed,
 				Detail: "userns-remap enabled (sind needs a daemon without it)", Remediation: usernsRemediation}
 		}
-		if daemon.Status == checkFailed {
-			failures = append(failures, "docker-daemon")
-		}
 		checks = append(checks, daemon)
 	}
 
@@ -188,11 +182,7 @@ func runDoctor(cmd *cobra.Command) error {
 		checks = append(checks, hostCheck(loc, locErr))
 	}
 
-	cgroup, failure := cgroupCheck(ctx, client, fs, info, local)
-	if failure != "" {
-		failures = append(failures, failure)
-	}
-	checks = append(checks, cgroup)
+	checks = append(checks, cgroupCheck(ctx, client, fs, info, local))
 
 	// Advisory: enough inotify instances for large clusters. The limit is
 	// the Docker host's, so the check is left out for a daemon elsewhere.
@@ -231,8 +221,16 @@ func runDoctor(cmd *cobra.Command) error {
 	} else {
 		printChecks(cmd.OutOrStdout(), checks)
 	}
-	if len(failures) > 0 {
-		return fmt.Errorf("checks failed: %s", strings.Join(failures, ", "))
+	// The names are the ones the output shows, so the error line points at
+	// the lines marked ✗.
+	var failed []string
+	for _, c := range checks {
+		if c.Status == checkFailed {
+			failed = append(failed, c.Name)
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("checks failed: %s", strings.Join(failed, ", "))
 	}
 	return nil
 }
@@ -252,18 +250,17 @@ func hostCheck(loc doctor.DaemonLocation, err error) doctorCheck {
 }
 
 // cgroupCheck checks that the Docker host runs the unified cgroup2
-// hierarchy with nsdelegate, and returns the check and, when it failed,
-// the name of the failure. The cgroup version comes from the daemon (info).
+// hierarchy with nsdelegate. The cgroup version comes from the daemon (info).
 // For a daemon on this machine the cgroup2 mount comes from /proc/mounts in
 // fs, as the kernel is the same; for one elsewhere, from a throwaway
 // container of the default node image (doctor.ProbeCgroupInfo), if the
 // daemon has that image: doctor pulls none.
-func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *docker.DaemonInfo, local bool) (doctorCheck, string) {
+func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *docker.DaemonInfo, local bool) doctorCheck {
 	log := sindlog.From(ctx)
 	if info != nil && info.CgroupVersion != "" && info.CgroupVersion != "2" {
 		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
 			Detail:      fmt.Sprintf("Docker runs containers on cgroup v%s (sind requires cgroupv2)", info.CgroupVersion),
-			Remediation: unifiedRemediation}, "cgroup"
+			Remediation: unifiedRemediation}
 	}
 	var mountPath, where string
 	var hasV2, hasNsd bool
@@ -272,20 +269,20 @@ func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *
 		log.Log(ctx, sindlog.LevelTrace, "reading /proc/mounts for cgroup2 info")
 		mountPath, hasV2, hasNsd = doctor.CgroupInfo(fs)
 	case info == nil:
-		return doctorCheck{Name: "cgroupv2", Status: checkWarning, Detail: "nsdelegate not checked: Docker is not reachable"}, ""
+		return doctorCheck{Name: "cgroupv2", Status: checkWarning, Detail: "nsdelegate not checked: Docker is not reachable"}
 	default:
 		image := config.DefaultImage
 		_, present, err := client.ImageLabels(ctx, image)
 		if err == nil && !present {
 			return doctorCheck{Name: "cgroupv2", Status: checkWarning,
 				Detail:      fmt.Sprintf("nsdelegate not checked: the Docker host has no %s to probe it with (sind create checks it)", image),
-				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + image}, ""
+				Remediation: "Pull the node image, then run sind doctor again:\n\ndocker pull " + image}
 		}
 		if err == nil {
 			mountPath, hasV2, hasNsd, err = doctor.ProbeCgroupInfo(ctx, client, image)
 		}
 		if err != nil {
-			return doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not checked: " + doctor.ErrorLine(err)}, "cgroup"
+			return doctorCheck{Name: "cgroupv2", Status: checkFailed, Detail: "nsdelegate not checked: " + doctor.ErrorLine(err)}
 		}
 		where = ", in a container"
 	}
@@ -294,15 +291,24 @@ func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *
 	case !hasV2 && mountPath != "":
 		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
 			Detail:      fmt.Sprintf("hybrid hierarchy: cgroup2 is mounted at %s, not %s (sind requires cgroupv2)", mountPath, doctor.CgroupRoot),
-			Remediation: unifiedRemediation}, "cgroup"
+			Remediation: unifiedRemediation}
 	case !hasV2:
 		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation}, "cgroup"
+			Detail: "not mounted (sind requires cgroupv2)", Remediation: unifiedRemediation}
 	case !hasNsd:
 		return doctorCheck{Name: "cgroupv2", Status: checkFailed,
-			Detail: "nsdelegate not found", Remediation: doctor.NsdelegateRemediation(mountPath)}, "cgroup-nsdelegate"
+			Detail: "nsdelegate not found", Remediation: doctor.NsdelegateRemediation(mountPath)}
 	}
-	return doctorCheck{Name: "cgroupv2", Status: checkOK, Detail: fmt.Sprintf("nsdelegate enabled (%s%s)", mountPath, where)}, ""
+	return doctorCheck{Name: "cgroupv2", Status: checkOK, Detail: fmt.Sprintf("nsdelegate enabled (%s%s)", mountPath, where)}
+}
+
+// statusMark is the mark of a check: ✓ passed, ✗ failed, and ! for an
+// advisory check that did not pass, which leaves the exit status alone.
+func statusMark(status string) string {
+	if status == checkWarning {
+		return "!"
+	}
+	return checkmark(status == checkOK)
 }
 
 // printChecks writes one line per check, each failed or warning check
@@ -310,7 +316,7 @@ func cgroupCheck(ctx context.Context, client *docker.Client, fs afero.Fs, info *
 // docker wrote, so it is escaped.
 func printChecks(w io.Writer, checks []doctorCheck) {
 	for _, c := range checks {
-		_, _ = fmt.Fprintf(w, "%s %s: %s\n", checkmark(c.Status == checkOK), c.Name, termtext.EscapeLines(c.Detail))
+		_, _ = fmt.Fprintf(w, "%s %s: %s\n", statusMark(c.Status), c.Name, termtext.EscapeLines(c.Detail))
 		if c.Remediation != "" {
 			_, _ = fmt.Fprintf(w, "\n%s\n\n", c.Remediation)
 		}

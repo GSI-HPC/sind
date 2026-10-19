@@ -55,10 +55,11 @@ func newCreateClusterCommand() *cobra.Command {
 	var configFile string
 
 	cmd := &cobra.Command{
-		Use:               "cluster [NAME] [--config FILE]",
-		Short:             "Create a Slurm cluster",
-		Args:              optionalCluster,
-		ValidArgsFunction: completeClusterNames,
+		Use:   "cluster [NAME] [--config FILE]",
+		Short: "Create a Slurm cluster",
+		Args:  optionalCluster,
+		// The name is new: the existing ones would conflict.
+		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			var name string
 			if len(args) > 0 {
@@ -69,7 +70,7 @@ func newCreateClusterCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
-	cmd.Flags().String("data", ".", `host directory to mount as /data (use "volume" for Docker volume)`)
+	cmd.Flags().String("data", ".", `host directory to mount read-write as /data on every node (default: the working directory; "volume" for a Docker volume)`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
 	cmd.Flags().Bool("monitoring", false, "collect the cluster's metrics and logs in the realm's monitoring stack (adds to the config's monitoring)")
 	addWaitFlag(cmd)
@@ -206,6 +207,11 @@ func applyDataStorage(cfg *config.Cluster, dataFlag string) error {
 func applyDataFlag(cfg *config.Cluster, value string) error {
 	if value == "volume" {
 		return nil
+	}
+	// filepath.Abs("") is the working directory: an unset variable in
+	// --data "$DATA" would mount it read-write into every node.
+	if value == "" {
+		return usagef(`--data must not be empty: give a host directory or "volume"`)
 	}
 	abs, err := filepath.Abs(value)
 	if err != nil {

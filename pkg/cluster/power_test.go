@@ -83,6 +83,36 @@ func TestPower_Shutdown_NodeNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestPower_Shutdown_ClusterNotFound(t *testing.T) {
+	client := docker.NewClient(notFoundExecutor(t, mock.Result{}))
+
+	err := PowerShutdown(t.Context(), client, "ci-42", "dev", []string{"worker-0"})
+
+	require.ErrorIs(t, err, ErrClusterNotFound)
+	assert.EqualError(t, err, `cluster "dev" not found in realm "ci-42"`)
+}
+
+func TestCheckNode(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "ps" {
+			return mock.Result{Stdout: powerContainers()}
+		}
+		return mock.Result{}
+	}
+	client := docker.NewClient(&m)
+
+	require.NoError(t, CheckNode(t.Context(), client, mesh.DefaultRealm, "dev", "worker-0"))
+
+	err := CheckNode(t.Context(), client, mesh.DefaultRealm, "dev", "worker-99")
+	require.ErrorIs(t, err, ErrNodeNotFound)
+	assert.EqualError(t, err, `node "worker-99" not found in cluster "dev"`)
+
+	client = docker.NewClient(notFoundExecutor(t, mock.Result{}))
+	err = CheckNode(t.Context(), client, "ci-42", "dev", "worker-0")
+	require.ErrorIs(t, err, ErrClusterNotFound)
+}
+
 func TestPower_Shutdown_StopError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {

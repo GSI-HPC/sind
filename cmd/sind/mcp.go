@@ -191,10 +191,29 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 		if mcpRunsToCompletion(req.Params.Name) {
 			ctx = context.WithoutCancel(ctx)
 		}
+		run = failedAsError(run)
 		if next == nil {
 			return run(ctx, req, in)
 		}
 		return next(ctx, req, in, run)
+	}
+}
+
+// failedAsError wraps a tool run so that a command that exits non-zero
+// comes back as an error result (isError: true). ophis returns it as an
+// ordinary result with the exit code in the output, and clients that key
+// on isError would take the failure for a success.
+func failedAsError(run ophis.ExecuteFunc) ophis.ExecuteFunc {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		res, out, err := run(ctx, req, in)
+		if err != nil || out.ExitCode == 0 {
+			return res, out, err
+		}
+		if res == nil {
+			res = &mcp.CallToolResult{}
+		}
+		res.IsError = true
+		return res, out, nil
 	}
 }
 
@@ -253,7 +272,8 @@ func commandPath(cmd *cobra.Command) string {
 // newMCPCommand returns the `sind mcp` command group, which serves sind's
 // commands as MCP tools through ophis. `sind mcp stream` keeps ophis's
 // flags but runs sind's own HTTP server, which requires a bearer token
-// (runMCPStream).
+// (runMCPStream), and the editor commands are sind's own
+// (newMCPEditorCommand).
 func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 	cmd := ophis.Command(cfg)
 	var start, stream *cobra.Command
@@ -264,7 +284,12 @@ func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 			start = sub
 		case "stream":
 			stream = sub
+		case "claude", "vscode", "cursor":
+			cmd.RemoveCommand(sub)
 		}
+	}
+	for _, e := range mcpEditors {
+		cmd.AddCommand(newMCPEditorCommand(e))
 	}
 	stream.Long = `Serve sind's MCP tools over streamable HTTP. Every request needs the
 header "Authorization: Bearer <token>". The token is ` + mcpTokenEnv + ` or, when

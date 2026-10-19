@@ -41,7 +41,7 @@ sind --realm ci-42 get cluster dev
 sind --realm ci-42 delete cluster dev
 ```
 
-When `sind get cluster` does not find a cluster in its realm, the error names the realms that hold a cluster of that name, for example `cluster "dev" not found in realm "sind" (it exists in realm "ci-42")`.
+When a command does not find a cluster in its realm, the error names the clusters the realm does hold and the other realms that hold a cluster of that name, for example `cluster "dev" not found in realm "sind" (existing clusters: default; it exists in realm "ci-42")`. `sind get cluster`, `get nodes`, `get auth-key`, `enter`, `exec`, `ssh`, `logs`, `power`, `create worker` and `delete worker` all report it this way, and exit `1`.
 
 A realm name must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-` (for example `ci-42`, not `CI-42`, `ci_42` or `ci.42`). sind rejects an invalid realm from any source. An invalid `--realm` fails every command with exit status 2, even one that does not use a realm such as `sind version`; `SIND_REALM` is only checked when it is the realm in effect.
 
@@ -60,7 +60,7 @@ With realm `ci-42`, resources are prefixed accordingly:
 
 ## Advisory locking
 
-Mutating operations (`create cluster`, `delete cluster`, `create worker`, `delete worker`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm lock to prevent concurrent modifications. Read-only operations (`get`, `logs`, etc.) are not affected. The lock has two parts:
+Mutating operations (`create cluster`, `delete cluster`, `delete realm`, `create worker`, `delete worker`, `connect container`, `disconnect container`, and `power on`, `reboot` and `cycle`, which start the mesh and rewrite DNS records) acquire a per-realm lock to prevent concurrent modifications. Read-only operations (`get`, `logs`, etc.) are not affected. The lock has two parts:
 
 - A file lock in the invoking user's state directory, which orders that user's commands without asking the Docker daemon:
 

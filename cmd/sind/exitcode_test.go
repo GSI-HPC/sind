@@ -55,6 +55,12 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"--realm", "Not_A_Realm", "get", "clusters"}, `--realm: invalid realm name "Not_A_Realm"`},
 		{[]string{"get", "node", "worker-0.dev.sind.sind"}, "not the FQDN"},
 		{[]string{"get", "node", "worker-0.Not_A_Name"}, `invalid node name "worker-0.Not_A_Name"`},
+		{[]string{"power", "on", "controller.default.sind.sind"}, `not the FQDN "controller.default.sind.sind"`},
+		{[]string{"delete", "worker", "worker-0.default.sind.sind"}, `not the FQDN "worker-0.default.sind.sind"`},
+		{[]string{"logs", "controller.default.sind.sind"}, `not the FQDN "controller.default.sind.sind"`},
+		{[]string{"ssh", "worker-0.default.sind.sind"}, `not the FQDN "worker-0.default.sind.sind"`},
+		{[]string{"power", "on", "a.b.c"}, `invalid node name "a.b.c": want NODE[.CLUSTER]`},
+		{[]string{"power", "on", "Worker-0"}, `invalid node name "Worker-0": it has uppercase letters`},
 		{[]string{"power", "on", "worker-["}, "expanding nodes"},
 		{[]string{"power", "on", "@compute"}, "expanding nodes: group @compute: sind has no node groups"},
 		// The arguments are joined with a space, so an operator may start
@@ -159,11 +165,16 @@ func fakeDockerOnPath(t *testing.T, exit string) string {
 }
 
 // submitterCtx returns a context whose docker client finds the default
-// cluster's submitter, the target of exec and enter.
+// cluster's submitter, the target of exec and enter, and its worker-0.
 func submitterCtx(ctx context.Context) context.Context {
-	var m mock.Executor
-	m.AddResult(`{"ID":"abc","Names":"sind-default-submitter","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=submitter"}`+"\n", "", nil)
-	return withClient(ctx, docker.NewClient(&m))
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[0] != "ps" {
+			return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+		}
+		return mock.Result{Stdout: `{"ID":"abc","Names":"sind-default-submitter","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=submitter"}` + "\n" +
+			`{"ID":"def","Names":"sind-default-worker-0","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=worker"}` + "\n"}
+	}}
+	return withClient(ctx, docker.NewClient(m))
 }
 
 // TestRun_PassesTheChildStatusThrough checks that ssh, exec, enter and logs
@@ -221,7 +232,7 @@ func TestRun_InterruptedChildExits130(t *testing.T) {
 	}()
 	var stderr bytes.Buffer
 
-	code := run(ctx, []string{"ssh", "worker-0", "--", "sleep", "60"}, &stderr)
+	code := run(submitterCtx(ctx), []string{"ssh", "worker-0", "--", "sleep", "60"}, &stderr)
 
 	_, err := os.Stat(started)
 	require.NoError(t, err, "docker was never started")
@@ -235,8 +246,23 @@ func TestRun_DockerThatCannotStartExits1(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var stderr bytes.Buffer
 
-	code := run(noDocker(t.Context()), []string{"ssh", "worker-0", "--", "true"}, &stderr)
+	code := run(submitterCtx(t.Context()), []string{"ssh", "worker-0", "--", "true"}, &stderr)
 
 	assert.Equal(t, exitFailure, code)
 	assert.Contains(t, stderr.String(), "executable file not found")
+}
+
+func TestArityErrorNamesTheUsage(t *testing.T) {
+	_, _, err := executeCommand("power", "on")
+
+	require.Error(t, err)
+	assert.True(t, isUsageError(err))
+	assert.Contains(t, err.Error(), "only received 0 (usage: sind power on NODES)")
+}
+
+func TestRemovedStatusCommandPointsToGetCluster(t *testing.T) {
+	_, _, err := executeCommand("status")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `(it is now "get cluster")`)
 }

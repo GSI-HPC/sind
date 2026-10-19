@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-nodeset"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -48,7 +49,8 @@ func (noGroups) All(string) (string, error)             { return "", errNoGroups
 // come in go-nodeset's order: by the name with its numbers left out, then
 // by number. An expression that names no node is an error, and so is one
 // that names nodes of two clusters whose names differ only in zero padding
-// (see paddingClash).
+// (see paddingClash), and one that is not NODE[.CLUSTER], such as an FQDN
+// (see parseNodeName).
 func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	set, err := nodeset.ParseWith(expr, noGroups{})
 	if err != nil {
@@ -66,19 +68,40 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 
 	targets := make([]nodeTarget, 0, len(names))
 	for _, name := range names {
-		t := nodeTarget{ShortName: name, Cluster: clusterOf(name)}
-		if i := strings.LastIndex(name, "."); i >= 0 {
-			t.ShortName = name[:i]
-		}
-		if t.ShortName == "" || t.Cluster == "" {
-			return nil, usagef("invalid node name %q", name)
-		}
-		if err := config.CheckName("cluster", t.Cluster); err != nil {
-			return nil, usagef("invalid node name %q: %w", name, err)
+		t, err := parseNodeName(name)
+		if err != nil {
+			return nil, err
 		}
 		targets = append(targets, t)
 	}
 	return targets, nil
+}
+
+// parseNodeName splits one node name into <shortName>.<cluster>, the cluster
+// defaulting to "default", and checks both parts. A name with more dots is
+// not NODE[.CLUSTER]: the FQDN that get nodes prints is NODE.CLUSTER.REALM.sind,
+// which the node commands do not take, as they act in the realm of --realm.
+func parseNodeName(name string) (nodeTarget, error) {
+	t := nodeTarget{ShortName: name, Cluster: clusterOf(name)}
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		t.ShortName = name[:i]
+	}
+	if t.ShortName == "" || t.Cluster == "" {
+		return nodeTarget{}, usagef("invalid node name %q", name)
+	}
+	if strings.Contains(t.ShortName, ".") {
+		if strings.HasSuffix(name, "."+cluster.DNSSuffix) {
+			return nodeTarget{}, usagef("use NODE[.CLUSTER], not the FQDN %q", name)
+		}
+		return nodeTarget{}, usagef("invalid node name %q: want NODE[.CLUSTER]", name)
+	}
+	if err := config.CheckName("node", t.ShortName); err != nil {
+		return nodeTarget{}, usage(err)
+	}
+	if err := config.CheckName("cluster", t.Cluster); err != nil {
+		return nodeTarget{}, usagef("invalid node name %q: %w", name, err)
+	}
+	return t, nil
 }
 
 // clusterOf returns the cluster of a node name: what follows its last ".",

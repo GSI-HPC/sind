@@ -125,13 +125,17 @@ func GetAllNodes(ctx context.Context, client *docker.Client, realm string) ([]*N
 	return buildNodeSummaries(ctx, client, realm, containers)
 }
 
-// GetNodes lists all nodes in the named cluster.
+// GetNodes lists all nodes in the named cluster. A cluster that does not
+// exist is an error (see ErrClusterNotFound), not an empty list.
 func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName string) ([]*NodeSummary, error) {
 	containers, err := client.ListContainers(ctx,
 		"label="+LabelRealm+"="+realm,
 		"label="+LabelCluster+"="+clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	if err := checkClusterExists(ctx, client, realm, clusterName, containers); err != nil {
+		return nil, err
 	}
 	return buildNodeSummaries(ctx, client, realm, containers)
 }
@@ -400,7 +404,7 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	if len(containers) == 0 {
-		return nil, fmt.Errorf("no containers found in cluster %q", clusterName)
+		return nil, clusterNotFound(ctx, client, realm, clusterName)
 	}
 	primary := AuthMunge
 	if IdentityFromLabels(containers[0].Labels) == config.IdentityClientIDs {

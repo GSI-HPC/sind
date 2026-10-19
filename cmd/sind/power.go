@@ -33,25 +33,35 @@ func newPowerCommand() *cobra.Command {
 	// stopped mesh, and rewrites the nodes' DNS records), so they hold the
 	// realm lock.
 	cmds := []struct {
-		use    string
-		short  string
-		fn     powerFunc
-		locked bool
+		use     string
+		aliases []string
+		short   string
+		fn      powerFunc
+		locked  bool
 	}{
-		{"shutdown NODES", "Graceful shutdown", withRealm(cluster.PowerShutdown), false},
-		{"cut NODES", "Hard power off", withRealm(cluster.PowerCut), false},
-		{"on NODES", "Power on", cluster.PowerOn, true},
-		{"reboot NODES", "Graceful reboot", cluster.PowerReboot, true},
-		{"cycle NODES", "Hard power cycle", cluster.PowerCycle, true},
-		{"freeze NODES", "Simulate unresponsive node", withRealm(cluster.PowerFreeze), false},
-		{"unfreeze NODES", "Resume frozen node", withRealm(cluster.PowerUnfreeze), false},
+		// off is the verb users guess first; without an alias cobra
+		// suggests the opposite action, "on".
+		{"shutdown NODES", []string{"off"}, "Gracefully shut down nodes (docker stop)", withRealm(cluster.PowerShutdown), false},
+		{"cut NODES", nil, "Hard power off nodes (docker kill)", withRealm(cluster.PowerCut), false},
+		{"on NODES", nil, "Power on nodes (docker start)", cluster.PowerOn, true},
+		{"reboot NODES", nil, "Gracefully reboot nodes (shutdown, then on)", cluster.PowerReboot, true},
+		{"cycle NODES", nil, "Hard power cycle nodes (cut, then on)", cluster.PowerCycle, true},
+		{"freeze NODES", nil, "Simulate unresponsive nodes (docker pause)", withRealm(cluster.PowerFreeze), false},
+		{"unfreeze NODES", nil, "Resume frozen nodes (docker unpause)", withRealm(cluster.PowerUnfreeze), false},
 	}
 
 	for _, c := range cmds {
 		fn, locked := c.fn, c.locked
 		cmd.AddCommand(&cobra.Command{
-			Use:               c.use,
-			Short:             c.short,
+			Use:     c.use,
+			Aliases: c.aliases,
+			Short:   c.short,
+			Long: c.short + `.
+
+NODES is one or more node arguments: a node (worker-0), a node of a cluster
+(worker-0.dev) or a node set (worker-[0-3], worker-[0-3].dev). The cluster
+defaults to "default".`,
+			Example:           "  sind power " + strings.Fields(c.use)[0] + " worker-[0-3]\n  sind power " + strings.Fields(c.use)[0] + " controller.dev",
 			Args:              cobra.MinimumNArgs(1),
 			ValidArgsFunction: completeNodeNames,
 			RunE: withProgress(func(cmd *cobra.Command, args []string) error {

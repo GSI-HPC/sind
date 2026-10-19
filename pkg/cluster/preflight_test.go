@@ -434,12 +434,13 @@ func TestCheckDaemon(t *testing.T) {
 				return
 			}
 			require.ErrorIs(t, err, tt.wantErr)
+			assert.Contains(t, err.Error(), "; run `sind doctor` for the fix")
 			if tt.wantErr == ErrCgroupV1 {
 				assert.Contains(t, err.Error(), "sind requires cgroup v2")
 				return
 			}
 			if tt.wantErr == ErrDockerTooOld {
-				assert.EqualError(t, err, "the Docker Engine is too old: 27.5.1; sind requires Docker Engine 28.0 or later, for the writable cgroups and network options of its nodes")
+				assert.EqualError(t, err, "the Docker Engine is too old: 27.5.1; sind requires Docker Engine 28.0 or later, for the writable cgroups and network options of its nodes; run `sind doctor` for the fix")
 				return
 			}
 			assert.Contains(t, err.Error(), "sind needs a rootful Docker daemon without userns-remap")
@@ -452,6 +453,7 @@ func TestCheckDaemon_InfoError(t *testing.T) {
 	m.AddResult("", "Cannot connect to the Docker daemon\n", testutil.ExitCode1(t))
 	err := CheckDaemon(t.Context(), docker.NewClient(&m))
 	require.ErrorContains(t, err, "querying the Docker daemon: exit status 1: Cannot connect to the Docker daemon")
+	require.ErrorContains(t, err, "run `sind doctor` for the fix")
 }
 
 // --- CheckNsdelegate ---

@@ -67,17 +67,17 @@ func TestParse_AccountsErrors(t *testing.T) {
 		{
 			name:    "unknown account field",
 			input:   "kind: Cluster\naccounts:\n  - name: physics\n    qos: normal",
-			wantErr: `account must be a name or an object: json: unknown field "qos"`,
+			wantErr: `line 4: accounts[0].qos: unknown key (valid: name, parent, limits)`,
 		},
 		{
 			name:    "account is a list",
 			input:   "kind: Cluster\naccounts:\n  - [physics]",
-			wantErr: "account must be a name or an object",
+			wantErr: "line 3: accounts[0]: expected an object, got a list",
 		},
 		{
 			name:    "limits is a list",
 			input:   "kind: Cluster\naccounts:\n  - name: physics\n    limits: [MaxJobs=1]",
-			wantErr: "limits must be a map of option names to values",
+			wantErr: "accounts[0].limits: expected an object, got a list",
 		},
 		{
 			name:    "limit is a bool",

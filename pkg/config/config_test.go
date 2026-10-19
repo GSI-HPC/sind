@@ -841,7 +841,7 @@ func TestParse_Errors(t *testing.T) {
 		{
 			name:    "missing kind",
 			input:   "name: dev",
-			wantErr: `kind must be "Cluster"`,
+			wantErr: `kind is required: add "kind: Cluster"`,
 		},
 		{
 			name:    "wrong kind",
@@ -853,7 +853,7 @@ func TestParse_Errors(t *testing.T) {
 			input: `kind: Cluster
 nodes:
   - [1, 2]`,
-			wantErr: "node must be a string",
+			wantErr: "nodes[0]: expected an object, got a list",
 		},
 		{
 			name: "node full form with invalid field type",
@@ -869,19 +869,19 @@ nodes:
 nodes:
   - worker: 3
     memory: 4g`,
-			wantErr: "shorthand node must have exactly one key",
+			wantErr: `nodes[0]: a node object needs "role: NAME"`,
 		},
 		{
 			name: "shorthand node with non-integer count",
 			input: `kind: Cluster
 nodes:
   - worker: abc`,
-			wantErr: "shorthand node count",
+			wantErr: "nodes[0].worker: expected a whole number, got a string",
 		},
 		{
 			name:    "unknown top-level field",
 			input:   "kind: Cluster\nunknownField: value",
-			wantErr: "unknown field",
+			wantErr: "line 2: unknownField: unknown key (valid: kind, name,",
 		},
 		{
 			name: "unknown node field",
@@ -889,7 +889,7 @@ nodes:
 nodes:
   - role: controller
     unknownField: value`,
-			wantErr: "unknown field",
+			wantErr: "nodes[0].unknownField: unknown key (valid: role, count,",
 		},
 	}
 

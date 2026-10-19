@@ -46,5 +46,8 @@ func validateOutputFlag(cmd *cobra.Command) error {
 func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
+	// The output is for scripts and people, not for embedding in HTML:
+	// doctor's ">= 28.0" must not become "\u003e= 28.0".
+	enc.SetEscapeHTML(false)
 	return enc.Encode(v)
 }

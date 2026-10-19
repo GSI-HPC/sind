@@ -129,6 +129,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 
+	if len(containers) == 0 {
+		return nil, clusterNotFound(ctx, client, realm, opts.ClusterName)
+	}
 	controller, ok := findController(containers, realm, opts.ClusterName)
 	if !ok {
 		return nil, errorWith(ErrClusterNotFound, "controller not found for cluster %q", opts.ClusterName)

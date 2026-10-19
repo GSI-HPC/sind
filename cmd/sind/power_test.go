@@ -24,6 +24,13 @@ func TestPower_SubcommandsExist(t *testing.T) {
 	}
 }
 
+func TestPower_OffIsShutdown(t *testing.T) {
+	cmd := NewRootCommand()
+	c, _, err := cmd.Find([]string{"power", "off"})
+	require.NoError(t, err)
+	assert.Equal(t, "shutdown", c.Name())
+}
+
 func TestPower_RequiresArgs(t *testing.T) {
 	subcmds := []string{"shutdown", "cut", "on", "reboot", "cycle", "freeze", "unfreeze"}
 

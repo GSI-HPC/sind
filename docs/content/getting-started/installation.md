@@ -21,7 +21,7 @@ gh attestation verify sind-linux-amd64 --repo GSI-HPC/sind \
   --signer-workflow GSI-HPC/sind/.github/workflows/release.yml
 ```
 
-Each release publishes a build provenance attestation for its binaries, and the [GitHub CLI](https://cli.github.com/) checks with it that sind's release workflow built the download. `--signer-workflow` matters: with `--repo` alone, any workflow of the repository would pass. Without the GitHub CLI, compare the download with the release's `checksums.txt`. That only detects a corrupted download, as the checksums come from the same release:
+Each release publishes a build provenance attestation for its binaries, and the [GitHub CLI](https://cli.github.com/) checks with it that sind's release workflow built the download. `gh attestation verify` needs a signed-in `gh` (`gh auth login`, or `GH_TOKEN` in the environment); without one, use the checksum route below. `--signer-workflow` matters: with `--repo` alone, any workflow of the repository would pass. Without the GitHub CLI, compare the download with the release's `checksums.txt`. That only detects a corrupted download, as the checksums come from the same release:
 
 ```bash
 curl -fLO https://github.com/GSI-HPC/sind/releases/latest/download/checksums.txt
@@ -58,7 +58,7 @@ Drop `-g` to pin sind in the current project's `mise.toml` instead. mise checks 
 
 {{< /tab >}}
 {{< tab "From source" >}}
-Build and install with Go:
+Build and install with Go 1.26 or later:
 
 ```bash
 go install github.com/GSI-HPC/sind/cmd/sind@latest

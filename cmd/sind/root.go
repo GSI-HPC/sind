@@ -25,6 +25,10 @@ func NewRootCommand() *cobra.Command {
 		Short: "Slurm in Docker",
 		Long:  "sind creates and manages containerized Slurm clusters for development, testing, and CI/CD workflows.",
 
+		// --version prints what `sind version` does; sind version --json
+		// stays the machine-readable form that sind-action reads.
+		Version: versionLine(),
+
 		SilenceUsage:     true,
 		SilenceErrors:    true,
 		TraverseChildren: true,
@@ -38,6 +42,8 @@ func NewRootCommand() *cobra.Command {
 		},
 	}
 
+	cmd.SetVersionTemplate("{{.Version}}\n")
+
 	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
 	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
 	cmd.PersistentFlags().String("progress", "",
@@ -46,6 +52,9 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().String("progress-log", "",
 		"append the progress events of create, delete and power to this file, one JSON object per line, "+
 			"created readable by you alone (default: "+envProgressLog+")")
+
+	_ = cmd.RegisterFlagCompletionFunc("realm", completeRealmNames)
+	_ = cmd.RegisterFlagCompletionFunc("progress", cobra.FixedCompletions(progressModeNames(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newDeleteCommand())
@@ -146,6 +155,10 @@ func requireKnownSubcommand(cmd *cobra.Command) {
 	}
 }
 
+// removedCommands maps top-level commands that sind dropped to their
+// replacement, for the hint on the error that a script gets.
+var removedCommands = map[string]string{"status": "get cluster"}
+
 // noUnknownSubcommand rejects positional arguments on a command group,
 // suggesting the closest subcommand if there is one.
 func noUnknownSubcommand(cmd *cobra.Command, args []string) error {
@@ -155,6 +168,8 @@ func noUnknownSubcommand(cmd *cobra.Command, args []string) error {
 	msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
 	if s := cmd.SuggestionsFor(args[0]); len(s) > 0 {
 		msg += fmt.Sprintf(" (did you mean %q?)", s[0])
+	} else if hint, ok := removedCommands[args[0]]; ok && cmd.Parent() == nil {
+		msg += fmt.Sprintf(" (it is now %q)", hint)
 	}
 	return errors.New(msg)
 }

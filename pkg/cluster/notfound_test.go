@@ -61,6 +61,29 @@ func TestGetStatus_NotFoundNamesOtherRealms(t *testing.T) {
 	}
 }
 
+// TestClusterNotFound_NamesExistingClusters checks that the error names the
+// clusters the realm does hold.
+func TestClusterNotFound_NamesExistingClusters(t *testing.T) {
+	exitErr := notFoundErr(t)
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "ps" && slices.Contains(args, "label=sind.realm=sind") && slices.Contains(args, "label=sind.cluster=dev"):
+			return mock.Result{}
+		case args[0] == "ps" && slices.Contains(args, "label=sind.cluster=dev"):
+			return mock.Result{Stdout: psLine("ci", "dev", "controller")}
+		case args[0] == "ps":
+			return mock.Result{Stdout: psLine("sind", "default", "controller") + "\n" + psLine("sind", "test", "controller")}
+		case args[0] == "network":
+			return mock.Result{Stderr: "Error: No such network: sind-dev-net\n", Err: exitErr}
+		}
+		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
+	}}
+
+	_, err := GetStatus(t.Context(), docker.NewClient(m), "sind", "dev")
+
+	require.EqualError(t, err, `cluster "dev" not found in realm "sind" (existing clusters: default, test; it exists in realm "ci")`)
+}
+
 func TestOtherRealms(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(psLine("ci-42", "dev", "controller")+"\n"+psLine("a", "dev", "controller")+"\n"+psLine("a", "dev", "worker-0"), "", nil)

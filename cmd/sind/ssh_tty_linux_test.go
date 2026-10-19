@@ -64,6 +64,7 @@ func sshDockerArgs(t *testing.T, stdin io.Reader, stdout io.Writer, args ...stri
 	cmd.SetOut(stdout)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
+	cmd.SetContext(submitterCtx(t.Context()))
 
 	require.NoError(t, cmd.Execute())
 	data, err := os.ReadFile(file)
@@ -104,6 +105,26 @@ func noStdout(t *testing.T) *os.File {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = f.Close() })
 	return f
+}
+
+func TestInteractive(t *testing.T) {
+	tty := openPTY(t)
+	for name, tc := range map[string]struct {
+		stdin  io.Reader
+		stdout io.Writer
+		want   bool
+	}{
+		"terminal at both ends": {tty, tty, true},
+		"output captured":       {tty, new(bytes.Buffer), false},
+		"input piped":           {strings.NewReader(""), tty, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := NewRootCommand()
+			cmd.SetIn(tc.stdin)
+			cmd.SetOut(tc.stdout)
+			assert.Equal(t, tc.want, interactive(cmd))
+		})
+	}
 }
 
 func TestStdinIsTTY_Terminal(t *testing.T) {

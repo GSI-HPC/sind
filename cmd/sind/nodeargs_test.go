@@ -66,13 +66,6 @@ func TestParseNodeArgs(t *testing.T) {
 	}
 }
 
-func TestParseNodeArgs_SplitsAtLastDot(t *testing.T) {
-	targets, err := parseNodeArgs("worker-0.lab.dev")
-	require.NoError(t, err)
-	require.Len(t, targets, 1)
-	assert.Equal(t, nodeTarget{ShortName: "worker-0.lab", Cluster: "dev"}, targets[0])
-}
-
 func TestParseNodeArgs_Errors(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -99,6 +92,11 @@ func TestParseNodeArgs_Errors(t *testing.T) {
 		{"empty result", "worker-[0-1]!worker-[0-1]", `expanding nodes: "worker-[0-1]!worker-[0-1]" names no node`},
 		{"empty short name", ".dev", `invalid node name ".dev"`},
 		{"trailing dot", "worker-0.", `invalid node name "worker-0."`},
+		{"fqdn", "controller.default.sind.sind", `use NODE[.CLUSTER], not the FQDN "controller.default.sind.sind"`},
+		{"fqdn in a set", "worker-[0-1].dev.sind.sind", `use NODE[.CLUSTER], not the FQDN "worker-0.dev.sind.sind"`},
+		{"too many labels", "a.b.c", `invalid node name "a.b.c": want NODE[.CLUSTER]`},
+		{"uppercase short name", "Worker-0", `invalid node name "Worker-0": it has uppercase letters`},
+		{"underscore in short name", "worker_0.dev", `invalid node name "worker_0"`},
 		{"invalid cluster", "worker-[0-1].my_cluster", `invalid node name "worker-0.my_cluster": invalid cluster name "my_cluster"`},
 		// go-nodeset would take each pair for one node, of the cluster
 		// written first, and act on the other cluster's node not at all.

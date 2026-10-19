@@ -19,6 +19,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +30,7 @@ func newGetCommand() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringP("output", "o", "human", "output format (human|json)")
+	registerOutputCompletion(cmd)
 
 	cmd.AddCommand(newGetClusterCommand())
 	cmd.AddCommand(newGetClustersCommand())
@@ -64,7 +66,7 @@ func newGetClustersCommand() *cobra.Command {
 func newGetNodesCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "nodes [CLUSTER]",
-		Short:             "List nodes",
+		Short:             "List the nodes of a cluster, or of every cluster of the realm",
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -126,7 +128,11 @@ func runGetClusters(cmd *cobra.Command) error {
 			c.State,
 		)
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	noteNone(cmd, len(clusters), "clusters", realm)
+	return nil
 }
 
 func newGetRealmsCommand() *cobra.Command {
@@ -159,7 +165,11 @@ func runGetRealms(cmd *cobra.Command) error {
 	for _, r := range realms {
 		_, _ = fmt.Fprintf(w, "%s\t%d\n", cell(r.Name), r.Clusters)
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	noteNone(cmd, len(realms), "realms", "")
+	return nil
 }
 
 func newGetNodeCommand() *cobra.Command {
@@ -178,23 +188,11 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
-	// An FQDN is NODE.CLUSTER.REALM.sind. Neither node short names nor
-	// cluster names contain dots, so only the dot count tells it apart
-	// from NODE.CLUSTER: the suffix alone also matches a cluster named
-	// "sind" (controller.sind).
-	if strings.Count(arg, ".") >= 2 && strings.HasSuffix(arg, "."+cluster.DNSSuffix) {
-		return usagef("use NODE[.CLUSTER], not the FQDN %q", arg)
+	target, err := parseNodeName(arg)
+	if err != nil {
+		return err
 	}
-	// Parse shortName.cluster on the first dot (neither node short names
-	// nor cluster names contain dots).
-	shortName, clusterName := arg, config.DefaultClusterName
-	if i := strings.Index(arg, "."); i >= 0 {
-		shortName = arg[:i]
-		clusterName = arg[i+1:]
-	}
-	if err := config.CheckName("cluster", clusterName); err != nil {
-		return usagef("invalid node name %q: %w", arg, err)
-	}
+	shortName, clusterName := target.ShortName, target.Cluster
 
 	client := clientFrom(cmd.Context())
 	realm, err := realmFromFlag(cmd)
@@ -289,7 +287,11 @@ func runGetAllNodes(cmd *cobra.Command) error {
 	for _, n := range nodes {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", cell(n.Container), cell(n.Cluster), cell(n.Role), cell(n.FQDN), cell(n.IP), cell(n.State))
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	noteNone(cmd, len(nodes), "nodes", realm)
+	return nil
 }
 
 func runGetNodes(cmd *cobra.Command, name string) error {
@@ -490,12 +492,19 @@ func newGetSSHConfigCommand() *cobra.Command {
 				return err
 			}
 			p := filepath.Join(dir, "ssh_config")
+			// The path is also right before the file exists, for an
+			// Include; a script that reads the file needs to know.
+			exists, _ := afero.Exists(fsFrom(cmd.Context()), p)
 			if isJSONOutput(cmd) {
 				return writeJSON(cmd.OutOrStdout(), struct {
-					Path string `json:"path"`
-				}{Path: p})
+					Path   string `json:"path"`
+					Exists bool   `json:"exists"`
+				}{Path: p, Exists: exists})
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
+			if !exists {
+				cmd.PrintErrln("Note: the file does not exist yet; sind writes it when a cluster is created in this realm")
+			}
 			return nil
 		},
 	}
@@ -812,6 +821,19 @@ func checkmark(ok bool) string {
 		return "\u2713"
 	}
 	return "\u2717"
+}
+
+// noteNone says on stderr that a table listed nothing, so that a lone header
+// is not mistaken for a failure. Stdout stays the table, for scripts.
+func noteNone(cmd *cobra.Command, n int, what, realm string) {
+	if n > 0 {
+		return
+	}
+	if realm == "" {
+		cmd.PrintErrf("No %s found.\n", what)
+		return
+	}
+	cmd.PrintErrf("No %s found in realm %q.\n", what, realm)
 }
 
 func formatServices(services cluster.ServiceHealth) string {

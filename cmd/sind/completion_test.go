@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -202,4 +203,56 @@ func TestCompleteClusterNames_DockerError(t *testing.T) {
 	names, directive := sub.ValidArgsFunction(sub, nil, "")
 	assert.Nil(t, names)
 	assert.Equal(t, cobra.ShellCompDirectiveError, directive)
+}
+
+func TestCompleteFlagValues(t *testing.T) {
+	for name, tc := range map[string]struct {
+		args []string
+		want []string
+	}{
+		"get -o":     {[]string{"get", "clusters", "-o", ""}, []string{"human", "json"}},
+		"doctor -o":  {[]string{"doctor", "-o", ""}, []string{"human", "json"}},
+		"--progress": {[]string{"--progress", ""}, progressModeNames()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, _, err := executeCommand(append([]string{cobra.ShellCompRequestCmd}, tc.args...)...)
+			require.NoError(t, err)
+			for _, w := range tc.want {
+				assert.Contains(t, out, w+"\n")
+			}
+		})
+	}
+}
+
+func TestCompleteRealmNames(t *testing.T) {
+	mock := &mock.Executor{}
+	mock.AddResult(
+		"{\"Names\":\"sind-dev-worker-0\",\"State\":\"running\",\"Labels\":\"sind.realm=sind,sind.cluster=dev\"}\n"+
+			"{\"Names\":\"ci-a-worker-0\",\"State\":\"running\",\"Labels\":\"sind.realm=ci,sind.cluster=a\"}\n", "", nil)
+	sub := findCmd(completionCtx(mock), t, "get", "clusters")
+
+	names, directive := completeRealmNames(sub, nil, "")
+
+	assert.ElementsMatch(t, []string{"sind", "ci"}, names)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestCompleteRealmNames_DockerError(t *testing.T) {
+	mock := &mock.Executor{}
+	mock.AddResult("", "boom", errors.New("exit status 1"))
+	sub := findCmd(completionCtx(mock), t, "get", "clusters")
+
+	names, directive := completeRealmNames(sub, nil, "")
+
+	assert.Nil(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveError, directive)
+}
+
+func TestCreateClusterCompletesNoExistingNames(t *testing.T) {
+	sub := findCmd(completionCtx(&mock.Executor{}), t, "create", "cluster")
+
+	names, directive := sub.ValidArgsFunction(sub, nil, "")
+
+	assert.Empty(t, names)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
