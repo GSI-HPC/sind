@@ -816,7 +816,7 @@ Commands accepting node arguments use DNS-style names, written as a node set exp
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name.
+The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name.
 
 ### Node Sets
 
@@ -1118,7 +1118,7 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 
 sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. The root command checks `--realm` before any command runs (`checkRealmFlag`), so it is a usage error even for a command that uses no realm, such as `version` or `get realms`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
 
-The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when `get cluster` does not find a cluster in its realm, the error names the realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (it exists in realm "ci-42")`).
+The realm in effect is `--realm`, then `SIND_REALM`, then, for `sind create cluster` only, the config's `realm`, then `sind` (`resolveRealm` in `cmd/sind/context.go`). Every other command resolves `--realm` > `SIND_REALM` > `sind`, so ranking `SIND_REALM` above the config keeps every command of a session, sind-action's among them, in the realm the environment names. A realm set only in the config does not carry over to later commands; when a command does not find a cluster in its realm, the error names the clusters the realm holds and the other realms that hold a cluster of that name (`cluster "dev" not found in realm "sind" (existing clusters: default; it exists in realm "ci-42")`). Every command that takes a cluster or a node reports a missing cluster this way (`ErrClusterNotFound`, `clusterNotFound`), `get nodes CLUSTER` included, which fails with exit status 1 instead of listing no nodes, and `logs` and `ssh` check the node first (`cluster.CheckNode`), so docker's error with an internal container name never reaches the user. A node missing from an existing cluster is `node "x" not found in cluster "dev"` (`ErrNodeNotFound`).
 
 Resource names join realm and cluster with `-`, so realm `ci` with cluster `42-dev` and realm `ci-42` with cluster `dev` share the names `ci-42-dev-*`. The second `sind create cluster` fails its preflight check, and `sind delete cluster` only removes a network or volume whose `sind.realm` and `sind.cluster` labels, if present, name the cluster being deleted.
 

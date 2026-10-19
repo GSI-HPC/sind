@@ -50,7 +50,7 @@ $ echo $?
 ```
 
 - The status is the command's, as `docker exec` reports it, and for `sind ssh` the remote command's, as `ssh` reports it. `ssh` exits `255` when it cannot connect. Docker's own errors, such as a container that is not running, give docker's status and message.
-- A failure before the program starts is sind's: `sind exec` in a cluster without a submitter or controller exits `1`, and a usage error exits `2`.
+- A failure before the program starts is sind's: `sind exec` in a cluster that does not exist, or without a submitter or controller, exits `1`, as do `sind ssh` and `sind logs` for a node or cluster that does not exist, and a usage error exits `2`.
 - A `docker` process killed by signal N exits 128 + N, as a shell reports it. Killed by SIGINT or SIGTERM, it exits `130`, like an interrupted sind: these signals reach `docker` when they are sent to sind's process group, as by Ctrl-C.
 
 ## Interrupts

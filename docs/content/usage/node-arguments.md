@@ -94,6 +94,8 @@ sind rejects these before it acts on any node, with exit status 2:
 - an expression that names more than 1,048,576 (2^20) nodes, refused before the names are allocated
 - a name that begins with `-`, which a command it is passed to could read as an option
 - a name with an empty short name or cluster, or an invalid cluster name: `.dev`, `worker-0.`, `worker-0.my_cluster`
+- a short name that is not a lowercase DNS label, such as `Worker-0` or `worker_0`
+- a name with more than one `.`, such as `a.b.c`, and the FQDN that `sind get nodes` prints, `worker-0.dev.sind.sind`: use `worker-0.dev`. The node commands act in the realm of `--realm`, so they take no realm in the name
 - names that differ only in the zero padding of their cluster, which a node set takes for one node: `worker-0.dev1,worker-0.dev01`
 
 ## Commands that accept node sets
