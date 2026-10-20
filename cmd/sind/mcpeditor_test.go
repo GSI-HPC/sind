@@ -115,6 +115,29 @@ func TestMCPEnable_Environment(t *testing.T) {
 	assert.Equal(t, []any{"mcp", "start"}, servers["sind"]["args"])
 }
 
+// TestMCPEnable_RealmFromEnvironment checks that enable records the realm
+// in effect, which an exported SIND_REALM sets as --realm does, unless
+// --env names one.
+func TestMCPEnable_RealmFromEnvironment(t *testing.T) {
+	t.Setenv("SIND_REALM", "ci")
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	_, _, err := executeCommand("mcp", "cursor", "enable", "--config-path", path)
+	require.NoError(t, err)
+	servers, _ := readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{"SIND_REALM": "ci"}, servers["sind"]["env"])
+
+	path = filepath.Join(t.TempDir(), "mcp.json")
+	_, _, err = executeCommand("mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_REALM=dev")
+	require.NoError(t, err)
+	servers, _ = readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{"SIND_REALM": "dev"}, servers["sind"]["env"])
+
+	t.Setenv("SIND_REALM", "Bad_Realm")
+	_, _, err = executeCommand("mcp", "cursor", "enable", "--config-path", path)
+	require.ErrorContains(t, err, `SIND_REALM: invalid realm name "Bad_Realm"`)
+	assert.False(t, cobratree.IsUsage(err), "the environment is no command line")
+}
+
 func TestMCPEnable_UsageErrors(t *testing.T) {
 	// An empty --config-path must not fall through to the default files.
 	home := t.TempDir()

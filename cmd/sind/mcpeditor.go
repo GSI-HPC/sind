@@ -101,8 +101,9 @@ func newMCPEnableCommand(e mcpEditor) *cobra.Command {
 		Long: `Register sind's MCP server with ` + e.title + `: add an entry that runs
 "sind mcp start", by the absolute path of this sind binary, or replace the
 entry of that name. The rest of the configuration file stays as it is, and
-the file as it was is first copied to <file>.<time>.bak. The root --realm
-sets SIND_REALM in the entry's environment, so the server serves that realm.`,
+the file as it was is first copied to <file>.<time>.bak. The realm in
+effect, of the root --realm or SIND_REALM, is set as SIND_REALM in the
+entry's environment, so the server serves that realm.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPEnable(cmd, e, f)
@@ -216,9 +217,10 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 }
 
 // mcpEntry returns the entry enable writes: this binary, by its absolute
-// path, running `mcp start`, with the environment of --env and the root's
-// --realm. An editor starts its MCP servers with its own environment, not
-// the shell's, so a realm the entry does not name is the default one.
+// path, running `mcp start`, with the environment of --env and the realm in
+// effect, of the root's --realm or SIND_REALM. An editor starts its MCP
+// servers with its own environment, not the shell's, so a realm the entry
+// does not name is the default one.
 func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Server, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -242,7 +244,10 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 	if len(f.env) > 0 {
 		entry.Env = f.env
 	}
-	if cmd.Root().Flags().Changed("realm") {
+	// The realm in effect, as every other command takes it: --realm, or
+	// else SIND_REALM, unless --env names one.
+	_, envRealm := f.env["SIND_REALM"]
+	if cmd.Root().Flags().Changed("realm") || (!envRealm && os.Getenv("SIND_REALM") != "") {
 		realm, err := realmFromFlag(cmd)
 		if err != nil {
 			return mcpconfig.Server{}, err
