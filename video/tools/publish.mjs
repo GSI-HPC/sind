@@ -64,13 +64,7 @@ ff(["-i", master, "-c:v", "libx264", "-preset", "slow", "-tune", "animation", "-
   "-movflags", "+faststart", "-c:a", "aac", "-b:a", "96k", "-ac", "1", out("mp4")]);
 ff(["-ss", values.poster, "-i", master, "-frames:v", "1", "-vf", "scale=1280:-2", "-q:v", "3", out("jpg")]);
 
-const stamp = (t) => {
-  const ms = Math.round(t * 1000);
-  const h = String(Math.floor(ms / 3600000)).padStart(2, "0");
-  const m = String(Math.floor(ms / 60000) % 60).padStart(2, "0");
-  const s = String(Math.floor(ms / 1000) % 60).padStart(2, "0");
-  return `${h}:${m}:${s}.${String(ms % 1000).padStart(3, "0")}`;
-};
+const stamp = (t) => new Date(Math.round(t * 1000)).toISOString().slice(11, 23); // HH:MM:SS.mmm, under 24 h
 const vtt = ["WEBVTT", ""];
 ep.cues.forEach((c, i) => vtt.push(String(i + 1), `${stamp(c.start)} --> ${stamp(c.end)}`, c.text, ""));
 writeFileSync(out("vtt"), vtt.join("\n"));
