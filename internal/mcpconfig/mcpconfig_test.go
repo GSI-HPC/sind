@@ -462,10 +462,6 @@ func TestSave_Errors(t *testing.T) {
 		{"backup open", true, "open /cfg/c.json.20261019-163005.bak", "backing up /cfg/c.json: failed"},
 		{"backup write", true, "write /cfg/c.json.20261019-163005.bak", "backing up /cfg/c.json: failed"},
 		{"backup close", true, "close /cfg/c.json.20261019-163005.bak", "backing up /cfg/c.json: failed"},
-		{"temp open", true, "open /cfg/.c.json-", "writing /cfg/c.json: failed"},
-		{"temp write", true, "write /cfg/.c.json-", "writing /cfg/c.json: failed"},
-		{"temp close", true, "close /cfg/.c.json-", "writing /cfg/c.json: failed"},
-		{"chmod", true, "chmod", "writing /cfg/c.json: failed"},
 		{"rename", true, "rename", "writing /cfg/c.json: failed"},
 	}
 	for _, tt := range tests {
@@ -492,9 +488,9 @@ func TestSave_Errors(t *testing.T) {
 	}
 }
 
-// failFs fails the operations named in fail: "stat", "mkdir", "chmod",
-// "rename", or "open", "write" or "close" followed by a space and a prefix
-// of the file's name.
+// failFs fails the operations named in fail: "stat", "mkdir", "rename",
+// or "open", "write" or "close" followed by a space and a prefix of the
+// file's name.
 type failFs struct {
 	afero.Fs
 	fail map[string]error
@@ -524,13 +520,6 @@ func (f *failFs) MkdirAll(path string, perm os.FileMode) error {
 		return err
 	}
 	return f.Fs.MkdirAll(path, perm)
-}
-
-func (f *failFs) Chmod(name string, mode os.FileMode) error {
-	if err := f.err("chmod", name); err != nil {
-		return err
-	}
-	return f.Fs.Chmod(name, mode)
 }
 
 func (f *failFs) Rename(oldname, newname string) error {

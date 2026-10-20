@@ -34,6 +34,8 @@ internal/mock/     Test doubles for cmdexec.Executor
 
 internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) in place, with a backup
 
+internal/atomicfile/ Replaces a file in one step, through a temporary file and a rename (editor configurations, the MCP stream's token)
+
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
 internal/testutil/ Shared test helpers

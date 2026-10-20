@@ -16,10 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/atomicfile"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -141,21 +143,9 @@ func mcpStreamToken() (token, path string, err error) {
 	token = rand.Text()
 	// A new file, renamed into place, is 0600 even if an older token file
 	// was not.
-	f, err := os.CreateTemp(dir, "."+mcpTokenFile+"-*")
-	if err != nil {
-		return "", "", fmt.Errorf("writing MCP token: %w", err)
-	}
-	_, werr := f.WriteString(token + "\n")
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
 	path = filepath.Join(dir, mcpTokenFile)
-	if werr == nil {
-		werr = os.Rename(f.Name(), path)
-	}
-	if werr != nil {
-		_ = os.Remove(f.Name())
-		return "", "", fmt.Errorf("writing MCP token: %w", werr)
+	if err := atomicfile.Write(afero.NewOsFs(), path, []byte(token+"\n"), 0o600); err != nil {
+		return "", "", fmt.Errorf("writing MCP token: %w", err)
 	}
 	return token, path, nil
 }

@@ -22,6 +22,8 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/tailscale/hujson"
+
+	"github.com/GSI-HPC/sind/internal/atomicfile"
 )
 
 // defaultIndent indents a file that has no members to copy from.
@@ -305,22 +307,7 @@ func (f *File) Save(now time.Time) (backup string, err error) {
 	} else if err := f.fs.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("writing %s: %w", f.path, err)
 	}
-	tmp, err := afero.TempFile(f.fs, dir, "."+filepath.Base(f.path)+"-*")
-	if err != nil {
-		return backup, fmt.Errorf("writing %s: %w", f.path, err)
-	}
-	_, err = tmp.Write(data)
-	if cerr := tmp.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = f.fs.Chmod(tmp.Name(), f.mode)
-	}
-	if err == nil {
-		err = f.fs.Rename(tmp.Name(), f.path)
-	}
-	if err != nil {
-		_ = f.fs.Remove(tmp.Name())
+	if err := atomicfile.Write(f.fs, f.path, data, f.mode); err != nil {
 		return backup, fmt.Errorf("writing %s: %w", f.path, err)
 	}
 	f.exists, f.orig = true, data
