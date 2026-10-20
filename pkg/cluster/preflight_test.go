@@ -3,6 +3,7 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -139,162 +140,64 @@ func preflightOnCall(t *testing.T, existing map[string]bool, existingContainers 
 	}
 }
 
-func TestPreflightCheck_NoConflicts(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t, nil)
-	c := docker.NewClient(&m)
+func TestPreflightCheck(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		workers    int // 1 unless set
+		backup     bool
+		existing   map[string]bool
+		containers []string
+		fail       string   // the last argument of the docker call that fails
+		want       []string // what the error says; nil for no error
+		notWant    []string
+	}{
+		{name: "no conflicts"},
+		{name: "backup controller state volume", backup: true, existing: map[string]bool{"sind-dev-state": true},
+			want: []string{"volume sind-dev-state"}},
+		{name: "backup controller container", backup: true, containers: []string{"sind-dev-controller-backup"},
+			want: []string{"container sind-dev-controller-backup"}},
+		{name: "network", existing: map[string]bool{"sind-dev-net": true}, want: []string{"network sind-dev-net"}},
+		{name: "volumes", existing: map[string]bool{"sind-dev-config": true, "sind-dev-data": true},
+			want: []string{"volume sind-dev-config", "volume sind-dev-data"}, notWant: []string{"munge"}},
+		{name: "containers", containers: []string{"sind-dev-controller"},
+			want: []string{"container sind-dev-controller"}, notWant: []string{"worker"}},
+		{name: "multiple", existing: map[string]bool{"sind-dev-net": true}, containers: []string{"sind-dev-controller", "sind-dev-worker-0"},
+			want: []string{"network sind-dev-net", "container sind-dev-controller", "container sind-dev-worker-0"}},
+		{name: "multi compute", workers: 3, containers: []string{"sind-dev-worker-0", "sind-dev-worker-2"},
+			want: []string{"container sind-dev-worker-0", "container sind-dev-worker-2"}, notWant: []string{"worker-1"}},
+		{name: "network check error", fail: "sind-dev-net", want: []string{"checking network sind-dev-net: "}},
+		{name: "volume check error", fail: "sind-dev-config", want: []string{"checking volume sind-dev-config: "}},
+		{name: "container list error", fail: "label=sind.cluster=dev", want: []string{"listing cluster containers: "}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			base := preflightOnCall(t, tt.existing, tt.containers...)
+			var m mock.Executor
+			m.OnCall = func(args []string, stdin string) mock.Result {
+				if args[len(args)-1] == tt.fail {
+					return mock.Result{Err: errors.New("docker daemon not running")}
+				}
+				return base(args, stdin)
+			}
+			cfg := minimalConfig()
+			cfg.Nodes[0].BackupController = tt.backup
+			cfg.Nodes[1].Count = max(tt.workers, 1)
 
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
+			err := PreflightCheck(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, cfg)
 
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 6) // network + 3 volumes + 2 filtered ps
-}
-
-func TestPreflightCheck_BackupControllerStateVolume(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-state": true})
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	cfg.Nodes[0].BackupController = true
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "volume sind-dev-state")
-}
-
-func TestPreflightCheck_ConflictingBackupController(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t, nil, "sind-dev-controller-backup")
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	cfg.Nodes[0].BackupController = true
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "container sind-dev-controller-backup")
-}
-
-func TestPreflightCheck_ConflictingNetwork(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{"sind-dev-net": true})
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "network sind-dev-net")
-}
-
-func TestPreflightCheck_ConflictingVolumes(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t, map[string]bool{
-		"sind-dev-config": true,
-		"sind-dev-data":   true,
-	})
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "volume sind-dev-config")
-	assert.Contains(t, err.Error(), "volume sind-dev-data")
-	assert.NotContains(t, err.Error(), "munge")
-}
-
-func TestPreflightCheck_ConflictingContainers(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t, nil, "sind-dev-controller")
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "container sind-dev-controller")
-	assert.NotContains(t, err.Error(), "worker")
-}
-
-func TestPreflightCheck_MultipleConflicts(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t,
-		map[string]bool{"sind-dev-net": true},
-		"sind-dev-controller", "sind-dev-worker-0")
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "network sind-dev-net")
-	assert.Contains(t, err.Error(), "container sind-dev-controller")
-	assert.Contains(t, err.Error(), "container sind-dev-worker-0")
-}
-
-func TestPreflightCheck_NetworkCheckError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if len(args) > 0 && args[0] == "ps" {
-			return mock.Result{Stdout: ""}
-		}
-		name := args[len(args)-1]
-		if name == "sind-dev-net" {
-			return mock.Result{Err: fmt.Errorf("docker daemon not running")}
-		}
-		return mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(t)}
+			if tt.want == nil {
+				require.NoError(t, err)
+				assert.Len(t, m.Calls, 6) // network + 3 volumes + 2 filtered ps
+				return
+			}
+			require.Error(t, err)
+			for _, s := range tt.want {
+				assert.Contains(t, err.Error(), s)
+			}
+			for _, s := range tt.notWant {
+				assert.NotContains(t, err.Error(), s)
+			}
+		})
 	}
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking network")
-}
-
-func TestPreflightCheck_VolumeCheckError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if len(args) > 0 && args[0] == "ps" {
-			return mock.Result{Stdout: ""}
-		}
-		name := args[len(args)-1]
-		if name == "sind-dev-config" {
-			return mock.Result{Err: fmt.Errorf("permission denied")}
-		}
-		return mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(t)}
-	}
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volume")
-}
-
-func TestPreflightCheck_ContainerCheckError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if len(args) > 0 && args[0] == "ps" && slices.Contains(args, "label=sind.cluster=dev") {
-			return mock.Result{Err: fmt.Errorf("connection refused")}
-		}
-		if len(args) > 0 && args[0] == "ps" {
-			return mock.Result{}
-		}
-		return mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(t)}
-	}
-	c := docker.NewClient(&m)
-
-	cfg := minimalConfig()
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing cluster containers")
 }
 
 // --- checkBridgePorts ---
@@ -385,28 +288,6 @@ func TestPreflightCheck_MeshFull(t *testing.T) {
 	require.ErrorIs(t, err, ErrNetworkFull)
 	assert.Contains(t, err.Error(), "network sind-mesh has 1023 containers and would get 2 more")
 }
-
-func TestPreflightCheck_MultiCompute(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = preflightOnCall(t, nil, "sind-dev-worker-0", "sind-dev-worker-2")
-	c := docker.NewClient(&m)
-
-	cfg := &config.Cluster{
-		Name: "dev",
-		Nodes: []config.Node{
-			{Role: config.RoleController},
-			{Role: config.RoleWorker, Count: 3},
-		},
-	}
-	err := PreflightCheck(t.Context(), c, mesh.DefaultRealm, cfg)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "container sind-dev-worker-0")
-	assert.Contains(t, err.Error(), "container sind-dev-worker-2")
-	assert.NotContains(t, err.Error(), "worker-1")
-}
-
-// --- CheckDaemon ---
 
 func TestCheckDaemon(t *testing.T) {
 	tests := []struct {
