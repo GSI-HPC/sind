@@ -3,7 +3,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -423,7 +422,7 @@ func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 		w := newTabWriter(out)
 		_, _ = fmt.Fprintln(w, "SERVICE\tCONTAINER\tADDRESS\tSTATUS")
 		for _, s := range m.Services {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(cmp.Or(s.URL, "-")), formatServiceState(s))
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(s.URL), formatServiceState(s))
 		}
 		if err := w.Flush(); err != nil {
 			return err
@@ -565,10 +564,10 @@ func printStatus(cmd *cobra.Command, status *cluster.Status, realm string) error
 }
 
 // formatHA renders a controller's pair position, marking the controller in
-// control with "*". Nodes outside the pair render empty.
+// control with "*". Nodes outside the pair render "-".
 func formatHA(ha *cluster.HAStatus) string {
 	if ha == nil {
-		return ""
+		return "-"
 	}
 	if ha.InControl {
 		return ha.Position + "*"
@@ -596,9 +595,6 @@ func formatState(status *cluster.Status) string {
 // not know it (unmanaged clusters). The version comes from a label, so it
 // is escaped like any other cell.
 func formatSlurmVersion(version string) string {
-	if version == "" {
-		return "-"
-	}
 	return cell(version)
 }
 
@@ -607,8 +603,13 @@ func formatSlurmVersion(version string) string {
 // reads, so such text may hold control sequences that retitle the
 // terminal or write its clipboard; they are shown escaped (\x1b), as on
 // the final error line. Tab and newline are shown escaped too (\t, \n): in
-// a table cell they would start a column or a row of their own.
+// a table cell they would start a column or a row of their own. An empty
+// cell is "-", so that every row has all its columns for awk and cut, as
+// a stopped node has no IP.
 func cell[S ~string](s S) string {
+	if s == "" {
+		return "-"
+	}
 	return termtext.Escape(string(s))
 }
 

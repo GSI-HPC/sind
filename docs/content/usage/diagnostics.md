@@ -308,7 +308,7 @@ A managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) 
 
 The data row shows what Docker mounts at the nodes' data mount point: the bind-mounted host directory (type `hostPath`) or the volume. With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), `MOUNTS` lists the home volume at `/home`. With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
 
-Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`. Unmanaged clusters show no `HA` column: sind cannot tell which of their controllers is in control.
+Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control, and `-` for the other nodes. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`. Unmanaged clusters show no `HA` column: sind cannot tell which of their controllers is in control.
 
 > **Tip:** Run `watch sind get cluster` for a simple live dashboard that refreshes every two seconds.
 
@@ -445,7 +445,7 @@ Without `--type` it prints the cluster's main key: `slurm.key` with identity `cl
 sind get mesh
 ```
 
-Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a [kind cluster]({{< relref "/guides/kind" >}})'s CoreDNS, can forward the `<realm>.sind` zone to it; it is empty while the DNS container is stopped.
+Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a [kind cluster]({{< relref "/guides/kind" >}})'s CoreDNS, can forward the `<realm>.sind` zone to it; it is `-` while the DNS container is stopped (`""` with `-o json`).
 
 If no mesh has been created yet, the command returns a friendly `no mesh found for realm "<name>"` error.
 

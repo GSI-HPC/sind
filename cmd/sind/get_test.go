@@ -120,6 +120,7 @@ func TestCell(t *testing.T) {
 	assert.Equal(t, "plain", cell("plain"))
 	assert.Equal(t, `a\tb\nc\x1b[2J\u202e`, cell("a\tb\nc\x1b[2J\u202e"))
 	assert.Equal(t, "worker", cell(config.RoleWorker))
+	assert.Equal(t, "-", cell(""), "an empty cell keeps its column")
 }
 
 func TestGetNodes_Output(t *testing.T) {
@@ -535,6 +536,25 @@ func TestGetMesh_Output(t *testing.T) {
 	assert.Contains(t, stdout, "ghcr.io/gsi-hpc/sind-node:latest")
 }
 
+// TestGetMesh_StoppedDNS checks that an empty value is "-" in the table,
+// which printed "dns-ip" and trailing spaces, and "" in the JSON output.
+func TestGetMesh_StoppedDNS(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+		if len(args) == 2 && args[0] == "inspect" && args[1] == "sind-dns" {
+			return mock.Result{Stdout: `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"exited"},"Config":{"Image":"coredns/coredns:1.14.7","Labels":{}},"NetworkSettings":{"Networks":{}}}]`}
+		}
+		return meshInspectCall(args, stdin)
+	}}
+
+	stdout, _, err := executeWithMock(m, "get", "mesh")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "\ndns-ip          -\n")
+
+	stdout, _, err = executeWithMock(m, "get", "mesh", "-o", "json")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, `"dns_ip": ""`)
+}
+
 func TestGetMesh_JSON(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = meshInspectCall
@@ -885,7 +905,7 @@ func TestGetNode_Output(t *testing.T) {
 func TestGetNode_Stopped(t *testing.T) {
 	inspect := `[{"Id":"id","Name":"/sind-dev-worker-0","State":{"Status":"exited"},"Config":{"Labels":{"sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`
 	for _, tc := range []struct{ format, want string }{
-		{"human", "   stopped\n"},
+		{"human", "sind-dev-worker-0   worker   worker-0.dev.sind.sind   -    stopped\n"},
 		{"json", `"status": "stopped"`},
 	} {
 		t.Run(tc.format, func(t *testing.T) {
@@ -1016,7 +1036,8 @@ func TestGetCluster_ControllerPair(t *testing.T) {
 	assert.Equal(t, []string{"NAME", "ROLE", "HA", "IP", "STATUS", "SERVICES"}, strings.Fields(header))
 	assert.Equal(t, "primary", rows["controller.dev"][2])
 	assert.Equal(t, "backup*", rows["controller-backup.dev"][2])
-	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][2], "workers leave the HA column empty")
+	assert.Equal(t, "-", rows["worker-0.dev"][2], "workers have no HA position")
+	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][3])
 }
 
 func TestGetCluster_UnknownSlurmVersion(t *testing.T) {
@@ -1057,7 +1078,7 @@ func TestFormatSlurmVersion(t *testing.T) {
 }
 
 func TestFormatHA(t *testing.T) {
-	assert.Equal(t, "", formatHA(nil))
+	assert.Equal(t, "-", formatHA(nil))
 	assert.Equal(t, "primary", formatHA(&cluster.HAStatus{Position: "primary"}))
 	assert.Equal(t, "backup*", formatHA(&cluster.HAStatus{Position: "backup", InControl: true}))
 }
