@@ -33,7 +33,15 @@ An error in the arguments ends with the usage line of the command, as above; one
 This covers:
 
 - an unknown command or help topic, with `--help` too: `sind get bogus`, `sind get bogus --help`, `sind help bogus`, `sind completion fishy`
-- an unknown flag, a flag without its value, or a value that is not valid: `sind get clusters -o yaml`, `sind --realm Not_A_Realm get clusters`
+- an unknown flag, a flag without its value, or a value that is not valid: `sind get clusters -o yaml`, `sind --realm Not_A_Realm get clusters`, `sind create worker --count x`. A flag value reads the same whatever the flag, with what it wants instead:
+
+  ```console
+  $ sind get clusters -o yaml
+  12:00:00.000 ERRO invalid --output value "yaml": want human or json
+  $ sind create cluster --wait 5
+  12:00:00.000 ERRO invalid --wait value "5": want a duration with a unit, such as 90s, 5m or 1h30m
+  ```
+
 - the wrong number of arguments, or an argument that is not valid: `sind get cluster a b`, `sind get cluster Not_A_Name`
 - a node argument that does not parse, that names no node, or that names several nodes where one is needed: `sind power on 'worker-['`, `sind power on @compute`, `sind ssh 'worker-[0-1]'`
 - `sind exec` without `--` and a command, and `sind ssh` with a remote command that does not follow `--`: `sind ssh worker-0 hostname`

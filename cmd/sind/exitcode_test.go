@@ -71,7 +71,15 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"logs", "a", "b", "c"}, "accepts between 1 and 2 arg(s), received 3"},
 		{[]string{"get", "cluster", "Not_A_Name"}, `invalid cluster name "Not_A_Name"`},
 		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml"`},
-		{[]string{"get", "auth-key", "--type", "kerberos"}, `invalid --type value "kerberos": must be munge, slurm, jwt`},
+		{[]string{"get", "auth-key", "--type", "kerberos"}, `invalid --type value "kerberos": want munge, slurm or jwt`},
+		{[]string{"get", "cluster", "--progress", "tree"}, `invalid --progress value "tree": want auto, tty, counter, plain or none`},
+		// pflag's parser errors read as the other invalid values do.
+		{[]string{"create", "worker", "--count", "x"}, `invalid --count value "x": want a whole number`},
+		{[]string{"create", "cluster", "--wait", "5"}, `invalid --wait value "5": want a duration with a unit, such as 90s, 5m or 1h30m`},
+		{[]string{"create", "worker", "--pull=maybe"}, `invalid --pull value "maybe": want true or false`},
+		{[]string{"logs", "-n", "x", "controller"}, `invalid --tail value "x": want a whole number`},
+		{[]string{"exec", "-v=x", "--", "true"}, `invalid --verbose value "x": want a whole number`},
+		{[]string{"create", "worker", "--device", "rel/path"}, `device "rel/path" in --device: host path must be absolute`},
 		{[]string{"--realm", "Not_A_Realm", "get", "clusters"}, `--realm: invalid realm name "Not_A_Realm"`},
 		{[]string{"get", "node", "worker-0.dev.sind.sind"}, "not the FQDN"},
 		{[]string{"get", "node", "worker-0.Not_A_Name"}, `invalid node name "worker-0.Not_A_Name"`},
@@ -292,7 +300,7 @@ func TestArgumentErrorsNameTheUsage(t *testing.T) {
 		{[]string{"exec", "a", "b", "--", "x"}, "expected at most one argument before --, got 2 (usage: sind exec [flags] [CLUSTER] -- COMMAND [ARGS...])"},
 		{[]string{"delete", "cluster", "--all", "x"}, "--all does not accept arguments (usage: sind delete cluster [NAME])"},
 		{[]string{"power", "on", "@compute"}, "expanding nodes: group @compute: sind has no node groups (usage: sind power on NODES)"},
-		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml": must be "human" or "json"`},
+		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml": want human or json`},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {

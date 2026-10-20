@@ -361,7 +361,7 @@ func (c *Cluster) Validate() error {
 		if err := cmp.Or(
 			CheckCapabilities("capAdd", n.CapAdd),
 			CheckCapabilities("capDrop", n.CapDrop),
-			CheckDevices(n.Devices),
+			CheckDevices("devices", n.Devices),
 			CheckSecurityOpts("securityOpt", n.SecurityOpt),
 		); err != nil {
 			return err

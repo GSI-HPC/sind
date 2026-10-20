@@ -36,7 +36,7 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 		{[]string{"--pull"}, "--pull needs --image"},
 		{[]string{"--cap-add", "BOGUS"}, `unknown capability "BOGUS" in --cap-add`},
 		{[]string{"--cap-drop", "net_raw"}, `unknown capability "net_raw" in --cap-drop`},
-		{[]string{"--device", "relative/dev"}, `device path must be absolute, got "relative/dev"`},
+		{[]string{"--device", "relative/dev"}, `device "relative/dev" in --device: host path must be absolute`},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {

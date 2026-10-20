@@ -64,6 +64,50 @@ func usagef(format string, args ...any) error {
 	return usage(fmt.Errorf(format, args...))
 }
 
+// invalidFlagValue returns the usage error for a value of the flag --name
+// that is not one of the words it takes, the one form of every such error:
+// invalid --output value "yaml": want human or json.
+func invalidFlagValue(name, value string, words ...string) error {
+	return invalidValue(name, value, oneOf(words))
+}
+
+// invalidValue returns the usage error for a value of the flag --name, with
+// what the flag wants instead.
+func invalidValue(name, value, want string) error {
+	return usagef("invalid --%s value %q: want %s", name, value, want)
+}
+
+// oneOf lists words as "a, b or c".
+func oneOf(words []string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " or " + words[len(words)-1]
+}
+
+// flagValueWants says what a flag of each pflag type wants, for the values
+// pflag's parsers reject with their own text (strconv.ParseInt: …, time:
+// missing unit in duration …).
+var flagValueWants = map[string]string{
+	"int":      "a whole number",
+	"count":    "a whole number",
+	"bool":     "true or false",
+	"duration": "a duration with a unit, such as 90s, 5m or 1h30m",
+}
+
+// flagError is the FlagErrorFunc of every command. A value that pflag
+// cannot parse as the flag's type reads as the other invalid flag values
+// do (invalidValue), instead of Go's parser error; every other flag error
+// is kept. Both are usage errors (isUsageError).
+func flagError(_ *cobra.Command, err error) error {
+	if invalid, ok := errors.AsType[*pflag.InvalidValueError](err); ok {
+		if want, ok := flagValueWants[invalid.GetFlag().Value.Type()]; ok {
+			return invalidValue(invalid.GetFlag().Name, invalid.GetValue(), want)
+		}
+	}
+	return err
+}
+
 // argsError marks err as a usage error in the arguments, whose message
 // ends with the usage line of the command (withUsageLine); nil stays nil.
 func argsError(err error) error {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -272,8 +273,12 @@ func throughDisplay(cmd *cobra.Command, p *cliprogress.Run) (context.Context, fu
 // says what is wrong with it; --progress-log is opened only by such a
 // command (withProgress), since opening it creates it.
 func checkProgressFlag(cmd *cobra.Command) error {
-	if !cmd.Root().Flags().Changed("progress") {
+	flags := cmd.Root().Flags()
+	if !flags.Changed("progress") {
 		return nil
+	}
+	if mode, _ := flags.GetString("progress"); !slices.Contains(progressModeNames(), mode) {
+		return invalidFlagValue("progress", mode, progressModeNames()...)
 	}
 	_, _, err := cliprogress.Choose(progressOptions(cmd.Context(), cmd))
 	return usage(err)

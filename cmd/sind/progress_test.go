@@ -186,9 +186,9 @@ func TestTheProgressDisplayIsDrawnWhereItCan(t *testing.T) {
 		{"the flag over the variable", true, nil, "xterm", "counter", []string{"--progress", "none"}, false, "", ownErr},
 		{"the flag after the command", true, nil, "xterm", "", []string{"create", "worker", "--progress", "counter"}, false, "counter", ownErr},
 		{"a value it does not know", true, nil, "xterm", "", []string{"--progress", "tree"}, false, "",
-			`--progress is "tree"; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "tree": want auto, tty, counter, plain or none`},
 		{"an empty value", true, nil, "xterm", "", []string{"--progress="}, false, "",
-			`--progress is ""; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "": want auto, tty, counter, plain or none`},
 		{"a variable it does not know", true, nil, "xterm", "fancy", nil, false, "", ownErr},
 		{"a Bus from the context", true, nil, "xterm", "tty", []string{"--progress", "tty"}, true, "", ownErr},
 	} {
@@ -237,14 +237,14 @@ func TestEveryCommandChecksTheProgressFlag(t *testing.T) {
 		msg  string
 	}{
 		{"a value it does not know", "", []string{"--progress", "bogus", "version"},
-			`--progress is "bogus"; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "bogus": want auto, tty, counter, plain or none`},
 		{"a tree without a terminal", "", []string{"--progress", "tty", "get", "realms"},
 			"--progress asks for a live tree, but standard error is not a terminal; use none, or auto to draw one only where it can be"},
 		{"a counter without a terminal", "", []string{"get", "realms", "--progress=counter"},
 			"--progress asks for a counter, but standard error is not a terminal; use none, or auto to draw one only where it can be"},
 		// exec parses its flags itself, after PersistentPreRunE.
 		{"a value it does not know after exec", "", []string{"exec", "--progress", "bogus", "--", "true"},
-			`--progress is "bogus"; it takes one of auto, tty, counter, plain, none`},
+			`invalid --progress value "bogus": want auto, tty, counter, plain or none`},
 		{"a tree without a terminal after exec", "", []string{"exec", "--progress=tty", "--", "true"},
 			"--progress asks for a live tree, but standard error is not a terminal; use none, or auto to draw one only where it can be"},
 		{"plain lines", "", []string{"--progress", "plain", "version"}, ""},

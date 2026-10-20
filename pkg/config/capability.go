@@ -101,12 +101,13 @@ func CheckSecurityOpts(field string, opts []string) error {
 }
 
 // CheckDevices reports the first device whose host path is not absolute.
-// A device is HOST_PATH[:CONTAINER_PATH[:PERMISSIONS]].
-func CheckDevices(devices []string) error {
+// A device is HOST_PATH[:CONTAINER_PATH[:PERMISSIONS]]. field names the
+// setting in the error, e.g. "devices".
+func CheckDevices(field string, devices []string) error {
 	for _, dev := range devices {
 		hostDev := strings.SplitN(dev, ":", 2)[0]
 		if !strings.HasPrefix(hostDev, "/") {
-			return fmt.Errorf("device path must be absolute, got %q", dev)
+			return fmt.Errorf("device %q in %s: host path must be absolute", dev, field)
 		}
 	}
 	return nil

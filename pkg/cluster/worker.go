@@ -71,7 +71,7 @@ func (o WorkerAddOptions) Check() error {
 	if err := config.CheckCapabilities("--cap-drop", o.CapDrop); err != nil {
 		return err
 	}
-	if err := config.CheckDevices(o.Devices); err != nil {
+	if err := config.CheckDevices("--device", o.Devices); err != nil {
 		return err
 	}
 	return config.CheckSecurityOpts("--security-opt", o.SecurityOpt)

@@ -465,7 +465,7 @@ func TestDoctorCommand_InvalidOutput(t *testing.T) {
 	var m mock.Executor
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t, "-o", "yaml")
-	require.EqualError(t, err, `invalid --output value "yaml": must be "human" or "json"`)
+	require.EqualError(t, err, `invalid --output value "yaml": want human or json`)
 	assert.Empty(t, out)
 	assert.Empty(t, m.Calls, "no check runs")
 }

@@ -178,7 +178,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 	flags.AddFlagSet(cmd.InheritedFlags()) // --realm, --progress and -v
 	if err := flags.Parse(args); err != nil {
-		return err
+		return cmd.FlagErrorFunc()(cmd, err)
 	}
 	if help, _ := flags.GetBool("help"); help {
 		return cmd.Help()

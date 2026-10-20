@@ -34,7 +34,7 @@ func validateOutputFlag(cmd *cobra.Command) error {
 	case outputHuman, outputJSON:
 		return nil
 	default:
-		return usagef("invalid --output value %q: must be %q or %q", outputFlag(cmd), outputHuman, outputJSON)
+		return invalidFlagValue("output", outputFlag(cmd), outputHuman, outputJSON)
 	}
 }
 

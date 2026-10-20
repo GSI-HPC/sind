@@ -354,8 +354,8 @@ func TestCheckCapabilities(t *testing.T) {
 }
 
 func TestCheckDevices(t *testing.T) {
-	require.NoError(t, CheckDevices([]string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}))
-	require.EqualError(t, CheckDevices([]string{"/dev/fuse", "fuse:/dev/fuse"}), `device path must be absolute, got "fuse:/dev/fuse"`)
+	require.NoError(t, CheckDevices("devices", []string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}))
+	require.EqualError(t, CheckDevices("devices", []string{"/dev/fuse", "fuse:/dev/fuse"}), `device "fuse:/dev/fuse" in devices: host path must be absolute`)
 }
 
 func TestApplyDefaults_MinimalConfig(t *testing.T) {
@@ -1472,7 +1472,7 @@ func TestValidate_SecurityFields(t *testing.T) {
 	t.Run("device path not absolute", func(t *testing.T) {
 		cfg := base()
 		cfg.Nodes[1].Devices = []string{"dev/fuse"}
-		require.ErrorContains(t, cfg.Validate(), "device path must be absolute")
+		require.ErrorContains(t, cfg.Validate(), "in devices: host path must be absolute")
 	})
 
 	t.Run("valid security opts", func(t *testing.T) {

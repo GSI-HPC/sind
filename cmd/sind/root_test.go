@@ -97,7 +97,7 @@ func TestUnknownSubcommandWithHelp(t *testing.T) {
 		{[]string{"get", "munge-key", "-h"}, `unknown command "munge-key" for "sind get"`},
 		{[]string{"power", "stop", "-h"}, `unknown command "stop" for "sind power" (did you mean "shutdown"?)`},
 		{[]string{"--help", "bogus"}, `unknown command "bogus" for "sind" (did you mean "logs"?)`},
-		{[]string{"get", "--help=bogus"}, `invalid argument "bogus" for "-h, --help" flag: strconv.ParseBool: parsing "bogus": invalid syntax`},
+		{[]string{"get", "--help=bogus"}, `invalid --help value "bogus": want true or false`},
 	} {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
 			stdout, _, err := executeCommand(tt.args...)

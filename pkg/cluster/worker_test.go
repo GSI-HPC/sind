@@ -745,7 +745,7 @@ func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
 	}{
 		{"cap-add", WorkerAddOptions{CapAdd: []string{"SYS_ADMIN", "NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
 		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
-		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device path must be absolute, got "dev/fuse"`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in --device: host path must be absolute`},
 		{"security-opt", WorkerAddOptions{SecurityOpt: []string{"privileged"}}, `unknown security option "privileged" in --security-opt`},
 	}
 	for _, tt := range tests {
@@ -1202,7 +1202,7 @@ func TestWorkerAddOptions_Check(t *testing.T) {
 		{"pull without image", WorkerAddOptions{Pull: true}, "--pull needs --image: without one, new workers run the image of the cluster's newest worker, by ID"},
 		{"cap-add", WorkerAddOptions{CapAdd: []string{"NOT_A_CAP"}}, `unknown capability "NOT_A_CAP" in --cap-add`},
 		{"cap-drop", WorkerAddOptions{CapDrop: []string{"net_raw"}}, `unknown capability "net_raw" in --cap-drop`},
-		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device path must be absolute, got "dev/fuse"`},
+		{"device", WorkerAddOptions{Devices: []string{"dev/fuse"}}, `device "dev/fuse" in --device: host path must be absolute`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

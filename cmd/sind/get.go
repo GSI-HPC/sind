@@ -334,7 +334,7 @@ func runGetAuthKey(cmd *cobra.Command, name string) error {
 	}
 	authType, _ := cmd.Flags().GetString("type")
 	if authType != "" && !slices.Contains(cluster.AuthTypes, cluster.AuthType(authType)) {
-		return usagef("invalid --type value %q: must be %s", authType, strings.Join(authTypeNames(), ", "))
+		return invalidFlagValue("type", authType, authTypeNames()...)
 	}
 	type output struct {
 		Type cluster.AuthType `json:"type"`
