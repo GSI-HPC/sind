@@ -775,10 +775,12 @@ func TestGetNode_NotFound(t *testing.T) {
 	assert.NotContains(t, err.Error(), "exit status")
 }
 
-func TestGetNode_Output(t *testing.T) {
+// nodeHealthMock answers get node for a running controller of cluster dev
+// whose services are all active, with no backup controller.
+func nodeHealthMock(t *testing.T) *mock.Executor {
+	t.Helper()
 	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"controller","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}]`
-
-	m := &mock.Executor{
+	return &mock.Executor{
 		OnCall: func(args []string, _ string) mock.Result {
 			if len(args) >= 2 && args[0] == "inspect" && args[1] == "sind-dev-controller-backup" {
 				return mock.Result{Stderr: "Error: No such object: sind-dev-controller-backup\n", Err: testutil.ExitCode1(t)}
@@ -801,6 +803,10 @@ func TestGetNode_Output(t *testing.T) {
 			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
 		},
 	}
+}
+
+func TestGetNode_Output(t *testing.T) {
+	m := nodeHealthMock(t)
 
 	stdout, _, err := executeWithMock(m, "get", "node", "controller.dev")
 	require.NoError(t, err)
@@ -827,29 +833,7 @@ func TestGetNode_Output(t *testing.T) {
 }
 
 func TestGetNode_JSON(t *testing.T) {
-	inspectWithLabels := `[{"Id":"abc","Name":"/sind-dev-controller","State":{"Status":"running"},"Config":{"Labels":{"sind.role":"controller","sind.cluster":"dev"}},"NetworkSettings":{"Networks":{"sind-dev-net":{"IPAddress":"10.0.0.2"}}}}]`
-
-	m := &mock.Executor{
-		OnCall: func(args []string, _ string) mock.Result {
-			if len(args) >= 2 && args[0] == "inspect" && args[1] == "sind-dev-controller-backup" {
-				return mock.Result{Stderr: "Error: No such object: sind-dev-controller-backup\n", Err: testutil.ExitCode1(t)}
-			}
-			if len(args) >= 2 && args[0] == "inspect" {
-				return mock.Result{Stdout: inspectWithLabels}
-			}
-			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-				var b strings.Builder
-				for range args[4:] {
-					b.WriteString("active\n")
-				}
-				return mock.Result{Stdout: b.String()}
-			}
-			if len(args) >= 3 && args[2] == "scontrol" {
-				return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
-			}
-			return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
-		},
-	}
+	m := nodeHealthMock(t)
 
 	stdout, _, err := executeWithMock(m, "get", "node", "controller.dev", "--output", "json")
 	require.NoError(t, err)
