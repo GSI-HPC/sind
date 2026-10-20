@@ -605,66 +605,34 @@ func TestGetStatus_UnmanagedNodes(t *testing.T) {
 // fullStatusOnCall returns a mock dispatcher for GetStatus with all healthy nodes.
 func fullStatusOnCall(t *testing.T) func([]string, string) mock.Result {
 	t.Helper()
+	ips := map[string]string{"sind-dev-controller": "172.18.0.2", "sind-dev-worker-0": "172.18.0.3", "sind-dev-worker-1": "172.18.0.4"}
+	return statusOnCall(t, []testutil.PsEntry{
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.8"},
+		{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8"},
+		{ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8"},
+	}, func(name string) (string, string) { return "running", ips[name] })
+}
+
+// statusOnCall returns a mock dispatcher for GetStatus of the cluster that
+// docker ps lists as ps, whose containers have the state and IP resolve
+// gives, and whose services, networks and volumes are all healthy.
+func statusOnCall(t *testing.T, ps []testutil.PsEntry, resolve func(name string) (status, ip string)) func([]string, string) mock.Result {
+	t.Helper()
 	return func(args []string, _ string) mock.Result {
-		if len(args) == 0 {
-			return mock.Result{Err: fmt.Errorf("empty args")}
-		}
-
-		// docker ps (ListContainers)
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{
-					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=25.11.8",
-				},
-				testutil.PsEntry{
-					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8",
-				},
-				testutil.PsEntry{
-					ID: "c", Names: "sind-dev-worker-1", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=25.11.8",
-				},
-			)}
-		}
-
-		// docker inspect (container) — batched across all containers.
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
-				switch name {
-				case "sind-dev-controller":
-					return "running", "172.18.0.2"
-				case "sind-dev-worker-0":
-					return "running", "172.18.0.3"
-				case "sind-dev-worker-1":
-					return "running", "172.18.0.4"
-				}
-				return "running", ""
-			})}
-		}
-
-		// docker exec: service checks (all pass)
-		if args[0] == "exec" {
-			if len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-				var b strings.Builder
-				for range args[4:] {
-					b.WriteString("active\n")
-				}
-				return mock.Result{Stdout: b.String()}
-			}
-			if len(args) >= 3 && args[2] == "scontrol" {
-				return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
-			}
-		}
-
-		// docker network inspect / volume ls
-		if args[0] == "network" && args[1] == "inspect" {
+		switch {
+		case args[0] == "ps":
+			return mock.Result{Stdout: testutil.NDJSON(ps...)}
+		case args[0] == "inspect":
+			return mock.Result{Stdout: statusInspectJSONBatch(args, resolve)}
+		case args[0] == "exec" && args[2] == "systemctl":
+			return mock.Result{Stdout: strings.Repeat("active\n", len(args)-4)}
+		case args[0] == "exec" && args[2] == "scontrol":
+			return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
+		case args[0] == "network" && args[1] == "inspect":
 			return mock.Result{Stdout: "[{}]\n"}
-		}
-		if args[0] == "volume" && args[1] == "ls" {
+		case args[0] == "volume" && args[1] == "ls":
 			return volumeLs("sind-dev-config", "sind-dev-munge", "sind-dev-data")
 		}
-
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
 }
@@ -914,46 +882,12 @@ func TestGetStatus_NetworkErrorBeforeVolumeError(t *testing.T) {
 
 func TestGetStatus_SortOrder(t *testing.T) {
 	var m mock.Executor
-	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		// Return nodes in non-sorted order including submitter.
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{
-					ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker",
-				},
-				testutil.PsEntry{
-					ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=submitter",
-				},
-				testutil.PsEntry{
-					ID: "d", Names: "sind-dev-db", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=db",
-				},
-				testutil.PsEntry{
-					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=controller",
-				},
-			)}
-		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
-				switch name {
-				case "sind-dev-controller":
-					return "running", "172.18.0.2"
-				case "sind-dev-db":
-					return "running", "172.18.0.5"
-				case "sind-dev-submitter":
-					return "running", "172.18.0.4"
-				case "sind-dev-worker-0":
-					return "running", "172.18.0.3"
-				}
-				return "running", ""
-			})}
-		}
-		return base(args, stdin)
-	}
+	m.OnCall = statusOnCall(t, []testutil.PsEntry{
+		{ID: "b", Names: "sind-dev-worker-0", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+		{ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=submitter"},
+		{ID: "d", Names: "sind-dev-db", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=db"},
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+	}, func(string) (string, string) { return "running", "172.18.0.2" })
 	c := docker.NewClient(&m)
 
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -968,33 +902,15 @@ func TestGetStatus_SortOrder(t *testing.T) {
 
 func TestGetStatus_MixedStates(t *testing.T) {
 	var m mock.Executor
-	base := fullStatusOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{
-					ID: "a", Names: "sind-dev-controller", State: "running", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=controller",
-				},
-				testutil.PsEntry{
-					ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img",
-					Labels: "sind.cluster=dev,sind.role=worker",
-				},
-			)}
+	m.OnCall = statusOnCall(t, []testutil.PsEntry{
+		{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"},
+		{ID: "b", Names: "sind-dev-worker-0", State: "exited", Image: "img", Labels: "sind.cluster=dev,sind.role=worker"},
+	}, func(name string) (string, string) {
+		if name == "sind-dev-worker-0" {
+			return "exited", ""
 		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
-				switch name {
-				case "sind-dev-controller":
-					return "running", "172.18.0.2"
-				case "sind-dev-worker-0":
-					return "exited", ""
-				}
-				return "running", ""
-			})}
-		}
-		return base(args, stdin)
-	}
+		return "running", "172.18.0.2"
+	})
 	c := docker.NewClient(&m)
 
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
@@ -1014,52 +930,13 @@ func TestGetStatus_Parallelism(t *testing.T) {
 	const nodeCount = statusNodeConcurrency + 4 // force at least one queued batch
 
 	// Build a stable list of worker containers; one controller at the head.
-	pss := make([]testutil.PsEntry, 0, nodeCount)
-	pss = append(pss, testutil.PsEntry{
-		ID: "c", Names: "sind-dev-controller", State: "running", Image: "img",
-		Labels: "sind.cluster=dev,sind.role=controller",
-	})
-	for i := 0; i < nodeCount-1; i++ {
-		pss = append(pss, testutil.PsEntry{
-			ID:     fmt.Sprintf("w%d", i),
-			Names:  fmt.Sprintf("sind-dev-worker-%d", i),
-			State:  "running",
-			Image:  "img",
-			Labels: "sind.cluster=dev,sind.role=worker",
-		})
+	pss := []testutil.PsEntry{{ID: "c", Names: "sind-dev-controller", State: "running", Image: "img", Labels: "sind.cluster=dev,sind.role=controller"}}
+	for i := range nodeCount - 1 {
+		pss = append(pss, testutil.PsEntry{ID: fmt.Sprintf("w%d", i), Names: fmt.Sprintf("sind-dev-worker-%d", i), State: "running", Image: "img",
+			Labels: "sind.cluster=dev,sind.role=worker"})
 	}
-
 	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(pss...)}
-		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(string) (string, string) {
-				return "running", "172.18.0.1"
-			})}
-		}
-		if args[0] == "exec" && len(args) >= 4 && args[2] == "systemctl" && args[3] == "is-active" {
-			var b strings.Builder
-			for range args[4:] {
-				b.WriteString("active\n")
-			}
-			return mock.Result{Stdout: b.String()}
-		}
-		if args[0] == "exec" && len(args) >= 3 && args[2] == "scontrol" {
-			return mock.Result{Stdout: "Slurmctld(primary) is UP\n"}
-		}
-		if args[0] == "network" && args[1] == "inspect" {
-			return mock.Result{Stdout: "[{}]\n"}
-		}
-		if args[0] == "volume" && args[1] == "ls" {
-			return mock.Result{}
-		}
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: "[{}]\n"}
-		}
-		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
-	}
+	m.OnCall = statusOnCall(t, pss, func(string) (string, string) { return "running", "172.18.0.1" })
 	c := docker.NewClient(&m)
 
 	status, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
