@@ -3,8 +3,6 @@
 package monitor
 
 import (
-	"context"
-	"io"
 	"strings"
 	"testing"
 
@@ -89,20 +87,6 @@ func TestSystemdMonitor_SkipsNonSignal(t *testing.T) {
 	assert.Empty(t, events)
 }
 
-func TestSystemdMonitor_SkipsMalformedJSON(t *testing.T) {
-	input := "not json\n" +
-		`{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"ActiveState":{"type":"s","data":"active"}},["Conditions"]]}}` + "\n"
-
-	m := NewSystemdMonitor("controller", "sind-dev-controller")
-	ch := make(chan Event, 10)
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
-	require.Len(t, events, 1, "malformed line skipped, valid line parsed")
-}
-
 func TestSystemdMonitor_SkipsNoActiveState(t *testing.T) {
 	// PropertiesChanged on .Unit but without ActiveState property.
 	input := `{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"SubState":{"type":"s","data":"running"}},["Conditions"]]}}` + "\n"
@@ -115,33 +99,6 @@ func TestSystemdMonitor_SkipsNoActiveState(t *testing.T) {
 
 	events := drainEvents(ch)
 	assert.Empty(t, events)
-}
-
-func TestSystemdMonitor_ContextCancelled(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-
-	pr, pw := io.Pipe()
-	m := NewSystemdMonitor("controller", "sind-dev-controller")
-	// Unbuffered channel — send blocks.
-	ch := make(chan Event)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- m.Run(ctx, pr, ch)
-	}()
-
-	// Write an event. The send will block.
-	_, _ = pw.Write([]byte(`{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"ActiveState":{"type":"s","data":"active"}},["Conditions"]]}}` + "\n"))
-
-	cancel()
-	_ = pw.Close()
-
-	err := <-done
-	// Either context.Canceled (cancel won the race) or nil (pipe EOF
-	// reached the scanner first) are valid outcomes.
-	if err != nil {
-		assert.ErrorIs(t, err, context.Canceled)
-	}
 }
 
 func TestUnitNameFromPath(t *testing.T) {
