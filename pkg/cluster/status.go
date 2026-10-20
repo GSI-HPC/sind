@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -422,9 +421,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	// synchronisation barrier.
 	_ = g.Wait()
 
-	sort.Slice(nodes, func(i, j int) bool {
-		return nodeStatusOrder(nodes[i]) < nodeStatusOrder(nodes[j])
-	})
+	slices.SortFunc(nodes, func(a, b *NodeStatus) int { return strings.Compare(nodeStatusOrder(a), nodeStatusOrder(b)) })
 
 	// sind cannot tell which controller of an unmanaged pair is in control.
 	if _, ok := infoByName[ContainerName(realm, clusterName, ControllerBackupShortName)]; ok && clusterManaged(containers, realm, clusterName) {
@@ -462,7 +459,7 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 // first).
 func nodeStatusOrder(n *NodeStatus) string {
 	shortName, _, _ := strings.Cut(n.Name, ".")
-	return rolePrefix(n.Role) + naturalSortKey(shortName)
+	return nodeOrder(n.Role, shortName)
 }
 
 // nodeServices returns the services checked on a node, from its labels:

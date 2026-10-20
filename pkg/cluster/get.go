@@ -3,10 +3,12 @@
 package cluster
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/sind/pkg/config"
@@ -74,15 +76,12 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 		}
 	}
 
-	// Build sorted result.
 	result := make([]*Summary, 0, len(byCluster))
-	for _, cd := range byCluster {
+	for _, name := range slices.Sorted(maps.Keys(byCluster)) {
+		cd := byCluster[name]
 		cd.summary.State = aggregateState(cd.states)
 		result = append(result, cd.summary)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
-	})
 	return result, nil
 }
 
@@ -147,15 +146,9 @@ func GetNodeNames(ctx context.Context, client *docker.Client, realm string) ([]s
 	containers = slices.DeleteFunc(containers, func(c docker.ContainerListEntry) bool {
 		return c.Labels[LabelCluster] == ""
 	})
-	sort.Slice(containers, func(i, j int) bool {
-		a, b := containers[i], containers[j]
-		if ca, cb := a.Labels[LabelCluster], b.Labels[LabelCluster]; ca != cb {
-			return ca < cb
-		}
-		if ra, rb := rolePrefix(config.Role(a.Labels[LabelRole])), rolePrefix(config.Role(b.Labels[LabelRole])); ra != rb {
-			return ra < rb
-		}
-		return naturalSortKey(string(a.Name)) < naturalSortKey(string(b.Name))
+	slices.SortFunc(containers, func(a, b docker.ContainerListEntry) int {
+		return cmp.Or(strings.Compare(a.Labels[LabelCluster], b.Labels[LabelCluster]),
+			strings.Compare(nodeOrder(config.Role(a.Labels[LabelRole]), string(a.Name)), nodeOrder(config.Role(b.Labels[LabelRole]), string(b.Name))))
 	})
 	names := make([]string, len(containers))
 	for i, c := range containers {
@@ -207,36 +200,24 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 			State:     containerStateToState(c.State),
 		})
 	}
-	sort.Slice(result, func(i, j int) bool {
-		a, b := result[i], result[j]
-		if a.Cluster != b.Cluster {
-			return naturalSortKey(a.Cluster) < naturalSortKey(b.Cluster)
-		}
-		if ra, rb := rolePrefix(a.Role), rolePrefix(b.Role); ra != rb {
-			return ra < rb
-		}
-		return naturalSortKey(a.Container) < naturalSortKey(b.Container)
+	slices.SortFunc(result, func(a, b *NodeSummary) int {
+		return cmp.Or(strings.Compare(naturalSortKey(a.Cluster), naturalSortKey(b.Cluster)),
+			strings.Compare(nodeOrder(a.Role, a.Container), nodeOrder(b.Role, b.Container)))
 	})
 	return result, nil
 }
 
-// rolePrefix returns a single-character sort prefix that orders nodes by role
-// (controller < db < api < submitter < worker < other).
-func rolePrefix(role config.Role) string {
-	switch role {
-	case config.RoleController:
-		return "0"
-	case config.RoleDB:
-		return "1"
-	case config.RoleAPI:
-		return "2"
-	case config.RoleSubmitter:
-		return "3"
-	case config.RoleWorker:
-		return "4"
-	default:
-		return "9"
+// roleOrder is the order of nodes by role; other roles go last.
+var roleOrder = []config.Role{config.RoleController, config.RoleDB, config.RoleAPI, config.RoleSubmitter, config.RoleWorker}
+
+// nodeOrder returns the sort key of a node of a cluster: by role (see
+// roleOrder), then by name, with natural ordering of numeric suffixes.
+func nodeOrder(role config.Role, name string) string {
+	rank := slices.Index(roleOrder, role)
+	if rank < 0 {
+		rank = len(roleOrder)
 	}
+	return strconv.Itoa(rank) + naturalSortKey(name)
 }
 
 // naturalSortKey returns a comparison key where runs of ASCII digits are
@@ -313,9 +294,7 @@ func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*N
 		}
 		result = append(result, ns)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
-	})
+	slices.SortFunc(result, func(a, b *NetworkSummary) int { return strings.Compare(a.Name, b.Name) })
 	return result, nil
 }
 
@@ -338,9 +317,7 @@ func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*Vo
 			Driver: e.Driver,
 		})
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
-	})
+	slices.SortFunc(result, func(a, b *VolumeSummary) int { return strings.Compare(a.Name, b.Name) })
 	return result, nil
 }
 
@@ -450,15 +427,12 @@ func GetRealms(ctx context.Context, client *docker.Client) ([]*RealmSummary, err
 	}
 
 	result := make([]*RealmSummary, 0, len(byRealm))
-	for name, rd := range byRealm {
+	for _, name := range slices.Sorted(maps.Keys(byRealm)) {
 		result = append(result, &RealmSummary{
 			Name:     name,
-			Clusters: len(rd.clusters),
+			Clusters: len(byRealm[name].clusters),
 		})
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
-	})
 	return result, nil
 }
 
