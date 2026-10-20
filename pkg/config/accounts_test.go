@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestParse_Accounts(t *testing.T) {
@@ -59,6 +60,12 @@ accounts:
 		"MaxJobs": "8", "MaxSubmitJobs": "16", "GrpJobs": "1000", "GrpTRESRunMins": "15000000000", "Fairshare": "1.1",
 		"GrpTRESMins": "18446744073709551615", "Description": "1.10", "Organization": "007", "Comment": "",
 	}, cfg.Accounts[0].Limits)
+}
+
+func TestLimits_UnmarshalYAMLErrors(t *testing.T) {
+	// Parse checks the form first; the decoder still reports a list.
+	var l Limits
+	require.ErrorContains(t, l.UnmarshalYAML(&yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}), "cannot unmarshal !!seq into map[string]interface {}")
 }
 
 func TestParse_AccountsErrors(t *testing.T) {

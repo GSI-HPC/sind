@@ -33,8 +33,11 @@ func TestParse_SyntaxErrors(t *testing.T) {
 		{"managed a number", "kind: Cluster\nnodes:\n  - role: worker\n    managed: 1\n", "line 4: nodes[0].managed: expected true or false, got a number"},
 		{"section a list", "kind: Cluster\nslurm:\n  main: [a]\n", "line 3: slurm.main: expected an object, got a list"},
 		{"fragment a list", "kind: Cluster\nslurm:\n  cgroup:\n    a.conf: [b]\n", "line 4: slurm.cgroup.a.conf: expected a string, got a list"},
-		{"duplicate limit", "kind: Cluster\naccounts:\n  - name: a\n    limits: {MaxJobs: 1, MaxJobs: 2}\n", `mapping key "MaxJobs" already defined`},
-		{"duplicate fragment", "kind: Cluster\nslurm:\n  cgroup: {a: b, a: c}\n", `mapping key "a" already defined`},
+		{"duplicate key", "kind: Cluster\nname: a\nname: b\n", "line 3: name: duplicate key (first on line 2)"},
+		{"duplicate node key", "kind: Cluster\nnodes:\n  - role: worker\n    cpus: 1\n    cpus: 2\n", "line 5: nodes[0].cpus: duplicate key (first on line 4)"},
+		{"duplicate limit", "kind: Cluster\naccounts:\n  - name: a\n    limits: {MaxJobs: 1, MaxJobs: 2}\n", "line 4: accounts[0].limits.MaxJobs: duplicate key (first on line 4)"},
+		{"duplicate fragment", "kind: Cluster\nslurm:\n  cgroup: {a: b, a: c}\n", "line 3: slurm.cgroup.a: duplicate key (first on line 3)"},
+		{"duplicate key in a merged object", "kind: Cluster\nnodes:\n  - role: worker\n    <<: {cpus: 1,\n      cpus: 2}\n", "line 5: nodes[0].cpus: duplicate key (first on line 4)"},
 		{"merged key unknown", "kind: Cluster\nnodes:\n  - &w {role: worker, cpu: 2}\n  - {<<: *w}\n", "line 3: nodes[0].cpu: unknown key"},
 		{"merge of a string", "kind: Cluster\nnodes:\n  - role: worker\n    <<: x\n", "line 4: nodes[0].<<: expected an object or a list of objects, got a string"},
 		{"merge of a list of strings", "kind: Cluster\nslurm:\n  cgroup: {<<: [{a: b}, c]}\n", "line 3: slurm.cgroup.<<: expected an object or a list of objects, got a string"},
@@ -96,6 +99,11 @@ func TestParse_SyntaxAccepts(t *testing.T) {
 	c, err = Parse([]byte("kind: Cluster\nslurm:\n  cgroup: &f {a.conf: x}\n  gres: {<<: *f, b.conf: y}\n"))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"a.conf": "x", "b.conf": "y"}, c.Slurm.Gres.Fragments)
+
+	// A key of the mapping overrides the same key of a merged object.
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - <<: {role: worker, cpus: 1}\n    cpus: 2\n"))
+	require.NoError(t, err)
+	assert.Equal(t, 2, c.Nodes[0].CPUs)
 
 	// An alias of a node is followed.
 	_, err = Parse([]byte("kind: Cluster\nnodes:\n  - &n {role: worker, cpu: 1}\n  - *n\n"))
