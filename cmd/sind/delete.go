@@ -26,9 +26,14 @@ func newDeleteCommand() *cobra.Command {
 
 func newDeleteClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "cluster [NAME]",
-		Short:             "Delete a cluster",
-		Long:              "Delete a cluster.\n\n" + defaultClusterHelp("NAME"),
+		Use:   "cluster [NAME]",
+		Short: "Delete a cluster",
+		// delete cluster --all and delete realm run the same code, so their
+		// help says the same.
+		Long: "Delete a cluster.\n\n" + defaultClusterHelp("NAME") + `
+
+--all deletes every cluster of the realm, its mesh, its monitoring stack
+and its exported SSH configuration, as delete realm does.`,
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
@@ -43,7 +48,7 @@ func newDeleteClusterCommand() *cobra.Command {
 		}),
 	}
 
-	cmd.Flags().Bool("all", false, "delete all clusters of the realm, and its mesh once the last one is gone")
+	cmd.Flags().Bool("all", false, "delete every cluster of the realm, its mesh, its monitoring stack and its exported SSH configuration, as delete realm does")
 
 	return cmd
 }
@@ -52,8 +57,10 @@ func newDeleteRealmCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "realm",
 		Short: "Delete every cluster of the realm and its mesh",
-		Long: "Delete every cluster of the realm (--realm, SIND_REALM or the default), its mesh, its monitoring stack " +
-			"and its exported SSH configuration. Containers outside sind attached to the realm's networks are detached, not removed.",
+		Long: `Delete every cluster of the realm, its mesh, its monitoring stack and its
+exported SSH configuration, as delete cluster --all does. The realm is the
+one --realm, SIND_REALM or the default names. Containers outside sind
+attached to the realm's networks are detached, not removed.`,
 		Args: cobra.NoArgs,
 		RunE: withProgress(func(cmd *cobra.Command, _ []string) error {
 			return runDeleteClustersAll(cmd)

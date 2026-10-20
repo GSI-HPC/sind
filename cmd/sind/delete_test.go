@@ -97,3 +97,19 @@ func TestDeleteClusterLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists, "config volume should be removed")
 }
+
+// TestDeleteRealmAndAll_Help verifies that delete realm and delete cluster
+// --all, which run the same code, describe the same scope and name each
+// other.
+func TestDeleteRealmAndAll_Help(t *testing.T) {
+	const scope = "every cluster of the realm, its mesh, its monitoring stack"
+	stdout, _, err := executeCommand("delete", "cluster", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "--all deletes "+scope)
+	assert.Contains(t, stdout, "as delete realm does")
+
+	stdout, _, err = executeCommand("delete", "realm", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "Delete "+scope)
+	assert.Contains(t, stdout, "as delete cluster --all does")
+}
