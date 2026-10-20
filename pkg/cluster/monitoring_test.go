@@ -758,6 +758,11 @@ func TestGetMonitoring(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "http://"+f.containers["sind-alloy"].ip+":12345", m.Services[3].URL)
 
+	delete(f.containers, "sind-loki")
+	m, err = GetMonitoring(t.Context(), client, "sind")
+	require.NoError(t, err)
+	assert.Equal(t, ServiceMissing, m.Services[2].State, "a container that does not exist")
+
 	f.fail["ps -a --no-trunc --format json --filter label=sind.realm"] = mock.Result{Err: testutil.ExitCode1(t)}
 	_, err = GetMonitoring(t.Context(), client, "sind")
 	require.ErrorContains(t, err, "listing monitored nodes")

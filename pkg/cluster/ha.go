@@ -97,7 +97,7 @@ func setControllerHA(ctx context.Context, client *docker.Client, realm, clusterN
 	var hb heartbeat
 	var ok bool
 	for _, n := range nodes {
-		if n.Role == config.RoleController && n.Health.State == docker.StateRunning {
+		if n.Role == config.RoleController && n.Health.State == StateRunning {
 			shortName := strings.TrimSuffix(n.Name, "."+clusterName)
 			hb, ok = readHeartbeat(ctx, client, ContainerName(realm, clusterName, shortName))
 			break
@@ -136,7 +136,7 @@ func nodeHA(ctx context.Context, client *docker.Client, realm, clusterName, shor
 	}
 
 	source := ContainerName(realm, clusterName, shortName)
-	if health.State != docker.StateRunning {
+	if health.State != StateRunning {
 		if partnerInfo == nil || partnerInfo.Status != docker.StateRunning {
 			source = ""
 		} else {

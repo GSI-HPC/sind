@@ -267,6 +267,17 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 | `empty`   | No nodes exist                                        |
 | `unknown` | All containers are in a state sind does not map, e.g. `restarting` |
 
+A node's `STATUS`, in `sind get cluster`, `sind get node` and `sind get nodes`, and its `status` in their JSON output, uses the same words for its container:
+
+| Status    | Container state                     |
+|-----------|-------------------------------------|
+| `running` | running                             |
+| `stopped` | exited, dead, or created            |
+| `paused`  | paused                              |
+| `unknown` | another state, e.g. `restarting`    |
+
+The `S` count of `STATUS (R/S/P/T)` includes the `unknown` nodes.
+
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok` and `ssh_ok` in the JSON output). After a host reboot or a Docker daemon restart they exist but are stopped; `sind power on` starts them again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
 
 When the realm has a [monitoring stack]({{< relref "/guides/monitoring" >}}), `MESH SERVICES` adds its four containers, each with ✓ while the service answers its readiness check, or while its container runs when Grafana, which runs the checks, does not (`grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` in the JSON output, which leaves them out without a stack). A monitored cluster lists its journal mount under `MOUNTS`: the realm's journal volume and the cluster's directory in it, in which each node mounts its own (`"subpath": "dev"` in the JSON output). The JSON output has `"monitoring": true` for a monitored cluster.
@@ -475,7 +486,7 @@ default   3       26.05.4
 dev       5       26.05.4
 ```
 
-`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):
+`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):
 
 ```json
 {

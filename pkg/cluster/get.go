@@ -101,15 +101,15 @@ type NodeSummary struct {
 // nodes the role's Slurm service, or mariadb and slurmdbd on a db node) are
 // reported under Services.
 type NodeDetail struct {
-	Container string                `json:"container"`
-	Cluster   string                `json:"cluster"`
-	Role      config.Role           `json:"role"`
-	Managed   bool                  `json:"managed"` // sind manages Slurm on the node (see IsManaged)
-	FQDN      string                `json:"fqdn"`
-	IP        string                `json:"ip"`
-	Status    docker.ContainerState `json:"status"`
-	Services  ServiceHealth         `json:"services"`
-	HA        *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
+	Container string        `json:"container"`
+	Cluster   string        `json:"cluster"`
+	Role      config.Role   `json:"role"`
+	Managed   bool          `json:"managed"` // sind manages Slurm on the node (see IsManaged)
+	FQDN      string        `json:"fqdn"`
+	IP        string        `json:"ip"`
+	Status    State         `json:"status"`
+	Services  ServiceHealth `json:"services"`
+	HA        *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
 // GetAllNodes lists all nodes across all clusters in the realm.
@@ -444,7 +444,9 @@ func aggregateState(states []docker.ContainerState) State {
 	return first
 }
 
-// containerStateToState maps a docker container state to a cluster State.
+// containerStateToState maps a docker container state to the State of a
+// node: running, paused, stopped (exited, dead or created), or unknown
+// (restarting, removing).
 func containerStateToState(state docker.ContainerState) State {
 	switch state {
 	case docker.StateRunning:

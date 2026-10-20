@@ -720,7 +720,7 @@ func TestFormatState(t *testing.T) {
 			"mixed",
 			[]*cluster.NodeStatus{
 				{Health: &cluster.NodeHealth{State: "running"}},
-				{Health: &cluster.NodeHealth{State: "exited"}},
+				{Health: &cluster.NodeHealth{State: "stopped"}},
 			},
 			cluster.StateMixed,
 			"mixed (1/1/0/2)",
@@ -878,6 +878,27 @@ func TestGetNode_Output(t *testing.T) {
 	assert.Equal(t, 1, inspects, "the node container is inspected once")
 }
 
+// TestGetNode_Stopped checks that a node whose container exited is
+// "stopped" in get node, in both formats, as it is in get nodes and get
+// cluster: get node printed docker's "exited".
+func TestGetNode_Stopped(t *testing.T) {
+	inspect := `[{"Id":"id","Name":"/sind-dev-worker-0","State":{"Status":"exited"},"Config":{"Labels":{"sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`
+	for _, tc := range []struct{ format, want string }{
+		{"human", "   stopped\n"},
+		{"json", `"status": "stopped"`},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(inspect, "", nil)
+
+			stdout, _, err := executeWithMock(&m, "get", "node", "worker-0.dev", "-o", tc.format)
+
+			require.NoError(t, err)
+			assert.Contains(t, stdout, tc.want)
+		})
+	}
+}
+
 func TestGetNode_JSON(t *testing.T) {
 	m := nodeHealthMock(t)
 
@@ -892,7 +913,7 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.True(t, got.Managed, "no sind.managed label: created before it existed")
 	assert.Equal(t, "controller.dev.sind.sind", got.FQDN)
 	assert.Equal(t, "10.0.0.2", got.IP)
-	assert.Equal(t, docker.StateRunning, got.Status)
+	assert.Equal(t, cluster.StateRunning, got.Status)
 	assert.True(t, got.Services["munge"])
 	assert.True(t, got.Services["sshd"])
 	assert.True(t, got.Services["slurmctld"])

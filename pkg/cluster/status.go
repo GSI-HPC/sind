@@ -31,10 +31,10 @@ type ServiceHealth map[probe.Service]bool
 
 // NodeHealth holds the health status of a single node.
 type NodeHealth struct {
-	State    docker.ContainerState `json:"status"`       // container state from Docker (e.g. "running", "exited")
-	IP       string                `json:"ip"`           // container IP address
-	Services ServiceHealth         `json:"services"`     // all readiness-checked services (munge unless identity clientIds, sshd, and on managed nodes the role's slurmctld/slurmd, mariadb and slurmdbd, slurmrestd, or sackd)
-	HA       *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
+	State    State         `json:"status"`       // the node's state, from its container's (see containerStateToState)
+	IP       string        `json:"ip"`           // container IP address
+	Services ServiceHealth `json:"services"`     // all readiness-checked services (munge unless identity clientIds, sshd, and on managed nodes the role's slurmctld/slurmd, mariadb and slurmdbd, slurmrestd, or sackd)
+	HA       *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
 // GetNodeHealth checks the health of a single node container, from its
@@ -62,7 +62,7 @@ func GetNodeHealth(ctx context.Context, client *docker.Client, info *docker.Cont
 // a per-node docker inspect.
 func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker.ContainerInfo, role config.Role, realm, clusterName string) *NodeHealth {
 	health := &NodeHealth{
-		State:    info.Status,
+		State:    containerStateToState(info.Status),
 		IP:       info.IPs[NetworkName(realm, clusterName)],
 		Services: make(ServiceHealth),
 	}

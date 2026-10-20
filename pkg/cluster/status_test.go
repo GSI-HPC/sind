@@ -156,7 +156,7 @@ func TestGetNodeHealth(t *testing.T) {
 			health, err := inspectedNodeHealth(t, docker.NewClient(&m), container, tt.role)
 
 			require.NoError(t, err)
-			assert.Equal(t, docker.ContainerState(status), health.State)
+			assert.Equal(t, containerStateToState(docker.ContainerState(status)), health.State)
 			assert.Equal(t, "172.18.0.2", health.IP)
 			assert.Equal(t, tt.want, health.Services)
 			if tt.wantRun != nil {
@@ -642,7 +642,7 @@ func TestGetStatus_Full(t *testing.T) {
 	require.Len(t, status.Nodes, 3)
 	assert.Equal(t, "controller.dev", status.Nodes[0].Name)
 	assert.Equal(t, config.RoleController, status.Nodes[0].Role)
-	assert.Equal(t, docker.StateRunning, status.Nodes[0].Health.State)
+	assert.Equal(t, StateRunning, status.Nodes[0].Health.State)
 	assert.Equal(t, "172.18.0.2", status.Nodes[0].Health.IP)
 	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceMunge])
 	assert.True(t, status.Nodes[0].Health.Services[probe.ServiceSSHD])
@@ -901,8 +901,8 @@ func TestGetStatus_MixedStates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StateMixed, status.State)
 	require.Len(t, status.Nodes, 2)
-	assert.Equal(t, docker.StateRunning, status.Nodes[0].Health.State)
-	assert.Equal(t, docker.StateExited, status.Nodes[1].Health.State)
+	assert.Equal(t, StateRunning, status.Nodes[0].Health.State)
+	assert.Equal(t, StateStopped, status.Nodes[1].Health.State, "exited is stopped, as in get nodes")
 }
 
 // TestGetStatus_Parallelism uses more nodes than statusNodeConcurrency to
@@ -969,7 +969,7 @@ func TestGetStatus_InspectMissingEntry(t *testing.T) {
 // TestNodeHealth_JSONStatusKey locks in the JSON schema: container state is
 // exposed as "status", matching Summary / Status / NodeSummary / NodeDetail.
 func TestNodeHealth_JSONStatusKey(t *testing.T) {
-	h := NodeHealth{State: docker.StateRunning, IP: "10.0.0.1"}
+	h := NodeHealth{State: StateRunning, IP: "10.0.0.1"}
 	data, err := json.Marshal(h)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"status":"running"`)
@@ -981,7 +981,7 @@ func TestNodeHealth_JSONStatusKey(t *testing.T) {
 // would be a schema regression for get node / get cluster consumers.
 func TestNodeHealth_JSONServicesMap(t *testing.T) {
 	h := NodeHealth{
-		State: docker.StateRunning,
+		State: StateRunning,
 		IP:    "10.0.0.1",
 		Services: ServiceHealth{
 			probe.ServiceMunge:     true,

@@ -132,7 +132,7 @@ func TestGetMonitoring_NoStack(t *testing.T) {
 }
 
 func TestFormatServiceState(t *testing.T) {
-	assert.Equal(t, "missing", formatServiceState(cluster.MonitoringService{}))
+	assert.Equal(t, "missing", formatServiceState(cluster.MonitoringService{State: cluster.ServiceMissing}))
 	assert.Equal(t, "not ready", formatServiceState(cluster.MonitoringService{State: "running", Checked: true}))
 	assert.Equal(t, "unchecked", formatServiceState(cluster.MonitoringService{State: "running"}))
 	assert.Equal(t, "running", formatServiceState(cluster.MonitoringService{State: "running", Ready: true, Checked: true}))

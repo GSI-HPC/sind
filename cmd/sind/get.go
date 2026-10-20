@@ -435,8 +435,6 @@ func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 // not, and "missing" when the container does not exist.
 func formatServiceState(s cluster.MonitoringService) string {
 	switch {
-	case s.State == "":
-		return "missing"
 	case s.State == docker.StateRunning && !s.Checked:
 		return "unchecked"
 	case s.State == docker.StateRunning && !s.Ready:
@@ -566,9 +564,9 @@ func formatState(status *cluster.Status) string {
 	var running, stopped, paused int
 	for _, n := range status.Nodes {
 		switch n.Health.State {
-		case docker.StateRunning:
+		case cluster.StateRunning:
 			running++
-		case docker.StatePaused:
+		case cluster.StatePaused:
 			paused++
 		default:
 			stopped++
