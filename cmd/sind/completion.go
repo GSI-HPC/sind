@@ -3,6 +3,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/cobra"
 )
@@ -70,4 +72,21 @@ func completeLogsArgs(cmd *cobra.Command, args []string, toComplete string) ([]s
 	default:
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
+}
+
+// completeAliases completes the aliases of a command group's subcommands,
+// which cobra leaves out, once a prefix of one is typed: without one, the
+// group lists each subcommand once, by its name.
+func completeAliases(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	var comps []string
+	if len(args) == 0 && toComplete != "" {
+		for _, sub := range cmd.Commands() {
+			for _, alias := range sub.Aliases {
+				if strings.HasPrefix(alias, toComplete) {
+					comps = append(comps, cobra.CompletionWithDesc(alias, sub.Short))
+				}
+			}
+		}
+	}
+	return comps, cobra.ShellCompDirectiveNoFileComp
 }

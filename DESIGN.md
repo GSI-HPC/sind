@@ -707,6 +707,8 @@ sind power unfreeze NODES               # resume frozen node
 | freeze | `docker pause` (cgroup freezer) |
 | unfreeze | `docker unpause` |
 
+A docker verb in place of the power command, such as `sind power stop`, is an unknown command whose error suggests the power command that runs it (`shutdown`); `restart` suggests `reboot`, and `resume` `unfreeze`. Shell completion offers `off` once a prefix of it is typed.
+
 `docker stop` sends the image's `STOPSIGNAL`. The sind-node images set `SIGRTMIN+3`, which makes systemd (PID 1) shut the node down cleanly. A custom image without it gets SIGTERM, which systemd does not treat as a shutdown request, so the node is killed after Docker's 10-second timeout (see Custom Images).
 
 A power command runs its Docker calls for the nodes of a cluster in parallel (at most 8 at a time), and handles the clusters of its nodes one after another; `reboot` and `cycle` take every node of a cluster down before they start any of them. A failing node does not stop the others: the command returns every failure, joined, and exits non-zero.

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +30,38 @@ func TestPower_OffIsShutdown(t *testing.T) {
 	c, _, err := cmd.Find([]string{"power", "off"})
 	require.NoError(t, err)
 	assert.Equal(t, "shutdown", c.Name())
+}
+
+// TestPower_SuggestsForDockerVerbs verifies that the docker verbs the
+// help names suggest the power command that runs them.
+func TestPower_SuggestsForDockerVerbs(t *testing.T) {
+	for verb, want := range map[string]string{
+		"stop": "shutdown", "kill": "cut", "start": "on", "restart": "reboot",
+		"pause": "freeze", "unpause": "unfreeze", "resume": "unfreeze",
+	} {
+		t.Run(verb, func(t *testing.T) {
+			_, _, err := executeCommand("power", verb)
+			require.EqualError(t, err, `unknown command "`+verb+`" for "sind power" (did you mean "`+want+`"?)`)
+		})
+	}
+}
+
+// TestPower_CompletesOff verifies that the off alias completes once a
+// prefix of it is typed, and only then.
+func TestPower_CompletesOff(t *testing.T) {
+	out, _, err := executeCommand(cobra.ShellCompRequestCmd, "power", "o")
+	require.NoError(t, err)
+	assert.Contains(t, out, "off\tGracefully shut down nodes (docker stop; alias: off)\n")
+	assert.Contains(t, out, "on\t")
+
+	out, _, err = executeCommand(cobra.ShellCompRequestCmd, "power", "")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "off\t")
+	assert.Contains(t, out, "shutdown\t")
+
+	out, _, err = executeCommand(cobra.ShellCompRequestCmd, "power", "x")
+	require.NoError(t, err)
+	assert.Equal(t, ":4\n", out)
 }
 
 func TestPower_RequiresArgs(t *testing.T) {
