@@ -407,31 +407,23 @@ func GetRealms(ctx context.Context, client *docker.Client) ([]*RealmSummary, err
 	}
 
 	// Group by realm, tracking unique cluster names per realm.
-	type realmData struct {
-		clusters map[string]struct{}
-	}
-	byRealm := make(map[string]*realmData)
+	byRealm := make(map[string]map[string]struct{})
 	for _, c := range containers {
 		realm := c.Labels[LabelRealm]
 		if realm == "" {
 			continue
 		}
-		rd, ok := byRealm[realm]
-		if !ok {
-			rd = &realmData{clusters: make(map[string]struct{})}
-			byRealm[realm] = rd
+		if byRealm[realm] == nil {
+			byRealm[realm] = make(map[string]struct{})
 		}
 		if cluster := c.Labels[LabelCluster]; cluster != "" {
-			rd.clusters[cluster] = struct{}{}
+			byRealm[realm][cluster] = struct{}{}
 		}
 	}
 
 	result := make([]*RealmSummary, 0, len(byRealm))
 	for _, name := range slices.Sorted(maps.Keys(byRealm)) {
-		result = append(result, &RealmSummary{
-			Name:     name,
-			Clusters: len(byRealm[name].clusters),
-		})
+		result = append(result, &RealmSummary{Name: name, Clusters: len(byRealm[name])})
 	}
 	return result, nil
 }
