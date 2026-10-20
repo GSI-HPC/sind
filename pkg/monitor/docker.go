@@ -82,14 +82,8 @@ func (m *DockerMonitor) Run(ctx context.Context, r io.Reader, ch chan<- Event) e
 // by stripping the container prefix. Returns false if the name does not
 // belong to this cluster.
 func (m *DockerMonitor) extractShortName(containerName string) (string, bool) {
-	if !strings.HasPrefix(containerName, m.containerPrefix) {
-		return "", false
-	}
-	short := strings.TrimPrefix(containerName, m.containerPrefix)
-	if short == "" {
-		return "", false
-	}
-	return short, true
+	short, ok := strings.CutPrefix(containerName, m.containerPrefix)
+	return short, ok && short != ""
 }
 
 // DockerEventsArgs returns the docker CLI arguments for streaming container

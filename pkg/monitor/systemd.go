@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,11 +129,10 @@ func parseChangedProperties(raw json.RawMessage) (map[string]string, error) {
 // unitNameFromPath extracts a systemd unit name from a D-Bus object path.
 // For example, /org/freedesktop/systemd1/unit/munge_2eservice becomes munge.service.
 func unitNameFromPath(path string) string {
-	const prefix = "/org/freedesktop/systemd1/unit/"
-	if !strings.HasPrefix(path, prefix) {
+	encoded, ok := strings.CutPrefix(path, "/org/freedesktop/systemd1/unit/")
+	if !ok {
 		return ""
 	}
-	encoded := strings.TrimPrefix(path, prefix)
 	return dbusPathUnescape(encoded)
 }
 
@@ -144,10 +144,8 @@ func dbusPathUnescape(s string) string {
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		if s[i] == '_' && i+2 < len(s) {
-			hi := unhex(s[i+1])
-			lo := unhex(s[i+2])
-			if hi >= 0 && lo >= 0 {
-				b.WriteByte(byte(hi<<4 | lo))
+			if c, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
+				b.WriteByte(byte(c))
 				i += 2
 				continue
 			}
@@ -155,19 +153,6 @@ func dbusPathUnescape(s string) string {
 		b.WriteByte(s[i])
 	}
 	return b.String()
-}
-
-func unhex(c byte) int {
-	switch {
-	case '0' <= c && c <= '9':
-		return int(c - '0')
-	case 'a' <= c && c <= 'f':
-		return int(c - 'a' + 10)
-	case 'A' <= c && c <= 'F':
-		return int(c - 'A' + 10)
-	default:
-		return -1
-	}
 }
 
 // SystemdMonitorArgs returns the docker CLI arguments for streaming
