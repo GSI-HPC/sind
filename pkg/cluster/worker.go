@@ -314,7 +314,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 				failed(err)
 			}
 			if monitored {
-				forgetMonitoredNodes(cleanupCtx, client, meshMgr, opts.ClusterName, workerNames(nodeConfigs)...)
+				forgetMonitoredNodes(cleanupCtx, client, meshMgr, opts.ClusterName, shortNames(nodeConfigs)...)
 			}
 			endRollback(errors.Join(rollbackErrs...))
 		}
@@ -395,11 +395,11 @@ func prepareMonitoredWorkers(ctx context.Context, client *docker.Client, meshMgr
 	if err := registerStackDNS(ctx, client, meshMgr); err != nil {
 		return err
 	}
-	return observability.NewManager(client, meshMgr.Realm).ResetJournals(ctx, clusterName, workerNames(nodeConfigs)...)
+	return observability.NewManager(client, meshMgr.Realm).ResetJournals(ctx, clusterName, shortNames(nodeConfigs)...)
 }
 
-// workerNames returns the short names of nodes.
-func workerNames(nodeConfigs []RunConfig) []string {
+// shortNames returns the short names of nodes.
+func shortNames(nodeConfigs []RunConfig) []string {
 	names := make([]string, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
 		names[i] = nc.ShortName
