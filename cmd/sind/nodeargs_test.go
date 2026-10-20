@@ -3,6 +3,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -156,4 +157,25 @@ func TestGroupByCluster(t *testing.T) {
 
 func TestGroupByCluster_Empty(t *testing.T) {
 	assert.Empty(t, groupByCluster(nil))
+}
+
+// TestNodeArgumentHelp verifies that the help of every command with an
+// optional cluster says what leaving it out means, and that the commands
+// that take node sets describe them alike.
+func TestNodeArgumentHelp(t *testing.T) {
+	for _, path := range []string{"create cluster", "create worker", "delete cluster", "get cluster", "get auth-key", "enter", "exec"} {
+		t.Run(path, func(t *testing.T) {
+			stdout, _, err := executeCommand(append(strings.Fields(path), "--help")...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, `defaults to "default".`)
+		})
+	}
+	for _, path := range []string{"power on", "delete worker"} {
+		t.Run(path, func(t *testing.T) {
+			stdout, _, err := executeCommand(append(strings.Fields(path), "--help")...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "NODES is one or more node arguments")
+			assert.Contains(t, stdout, "sind "+path+" 'worker-[0-3]'")
+		})
+	}
 }

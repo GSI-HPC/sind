@@ -18,6 +18,7 @@ func newCreateWorkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "worker [CLUSTER]",
 		Short:             "Add worker nodes to a cluster",
+		Long:              "Add worker nodes to a cluster.\n\n" + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
@@ -121,6 +122,8 @@ func newDeleteWorkerCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "worker NODES",
 		Short:             "Remove worker nodes from a cluster",
+		Long:              "Remove worker nodes from a cluster.\n\n" + nodesHelp,
+		Example:           nodesExample("sind delete worker", "worker-0.dev"),
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeNodeNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {

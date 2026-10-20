@@ -56,6 +56,7 @@ func newCreateClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cluster [NAME] [--config FILE]",
 		Short: "Create a Slurm cluster",
+		Long:  "Create a Slurm cluster.\n\nNAME overrides the name in the configuration, which defaults to \"" + config.DefaultClusterName + "\".",
 		Args:  optionalCluster,
 		// The name is new: the existing ones would conflict.
 		ValidArgsFunction: cobra.NoFileCompletions,

@@ -25,6 +25,26 @@ func optionalCluster(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// defaultClusterHelp is the line of the Long of a command that names the
+// optional cluster argument arg.
+func defaultClusterHelp(arg string) string {
+	return arg + ` defaults to "` + config.DefaultClusterName + `".`
+}
+
+// nodesHelp describes the NODES argument of the commands that take node
+// sets, power and delete worker.
+const nodesHelp = `NODES is one or more node arguments: a node (worker-0), a node of a cluster
+(worker-0.dev) or a node set (worker-[0-3], worker-[0-3].dev). The cluster
+defaults to "default". Quote a node set from the shell, which would
+otherwise expand worker-[0-3] to the files in the working directory that
+match it.`
+
+// nodesExample returns the Example of a command that takes node sets: a
+// quoted node set, and node, a node of another cluster.
+func nodesExample(command, node string) string {
+	return "  " + command + " 'worker-[0-3]'\n  " + command + " " + node
+}
+
 // clusterArg returns the cluster named by the argument of a command that
 // optionalCluster checks, the default cluster without one.
 func clusterArg(args []string) string {

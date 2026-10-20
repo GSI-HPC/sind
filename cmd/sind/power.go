@@ -53,17 +53,11 @@ func newPowerCommand() *cobra.Command {
 	for _, c := range cmds {
 		fn, locked := c.fn, c.locked
 		cmd.AddCommand(&cobra.Command{
-			Use:     c.use,
-			Aliases: c.aliases,
-			Short:   c.short,
-			Long: c.short + `.
-
-NODES is one or more node arguments: a node (worker-0), a node of a cluster
-(worker-0.dev) or a node set (worker-[0-3], worker-[0-3].dev). The cluster
-defaults to "default". Quote a node set from the shell, which would
-otherwise expand worker-[0-3] to the files in the working directory that
-match it.`,
-			Example:           "  sind power " + strings.Fields(c.use)[0] + " 'worker-[0-3]'\n  sind power " + strings.Fields(c.use)[0] + " controller.dev",
+			Use:               c.use,
+			Aliases:           c.aliases,
+			Short:             c.short,
+			Long:              c.short + ".\n\n" + nodesHelp,
+			Example:           nodesExample("sind power "+strings.Fields(c.use)[0], "controller.dev"),
 			Args:              cobra.MinimumNArgs(1),
 			ValidArgsFunction: completeNodeNames,
 			RunE: withProgress(func(cmd *cobra.Command, args []string) error {

@@ -95,6 +95,7 @@ func newEnterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "enter [CLUSTER]",
 		Short:             "Interactive shell on submitter or controller",
+		Long:              "Interactive shell on submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -151,6 +152,7 @@ func newExecCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "exec [CLUSTER] -- COMMAND [ARGS...]",
 		Short: "Run a command on submitter or controller",
+		Long:  "Run a command on submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
 		// runExec parses the flags itself: with cobra parsing them, shell
 		// completion could not tell whether the -- was typed yet.
 		DisableFlagParsing: true,

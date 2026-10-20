@@ -299,7 +299,9 @@ func newGetAuthKeyCommand() *cobra.Command {
 slurm (auth/slurm, identity clientIds) or jwt (auth/jwt, which signs the
 REST API tokens of a cluster with an api node). Without it, the key of the
 cluster's AuthType: slurm.key with identity clientIds, the munge key
-otherwise.`,
+otherwise.
+
+` + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -442,6 +444,7 @@ func newGetClusterCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "cluster [NAME]",
 		Short:             "Show cluster health status",
+		Long:              "Show cluster health status.\n\n" + defaultClusterHelp("NAME"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {

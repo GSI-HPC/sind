@@ -28,6 +28,7 @@ func newDeleteClusterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "cluster [NAME]",
 		Short:             "Delete a cluster",
+		Long:              "Delete a cluster.\n\n" + defaultClusterHelp("NAME"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
