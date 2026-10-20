@@ -103,8 +103,7 @@ func TestDoctorCommand_DockerTooOld(t *testing.T) {
 	m.AddResult(dockerInfo("27.5.0"), "", nil) // docker info
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Docker Engine")
+	require.ErrorContains(t, err, "Docker Engine")
 
 	assert.Contains(t, out, "27.5.0")
 }
@@ -116,8 +115,7 @@ func TestDoctorCommand_DockerNotReachable(t *testing.T) {
 	}
 
 	out, err := executeDoctor(hermeticDoctorCtx(t, &m, nil), t)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Docker Engine")
+	require.ErrorContains(t, err, "Docker Engine")
 
 	assert.Contains(t, out, "Docker Engine")
 }

@@ -60,15 +60,13 @@ func TestParseSSHArgs_Empty(t *testing.T) {
 
 func TestParseSSHArgs_OnlyDash(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"--"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "node argument required")
+	assert.ErrorContains(t, err, "node argument required")
 }
 
 func TestParseSSHArgs_OnlyOptions(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"-v", "-l", "alice", "--", "id"})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "node argument required")
 	assert.True(t, isUsageError(err))
-	assert.Contains(t, err.Error(), "node argument required")
 }
 
 // TestParseSSHArgs_OptionValues checks that the node is found among SSH
@@ -127,9 +125,8 @@ func TestParseSSHArgs_MissingOptionValue(t *testing.T) {
 
 func TestParseSSHArgs_LongOption(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"--realm", "ci", "worker-0"})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "ssh has no option --realm")
 	assert.True(t, isUsageError(err))
-	assert.Contains(t, err.Error(), "ssh has no option --realm")
 }
 
 func TestSSH_CommandWithoutDashExits2(t *testing.T) {
@@ -190,20 +187,17 @@ func TestParseExecArgs_WithCluster(t *testing.T) {
 
 func TestParseExecArgs_MissingSeparator(t *testing.T) {
 	_, _, err := parseExecArgs([]string{"hostname"}, -1)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "-- separator")
+	assert.ErrorContains(t, err, "-- separator")
 }
 
 func TestParseExecArgs_MissingCommand(t *testing.T) {
 	_, _, err := parseExecArgs(nil, 0)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "command required")
+	assert.ErrorContains(t, err, "command required")
 }
 
 func TestParseExecArgs_ExtraArgsBefore(t *testing.T) {
 	_, _, err := parseExecArgs([]string{"a", "b", "cmd"}, 2)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "at most one argument before --")
+	assert.ErrorContains(t, err, "at most one argument before --")
 }
 
 func TestSSH_Help(t *testing.T) {
@@ -274,8 +268,7 @@ func TestExec_VerboseAfterExec(t *testing.T) {
 
 func TestExec_UnknownFlag(t *testing.T) {
 	_, _, err := executeCommand("exec", "--bogus", "--", "hostname")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown flag: --bogus")
+	require.ErrorContains(t, err, "unknown flag: --bogus")
 }
 
 // dockerArgs runs sind with args, stdin and stdout, with the default

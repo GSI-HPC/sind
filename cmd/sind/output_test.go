@@ -41,8 +41,7 @@ func TestGetOutput_RejectsUnknownValue(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{"get", "clusters", "--output", "yaml"})
 	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `invalid --output value "yaml"`)
+	require.ErrorContains(t, err, `invalid --output value "yaml"`)
 }
 
 func TestWriteJSON_KeepsHTMLCharacters(t *testing.T) {

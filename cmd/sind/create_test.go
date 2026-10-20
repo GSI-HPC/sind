@@ -75,8 +75,7 @@ func TestLoadConfig_FromFile(t *testing.T) {
 
 func TestLoadConfig_FileNotFound(t *testing.T) {
 	_, err := loadConfig(noStdin(t), io.Discard, "/nonexistent/config.yaml")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reading config")
+	assert.ErrorContains(t, err, "reading config")
 }
 
 func TestLoadConfig_InvalidYAML(t *testing.T) {
@@ -210,9 +209,8 @@ func TestCreate_WaitFlag(t *testing.T) {
 
 			// A negative limit is a usage error, reported before sind acts.
 			_, _, err = executeCommand("create", sub, "--wait", "-1s")
-			require.Error(t, err)
+			require.EqualError(t, err, "--wait must not be negative, got -1s")
 			assert.True(t, isUsageError(err))
-			assert.Equal(t, "--wait must not be negative, got -1s", err.Error())
 		})
 	}
 }

@@ -44,8 +44,7 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 
 			_, _, err := executeWithMock(&m, append([]string{"create", "worker"}, tt.args...)...)
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.True(t, isUsageError(err), "exits 2")
 			assert.Empty(t, m.Calls, "no docker call")
 		})

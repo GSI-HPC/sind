@@ -260,8 +260,7 @@ func TestRefuseFlagArgs(t *testing.T) {
 	assert.Equal(t, []string{"worker-0.dev"}, called.Args)
 	for _, args := range [][]string{{"-v"}, {"worker-0", "--follow"}, {"--", "-x"}} {
 		err := call(plain, "sind_logs", args...)
-		require.Error(t, err, args)
-		assert.Contains(t, err.Error(), "is a flag")
+		require.ErrorContains(t, err, "is a flag", args)
 	}
 
 	// exec's command after "--" may hold flags; its own arguments may not.

@@ -110,9 +110,8 @@ func TestParseNodeArgs_Errors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			targets, err := parseNodeArgs(tt.expr)
-			require.Error(t, err)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.Nil(t, targets)
-			assert.Contains(t, err.Error(), tt.wantErr)
 			var ue *usageError
 			assert.ErrorAs(t, err, &ue, "a node argument error is a usage error")
 		})

@@ -121,8 +121,7 @@ func TestSyncSSHExport_ExportError(t *testing.T) {
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(dir, "ssh_config"), []byte("old"), 0644))
 
 	err := syncSSHExport(t.Context(), client, meshMgr, fs, dir)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "is not running")
+	require.ErrorContains(t, err, "is not running")
 	exists, err := afero.Exists(fs, filepath.Join(dir, "ssh_config"))
 	require.NoError(t, err)
 	assert.True(t, exists)

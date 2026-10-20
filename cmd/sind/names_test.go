@@ -38,8 +38,7 @@ func TestInvalidClusterName(t *testing.T) {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
 			var m mock.Executor
 			_, _, err := executeWithMock(&m, tt.args...)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.Empty(t, m.Calls, "docker must not be called")
 		})
 	}

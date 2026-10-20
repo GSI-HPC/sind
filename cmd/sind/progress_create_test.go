@@ -233,7 +233,7 @@ func TestCreateCluster_MeshRollbackIsAStep(t *testing.T) {
 			stderr, events, err := run(true)
 
 			require.EqualError(t, err, "setting up mesh: inspecting mesh network: exit status 1: Error response from daemon: network sind-mesh not found")
-			assert.Equal(t, plainErr.Error(), err.Error())
+			assert.EqualError(t, err, plainErr.Error())
 			assert.Equal(t, withoutTimestamps(plainStderr), withoutTimestamps(stderr))
 			tree := testutil.WithoutCalls(events)
 			assert.True(t, strings.HasSuffix(tree, "\n  "+tc.rollback+"\n"), tree)

@@ -744,8 +744,7 @@ func TestFormatServices_Multiple(t *testing.T) {
 
 func TestGetNode_RejectsFQDN(t *testing.T) {
 	_, _, err := executeCommand("get", "node", "worker-0.dev.sind.sind")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "NODE[.CLUSTER]")
+	require.ErrorContains(t, err, "NODE[.CLUSTER]")
 	assert.Contains(t, err.Error(), "worker-0.dev.sind.sind")
 }
 
@@ -770,8 +769,7 @@ func TestGetNode_NotFound(t *testing.T) {
 	m.AddResult("", "Error: No such container: sind-dev-ghost\n", testutil.ExitCode1(t))
 
 	_, _, err := executeWithMock(&m, "get", "node", "ghost.dev")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `node "ghost" not found in cluster "dev"`)
+	require.ErrorContains(t, err, `node "ghost" not found in cluster "dev"`)
 	assert.NotContains(t, err.Error(), "exit status")
 }
 

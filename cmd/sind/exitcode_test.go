@@ -160,7 +160,7 @@ func TestNewChildExitError(t *testing.T) {
 			err := newChildExitError(exitErr)
 
 			assert.Equal(t, tc.want, err.code)
-			assert.Equal(t, exitErr.Error(), err.Error())
+			assert.EqualError(t, err, exitErr.Error())
 			require.ErrorIs(t, err, exitErr)
 		})
 	}
@@ -274,14 +274,12 @@ func TestRun_DockerThatCannotStartExits1(t *testing.T) {
 func TestArityErrorNamesTheUsage(t *testing.T) {
 	_, _, err := executeCommand("power", "on")
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "only received 0 (usage: sind power on NODES)")
 	assert.True(t, isUsageError(err))
-	assert.Contains(t, err.Error(), "only received 0 (usage: sind power on NODES)")
 }
 
 func TestRemovedStatusCommandPointsToGetCluster(t *testing.T) {
 	_, _, err := executeCommand("status")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `(it is now "get cluster")`)
+	require.ErrorContains(t, err, `(it is now "get cluster")`)
 }

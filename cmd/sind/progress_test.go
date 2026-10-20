@@ -213,9 +213,8 @@ func TestTheProgressDisplayIsDrawnWhereItCan(t *testing.T) {
 			}
 			err := executeOn(ctx, &stdout, &stderr, append(args, "--count", "0")...)
 
-			require.Error(t, err)
+			require.EqualError(t, err, tc.msg)
 			assert.True(t, isUsageError(err), "a usage error: %v", err)
-			assert.Equal(t, tc.msg, err.Error())
 			assert.Equal(t, tc.shown, c.shown(), "displays made")
 			assert.Empty(t, stdout.String())
 			if w != nil {
@@ -268,9 +267,8 @@ func TestEveryCommandChecksTheProgressFlag(t *testing.T) {
 				assert.Empty(t, stderr.String())
 				return
 			}
-			require.Error(t, err)
+			require.EqualError(t, err, tc.msg)
 			assert.True(t, isUsageError(err), "a usage error: %v", err)
-			assert.Equal(t, tc.msg, err.Error())
 			assert.Empty(t, stdout.String())
 			assert.Zero(t, calls, "nothing runs")
 		})
@@ -653,9 +651,8 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 			var stderr bytes.Buffer
 			err := executeOn(powerCutFails(t.Context(), t, func() { calls++ }), io.Discard, &stderr,
 				"--progress-log", path, "power", "cut", "worker-0")
-			require.Error(t, err)
+			require.ErrorContains(t, err, "--progress-log names a progress log that cannot be used: ")
 			assert.True(t, isUsageError(err), "a usage error: %v", err)
-			assert.Contains(t, err.Error(), "--progress-log names a progress log that cannot be used: ")
 			assert.Zero(t, calls, "nothing runs")
 			assert.Empty(t, stderr.String())
 		}
