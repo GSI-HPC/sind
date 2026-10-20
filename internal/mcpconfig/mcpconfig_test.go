@@ -43,7 +43,19 @@ func read(t *testing.T, fsys afero.Fs, path string) string {
 	return string(data)
 }
 
-func ptr(s string) *string { return &s }
+// newServers is the configuration Set makes of an empty one.
+const newServers = `{
+  "mcpServers": {
+    "sind": {
+      "command": "/usr/bin/sind",
+      "args": [
+        "mcp",
+        "start"
+      ]
+    }
+  }
+}
+`
 
 func TestSet(t *testing.T) {
 	tests := []struct {
@@ -52,42 +64,11 @@ func TestSet(t *testing.T) {
 		key  string
 		want string
 	}{
-		{
-			name: "no file",
-			key:  "mcpServers",
-			want: `{
-  "mcpServers": {
-    "sind": {
-      "command": "/usr/bin/sind",
-      "args": [
-        "mcp",
-        "start"
-      ]
-    }
-  }
-}
-`,
-		},
-		{
-			name: "whitespace only",
-			in:   ptr(" \n"),
-			key:  "mcpServers",
-			want: `{
-  "mcpServers": {
-    "sind": {
-      "command": "/usr/bin/sind",
-      "args": [
-        "mcp",
-        "start"
-      ]
-    }
-  }
-}
-`,
-		},
+		{name: "no file", key: "mcpServers", want: newServers},
+		{name: "whitespace only", in: new(" \n"), key: "mcpServers", want: newServers},
 		{
 			name: "keeps other settings and servers",
-			in: ptr(`{
+			in: new(`{
 	"globalShortcut": "Ctrl+Space",
 	"mcpServers": {
 		"other": {"command": "x", "cwd": "/w", "disabled": true, "autoApprove": ["t"]}
@@ -112,7 +93,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "jsonc with comments and trailing commas",
-			in: ptr(`{
+			in: new(`{
   // inputs
   "inputs": [],
   "servers": {
@@ -139,7 +120,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "comment after the last entry",
-			in: ptr(`{
+			in: new(`{
     "servers": {
         "other": {
             "command": "x"
@@ -164,7 +145,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "no servers yet",
-			in:   ptr("{\n  \"preferences\": {\"x\": 1}\n}\n"),
+			in:   new("{\n  \"preferences\": {\"x\": 1}\n}\n"),
 			key:  "mcpServers",
 			want: `{
   "preferences": {"x": 1},
@@ -182,7 +163,7 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "empty servers",
-			in:   ptr("{\n  \"servers\": {}\n}\n"),
+			in:   new("{\n  \"servers\": {}\n}\n"),
 			key:  "servers",
 			want: `{
   "servers": {
@@ -199,19 +180,19 @@ func TestSet(t *testing.T) {
 		},
 		{
 			name: "one-line file",
-			in:   ptr(`{"a":1,"mcpServers":{"b":{"command":"y"}}}`),
+			in:   new(`{"a":1,"mcpServers":{"b":{"command":"y"}}}`),
 			key:  "mcpServers",
 			want: `{"a":1,"mcpServers":{"b":{"command":"y"},"sind":{"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
 		},
 		{
 			name: "one-line file without servers",
-			in:   ptr(`{"a": 1}`),
+			in:   new(`{"a": 1}`),
 			key:  "mcpServers",
 			want: `{"a": 1,"mcpServers": {"sind": {"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
 		},
 		{
 			name: "replaces the entry and keeps its comments",
-			in: ptr(`{
+			in: new(`{
   "mcpServers": {
     // ours
     "sind": {"command": "old", "args": ["x"]}, // was old
@@ -313,14 +294,14 @@ func TestRemove(t *testing.T) {
 }
 
 func TestRemove_Missing(t *testing.T) {
-	_, f := load(t, ptr(`{"servers": {"a": {}}}`), "servers")
+	_, f := load(t, new(`{"servers": {"a": {}}}`), "servers")
 	assert.False(t, f.Remove("sind"))
 	_, f = load(t, nil, "servers")
 	assert.False(t, f.Remove("sind"))
 }
 
 func TestServers(t *testing.T) {
-	_, f := load(t, ptr(`{
+	_, f := load(t, new(`{
   "mcpServers": {
     "z": {"type": "stdio", "command": "/bin/z", "args": ["a", "b"], "env": {"K": "secret"}},
     "web": {"type": "http", "url": "https://example.com/mcp", /* auth */ "headers": {}},
@@ -422,7 +403,7 @@ func TestLoad_SymlinkErrors(t *testing.T) {
 }
 
 func TestSave_Backups(t *testing.T) {
-	fsys, f := load(t, ptr("{}\n"), "mcpServers")
+	fsys, f := load(t, new("{}\n"), "mcpServers")
 
 	// Nothing changed, nothing written.
 	backup, err := f.Save(now)
