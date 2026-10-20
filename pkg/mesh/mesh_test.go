@@ -226,6 +226,7 @@ func TestEnsureMesh(t *testing.T) {
 	assert.Equal(t, DNSImage, dns.image)
 	assert.Equal(t, "10.0.255.254", dns.ips["sind-mesh"], "DNS has the pinned address")
 	assert.Contains(t, dns.files[corefilePath], "hosts {")
+	assert.Equal(t, zonefile, dns.files[zonefilePath])
 
 	// The relay resolves through the DNS container and got the keys
 	// before it started; no helper container is involved.
@@ -998,6 +999,7 @@ func TestRemoveDNSRecords_DNSStopped(t *testing.T) {
 	assert.Empty(t, dns.signals, "a started CoreDNS reads the Corefile anyway")
 	assert.NotContains(t, dns.files[corefilePath], "controller.dev.sind.sind")
 	assert.Contains(t, dns.files[corefilePath], "172.18.0.3 worker-0.dev.sind.sind")
+	assert.Equal(t, zonefile, dns.files[zonefilePath], "a DNS container of an earlier sind gets the zone file")
 	assert.Equal(t, []string{"start sind-dns", "start sind-ssh"}, calls(m, "start"))
 }
 
@@ -1021,7 +1023,7 @@ func TestGenerateCorefile_Empty(t *testing.T) {
 	cf := generateCorefile(DefaultRealm, nil)
 	assert.Contains(t, cf, "sind.sind:53")
 	assert.Contains(t, cf, "hosts {")
-	assert.Contains(t, cf, "fallthrough")
+	assert.Contains(t, cf, "        fallthrough\n    }\n    file /zone.db\n")
 	assert.Contains(t, cf, "forward . /etc/resolv.conf")
 }
 
