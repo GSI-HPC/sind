@@ -9,7 +9,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/ssh"
-	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/afero"
 )
 
@@ -33,11 +32,4 @@ func syncSSHExport(ctx context.Context, client *docker.Client, meshMgr *mesh.Man
 	// Remove the realm directory if empty.
 	_ = fs.Remove(dir)
 	return nil
-}
-
-// sindStateDir returns the per-realm SSH export directory path,
-// state.RealmDir: $XDG_STATE_HOME/sind/<realm>, falling back to
-// ~/.local/state/sind/<realm>.
-func sindStateDir(realm string) (string, error) {
-	return state.RealmDir(realm)
 }

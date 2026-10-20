@@ -19,6 +19,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/GSI-HPC/sind/pkg/probe"
+	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -483,7 +484,7 @@ func newGetSSHConfigCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			dir, err := sindStateDir(realm)
+			dir, err := state.RealmDir(realm)
 			if err != nil {
 				return err
 			}

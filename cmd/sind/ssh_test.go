@@ -16,6 +16,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
+	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -415,7 +416,7 @@ func TestSSHAccess(t *testing.T) {
 	assert.Contains(t, stdout, "submitter", "exec should route to submitter when present")
 
 	// --- user SSH client via exported ssh_config ---
-	sshConfigDir, err := sindStateDir(realm)
+	sshConfigDir, err := state.RealmDir(realm)
 	require.NoError(t, err)
 	sshConfigPath := filepath.Join(sshConfigDir, "ssh_config")
 

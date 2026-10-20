@@ -9,6 +9,7 @@ import (
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -127,7 +128,7 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		return err
 	}
 
-	if dir, dirErr := sindStateDir(realm); dirErr == nil {
+	if dir, dirErr := state.RealmDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
 			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
 		}
@@ -175,7 +176,7 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 		}
 	}
 
-	if dir, dirErr := sindStateDir(realm); dirErr == nil {
+	if dir, dirErr := state.RealmDir(realm); dirErr == nil {
 		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
 			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
 		}
