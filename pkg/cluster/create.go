@@ -726,11 +726,10 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			}()
 
 			hostKey, err := setupNode(nctx, client, containerName, nc, sshPubKey)
+			ir := <-inspected // on a failed setup too: no inspect outlives setupNodes
 			if err != nil {
 				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
-
-			ir := <-inspected
 			if ir.err != nil {
 				return fmt.Errorf("inspecting node %s: %w", nc.ShortName, ir.err)
 			}

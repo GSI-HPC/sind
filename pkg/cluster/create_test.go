@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1464,6 +1465,30 @@ func TestSetupNodes_InspectError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting node controller")
+}
+
+// A node whose setup fails waits for the inspect that runs alongside the
+// setup, so that no docker call outlives setupNodes.
+func TestSetupNodes_SetupErrorWaitsForTheInspect(t *testing.T) {
+	var inspects atomic.Int32
+	var inspected atomic.Bool
+	m := &mock.Executor{OnCall: nodesOnCall(t, func(args []string) (mock.Result, bool) {
+		switch {
+		case args[0] == "inspect" && inspects.Add(1) > 1: // the inspect after the probes
+			time.Sleep(50 * time.Millisecond)
+			inspected.Store(true)
+		case strings.Contains(strings.Join(args, " "), "ssh-keyscan"):
+			return failedSetup(t, 1, "", "ssh"), true
+		}
+		return mock.Result{}, false
+	})}
+	client := docker.NewClient(m)
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
+
+	_, err := setupNodes(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+
+	require.ErrorContains(t, err, "node controller: setting up SSH")
+	assert.True(t, inspected.Load(), "setupNodes returned before the inspect finished")
 }
 
 func TestSetupNodes_WaitsForMunge(t *testing.T) {
