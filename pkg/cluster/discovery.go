@@ -61,13 +61,8 @@ func ListClusterResources(ctx context.Context, client *docker.Client, realm, clu
 	)
 	err := concurrently(
 		func() (err error) {
-			res.Containers, err = client.ListContainers(ctx,
-				"label="+LabelRealm+"="+realm,
-				"label="+LabelCluster+"="+clusterName)
-			if err != nil {
-				return fmt.Errorf("listing containers: %w", err)
-			}
-			return nil
+			res.Containers, err = clusterContainers(ctx, client, realm, clusterName)
+			return err
 		},
 		func() (err error) {
 			netLabels, netExists, err = client.NetworkLabels(ctx, res.Network)

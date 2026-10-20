@@ -128,11 +128,9 @@ func GetAllNodes(ctx context.Context, client *docker.Client, realm string) ([]*N
 // GetNodes lists all nodes in the named cluster. A cluster that does not
 // exist is an error (see ErrClusterNotFound), not an empty list.
 func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName string) ([]*NodeSummary, error) {
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
+	containers, err := clusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
+		return nil, err
 	}
 	if err := checkClusterExists(ctx, client, realm, clusterName, containers); err != nil {
 		return nil, err
@@ -397,14 +395,9 @@ func GetAuthKey(ctx context.Context, client *docker.Client, realm, clusterName s
 	if authType != "" && !slices.Contains(AuthTypes, authType) {
 		return nil, fmt.Errorf("unknown authentication type %q: must be %s, %s or %s", authType, AuthMunge, AuthSlurm, AuthJWT)
 	}
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
+	containers, err := existingClusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
-	}
-	if len(containers) == 0 {
-		return nil, clusterNotFound(ctx, client, realm, clusterName)
+		return nil, err
 	}
 	primary := AuthMunge
 	if IdentityFromLabels(containers[0].Labels) == config.IdentityClientIDs {

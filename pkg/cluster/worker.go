@@ -122,15 +122,9 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 
 	// List cluster containers once for validation, index and the newest
 	// worker.
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+opts.ClusterName)
+	containers, err := existingClusterContainers(ctx, client, realm, opts.ClusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
-	}
-
-	if len(containers) == 0 {
-		return nil, clusterNotFound(ctx, client, realm, opts.ClusterName)
+		return nil, err
 	}
 	controller, ok := findController(containers, realm, opts.ClusterName)
 	if !ok {

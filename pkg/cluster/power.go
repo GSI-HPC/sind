@@ -203,14 +203,9 @@ func resolveTargets(ctx context.Context, client *docker.Client, realm, clusterNa
 		return nil, nil
 	}
 
-	entries, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
+	entries, err := existingClusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
-	}
-	if len(entries) == 0 {
-		return nil, clusterNotFound(ctx, client, realm, clusterName)
+		return nil, err
 	}
 
 	existing := make(map[docker.ContainerName]docker.ContainerListEntry, len(entries))

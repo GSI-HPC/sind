@@ -45,14 +45,9 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	log.InfoContext(ctx, "removing workers", "cluster", clusterName, "nodes", strings.Join(shortNames, ","))
 
 	// List cluster containers to find controller and validate targets.
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
+	containers, err := existingClusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
-		return fmt.Errorf("listing containers: %w", err)
-	}
-	if len(containers) == 0 {
-		return clusterNotFound(ctx, client, realm, clusterName)
+		return err
 	}
 
 	controller, hasController := findController(containers, realm, clusterName)

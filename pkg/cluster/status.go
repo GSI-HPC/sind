@@ -352,12 +352,9 @@ type Status struct {
 // GetStatus returns the full status of a cluster, aggregating node, network,
 // and volume health information.
 func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName string) (*Status, error) {
-	// List all containers in this cluster.
-	containers, err := client.ListContainers(ctx,
-		"label="+LabelRealm+"="+realm,
-		"label="+LabelCluster+"="+clusterName)
+	containers, err := clusterContainers(ctx, client, realm, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("listing containers: %w", err)
+		return nil, err
 	}
 
 	if err := checkClusterExists(ctx, client, realm, clusterName, containers); err != nil {
