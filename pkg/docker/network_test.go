@@ -392,8 +392,7 @@ func TestNetworkLabels_BadJSON(t *testing.T) {
 
 	_, _, err := c.NetworkLabels(t.Context(), testNetworkName)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing labels")
+	require.ErrorContains(t, err, "parsing labels")
 }
 
 func TestNetworkExists_True(t *testing.T) {
@@ -558,8 +557,7 @@ func TestNetworkContainers_BadJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.NetworkContainers(t.Context(), testNetworkName)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing network inspect output")
+	require.ErrorContains(t, err, "parsing network inspect output")
 }
 
 // --- DisconnectAll ---
@@ -614,8 +612,7 @@ func TestDisconnectAll_DisconnectError(t *testing.T) {
 	c := NewClient(&m)
 
 	err := c.DisconnectAll(t.Context(), testNetworkName)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "disconnecting kind-control-plane")
+	require.ErrorContains(t, err, "disconnecting kind-control-plane")
 }
 
 // --- InspectNetwork ---
@@ -672,8 +669,7 @@ func TestInspectNetwork_EmptyResult(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.InspectNetwork(t.Context(), testNetworkName)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no results")
+	assert.ErrorContains(t, err, "no results")
 }
 
 func TestInspectNetwork_InvalidJSON(t *testing.T) {
@@ -682,8 +678,7 @@ func TestInspectNetwork_InvalidJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.InspectNetwork(t.Context(), testNetworkName)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing")
+	assert.ErrorContains(t, err, "parsing")
 }
 
 // --- InspectNetworks ---

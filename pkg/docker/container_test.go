@@ -364,9 +364,8 @@ func TestInspectContainer_InvalidJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	info, err := c.InspectContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "parsing inspect output")
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "parsing inspect output")
 }
 
 func TestInspectContainer_EmptyResult(t *testing.T) {
@@ -375,9 +374,8 @@ func TestInspectContainer_EmptyResult(t *testing.T) {
 	c := NewClient(&m)
 
 	info, err := c.InspectContainer(t.Context(), testContainerName)
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "no results")
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "no results")
 }
 
 func TestInspectContainers_Multiple(t *testing.T) {
@@ -611,9 +609,8 @@ func TestListContainers_InvalidJSON(t *testing.T) {
 	c := NewClient(&m)
 
 	entries, err := c.ListContainers(t.Context())
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "parsing ps output")
 	assert.Nil(t, entries)
-	assert.Contains(t, err.Error(), "parsing ps output")
 }
 
 func TestListContainers_Error(t *testing.T) {
@@ -686,8 +683,7 @@ func TestExecAllowNonZero_DockerFailurePropagates(t *testing.T) {
 			c := NewClient(&m)
 
 			_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "systemctl", "is-active", "slurmdbd")
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), strings.TrimSpace(stderr))
+			require.ErrorContains(t, err, strings.TrimSpace(stderr))
 		})
 	}
 }
@@ -710,8 +706,7 @@ func TestExecAllowNonZero_NonExitErrorPropagates(t *testing.T) {
 	c := NewClient(&m)
 
 	_, err := c.ExecAllowNonZero(t.Context(), testContainerName, "true")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "daemon")
+	require.ErrorContains(t, err, "daemon")
 }
 
 func TestExecWithStdin(t *testing.T) {
@@ -939,8 +934,7 @@ func TestBuildFilesTar_DirHeaderError(t *testing.T) {
 		"sub/test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing tar header for sub/")
+	require.ErrorContains(t, err, "writing tar header for sub/")
 }
 
 func TestBuildFilesTar_HeaderError(t *testing.T) {
@@ -950,8 +944,7 @@ func TestBuildFilesTar_HeaderError(t *testing.T) {
 		"test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing tar header")
+	require.ErrorContains(t, err, "writing tar header")
 }
 
 func TestBuildFilesTar_ContentError(t *testing.T) {
@@ -961,8 +954,7 @@ func TestBuildFilesTar_ContentError(t *testing.T) {
 		"test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing tar content")
+	require.ErrorContains(t, err, "writing tar content")
 }
 
 func TestBuildFilesTar_CloseError(t *testing.T) {
@@ -972,8 +964,7 @@ func TestBuildFilesTar_CloseError(t *testing.T) {
 		"test": {Content: []byte("data"), Mode: 0644},
 	}
 	err := buildFilesTar(w, files)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "closing tar writer")
+	require.ErrorContains(t, err, "closing tar writer")
 }
 
 // failWriter is an io.Writer that fails after a configurable number of bytes.
@@ -1067,9 +1058,8 @@ func TestCopyFromContainer_InvalidTar(t *testing.T) {
 	c := NewClient(&m)
 
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "reading tar output")
 	assert.Nil(t, data)
-	assert.Contains(t, err.Error(), "reading tar output")
 }
 
 func TestCopyFromContainer_TruncatedTar(t *testing.T) {
@@ -1086,9 +1076,8 @@ func TestCopyFromContainer_TruncatedTar(t *testing.T) {
 	c := NewClient(&m)
 
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/hosts")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "reading file content")
 	assert.Nil(t, data)
-	assert.Contains(t, err.Error(), "reading file content")
 }
 
 func TestCopyFromContainer_EmptyTar(t *testing.T) {
@@ -1102,7 +1091,6 @@ func TestCopyFromContainer_EmptyTar(t *testing.T) {
 	c := NewClient(&m)
 
 	data, err := c.CopyFromContainer(t.Context(), testContainerName, "/nonexistent")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "file not found in tar output")
 	assert.Nil(t, data)
-	assert.Contains(t, err.Error(), "file not found in tar output")
 }

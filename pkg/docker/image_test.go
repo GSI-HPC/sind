@@ -99,8 +99,7 @@ func TestPullImage(t *testing.T) {
 	assert.Equal(t, []string{"pull", "ghcr.io/gsi-hpc/sind-node:latest"}, m.Calls[0].Args)
 
 	err := c.PullImage(t.Context(), "ghcr.io/gsi-hpc/sind-node:nope")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "manifest unknown")
+	require.ErrorContains(t, err, "manifest unknown")
 }
 
 func TestRunEphemeralWith(t *testing.T) {
