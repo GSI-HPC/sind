@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -203,8 +204,8 @@ func TestCleanupRealm(t *testing.T) {
 	require.NoError(t, cleanupRealm(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm)))
 	assert.Empty(t, f.containers)
 	assert.Empty(t, f.volumes)
-	assert.Less(t, indexOf(removed(m), "sind-grafana"), indexOf(removed(m), "sind-mesh"))
-	assert.Less(t, indexOf(removed(m), "sind-mesh"), indexOf(removed(m), "sind-journal"))
+	assert.Less(t, slices.Index(removed(m), "sind-grafana"), slices.Index(removed(m), "sind-mesh"))
+	assert.Less(t, slices.Index(removed(m), "sind-mesh"), slices.Index(removed(m), "sind-journal"))
 
 	for _, prefix := range []string{"ps -a --no-trunc --format json --filter label=com.docker.compose.project", "volume ls --format json --filter label=com.docker.compose.project"} {
 		f := newStackFake(t).withStack()

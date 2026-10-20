@@ -971,16 +971,6 @@ func TestDeleteAll_DiscoveryErrors(t *testing.T) {
 
 // --- helpers ---
 
-// indexOf returns the index of s in slice, or -1 if not found.
-func indexOf(slice []string, s string) int {
-	for i, v := range slice {
-		if v == s {
-			return i
-		}
-	}
-	return -1
-}
-
 // dnsRunningInspectJSON is a mock docker inspect result reporting the
 // sind-dns container as running. Used by DeregisterMesh tests to satisfy the
 // container-state check that gates the DNS reload.

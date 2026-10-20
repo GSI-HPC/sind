@@ -95,10 +95,7 @@ func TestGetClusters_LabelFilter(t *testing.T) {
 	_, _ = GetClusters(t.Context(), c, mesh.DefaultRealm)
 
 	require.Len(t, m.Calls, 1)
-	args := m.Calls[0].Args
-	filterIdx := indexOf(args, "--filter")
-	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label="+LabelRealm+"="+mesh.DefaultRealm, args[filterIdx+1])
+	assert.Equal(t, []string{"label=" + LabelRealm + "=" + mesh.DefaultRealm}, testutil.ArgValues(m.Calls[0].Args, "--filter"))
 }
 
 func TestGetClusters_NoSlurmVersion(t *testing.T) {
@@ -702,10 +699,7 @@ func TestGetRealms_LabelFilter(t *testing.T) {
 	_, _ = GetRealms(t.Context(), c)
 
 	require.Len(t, m.Calls, 1)
-	args := m.Calls[0].Args
-	filterIdx := indexOf(args, "--filter")
-	require.Greater(t, filterIdx, -1)
-	assert.Equal(t, "label="+LabelRealm, args[filterIdx+1])
+	assert.Equal(t, []string{"label=" + LabelRealm}, testutil.ArgValues(m.Calls[0].Args, "--filter"))
 }
 
 func TestGetRealms_SkipsEmptyRealmLabel(t *testing.T) {
