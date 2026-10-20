@@ -9,59 +9,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// --- Container logs ---
-
-func TestLogs_Container(t *testing.T) {
-	args := ContainerLogArgs(mesh.DefaultRealm, "controller", "dev", LogOptions{})
-
-	assert.Equal(t, []string{
-		"logs", "sind-dev-controller",
-	}, args)
-}
-
-func TestLogs_ContainerFollow(t *testing.T) {
-	args := ContainerLogArgs(mesh.DefaultRealm, "worker-0", "dev", LogOptions{Follow: true})
-
-	assert.Equal(t, []string{
-		"logs", "--follow", "sind-dev-worker-0",
-	}, args)
-}
-
-// --- Service logs ---
-
-func TestLogs_Service(t *testing.T) {
-	args := ServiceLogArgs(mesh.DefaultRealm, "controller", "dev", "slurmctld", LogOptions{})
-
-	assert.Equal(t, []string{
-		"exec", "sind-dev-controller",
-		"journalctl", "-u", "slurmctld",
-	}, args)
-}
-
-func TestLogs_ServiceFollow(t *testing.T) {
-	args := ServiceLogArgs(mesh.DefaultRealm, "worker-0", "dev", "slurmd", LogOptions{Follow: true})
-
-	assert.Equal(t, []string{
-		"exec", "sind-dev-worker-0",
-		"journalctl", "-u", "slurmd", "--follow",
-	}, args)
-}
-
-func TestLogs_ContainerTail(t *testing.T) {
-	tail := 20
-	args := ContainerLogArgs(mesh.DefaultRealm, "controller", "dev", LogOptions{Tail: &tail})
-
-	assert.Equal(t, []string{
-		"logs", "--tail", "20", "sind-dev-controller",
-	}, args)
-}
-
-func TestLogs_ServiceTail(t *testing.T) {
-	tail := 0
-	args := ServiceLogArgs(mesh.DefaultRealm, "controller", "dev", "slurmctld", LogOptions{Follow: true, Tail: &tail})
-
-	assert.Equal(t, []string{
-		"exec", "sind-dev-controller",
-		"journalctl", "-u", "slurmctld", "--follow", "-n", "0",
-	}, args)
+func TestLogArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		node    string
+		service string // ServiceLogArgs when set, ContainerLogArgs otherwise
+		opts    LogOptions
+		want    []string
+	}{
+		{"container", "controller", "", LogOptions{}, []string{"logs", "sind-dev-controller"}},
+		{"container follow", "worker-0", "", LogOptions{Follow: true}, []string{"logs", "--follow", "sind-dev-worker-0"}},
+		{"container tail", "controller", "", LogOptions{Tail: new(20)}, []string{"logs", "--tail", "20", "sind-dev-controller"}},
+		{"service", "controller", "slurmctld", LogOptions{}, []string{"exec", "sind-dev-controller", "journalctl", "-u", "slurmctld"}},
+		{"service follow", "worker-0", "slurmd", LogOptions{Follow: true},
+			[]string{"exec", "sind-dev-worker-0", "journalctl", "-u", "slurmd", "--follow"}},
+		{"service tail", "controller", "slurmctld", LogOptions{Follow: true, Tail: new(0)},
+			[]string{"exec", "sind-dev-controller", "journalctl", "-u", "slurmctld", "--follow", "-n", "0"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ContainerLogArgs(mesh.DefaultRealm, tt.node, "dev", tt.opts)
+			if tt.service != "" {
+				got = ServiceLogArgs(mesh.DefaultRealm, tt.node, "dev", tt.service, tt.opts)
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

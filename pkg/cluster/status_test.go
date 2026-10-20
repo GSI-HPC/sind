@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -1015,7 +1016,7 @@ func TestNodeHealth_JSONServicesMap(t *testing.T) {
 	// munge/sshd keys at the top level.
 	var top map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &top))
-	assert.ElementsMatch(t, []string{"status", "ip", "services"}, keys(top))
+	assert.ElementsMatch(t, []string{"status", "ip", "services"}, slices.Collect(maps.Keys(top)))
 
 	// And that munge/sshd live under services.
 	var svc map[string]bool
@@ -1031,13 +1032,4 @@ func TestNodeStatus_JSONManaged(t *testing.T) {
 	data, err := json.Marshal(NodeStatus{Name: "worker-0.dev", Role: config.RoleWorker})
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"managed":false`)
-}
-
-// keys returns the keys of a map sorted for stable assertion errors.
-func keys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
