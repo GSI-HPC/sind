@@ -263,7 +263,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 			return
 		}
 		if rd.expired() {
-			retErr = fmt.Errorf("cluster %s %w within %s: %w", cfg.Name, ErrNotReady, rd.wait, retErr)
+			retErr = fmt.Errorf("cluster %q %w within %s: %w", cfg.Name, ErrNotReady, rd.wait, retErr)
 		}
 		if !resourcesCreated && !meshMgr.Created() {
 			return
@@ -704,7 +704,7 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			}
 			log.DebugContext(nctx, "waiting for node", "node", nc.ShortName)
 			if err := waitReady(nctx, client, containerName, baseProbes, rd.interval, watcher); err != nil {
-				return fmt.Errorf("waiting for %s: %w", nc.ShortName, err)
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 
 			// The node's IPs and ID do not depend on its setup, so the
@@ -837,7 +837,9 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 		err := enableDBNode(dbCtxs[i], client, containerName, nc.ShortName, nc.StoragePass)
 		if err == nil {
 			slurmdbdProbe := probe.ForService(probe.ServiceSlurmdbd)
-			err = waitReady(dbCtxs[i], client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher)
+			if err = waitReady(dbCtxs[i], client, containerName, []probe.Probe{slurmdbdProbe}, interval, watcher); err != nil {
+				err = fmt.Errorf("node %s: %w", nc.ShortName, err)
+			}
 		}
 		endSpan(ctx, dbTargets[i], err)
 		if err != nil {
@@ -860,12 +862,15 @@ func enableSlurm(ctx context.Context, client *docker.Client, realm, clusterName 
 				return err
 			}
 			if err := waitReady(ctxs[i], client, containerName, []probe.Probe{slurmProbe}, interval, watcher); err != nil {
-				return err
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
 			}
 			if !nc.Monitoring || service != probe.ServiceSlurmctld {
 				return nil
 			}
-			return waitReady(ctxs[i], client, containerName, []probe.Probe{slurmctldHTTPProbe(nc.ShortName)}, interval, watcher)
+			if err := waitReady(ctxs[i], client, containerName, []probe.Probe{slurmctldHTTPProbe(nc.ShortName)}, interval, watcher); err != nil {
+				return fmt.Errorf("node %s: %w", nc.ShortName, err)
+			}
+			return nil
 		})
 	}
 	return g.Wait()

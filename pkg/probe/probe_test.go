@@ -503,7 +503,7 @@ func TestUntilReady_Timeout(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.ErrorContains(t, err, "not ready")
+	require.ErrorContains(t, err, "timed out; last probe error: probe container")
 	assert.Contains(t, err.Error(), "probe container")
 }
 
@@ -607,7 +607,7 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.ErrorContains(t, err, "not ready")
+	require.ErrorContains(t, err, "context canceled; last probe error")
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -622,7 +622,7 @@ func TestUntilReady_TerminalError(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.ErrorContains(t, err, "not ready")
+	require.ErrorContains(t, err, "probe container: container "+string(testContainer))
 	assert.Contains(t, err.Error(), "exited")
 	// Only one call — no retries for terminal state.
 	assert.Len(t, m.Calls, 1)
@@ -696,7 +696,7 @@ func TestUntilReadyWithEvents_ContainerDie(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
-	require.ErrorContains(t, err, "not ready")
+	require.ErrorContains(t, err, "container "+string(testContainer)+" died")
 
 	var te *TerminalError
 	assert.ErrorAs(t, err, &te)
@@ -814,7 +814,7 @@ func TestUntilReadyWithEvents_ContextCanceled(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.ErrorContains(t, err, "not ready")
+	require.ErrorContains(t, err, "context canceled; last probe error")
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -831,7 +831,7 @@ func TestUntilReadyWithEvents_Timeout(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.ErrorContains(t, err, "not ready")
+	require.ErrorContains(t, err, "timed out; last probe error")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "last probe error: probe container")
 }
@@ -1272,9 +1272,19 @@ func TestWaitEnded_NoProbeFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := waitEnded(ctx, testContainer, nil)
+	err := waitEnded(ctx, nil)
 	require.ErrorIs(t, err, context.Canceled)
-	assert.EqualError(t, err, "node "+string(testContainer)+" not ready: context canceled")
+	assert.EqualError(t, err, "context canceled")
+}
+
+func TestWaitEnded_TimedOut(t *testing.T) {
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now())
+	defer cancel()
+	<-ctx.Done()
+
+	err := waitEnded(ctx, nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.EqualError(t, err, "timed out")
 }
 
 func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
@@ -1282,11 +1292,11 @@ func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
 	cancel()
 	probeErr := &TerminalError{Msg: "boom"}
 
-	err := waitEnded(ctx, testContainer, probeErr)
+	err := waitEnded(ctx, probeErr)
 	require.ErrorIs(t, err, context.Canceled)
 	var te *TerminalError
 	require.ErrorAs(t, err, &te)
-	assert.EqualError(t, err, "node "+string(testContainer)+" not ready: context canceled; last probe error: boom")
+	assert.EqualError(t, err, "context canceled; last probe error: boom")
 }
 
 // endsOnDemand is a wait whose deadline passes when end is called, not at
@@ -1342,5 +1352,5 @@ func TestUntilReady_EndReportsTheProbeThatHangs(t *testing.T) {
 	err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.EqualError(t, err, "node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: signal: killed")
+	assert.EqualError(t, err, "timed out; last probe error: probe munge: signal: killed")
 }

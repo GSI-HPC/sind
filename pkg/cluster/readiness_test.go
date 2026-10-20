@@ -87,7 +87,7 @@ func TestCreate_WaitLimit(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrNotReady)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Contains(t, err.Error(), "cluster dev not ready within 500ms: waiting for worker-0")
+	assert.Contains(t, err.Error(), "cluster \"dev\" not ready within 500ms: node worker-0: timed out; last probe error")
 	assert.Contains(t, err.Error(), "last probe error: probe munge: munge not ready: activating")
 	// The rollback ran: preflight (twice: the cluster's containers and
 	// those on the mesh and the cluster network), the connect of external
@@ -165,6 +165,6 @@ func TestWorkerAdd_WaitLimit(t *testing.T) {
 		return onCall(args, stdin)
 	}, WorkerAddOptions{ClusterName: "dev", Count: 1, Wait: 200 * time.Millisecond})
 	require.ErrorIs(t, err, ErrNotReady)
-	assert.Contains(t, err.Error(), "workers not ready within 200ms: waiting for worker-1")
+	assert.Contains(t, err.Error(), "workers of cluster \"dev\" not ready within 200ms: node worker-1: timed out; last probe error")
 	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker should be removed")
 }

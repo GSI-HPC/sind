@@ -294,7 +294,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 	confUpdated := false
 	defer func() {
 		if retErr != nil && rd.expired() {
-			retErr = fmt.Errorf("workers %w within %s: %w", ErrNotReady, rd.wait, retErr)
+			retErr = fmt.Errorf("workers of cluster %q %w within %s: %w", opts.ClusterName, ErrNotReady, rd.wait, retErr)
 		}
 		if retErr != nil && needsCleanup {
 			log.ErrorContext(ctx, "cleaning up partial resources, please wait")

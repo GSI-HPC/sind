@@ -556,7 +556,7 @@ func TestCreate_Fails(t *testing.T) {
 		{"node not running", func(args []string, _ string) (mock.Result, bool) {
 			return mock.Result{Stdout: inspectJSON(t, args[1], "created", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})},
 				args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-")
-		}, "waiting for"},
+		}, ": timed out; last probe error: probe container:"},
 		// Reading the Corefile fails.
 		{"mesh registration", func(args []string, _ string) (mock.Result, bool) {
 			return mock.Result{Err: fmt.Errorf("dns container stopped")},
@@ -1110,7 +1110,33 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	defer cancel()
 	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
-	require.ErrorContains(t, err, "not ready")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld: ")
+}
+
+// TestEnableSlurm_HTTPProbeTimeout checks that a monitored controller whose
+// slurmctld serves no HTTP is named in the error of its wait.
+func TestEnableSlurm_HTTPProbeTimeout(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = func(args []string, _ string) mock.Result {
+		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
+			return mock.Result{Stdout: "Slurmctld(primary) at controller is UP\n"}
+		}
+		if args[0] == "exec" && len(args) > 2 && args[2] == "systemctl" {
+			return mock.Result{}
+		}
+		return mock.Result{Err: fmt.Errorf("connection refused")}
+	}
+
+	client := docker.NewClient(&m)
+	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController, Managed: true, Monitoring: true}}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "node controller: timed out; last probe error: probe slurmctld HTTP: ")
 }
 
 func TestEnableSlurm_DBFirst(t *testing.T) {

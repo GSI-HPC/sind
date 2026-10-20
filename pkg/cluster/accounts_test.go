@@ -196,7 +196,7 @@ func TestCreateSlurmAccounts_NotRegistered(t *testing.T) {
 
 	err := createSlurmAccounts(ctx, docker.NewClient(&m), mesh.DefaultRealm, accountsCfg(), time.Millisecond, nil)
 
-	require.ErrorContains(t, err, "waiting for slurmdbd to register the cluster: node sind-dev-controller not ready")
+	require.ErrorContains(t, err, "waiting for slurmdbd to register the cluster: timed out; last probe error: probe registration:")
 	assert.Contains(t, err.Error(), "cluster dev not registered with slurmdbd yet")
 	assert.Empty(t, accountsScripts(t, m.Calls))
 }

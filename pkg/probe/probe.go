@@ -137,7 +137,9 @@ const DefaultInterval = 500 * time.Millisecond
 // wait killed the docker call of the probe that failed last, or of one
 // before it that had passed, what the probe that failed last said, not the
 // killed call; a probe after it, which the round reached as that one
-// passed, with its own error.
+// passed, with its own error. A wait that its deadline ended reads "timed
+// out" and wraps context.DeadlineExceeded. The error does not name the
+// node, which the caller knows by a better name than the container's.
 func UntilReady(ctx context.Context, client *docker.Client, name docker.ContainerName, probes []Probe, interval time.Duration) error {
 	return untilReady(ctx, client, name, probes, interval, nil, "starting readiness probes")
 }
@@ -228,7 +230,7 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 				}
 				lastAt = i
 				if terminal {
-					return fmt.Errorf("node %s not ready: %w", name, lastErr)
+					return lastErr
 				}
 				break
 			}
@@ -241,7 +243,7 @@ func untilReady(ctx context.Context, client *docker.Client, name docker.Containe
 		for {
 			select {
 			case <-ctx.Done():
-				return waitEnded(ctx, name, lastErr)
+				return waitEnded(ctx, lastErr)
 			case <-ticker.C:
 				// The tick and queued events can be ready at once, and
 				// select picks one at random: take the events first, so
@@ -318,9 +320,9 @@ func (p *progress) take(name docker.ContainerName, ev monitor.Event, events <-ch
 		}
 		if concerns(name, ev) {
 			if ev.Kind == monitor.EventContainerDie {
-				p.died = fmt.Errorf("node %s not ready: %w", name, &TerminalError{
+				p.died = &TerminalError{
 					Msg: fmt.Sprintf("container %s died: %s", name, ev.Detail),
-				})
+				}
 				return true
 			}
 			relevant = true
@@ -386,12 +388,26 @@ func orDefault(interval time.Duration) time.Duration {
 // interrupt or a timeout, not a failed node. It wraps ctx.Err() so callers
 // can tell the two apart with errors.Is, and keeps the last probe failure,
 // if there was one, to say what the node was still waiting for.
-func waitEnded(ctx context.Context, name docker.ContainerName, lastErr error) error {
+func waitEnded(ctx context.Context, lastErr error) error {
+	ended := endedError{ctx.Err()}
 	if lastErr == nil {
-		return fmt.Errorf("node %s not ready: %w", name, ctx.Err())
+		return ended
 	}
-	return fmt.Errorf("node %s not ready: %w; last probe error: %w", name, ctx.Err(), lastErr)
+	return fmt.Errorf("%w; last probe error: %w", ended, lastErr)
 }
+
+// endedError is the context error that ended a wait, which reads "timed
+// out" for a deadline rather than Go's "context deadline exceeded".
+type endedError struct{ err error }
+
+func (e endedError) Error() string {
+	if errors.Is(e.err, context.DeadlineExceeded) {
+		return "timed out"
+	}
+	return e.err.Error()
+}
+
+func (e endedError) Unwrap() error { return e.err }
 
 // ContainerRunning verifies that the container is in the "running" state.
 // Returns a TerminalError for states that cannot recover (exited, dead).

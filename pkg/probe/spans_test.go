@@ -77,7 +77,7 @@ func TestUntilReady_PassedDeadline(t *testing.T) {
 	err := UntilReady(ctx, nil, testContainer, []Probe{scripted("munge", func() bool { return true })}, time.Millisecond)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Equal(t, "wait ready message=munge: failed (timeout): node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: munge not ready\n", w.Finish())
+	assert.Equal(t, "wait ready message=munge: failed (timeout): timed out; last probe error: probe munge: munge not ready\n", w.Finish())
 }
 
 // A wait that ends while a probe runs kills the probe's docker call, which
@@ -89,8 +89,8 @@ func TestUntilReady_EndKeepsTheFailingProbe(t *testing.T) {
 		name, killed, want, failing string
 		class                       spans.Class
 	}{
-		{"killed", "", "node sind-dev-controller not ready: context canceled; last probe error: probe munge: munge not ready", "munge", spans.ClassCanceled},
-		{"terminal", inspectJSON("exited"), "node sind-dev-controller not ready: probe container: container sind-dev-controller is exited (exit code 0)", "container", spans.ClassTarget},
+		{"killed", "", "context canceled; last probe error: probe munge: munge not ready", "munge", spans.ClassCanceled},
+		{"terminal", inspectJSON("exited"), "probe container: container sind-dev-controller is exited (exit code 0)", "container", spans.ClassTarget},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, w := progresstest.Watch(t.Context(), t)
@@ -146,5 +146,5 @@ func TestUntilReady_WaitNamesTheProbeThatHangs(t *testing.T) {
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Equal(t, []string{"container", "munge"}, messages(w.Events()))
-	assert.Equal(t, "wait ready message=munge: failed (timeout): node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: signal: killed\n", w.Finish())
+	assert.Equal(t, "wait ready message=munge: failed (timeout): timed out; last probe error: probe munge: signal: killed\n", w.Finish())
 }

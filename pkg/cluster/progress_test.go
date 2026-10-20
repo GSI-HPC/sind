@@ -163,8 +163,8 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 	w.Finish()
 	assert.Equal(t, `step nodes total=3 [fold]: failed (target): node worker-0: creating container worker-0: image not found
   target worker-0 role=worker: failed (target): node {}: creating container {}: image not found
-  target worker-[1-2] role=worker: canceled (canceled): waiting for {}: node sind-dev-{} not ready: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
-    wait ready message=container: canceled (canceled): node sind-dev-{} not ready: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
+  target worker-[1-2] role=worker: canceled (canceled): node {}: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
+    wait ready message=container: canceled (canceled): context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
 `, testutil.WithoutCalls(w.Events()))
 }
 
