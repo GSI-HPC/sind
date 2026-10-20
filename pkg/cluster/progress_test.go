@@ -99,12 +99,8 @@ func workerConfigs(names ...string) []RunConfig {
 // before the first runs, each waiting for its node to get ready.
 func TestSetupNodes_ReportsTheNodes(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	m := &mock.Executor{OnCall: nodesOnCall(t, func([]string) (mock.Result, bool) { return mock.Result{}, false })}
-	client := docker.NewClient(m)
-	configs := append([]RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}},
-		workerConfigs("worker-0", "worker-1")...)
-
-	_, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	_, _, err := setupNodesWith(ctx, t, func([]string) (mock.Result, bool) { return mock.Result{}, false },
+		append([]RunConfig{controllerConfig}, workerConfigs("worker-0", "worker-1")...)...)
 
 	require.NoError(t, err)
 	w.Finish()
@@ -152,7 +148,7 @@ func TestSetupNode_IsTheCallSetup(t *testing.T) {
 // canceled, not failed, and the error is that of the node that failed.
 func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	m := &mock.Executor{OnCall: nodesOnCall(t, func(args []string) (mock.Result, bool) {
+	_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
 		switch {
 		case args[0] == "create" && strings.Contains(strings.Join(args, " "), "sind-dev-worker-0"):
 			return mock.Result{Err: errors.New("image not found")}, true
@@ -161,10 +157,7 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 			return mock.Result{Stdout: inspectJSON(t, args[1], "created", nil)}, true
 		}
 		return mock.Result{}, false
-	})}
-	client := docker.NewClient(m)
-
-	_, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", workerConfigs("worker-0", "worker-1", "worker-2"), &readiness{interval: time.Millisecond}, nil)
+	}, workerConfigs("worker-0", "worker-1", "worker-2")...)
 
 	require.EqualError(t, err, "node worker-0: creating container worker-0: image not found")
 	w.Finish()

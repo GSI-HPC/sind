@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -297,36 +296,15 @@ func TestSetupNodes_CallsPerNode(t *testing.T) {
 	// calls, whatever its role and identity mode: create, start, the base
 	// probes once each (inspect, then three execs), the inspect of its
 	// addresses, and one setup exec.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		joined := strings.Join(args, " ")
-		switch {
-		case args[0] == "create":
-			return mock.Result{Stdout: "cid\n"}
-		case args[0] == "inspect":
-			return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})}
-		case strings.Contains(joined, "is-system-running"):
-			return mock.Result{Stdout: "running\n"}
-		case strings.Contains(joined, "/dev/tcp"):
-			return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.9\n"}
-		case strings.Contains(joined, "is-active"):
-			return mock.Result{Stdout: "active\n"}
-		case strings.Contains(joined, "ssh-keyscan"):
-			return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-" + args[1] + "\n"}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
 	base := RunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", Users: testUsers}
 	controller, local, nss := base, base, base
 	controller.ShortName, controller.Role, controller.AddUsers = "controller", config.RoleController, true
 	local.ShortName, local.Role, local.AddUsers = "worker-0", config.RoleWorker, true
 	nss.ShortName, nss.Role, nss.NSSSlurm, nss.Identity = "worker-1", config.RoleWorker, true, config.IdentityNSSSlurm
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	results, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-ed25519 AAAA-test-key\n",
-		[]RunConfig{controller, local, nss}, &readiness{interval: time.Millisecond}, nil)
+	m, results, err := setupNodesWith(t.Context(), t, func(args []string) (mock.Result, bool) {
+		return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-" + args[1] + "\n"}, strings.Contains(strings.Join(args, " "), "ssh-keyscan")
+	}, controller, local, nss)
 	require.NoError(t, err)
 	assert.Equal(t, "ssh-ed25519 AAAA-sind-dev-worker-1", results[2].hostKey)
 

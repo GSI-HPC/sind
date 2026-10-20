@@ -962,52 +962,29 @@ func TestResolveInfra_Errors(t *testing.T) {
 	}
 }
 
+// setupNodesWith runs setupNodes for configs under ctx, polling every
+// millisecond, against nodesOnCall with override.
+func setupNodesWith(ctx context.Context, t *testing.T, override func([]string) (mock.Result, bool), configs ...RunConfig) (*mock.Executor, []nodeResult, error) {
+	t.Helper()
+	m := &mock.Executor{OnCall: nodesOnCall(t, override)}
+	client := docker.NewClient(m)
+	results, err := setupNodes(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	return m, results, err
+}
+
+// controllerConfig is the run config of the controller of cluster dev.
+var controllerConfig = RunConfig{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}
+
 func TestSetupNodes_InspectError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
+	// After the probes pass, the inspect for the node's addresses fails.
+	inspects := 0
+	_, _, err := setupNodesWith(t.Context(), t, func(args []string) (mock.Result, bool) {
 		if args[0] == "inspect" {
-			// First call: ContainerRunning probe → running
-			name := args[1]
-			return mock.Result{Stdout: inspectJSON(t, name, "running", nil)}
+			inspects++
+			return mock.Result{Err: fmt.Errorf("inspect network error")}, inspects > 1
 		}
-		if args[0] == "exec" {
-			joined := strings.Join(args, " ")
-			if strings.Contains(joined, "is-system-running") {
-				return mock.Result{Stdout: "running\n"}
-			}
-			if strings.Contains(joined, "/dev/tcp") {
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			}
-			if strings.Contains(joined, "is-active") {
-				return mock.Result{Stdout: "active\n"}
-			}
-			if strings.Contains(joined, "ssh-keyscan") {
-				return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey\n"}
-			}
-		}
-		return mock.Result{}
-	}
-
-	// Override: after probes pass, the second inspect (for IP collection) fails.
-	callCount := 0
-	origOnCall := m.OnCall
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "inspect" && strings.HasPrefix(args[1], "sind-dev-") {
-			callCount++
-			if callCount > 1 {
-				return mock.Result{Err: fmt.Errorf("inspect network error")}
-			}
-		}
-		return origOnCall(args, stdin)
-	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+		return mock.Result{}, false
+	}, controllerConfig)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "inspecting node controller")
@@ -1018,7 +995,7 @@ func TestSetupNodes_InspectError(t *testing.T) {
 func TestSetupNodes_SetupErrorWaitsForTheInspect(t *testing.T) {
 	var inspects atomic.Int32
 	var inspected atomic.Bool
-	m := &mock.Executor{OnCall: nodesOnCall(t, func(args []string) (mock.Result, bool) {
+	_, _, err := setupNodesWith(t.Context(), t, func(args []string) (mock.Result, bool) {
 		switch {
 		case args[0] == "inspect" && inspects.Add(1) > 1: // the inspect after the probes
 			time.Sleep(50 * time.Millisecond)
@@ -1027,121 +1004,47 @@ func TestSetupNodes_SetupErrorWaitsForTheInspect(t *testing.T) {
 			return failedSetup(t, 1, "", "ssh"), true
 		}
 		return mock.Result{}, false
-	})}
-	client := docker.NewClient(m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
-
-	_, err := setupNodes(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	}, controllerConfig)
 
 	require.ErrorContains(t, err, "node controller: setting up SSH")
 	assert.True(t, inspected.Load(), "setupNodes returned before the inspect finished")
 }
 
 func TestSetupNodes_WaitsForMunge(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: inspectJSON(t, args[1], "running", nil)}
-		}
-		if args[0] == "exec" {
-			joined := strings.Join(args, " ")
-			switch {
-			case strings.Contains(joined, "is-system-running"):
-				return mock.Result{Stdout: "running\n"}
-			case strings.Contains(joined, "/dev/tcp"):
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case strings.HasSuffix(joined, "systemctl is-active munge"):
-				return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")}
-			}
-		}
-		return mock.Result{}
-	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "worker-0", Role: config.RoleWorker}}
-
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
+	_, _, err := setupNodesWith(ctx, t, func(args []string) (mock.Result, bool) {
+		return mock.Result{Stdout: "activating\n", Err: fmt.Errorf("exit status 3")},
+			strings.HasSuffix(strings.Join(args, " "), "systemctl is-active munge")
+	}, workerConfigs("worker-0")...)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "probe munge")
 }
 
-func TestSetupNodes_InjectKeyError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
-				"sind-dev-net": "10.0.1.1",
-			})}
-		}
-		if args[0] == "exec" {
-			joined := strings.Join(args, " ")
-			switch {
-			case strings.Contains(joined, "is-system-running"):
-				return mock.Result{Stdout: "running\n"}
-			case strings.Contains(joined, "/dev/tcp"):
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case strings.Contains(joined, "is-active"):
-				return mock.Result{Stdout: "active\n"}
-			case strings.Contains(joined, "ssh-keyscan"):
-				return failedSetup(t, 1, "mkdir: cannot create directory '/root/.ssh': Permission denied\n", "ssh")
-			}
-		}
-		return mock.Result{}
+func TestSetupNodes_SSHSetupError(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		result func(t *testing.T) mock.Result
+		want   string
+	}{
+		{"inject key", func(t *testing.T) mock.Result {
+			return failedSetup(t, 1, "mkdir: cannot create directory '/root/.ssh': Permission denied\n", "ssh")
+		}, "node controller: setting up SSH: injecting SSH key and scanning host key: exit status 1: mkdir: cannot create directory '/root/.ssh': Permission denied"},
+		{"host key", func(*testing.T) mock.Result {
+			return mock.Result{Stdout: "# localhost:22 SSH-2.0-OpenSSH_9.0\n"}
+		}, "node controller: setting up SSH: no ed25519 host key found"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.result(t)
+			_, _, err := setupNodesWith(t.Context(), t, func(args []string) (mock.Result, bool) {
+				return r, strings.Contains(strings.Join(args, " "), "ssh-keyscan")
+			}, controllerConfig)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
 	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node controller: setting up SSH: injecting SSH key and scanning host key: exit status 1: mkdir: cannot create directory '/root/.ssh': Permission denied")
-}
-
-func TestSetupNodes_HostKeyError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "inspect" {
-			return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{
-				"sind-dev-net": "10.0.1.1",
-			})}
-		}
-		if args[0] == "exec" {
-			if args[1] == "-i" {
-				return mock.Result{}
-			}
-			joined := strings.Join(args, " ")
-			switch {
-			case strings.Contains(joined, "is-system-running"):
-				return mock.Result{Stdout: "running\n"}
-			case strings.Contains(joined, "/dev/tcp"):
-				return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.0\n"}
-			case strings.Contains(joined, "is-active"):
-				return mock.Result{Stdout: "active\n"}
-			case strings.Contains(joined, "ssh-keyscan"):
-				return mock.Result{Stdout: "# localhost:22 SSH-2.0-OpenSSH_9.0\n"}
-			}
-		}
-		return mock.Result{}
-	}
-
-	client := docker.NewClient(&m)
-	configs := []RunConfig{{Realm: mesh.DefaultRealm, ClusterName: "dev", ShortName: "controller", Role: config.RoleController}}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-	_, err := setupNodes(ctx, client, mgr, mesh.DefaultRealm, "dev", "ssh-key", configs, &readiness{interval: time.Millisecond}, nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node controller: setting up SSH: no ed25519 host key found")
 }
 
 func TestRegisterNodes_DNSError(t *testing.T) {
@@ -1466,26 +1369,13 @@ func TestSetupNodes_SkipsPassedProbes(t *testing.T) {
 			booting := 3
 			var m mock.Executor
 			m.OnStart = pipes.OnStart
-			m.OnCall = func(args []string, _ string) mock.Result {
-				joined := strings.Join(args, " ")
-				switch {
-				case args[0] == "inspect":
-					return mock.Result{Stdout: inspectJSON(t, args[1], "running", map[docker.NetworkName]string{"sind-dev-net": "10.0.1.1"})}
-				case strings.Contains(joined, "is-system-running"):
-					if booting > 0 {
-						booting--
-						return mock.Result{Stdout: "starting\n"}
-					}
-					return mock.Result{Stdout: "running\n"}
-				case strings.Contains(joined, "/dev/tcp"):
-					return mock.Result{Stdout: "SSH-2.0-OpenSSH_9.9\n"}
-				case strings.Contains(joined, "is-active"):
-					return mock.Result{Stdout: "active\n"}
-				case strings.Contains(joined, "ssh-keyscan"):
-					return mock.Result{Stdout: "localhost ssh-ed25519 AAAA-hostkey\n"}
+			m.OnCall = nodesOnCall(t, func(args []string) (mock.Result, bool) {
+				if booting > 0 && strings.Contains(strings.Join(args, " "), "is-system-running") {
+					booting--
+					return mock.Result{Stdout: "starting\n"}, true
 				}
-				return mock.Result{}
-			}
+				return mock.Result{}, false
+			})
 			client := docker.NewClient(&m)
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
