@@ -130,8 +130,8 @@ func (m *Manager) startSSH(ctx context.Context, info *docker.ContainerInfo) erro
 // privateKeyPath is the path to the private key inside the SSH container.
 const privateKeyPath = "/root/.ssh/id_ed25519"
 
-// publicKeyPath is the path to the public key inside the SSH container.
-const publicKeyPath = "/root/.ssh/id_ed25519.pub"
+// PublicKeyPath is the path to the public key inside the SSH container.
+const PublicKeyPath = "/root/.ssh/id_ed25519.pub"
 
 // GetSSHPrivateKey reads the SSH private key from the SSH container.
 func (m *Manager) GetSSHPrivateKey(ctx context.Context) (string, error) {
@@ -140,7 +140,7 @@ func (m *Manager) GetSSHPrivateKey(ctx context.Context) (string, error) {
 
 // GetSSHPublicKey reads the SSH public key from the SSH container.
 func (m *Manager) GetSSHPublicKey(ctx context.Context) (string, error) {
-	return m.readSSHFile(ctx, publicKeyPath, "SSH public key")
+	return m.readSSHFile(ctx, PublicKeyPath, "SSH public key")
 }
 
 // GetSSHKnownHosts reads the known_hosts file from the SSH container.

@@ -524,7 +524,7 @@ func resolveMeshInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.
 	if !found {
 		return "", "", fmt.Errorf("inspecting DNS container: %s not found", meshMgr.DNSContainerName())
 	}
-	key, err := client.ReadFile(ctx, meshMgr.SSHContainerName(), "/root/.ssh/id_ed25519.pub")
+	key, err := client.ReadFile(ctx, meshMgr.SSHContainerName(), mesh.PublicKeyPath)
 	if err != nil {
 		return "", "", fmt.Errorf("reading SSH public key: %w", err)
 	}
