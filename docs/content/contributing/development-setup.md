@@ -66,7 +66,9 @@ sind uses a minimal set of dependencies:
 | `github.com/spf13/pflag` | Flag library under cobra: the MCP tool flag filter, and the flag errors that exit 2 as usage errors |
 | `go.yaml.in/yaml/v3` | YAML configuration parsing (YAML 1.2) |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
-| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output |
+| `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the progress display |
+| `github.com/muesli/termenv` | The colour profiles lipgloss reports |
+| `github.com/GSI-HPC/go-clikit` | Progress spans and their displays, the pools of the power commands and `delete cluster --all`, and escaping of the text sind prints from docker and containers |
 | `github.com/mattn/go-isatty` | TTY detection for interactive commands |
 | `github.com/njayp/ophis` | MCP server framework |
 | `github.com/tailscale/hujson` | `sind mcp <editor> enable` and `disable`: edits an editor's MCP configuration (JSON with comments and trailing commas) in place, keeping its other settings, comments and formatting |
@@ -75,6 +77,7 @@ sind uses a minimal set of dependencies:
 | `golang.org/x/crypto` | The OpenSSH encoding of the SSH relay's ed25519 keypair (`ssh`) |
 | `golang.org/x/sync` | Errgroup for concurrent operations |
 | `golang.org/x/sys` | Realm lock: advisory file locking (flock), and the check whether a lock holder still runs (kill) |
+| `github.com/GSI-HPC/go-nodeset` | Node arguments: ClusterShell node set expressions |
 | `github.com/stretchr/testify` | Test assertions (test only) |
 
 ## Run tests

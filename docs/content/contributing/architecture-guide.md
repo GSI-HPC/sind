@@ -86,6 +86,7 @@ pkg/cluster/       Cluster operations (orchestration)
   ├── node.go      Node initialization and setup
   ├── setup.go     In-container node setup (nss_slurm, slurmrestd, users, SSH) in one docker exec
   ├── discovery.go Cluster/node discovery queries, VolumeType
+  ├── external.go  External containers on the mesh: connect, disconnect, and their connection to new clusters
   ├── resources.go Resource creation helpers
   ├── types.go     Shared types (Cluster, Node, State)
   ├── ssh.go       ssh/enter/exec arg building and target selection
