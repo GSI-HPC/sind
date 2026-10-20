@@ -10,7 +10,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -39,27 +38,11 @@ const restVersion = "v0.0.45"
 // check and skips the rest of the test.
 func apiCluster(ctx context.Context, t *testing.T, c *docker.Client, name, body string) (meshMgr *mesh.Manager, realm string, result *Cluster) {
 	t.Helper()
-	checkPrerequisites(t, c)
-
-	img := testutil.Image()
-	version, err := slurm.DiscoverVersion(ctx, c, img)
+	meshMgr, realm = testMesh(ctx, t, c, name, name)
+	version, err := slurm.DiscoverVersion(ctx, c, testutil.Image())
 	require.NoError(t, err)
 
-	realm = testutil.Realm(name)
-	meshMgr = mesh.NewManager(c, realm)
-	t.Cleanup(func() {
-		bg := context.Background()
-		_ = Delete(bg, c, meshMgr, name)
-		_ = meshMgr.CleanupMesh(bg)
-	})
-	require.NoError(t, meshMgr.EnsureMesh(ctx))
-
-	cfg, err := config.Parse([]byte(fmt.Sprintf("kind: Cluster\nname: %s\ndefaults:\n  image: %s\n%s", name, img, body)))
-	require.NoError(t, err)
-	cfg.ApplyDefaults()
-	require.NoError(t, cfg.Validate())
-
-	result, err = Create(ctx, c, meshMgr, cfg, probeInterval)
+	result, err = Create(ctx, c, meshMgr, testConfig(t, name, body), probeInterval)
 	if strings.HasPrefix(version, "25.") {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "has no slurmrestd with its systemd unit, which the api node runs")
