@@ -108,11 +108,36 @@ func TestMCPEnable_Environment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
-	_, _, err = executeCommand("--realm", "dev", "mcp", "cursor", "enable", "--config-path", path)
+	// Run again, enable keeps the environment, and the flags change what
+	// they name; the arguments are the flags' alone.
+	_, _, err = executeCommand("--realm", "dev", "mcp", "cursor", "enable", "--config-path", path, "--env", "TOKEN=t")
 	require.NoError(t, err)
 	servers, _ = readMCPConfig(t, path, "mcpServers")
-	assert.Equal(t, map[string]any{"SIND_REALM": "dev"}, servers["sind"]["env"])
+	assert.Equal(t, map[string]any{"PATH": "/opt/bin", "SIND_REALM": "dev", "TOKEN": "t"}, servers["sind"]["env"])
 	assert.Equal(t, []any{"mcp", "start"}, servers["sind"]["args"])
+}
+
+// TestMCPEnable_KeepsTheEntrysSettings checks that enable, run again as
+// after sind moved, keeps the realm and environment of the entry and the
+// settings sind does not write.
+func TestMCPEnable_KeepsTheEntrysSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "claude_desktop_config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"sind":{"command":"/old/sind","args":["mcp","start"],`+
+		`"env":{"SIND_REALM":"ci","FOO":"bar"},"disabled":true,"autoApprove":["sind_get_clusters"]}}}`), 0o600))
+
+	_, _, err := executeCommand("mcp", "claude", "enable", "--config-path", path)
+	require.NoError(t, err)
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	servers, _ := readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{
+		"command":     exe,
+		"args":        []any{"mcp", "start"},
+		"env":         map[string]any{"SIND_REALM": "ci", "FOO": "bar"},
+		"disabled":    true,
+		"autoApprove": []any{"sind_get_clusters"},
+	}, servers["sind"])
 }
 
 // TestMCPEnable_RealmFromEnvironment checks that enable records the realm

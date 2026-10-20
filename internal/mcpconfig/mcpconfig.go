@@ -162,8 +162,21 @@ func (f *File) Servers() []Server {
 	return servers
 }
 
+// Server returns the entry name, as Servers lists it, and whether there
+// is one.
+func (f *File) Server(name string) (Server, bool) {
+	for _, s := range f.Servers() {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return Server{}, false
+}
+
 // Set adds the server s under its name, or replaces the entry that has
-// that name. Comments around a replaced entry stay.
+// that name. A replaced entry keeps the members that Server has no field
+// for, such as "disabled" or "autoApprove", in their place, and the
+// comments around it stay.
 func (f *File) Set(s Server) {
 	obj := f.servers()
 	var m *hujson.ObjectMember
@@ -171,10 +184,12 @@ func (f *File) Set(s Server) {
 		m = member(obj, s.Name)
 	}
 	indent, lines := f.layout(obj, 2)
+	var old *hujson.Object
 	if m != nil {
 		indent, lines = indentOf(m.Name.BeforeExtra), multiline(m.Name.BeforeExtra)
+		old, _ = m.Value.Value.(*hujson.Object)
 	}
-	value := f.render(s, indent, lines)
+	value := f.render(s, old, indent, lines)
 	if m != nil {
 		m.Value.Value = value.Value
 		return
@@ -186,6 +201,10 @@ func (f *File) Set(s Server) {
 	}
 	f.insert(obj, "/"+pointerToken(f.key), 2, s.Name, value, indent, lines)
 }
+
+// serverMembers are the members of an entry that the fields of Server
+// hold: Set writes them as s has them, and leaves out those s leaves empty.
+var serverMembers = []string{"type", "command", "args", "url", "env"}
 
 // Remove removes the server entry name and reports whether there was one.
 func (f *File) Remove(name string) bool {
@@ -262,19 +281,52 @@ func (f *File) patch(op, ptr string, value hujson.ValueTrimmed) {
 	}
 }
 
-// render marshals s as JSON: indented with the file's indentation after
-// the prefix indent, if lines is set, or on one line. A Server always
-// marshals, to JSON that always parses.
-func (f *File) render(s Server, indent string, lines bool) hujson.Value {
+// render marshals s as JSON, with the members of old, the entry s
+// replaces, that Server has no field for, in their place, and those of s
+// after them: indented with the file's indentation after the prefix
+// indent, if lines is set, or on one line. A Server always marshals, to
+// JSON that always parses, and the members of old, standardized, are JSON.
+func (f *File) render(s Server, old *hujson.Object, indent string, lines bool) hujson.Value {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	if lines {
-		enc.SetIndent(indent, f.indentUnit())
-	}
 	_ = enc.Encode(s)
 	v, _ := hujson.Parse(bytes.TrimSpace(buf.Bytes()))
+	if old != nil {
+		v = merge(old, v.Value.(*hujson.Object))
+	}
+	buf.Reset()
+	if lines {
+		_ = json.Indent(&buf, v.Pack(), indent, f.indentUnit())
+	} else {
+		buf.Write(v.Pack())
+	}
+	v, _ = hujson.Parse(buf.Bytes())
 	return v
+}
+
+// merge returns the members of old that Server has no field for, in their
+// place, and those of s there and after them, without comments.
+func merge(old, s *hujson.Object) hujson.Value {
+	merged := &hujson.Object{}
+	added := map[string]bool{}
+	for _, m := range old.Members {
+		name := m.Name.Value.(hujson.Literal).String()
+		if !slices.Contains(serverMembers, name) {
+			v := m.Value.Clone()
+			v.Standardize()
+			merged.Members = append(merged.Members, hujson.ObjectMember{Name: hujson.Value{Value: m.Name.Value}, Value: v})
+		} else if sm := member(s, name); sm != nil && !added[name] {
+			merged.Members = append(merged.Members, *sm)
+			added[name] = true
+		}
+	}
+	for _, m := range s.Members {
+		if !added[m.Name.Value.(hujson.Literal).String()] {
+			merged.Members = append(merged.Members, m)
+		}
+	}
+	return hujson.Value{Value: merged}
 }
 
 // indentUnit returns the indentation of the file's first top-level member,

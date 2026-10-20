@@ -216,6 +216,45 @@ func TestSet(t *testing.T) {
 }
 `,
 		},
+		{
+			name: "replaces the entry and keeps the members it does not set",
+			in: new(`{
+  "mcpServers": {
+    "sind": {"disabled": true, "command": "old", "autoApprove": ["x"], "env": {"A": "1"}, /* where */ "cwd": "/w", "url": "u", "command": "again",}
+  }
+}
+`),
+			key: "mcpServers",
+			want: `{
+  "mcpServers": {
+    "sind": {
+      "disabled": true,
+      "command": "/usr/bin/sind",
+      "autoApprove": [
+        "x"
+      ],
+      "cwd": "/w",
+      "args": [
+        "mcp",
+        "start"
+      ]
+    }
+  }
+}
+`,
+		},
+		{
+			name: "replaces a one-line entry",
+			in:   new(`{"mcpServers":{"sind":{"type":"http","disabled":false}}}`),
+			key:  "mcpServers",
+			want: `{"mcpServers":{"sind":{"disabled":false,"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
+		},
+		{
+			name: "replaces an entry that is no object",
+			in:   new(`{"mcpServers":{"sind":"x"}}`),
+			key:  "mcpServers",
+			want: `{"mcpServers":{"sind":{"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -226,6 +265,15 @@ func TestSet(t *testing.T) {
 			assert.Equal(t, tt.want, read(t, fsys, "/cfg/c.json"))
 		})
 	}
+}
+
+func TestServer(t *testing.T) {
+	_, f := load(t, new(`{"servers": {"a": {"command": "x"}, "sind": {"command": "/bin/sind", "env": {"K": "v"}}}}`), "servers")
+	s, ok := f.Server("sind")
+	assert.True(t, ok)
+	assert.Equal(t, mcpconfig.Server{Name: "sind", Command: "/bin/sind", Env: map[string]string{"K": "v"}}, s)
+	_, ok = f.Server("none")
+	assert.False(t, ok)
 }
 
 func TestRemove(t *testing.T) {

@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -100,10 +101,11 @@ func newMCPEnableCommand(e mcpEditor) *cobra.Command {
 		Short: "Register sind's MCP server with " + e.title,
 		Long: `Register sind's MCP server with ` + e.title + `: add an entry that runs
 "sind mcp start", by the absolute path of this sind binary, or replace the
-entry of that name. The rest of the configuration file stays as it is, and
-the file as it was is first copied to <file>.<time>.bak. The realm in
-effect, of the root --realm or SIND_REALM, is set as SIND_REALM in the
-entry's environment, so the server serves that realm.`,
+entry of that name, which keeps its environment, unless --env or the realm
+change it, and its other settings. The rest of the configuration file stays
+as it is, and the file as it was is first copied to <file>.<time>.bak. The
+realm in effect, of the root --realm or SIND_REALM, is set as SIND_REALM in
+the entry's environment, so the server serves that realm.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPEnable(cmd, e, f)
@@ -211,6 +213,14 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 	cfg, err := loadMCPConfig(cmd, e, f)
 	if err != nil {
 		return err
+	}
+	// Run again, as after sind moved, enable keeps what the entry had and
+	// the flags do not change: its environment, with the realm the server
+	// serves, and the members sind does not write (cfg.Set).
+	if old, ok := cfg.Server(entry.Name); ok && len(old.Env) > 0 {
+		env := maps.Clone(old.Env)
+		maps.Copy(env, entry.Env)
+		entry.Env = env
 	}
 	cfg.Set(entry)
 	return saveMCPConfig(cmd, cfg)
