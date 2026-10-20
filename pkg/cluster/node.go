@@ -3,6 +3,7 @@
 package cluster
 
 import (
+	"cmp"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -71,19 +72,13 @@ const (
 // IdentityFromLabels returns the identity mode a node container's
 // LabelIdentity records, local without one.
 func IdentityFromLabels(labels docker.Labels) config.IdentityMode {
-	if mode := labels[LabelIdentity]; mode != "" {
-		return config.IdentityMode(mode)
-	}
-	return config.IdentityLocal
+	return cmp.Or(config.IdentityMode(labels[LabelIdentity]), config.IdentityLocal)
 }
 
 // DataMountPath returns where a node container mounts the cluster's data:
 // its LabelDataMountPath, or DefaultDataMountPath without one.
 func DataMountPath(labels docker.Labels) string {
-	if p := labels[LabelDataMountPath]; p != "" {
-		return p
-	}
-	return DefaultDataMountPath
+	return cmp.Or(labels[LabelDataMountPath], DefaultDataMountPath)
 }
 
 // ComposeProject returns the Docker Compose project name for a cluster.
@@ -246,10 +241,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	}
 
 	// Data volume
-	dataMountPath := cfg.DataMountPath
-	if dataMountPath == "" {
-		dataMountPath = DefaultDataMountPath
-	}
+	dataMountPath := cmp.Or(cfg.DataMountPath, DefaultDataMountPath)
 	if cfg.DataHostPath != "" {
 		args = append(args, "--mount", bindMount(cfg.DataHostPath, dataMountPath))
 	} else {
@@ -332,11 +324,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	labels[LabelDataMountPath] = dataMountPath
 	labels[LabelCVMFS] = string(cfg.CVMFS)
 	maps.Copy(labels, cfg.Users.Labels())
-	identity := cfg.Identity
-	if identity == "" {
-		identity = config.IdentityLocal
-	}
-	labels[LabelIdentity] = string(identity)
+	labels[LabelIdentity] = string(cmp.Or(cfg.Identity, config.IdentityLocal))
 	labels[LabelMonitoring] = strconv.FormatBool(cfg.Monitoring)
 	args = append(args, docker.SortedLabelFlags(labels)...)
 
@@ -439,13 +427,10 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 	taskAffinity := slurm.TaskAffinity(cfg.Slurm.Main)
 
 	dataHostPath := ""
-	dataMountPath := ""
 	if cfg.Storage.DataStorage.UsesHostPath() {
 		dataHostPath = absDataHostPath(cfg.Storage.DataStorage.HostPath)
 	}
-	if cfg.Storage.DataStorage.MountPath != "" {
-		dataMountPath = cfg.Storage.DataStorage.MountPath
-	}
+	dataMountPath := cfg.Storage.DataStorage.MountPath
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
@@ -494,12 +479,8 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 			backup.ContainerNumber = 2
 			configs = append(configs, base, backup)
 		case config.RoleWorker:
-			count := n.Count
-			if count <= 0 {
-				count = 1
-			}
 			isManaged := clusterManaged && (n.Managed == nil || *n.Managed)
-			for i := 0; i < count; i++ {
+			for range max(n.Count, 1) {
 				configs = append(configs, RunConfig{
 					Realm:           realm,
 					ClusterName:     cfg.Name,
