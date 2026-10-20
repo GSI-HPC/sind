@@ -4,7 +4,6 @@ package mesh
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -1364,7 +1363,7 @@ func TestGetDNSRecords(t *testing.T) {
 	var m mock.Executor
 	entries := []string{"172.18.0.2 controller.dev.sind.sind", "172.18.0.3 worker-0.dev.sind.sind"}
 	m.AddResult("[{}]\n", "", nil) // DNS container exists
-	m.AddResult(corefileTar(t, entries), "", nil)
+	m.AddResult(corefileTar(entries), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -1380,7 +1379,7 @@ func TestGetDNSRecords(t *testing.T) {
 func TestGetDNSRecords_Empty(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("[{}]\n", "", nil) // DNS container exists
-	m.AddResult(corefileTar(t, nil), "", nil)
+	m.AddResult(corefileTar(nil), "", nil)
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -1514,15 +1513,8 @@ func TestCleanupMesh_HostDNS(t *testing.T) {
 
 // corefileTar builds a tar archive containing a Corefile with the given entries,
 // matching the format returned by docker cp.
-func corefileTar(t *testing.T, entries []string) string {
-	t.Helper()
-	content := []byte(generateCorefile(DefaultRealm, entries))
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	_ = tw.WriteHeader(&tar.Header{Name: "Corefile", Size: int64(len(content)), Mode: 0644})
-	_, _ = tw.Write(content)
-	_ = tw.Close()
-	return buf.String()
+func corefileTar(entries []string) string {
+	return testutil.TarArchive("Corefile", generateCorefile(DefaultRealm, entries))
 }
 
 // extractTarFile reads a named file from a tar archive captured by MockExecutor.
