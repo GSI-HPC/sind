@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -433,6 +434,6 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 			m.Clusters[i].SlurmVersion = v
 		}
 	}
-	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return natsort.Compare(a.Name, b.Name) })
 	return m, nil
 }

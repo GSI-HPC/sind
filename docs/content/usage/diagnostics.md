@@ -220,7 +220,7 @@ sind get nodes -o json
 sind get cluster dev --output json
 ```
 
-A listing that finds nothing prints its header alone on stdout and says so on stderr, with where sind looked, such as `No clusters found in realm "sind".`; with `-o json` it prints an empty list and nothing on stderr. `sind get ssh-config` notes on stderr, with `Note:`, that the file it prints the path of does not exist yet.
+Listings are sorted by name in natural order, with numbers by their value, so the cluster `dev2` comes before `dev10`; `sind get dns` sorts by host name. A listing that finds nothing prints its header alone on stdout and says so on stderr, with where sind looked, such as `No clusters found in realm "sind".`; with `-o json` it prints an empty list and nothing on stderr. `sind get ssh-config` notes on stderr, with `Note:`, that the file it prints the path of does not exist yet.
 
 ## Cluster status
 

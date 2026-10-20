@@ -5,7 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -412,12 +412,12 @@ func TestGetNodeNames(t *testing.T) {
 	names, err := GetNodeNames(t.Context(), c, mesh.DefaultRealm)
 
 	require.NoError(t, err)
-	// Clusters in string order, as the cluster discovery sorted them, then
+	// Clusters in natural order, as the cluster discovery sorts them, then
 	// role and natural name order within each cluster. The mesh DNS
 	// container has no cluster and is left out.
 	assert.Equal(t, []string{
-		"worker-0.dev-10",
 		"controller.dev-2",
+		"worker-0.dev-10",
 		"controller.prod",
 		"db.prod",
 		"worker-2.prod",
@@ -465,44 +465,6 @@ func TestGetNodes_SkipsEmptyClusterLabel(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
-}
-
-func TestNaturalSortKey(t *testing.T) {
-	tests := []struct {
-		name  string
-		input []string
-		want  []string
-	}{
-		{
-			name:  "worker numeric suffix",
-			input: []string{"worker-10", "worker-2", "worker-1", "worker-0", "worker-11"},
-			want:  []string{"worker-0", "worker-1", "worker-2", "worker-10", "worker-11"},
-		},
-		{
-			name:  "plain strings unchanged",
-			input: []string{"controller", "beta", "alpha"},
-			want:  []string{"alpha", "beta", "controller"},
-		},
-		{
-			name:  "mixed digit runs",
-			input: []string{"a1b20c3", "a1b3c30", "a1b3c3"},
-			want:  []string{"a1b3c3", "a1b3c30", "a1b20c3"},
-		},
-		{
-			name:  "empty string",
-			input: []string{"b", "", "a"},
-			want:  []string{"", "a", "b"},
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := append([]string(nil), tc.input...)
-			sort.Slice(got, func(i, j int) bool {
-				return naturalSortKey(got[i]) < naturalSortKey(got[j])
-			})
-			assert.Equal(t, tc.want, got)
-		})
-	}
 }
 
 func TestContainerStateToState(t *testing.T) {
@@ -709,6 +671,49 @@ func TestGetRealms(t *testing.T) {
 	assert.Equal(t, 1, realms[0].Clusters)
 	assert.Equal(t, "sind", realms[1].Name)
 	assert.Equal(t, 2, realms[1].Clusters)
+}
+
+// TestGetListings_NaturalOrder checks that clusters, realms, networks and
+// volumes are listed in natural order, as nodes are: dev2 before dev10.
+func TestGetListings_NaturalOrder(t *testing.T) {
+	ps := func(realm, clusterName string) testutil.PsEntry {
+		return testutil.PsEntry{Names: realm + "-" + clusterName + "-controller", State: "running",
+			Labels: "sind.realm=" + realm + ",sind.cluster=" + clusterName + ",sind.role=controller"}
+	}
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		switch {
+		case args[0] == "ps" && slices.Contains(testutil.ArgValues(args, "--filter"), "label=sind.realm=sind"):
+			return mock.Result{Stdout: testutil.NDJSON(ps("sind", "dev10"), ps("sind", "dev2"))}
+		case args[0] == "ps":
+			return mock.Result{Stdout: testutil.NDJSON(ps("sind", "dev10"), ps("sind", "dev2"), ps("ci10", "a"), ps("ci2", "a"))}
+		case args[0] == "network" && args[1] == "ls":
+			return mock.Result{Stdout: testutil.NDJSON(networkEntry{Name: "sind-dev10-net"}, networkEntry{Name: "sind-dev2-net"})}
+		case args[0] == "volume" && args[1] == "ls":
+			return mock.Result{Stdout: testutil.NDJSON(volumeEntry{Name: "sind-dev10-config"}, volumeEntry{Name: "sind-dev2-config"})}
+		}
+		return mock.Result{Stdout: "[]"}
+	}}
+	c := docker.NewClient(m)
+
+	clusters, err := GetClusters(t.Context(), c, "sind")
+	require.NoError(t, err)
+	require.Len(t, clusters, 2)
+	assert.Equal(t, []string{"dev2", "dev10"}, []string{clusters[0].Name, clusters[1].Name})
+
+	realms, err := GetRealms(t.Context(), c)
+	require.NoError(t, err)
+	require.Len(t, realms, 3)
+	assert.Equal(t, []string{"ci2", "ci10", "sind"}, []string{realms[0].Name, realms[1].Name, realms[2].Name})
+
+	networks, err := GetNetworks(t.Context(), c, "sind")
+	require.NoError(t, err)
+	require.Len(t, networks, 2)
+	assert.Equal(t, "sind-dev2-net", networks[0].Name)
+
+	volumes, err := GetVolumes(t.Context(), c, "sind")
+	require.NoError(t, err)
+	require.Len(t, volumes, 2)
+	assert.Equal(t, "sind-dev2-config", volumes[0].Name)
 }
 
 func TestGetRealms_LabelFilter(t *testing.T) {

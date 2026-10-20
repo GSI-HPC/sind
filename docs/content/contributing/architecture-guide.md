@@ -38,6 +38,8 @@ internal/atomicfile/ Replaces a file in one step, through a temporary file and a
 
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
+internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
+
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Image (SIND_TEST_IMAGE), TarModes, WithoutCalls
   ├── client.go    NewClient, Realm (unit test variants)
@@ -114,6 +116,7 @@ pkg/state/         sind's state directory and the realm lock (flock, and the <re
 
 ```
 cmd/sind → pkg/cluster → pkg/cmdexec
+                       → internal/natsort
                        → pkg/config  → internal/hostname
                        → pkg/docker  → pkg/cmdexec
                                      → pkg/log
@@ -124,6 +127,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                                      → pkg/cmdexec
                                      → pkg/config
                                      → pkg/log
+                                     → internal/natsort
                        → pkg/monitor → pkg/docker
                                      → pkg/cmdexec
                                      → pkg/log

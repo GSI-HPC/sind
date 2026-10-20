@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/docker"
 )
 
@@ -185,10 +186,10 @@ func DiscoverClusterNames(ctx context.Context, client *docker.Client, realm stri
 	return sortedClusterNames(names), nil
 }
 
-// sortedClusterNames returns names sorted, without duplicates and empty
-// names.
+// sortedClusterNames returns names in natural order (natsort), without
+// duplicates and empty names.
 func sortedClusterNames(names []string) []string {
-	slices.Sort(names)
+	slices.SortFunc(names, natsort.Compare)
 	return slices.DeleteFunc(slices.Compact(names), func(n string) bool { return n == "" })
 }
 

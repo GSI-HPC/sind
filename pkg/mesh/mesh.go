@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -745,7 +746,9 @@ type DNSRecord struct {
 	IP       string `json:"ip"`
 }
 
-// GetDNSRecords returns all A records currently served by the mesh DNS.
+// GetDNSRecords returns all A records currently served by the mesh DNS, in
+// the natural order of their host names (natsort), as the Corefile keeps
+// them in the order they were added.
 func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 	if err := m.requireMeshContainer(ctx, m.DNSContainerName()); err != nil {
 		return nil, err
@@ -761,6 +764,7 @@ func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 			records = append(records, DNSRecord{IP: fields[0], Hostname: fields[1]})
 		}
 	}
+	slices.SortFunc(records, func(a, b DNSRecord) int { return natsort.Compare(a.Hostname, b.Hostname) })
 	return records, nil
 }
 

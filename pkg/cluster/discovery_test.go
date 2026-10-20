@@ -346,6 +346,11 @@ func TestDiscoverClusterNames(t *testing.T) {
 			volumes: mock.Result{Stdout: `{"Name":"sind-dev-config","Driver":"local","Labels":"sind.realm=sind,sind.cluster=dev"}
 {"Name":"sind-test-data","Driver":"local","Labels":"sind.realm=sind,sind.cluster=test"}`},
 			want: []string{"dev", "prod", "test"}},
+		// Natural order: dev2 before dev10.
+		{name: "natural order", networks: mock.Result{Stdout: `{"Name":"sind-dev10-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=dev10"}
+{"Name":"sind-dev2-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=dev2"}
+{"Name":"sind-dev-net","Driver":"bridge","Labels":"sind.realm=sind,sind.cluster=dev"}`},
+			want: []string{"dev", "dev2", "dev10"}},
 		{name: "empty"},
 		{name: "network error", networks: mock.Result{Err: fmt.Errorf("docker daemon unreachable")}, wantErr: "listing networks"},
 		{name: "volume error", volumes: mock.Result{Err: fmt.Errorf("docker daemon unreachable")}, wantErr: "listing volumes"},

@@ -1358,7 +1358,9 @@ func TestGetInfo_InspectErrors(t *testing.T) {
 
 func TestGetDNSRecords(t *testing.T) {
 	var m mock.Executor
-	entries := []string{"172.18.0.2 controller.dev.sind.sind", "172.18.0.3 worker-0.dev.sind.sind"}
+	// The Corefile keeps the records in the order they were added; the
+	// listing is in natural order of the host names.
+	entries := []string{"172.18.0.4 worker-10.dev.sind.sind", "172.18.0.3 worker-2.dev.sind.sind", "172.18.0.2 controller.dev.sind.sind"}
 	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(corefileTar(entries), "", nil)
 	c := docker.NewClient(&m)
@@ -1366,11 +1368,11 @@ func TestGetDNSRecords(t *testing.T) {
 
 	records, err := mgr.GetDNSRecords(t.Context())
 	require.NoError(t, err)
-	require.Len(t, records, 2)
-	assert.Equal(t, "172.18.0.2", records[0].IP)
-	assert.Equal(t, "controller.dev.sind.sind", records[0].Hostname)
-	assert.Equal(t, "172.18.0.3", records[1].IP)
-	assert.Equal(t, "worker-0.dev.sind.sind", records[1].Hostname)
+	assert.Equal(t, []DNSRecord{
+		{Hostname: "controller.dev.sind.sind", IP: "172.18.0.2"},
+		{Hostname: "worker-2.dev.sind.sind", IP: "172.18.0.3"},
+		{Hostname: "worker-10.dev.sind.sind", IP: "172.18.0.4"},
+	}, records)
 }
 
 func TestGetDNSRecords_Empty(t *testing.T) {
