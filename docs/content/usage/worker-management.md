@@ -103,10 +103,10 @@ Deleting a managed worker needs a running controller: with the controller stoppe
 sind delete worker worker-2
 
 # Remove multiple workers
-sind delete worker worker-[2-4]
+sind delete worker 'worker-[2-4]'
 
 # Remove workers from a named cluster
-sind delete worker worker-[0-1].dev
+sind delete worker 'worker-[0-1].dev'
 ```
 
 See [Node Arguments](../node-arguments/) for the full node set syntax, set operators included.

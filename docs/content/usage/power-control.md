@@ -33,16 +33,16 @@ A power command acts on the nodes of each cluster in parallel, at most 8 at a ti
 sind power shutdown worker-0
 
 # Hard power off multiple workers
-sind power cut worker-[0-3]
+sind power cut 'worker-[0-3]'
 
 # Power on after shutdown
-sind power on worker-[0-3]
+sind power on 'worker-[0-3]'
 
 # Graceful reboot
 sind power reboot controller
 
 # Hard cycle
-sind power cycle worker-[0-1].dev
+sind power cycle 'worker-[0-1].dev'
 
 # Freeze a node (stays "running" but completely unresponsive)
 sind power freeze worker-0
@@ -58,7 +58,7 @@ sind power unfreeze worker-0
 After a host reboot or a Docker daemon restart, the mesh and all nodes are stopped; `sind power on` brings them back (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})):
 
 ```bash
-sind power on controller,worker-[0-1]
+sind power on 'controller,worker-[0-1]'
 ```
 
 ## Freeze and unfreeze
@@ -88,7 +88,7 @@ slurmctld pings about every third of the timeout, so a worker is then `DOWN` wit
 All power commands accept [node set expressions](../node-arguments/) for targeting multiple nodes:
 
 ```bash
-sind power shutdown controller,worker-[0-3]
-sind power cycle worker-[0-1].dev,worker-[0-3].default
-sind power freeze worker-[0-3] '!worker-2'
+sind power shutdown 'controller,worker-[0-3]'
+sind power cycle 'worker-[0-1].dev,worker-[0-3].default'
+sind power freeze 'worker-[0-3]' '!worker-2'
 ```

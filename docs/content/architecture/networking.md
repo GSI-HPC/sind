@@ -77,7 +77,7 @@ The DNS container is lightweight — no systemd or sshd.
 sind sets no restart policy, so the mesh containers and the nodes stay stopped after a host reboot or a Docker daemon restart. `sind get cluster` then shows `dns` and `ssh` with ✗. `sind power on` starts them again: first the realm's DNS container, then the SSH relay, then the nodes, whose DNS records it points at their new addresses. It also applies host DNS again, and last starts a stopped monitoring stack and registers its DNS names again. `sind create cluster` and `sind create worker` start a stopped mesh too, and so do `sind delete cluster` and `sind delete worker` when they remove nodes from a mesh that other clusters keep, so that the nodes leave the relay's `known_hosts` as well as the DNS records.
 
 ```bash
-sind power on controller,worker-[0-1]
+sind power on 'controller,worker-[0-1]'
 ```
 
 Docker fixes the DNS server of the nodes and the relay (`--dns`) when it creates them, and does not keep the address of a stopped container. sind therefore pins the DNS container's address. The mesh network gets a subnet of its own, which sind lets Docker choose from its default address pools: Docker hands out the lower half to the nodes and the relay (`--ip-range`), and the DNS container gets a fixed address in the upper half (`--ip`), the last one before the broadcast address, such as `172.18.255.254` in `172.18.0.0/16`. It gets that address back in whatever order the containers start. The mesh network records it in its label `sind.dns.ip`.

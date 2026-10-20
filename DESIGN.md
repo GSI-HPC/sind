@@ -839,7 +839,7 @@ Node arguments are node set expressions in ClusterShell's syntax, which Slurm an
 Rules:
 - Every run of digits in a name is a number, the cluster's included; a bracket may stand for any of them, and the padding and order rules below apply to each.
 - The operators have no precedence: an expression is evaluated left to right, so `worker-[0-9]!worker-[0-4]&worker-[3-6]` is worker-5 and worker-6. `!`, `&` and `^` need an operand on each side; an empty operand of a union is nothing, so `worker-0,` is worker-0.
-- A command joins its node arguments with a space, which is a union, so `sind power on worker-[0-3] '!worker-2'` is one expression. Quote an expression with `!`, `&` or `^` from the shell.
+- A command joins its node arguments with a space, which is a union, so `sind power on 'worker-[0-3]' '!worker-2'` is one expression. Quote an expression with `[`, `!`, `&` or `^` from the shell: the shell reads `!` itself, and expands `worker-[0-3]` to the files in the working directory that match it, such as a job's output file `worker-1`.
 - Zero padding is not part of a node's identity: `worker-1,worker-01` is one node, and `worker-[1-3]!worker-02` is worker-1 and worker-3. A node keeps the spelling it was first given, and sind looks it up by that spelling. sind names its workers without padding, so `worker-[00-03]` names none of them.
 - The padding of the cluster suffix's numbers is no part of the identity either, but clusters `dev1` and `dev01` are two: an expression whose names differ only in the padding of their cluster (`worker-0.dev1,worker-0.dev01`), which would act on one of the two nodes, is a usage error (`paddingClash` expands each term on its own to see every spelling).
 - The operators compare names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing. Write the suffix the same way throughout an expression.
@@ -851,12 +851,12 @@ sind acts on the nodes in go-nodeset's order: sorted by the name with each numbe
 ### Examples
 
 ```bash
-sind power shutdown controller                    # controller.default
-sind power cycle worker-0                        # worker-0.default
-sind power freeze worker-[0-3].dev               # 4 nodes in dev cluster
-sind power reboot controller,worker-[0-1]        # multiple nodes in default
-sind power on worker-[0-3] '!worker-2'           # 3 nodes in default
-sind delete worker worker-[0-1].dev worker-3.prod  # nodes in two clusters
+sind power shutdown controller                       # controller.default
+sind power cycle worker-0                            # worker-0.default
+sind power freeze 'worker-[0-3].dev'                 # 4 nodes in dev cluster
+sind power reboot 'controller,worker-[0-1]'          # multiple nodes in default
+sind power on 'worker-[0-3]' '!worker-2'             # 3 nodes in default
+sind delete worker 'worker-[0-1].dev' worker-3.prod  # nodes in two clusters
 ```
 
 ## Configuration Schema

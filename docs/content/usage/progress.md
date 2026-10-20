@@ -107,7 +107,7 @@ sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
 The `power` commands show a step named by what they do, with a target for each node, named as you name it in a node argument (`worker-0`, or `worker-0.dev` in the cluster `dev`): `stopping` (`shutdown`), `killing` (`cut`), `starting` (`on`), `pausing` (`freeze`) or `unpausing` (`unfreeze`); `reboot` shows `stopping` and then `starting`, and `cycle` shows `killing` and then `starting`. A `power reboot` of 24 workers, at most 8 at a time, while it stops them:
 
 ```text
-$ sind power reboot worker-[0-23]
+$ sind power reboot 'worker-[0-23]'
 power reboot · 0:07.3
   stopping  9/24 · 8 running · 7 queued
     ▸ worker-8  4.2s  docker stop
@@ -123,7 +123,7 @@ power reboot · 0:07.3
 and once it is done:
 
 ```text
-$ sind power reboot worker-[0-23]
+$ sind power reboot 'worker-[0-23]'
 ✓ stopping  14s  24 ok
 ✓ starting  2.2s  24 ok
 ```
