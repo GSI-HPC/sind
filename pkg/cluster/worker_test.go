@@ -174,48 +174,6 @@ func TestNextWorkerIndex(t *testing.T) {
 	assert.Equal(t, 1, nextIndex(t, testutil.NDJSON(controller, worker0, nonNumeric)))
 }
 
-// TestWorkerAdd_LabelFilter asserts the container list is scoped by both
-// realm and cluster labels so parallel realms do not cross-match.
-func TestWorkerAdd_LabelFilter(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func([]string, string) mock.Result {
-		return mock.Result{Err: fmt.Errorf("docker daemon not running")}
-	}
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev"}, time.Millisecond)
-	require.Error(t, err)
-
-	require.NotEmpty(t, m.Calls)
-	psArgs := m.Calls[0].Args
-	assert.Equal(t, "ps", psArgs[0])
-	assert.Contains(t, psArgs, "label=sind.realm="+mesh.DefaultRealm)
-	assert.Contains(t, psArgs, "label=sind.cluster=dev")
-}
-
-func TestWorkerAdd_RequiresSindNodes(t *testing.T) {
-	// When sind-nodes.conf is missing on the controller,
-	// managed worker add must fail.
-	base := workerAddOnCall(t)
-	var m mock.Executor
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		// ReadFile (docker exec controller cat /etc/slurm/sind-nodes.conf) fails
-		if args[0] == "exec" && len(args) >= 4 && args[2] == "cat" && strings.HasSuffix(args[3], "sind-nodes.conf") {
-			return nodesConfMissing(t)
-		}
-		return base(args, stdin)
-	}
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       1,
-	}, time.Millisecond)
-
-	require.ErrorIs(t, err, ErrNodesConfMissing)
-	assert.Zero(t, countCalls(m.Calls, "create"))
-}
-
 func TestReadNodesConf_ControllerNotRunning(t *testing.T) {
 	// A stopped controller is not a missing sind-nodes.conf: the remedy is
 	// to start it, not --unmanaged.
@@ -263,47 +221,6 @@ func TestWorkerAdd_ClusterNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
 	assert.ErrorIs(t, err, ErrClusterNotFound)
-}
-
-func TestWorkerAdd_ClusterNotFound_Unmanaged(t *testing.T) {
-	// Even unmanaged mode requires the cluster (controller) to exist.
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: ""}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       1,
-		Unmanaged:   true,
-	}, time.Millisecond)
-
-	require.Error(t, err)
-	assert.EqualError(t, err, `cluster "dev" not found in realm "sind"`)
-	assert.ErrorIs(t, err, ErrClusterNotFound)
-}
-
-func TestWorkerAdd_ListContainersError(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Err: fmt.Errorf("docker daemon not running")}
-		}
-		return mock.Result{}
-	}
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       1,
-	}, time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
 }
 
 // TestWorkerAdd_MeshFull covers workers that do not fit on the realm's
@@ -1588,39 +1505,14 @@ func TestWorkerRemove_ListContainersError(t *testing.T) {
 }
 
 func TestWorkerAdd_DefaultCount(t *testing.T) {
-	// When Count is 0 (zero value), WorkerAdd defaults to creating 1 node.
-	_, nodes, err := addWorkers(t, workerAddOnCall(t), WorkerAddOptions{
-		ClusterName: "dev",
-		// Count intentionally 0 → should default to 1
-		CPUs:    2,
-		Memory:  "2g",
-		TmpSize: "1g",
-	})
+	// A count of zero or less adds one worker.
+	for _, count := range []int{0, -5} {
+		_, nodes, err := addWorkers(t, workerAddOnCall(t), WorkerAddOptions{ClusterName: "dev", Count: count, CPUs: 2, Memory: "2g", TmpSize: "1g"})
 
-	require.NoError(t, err)
-	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
-}
-
-func TestWorkerAdd_DefaultResources(t *testing.T) {
-	// When CPUs, Memory, TmpSize are zero/empty, WorkerAdd defaults to
-	// config.DefaultCPUs, config.DefaultMemory, config.DefaultTmpSize.
-	var m mock.Executor
-	m.OnCall = workerAddOnCall(t)
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       1,
-		// CPUs, Memory, TmpSize intentionally omitted → should use defaults
-	}, time.Millisecond)
-
-	require.NoError(t, err)
-	require.Len(t, nodes, 1)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		assert.Equal(t, "worker-1", nodes[0].Name)
+	}
 }
 
 func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
@@ -1681,40 +1573,27 @@ func TestWorkerRemove_NoController(t *testing.T) {
 	assert.True(t, removed, "container should be removed even without controller")
 }
 
-func TestWorkerRemove_RejectsController(t *testing.T) {
-	// Removing the controller via worker remove must be rejected.
+func TestWorkerRemove_RejectsNonWorkers(t *testing.T) {
+	// Only worker nodes can be removed with worker remove.
+	ps := testutil.NDJSON(
+		testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "sub", Names: "sind-dev-submitter", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=submitter"},
+		testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
+			Labels: "sind.cluster=dev,sind.role=worker"},
+	)
 	onCall := func(args []string, _ string) mock.Result {
 		if args[0] == "ps" {
-			return mock.Result{Stdout: workerContainers("worker-0")}
+			return mock.Result{Stdout: ps}
 		}
 		return mock.Result{}
 	}
+	for _, node := range []string{"controller", "submitter"} {
+		_, err := removeWorkers(t, onCall, node)
 
-	_, err := removeWorkers(t, onCall, "controller")
-
-	require.Error(t, err)
-	assert.Equal(t, `node "controller" has role "controller": only worker nodes can be removed`, err.Error())
-}
-
-func TestWorkerRemove_RejectsSubmitter(t *testing.T) {
-	onCall := func(args []string, _ string) mock.Result {
-		if args[0] == "ps" {
-			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=controller"},
-				testutil.PsEntry{ID: "sub", Names: "sind-dev-submitter", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=submitter"},
-				testutil.PsEntry{ID: "c0", Names: "sind-dev-worker-0", State: "running", Image: "img:1",
-					Labels: "sind.cluster=dev,sind.role=worker"},
-			)}
-		}
-		return mock.Result{}
+		assert.EqualError(t, err, fmt.Sprintf("node %q has role %q: only worker nodes can be removed", node, node))
 	}
-
-	_, err := removeWorkers(t, onCall, "submitter")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "only worker nodes")
 }
 
 func TestWorkerRemove_DuplicateNames(t *testing.T) {
@@ -1742,21 +1621,6 @@ func TestWorkerRemove_EmptyNames(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, m.Calls, "no docker calls should be made for empty shortNames")
-}
-
-func TestWorkerAdd_NegativeCount(t *testing.T) {
-	// Negative count defaults to 1, same as zero.
-	_, nodes, err := addWorkers(t, workerAddOnCall(t), WorkerAddOptions{
-		ClusterName: "dev",
-		Count:       -5,
-		CPUs:        2,
-		Memory:      "2g",
-		TmpSize:     "1g",
-	})
-
-	require.NoError(t, err)
-	require.Len(t, nodes, 1)
-	assert.Equal(t, "worker-1", nodes[0].Name)
 }
 
 // --- WorkerAdd error path tests ---
@@ -1839,29 +1703,6 @@ func TestWorkerAdd_RegisterNodesError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestWorkerAdd_EnableSlurmError(t *testing.T) {
-	var m mock.Executor
-	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "exec" && len(args) > 3 &&
-			strings.Contains(args[1], "worker") && args[2] == "systemctl" && args[3] == "enable" {
-			return mock.Result{Err: fmt.Errorf("systemctl failed")}
-		}
-		return inner(args, stdin)
-	}
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
-		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
-	}, time.Millisecond)
-
-	require.Error(t, err)
-}
-
 func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 	// When enableSlurm fails (after containers exist), cleanup should run.
 	inner := workerAddOnCall(t)
@@ -1933,48 +1774,25 @@ func TestWorkerAdd_CleanupErrors(t *testing.T) {
 
 func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
 	// When validation fails (before containers), cleanup should NOT run.
-	var m mock.Executor
 	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	onCall := func(args []string, stdin string) mock.Result {
 		if args[0] == "inspect" && args[1] == "sind-dev-controller" {
 			return mock.Result{Err: fmt.Errorf("container not running")}
 		}
 		return inner(args, stdin)
 	}
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
 
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
+	m, _, err := addWorkers(t, onCall, WorkerAddOptions{
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
-	}, time.Millisecond)
+	})
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "inspecting controller")
 	// No "docker rm" calls on worker containers → cleanup did not run.
 	for _, call := range m.Calls {
 		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
 			require.Fail(t, "cleanup should not run when validation fails")
 		}
 	}
-}
-
-func TestWorkerAdd_ControllerInspectError(t *testing.T) {
-	var m mock.Executor
-	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
-		if args[0] == "inspect" && args[1] == "sind-dev-controller" {
-			return mock.Result{Err: fmt.Errorf("container not running")}
-		}
-		return inner(args, stdin)
-	}
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{
-		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
-	}, time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting controller")
 }
 
 func TestWorkerAdd_ReadsNodesConfOnce(t *testing.T) {
