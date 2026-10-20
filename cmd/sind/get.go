@@ -156,8 +156,9 @@ func runGetRealms(cmd *cobra.Command, _ []string) error {
 
 func newGetNodeCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "node NODE[.CLUSTER]",
-		Short:             "Show node health status (accepts bare name or NODE.CLUSTER)",
+		Use:               "node NODE",
+		Short:             "Show node health status",
+		Long:              "Show node health status.\n\n" + nodeHelp,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeNodeName,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -171,7 +172,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	if err := validateOutputFlag(cmd); err != nil {
 		return err
 	}
-	target, err := parseNodeName(arg)
+	target, err := parseOneNode("get node", arg)
 	if err != nil {
 		return err
 	}

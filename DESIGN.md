@@ -408,7 +408,7 @@ sind connect container CONTAINER...
 sind disconnect container CONTAINER...
 sind get cluster [NAME]
 sind get clusters
-sind get node NODE[.CLUSTER]
+sind get node NODE
 sind get nodes [CLUSTER]
 sind get networks
 sind get realms
@@ -822,7 +822,7 @@ Commands accepting node arguments use DNS-style names, written as a node set exp
 <role>-<N>.<cluster>
 ```
 
-The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name.
+The cluster suffix defaults to `.default` if omitted. A name is split at its last `.`, and what follows it must be a valid cluster name; what precedes it must be a node's short name, a lowercase DNS label, so a name with more dots is a usage error. The FQDN that `get nodes` prints (`NODE.CLUSTER.REALM.sind`) is one of them, and every node command (`get node`, `power`, `delete worker`, `logs`, `ssh`) rejects it with the same usage error, `use NODE[.CLUSTER], not the FQDN`, since `parseNodeName` checks every node name. Its errors quote the term of the argument that named the node, as typed (`typedTerm`): `invalid node name "Worker-[0-1]": invalid short name "Worker-0": it has uppercase letters`. `ssh`, `logs` and `get node` act on one node and parse their argument the same way (`parseOneNode`): a node set that names another number of nodes is the usage error `<command> requires exactly one node, got N`.
 
 ### Node Sets
 

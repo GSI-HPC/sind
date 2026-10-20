@@ -98,6 +98,8 @@ sind rejects these before it acts on any node, with exit status 2:
 - a name with more than one `.`, such as `a.b.c`, and the FQDN that `sind get nodes` prints, `worker-0.dev.sind.sind`: use `worker-0.dev`. The node commands act in the realm of `--realm`, so they take no realm in the name
 - names that differ only in the zero padding of their cluster, which a node set takes for one node: `worker-0.dev1,worker-0.dev01`
 
+An error about a name quotes the part of the argument that named it, as you typed it: `sind power on 'Worker-[0-1]'` fails with `invalid node name "Worker-[0-1]": invalid short name "Worker-0": it has uppercase letters`.
+
 ## Commands that accept node sets
 
 | Command | Accepts node sets |
@@ -106,3 +108,6 @@ sind rejects these before it acts on any node, with exit status 2:
 | `sind delete worker` | Yes — one or more nodes |
 | `sind ssh` | No — exactly one node |
 | `sind logs` | No — exactly one node |
+| `sind get node` | No — exactly one node |
+
+The commands that take one node fail alike for a node set of more than one: `sind logs 'worker-[0-1]'` fails with `logs requires exactly one node, got 2`.

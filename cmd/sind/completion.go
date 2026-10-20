@@ -103,8 +103,8 @@ func completeLogsArgs(cmd *cobra.Command, args []string, _ string) ([]string, co
 // nodeServices returns the services of the node arg names as completions,
 // those its role runs. An argument that names no single node has none.
 func nodeServices(cmd *cobra.Command, arg string) ([]string, cobra.ShellCompDirective) {
-	targets, err := parseNodeArgs(arg)
-	if err != nil || len(targets) != 1 {
+	node, err := parseOneNode("logs", arg)
+	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	ctx := cmd.Context()
@@ -112,7 +112,7 @@ func nodeServices(cmd *cobra.Command, arg string) ([]string, cobra.ShellCompDire
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
-	services, err := cluster.NodeServices(ctx, clientFrom(ctx), realm, targets[0].Cluster, targets[0].ShortName)
+	services, err := cluster.NodeServices(ctx, clientFrom(ctx), realm, node.Cluster, node.ShortName)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}

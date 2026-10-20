@@ -26,6 +26,8 @@ SSH options, before or after NODE, are passed through to ssh. A remote
 command must follow --: NODE is the only other argument before it. sind's
 own flags, such as --realm, go before ssh: sind --realm R ssh NODE.
 
+` + nodeHelp + `
+
 ssh runs in the realm's SSH relay container, so the ports and files that
 options such as -L and -i name are the relay's. To forward a port to this
 machine, use your own ssh with the exported config:
@@ -66,12 +68,9 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		node = host
 	}
 
-	target, err := parseNodeArgs(node)
+	target, err := parseOneNode("ssh", node)
 	if err != nil {
 		return err
-	}
-	if len(target) != 1 {
-		return argsErrorf("ssh requires exactly one node, got %d", len(target))
 	}
 
 	// Through a pseudo-terminal, the remote output would come back with CRLF
@@ -86,11 +85,11 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	// The relay would answer a missing node with ssh's own error, and a
 	// realm without clusters has no relay for docker to exec in.
 	ctx := cmd.Context()
-	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target[0].Cluster, target[0].ShortName); err != nil {
+	if err := cluster.CheckNode(ctx, clientFrom(ctx), realm, target.Cluster, target.ShortName); err != nil {
 		return err
 	}
 	sshContainer := mesh.NewManager(nil, realm).SSHContainerName()
-	dockerArgs := cluster.BuildSSHArgs(sshContainer, target[0].ShortName, target[0].Cluster, realm, isTTY, sshOptions, command)
+	dockerArgs := cluster.BuildSSHArgs(sshContainer, target.ShortName, target.Cluster, realm, isTTY, sshOptions, command)
 
 	return dockerExec(cmd, dockerArgs)
 }

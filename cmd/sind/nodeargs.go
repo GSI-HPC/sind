@@ -50,6 +50,11 @@ defaults to "default". Quote a node set from the shell, which would
 otherwise expand worker-[0-3] to the files in the working directory that
 match it.`
 
+// nodeHelp describes the NODE argument of the commands that act on one
+// node, ssh, logs and get node.
+const nodeHelp = `NODE is a node (worker-0) or a node of a cluster (worker-0.dev). The
+cluster defaults to "default".`
+
 // nodesExample returns the Example of a command that takes node sets: a
 // quoted node set, and node, a node of another cluster.
 func nodesExample(command, node string) string {
@@ -108,7 +113,7 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 
 	targets := make([]nodeTarget, 0, len(names))
 	for _, name := range names {
-		t, err := parseNodeName(name)
+		t, err := parseNodeName(name, typedTerm(expr, name))
 		if err != nil {
 			return nil, err
 		}
@@ -117,29 +122,60 @@ func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	return targets, nil
 }
 
+// parseOneNode parses the node argument of a command that acts on one node,
+// such as ssh, logs and get node, named command in the error: a node set
+// that names any other number of nodes is a usage error.
+func parseOneNode(command, arg string) (nodeTarget, error) {
+	targets, err := parseNodeArgs(arg)
+	if err != nil {
+		return nodeTarget{}, err
+	}
+	if len(targets) != 1 {
+		return nodeTarget{}, argsErrorf("%s requires exactly one node, got %d", command, len(targets))
+	}
+	return targets[0], nil
+}
+
+// typedTerm returns the term of the node set expression expr that names
+// name, as the user typed it, such as worker-[0-1].dev for worker-0.dev,
+// for the errors about name. Without one, it returns name.
+func typedTerm(expr, name string) string {
+	for _, term := range nodeTerms(expr) {
+		if set, err := nodeset.Parse(term); err == nil && slices.Contains(set.Expand(), name) {
+			return term
+		}
+	}
+	return name
+}
+
 // parseNodeName splits one node name into <shortName>.<cluster>, the cluster
 // defaulting to "default", and checks both parts. A name with more dots is
 // not NODE[.CLUSTER]: the FQDN that get nodes prints is NODE.CLUSTER.REALM.sind,
 // which the node commands do not take, as they act in the realm of --realm.
-func parseNodeName(name string) (nodeTarget, error) {
+// The errors quote typed, the term of the node argument that named name.
+func parseNodeName(name, typed string) (nodeTarget, error) {
 	t := nodeTarget{ShortName: name, Cluster: clusterOf(name)}
 	if i := strings.LastIndex(name, "."); i >= 0 {
 		t.ShortName = name[:i]
 	}
 	if t.ShortName == "" || t.Cluster == "" {
-		return nodeTarget{}, argsErrorf("invalid node name %q", name)
+		return nodeTarget{}, argsErrorf("invalid node name %q", typed)
 	}
 	if strings.Contains(t.ShortName, ".") {
 		if strings.HasSuffix(name, "."+cluster.DNSSuffix) {
-			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", name)
+			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", typed)
 		}
-		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", name)
+		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", typed)
 	}
 	if err := config.CheckName("node", t.ShortName); err != nil {
-		return nodeTarget{}, argsError(err)
+		if t.ShortName == typed {
+			return nodeTarget{}, argsError(err)
+		}
+		// The short name of a name with a cluster, or of a node set.
+		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, config.CheckName("short", t.ShortName))
 	}
 	if err := config.CheckName("cluster", t.Cluster); err != nil {
-		return nodeTarget{}, argsErrorf("invalid node name %q: %w", name, err)
+		return nodeTarget{}, argsErrorf("invalid node name %q: %w", typed, err)
 	}
 	return t, nil
 }
