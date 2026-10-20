@@ -160,12 +160,6 @@ func (f *File) Servers() []Server {
 	return servers
 }
 
-// Has reports whether a server is configured under name.
-func (f *File) Has(name string) bool {
-	obj := f.servers()
-	return obj != nil && member(obj, name) != nil
-}
-
 // Set adds the server s under its name, or replaces the entry that has
 // that name. Comments around a replaced entry stay.
 func (f *File) Set(s Server) {
@@ -193,10 +187,10 @@ func (f *File) Set(s Server) {
 
 // Remove removes the server entry name and reports whether there was one.
 func (f *File) Remove(name string) bool {
-	if !f.Has(name) {
+	obj := f.servers()
+	if obj == nil || member(obj, name) == nil {
 		return false
 	}
-	obj := f.servers()
 	closing := indentOf(obj.AfterExtra)
 	ptr := "/" + pointerToken(f.key) + "/" + pointerToken(name)
 	f.patch("remove", ptr, nil)

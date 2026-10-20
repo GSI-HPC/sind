@@ -305,7 +305,6 @@ func TestRemove(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fsys, f := load(t, &tt.in, "servers")
 			assert.True(t, f.Remove("sind"))
-			assert.False(t, f.Has("sind"))
 			_, err := f.Save(now)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, read(t, fsys, "/cfg/c.json"))
@@ -335,12 +334,10 @@ func TestServers(t *testing.T) {
 		{Name: "bad"},
 		{Name: "odd"},
 	}, f.Servers())
-	assert.True(t, f.Has("bad"))
 	assert.Equal(t, "/cfg/c.json", f.Path())
 
 	_, f = load(t, nil, "mcpServers")
 	assert.Empty(t, f.Servers())
-	assert.False(t, f.Has("z"))
 }
 
 func TestLoad_Errors(t *testing.T) {
