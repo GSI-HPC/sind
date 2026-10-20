@@ -5,6 +5,7 @@ package mesh
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -141,11 +142,17 @@ func TestEditKnownHosts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var m mock.Executor
 			m.AddResult(tt.existing, "", nil) // ReadFile
-			m.AddResult("", "", nil)          // WriteFile
+			m.AddResult("", "", nil)          // ReplaceFile
 			require.NoError(t, tt.edit(NewManager(docker.NewClient(&m), DefaultRealm)))
 
 			require.Len(t, m.Calls, 2)
-			assert.Equal(t, []string{"exec", "-i", string(SSHContainerName), "sh", "-c", "cat > " + knownHostsPath}, m.Calls[1].Args)
+			// ReplaceFile's script, which moves a complete temporary
+			// file over known_hosts, gets the path and the length.
+			args := m.Calls[1].Args
+			require.Len(t, args, 9)
+			assert.Equal(t, []string{"exec", "-i", string(SSHContainerName), "sh", "-c"}, args[:5])
+			assert.Contains(t, args[5], "mv -f")
+			assert.Equal(t, []string{"sh", knownHostsPath, strconv.Itoa(len(tt.want))}, args[6:])
 			assert.Equal(t, tt.want, m.Calls[1].Stdin)
 		})
 	}

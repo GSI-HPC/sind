@@ -899,7 +899,7 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.
 		// ReadFile: docker exec sind-ssh cat /root/.ssh/known_hosts
 		case args[0] == "exec" && len(args) >= 3 && args[2] == "cat":
 			return mock.Result{Stdout: knownHostsContent}
-		// WriteFile: docker exec -i sind-ssh sh -c 'cat > ...'
+		// ReplaceFile: docker exec -i sind-ssh sh -c SCRIPT sh /root/.ssh/known_hosts N
 		case args[0] == "exec" && len(args) >= 2 && args[1] == "-i":
 			return mock.Result{}
 		}

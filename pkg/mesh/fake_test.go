@@ -463,8 +463,9 @@ func (f *fakeDocker) exec(args []string, stdin string) mock.Result {
 		file := strings.TrimPrefix(cmd, "sh -c cat >> ")
 		c.files[file] += stdin
 		return mock.Result{}
-	case strings.HasPrefix(cmd, "sh -c cat > "):
-		c.files[strings.TrimPrefix(cmd, "sh -c cat > ")] = stdin
+	case len(args) == 7 && args[1] == "sh" && args[2] == "-c" && strings.Contains(args[3], "mv -f") && args[4] == "sh":
+		// ReplaceFile: sh -c SCRIPT sh PATH LENGTH
+		c.files[args[5]] = stdin
 		return mock.Result{}
 	}
 	f.t.Errorf("fakeDocker: unexpected exec: %s", cmd)

@@ -206,11 +206,13 @@ func (m *Manager) editKnownHosts(ctx context.Context, hostnames, add []string) e
 	return nil
 }
 
-// writeKnownHosts replaces the relay's known_hosts. The write ignores the
-// cancellation of ctx: `cat >` truncates the file first, and a write cut
-// short by Ctrl+C would drop the host keys of every cluster in the realm.
+// writeKnownHosts replaces the relay's known_hosts in one step
+// (docker.Client.ReplaceFile): a write cut short, even by a Ctrl+C that
+// reaches the docker CLI directly, leaves the old file, not a truncated one
+// without the host keys of every cluster in the realm. The write ignores
+// the cancellation of ctx, so that the file keeps up with the mesh DNS.
 func (m *Manager) writeKnownHosts(ctx context.Context, content string) error {
-	return m.Docker.WriteFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
+	return m.Docker.ReplaceFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
 }
 
 // generateKeypair creates a new ed25519 keypair and returns the private key
