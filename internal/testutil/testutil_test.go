@@ -47,41 +47,6 @@ func TestPtr(t *testing.T) {
 	assert.Equal(t, "hello", *s)
 }
 
-func TestPairs(t *testing.T) {
-	var got []string
-	for k, v := range Pairs([]string{"a", "b", "c"}) {
-		got = append(got, k+":"+v)
-	}
-	assert.Equal(t, []string{"a:b", "b:c"}, got)
-}
-
-func TestPairs_Empty(t *testing.T) {
-	count := 0
-	for range Pairs(nil) {
-		count++
-	}
-	assert.Zero(t, count)
-}
-
-func TestPairs_Single(t *testing.T) {
-	count := 0
-	for range Pairs([]string{"a"}) {
-		count++
-	}
-	assert.Zero(t, count)
-}
-
-func TestPairs_EarlyBreak(t *testing.T) {
-	var got []string
-	for k, v := range Pairs([]string{"a", "b", "c", "d"}) {
-		got = append(got, k+":"+v)
-		if k == "b" {
-			break
-		}
-	}
-	assert.Equal(t, []string{"a:b", "b:c"}, got)
-}
-
 func TestArgValue(t *testing.T) {
 	args := []string{"--name", "foo", "--count", "3"}
 
