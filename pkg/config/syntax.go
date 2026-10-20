@@ -56,6 +56,9 @@ var positionless = []string{
 	"expected low surrogate", "control characters",
 }
 
+// wholeNumber matches a whole number in decimal form.
+var wholeNumber = regexp.MustCompile(`^[-+]?[0-9]+$`)
+
 // yamlLine matches the line number the YAML parser puts in front of its
 // error messages.
 var yamlLine = regexp.MustCompile(`(?s)^line (\d+): (.*)$`)
@@ -136,12 +139,48 @@ func describe(n *yaml.Node) string {
 		return "a list"
 	}
 	switch n.Tag {
-	case "!!int", "!!float":
+	case "!!int":
 		return "a number"
+	case "!!float":
+		return "a decimal number"
 	case "!!bool":
 		return "a boolean"
+	case "!!timestamp":
+		return "a date"
 	}
 	return "a string"
+}
+
+// enum is the values a string type of the config takes, and what an error
+// calls one.
+type enum struct {
+	what   string
+	values []string
+}
+
+// enums are the string types of the config that take one of a set of
+// values. Validate checks them too, for a Cluster built in code.
+var enums = map[reflect.Type]enum{
+	reflect.TypeFor[Role](): {"role", []string{
+		string(RoleController), string(RoleDB), string(RoleAPI), string(RoleSubmitter), string(RoleWorker),
+	}},
+	reflect.TypeFor[IdentityMode](): {"identity mode", []string{
+		string(IdentityLocal), string(IdentityNSSSlurm), string(IdentityClientIDs),
+	}},
+	reflect.TypeFor[AdminLevel]():  {"admin level", []string{string(AdminOperator), string(AdminAdmin)}},
+	reflect.TypeFor[StorageType](): {"storage type", []string{string(StorageVolume), string(StorageHostPath)}},
+}
+
+// check reports a value of n that is not one of e's.
+func (e enum) check(n *yaml.Node, path string) error {
+	if n.Value == "" || slices.Contains(e.values, n.Value) {
+		return nil
+	}
+	hint := ""
+	if i := slices.IndexFunc(e.values, func(v string) bool { return strings.EqualFold(v, n.Value) }); i >= 0 {
+		hint = fmt.Sprintf("; did you mean %q? %ss are case-sensitive", e.values[i], e.what)
+	}
+	return errorAt(n, path, "invalid %s %q (valid: %s)%s", e.what, n.Value, strings.Join(e.values, ", "), hint)
 }
 
 func errorAt(n *yaml.Node, path, format string, args ...any) error {
@@ -189,21 +228,39 @@ func walk(t reflect.Type, n *yaml.Node, path string) error {
 		}
 		pairs := pairsOf(n)
 		for i := 0; i < len(pairs); i += 2 {
-			if err := walk(t.Elem(), pairs[i+1], join(path, pairs[i].Value)); err != nil {
+			key, value := pairs[i].Value, resolve(pairs[i+1])
+			// Limits take numbers as well as strings, but no
+			// booleans or dates.
+			if t == reflect.TypeFor[Limits]() && (value.Tag == "!!bool" || value.Tag == "!!timestamp") {
+				return errorAt(value, join(path, key), "expected a string or a number, got %s", describe(value))
+			}
+			if err := walk(t.Elem(), value, join(path, key)); err != nil {
 				return err
 			}
 		}
 	case reflect.Int:
-		if n.Kind != yaml.ScalarNode || n.Tag != "!!int" {
+		// The decoder reads a whole number too large for an int64 as a
+		// decimal one.
+		var i int
+		switch {
+		case n.Tag == "!!int" && n.Decode(&i) == nil:
+		case n.Tag == "!!int", n.Tag == "!!float" && wholeNumber.MatchString(n.Value):
+			return errorAt(n, path, "%s is out of range", n.Value)
+		default:
 			return errorAt(n, path, "expected a whole number, got %s", describe(n))
 		}
 	case reflect.String:
 		if n.Kind != yaml.ScalarNode {
 			return errorAt(n, path, "expected a string, got %s", describe(n))
 		}
+		if e, ok := enums[t]; ok {
+			return e.check(n, path)
+		}
 	case reflect.Bool:
+		// A quoted value is a string, even "yes", which the decoder
+		// would take.
 		var b bool
-		if n.Decode(&b) != nil {
+		if n.Style&(yaml.DoubleQuotedStyle|yaml.SingleQuotedStyle) != 0 || n.Decode(&b) != nil {
 			return errorAt(n, path, "expected true or false, got %s", describe(n))
 		}
 	}
@@ -219,7 +276,11 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 		if t == reflect.TypeFor[Node]() && strings.ContainsAny(n.Value, " \t") {
 			return errorAt(n, path, "%q is not a role; check the indentation of the list", n.Value)
 		}
-		return nil
+		if t == reflect.TypeFor[Section]() {
+			return nil // its content
+		}
+		// It is the value of the type's first field.
+		return walk(fields[0].typ, n, path)
 	}
 	if t == reflect.TypeFor[Section]() {
 		return walk(reflect.TypeFor[map[string]string](), n, path) // fragments

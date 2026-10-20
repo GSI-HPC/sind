@@ -38,7 +38,19 @@ func TestParse_SyntaxErrors(t *testing.T) {
 		{"shorthand count", "kind: Cluster\nnodes:\n  - worker: [2]\n", "line 3: nodes[0].worker: expected a whole number, got a list"},
 		{"nodes not a list", "kind: Cluster\nnodes: {worker: 2}\n", "line 2: nodes: expected a list, got an object"},
 		{"defaults not an object", "kind: Cluster\ndefaults: fast\n", "line 2: defaults: expected an object, got a string"},
-		{"cpus not a number", "kind: Cluster\ndefaults:\n  cpus: 2.5\n", "line 3: defaults.cpus: expected a whole number, got a number"},
+		{"cpus not a whole number", "kind: Cluster\ndefaults:\n  cpus: 2.5\n", "line 3: defaults.cpus: expected a whole number, got a decimal number"},
+		{"cpus too large", "kind: Cluster\ndefaults:\n  cpus: 99999999999999999999\n", "line 3: defaults.cpus: 99999999999999999999 is out of range"},
+		{"cpus too small", "kind: Cluster\ndefaults:\n  cpus: -99999999999999999999\n", "line 3: defaults.cpus: -99999999999999999999 is out of range"},
+		{"count too large", "kind: Cluster\nnodes:\n  - role: worker\n    count: 18446744073709551615\n", "line 4: nodes[0].count: 18446744073709551615 is out of range"},
+		{"role a number", "kind: Cluster\nnodes: [controller, worker, 3]\n", `line 2: nodes[2]: invalid role "3" (valid: controller, db, api, submitter, worker)`},
+		{"role case", "kind: Cluster\nnodes: [Controller, worker]\n", `line 2: nodes[0]: invalid role "Controller" (valid: controller, db, api, submitter, worker); did you mean "controller"? roles are case-sensitive`},
+		{"role key a number", "kind: Cluster\nnodes:\n  - role: 1\n", `line 3: nodes[0].role: invalid role "1" (valid:`},
+		{"identity mode", "kind: Cluster\nidentity:\n  mode: 1\n", `line 3: identity.mode: invalid identity mode "1" (valid: local, nssSlurm, clientIds)`},
+		{"identity case", "kind: Cluster\nidentity: nssslurm\n", `line 2: identity: invalid identity mode "nssslurm" (valid: local, nssSlurm, clientIds); did you mean "nssSlurm"? identity modes are case-sensitive`},
+		{"admin level", "kind: Cluster\nusers:\n  - name: alice\n    adminLevel: 1\n", `line 4: users[0].adminLevel: invalid admin level "1" (valid: operator, admin)`},
+		{"storage type", "kind: Cluster\nstorage:\n  dataStorage:\n    type: Volume\n", `line 4: storage.dataStorage.type: invalid storage type "Volume" (valid: volume, hostPath); did you mean "volume"?`},
+		{"quoted boolean", "kind: Cluster\nnodes:\n  - role: controller\n    backupController: \"yes\"\n", "line 4: nodes[0].backupController: expected true or false, got a string"},
+		{"quoted false", "kind: Cluster\nmonitoring: 'false'\n", "line 2: monitoring: expected true or false, got a string"},
 		{"cpus a boolean", "kind: Cluster\ndefaults:\n  cpus: true\n", "defaults.cpus: expected a whole number, got a boolean"},
 		{"image an object", "kind: Cluster\ndefaults:\n  image: {a: b}\n", "defaults.image: expected a string, got an object"},
 		{"limits a list", "kind: Cluster\naccounts:\n  - name: a\n    limits: [x]\n", "expected an object, got a list"},
@@ -105,6 +117,13 @@ func TestParse_SyntaxAccepts(t *testing.T) {
 
 	_, err = Parse([]byte("kind: Cluster\ndefaults:\nnodes:\n"))
 	require.NoError(t, err)
+
+	// An empty value is left to Validate, which reports a role but takes
+	// no admin level.
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - role: ''\nusers:\n  - name: a\n    adminLevel: ''\n"))
+	require.NoError(t, err)
+	assert.Empty(t, c.Nodes[0].Role)
+	assert.Empty(t, c.Users[0].AdminLevel)
 
 	// A string field takes any scalar as written; YAML 1.2 has no yes/no
 	// booleans, but bool fields still take them.

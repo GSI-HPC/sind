@@ -809,6 +809,11 @@ func TestParse_Errors(t *testing.T) {
 			wantErr: "parsing config",
 		},
 		{
+			name:    "explicit tag that does not fit",
+			input:   "kind: Cluster\nname: !!int x",
+			wantErr: "cannot decode !!str `x` as a !!int",
+		},
+		{
 			name:    "missing kind",
 			input:   "name: dev",
 			wantErr: `kind is required: add "kind: Cluster"`,
