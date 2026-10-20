@@ -10,109 +10,90 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
-	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestWatcher_BroadcastsEvents(t *testing.T) {
+// controller is the node the watcher tests monitor.
+var controller = NodeTarget{ShortName: "controller", Container: "sind-dev-controller"}
+
+// startLine is a docker events line of a container's start.
+func startLine(name string) string {
+	return `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"` + name + `"}},"time":1}` + "\n"
+}
+
+// mungeActive is a busctl monitor line of munge.service reaching active.
+const mungeActive = `{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"ActiveState":{"type":"s","data":"active"}},["Conditions"]]}}` + "\n"
+
+// startWatcher starts a watcher of cluster dev on fake streams, pipe 0
+// the docker events and pipe i+1 the systemd monitor of nodes[i], and
+// stops it when the test ends.
+func startWatcher(t *testing.T, nodes ...NodeTarget) (*Watcher, *mock.Pipes) {
+	t.Helper()
 	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
 	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	w := NewWatcher(&mock.Executor{OnStart: pipes.OnStart}, "sind-dev-", "dev")
+	require.NoError(t, w.Start(ctx, nodes), "Start")
+	t.Cleanup(func() {
+		cancel()
+		pipes.CloseAll()
+		w.Wait()
+	})
+	return w, pipes
+}
 
-	w := NewWatcher(m, "sind-dev-", "dev")
-	sub := w.Subscribe()
-
-	nodes := []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}
-	err := w.Start(ctx, nodes)
-	require.NoError(t, err, "Start")
-
-	// Send a docker event (pipe 0 = docker events).
-	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1}`+"\n")
-
+// next returns the next event of sub, failing the test after 2 s.
+func next(t *testing.T, sub <-chan Event) Event {
+	t.Helper()
 	select {
 	case ev := <-sub:
-		assert.Equal(t, EventContainerStart, ev.Kind)
-		assert.Equal(t, "controller", ev.Node)
+		return ev
 	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for event")
+		t.Fatal("timeout waiting for an event")
+		return Event{}
 	}
+}
 
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
+// assertNone asserts that sub has no event waiting.
+func assertNone(t *testing.T, sub <-chan Event) {
+	t.Helper()
+	select {
+	case ev := <-sub:
+		t.Fatalf("unexpected event %+v", ev)
+	default:
+	}
+}
+
+func TestWatcher_BroadcastsEvents(t *testing.T) {
+	w, pipes := startWatcher(t, controller)
+	sub := w.Subscribe()
+	pipes.Write(0, startLine("sind-dev-controller"))
+	ev := next(t, sub)
+	assert.Equal(t, EventContainerStart, ev.Kind)
+	assert.Equal(t, "controller", ev.Node)
 }
 
 func TestWatcher_SystemdEvents(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w, pipes := startWatcher(t, controller)
 	sub := w.Subscribe()
-
-	nodes := []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}
-	err := w.Start(ctx, nodes)
-	require.NoError(t, err, "Start")
-
-	// Send a systemd event (pipe 1 = systemd monitor for controller).
-	pipes.Write(1, `{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"ActiveState":{"type":"s","data":"active"}},["Conditions"]]}}`+"\n")
-
-	select {
-	case ev := <-sub:
-		assert.Equal(t, EventUnitActive, ev.Kind)
-		assert.Equal(t, "munge.service", ev.Unit)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for event")
-	}
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
+	pipes.Write(1, mungeActive)
+	ev := next(t, sub)
+	assert.Equal(t, EventUnitActive, ev.Kind)
+	assert.Equal(t, "munge.service", ev.Unit)
 }
 
 func TestWatcher_AddNodes(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w, pipes := startWatcher(t)
 	sub := w.Subscribe()
-
-	// Start with no nodes, then add one after.
-	err := w.Start(ctx, nil)
-	require.NoError(t, err, "Start")
-
-	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
-
-	// pipe 0 = docker events, pipe 1 = systemd monitor added via AddNodes.
-	pipes.Write(1, `{"type":"signal","endian":"l","flags":1,"version":1,"cookie":100,"timestamp-realtime":1000000,"sender":":1.1","path":"/org/freedesktop/systemd1/unit/munge_2eservice","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","payload":{"type":"sa{sv}as","data":["org.freedesktop.systemd1.Unit",{"ActiveState":{"type":"s","data":"active"}},["Conditions"]]}}`+"\n")
-
-	select {
-	case ev := <-sub:
-		assert.Equal(t, EventUnitActive, ev.Kind)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for event")
-	}
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
+	w.AddNodes([]NodeTarget{controller})
+	pipes.Write(1, mungeActive)
+	assert.Equal(t, EventUnitActive, next(t, sub).Kind)
 }
 
 func TestWatcher_AddNodesBeforeStart(t *testing.T) {
 	m := &mock.Executor{}
 	w := NewWatcher(m, "sind-dev-", "dev")
-	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	w.AddNodes([]NodeTarget{controller})
 	assert.Empty(t, m.Calls)
 }
 
@@ -126,7 +107,7 @@ func TestWatcher_AddNodesStopsWithWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	w := NewWatcher(m, "sind-dev-", "dev")
 	require.NoError(t, w.Start(ctx, nil))
-	w.AddNodes([]NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}})
+	w.AddNodes([]NodeTarget{controller})
 	require.Equal(t, 2, pipes.Len())
 
 	cancel()
@@ -143,112 +124,34 @@ func TestWatcher_AddNodesStopsWithWatcher(t *testing.T) {
 }
 
 func TestWatcher_MultipleSubscribers(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
-	sub1 := w.Subscribe()
-	sub2 := w.Subscribe()
-
-	nodes := []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}
-	err := w.Start(ctx, nodes)
-	require.NoError(t, err, "Start")
-
-	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1}`+"\n")
-
-	for i, sub := range []<-chan Event{sub1, sub2} {
-		select {
-		case ev := <-sub:
-			assert.Equal(t, EventContainerStart, ev.Kind, "subscriber %d", i)
-		case <-time.After(2 * time.Second):
-			t.Fatalf("subscriber %d: timeout", i)
-		}
-	}
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
+	w, pipes := startWatcher(t, controller)
+	sub1, sub2 := w.Subscribe(), w.Subscribe()
+	pipes.Write(0, startLine("sind-dev-controller"))
+	assert.Equal(t, EventContainerStart, next(t, sub1).Kind)
+	assert.Equal(t, EventContainerStart, next(t, sub2).Kind)
 }
 
 func TestWatcher_SubscribeTo(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w, pipes := startWatcher(t)
 	worker := w.SubscribeTo("sind-dev-worker-0")
 	all := w.Subscribe()
-	require.NoError(t, w.Start(ctx, nil))
-
-	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1}`+"\n")
-	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-worker-0"}},"time":2}`+"\n")
-
-	for _, want := range []string{"controller", "worker-0"} {
-		select {
-		case ev := <-all:
-			assert.Equal(t, want, ev.Node)
-		case <-time.After(2 * time.Second):
-			t.Fatalf("timeout waiting for the %s event", want)
-		}
-	}
+	pipes.Write(0, startLine("sind-dev-controller"))
+	pipes.Write(0, startLine("sind-dev-worker-0"))
+	assert.Equal(t, "controller", next(t, all).Node)
+	assert.Equal(t, "worker-0", next(t, all).Node)
 	// The worker's subscription got the worker's event only.
-	select {
-	case ev := <-worker:
-		assert.Equal(t, "worker-0", ev.Node)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for the worker event")
-	}
-	select {
-	case ev := <-worker:
-		t.Fatalf("unexpected event %+v", ev)
-	default:
-	}
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
+	assert.Equal(t, "worker-0", next(t, worker).Node)
+	assertNone(t, worker)
 }
 
 func TestWatcher_Unsubscribe(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
-	sub1 := w.Subscribe()
-	sub2 := w.Subscribe()
+	w, pipes := startWatcher(t, controller)
+	sub1, sub2 := w.Subscribe(), w.Subscribe()
 	w.Unsubscribe(sub1)
-
-	nodes := []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}
-	err := w.Start(ctx, nodes)
-	require.NoError(t, err, "Start")
-
-	pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1}`+"\n")
-
-	select {
-	case ev := <-sub2:
-		assert.Equal(t, EventContainerStart, ev.Kind)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for event on sub2")
-	}
-
-	// sub1 should be closed after Unsubscribe.
+	pipes.Write(0, startLine("sind-dev-controller"))
+	assert.Equal(t, EventContainerStart, next(t, sub2).Kind)
 	_, ok := <-sub1
 	assert.False(t, ok, "sub1 should be closed after Unsubscribe")
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
 }
 
 func TestWatcher_UnsubscribeNonexistent(_ *testing.T) {
@@ -259,42 +162,13 @@ func TestWatcher_UnsubscribeNonexistent(_ *testing.T) {
 }
 
 func TestWatcher_FullSubscriberDropsEvents(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w, pipes := startWatcher(t, controller)
 	sub := w.Subscribe()
-
-	nodes := []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}
-	err := w.Start(ctx, nodes)
-	require.NoError(t, err, "Start")
-
-	for i := range 70 {
-		pipes.Write(0, `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":`+
-			string(rune('0'+i%10))+`}`+"\n")
+	for range 70 {
+		pipes.Write(0, startLine("sind-dev-controller"))
 	}
-
 	time.Sleep(50 * time.Millisecond)
-
-	drained := 0
-	for {
-		select {
-		case <-sub:
-			drained++
-		default:
-			goto done
-		}
-	}
-done:
-	assert.LessOrEqual(t, drained, 64, "expected at most 64 (buffer size)")
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
+	assert.LessOrEqual(t, len(sub), 64, "expected at most 64 (buffer size)")
 }
 
 func TestWatcher_SystemdMonitorStartFailure(t *testing.T) {
@@ -318,127 +192,44 @@ func TestWatcher_SystemdMonitorStartFailure(t *testing.T) {
 	w := NewWatcher(m, "sind-dev-", "dev")
 	sub := w.Subscribe()
 
-	nodes := []NodeTarget{{ShortName: "controller", Container: docker.ContainerName("sind-dev-controller")}}
-	err := w.Start(ctx, nodes)
-	require.NoError(t, err, "Start")
+	require.NoError(t, w.Start(ctx, []NodeTarget{controller}), "Start")
 
-	select {
-	case ev := <-sub:
-		assert.Equal(t, EventMonitorError, ev.Kind)
-		assert.Equal(t, "controller", ev.Node)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for monitor error event")
-	}
+	ev := next(t, sub)
+	assert.Equal(t, EventMonitorError, ev.Kind)
+	assert.Equal(t, "controller", ev.Node)
 
 	cancel()
 	_ = dockerPW.Close()
 	w.Wait()
 }
 
-func TestWatcher_DockerMonitorRunFailure(t *testing.T) {
-	// When docker events stream fails mid-flight, an EventMonitorError
-	// should be emitted to subscribers.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
-	sub := w.Subscribe()
-
-	err := w.Start(ctx, nil)
-	require.NoError(t, err, "Start")
-
-	// Close the docker events pipe writer with an error to simulate
-	// a stream failure. The scanner returns the pipe error.
-	pipes.CloseWithError(0, errors.New("connection reset"))
-
-	select {
-	case ev := <-sub:
-		assert.Equal(t, EventMonitorError, ev.Kind)
-		assert.Contains(t, ev.Detail, "docker events")
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for monitor error event")
-	}
-
-	cancel()
-	w.Wait()
-}
-
-func TestWatcher_SystemdMonitorRunFailure(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
-	sub := w.Subscribe()
-
-	nodes := []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}
-	err := w.Start(ctx, nodes)
-	require.NoError(t, err, "Start")
-
-	// Close the systemd monitor pipe (index 1) with an error.
-	pipes.CloseWithError(1, errors.New("container stopped"))
-
-	select {
-	case ev := <-sub:
-		assert.Equal(t, EventMonitorError, ev.Kind)
-		assert.Equal(t, "controller", ev.Node)
-		assert.Contains(t, ev.Detail, "systemd monitor")
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for monitor error event")
-	}
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
-}
-
-func TestWatcher_MonitorStreamEnds(t *testing.T) {
-	// A stream that ends while the watcher runs, as busctl's does when its
-	// node stops or the image has no busctl, is a monitor error too: the
-	// monitor's events are missing from then on.
+func TestWatcher_MonitorStreamFails(t *testing.T) {
+	// A stream that fails or ends while the watcher runs, as busctl's does
+	// when its node stops or the image has no busctl, is a monitor error:
+	// the monitor's events are missing from then on.
 	for _, tt := range []struct {
 		name   string
 		pipe   int
+		err    error
 		node   string
 		detail string
 	}{
-		{"docker events", 0, "", "docker events stream ended"},
-		{"systemd monitor", 1, "controller", "systemd monitor stream ended"},
+		{"docker events failed", 0, errors.New("connection reset"), "", "docker events stream failed"},
+		{"systemd monitor failed", 1, errors.New("container stopped"), "controller", "systemd monitor stream failed"},
+		{"docker events ended", 0, nil, "", "docker events stream ended"},
+		{"systemd monitor ended", 1, nil, "controller", "systemd monitor stream ended"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			pipes := &mock.Pipes{}
-			defer pipes.CloseAll()
-
-			m := &mock.Executor{OnStart: pipes.OnStart}
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-
-			w := NewWatcher(m, "sind-dev-", "dev")
+			w, pipes := startWatcher(t, controller)
 			sub := w.Subscribe()
-			require.NoError(t, w.Start(ctx, []NodeTarget{{ShortName: "controller", Container: "sind-dev-controller"}}))
-
-			pipes.CloseWithError(tt.pipe, nil) // EOF
-
-			select {
-			case ev := <-sub:
-				assert.Equal(t, EventMonitorError, ev.Kind)
-				assert.Equal(t, tt.node, ev.Node)
-				assert.Equal(t, tt.detail, ev.Detail)
+			pipes.CloseWithError(tt.pipe, tt.err)
+			ev := next(t, sub)
+			assert.Equal(t, EventMonitorError, ev.Kind)
+			assert.Equal(t, tt.node, ev.Node)
+			assert.Equal(t, tt.detail, ev.Detail)
+			if tt.err == nil {
 				assert.ErrorIs(t, ev.Err, errStreamEnded)
-			case <-time.After(2 * time.Second):
-				t.Fatal("timeout waiting for monitor error event")
 			}
-
-			cancel()
-			pipes.CloseAll()
-			w.Wait()
 		})
 	}
 }
@@ -446,37 +237,14 @@ func TestWatcher_MonitorStreamEnds(t *testing.T) {
 func TestWatcher_SubscribeToGetsWatcherErrors(t *testing.T) {
 	// A subscription to one container gets the monitor errors of the
 	// whole watcher, not those of another container's monitor.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	w := NewWatcher(m, "sind-dev-", "dev")
+	w, _ := startWatcher(t)
 	worker := w.SubscribeTo("sind-dev-worker-0")
-	require.NoError(t, w.Start(ctx, nil))
-
-	w.emit(ctx, Event{Kind: EventMonitorError, Node: "controller", Container: "sind-dev-controller"})
-	w.emit(ctx, Event{Kind: EventMonitorError, Detail: "docker events stream failed"})
-
-	select {
-	case ev := <-worker:
-		assert.Equal(t, EventMonitorError, ev.Kind)
-		assert.Empty(t, ev.Container)
-		assert.Equal(t, "docker events stream failed", ev.Detail)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for the watcher's monitor error")
-	}
-	select {
-	case ev := <-worker:
-		t.Fatalf("unexpected event %+v", ev)
-	default:
-	}
-
-	cancel()
-	pipes.CloseAll()
-	w.Wait()
+	w.emit(t.Context(), Event{Kind: EventMonitorError, Node: "controller", Container: "sind-dev-controller"})
+	w.emit(t.Context(), Event{Kind: EventMonitorError, Detail: "docker events stream failed"})
+	ev := next(t, worker)
+	assert.Empty(t, ev.Container)
+	assert.Equal(t, "docker events stream failed", ev.Detail)
+	assertNone(t, worker)
 }
 
 func TestWatcher_DockerMonitorStartFailure(t *testing.T) {
