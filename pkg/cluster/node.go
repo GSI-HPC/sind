@@ -430,7 +430,34 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 	if cfg.Storage.DataStorage.UsesHostPath() {
 		dataHostPath = absDataHostPath(cfg.Storage.DataStorage.HostPath)
 	}
-	dataMountPath := cfg.Storage.DataStorage.MountPath
+	// runConfig returns the RunConfig of one node of n.
+	runConfig := func(n config.Node, shortName string, containerNumber int, managed bool) RunConfig {
+		return RunConfig{
+			Realm:           realm,
+			ClusterName:     cfg.Name,
+			ShortName:       shortName,
+			Role:            n.Role,
+			Image:           n.Image,
+			CPUs:            n.CPUs,
+			Memory:          n.Memory,
+			TmpSize:         n.TmpSize,
+			SlurmVersion:    slurmVersion,
+			DNSIP:           dnsIP,
+			DataHostPath:    dataHostPath,
+			DataMountPath:   cfg.Storage.DataStorage.MountPath,
+			Managed:         managed,
+			ContainerNumber: containerNumber,
+			CapAdd:          n.CapAdd,
+			CapDrop:         n.CapDrop,
+			Devices:         n.Devices,
+			SecurityOpt:     n.SecurityOpt,
+			CVMFS:           cvmfs,
+			Users:           users,
+			AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, managed, hasSubmitter),
+			Identity:        cfg.Identity.Mode,
+			Monitoring:      cfg.Monitoring,
+		}
+	}
 
 	for _, n := range cfg.Nodes {
 		switch n.Role {
@@ -439,31 +466,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 			if (n.Role == config.RoleDB || n.Role == config.RoleAPI) && n.Managed != nil && !*n.Managed {
 				nodeManaged = false
 			}
-			base := RunConfig{
-				Realm:           realm,
-				ClusterName:     cfg.Name,
-				ShortName:       string(n.Role),
-				Role:            n.Role,
-				Image:           n.Image,
-				CPUs:            n.CPUs,
-				Memory:          n.Memory,
-				TmpSize:         n.TmpSize,
-				SlurmVersion:    slurmVersion,
-				DNSIP:           dnsIP,
-				DataHostPath:    dataHostPath,
-				DataMountPath:   dataMountPath,
-				Managed:         nodeManaged,
-				ContainerNumber: 1,
-				CapAdd:          n.CapAdd,
-				CapDrop:         n.CapDrop,
-				Devices:         n.Devices,
-				SecurityOpt:     n.SecurityOpt,
-				CVMFS:           cvmfs,
-				Users:           users,
-				AddUsers:        nodeGetsUsers(cfg.Identity, n.Role, nodeManaged, hasSubmitter),
-				Identity:        cfg.Identity.Mode,
-				Monitoring:      cfg.Monitoring,
-			}
+			base := runConfig(n, string(n.Role), 1, nodeManaged)
 			if n.Role == config.RoleDB && nodeManaged {
 				base.StoragePass, _ = cfg.Slurm.Slurmdbd.Parameter("StoragePass")
 			}
@@ -481,33 +484,10 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 		case config.RoleWorker:
 			isManaged := clusterManaged && (n.Managed == nil || *n.Managed)
 			for range max(n.Count, 1) {
-				configs = append(configs, RunConfig{
-					Realm:           realm,
-					ClusterName:     cfg.Name,
-					ShortName:       fmt.Sprintf("worker-%d", workerIdx),
-					Role:            config.RoleWorker,
-					Image:           n.Image,
-					CPUs:            n.CPUs,
-					Memory:          n.Memory,
-					TmpSize:         n.TmpSize,
-					SlurmVersion:    slurmVersion,
-					DNSIP:           dnsIP,
-					DataHostPath:    dataHostPath,
-					DataMountPath:   dataMountPath,
-					Managed:         isManaged,
-					ContainerNumber: workerIdx + 1,
-					CapAdd:          n.CapAdd,
-					CapDrop:         n.CapDrop,
-					Devices:         n.Devices,
-					SecurityOpt:     n.SecurityOpt,
-					CVMFS:           cvmfs,
-					Users:           users,
-					AddUsers:        nodeGetsUsers(cfg.Identity, config.RoleWorker, isManaged, hasSubmitter),
-					Identity:        cfg.Identity.Mode,
-					NSSSlurm:        isManaged && cfg.Identity.UsesNSSSlurm(),
-					TaskAffinity:    isManaged && taskAffinity,
-					Monitoring:      cfg.Monitoring,
-				})
+				rc := runConfig(n, fmt.Sprintf("worker-%d", workerIdx), workerIdx+1, isManaged)
+				rc.NSSSlurm = isManaged && cfg.Identity.UsesNSSSlurm()
+				rc.TaskAffinity = isManaged && taskAffinity
+				configs = append(configs, rc)
 				workerIdx++
 			}
 		}
