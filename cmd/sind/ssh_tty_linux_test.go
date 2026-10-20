@@ -79,6 +79,28 @@ func TestSSH_TTYOnlyWithTerminalsAtBothEnds(t *testing.T) {
 	}
 }
 
+// TestExec_TTYOnlyWithTerminalsAtBothEnds checks that exec passes -t to
+// docker exec only when stdin and stdout are terminals, as ssh does.
+func TestExec_TTYOnlyWithTerminalsAtBothEnds(t *testing.T) {
+	tty := openPTY(t)
+	withTTY := []string{"exec", "-i", "-t", "-w", "/data", "sind-default-submitter", "hostname"}
+	withoutTTY := []string{"exec", "-i", "-w", "/data", "sind-default-submitter", "hostname"}
+	for name, tc := range map[string]struct {
+		stdin  io.Reader
+		stdout io.Writer
+		want   []string
+	}{
+		"terminal at both ends": {tty, tty, withTTY},
+		"output captured":       {tty, new(bytes.Buffer), withoutTTY},
+		"input piped":           {strings.NewReader(""), tty, withoutTTY},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := dockerArgs(t, tc.stdin, tc.stdout, "exec", "--", "hostname")
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 // noStdout returns a file that is not a terminal, to stand for redirected
 // output.
 func noStdout(t *testing.T) *os.File {
