@@ -14,7 +14,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // mcpStreamHost is the address `sind mcp stream` listens on unless --host
@@ -116,14 +115,14 @@ func mcpConfig() *ophis.Config {
 				CmdSelector: func(cmd *cobra.Command) bool {
 					return isMCPTool(cmd) && cmd.Flag("output") != nil
 				},
-				LocalFlagSelector:     isMCPFlagNotOutput,
-				InheritedFlagSelector: isMCPFlagNotOutput,
+				LocalFlagSelector:     ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
+				InheritedFlagSelector: ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
 				Middleware:            refuseFlagArgs(forceJSONOutput),
 			},
 			{
 				CmdSelector:           isMCPTool,
-				LocalFlagSelector:     isMCPFlag,
-				InheritedFlagSelector: isMCPFlag,
+				LocalFlagSelector:     ophis.ExcludeFlags(mcpExcludedFlags...),
+				InheritedFlagSelector: ophis.ExcludeFlags(mcpExcludedFlags...),
 				Middleware:            refuseFlagArgs(nil),
 			},
 		},
@@ -138,27 +137,16 @@ func isMCPTool(cmd *cobra.Command) bool {
 }
 
 // mcpExcludedFlags lists the flags that are not offered to MCP tools.
-var mcpExcludedFlags = map[string]bool{
+var mcpExcludedFlags = []string{
 	// A count flag is passed as "--verbose 2", which pflag reads as
 	// --verbose and a stray positional argument: unknown command "2".
-	"verbose": true,
+	"verbose",
 	// logs --follow never ends, and a tool's output is returned only when
 	// the command exits.
-	"follow": true,
+	"follow",
 	// A tool's output is no terminal, and holds no progress and no
 	// events (withoutProgress).
-	"progress":     true,
-	"progress-log": true,
-}
-
-// isMCPFlag reports whether a flag is offered in a tool's input schema.
-func isMCPFlag(f *pflag.Flag) bool {
-	return !mcpExcludedFlags[f.Name]
-}
-
-// isMCPFlagNotOutput is isMCPFlag for a tool whose -o the server sets.
-func isMCPFlagNotOutput(f *pflag.Flag) bool {
-	return isMCPFlag(f) && f.Name != "output"
+	"progress", "progress-log",
 }
 
 // forceJSONOutput runs a tool with -o json, whatever flags it was given.
