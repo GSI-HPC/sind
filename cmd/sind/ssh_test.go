@@ -15,8 +15,6 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -367,20 +365,7 @@ func TestSSHAccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, realm)
-	t.Cleanup(func() {
-		bg := context.Background()
-		for _, name := range []string{"controller", "submitter", "worker-0"} {
-			cn := docker.ContainerName(realm + "-" + cluster + "-" + name)
-			_ = c.KillContainer(bg, cn)
-			_ = c.RemoveContainer(bg, cn)
-		}
-		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-"+cluster+"-"+vt))
-		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-"+cluster+"-net"))
-		_ = meshMgr.CleanupMesh(bg)
-	})
+	cleanupRealm(t, c, realm)
 
 	// Create cluster with a submitter for enter/exec routing tests.
 	cfgDir := t.TempDir()

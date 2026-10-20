@@ -15,6 +15,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -381,6 +382,20 @@ func TestLoadConfig_PreservesName(t *testing.T) {
 
 // --- Integration ---
 
+// cleanupRealm deletes, when the test ends, the clusters of realm and its
+// mesh: whatever the test left behind, as far as it got.
+func cleanupRealm(t *testing.T, c *docker.Client, realm string) {
+	t.Cleanup(func() {
+		bg := context.Background()
+		meshMgr := mesh.NewManager(c, realm)
+		names, _ := cluster.DiscoverClusterNames(bg, c, realm)
+		for _, name := range names {
+			_ = cluster.Delete(bg, c, meshMgr, name)
+		}
+		_ = meshMgr.CleanupMesh(bg)
+	})
+}
+
 // TestClusterLifecycle exercises the full user workflow via CLI commands:
 // create cluster → get/status → power ops → add worker → delete worker → delete cluster.
 func TestClusterLifecycle(t *testing.T) {
@@ -395,21 +410,7 @@ func TestClusterLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, realm)
-	t.Cleanup(func() {
-		bg := context.Background()
-		// Best-effort cleanup in case test fails partway.
-		for _, name := range []string{"controller", "worker-0", "worker-1"} {
-			cn := docker.ContainerName(realm + "-" + cluster + "-" + name)
-			_ = c.KillContainer(bg, cn)
-			_ = c.RemoveContainer(bg, cn)
-		}
-		for _, vt := range []string{"config", "munge", "data"} {
-			_ = c.RemoveVolume(bg, docker.VolumeName(realm+"-"+cluster+"-"+vt))
-		}
-		_ = c.RemoveNetwork(bg, docker.NetworkName(realm+"-"+cluster+"-net"))
-		_ = meshMgr.CleanupMesh(bg)
-	})
+	cleanupRealm(t, c, realm)
 
 	// Write a config file.
 	cfgDir := t.TempDir()

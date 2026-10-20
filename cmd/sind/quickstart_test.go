@@ -13,9 +13,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/testutil"
-	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,15 +33,7 @@ func TestQuickstart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	meshMgr := mesh.NewManager(c, realm)
-	t.Cleanup(func() {
-		bg := context.Background()
-		names, _ := cluster.DiscoverClusterNames(bg, c, realm)
-		for _, name := range names {
-			_ = cluster.Delete(bg, c, meshMgr, name)
-		}
-		_ = meshMgr.CleanupMesh(bg)
-	})
+	cleanupRealm(t, c, realm)
 
 	// ## Create a cluster
 	// sind create cluster
