@@ -101,4 +101,4 @@ kind delete cluster --name bridge
 sind delete realm
 ```
 
-The order does not matter. `sind delete realm`, like `sind delete cluster`, disconnects every container still attached to the networks it removes, kind nodes included, and leaves the containers themselves alone. To keep the kind cluster and the sind clusters, but part them, run `sind disconnect container $(kind get nodes --name bridge)`.
+The order does not matter. `sind delete realm`, like `sind delete cluster`, disconnects every container still attached to the networks it removes, kind nodes included, stopped or running, and leaves the containers themselves alone. To keep the kind cluster and the sind clusters, but part them, run `sind disconnect container $(kind get nodes --name bridge)`.

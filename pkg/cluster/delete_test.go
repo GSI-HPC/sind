@@ -3,10 +3,8 @@
 package cluster
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
-	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -460,20 +458,25 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 	require.ErrorContains(t, err, "removing network")
 }
 
-// TestDelete_DetachesForeignContainers covers containers outside sind, such
-// as kind nodes, attached to the cluster network: they are detached so that
-// the network can go, and they are not removed.
+// TestDelete_DetachesForeignContainers covers the mesh's SSH relay and
+// containers outside sind, such as kind nodes, attached to the cluster
+// network: they are detached so that the network can go, stopped ones too,
+// so that they can start again without it, and they are not removed. The
+// relay stays stopped when the mesh could not be started.
 func TestDelete_DetachesForeignContainers(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
-		networkExists:     true,
-		volumes:           []string{"config"},
-		otherClusters:     true,
-		knownHosts:        "controller.dev.sind.sind ssh-ed25519 K1\n",
-		networkContainers: []string{"sind-ssh", "kind-control-plane"},
+		networkExists: true,
+		volumes:       []string{"config"},
+		otherClusters: true,
+		knownHosts:    "controller.dev.sind.sind ssh-ed25519 K1\n",
+		networkContainers: []testutil.PsEntry{
+			{Names: "kind-control-plane", State: "running"},
+			{Names: "sind-ssh", State: "exited"},
+		},
 	})
 	c := docker.NewClient(&m)
 
@@ -499,7 +502,7 @@ func TestDelete_DetachError(t *testing.T) {
 	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		networkExists:     true,
 		otherClusters:     true,
-		networkContainers: []string{"kind-control-plane"},
+		networkContainers: []testutil.PsEntry{{Names: "kind-control-plane", State: "running"}},
 		disconnectFail:    true,
 	})
 	c := docker.NewClient(&m)
@@ -918,7 +921,7 @@ type deleteOnCallOpts struct {
 	containerRemoveFail bool
 	networkRemoveFail   bool
 	volumeRemoveFail    bool
-	networkContainers   []string // containers still attached to the cluster network
+	networkContainers   []testutil.PsEntry // containers still attached to the cluster network
 	disconnectFail      bool
 }
 
@@ -939,6 +942,10 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 		}
 
 		switch {
+		// docker ps -a --filter network=... (DisconnectAll)
+		case args[0] == "ps" && args[len(args)-1] == "network=sind-"+clusterName+"-net":
+			return mock.Result{Stdout: testutil.NDJSON(opts.networkContainers...)}
+
 		// docker ps -a ... (ListContainers or HasOtherClusters)
 		case args[0] == "ps":
 			filterVal := ""
@@ -960,18 +967,6 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 				)}
 			}
 			return mock.Result{Stdout: ""}
-
-		// docker network inspect --format {{json .Containers}} (DisconnectAll)
-		case args[0] == "network" && args[1] == "inspect" && slices.Contains(args, "{{json .Containers}}"):
-			if !opts.networkExists || args[2] != "sind-"+clusterName+"-net" {
-				return mock.Result{Stderr: testutil.NoSuchNetwork(args[2]), Err: exitErr}
-			}
-			endpoints := map[string]map[string]string{}
-			for _, name := range opts.networkContainers {
-				endpoints["id-"+name] = map[string]string{"Name": name}
-			}
-			out, _ := json.Marshal(endpoints)
-			return mock.Result{Stdout: string(out) + "\n"}
 
 		// docker network disconnect (DisconnectAll)
 		case args[0] == "network" && args[1] == "disconnect":

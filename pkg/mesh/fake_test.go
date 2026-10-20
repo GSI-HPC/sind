@@ -229,18 +229,24 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		}
 		out, _ := json.Marshal(nw.labels)
 		return mock.Result{Stdout: string(out) + "\n"}
-	case len(args) == 5 && joined == "network inspect "+args[2]+" --format {{json .Containers}}":
-		if _, ok := f.networks[args[2]]; !ok {
-			return notFound(f.t, testutil.NoSuchNetwork(args[2]))
-		}
-		endpoints := map[string]map[string]string{}
+	case strings.HasPrefix(joined, "ps -a --no-trunc --format json --filter network="):
+		// docker ps -a lists stopped containers too, which keep their
+		// networks in their configuration.
+		network := strings.TrimPrefix(last, "network=")
+		var names []string
 		for name, c := range f.containers {
-			if slices.Contains(c.networks, args[2]) {
-				endpoints["id-"+name] = map[string]string{"Name": name}
+			if slices.Contains(c.networks, network) {
+				names = append(names, name)
 			}
 		}
-		out, _ := json.Marshal(endpoints)
-		return mock.Result{Stdout: string(out) + "\n"}
+		slices.Sort(names)
+		var out strings.Builder
+		for _, name := range names {
+			line, _ := json.Marshal(map[string]string{"Names": name, "State": string(f.containers[name].state)})
+			out.Write(line)
+			out.WriteString("\n")
+		}
+		return mock.Result{Stdout: out.String()}
 	case len(args) == 4 && joined == "network disconnect "+args[2]+" "+last:
 		c, ok := f.containers[last]
 		if !ok {
