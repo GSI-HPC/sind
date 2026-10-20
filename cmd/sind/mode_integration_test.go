@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -119,15 +118,4 @@ func checkPrerequisites(t *testing.T, c *docker.Client) {
 	if !hasNsd {
 		t.Skip("host cgroup mount lacks nsdelegate")
 	}
-}
-
-// testImage returns the sind-node image to use for integration tests.
-// Docker pulls the image automatically during container creation.
-func testImage(t *testing.T) string {
-	t.Helper()
-	image := os.Getenv("SIND_TEST_IMAGE")
-	if image == "" {
-		image = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
-	return image
 }

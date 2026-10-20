@@ -38,6 +38,13 @@ func TestTarArchive(t *testing.T) {
 	assert.Equal(t, "world", string(content))
 }
 
+func TestImage(t *testing.T) {
+	t.Setenv("SIND_TEST_IMAGE", "")
+	assert.Equal(t, "ghcr.io/gsi-hpc/sind-node:latest", Image())
+	t.Setenv("SIND_TEST_IMAGE", "local/sind-node:ci")
+	assert.Equal(t, "local/sind-node:ci", Image())
+}
+
 func TestArgValue(t *testing.T) {
 	args := []string{"--name", "foo", "--count", "3"}
 

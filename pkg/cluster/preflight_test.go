@@ -4,7 +4,6 @@ package cluster
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -474,10 +473,7 @@ func isNsdelegateProbe(args []string) bool {
 func TestCheckNsdelegateLifecycle(t *testing.T) {
 	t.Parallel()
 	c, rec := testutil.NewClient(t)
-	image := os.Getenv("SIND_TEST_IMAGE")
-	if image == "" {
-		image = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	image := testutil.Image()
 	if !rec.IsIntegration() {
 		rec.AddResult(probeMounts, "", nil)
 	}

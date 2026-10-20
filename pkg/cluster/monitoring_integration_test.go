@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -68,10 +67,7 @@ func TestMonitoring(t *testing.T) {
 	ctx := t.Context()
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 	version, err := slurm.DiscoverVersion(ctx, c, img)
 	require.NoError(t, err)
 

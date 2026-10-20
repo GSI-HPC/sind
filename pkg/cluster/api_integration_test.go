@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -42,10 +41,7 @@ func apiCluster(ctx context.Context, t *testing.T, c *docker.Client, name, body 
 	t.Helper()
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 	version, err := slurm.DiscoverVersion(ctx, c, img)
 	require.NoError(t, err)
 

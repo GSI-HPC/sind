@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -391,7 +392,7 @@ func TestClusterLifecycle(t *testing.T) {
 	t.Parallel()
 	c := realClient(t)
 	checkPrerequisites(t, c)
-	image := testImage(t)
+	image := testutil.Image()
 	dataDir := t.TempDir()
 
 	realm := "it-e2e-" + testID

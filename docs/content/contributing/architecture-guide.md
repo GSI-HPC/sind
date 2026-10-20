@@ -37,7 +37,7 @@ internal/mcpconfig/ Edits the MCP servers of an editor's configuration (JSONC) i
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
 internal/testutil/ Shared test helpers
-  ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume
+  ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Image (SIND_TEST_IMAGE)
   ├── client.go    NewClient, Realm (unit test variants)
   └── client_integration.go NewClient, Realm (integration test variants)
 

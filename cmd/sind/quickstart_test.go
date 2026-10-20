@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -27,7 +28,7 @@ func TestQuickstart(t *testing.T) {
 	dataDir := t.TempDir()
 	c := realClient(t)
 	checkPrerequisites(t, c)
-	image := testImage(t)
+	image := testutil.Image()
 
 	realm := "it-qs-" + testID
 

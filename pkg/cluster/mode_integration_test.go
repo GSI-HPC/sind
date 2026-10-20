@@ -7,7 +7,6 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -33,10 +32,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-cluster")
 	clusterName := "it-cluster"
@@ -189,10 +185,7 @@ func TestSlurmSectionApplied(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-slurm-sect")
 	clusterName := "it-slurm-sect"
@@ -264,10 +257,7 @@ func TestSlurmSectionMapFormApplied(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-slurm-map")
 	clusterName := "it-slurm-map"
@@ -364,10 +354,7 @@ func TestControllerPairFailover(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-ha")
 	clusterName := "it-ha"
@@ -494,10 +481,7 @@ func TestClusterNamesAroundMesh(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-names")
 	meshMgr := mesh.NewManager(c, realm)
@@ -577,10 +561,7 @@ func TestUnmanagedCluster(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-unmanaged")
 	clusterName := "it-unmanaged"
@@ -726,10 +707,7 @@ func TestDBNodeAccounting(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-db")
 	clusterName := "it-db"
@@ -849,10 +827,7 @@ func TestUnmanagedDBNode(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-db-unmanaged")
 	clusterName := "it-db-unmanaged"
@@ -927,10 +902,7 @@ func TestClusterUsers(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-users")
 	clusterName := "it-users"
@@ -1062,10 +1034,7 @@ func TestClusterAccounts(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-accounts")
 	clusterName := "it-accounts"
@@ -1189,10 +1158,7 @@ func TestIdentityNSSSlurm(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-nss")
 	clusterName := "it-nss"
@@ -1279,10 +1245,7 @@ func TestIdentityClientIDs(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-clientids")
 	clusterName := "it-clientids"
@@ -1401,10 +1364,7 @@ func TestNodeSetupStepFails(t *testing.T) {
 
 	checkPrerequisites(t, c)
 
-	img := os.Getenv("SIND_TEST_IMAGE")
-	if img == "" {
-		img = "ghcr.io/gsi-hpc/sind-node:latest"
-	}
+	img := testutil.Image()
 
 	realm := testutil.Realm("it-setup")
 	clusterName := "it-setup"

@@ -6,7 +6,9 @@ package testutil
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -45,6 +47,12 @@ func TarArchive(name, content string) string {
 	_, _ = tw.Write(data)
 	_ = tw.Close()
 	return buf.String()
+}
+
+// Image returns the sind-node image the tests run: SIND_TEST_IMAGE, or
+// ghcr.io/gsi-hpc/sind-node:latest when it is unset.
+func Image() string {
+	return cmp.Or(os.Getenv("SIND_TEST_IMAGE"), "ghcr.io/gsi-hpc/sind-node:latest")
 }
 
 // ArgValue returns the value following the first occurrence of flag in args.

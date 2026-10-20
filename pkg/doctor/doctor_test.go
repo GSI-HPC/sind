@@ -5,7 +5,6 @@ package doctor
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"testing"
 
@@ -202,14 +201,6 @@ func TestErrorLine(t *testing.T) {
 	assert.Equal(t, "context canceled", ErrorLine(fmt.Errorf("%s\n%s", "context canceled", "second line")))
 }
 
-// probeImage is the image the probe tests run: the image under test in CI.
-func probeImage() string {
-	if image := os.Getenv("SIND_TEST_IMAGE"); image != "" {
-		return image
-	}
-	return "ghcr.io/gsi-hpc/sind-node:latest"
-}
-
 // TestProbeCgroupInfoLifecycle probes a real daemon in integration mode,
 // which runs on the machine the tests run on: the container shows the
 // nsdelegate option of this machine's own cgroup2 mount, which the CI
@@ -226,7 +217,7 @@ func TestProbeCgroupInfoLifecycle(t *testing.T) {
 			"cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n", "", nil)
 	}
 
-	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), c, probeImage())
+	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), c, testutil.Image())
 	require.NoError(t, err)
 	assert.Equal(t, CgroupRoot, mountPath)
 	assert.True(t, hasV2)
