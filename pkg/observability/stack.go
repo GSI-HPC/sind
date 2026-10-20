@@ -19,7 +19,6 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/probe"
-	"github.com/GSI-HPC/sind/pkg/retry"
 )
 
 // labelRealm is the realm label of the stack's volumes, as pkg/mesh and
@@ -430,11 +429,7 @@ func (m *Manager) RemoveVolumes(ctx context.Context) error {
 		if !slices.ContainsFunc(existing, func(e docker.VolumeListEntry) bool { return e.Name == v }) {
 			continue
 		}
-		err := retry.Do(ctx,
-			func() error { return m.Docker.RemoveVolume(ctx, v) },
-			docker.IsVolumeInUse,
-			6, 100*time.Millisecond)
-		if err != nil && !docker.IsNotFound(err) {
+		if err := m.Docker.RemoveVolume(ctx, v); err != nil && !docker.IsNotFound(err) {
 			return fmt.Errorf("removing volume %s: %w", v, err)
 		}
 	}

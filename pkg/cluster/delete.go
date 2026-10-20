@@ -10,13 +10,11 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/GSI-HPC/go-clikit/fanout"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
-	"github.com/GSI-HPC/sind/pkg/retry"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -312,10 +310,7 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 	var wg sync.WaitGroup
 	for i, v := range volumes {
 		wg.Go(func() {
-			err := retry.Do(ctx,
-				func() error { return client.RemoveVolume(ctx, v) },
-				docker.IsVolumeInUse,
-				6, 100*time.Millisecond)
+			err := client.RemoveVolume(ctx, v)
 			switch {
 			case err == nil:
 			case docker.IsNotFound(err):

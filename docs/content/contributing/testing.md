@@ -73,7 +73,7 @@ assert.Contains(t, m.Calls[0].Args, "--name")
 
 The real executor returns a failed command as a `*cmdexec.ExitError` that carries the exit code and what the command wrote to stderr. The mock returns a queued `*exec.ExitError` in the same shape, wrapped with the result's stderr.
 
-Docker exits 1 for many failures, so `docker.IsNotFound` and `docker.IsVolumeInUse` read docker's message, not only the exit code. Queue a real `*exec.ExitError` with exit code 1 together with the stderr docker prints:
+Docker exits 1 for many failures, so `docker.IsNotFound` and the in-use retry of `RemoveVolume` read docker's message, not only the exit code. Queue a real `*exec.ExitError` with exit code 1 together with the stderr docker prints:
 
 ```go
 m.AddResult("", testutil.NoSuchContainer("sind-dev-controller"), testutil.ExitCode1(t))

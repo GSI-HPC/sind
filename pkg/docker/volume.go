@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/csv"
 	"strings"
+	"time"
+
+	"github.com/GSI-HPC/sind/pkg/retry"
 )
 
 // VolumeExists returns true if the given volume exists.
@@ -22,16 +25,18 @@ func (c *Client) CreateVolume(ctx context.Context, name VolumeName, labels Label
 	return c.do(ctx, args...)
 }
 
-// RemoveVolume removes a Docker volume.
+// RemoveVolume removes a Docker volume, retrying past the dockerd
+// async-cleanup race that follows `docker rm -f` (see isVolumeInUse).
 func (c *Client) RemoveVolume(ctx context.Context, name VolumeName) error {
-	return c.do(ctx, "volume", "rm", string(name))
+	return retry.Do(ctx, func() error { return c.do(ctx, "volume", "rm", string(name)) },
+		isVolumeInUse, 6, 100*time.Millisecond)
 }
 
-// IsVolumeInUse reports whether err indicates the volume is still held by a
+// isVolumeInUse reports whether err indicates the volume is still held by a
 // just-removed container. dockerd releases volume mounts asynchronously after
-// `docker rm -f`, so callers tearing down a cluster race the daemon and can
-// retry this specific error.
-func IsVolumeInUse(err error) bool {
+// `docker rm -f`, so a removal that tears down a cluster races the daemon and
+// retries this specific error.
+func isVolumeInUse(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "volume is in use")
 }
 

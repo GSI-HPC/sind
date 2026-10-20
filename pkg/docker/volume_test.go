@@ -125,7 +125,7 @@ func TestIsVolumeInUse(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, IsVolumeInUse(tc.err))
+			assert.Equal(t, tc.want, isVolumeInUse(tc.err))
 		})
 	}
 }

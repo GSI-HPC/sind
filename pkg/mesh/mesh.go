@@ -11,13 +11,11 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/retry"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -384,15 +382,9 @@ func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.Network
 	return nil
 }
 
-// removeVolumeIfExists removes a volume, retrying past the dockerd
-// async-cleanup race that follows `docker rm -f`, and treating "not found"
-// as success.
+// removeVolumeIfExists removes a volume, treating "not found" as success.
 func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeName) error {
-	err := retry.Do(ctx,
-		func() error { return m.Docker.RemoveVolume(ctx, name) },
-		docker.IsVolumeInUse,
-		6, 100*time.Millisecond)
-	if err != nil && !docker.IsNotFound(err) {
+	if err := m.Docker.RemoveVolume(ctx, name); err != nil && !docker.IsNotFound(err) {
 		return err
 	}
 	return nil
