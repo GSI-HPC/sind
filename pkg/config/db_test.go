@@ -54,8 +54,7 @@ func TestValidate_SlurmdbdParameters(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 

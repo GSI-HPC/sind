@@ -292,8 +292,7 @@ func TestValidate_DataStorage(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -342,8 +341,7 @@ func TestValidate_DataMountPath(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -351,16 +349,12 @@ func TestValidate_DataMountPath(t *testing.T) {
 func TestCheckCapabilities(t *testing.T) {
 	require.NoError(t, CheckCapabilities("capAdd", []string{"SYS_ADMIN", "ALL"}))
 	require.NoError(t, CheckCapabilities("capAdd", nil))
-	err := CheckCapabilities("--cap-add", []string{"SYS_ADMIN", "BOGUS"})
-	require.Error(t, err)
-	assert.Equal(t, `unknown capability "BOGUS" in --cap-add`, err.Error())
+	require.EqualError(t, CheckCapabilities("--cap-add", []string{"SYS_ADMIN", "BOGUS"}), `unknown capability "BOGUS" in --cap-add`)
 }
 
 func TestCheckDevices(t *testing.T) {
 	require.NoError(t, CheckDevices([]string{"/dev/fuse", "/dev/sda:/dev/xvda:rwm"}))
-	err := CheckDevices([]string{"/dev/fuse", "fuse:/dev/fuse"})
-	require.Error(t, err)
-	assert.Equal(t, `device path must be absolute, got "fuse:/dev/fuse"`, err.Error())
+	require.EqualError(t, CheckDevices([]string{"/dev/fuse", "fuse:/dev/fuse"}), `device path must be absolute, got "fuse:/dev/fuse"`)
 }
 
 func TestApplyDefaults_MinimalConfig(t *testing.T) {
@@ -622,9 +616,7 @@ func TestValidate_RequiredFields(t *testing.T) {
 				Name:  "default",
 				Nodes: tt.nodes,
 			}
-			err := cfg.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, cfg.Validate(), tt.wantErr)
 		})
 	}
 }
@@ -814,9 +806,7 @@ func TestValidate_Constraints(t *testing.T) {
 				Name:  "default",
 				Nodes: tt.nodes,
 			}
-			err := cfg.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, cfg.Validate(), tt.wantErr)
 		})
 	}
 }
@@ -895,8 +885,7 @@ nodes:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -1165,9 +1154,7 @@ func TestValidate_SlurmSections(t *testing.T) {
 		cfg.Slurm.Main = Section{Fragments: map[string]string{
 			"": "content",
 		}}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must not be empty")
+		require.ErrorContains(t, cfg.Validate(), "must not be empty")
 	})
 
 	t.Run("fragment name with path separator", func(t *testing.T) {
@@ -1175,9 +1162,7 @@ func TestValidate_SlurmSections(t *testing.T) {
 		cfg.Slurm.Cgroup = Section{Fragments: map[string]string{
 			"../escape": "content",
 		}}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "plain filename")
+		require.ErrorContains(t, cfg.Validate(), "plain filename")
 	})
 
 	t.Run("empty fragment content", func(t *testing.T) {
@@ -1185,9 +1170,7 @@ func TestValidate_SlurmSections(t *testing.T) {
 		cfg.Slurm.Gres = Section{Fragments: map[string]string{
 			"gpu": "",
 		}}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must not be empty")
+		require.ErrorContains(t, cfg.Validate(), "must not be empty")
 	})
 
 	t.Run("all sections valid", func(t *testing.T) {
@@ -1220,16 +1203,12 @@ func TestValidate_BackupControllerSlurmMain(t *testing.T) {
 
 	for _, key := range []string{"SlurmctldHost", "ControlMachine", "BackupController", "BackupAddr", "StateSaveLocation"} {
 		t.Run("rejects "+key, func(t *testing.T) {
-			err := base(Section{Content: key + "=x\n"}).Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "must not set "+key)
+			require.ErrorContains(t, base(Section{Content: key + "=x\n"}).Validate(), "must not set "+key)
 		})
 	}
 
 	t.Run("rejects key in fragment", func(t *testing.T) {
-		err := base(Section{Fragments: map[string]string{"ha": "  slurmctldhost=x\n"}}).Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must not set SlurmctldHost")
+		require.ErrorContains(t, base(Section{Fragments: map[string]string{"ha": "  slurmctldhost=x\n"}}).Validate(), "must not set SlurmctldHost")
 	})
 
 	t.Run("allows SlurmctldTimeout", func(t *testing.T) {
@@ -1263,9 +1242,7 @@ func TestValidate_UnmanagedSlurmSections(t *testing.T) {
 				},
 			}
 			set(&cfg.Slurm)
-			err := cfg.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "slurm "+name+" requires a managed controller")
+			require.ErrorContains(t, cfg.Validate(), "slurm "+name+" requires a managed controller")
 		})
 	}
 }
@@ -1513,17 +1490,13 @@ func TestValidate_SecurityFields(t *testing.T) {
 	t.Run("invalid capAdd", func(t *testing.T) {
 		cfg := base()
 		cfg.Nodes[1].CapAdd = []string{"INVALID_CAP"}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `unknown capability "INVALID_CAP" in capAdd`)
+		require.ErrorContains(t, cfg.Validate(), `unknown capability "INVALID_CAP" in capAdd`)
 	})
 
 	t.Run("invalid capDrop", func(t *testing.T) {
 		cfg := base()
 		cfg.Nodes[1].CapDrop = []string{"NOT_A_CAP"}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `unknown capability "NOT_A_CAP" in capDrop`)
+		require.ErrorContains(t, cfg.Validate(), `unknown capability "NOT_A_CAP" in capDrop`)
 	})
 
 	t.Run("valid devices", func(t *testing.T) {
@@ -1535,9 +1508,7 @@ func TestValidate_SecurityFields(t *testing.T) {
 	t.Run("device path not absolute", func(t *testing.T) {
 		cfg := base()
 		cfg.Nodes[1].Devices = []string{"dev/fuse"}
-		err := cfg.Validate()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "device path must be absolute")
+		require.ErrorContains(t, cfg.Validate(), "device path must be absolute")
 	})
 
 	t.Run("valid security opts", func(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,8 +76,7 @@ func TestValidate_Names(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }

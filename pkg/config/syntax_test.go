@@ -38,8 +38,7 @@ func TestParse_SyntaxErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.want)
+			require.ErrorContains(t, err, tt.want)
 			assert.NotContains(t, err.Error(), "JSON")
 			assert.NotContains(t, err.Error(), "Go ")
 		})

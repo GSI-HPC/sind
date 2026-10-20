@@ -39,8 +39,7 @@ func TestParse_IdentityErrors(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Parse([]byte(tt.input))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -139,8 +138,7 @@ func TestValidate_Identity(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
