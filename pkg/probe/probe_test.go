@@ -279,68 +279,6 @@ func TestParseSlurmctldPing(t *testing.T) {
 	assert.Empty(t, ParseSlurmctldPing(""))
 }
 
-func TestMungeReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := MungeReady(t.Context(), c, testContainer)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "munge"}, m.Calls[0].Args)
-}
-
-func TestMungeReady_NotReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	err := MungeReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "munge not ready")
-}
-
-func TestSlurmdReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := SlurmdReady(t.Context(), c, testContainer)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmd"}, m.Calls[0].Args)
-}
-
-func TestSlurmdReady_NotReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("exit status 1"))
-	c := docker.NewClient(&m)
-
-	err := SlurmdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmd not ready")
-}
-
-func TestSackdReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	m.AddResult("", "", fmt.Errorf("exit status 3"))
-	c := docker.NewClient(&m)
-
-	require.NoError(t, SackdReady(t.Context(), c, testContainer))
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "sackd"}, m.Calls[0].Args)
-
-	err := SackdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "sackd not ready: exit status 3", err.Error())
-
-	p := ForService(ServiceSackd)
-	assert.Equal(t, "sackd", p.Name)
-	assert.NotNil(t, p.Check)
-}
-
 func TestSlurmrestdReady(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("active\n", "", nil) // systemctl is-active
@@ -421,31 +359,37 @@ func TestUnitJournal(t *testing.T) {
 		m.Calls[0].Args)
 }
 
-func TestUnitProbes_Failed(t *testing.T) {
-	for _, tt := range []struct {
-		unit  string
-		check Func
-	}{
-		{"munge", MungeReady},
-		{"slurmd", SlurmdReady},
-		{"sackd", SackdReady},
-		{"slurmdbd", SlurmdbdReady},
-	} {
-		t.Run(tt.unit, func(t *testing.T) {
+// TestUnitProbes checks the probes of the services whose unit decides:
+// active passes, a failed unit is a TerminalError with its journal tail,
+// and any other state or a failed exec is an error to retry.
+func TestUnitProbes(t *testing.T) {
+	for _, svc := range []Service{ServiceMunge, ServiceSlurmd, ServiceSackd, ServiceSlurmdbd} {
+		unit := string(svc)
+		isActive := []string{"exec", string(testContainer), "systemctl", "is-active", unit}
+		check := ForService(svc).Check
+		t.Run(unit, func(t *testing.T) {
 			var m mock.Executor
+			m.AddResult("active\n", "", nil)
+			m.AddResult("activating\n", "", testutil.ExitCode1(t))
+			m.AddResult("", "", fmt.Errorf("daemon unreachable"))
 			m.AddResult("failed\n", "", testutil.ExitCode1(t))
 			m.AddResult("fatal: something\n", "", nil)
 			c := docker.NewClient(&m)
 
-			err := tt.check(t.Context(), c, testContainer)
+			require.NoError(t, check(t.Context(), c, testContainer))
+			assert.Equal(t, isActive, m.Calls[0].Args)
 			var te *TerminalError
+			err := check(t.Context(), c, testContainer)
+			require.EqualError(t, err, unit+" not ready: activating")
+			assert.NotErrorAs(t, err, &te)
+			err = check(t.Context(), c, testContainer)
+			require.EqualError(t, err, unit+" not ready: daemon unreachable")
+			assert.NotErrorAs(t, err, &te)
+			err = check(t.Context(), c, testContainer)
 			require.ErrorAs(t, err, &te)
-			assert.Equal(t, tt.unit+" failed:\nfatal: something", te.Msg)
-			require.Len(t, m.Calls, 2)
-			assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", tt.unit}, m.Calls[0].Args)
-			assert.Equal(t,
-				[]string{"exec", string(testContainer), "journalctl", "-u", tt.unit, "-n", "20", "--no-pager", "-o", "cat"},
-				m.Calls[1].Args)
+			assert.Equal(t, unit+" failed:\nfatal: something", te.Msg)
+			require.Len(t, m.Calls, 5)
+			assert.Equal(t, []string{"exec", string(testContainer), "journalctl", "-u", unit, "-n", "20", "--no-pager", "-o", "cat"}, m.Calls[4].Args)
 		})
 	}
 }
@@ -459,62 +403,6 @@ func TestUnitActive_Inactive(t *testing.T) {
 	require.EqualError(t, err, "munge not ready: inactive")
 	var te *TerminalError
 	assert.NotErrorAs(t, err, &te)
-}
-
-func TestSlurmdbdReady(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("active\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", string(testContainer), "systemctl", "is-active", "slurmdbd"}, m.Calls[0].Args)
-}
-
-func TestSlurmdbdReady_ExecError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("daemon unreachable"))
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmdbd not ready")
-	var te *TerminalError
-	assert.NotErrorAs(t, err, &te)
-}
-
-func TestSlurmdbdReady_Activating(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("activating\n", "", testutil.ExitCode1(t))
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmdbd not ready: activating")
-	var te *TerminalError
-	assert.NotErrorAs(t, err, &te)
-	assert.Len(t, m.Calls, 1)
-}
-
-func TestSlurmdbdReady_Failed(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("failed\n", "", testutil.ExitCode1(t))
-	m.AddResult("slurmdbd: fatal: mysql_real_connect failed\n", "", nil)
-	c := docker.NewClient(&m)
-
-	err := SlurmdbdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	var te *TerminalError
-	require.ErrorAs(t, err, &te)
-	assert.Equal(t, "slurmdbd failed:\nslurmdbd: fatal: mysql_real_connect failed", te.Msg)
-
-	require.Len(t, m.Calls, 2)
-	assert.Equal(t,
-		[]string{"exec", string(testContainer), "journalctl", "-u", "slurmdbd", "-n", "20", "--no-pager", "-o", "cat"},
-		m.Calls[1].Args,
-	)
 }
 
 func TestForService(t *testing.T) {

@@ -80,15 +80,23 @@ type Probe struct {
 
 // serviceChecks are the readiness checks of the services sind waits for.
 var serviceChecks = map[Service]Func{
-	ServiceMunge:     MungeReady,
+	ServiceMunge:     unitReady(ServiceMunge),
 	ServiceSSHD:      SSHDReady,
 	ServiceSlurmctld: SlurmctldReady,
-	ServiceSlurmd:    SlurmdReady,
-	ServiceSlurmdbd:  SlurmdbdReady,
-	ServiceSackd:     SackdReady,
+	ServiceSlurmd:    unitReady(ServiceSlurmd),
+	ServiceSlurmdbd:  unitReady(ServiceSlurmdbd),
+	ServiceSackd:     unitReady(ServiceSackd),
 	// Its port check follows the unit too: slurmrestd closes the port only
 	// when its unit stops.
 	ServiceSlurmrestd: SlurmrestdReady,
+}
+
+// unitReady returns the check that the service's unit is active; a failed
+// unit is a TerminalError (see UnitActive).
+func unitReady(svc Service) Func {
+	return func(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
+		return UnitActive(ctx, client, name, string(svc))
+	}
 }
 
 // ForService returns the readiness probe for a service, which follows the
@@ -441,12 +449,6 @@ func SSHDReady(ctx context.Context, client *docker.Client, name docker.Container
 	return nil
 }
 
-// MungeReady verifies that the munge authentication service is active. A
-// failed unit is a TerminalError (see UnitActive).
-func MungeReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceMunge))
-}
-
 // SlurmctldReady verifies that the slurmctld on the given controller node is
 // responding to RPC requests. While it does not, a failed slurmctld unit
 // (e.g. a slurm.conf line slurmctld rejects) is a TerminalError carrying the
@@ -504,12 +506,6 @@ func ParseSlurmctldPing(stdout string) map[string]bool {
 	return result
 }
 
-// SlurmdReady verifies that the slurmd service is active. A failed unit is
-// a TerminalError (see UnitActive).
-func SlurmdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceSlurmd))
-}
-
 // ClusterRegistered returns a check that passes once slurmdbd lists the
 // cluster, which slurmctld registers when it first starts with accounting.
 // Until then, sacctmgr refuses to add users. The registration can land
@@ -527,12 +523,6 @@ func ClusterRegistered(clusterName string) Func {
 		}
 		return fmt.Errorf("cluster %s not registered with slurmdbd yet", clusterName)
 	}
-}
-
-// SackdReady verifies that the sackd service is active. A failed unit is a
-// TerminalError (see UnitActive).
-func SackdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceSackd))
 }
 
 // SlurmrestdPort is the TCP port slurmrestd listens on: SLURMRESTD_LISTEN
@@ -563,12 +553,6 @@ func UnitJournal(ctx context.Context, client *docker.Client, name docker.Contain
 	journal, _ := client.ExecAllowNonZero(ctx, name,
 		"journalctl", "-u", unit, "-n", journalLines, "--no-pager", "-o", "cat")
 	return strings.TrimSpace(journal)
-}
-
-// SlurmdbdReady verifies that the slurmdbd service is active. A failed unit
-// is a TerminalError (see UnitActive).
-func SlurmdbdReady(ctx context.Context, client *docker.Client, name docker.ContainerName) error {
-	return UnitActive(ctx, client, name, string(ServiceSlurmdbd))
 }
 
 // UnitActive verifies that a systemd unit on the node is active. A failed
