@@ -379,8 +379,8 @@ func TestCheckNsdelegate_Missing(t *testing.T) {
 
 	err := CheckNsdelegate(t.Context(), docker.NewClient(&m), "img:1")
 	require.ErrorIs(t, err, ErrNoNsdelegate)
-	assert.Equal(t, "the Docker host mounts cgroup2 without nsdelegate, which sind requires\n\n"+
-		doctor.NsdelegateRemediation("/sys/fs/cgroup"), err.Error())
+	assert.EqualError(t, err, "the Docker host mounts cgroup2 without nsdelegate, which sind requires\n\n"+
+		doctor.NsdelegateRemediation("/sys/fs/cgroup"))
 }
 
 func TestCheckNsdelegate_NoCgroup2(t *testing.T) {

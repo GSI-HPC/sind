@@ -145,8 +145,7 @@ func TestCreate_APINodeWithoutSlurmrestd(t *testing.T) {
 		return mock.Result{}, false
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node api: image img:1 has no slurmrestd")
+	require.ErrorContains(t, err, "node api: image img:1 has no slurmrestd")
 	assert.Empty(t, collectIdentityCalls(calls).enabled["sind-dev-api"])
 }
 

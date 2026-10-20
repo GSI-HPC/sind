@@ -135,8 +135,7 @@ func TestDeleteVolumes_StillInUse(t *testing.T) {
 		c := docker.NewClient(&m)
 
 		err := DeleteVolumes(t.Context(), c, []docker.VolumeName{"sind-dev-munge"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "removing volume sind-dev-munge: exit status 1: Error response from daemon: remove sind-dev-munge: volume is in use")
+		require.ErrorContains(t, err, "removing volume sind-dev-munge: exit status 1: Error response from daemon: remove sind-dev-munge: volume is in use")
 		assert.Len(t, m.Calls, 6)
 	})
 }
@@ -386,8 +385,7 @@ func TestDelete_ListResourcesError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 // TestDelete_DeregisterMeshFailureContinues verifies that a failure during
@@ -444,8 +442,7 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing container")
+	require.ErrorContains(t, err, "removing container")
 }
 
 func TestDelete_NetworkRemoveError(t *testing.T) {
@@ -462,8 +459,7 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing network")
+	require.ErrorContains(t, err, "removing network")
 }
 
 // TestDelete_DetachesForeignContainers covers containers outside sind, such
@@ -541,8 +537,7 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 func TestDelete_VolumeRemoveError(t *testing.T) {
@@ -559,8 +554,7 @@ func TestDelete_VolumeRemoveError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing volume")
+	require.ErrorContains(t, err, "removing volume")
 }
 
 func TestDelete_CleanupMeshError(t *testing.T) {
@@ -587,8 +581,7 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 
 	err := Delete(t.Context(), c, mgr, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing SSH keygen container")
+	require.ErrorContains(t, err, "removing SSH keygen container")
 }
 
 // meshUpdates returns the recorded calls that update the realm's Corefile
@@ -812,8 +805,7 @@ func TestDeleteAll_ClusterFails(t *testing.T) {
 
 	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "deleting cluster test")
+	require.ErrorContains(t, err, "deleting cluster test")
 	got := removed(&m)
 	assert.Contains(t, got, "sind-dev-controller")
 	assert.NotContains(t, got, "sind-dns", "mesh kept for test")
@@ -842,8 +834,7 @@ func TestDeleteAll_ListError(t *testing.T) {
 
 	err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "deleting cluster dev: listing containers")
+	require.ErrorContains(t, err, "deleting cluster dev: listing containers")
 }
 
 func TestDeleteAll_DiscoveryErrors(t *testing.T) {
@@ -863,8 +854,7 @@ func TestDeleteAll_DiscoveryErrors(t *testing.T) {
 
 			err := DeleteAll(t.Context(), c, mesh.NewManager(c, mesh.DefaultRealm))
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 			assert.Empty(t, removed(&m))
 		})
 	}

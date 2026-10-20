@@ -510,8 +510,7 @@ func TestGetMountPoints_CheckError(t *testing.T) {
 
 	_, err := GetMountPoints(t.Context(), c, mesh.DefaultRealm, "dev", nil)
 
-	require.Error(t, err)
-	assert.Equal(t, "checking volumes: docker daemon error", err.Error())
+	require.EqualError(t, err, "checking volumes: docker daemon error")
 }
 
 func TestGetMountPoints_HostPathWithComma(t *testing.T) {
@@ -773,8 +772,7 @@ func TestGetStatus_NetworkInspectError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking cluster network")
+	require.ErrorContains(t, err, "checking cluster network")
 	assert.Contains(t, err.Error(), "docker daemon not running")
 }
 
@@ -785,8 +783,7 @@ func TestGetStatus_ListError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 func TestGetStatus_NodeHealthError(t *testing.T) {
@@ -810,8 +807,7 @@ func TestGetStatus_NodeHealthError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting cluster containers")
+	require.ErrorContains(t, err, "inspecting cluster containers")
 }
 
 func TestGetStatus_NetworkHealthError(t *testing.T) {
@@ -828,8 +824,7 @@ func TestGetStatus_NetworkHealthError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network")
+	require.ErrorContains(t, err, "checking mesh network")
 }
 
 func TestGetStatus_VolumeHealthError(t *testing.T) {
@@ -846,8 +841,7 @@ func TestGetStatus_VolumeHealthError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking volumes")
+	require.ErrorContains(t, err, "checking volumes")
 }
 
 // TestGetStatus_NetworkErrorBeforeVolumeError checks that when both
@@ -866,8 +860,7 @@ func TestGetStatus_NetworkErrorBeforeVolumeError(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network")
+	require.ErrorContains(t, err, "checking mesh network")
 }
 
 func TestGetStatus_SortOrder(t *testing.T) {
@@ -969,8 +962,7 @@ func TestGetStatus_InspectMissingEntry(t *testing.T) {
 
 	_, err := GetStatus(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspect returned no entry")
+	require.ErrorContains(t, err, "inspect returned no entry")
 	assert.Len(t, m.Calls, 2, "no probe or check starts")
 }
 

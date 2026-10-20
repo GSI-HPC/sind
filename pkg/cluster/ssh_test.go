@@ -238,8 +238,7 @@ func TestEnter_TargetSelection_NoControllerOrSubmitter(t *testing.T) {
 
 	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no submitter or controller")
+	require.ErrorContains(t, err, "no submitter or controller")
 }
 
 func TestEnter_TargetSelection_EmptyCluster(t *testing.T) {
@@ -259,6 +258,5 @@ func TestEnter_TargetSelection_ListError(t *testing.T) {
 
 	_, _, err := EnterTarget(t.Context(), client, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
+	require.ErrorContains(t, err, "listing")
 }

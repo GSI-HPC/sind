@@ -314,8 +314,7 @@ func TestGetNodeHealth_ControllerHA(t *testing.T) {
 
 			health, err := inspectedNodeHealth(t, c, "sind-dev-"+tt.node, config.RoleController)
 			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)

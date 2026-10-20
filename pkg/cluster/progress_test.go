@@ -343,8 +343,7 @@ func TestPower_ReportsTheNodes(t *testing.T) {
 
 	err := PowerShutdown(ctx, docker.NewClient(&m), mesh.DefaultRealm, "dev", []string{"controller", "worker-0", "worker-1"})
 
-	require.Error(t, err)
-	assert.Equal(t, "stopping sind-dev-worker-0: container already stopped", err.Error())
+	require.EqualError(t, err, "stopping sind-dev-worker-0: container already stopped")
 	assert.Equal(t, `call docker ps [hidden]: ok
 step stopping total=3 limit=8 [fold]: failed (target): stopping sind-dev-worker-0: container already stopped
   target controller.dev role=controller: ok
@@ -417,10 +416,9 @@ func TestPower_JoinsTheFailures(t *testing.T) {
 
 	err := PowerFreeze(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev", []string{"worker-1", "controller", "worker-0"})
 
-	require.Error(t, err)
-	assert.Equal(t, "pausing sind-dev-worker-1: sind-dev-worker-1 is not running\n"+
+	require.EqualError(t, err, "pausing sind-dev-worker-1: sind-dev-worker-1 is not running\n"+
 		"pausing sind-dev-controller: sind-dev-controller is not running\n"+
-		"pausing sind-dev-worker-0: sind-dev-worker-0 is not running", err.Error())
+		"pausing sind-dev-worker-0: sind-dev-worker-0 is not running")
 	assert.Equal(t, progress.ClassTarget, progress.Classify(err, nil))
 }
 
@@ -442,7 +440,7 @@ func TestForEachContainer_Interrupted(t *testing.T) {
 
 	assert.Empty(t, done)
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled", err.Error())
+	assert.EqualError(t, err, "stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled")
 	assert.Equal(t, progress.ClassCanceled, progress.Classify(err, nil))
 	assert.Equal(t, `step stopping total=2 limit=8 [fold]: canceled (canceled): stopping sind-dev-worker-0: context canceled\nstopping sind-dev-worker-1: context canceled
   target worker-[0-1] role=worker: canceled (canceled): context canceled
@@ -477,7 +475,7 @@ func TestForEachContainer_Panic(t *testing.T) {
 			})
 
 			assert.Equal(t, targets[1:], done)
-			assert.Equal(t, `stopping sind-dev-worker-0: sind panicked; this is a bug, please report it: "boom"`, err.Error())
+			assert.EqualError(t, err, `stopping sind-dev-worker-0: sind panicked; this is a bug, please report it: "boom"`)
 			_, isPanic := errors.AsType[*fanout.PanicError](err)
 			assert.True(t, isPanic, "the panic is in the error")
 			written, unused := &busLog, &ctxLog
@@ -513,8 +511,8 @@ func TestDeleteAll_Interrupted(t *testing.T) {
 	err := DeleteAll(ctx, c, mesh.NewManager(c, mesh.DefaultRealm))
 
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "deleting cluster dev: listing containers: context canceled\n"+
-		"deleting cluster prod: listing containers: context canceled", err.Error())
+	assert.EqualError(t, err, "deleting cluster dev: listing containers: context canceled\n"+
+		"deleting cluster prod: listing containers: context canceled")
 	assert.Equal(t, progress.ClassCanceled, progress.Classify(err, nil))
 	w.Finish()
 	assert.Equal(t, `step clusters total=2 limit=4 [fold]: canceled (canceled): deleting cluster dev: listing containers: context canceled\ndeleting cluster prod: listing containers: context canceled
@@ -539,8 +537,7 @@ func TestDeleteAll_ReportsTheClusters(t *testing.T) {
 
 	err := DeleteAll(ctx, c, mesh.NewManager(c, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Equal(t, "deleting cluster test: removing container sind-test-controller: docker daemon unavailable", err.Error())
+	require.EqualError(t, err, "deleting cluster test: removing container sind-test-controller: docker daemon unavailable")
 	w.Finish()
 	assert.Equal(t, `step clusters total=3 limit=4 [fold]: failed (target): deleting cluster test: removing container sind-test-controller: docker daemon unavailable
   target dev,prod: ok

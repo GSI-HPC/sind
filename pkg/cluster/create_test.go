@@ -406,8 +406,7 @@ func TestCreate_BackupControllerNotReady(t *testing.T) {
 	_, _, err := runCreate(ctx, t, cfg, false,
 		scontrolPing("Slurmctld(primary) at controller is UP\nSlurmctld(backup) at controller-backup is DOWN\n"))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "controller-backup is DOWN")
+	require.ErrorContains(t, err, "controller-backup is DOWN")
 }
 
 func TestCreate_CVMFS(t *testing.T) {
@@ -472,8 +471,7 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 		return mock.Result{}, false
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "storage.cvmfs")
+	require.ErrorContains(t, err, "storage.cvmfs")
 	assert.Nil(t, cluster)
 	assertNoNodeCreated(t, m)
 }
@@ -572,8 +570,7 @@ func TestCreate_Fails(t *testing.T) {
 
 			_, cluster, err := runCreate(ctx, t, createCfg(), false, tt.override)
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.Nil(t, cluster)
 		})
 	}
@@ -676,8 +673,7 @@ func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
 		return failEnable(args, stdin)
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "systemctl failed")
+	require.ErrorContains(t, err, "systemctl failed")
 	assert.False(t, meshRemoved(m))
 }
 
@@ -719,8 +715,7 @@ func TestResolveMeshInfra_NoDNSContainer(t *testing.T) {
 
 	_, _, err := resolveMeshInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container: sind-dns not found")
+	require.ErrorContains(t, err, "inspecting DNS container: sind-dns not found")
 }
 
 // TestResolveMeshInfra_StartsStoppedMesh covers a create after a host
@@ -786,8 +781,7 @@ func TestCreate_CleanupErrors(t *testing.T) {
 				return r, ok
 			})
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "systemctl failed")
+			require.ErrorContains(t, err, "systemctl failed")
 			assert.Contains(t, err.Error(), tt.wantErr)
 			assert.Contains(t, err.Error(), "docker daemon unavailable")
 		})
@@ -905,8 +899,7 @@ func TestResolveInfra_Errors(t *testing.T) {
 
 			_, _, _, err := resolveInfra(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), startPull(t.Context(), nil, client, nil, false))
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErrSubstr)
+			require.ErrorContains(t, err, tt.wantErrSubstr)
 		})
 	}
 }
@@ -935,8 +928,7 @@ func TestSetupNodes_InspectError(t *testing.T) {
 		return mock.Result{}, false
 	}, controllerConfig)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting node controller")
+	require.ErrorContains(t, err, "inspecting node controller")
 }
 
 // A node whose setup fails waits for the inspect that runs alongside the
@@ -967,8 +959,7 @@ func TestSetupNodes_WaitsForMunge(t *testing.T) {
 			strings.HasSuffix(strings.Join(args, " "), "systemctl is-active munge")
 	}, workerConfigs("worker-0")...)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "probe munge")
+	require.ErrorContains(t, err, "probe munge")
 }
 
 func TestSetupNodes_SSHSetupError(t *testing.T) {
@@ -990,8 +981,7 @@ func TestSetupNodes_SSHSetupError(t *testing.T) {
 				return r, strings.Contains(strings.Join(args, " "), "ssh-keyscan")
 			}, controllerConfig)
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.want)
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -1016,8 +1006,7 @@ func TestRegisterNodes_DNSError(t *testing.T) {
 
 	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "registering DNS")
+	require.ErrorContains(t, err, "registering DNS")
 }
 
 func TestRegisterNodes_KnownHostError(t *testing.T) {
@@ -1061,8 +1050,7 @@ func TestRegisterNodes_KnownHostError(t *testing.T) {
 
 	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "registering host key")
+	require.ErrorContains(t, err, "registering host key")
 }
 
 func TestLogExtraPrivileges(t *testing.T) {
@@ -1122,8 +1110,7 @@ func TestEnableSlurm_ProbeTimeout(t *testing.T) {
 	defer cancel()
 	err := enableSlurm(ctx, client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 }
 
 func TestEnableSlurm_DBFirst(t *testing.T) {
@@ -1184,8 +1171,7 @@ func TestEnableSlurm_DBFailedIsTerminal(t *testing.T) {
 	// No deadline: a failed slurmdbd unit must end the wait on its own.
 	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmdbd failed:\nslurmdbd: fatal: example")
+	require.ErrorContains(t, err, "slurmdbd failed:\nslurmdbd: fatal: example")
 	for _, call := range m.Calls {
 		assert.NotEqual(t, "sind-dev-controller", call.Args[1], "controller untouched after the db failed")
 	}
@@ -1202,8 +1188,7 @@ func TestEnableSlurm_DBEnableError(t *testing.T) {
 
 	err := enableSlurm(t.Context(), client, mesh.DefaultRealm, "dev", configs, 10*time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enabling mariadb on db")
+	require.ErrorContains(t, err, "enabling mariadb on db")
 	require.Len(t, m.Calls, 2, "enable, then the journal; the controller is untouched")
 	assert.Equal(t, "journalctl", m.Calls[1].Args[2])
 }
@@ -1371,8 +1356,7 @@ func TestEnableService_FailureCarriesJournal(t *testing.T) {
 
 	err := enableService(t.Context(), c, "sind-dev-worker-0", "worker-0", probe.ServiceSlurmd)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enabling slurmd on worker-0: ")
+	require.ErrorContains(t, err, "enabling slurmd on worker-0: ")
 	assert.Contains(t, err.Error(), "\nslurmd journal:\nslurmd: error: memory cgroup controller is not available.")
 	require.Len(t, m.Calls, 2)
 	assert.Equal(t,

@@ -126,8 +126,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 	// not take it out of sind-nodes.conf.
 	require.NoError(t, PowerFreeze(ctx, c, realm, clusterName, []string{"controller"}))
 	err = WorkerRemove(ctx, c, meshMgr, clusterName, []string{"worker-0"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "is not running (paused)")
+	require.ErrorContains(t, err, "is not running (paused)")
 	exists, err := c.ContainerExists(ctx, ContainerName(realm, clusterName, "worker-0"))
 	require.NoError(t, err)
 	assert.True(t, exists)
@@ -1123,8 +1122,7 @@ users:
 `)
 
 	_, err := Create(ctx, c, meshMgr, cfg, probeInterval)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), ": adding users: exit status ")
+	require.ErrorContains(t, err, ": adding users: exit status ")
 	assert.Contains(t, err.Error(), "groupadd: group 'munge' already exists")
 	assert.NotContains(t, err.Error(), setupStepMarker)
 

@@ -18,7 +18,7 @@ import (
 
 func TestErrorWith(t *testing.T) {
 	err := errorWith(ErrNodeNotFound, "node %q not found in cluster %q", "worker-9", "dev")
-	assert.Equal(t, `node "worker-9" not found in cluster "dev"`, err.Error())
+	assert.EqualError(t, err, `node "worker-9" not found in cluster "dev"`)
 	require.ErrorIs(t, err, ErrNodeNotFound)
 	require.ErrorIs(t, fmt.Errorf("power: %w", err), ErrNodeNotFound)
 	assert.NotErrorIs(t, err, ErrClusterNotFound)
@@ -40,8 +40,7 @@ func TestWorkerAdd_RollbackFailuresJoined(t *testing.T) {
 		}
 		return onCall(args, stdin)
 	}, WorkerAddOptions{ClusterName: "dev", Count: 2})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "enable failed")
+	require.ErrorContains(t, err, "enable failed")
 	assert.Contains(t, err.Error(), "\nrolling back: removing container sind-dev-worker-1: ")
 	assert.NotContains(t, err.Error(), "sind-dev-worker-2:")
 }
@@ -60,8 +59,7 @@ func TestCleanupWorkers_MeshFailures(t *testing.T) {
 
 	err := cleanupWorkers(t.Context(), client, mgr, mesh.DefaultRealm, "dev", []RunConfig{{ShortName: "worker-1"}})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing DNS records: ")
+	require.ErrorContains(t, err, "removing DNS records: ")
 	assert.Contains(t, err.Error(), "removing known hosts: ")
 	var removed bool
 	for _, c := range m.Calls {

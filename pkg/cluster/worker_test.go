@@ -194,8 +194,7 @@ func TestReadNodesConf_ControllerNotRunning(t *testing.T) {
 
 	_, err := readNodesConf(t.Context(), client, controller)
 
-	require.Error(t, err)
-	assert.Equal(t, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first", err.Error())
+	require.EqualError(t, err, "controller sind-dev-controller is not running (exited): sind updates sind-nodes.conf and reconfigures Slurm through it; start it with sind power on or sind power unfreeze first")
 	assert.Empty(t, m.Calls, "no docker exec")
 }
 
@@ -210,9 +209,8 @@ func TestReadNodesConf_ReadError(t *testing.T) {
 
 	_, err := readNodesConf(t.Context(), client, controller)
 
-	require.Error(t, err)
+	require.EqualError(t, err, "reading sind-nodes.conf: exit status 1: Error response from daemon: OCI runtime exec failed")
 	assert.NotErrorIs(t, err, ErrNodesConfMissing)
-	assert.Equal(t, "reading sind-nodes.conf: exit status 1: Error response from daemon: OCI runtime exec failed", err.Error())
 }
 
 func TestWorkerAdd_ClusterNotFound(t *testing.T) {
@@ -674,8 +672,7 @@ func TestWorkerAdd_WorkerInspectError(t *testing.T) {
 
 	m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 
-	require.Error(t, err)
-	assert.Equal(t, "inspecting worker sind-dev-worker-0: daemon gone", err.Error())
+	require.EqualError(t, err, "inspecting worker sind-dev-worker-0: daemon gone")
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
@@ -714,8 +711,7 @@ func TestWorkerAdd_RelativeDataHostPath(t *testing.T) {
 
 	m, _, err := addWorkers(t, withController(t, workerAddOnCall(t), labels), WorkerAddOptions{ClusterName: "dev", Count: 1})
 
-	require.Error(t, err)
-	assert.Equal(t, `controller label sind.data.hostpath="sind-other-munge" is not an absolute path: refusing to bind-mount it into new workers`, err.Error())
+	require.EqualError(t, err, `controller label sind.data.hostpath="sind-other-munge" is not an absolute path: refusing to bind-mount it into new workers`)
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
@@ -758,8 +754,7 @@ func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
 
 			m, _, err := addWorkers(t, nil, tt.opts)
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.Empty(t, m.Calls, "docker must not be called")
 		})
 	}
@@ -935,8 +930,7 @@ func TestWorkerRemove_ControllerNotRunning(t *testing.T) {
 
 			m, err := removeWorkers(t, onCall, "worker-1")
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "controller sind-dev-controller is not running ("+state+")")
+			require.ErrorContains(t, err, "controller sind-dev-controller is not running ("+state+")")
 			assert.Len(t, m.Calls, 1, "nothing but the listing")
 		})
 	}
@@ -978,8 +972,7 @@ func TestWorkerRemove_ReadError(t *testing.T) {
 
 	m, err := removeWorkers(t, onCall, "worker-1")
 
-	require.Error(t, err)
-	assert.Equal(t, "reading sind-nodes.conf: daemon gone", err.Error())
+	require.EqualError(t, err, "reading sind-nodes.conf: daemon gone")
 	assert.Zero(t, countCalls(m.Calls, "rm"))
 }
 
@@ -1015,8 +1008,7 @@ func TestWorkerRemove_ReconfigureError(t *testing.T) {
 
 	m, err := removeWorkers(t, onCall, "worker-1")
 
-	require.Error(t, err)
-	assert.Equal(t, "reconfiguring slurmctld: slurmctld down", err.Error())
+	require.EqualError(t, err, "reconfiguring slurmctld: slurmctld down")
 	assert.Zero(t, countCalls(m.Calls, "rm"))
 	assert.Equal(t, 1, countCalls(m.Calls, "kill", "-s", "USR1", "sind-dns"), "CoreDNS reloaded")
 	writes := nodesConfWrites(m.Calls)
@@ -1044,8 +1036,7 @@ func TestWorkerRemove_ReconfigureAndRestoreError(t *testing.T) {
 
 	m, err := removeWorkers(t, onCall, "worker-1")
 
-	require.Error(t, err)
-	assert.Equal(t, "reconfiguring slurmctld: slurmctld down\nrestoring sind-nodes.conf: controller gone", err.Error())
+	require.EqualError(t, err, "reconfiguring slurmctld: slurmctld down\nrestoring sind-nodes.conf: controller gone")
 	assert.Zero(t, countCalls(m.Calls, "rm"))
 }
 
@@ -1141,8 +1132,7 @@ func TestWorkerAdd_ExplicitImageVersionMismatch(t *testing.T) {
 		ClusterName: "dev", Count: 1, Image: "ghcr.io/gsi-hpc/sind-node:latest", Pull: true,
 	})
 
-	require.Error(t, err)
-	assert.Equal(t, `image ghcr.io/gsi-hpc/sind-node:latest has Slurm 26.05.4, but cluster "dev" runs Slurm 25.11.0: managed workers need the cluster's version`, err.Error())
+	require.EqualError(t, err, `image ghcr.io/gsi-hpc/sind-node:latest has Slurm 26.05.4, but cluster "dev" runs Slurm 25.11.0: managed workers need the cluster's version`)
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
@@ -1159,8 +1149,7 @@ func TestWorkerAdd_ExplicitImageVersionError(t *testing.T) {
 		ClusterName: "dev", Count: 1, Image: "custom:v1",
 	})
 
-	require.Error(t, err)
-	assert.Equal(t, "discovering the Slurm version of custom:v1: running slurmctld -V: pull access denied", err.Error())
+	require.EqualError(t, err, "discovering the Slurm version of custom:v1: running slurmctld -V: pull access denied")
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
@@ -1222,8 +1211,7 @@ func TestWorkerAddOptions_Check(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 		})
 	}
 }
@@ -1245,8 +1233,7 @@ func TestWorkerAdd_InfraError(t *testing.T) {
 		TmpSize:     "1g",
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container")
+	require.ErrorContains(t, err, "inspecting DNS container")
 }
 
 func TestWorkerAdd_SindNodesConfMissing(t *testing.T) {
@@ -1291,8 +1278,7 @@ func TestWorkerAdd_ControllerNotRunning(t *testing.T) {
 
 			m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "controller sind-dev-controller is not running ("+state+")")
+			require.ErrorContains(t, err, "controller sind-dev-controller is not running ("+state+")")
 			assert.Zero(t, countCalls(m.Calls, "exec", "sind-dev-controller"))
 			assert.Zero(t, countCalls(m.Calls, "create"))
 		})
@@ -1338,8 +1324,7 @@ func TestWorkerAdd_InvalidResources(t *testing.T) {
 			TmpSize:     tt.tmpSize,
 		})
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), tt.wantErr)
+		require.ErrorContains(t, err, tt.wantErr)
 		assert.Empty(t, m.Calls)
 	}
 }
@@ -1367,8 +1352,7 @@ func TestUpdateNodesConf_InvalidMemory(t *testing.T) {
 
 	err := updateNodesConf(t.Context(), client, "sind-dev-controller", "# Generated by sind\n", config.Section{}, []RunConfig{{ShortName: "worker-1", CPUs: 1, Memory: "bogus"}})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `parsing memory "bogus" for worker-1`)
+	require.ErrorContains(t, err, `parsing memory "bogus" for worker-1`)
 }
 
 func TestWorkerRemove_MultipleNodes(t *testing.T) {
@@ -1396,8 +1380,7 @@ func TestWorkerRemove_ListContainersError(t *testing.T) {
 
 	m, err := removeWorkers(t, onCall, "worker-0")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 
 	// The list call must be scoped by both realm and cluster labels.
 	require.NotEmpty(t, m.Calls)
@@ -1513,8 +1496,7 @@ func TestWorkerAdd_ListError(t *testing.T) {
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 
 	// The list call must be scoped by both realm and cluster labels.
 	require.NotEmpty(t, m.Calls)
@@ -1637,8 +1619,7 @@ func TestWorkerAdd_CleanupErrors(t *testing.T) {
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "systemctl failed")
+	require.ErrorContains(t, err, "systemctl failed")
 }
 
 func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
@@ -1682,8 +1663,7 @@ func TestWorkerAdd_ReadNodesConfError(t *testing.T) {
 
 	m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 
-	require.Error(t, err)
-	assert.Equal(t, "reading sind-nodes.conf: daemon gone", err.Error())
+	require.EqualError(t, err, "reading sind-nodes.conf: daemon gone")
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
@@ -1808,7 +1788,7 @@ func TestWriteNodesConfAndReconfigure_Cancelled(t *testing.T) {
 	err := writeNodesConfAndReconfigure(ctx, client, "sind-dev-controller", "# Generated by sind\n")
 
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "reconfiguring slurmctld: context canceled", err.Error())
+	assert.EqualError(t, err, "reconfiguring slurmctld: context canceled")
 	require.Len(t, e.Calls, 1)
 	assert.Equal(t, []string{"exec", "-i", "sind-dev-controller", "sh", "-c"}, e.Calls[0].Args[:5])
 	assert.Equal(t, []string{"sh", "/etc/slurm/sind-nodes.conf", "20"}, e.Calls[0].Args[6:])
@@ -1846,8 +1826,7 @@ func TestWorkerAdd_RollbackNodesConfErrors(t *testing.T) {
 
 			m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "slurmd failed")
+			require.ErrorContains(t, err, "slurmd failed")
 			assert.Contains(t, err.Error(), "\nrolling back: restoring sind-nodes.conf: "+tt.want)
 			assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "containers removed anyway")
 		})
@@ -1924,8 +1903,7 @@ func TestWorkerAdd_WriteNodesConfError(t *testing.T) {
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "updating sind-nodes.conf")
+	require.ErrorContains(t, err, "updating sind-nodes.conf")
 }
 
 func TestWorkerAdd_ScontrolReconfigureError(t *testing.T) {
@@ -1941,8 +1919,7 @@ func TestWorkerAdd_ScontrolReconfigureError(t *testing.T) {
 		ClusterName: "dev", Count: 1, CPUs: 2, Memory: "2g", TmpSize: "1g",
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reconfiguring slurmctld")
+	require.ErrorContains(t, err, "reconfiguring slurmctld")
 }
 
 // --- WorkerRemove error path tests ---
@@ -1964,8 +1941,7 @@ func TestWorkerRemove_RemoveNodesConfError(t *testing.T) {
 
 	_, err := removeWorkers(t, onCall, "worker-1")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "updating sind-nodes.conf")
+	require.ErrorContains(t, err, "updating sind-nodes.conf")
 }
 
 // TestWorkerRemove_DeregisterMeshContinuesOnDNSFailure verifies that a DNS

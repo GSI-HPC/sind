@@ -256,8 +256,7 @@ func TestCheckIdentityImage(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 		})
 	}
 }
@@ -306,8 +305,7 @@ func TestCheckIdentityImages_Old(t *testing.T) {
 
 	err := checkIdentityImages(t.Context(), docker.NewClient(&m), identityCfg(config.Identity{Mode: config.IdentityClientIDs}))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "image img:1 is a sind-node image from before identity modes")
+	require.ErrorContains(t, err, "image img:1 is a sind-node image from before identity modes")
 	assert.Len(t, m.Calls, 1)
 }
 
@@ -381,8 +379,7 @@ func TestWriteClusterConfig_SlurmKeyErrors(t *testing.T) {
 
 			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 			assert.Equal(t, "run", m.Calls[0].Args[0], "helper runs to fix ownership")
 		})
 	}
@@ -464,8 +461,7 @@ func TestCreate_IdentityOldImage(t *testing.T) {
 	// before anything is created.
 	m, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, imageLabels(oldSindNodeLabels))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "image img:1 is a sind-node image from before identity modes")
+	require.ErrorContains(t, err, "image img:1 is a sind-node image from before identity modes")
 	assert.Zero(t, countCalls(m.Calls, "create"), "no node")
 	assert.Zero(t, countCalls(m.Calls, "network", "create"), "no network")
 	assert.Zero(t, countCalls(m.Calls, "volume", "create"), "no volume")
@@ -508,8 +504,7 @@ func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
 		return imageLabels("{}")(args, stdin)
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node worker-0: image img:1 has no libnss_slurm.so.2, which identity nssSlurm needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: exit status 1")
+	require.ErrorContains(t, err, "node worker-0: image img:1 has no libnss_slurm.so.2, which identity nssSlurm needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: exit status 1")
 }
 
 func TestWorkerAdd_Identity(t *testing.T) {
@@ -570,8 +565,7 @@ func TestWorkerAdd_IdentityImage(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Equal(t, tt.wantErr, err.Error())
+			require.EqualError(t, err, tt.wantErr)
 			assert.Zero(t, countCalls(m.Calls, "create"))
 		})
 	}
@@ -671,6 +665,5 @@ func TestGetAuthKey_ClientIDsCopyError(t *testing.T) {
 
 	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
-	require.Error(t, err)
-	assert.Equal(t, "reading slurm key: cp failed", err.Error())
+	require.EqualError(t, err, "reading slurm key: cp failed")
 }

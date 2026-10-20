@@ -492,8 +492,7 @@ func TestCreateNode_CreateError(t *testing.T) {
 	cfg := defaultRunConfig()
 
 	_, err := CreateNode(t.Context(), c, mgr, cfg)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating container")
+	assert.ErrorContains(t, err, "creating container")
 	assert.Len(t, m.Calls, 1)
 }
 
@@ -507,8 +506,7 @@ func TestCreateNode_StartError(t *testing.T) {
 	cfg := defaultRunConfig()
 
 	_, err := CreateNode(t.Context(), c, mgr, cfg)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "starting container")
+	assert.ErrorContains(t, err, "starting container")
 	assert.Len(t, m.Calls, 2)
 }
 

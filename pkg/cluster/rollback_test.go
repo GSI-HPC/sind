@@ -97,8 +97,7 @@ func TestCreate_RollbackIsAStep(t *testing.T) {
 			_, plain := underCommand(t, false, run)
 			events, err := underCommand(t, true, run)
 
-			require.Error(t, err)
-			assert.Equal(t, plain.Error(), err.Error())
+			require.EqualError(t, err, plain.Error())
 			end := rollbackStep(t, events)
 			assert.Equal(t, tc.status, end.Status)
 			assert.Equal(t, tc.want, end.Err)
@@ -162,8 +161,7 @@ func TestWorkerAdd_RollbackIsAStep(t *testing.T) {
 			_, plain := underCommand(t, false, run)
 			events, err := underCommand(t, true, run)
 
-			require.Error(t, err)
-			assert.Equal(t, plain.Error(), err.Error())
+			require.EqualError(t, err, plain.Error())
 			end := rollbackStep(t, events)
 			assert.Equal(t, tc.status, end.Status)
 			assert.Equal(t, strings.ReplaceAll(tc.want, "\n", `\n`), end.Err)

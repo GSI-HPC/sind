@@ -653,8 +653,7 @@ func TestGetAuthKey_CopyError(t *testing.T) {
 
 	_, err := GetAuthKey(t.Context(), c, mesh.DefaultRealm, "dev", "")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reading munge key")
+	require.ErrorContains(t, err, "reading munge key")
 }
 
 // --- GetRealms ---

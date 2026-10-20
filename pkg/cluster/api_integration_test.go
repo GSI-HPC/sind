@@ -44,8 +44,7 @@ func apiCluster(ctx context.Context, t *testing.T, c *docker.Client, name, body 
 
 	result, err = Create(ctx, c, meshMgr, testConfig(t, name, body), probeInterval)
 	if strings.HasPrefix(version, "25.") {
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "has no slurmrestd with its systemd unit, which the api node runs")
+		require.ErrorContains(t, err, "has no slurmrestd with its systemd unit, which the api node runs")
 		t.Skipf("Slurm %s images have no slurmrestd; the create failed as it should", version)
 	}
 	require.NoError(t, err)

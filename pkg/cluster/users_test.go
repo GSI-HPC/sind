@@ -114,13 +114,11 @@ func TestLinuxUsersFromLabels(t *testing.T) {
 
 	for _, value := range []string{"alice", "alice:1000", "alice:1000:1000:x", ":1000:1000", "Alice:1000:1000", "alice:x:1000", "alice:1000:x", "alice:1000:1000,bob:2001:2001"} {
 		_, err := LinuxUsersFromLabels(docker.Labels{LabelUsers: value})
-		require.Error(t, err, value)
-		assert.Equal(t, `invalid sind.users label "`+value+`": want name:uid:gid entries`, err.Error())
+		require.EqualError(t, err, `invalid sind.users label "`+value+`": want name:uid:gid entries`, value)
 	}
 	for _, value := range []string{"hpc", "hpc:3000:alice:bob", "-hpc:3000", "hpc:x", "hpc:3000:", "hpc:3000:alice+", "hpc:3000:Alice"} {
 		_, err := LinuxUsersFromLabels(docker.Labels{LabelGroups: value})
-		require.Error(t, err, value)
-		assert.Equal(t, `invalid sind.groups label "`+value+`": want name:gid[:member+...] entries`, err.Error())
+		require.EqualError(t, err, `invalid sind.groups label "`+value+`": want name:gid[:member+...] entries`, value)
 	}
 }
 
@@ -167,8 +165,7 @@ func TestCreateHomes_Error(t *testing.T) {
 
 	err := createHomes(t.Context(), docker.NewClient(&m), "sind-dev-controller", testUsers.Users, "ssh-ed25519 AAAA-key")
 
-	require.Error(t, err)
-	assert.Equal(t, "creating home directories: exit status 1", err.Error())
+	require.EqualError(t, err, "creating home directories: exit status 1")
 }
 
 func TestBuildRunArgs_Users(t *testing.T) {
@@ -268,8 +265,7 @@ func TestPreflightCheck_HomeVolume(t *testing.T) {
 	cfg.Users = []config.User{{Name: "alice", UID: 1000}}
 	err := PreflightCheck(t.Context(), client, mesh.DefaultRealm, cfg)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "volume sind-dev-home")
+	require.ErrorContains(t, err, "volume sind-dev-home")
 }
 
 // userCalls sorts the calls of a Create or WorkerAdd run that concern
@@ -377,8 +373,7 @@ func TestCreate_AddUsersFails(t *testing.T) {
 		return mock.Result{}, false
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "node worker-0: adding users: exit status 1: useradd: cannot lock /etc/passwd")
+	require.ErrorContains(t, err, "node worker-0: adding users: exit status 1: useradd: cannot lock /etc/passwd")
 }
 
 func TestCreate_CreateHomesFails(t *testing.T) {
@@ -389,8 +384,7 @@ func TestCreate_CreateHomesFails(t *testing.T) {
 		return mock.Result{}, false
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating home directories: exit status 1")
+	require.ErrorContains(t, err, "creating home directories: exit status 1")
 }
 
 // psWithLabels returns an OnCall function that lists a running controller
@@ -468,8 +462,7 @@ func TestWorkerAdd_ReadSlurmConfError(t *testing.T) {
 
 func TestWorkerAdd_InvalidUsersLabel(t *testing.T) {
 	m, _, err := addWorkers(t, psWithLabels(workerAddOnCall(t), "sind.managed=false,sind.users=alice"), WorkerAddOptions{ClusterName: "dev", Count: 1})
-	require.Error(t, err)
-	assert.Equal(t, `invalid sind.users label "alice": want name:uid:gid entries`, err.Error())
+	require.EqualError(t, err, `invalid sind.users label "alice": want name:uid:gid entries`)
 	assert.Zero(t, countCalls(m.Calls, "create"), "no worker container")
 }
 

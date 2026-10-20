@@ -196,8 +196,7 @@ func TestCreateSlurmAccounts_NotRegistered(t *testing.T) {
 
 	err := createSlurmAccounts(ctx, docker.NewClient(&m), mesh.DefaultRealm, accountsCfg(), time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "waiting for slurmdbd to register the cluster: node sind-dev-controller not ready")
+	require.ErrorContains(t, err, "waiting for slurmdbd to register the cluster: node sind-dev-controller not ready")
 	assert.Contains(t, err.Error(), "cluster dev not registered with slurmdbd yet")
 	assert.Empty(t, accountsScripts(t, m.Calls))
 }
@@ -216,8 +215,7 @@ func TestCreateSlurmAccounts_SacctmgrFails(t *testing.T) {
 
 	err := createSlurmAccounts(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, accountsCfg(), time.Millisecond, nil)
 
-	require.Error(t, err)
-	assert.Equal(t, "creating Slurm accounts: exit status 1", err.Error())
+	require.EqualError(t, err, "creating Slurm accounts: exit status 1")
 	assert.Len(t, accountsScripts(t, m.Calls), 1)
 }
 
@@ -304,6 +302,5 @@ func TestCreate_AccountsFail(t *testing.T) {
 		Err:    fmt.Errorf("exit status 1"),
 	}))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating Slurm accounts: exit status 1")
+	require.ErrorContains(t, err, "creating Slurm accounts: exit status 1")
 }

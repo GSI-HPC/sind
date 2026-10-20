@@ -134,8 +134,7 @@ func TestListClusterResources_ListContainersError(t *testing.T) {
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 func TestListClusterResources_NetworkCheckError(t *testing.T) {
@@ -145,8 +144,7 @@ func TestListClusterResources_NetworkCheckError(t *testing.T) {
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking network sind-dev-net: network inspect failed")
+	require.ErrorContains(t, err, "checking network sind-dev-net: network inspect failed")
 }
 
 func TestListClusterResources_VolumeListError(t *testing.T) {
@@ -156,8 +154,7 @@ func TestListClusterResources_VolumeListError(t *testing.T) {
 
 	_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing volumes: daemon gone")
+	require.ErrorContains(t, err, "listing volumes: daemon gone")
 }
 
 // TestListClusterResources_ErrorOrder checks that when every lookup fails,
@@ -173,8 +170,7 @@ func TestListClusterResources_ErrorOrder(t *testing.T) {
 
 		_, err := ListClusterResources(t.Context(), c, mesh.DefaultRealm, "dev")
 
-		require.Error(t, err)
-		assert.Equal(t, "listing containers: daemon gone", err.Error())
+		require.EqualError(t, err, "listing containers: daemon gone")
 	}
 }
 
@@ -310,8 +306,7 @@ func TestHasOtherClusters_Error(t *testing.T) {
 
 	_, err := HasOtherClusters(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing containers")
+	require.ErrorContains(t, err, "listing containers")
 }
 
 // --- DiscoverClusterNames ---

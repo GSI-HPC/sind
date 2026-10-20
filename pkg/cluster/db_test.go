@@ -72,8 +72,7 @@ func TestEnableDBNode_Errors(t *testing.T) {
 
 			err := enableDBNode(t.Context(), c, "sind-dev-db", "db", "")
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			assert.Len(t, m.Calls, tt.wantCalls, "stops at the failing step")
 		})
 	}

@@ -379,8 +379,7 @@ func TestPower_On_MeshErrors(t *testing.T) {
 			client := docker.NewClient(&m)
 
 			err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 		})
 	}
 }
@@ -400,8 +399,7 @@ func TestPower_On_ListError(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing")
+	require.ErrorContains(t, err, "listing")
 }
 
 // TestPower_On_StartError covers one node that does not start: the other
@@ -418,8 +416,7 @@ func TestPower_On_StartError(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0", "worker-1"})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting sind-dev-worker-0")
+	require.ErrorContains(t, err, "starting sind-dev-worker-0")
 	assert.NotContains(t, err.Error(), "worker-1")
 	assert.Len(t, m.Calls, 1+2+2, "ps, two mesh inspects, both starts")
 }
@@ -439,8 +436,7 @@ func TestPower_On_NothingStarted(t *testing.T) {
 
 	err := PowerOn(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), "dev", []string{"worker-0"})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting sind-dev-worker-0")
+	require.ErrorContains(t, err, "starting sind-dev-worker-0")
 	assert.Empty(t, written)
 	for _, c := range m.Calls {
 		assert.NotEqual(t, "cp", c.Args[0], "no Corefile read")

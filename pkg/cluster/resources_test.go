@@ -132,8 +132,7 @@ func TestCreateClusterNetwork_Error(t *testing.T) {
 
 	err := CreateClusterNetwork(t.Context(), c, mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating cluster network")
+	require.ErrorContains(t, err, "creating cluster network")
 }
 
 // --- CreateClusterVolume ---
@@ -164,8 +163,7 @@ func TestCreateClusterVolume_Error(t *testing.T) {
 
 	err := CreateClusterVolume(t.Context(), c, mesh.DefaultRealm, "dev", VolumeMunge)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "munge")
+	require.ErrorContains(t, err, "munge")
 }
 
 // --- WriteClusterConfig ---
@@ -308,8 +306,7 @@ func TestWriteClusterConfig_CreateError(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev"}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating config helper")
+	require.ErrorContains(t, err, "creating config helper")
 }
 
 func TestWriteClusterConfig_DefMemPerCPU(t *testing.T) {
@@ -339,8 +336,7 @@ func TestWriteClusterConfig_InvalidMemory(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{{Role: config.RoleController}, {Role: config.RoleWorker, CPUs: 1, Memory: "2x"}}}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `generating sind-nodes.conf: worker-0: invalid memory "2x"`)
+	require.ErrorContains(t, err, `generating sind-nodes.conf: worker-0: invalid memory "2x"`)
 	assert.Empty(t, m.Calls)
 }
 
@@ -354,8 +350,7 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev"}
 	err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing slurm config")
+	require.ErrorContains(t, err, "writing slurm config")
 	assert.Len(t, m.Calls, 3) // defer still runs
 }
 
@@ -486,8 +481,7 @@ func TestWriteClusterConfig_DBErrors(t *testing.T) {
 
 			err := WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, tt.cfg, "busybox:latest")
 
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 			if tt.name != "run" {
 				assert.Equal(t, "rm", m.Calls[len(m.Calls)-1].Args[0], "helper removed")
 			}
@@ -529,8 +523,7 @@ func TestWriteMungeKey_RunError(t *testing.T) {
 
 	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "creating munge helper")
+	require.ErrorContains(t, err, "creating munge helper")
 }
 
 func TestWriteMungeKey_CopyError(t *testing.T) {
@@ -542,8 +535,7 @@ func TestWriteMungeKey_CopyError(t *testing.T) {
 
 	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing munge key")
+	require.ErrorContains(t, err, "writing munge key")
 	assert.Len(t, m.Calls, 3) // defer runs rm
 }
 
@@ -557,6 +549,5 @@ func TestWriteMungeKey_SecureError(t *testing.T) {
 
 	err := WriteMungeKey(t.Context(), c, mesh.DefaultRealm, "dev", []byte("key"), "busybox:latest")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "fixing munge key ownership")
+	require.ErrorContains(t, err, "fixing munge key ownership")
 }

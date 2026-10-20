@@ -58,8 +58,7 @@ func TestDetectCVMFS_Unavailable(t *testing.T) {
 
 	_, err := DetectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "storage.cvmfs")
+	require.ErrorContains(t, err, "storage.cvmfs")
 	assert.Contains(t, err.Error(), "install CVMFS on the Docker host or the \"cvmfs\" Docker volume plugin")
 	assert.Contains(t, err.Error(), "exit status 125")
 }
@@ -70,8 +69,7 @@ func TestDetectCVMFS_PluginListError(t *testing.T) {
 
 	_, err := DetectCVMFS(t.Context(), docker.NewClient(&m), "img:1")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing volume plugins")
+	require.ErrorContains(t, err, "listing volume plugins")
 	require.Len(t, m.Calls, 1)
 }
 
