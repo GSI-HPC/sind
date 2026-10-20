@@ -160,7 +160,7 @@ func TestCreateCluster_ReportsItsProgress(t *testing.T) {
       wait ready: ok
     target worker-0 role=worker: ok
       wait ready: ok
-`, timeouts.ReplaceAllString(withoutCalls(w.Events()), ""))
+`, timeouts.ReplaceAllString(testutil.WithoutCalls(w.Events()), ""))
 	// Each node's wait has the whole --wait limit; the waits for Slurm
 	// have what is left of it once the nodes are ready, in whole seconds.
 	var bounds []time.Duration
@@ -235,7 +235,7 @@ func TestCreateCluster_MeshRollbackIsAStep(t *testing.T) {
 			require.EqualError(t, err, "setting up mesh: inspecting mesh network: exit status 1: Error response from daemon: network sind-mesh not found")
 			assert.Equal(t, plainErr.Error(), err.Error())
 			assert.Equal(t, withoutTimestamps(plainStderr), withoutTimestamps(stderr))
-			tree := withoutCalls(events)
+			tree := testutil.WithoutCalls(events)
 			assert.True(t, strings.HasSuffix(tree, "\n  "+tc.rollback+"\n"), tree)
 		})
 	}

@@ -353,7 +353,7 @@ func TestWriteClusterConfig_ClientIDs(t *testing.T) {
 	assert.Contains(t, cpStdin, "slurm.key")
 	assert.Contains(t, cpStdin, "AuthType=auth/slurm\nCredType=cred/slurm\nAuthInfo=use_client_ids\nLaunchParameters=enable_nss_slurm\n")
 	assert.Contains(t, cpStdin, "AuthType=auth/slurm\nAuthInfo=use_client_ids\nDbdHost=db\n")
-	modes := tarModes(t, cpStdin)
+	modes := testutil.TarModes(t, cpStdin)
 	assert.Equal(t, int64(0o600), modes["slurm.key"])
 	assert.Equal(t, int64(0o600), modes["slurmdbd.conf"])
 	assert.Equal(t, []string{"exec", "sind-dev-config-helper", "chown", "slurm:slurm", "/etc/slurm/slurmdbd.conf", "/etc/slurm/slurm.key"}, m.Calls[2].Args)

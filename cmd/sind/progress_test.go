@@ -573,23 +573,7 @@ func TestAcquireRealmLock_WaitIsASpan(t *testing.T) {
 	since := time.Date(2026, 10, 4, 10, 2, 3, 0, time.UTC).Local().Format(time.DateTime)
 	w.Finish()
 	assert.Equal(t, "wait realm lock message=sind create cluster (pid 7 on elsewhere, since "+since+"): canceled (canceled): taking the realm lock on the Docker daemon: context canceled\n",
-		withoutCalls(w.Events()))
-}
-
-// withoutCalls draws the spans of events as progresstest.Capture.Tree
-// does, leaving out the calls and what is under them: the docker commands
-// of a wait that polls, which run as often as the wait takes.
-func withoutCalls(events []progress.Event) string {
-	var c progresstest.Capture
-	calls := map[progress.SpanID]bool{}
-	for _, e := range events {
-		if e.Kind == progress.KindCall || calls[e.Parent] {
-			calls[e.Span] = true
-			continue
-		}
-		c.Handle(e)
-	}
-	return c.Tree()
+		testutil.WithoutCalls(w.Events()))
 }
 
 // The event log is a file of JSON lines readable by its owner alone,

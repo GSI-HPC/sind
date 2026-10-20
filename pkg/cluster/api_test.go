@@ -125,7 +125,7 @@ func TestCreate_APINode(t *testing.T) {
 			assert.Positive(t, countCalls(calls, "exec", "sind-dev-api", "systemctl", "is-active", "slurmrestd"))
 
 			archive := configCopy(t, calls)
-			assert.Equal(t, int64(0o600), tarModes(t, archive)["jwt_hs256.key"])
+			assert.Equal(t, int64(0o600), testutil.TarModes(t, archive)["jwt_hs256.key"])
 			assert.Contains(t, archive, "\nAuthAltTypes=auth/jwt\n"+tt.params)
 			assert.Contains(t, archive, "DbdHost=db\n", "slurmdbd.conf")
 			assert.Equal(t, 2, strings.Count(archive, tt.params), "slurm.conf and slurmdbd.conf")

@@ -3,11 +3,8 @@
 package cluster
 
 import (
-	"archive/tar"
 	"context"
 	"fmt"
-	"io"
-	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
@@ -364,22 +361,6 @@ func TestWriteClusterConfig_CopyError(t *testing.T) {
 
 // --- WriteMungeKey ---
 
-// tarModes returns the mode of each file in a tar archive, as docker cp
-// receives it on stdin.
-func tarModes(t *testing.T, archive string) map[string]int64 {
-	t.Helper()
-	modes := map[string]int64{}
-	tr := tar.NewReader(strings.NewReader(archive))
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return modes
-		}
-		require.NoError(t, err)
-		modes[hdr.Name] = hdr.Mode
-	}
-}
-
 func TestWriteClusterConfig_WithDB(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("abc123\n", "", nil) // RunContainer (helper with sleep)
@@ -421,7 +402,7 @@ func TestWriteClusterConfig_WithDB(t *testing.T) {
 	// slurmdbd.conf and its fragments, which may hold a StoragePass, are
 	// written 0600, never readable by others, and given to slurm with
 	// their directory.
-	modes := tarModes(t, cpStdin)
+	modes := testutil.TarModes(t, cpStdin)
 	assert.Equal(t, int64(0o600), modes["slurmdbd.conf"])
 	assert.Equal(t, int64(0o600), modes["slurmdbd.conf.d/archive.conf"])
 	assert.Equal(t, int64(0o644), modes["slurm.conf"])
@@ -536,7 +517,7 @@ func TestWriteMungeKey(t *testing.T) {
 	// CopyToContainer with mode 0400, so that the key is never readable by
 	// others, then chown
 	assert.Equal(t, "cp", m.Calls[1].Args[0])
-	assert.Equal(t, map[string]int64{"munge.key": 0o400}, tarModes(t, m.Calls[1].Stdin))
+	assert.Equal(t, map[string]int64{"munge.key": 0o400}, testutil.TarModes(t, m.Calls[1].Stdin))
 	assert.Equal(t, []string{"exec", "sind-dev-munge-helper", "chown", "munge:munge", "/etc/munge/munge.key"}, m.Calls[2].Args)
 	assert.Equal(t, []string{"rm", "-f", "-v", "sind-dev-munge-helper"}, m.Calls[3].Args)
 }

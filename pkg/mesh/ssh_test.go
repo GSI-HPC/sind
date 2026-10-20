@@ -3,14 +3,12 @@
 package mesh
 
 import (
-	"archive/tar"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"strings"
 	"testing"
 
@@ -77,7 +75,7 @@ func TestEnsureSSH_Keys(t *testing.T) {
 	assert.Contains(t, privKey, "END OPENSSH PRIVATE KEY")
 	assert.True(t, strings.HasPrefix(pubKey, "ssh-ed25519 "))
 	assert.Equal(t, "", knownHosts)
-	assert.Equal(t, map[string]int64{"id_ed25519": 0o600, "id_ed25519.pub": 0o644, "known_hosts": 0o644}, tarModes(t, stdin))
+	assert.Equal(t, map[string]int64{"id_ed25519": 0o600, "id_ed25519.pub": 0o644, "known_hosts": 0o644}, testutil.TarModes(t, stdin))
 }
 
 // TestEnsureSSH_KeysIntoExistingRelay covers a new volume under an existing
@@ -112,21 +110,6 @@ func TestEnsureSSH_Creates(t *testing.T) {
 
 func TestSSHImage_DefaultNodeImage(t *testing.T) {
 	assert.Equal(t, config.DefaultImage, SSHImage())
-}
-
-// tarModes returns the mode of each file in a tar archive.
-func tarModes(t *testing.T, data string) map[string]int64 {
-	t.Helper()
-	modes := map[string]int64{}
-	tr := tar.NewReader(strings.NewReader(data))
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return modes
-		}
-		require.NoError(t, err)
-		modes[hdr.Name] = hdr.Mode
-	}
 }
 
 // --- AddKnownHost ---

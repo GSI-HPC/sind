@@ -8,6 +8,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,6 +38,25 @@ func TestTarArchive(t *testing.T) {
 	content, err := io.ReadAll(tr)
 	require.NoError(t, err)
 	assert.Equal(t, "world", string(content))
+}
+
+func TestTarModes(t *testing.T) {
+	assert.Equal(t, map[string]int64{"hello": 0644}, TarModes(t, TarArchive("hello", "world")))
+}
+
+func TestWithoutCalls(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	ctx, step := progress.Start(ctx, progress.KindStep, "create")
+	callCtx, call := progress.Start(ctx, progress.KindCall, "docker")
+	_, inner := progress.Start(callCtx, progress.KindWait, "retry")
+	inner.End(nil)
+	call.End(nil)
+	_, target := progress.Start(ctx, progress.KindTarget, "node")
+	target.End(nil)
+	step.End(nil)
+
+	assert.Equal(t, "step create: ok\n  target node: ok\n", WithoutCalls(w.Events()))
+	assert.Contains(t, w.Finish(), "call docker")
 }
 
 func TestImage(t *testing.T) {

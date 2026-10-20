@@ -16,27 +16,12 @@ import (
 	"github.com/GSI-HPC/go-clikit/progress/display"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// withoutCalls draws the spans of events as progresstest.Capture.Tree
-// does, leaving out the calls, the docker commands, which the tests of the
-// docker package cover.
-func withoutCalls(events []progress.Event) string {
-	var c progresstest.Capture
-	calls := map[progress.SpanID]bool{}
-	for _, e := range events {
-		if e.Kind == progress.KindCall || calls[e.Parent] {
-			calls[e.Span] = true
-			continue
-		}
-		c.Handle(e)
-	}
-	return c.Tree()
-}
 
 // EnsureMesh is the hidden progress step "mesh", with a target for each
 // part of the mesh, all announced before the first runs; a part in place
@@ -86,7 +71,7 @@ func TestEnsureMesh_ReportsItsParts(t *testing.T) {
 				}
 			}
 			assert.Positive(t, calls)
-			assert.Equal(t, tc.want, withoutCalls(w.Events()))
+			assert.Equal(t, tc.want, testutil.WithoutCalls(w.Events()))
 		})
 	}
 }

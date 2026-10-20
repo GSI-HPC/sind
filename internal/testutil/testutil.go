@@ -8,12 +8,15 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,6 +50,39 @@ func TarArchive(name, content string) string {
 	_, _ = tw.Write(data)
 	_ = tw.Close()
 	return buf.String()
+}
+
+// TarModes returns the mode of each file in a tar archive, as docker cp
+// receives it on stdin.
+func TarModes(t *testing.T, archive string) map[string]int64 {
+	t.Helper()
+	modes := map[string]int64{}
+	tr := tar.NewReader(strings.NewReader(archive))
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return modes
+		}
+		require.NoError(t, err)
+		modes[hdr.Name] = hdr.Mode
+	}
+}
+
+// WithoutCalls draws the spans of events as progresstest.Capture.Tree
+// does, leaving out the calls and what is under them: the docker commands,
+// which the tests of the docker package cover, and of which a wait that
+// polls runs as many as its rounds take.
+func WithoutCalls(events []progress.Event) string {
+	var c progresstest.Capture
+	calls := map[progress.SpanID]bool{}
+	for _, e := range events {
+		if e.Kind == progress.KindCall || calls[e.Parent] {
+			calls[e.Span] = true
+			continue
+		}
+		c.Handle(e)
+	}
+	return c.Tree()
 }
 
 // Image returns the sind-node image the tests run: SIND_TEST_IMAGE, or

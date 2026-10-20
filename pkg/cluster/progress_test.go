@@ -26,23 +26,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// withoutCalls draws the spans of events as progresstest.Capture.Tree
-// does, leaving out the calls and what is under them: the docker commands,
-// which the tests of the docker package cover, and of which a readiness
-// wait runs as many as its rounds take.
-func withoutCalls(events []progress.Event) string {
-	var c progresstest.Capture
-	calls := map[progress.SpanID]bool{}
-	for _, e := range events {
-		if e.Kind == progress.KindCall || calls[e.Parent] {
-			calls[e.Span] = true
-			continue
-		}
-		c.Handle(e)
-	}
-	return c.Tree()
-}
-
 // endSpan ends a span failed with the work's error, unless the context
 // had been canceled for another reason first: then the work was stopped,
 // and the span ends canceled with the work's error as its text.
@@ -130,7 +113,7 @@ func TestSetupNodes_ReportsTheNodes(t *testing.T) {
     wait ready: ok
   target worker-[0-1] role=worker: ok
     wait ready: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A node's setup is the call "setup", with its docker exec under it,
@@ -189,7 +172,7 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
   target worker-0 role=worker: failed (target): node {}: creating container {}: image not found
   target worker-[1-2] role=worker: canceled (canceled): waiting for {}: node sind-dev-{} not ready: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
     wait ready message=container: canceled (canceled): node sind-dev-{} not ready: context canceled; last probe error: probe container: container sind-dev-{} is created, expected running
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // The pull is the step "pull images", with a target for each image it
@@ -222,7 +205,7 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 			require.NoError(t, g.Wait())
 			require.NoError(t, p.err)
 			w.Finish()
-			assert.Equal(t, tc.want, withoutCalls(w.Events()))
+			assert.Equal(t, tc.want, testutil.WithoutCalls(w.Events()))
 		})
 	}
 }
@@ -246,7 +229,7 @@ func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 step pull images total=1 [fold,show-lines]: failed (target): pulling img:1: manifest unknown
   target img:1 [show-lines]: failed (target): pulling {}: manifest unknown
 step rollback: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // An inspection of the images that fails before any pull fails the
@@ -269,7 +252,7 @@ func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 	w.Finish()
 	assert.Equal(t, `step preflight [hidden]: failed (target): inspecting image img:1: docker daemon unavailable
 step rollback: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A Create reports its steps: the hidden preflight, the nodes, the mesh
@@ -308,7 +291,7 @@ step slurm total=3 [fold]: ok
     wait ready: ok
   target worker-0 role=worker: ok
     wait ready: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A db node that fails ends the step: the nodes that did not start end
@@ -337,7 +320,7 @@ func TestEnableSlurm_ReportsTheNodes(t *testing.T) {
   target controller role=controller: canceled (canceled): not finished
   target db role=db: failed (target): enabling mariadb on {}: mariadb failed\nmariadb journal:\n
   target worker-0 role=worker: canceled (canceled): not finished
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // WorkerAdd reports the same steps as Create for the nodes it adds.
@@ -361,7 +344,7 @@ step nodes total=2 [fold]: ok
 step slurm total=2 [fold]: ok
   target worker-[1-2] role=worker: ok
     wait ready: ok
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // A power action is the step its verb names, with a target for each node,
@@ -437,7 +420,7 @@ func TestPower_TellsTheClustersApart(t *testing.T) {
     target worker-0.dev role=worker: failed (target): container already stopped
   step stopping total=1 limit=8 [fold]: ok
     target worker-0 role=worker: ok
-`, withoutCalls(capture.Events()))
+`, testutil.WithoutCalls(capture.Events()))
 	assert.Contains(t, summary.Line(), ": 1 ok, 1 failed")
 }
 
@@ -559,7 +542,7 @@ func TestDeleteAll_Interrupted(t *testing.T) {
 	w.Finish()
 	assert.Equal(t, `step clusters total=2 limit=4 [fold]: canceled (canceled): deleting cluster dev: listing containers: context canceled\ndeleting cluster prod: listing containers: context canceled
   target dev,prod: canceled (canceled): context canceled
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
 
 // delete cluster --all deletes the clusters as the step "clusters", with a
@@ -585,5 +568,5 @@ func TestDeleteAll_ReportsTheClusters(t *testing.T) {
 	assert.Equal(t, `step clusters total=3 limit=4 [fold]: failed (target): deleting cluster test: removing container sind-test-controller: docker daemon unavailable
   target dev,prod: ok
   target test: failed (target): removing container sind-{}-controller: docker daemon unavailable
-`, withoutCalls(w.Events()))
+`, testutil.WithoutCalls(w.Events()))
 }
