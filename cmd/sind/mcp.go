@@ -153,6 +153,38 @@ var mcpExcludedFlags = []string{
 	"progress", "progress-log",
 }
 
+// mcpNoDefault lists the flags, by command path below the root, whose input
+// schema has no default. ophis takes a flag's default from its DefValue,
+// but these flags mean something else when they are not given than with
+// that value, which a client that fills in the defaults of a schema would
+// send: logs --tail 0 shows no line, and logs without it every line.
+var mcpNoDefault = map[string][]string{
+	"logs": {"tail"},
+}
+
+// withMCPFlagSchemas makes cmd, `sind mcp start` or `sind mcp tools`,
+// apply mcpNoDefault to the flags before ophis builds the tools from
+// them. It changes the flags of this process alone, which only
+// serves or exports the tools, so the help of the commands stays as it is.
+func withMCPFlagSchemas(cmd *cobra.Command) {
+	run := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		adaptMCPFlags(cmd.Root())
+		return run(cmd, args)
+	}
+}
+
+// adaptMCPFlags applies mcpNoDefault to cmd and the commands below it.
+func adaptMCPFlags(cmd *cobra.Command) {
+	for _, sub := range cmd.Commands() {
+		adaptMCPFlags(sub)
+	}
+	path := commandPath(cmd)
+	for _, name := range mcpNoDefault[path] {
+		cmd.Flags().Lookup(name).DefValue = ""
+	}
+}
+
 // forceJSONOutput runs a tool with -o json, whatever flags it was given.
 func forceJSONOutput(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput, next ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
 	flags := make(map[string]any, len(in.Flags)+1)
@@ -354,6 +386,7 @@ HTTP (stream), and register the server with an editor.`
 		switch sub.Name() {
 		case "start":
 			asMCPServer(sub)
+			withMCPFlagSchemas(sub)
 			start = sub
 			sub.Short = "Serve the MCP tools on stdio"
 			sub.Long = `Serve sind's MCP tools on standard input and output, for an AI assistant
@@ -362,6 +395,7 @@ that starts sind as its MCP server.`
 			stream = sub
 			sub.Short = "Serve the MCP tools over HTTP"
 		case "tools":
+			withMCPFlagSchemas(sub)
 			sub.Short = "Write the MCP tool definitions to mcp-tools.json"
 			sub.Long = `Write the definitions of the MCP tools that start and stream serve, with
 their input schemas, to mcp-tools.json in the working directory.`

@@ -132,6 +132,46 @@ func TestMCPTools_Flags(t *testing.T) {
 	assert.Contains(t, tools["sind_create_cluster"].InputSchema.Properties.Flags.Properties, "config")
 }
 
+// TestMCPTools_NoDefault checks that a flag that means something else when
+// it is not given than with its default value has no default in the input
+// schema, which a client would fill in.
+func TestMCPTools_NoDefault(t *testing.T) {
+	tools := exportMCPTools(t)
+	for path, names := range mcpNoDefault {
+		flags := tools[mcpToolName(path)].InputSchema.Properties.Flags.Properties
+		for _, name := range names {
+			require.Contains(t, flags, name, path)
+			var schema map[string]any
+			require.NoError(t, json.Unmarshal(flags[name], &schema))
+			assert.NotContains(t, schema, "default", path+" --"+name)
+		}
+	}
+	var count map[string]any
+	require.NoError(t, json.Unmarshal(tools["sind_create_worker"].InputSchema.Properties.Flags.Properties["count"], &count))
+	assert.InDelta(t, 1, count["default"], 0, "other flags keep their default")
+
+	logs, _, err := NewRootCommand().Find([]string{"logs"})
+	require.NoError(t, err)
+	assert.Equal(t, "0", logs.Flags().Lookup("tail").DefValue, "the command keeps its default")
+}
+
+// TestMCPFlags_NameExistingFlags checks that mcpNoDefault names flags that
+// exist.
+func TestMCPFlags_NameExistingFlags(t *testing.T) {
+	root := NewRootCommand()
+	check := func(path, name string) {
+		cmd, _, err := root.Find(strings.Fields(path))
+		require.NoError(t, err, path)
+		require.Equal(t, path, commandPath(cmd))
+		assert.NotNil(t, cmd.Flags().Lookup(name), path+" --"+name)
+	}
+	for path, names := range mcpNoDefault {
+		for _, name := range names {
+			check(path, name)
+		}
+	}
+}
+
 func TestMCPTools_NoOutputFlag(t *testing.T) {
 	tools := exportMCPTools(t)
 	var get int
