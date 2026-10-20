@@ -308,7 +308,7 @@ func removeEach[N ~string](ctx context.Context, kind string, names []N, remove f
 // DeregisterMesh removes DNS records and known_hosts entries for all
 // containers in batch, starting a stopped mesh first (see
 // deregisterHostnames). This is the inverse of registerNodes during cluster
-// creation. Failures are logged and swallowed: the cluster is being torn
+// creation. Failures are warnings, not errors: the cluster is being torn
 // down, and stale entries in a mesh helper that's already unreachable will
 // be overwritten on next register or cleared when the mesh itself is torn
 // down.
@@ -328,8 +328,9 @@ func meshHostnames(realm, clusterName string, containers []docker.ContainerListE
 }
 
 // deregisterHostnames removes the DNS records and known_hosts entries of the
-// given mesh host names, logging failures. It first starts the realm's DNS
-// container and SSH relay if they are stopped, as after a host reboot (see
+// given mesh host names; a failure is a warning (meshMgr.Warn). It first
+// starts the realm's DNS container and SSH relay if they are stopped, as
+// after a host reboot (see
 // mesh.Manager.StartMesh): known_hosts is read and written with docker
 // exec in the relay, which needs it running. The Corefile and known_hosts
 // live in different containers, so the two updates then run in parallel;
@@ -338,22 +339,21 @@ func deregisterHostnames(ctx context.Context, meshMgr *mesh.Manager, hostnames [
 	if len(hostnames) == 0 {
 		return
 	}
-	log := sindlog.From(ctx)
 	if _, _, err := meshMgr.StartMesh(ctx); err != nil {
-		log.WarnContext(ctx, "starting the mesh failed, continuing", "error", err)
+		meshMgr.Warn(ctx, fmt.Sprintf("starting the mesh to remove the deleted nodes from it: %v", err))
 	}
 	var g errgroup.Group
 	g.Go(func() error {
 		if err := meshMgr.RemoveDNSRecords(ctx, hostnames); err != nil {
-			log.WarnContext(ctx, "removing DNS records failed, continuing", "error", err)
+			meshMgr.Warn(ctx, fmt.Sprintf("not removing the deleted nodes from the mesh DNS: %v", err))
 		}
 		return nil
 	})
 	g.Go(func() error {
 		if err := meshMgr.RemoveKnownHosts(ctx, hostnames); err != nil {
-			log.WarnContext(ctx, "removing known_hosts entries failed, continuing", "error", err)
+			meshMgr.Warn(ctx, fmt.Sprintf("not removing the deleted nodes from known_hosts: %v", err))
 		}
 		return nil
 	})
-	_ = g.Wait() // failures are logged
+	_ = g.Wait() // failures are warnings
 }

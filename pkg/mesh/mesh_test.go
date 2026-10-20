@@ -14,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -872,6 +873,11 @@ func TestWarnStaleDNS_NothingToReport(t *testing.T) {
 func TestWarn_WithoutOnWarning(t *testing.T) {
 	mgr := NewManager(nil, DefaultRealm)
 	mgr.Warn(t.Context(), "logged at warn level") // must not panic
+
+	var got []string
+	ctx := sindlog.WithWarn(t.Context(), func(msg string) { got = append(got, msg) })
+	mgr.Warn(ctx, "through the context")
+	assert.Equal(t, []string{"through the context"}, got)
 }
 
 // --- AddDNSRecords / RemoveDNSRecords ---

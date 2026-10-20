@@ -13,6 +13,7 @@ import (
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -268,8 +269,8 @@ func TestGetNodes_LabelFilter(t *testing.T) {
 
 // TestGetNodes_InspectError verifies that a failed batched inspect degrades
 // gracefully: summaries are still returned with empty IPs, and the error is
-// surfaced via logging (not propagated) so listings and shell completion
-// keep working even when the Docker daemon hiccups on inspect.
+// a warning (not propagated) so listings and shell completion keep working
+// even when the Docker daemon hiccups on inspect.
 func TestGetNodes_InspectError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(
@@ -280,13 +281,16 @@ func TestGetNodes_InspectError(t *testing.T) {
 	), "", nil)
 	m.AddResult("", "", fmt.Errorf("docker daemon busy"))
 	c := docker.NewClient(&m)
+	var warned []string
+	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
-	nodes, err := GetNodes(t.Context(), c, mesh.DefaultRealm, "dev")
+	nodes, err := GetNodes(ctx, c, mesh.DefaultRealm, "dev")
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "sind-dev-controller", nodes[0].Container)
 	assert.Empty(t, nodes[0].IP)
+	assert.Equal(t, []string{"listing the nodes without their IPs: docker daemon busy"}, warned)
 }
 
 // --- GetAllNodes ---

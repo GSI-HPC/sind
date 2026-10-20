@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -2178,14 +2177,14 @@ func TestDeviceArgs(t *testing.T) {
 }
 
 func TestExtraSecurityOpts(t *testing.T) {
-	var logs strings.Builder
-	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+	var warned []string
+	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
 	extra := extraSecurityOpts(ctx, "sind-dev-worker-0", []string{
 		"writable-cgroups=true", "label=disable", "apparmor=unconfined", `seccomp={"defaultAction":"SCMP_ACT_ALLOW"}`, "seccomp=unconfined",
 	})
 
 	assert.Equal(t, []string{"apparmor=unconfined", "seccomp=unconfined"}, extra)
-	assert.Contains(t, logs.String(), "not inheriting the seccomp profile of the newest worker")
+	assert.Equal(t, []string{"not inheriting the seccomp profile of sind-dev-worker-0: pass it with --security-opt seccomp=FILE"}, warned)
 	assert.Equal(t, []string{"writable-cgroups=true", "label=disable"}, nodeSecurityOpts())
 }

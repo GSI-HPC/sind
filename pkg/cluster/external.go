@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
-	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
@@ -178,17 +177,16 @@ func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 
 // ConnectExternal connects the realm's external containers to a new
 // cluster network. It is best-effort: a container that cannot be connected
-// is logged, and does not fail the create.
+// is a warning (meshMgr.Warn), and does not fail the create.
 func ConnectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, network docker.NetworkName) {
-	log := sindlog.From(ctx)
 	names, err := ExternalContainers(ctx, client, meshMgr)
 	if err != nil {
-		log.WarnContext(ctx, "not connecting external containers to the cluster network", "network", string(network), "err", err)
+		meshMgr.Warn(ctx, fmt.Sprintf("not connecting external containers to %s: %v", network, err))
 		return
 	}
 	for _, name := range names {
 		if err := client.ConnectNetwork(ctx, network, name); err != nil {
-			log.WarnContext(ctx, "connecting an external container to the cluster network", "container", string(name), "network", string(network), "err", err)
+			meshMgr.Warn(ctx, fmt.Sprintf("not connecting external container %s to %s: %v", name, network, err))
 		}
 	}
 }

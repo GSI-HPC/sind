@@ -194,6 +194,25 @@ func TestGetNodes_AllClusters(t *testing.T) {
 	assert.Contains(t, stdout, "prod")
 }
 
+// TestGetNodes_WarnsWithoutIPs checks that a listing whose IPs could not be
+// read says so on stderr without -v: it printed empty IPs and nothing else.
+func TestGetNodes_WarnsWithoutIPs(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+	), "", nil)
+	m.AddResult("", "daemon busy\x1b[2J", testutil.ExitCode1(t))
+
+	stdout, stderr, err := executeWithMock(&m, "get", "nodes")
+
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "sind-dev-controller")
+	assert.Equal(t, "Warning: listing the nodes without their IPs: exit status 1: daemon busy\\x1b[2J\n", stderr)
+}
+
 func TestGetMungeKey_Removed(t *testing.T) {
 	_, _, err := executeCommand("get", "munge-key")
 	assert.Error(t, err)

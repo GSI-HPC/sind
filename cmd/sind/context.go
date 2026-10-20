@@ -34,7 +34,14 @@ const (
 // warnings that code without the command at hand prints, and for the stack
 // of a panic that a pool of pkg/cluster turned into a node's error while
 // the context carries no progress Bus (cluster.WithPanicLog).
+//
+// The warnings pkg/ reports for the user (sindlog.Warn), the realm lock's
+// and the mesh manager's among them, go there as "Warning:" lines, escaped
+// as they can quote what docker or a container wrote.
 func withStderr(ctx context.Context, w io.Writer) context.Context {
+	ctx = sindlog.WithWarn(ctx, func(msg string) {
+		_, _ = fmt.Fprintln(w, "Warning:", termtext.EscapeLines(msg))
+	})
 	return cluster.WithPanicLog(context.WithValue(ctx, stderrKey, w), w)
 }
 
@@ -93,10 +100,6 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 		},
 	}
 	mgr.HostDNS = true
-	stderr := stderrFrom(ctx)
-	mgr.OnWarning = func(msg string) {
-		_, _ = fmt.Fprintln(stderr, "Warning:", termtext.EscapeLines(msg))
-	}
 	return mgr
 }
 

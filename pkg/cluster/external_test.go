@@ -3,10 +3,8 @@
 package cluster
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -296,21 +294,21 @@ func TestConnectExternal(t *testing.T) {
 }
 
 func TestConnectExternal_Warnings(t *testing.T) {
-	for _, tt := range []struct{ fail, match string }{
-		{"ps", "not connecting external containers"},
-		{"network connect", "connecting an external container"},
+	for _, tt := range []struct{ fail, want string }{
+		{"ps", "not connecting external containers to sind-new-net: listing containers on the mesh: daemon unreachable"},
+		{"network connect", "not connecting external container kind-control-plane to sind-new-net: daemon unreachable"},
 	} {
 		t.Run(tt.fail, func(t *testing.T) {
 			f, c, _ := newExternalFake(t)
 			f.containers["kind-control-plane"] = externalContainer{networks: []string{"sind-mesh"}}
 			f.fail[tt.fail] = mock.Result{Err: fmt.Errorf("daemon unreachable")}
-			var logs bytes.Buffer
-			ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+			var warned []string
+			ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
 			ConnectExternal(ctx, c, mesh.NewManager(c, "sind"), "sind-new-net")
 
-			assert.Contains(t, logs.String(), "level=WARN")
-			assert.Contains(t, logs.String(), tt.match)
+			require.Len(t, warned, 1)
+			assert.Contains(t, warned[0], tt.want)
 		})
 	}
 }

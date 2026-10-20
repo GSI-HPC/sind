@@ -279,11 +279,12 @@ func (o *LockOptions) waiting(ctx context.Context, realm string, holder *LockHol
 	sindlog.From(ctx).InfoContext(ctx, "waiting for another operation to complete", args...)
 }
 
-// warn reports a warning for the user through OnWarning, or else the log.
+// warn reports a warning for the user through OnWarning, or else through
+// the context (sindlog.Warn).
 func (o *LockOptions) warn(ctx context.Context, msg string) {
 	if o.OnWarning != nil {
 		o.OnWarning(msg)
 		return
 	}
-	sindlog.From(ctx).WarnContext(ctx, msg)
+	sindlog.Warn(ctx, msg)
 }

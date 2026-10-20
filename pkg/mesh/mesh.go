@@ -69,21 +69,22 @@ type Manager struct {
 	HostDNS bool // configure host DNS resolution via systemd-resolved
 
 	// OnWarning receives warnings meant for the user, such as a mesh DNS
-	// address that containers created earlier no longer use. The sind CLI
-	// prints them to stderr. Without it, Warn logs them at warn level.
+	// address that containers created earlier no longer use. Without it,
+	// Warn reports them through the context (sindlog.Warn), where the sind
+	// CLI prints them to stderr.
 	OnWarning func(msg string)
 
 	created bool // set by EnsureMeshNetwork when this call created the mesh network
 }
 
-// Warn reports a warning for the user through OnWarning, or the context's
-// logger when OnWarning is nil.
+// Warn reports a warning for the user through OnWarning, or through the
+// context (sindlog.Warn) when OnWarning is nil.
 func (m *Manager) Warn(ctx context.Context, msg string) {
 	if m.OnWarning != nil {
 		m.OnWarning(msg)
 		return
 	}
-	sindlog.From(ctx).WarnContext(ctx, msg)
+	sindlog.Warn(ctx, msg)
 }
 
 // NewManager returns a Manager that operates on global resources through the

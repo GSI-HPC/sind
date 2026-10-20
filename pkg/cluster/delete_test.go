@@ -5,7 +5,6 @@ package cluster
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os/exec"
 	"slices"
 	"strings"
@@ -276,7 +275,7 @@ func TestDeregisterMesh_StartsStoppedMesh(t *testing.T) {
 }
 
 // TestDeregisterMesh_StartMeshError covers a mesh that cannot be inspected:
-// the failure is logged, and the removals are still tried.
+// the failure is a warning, and the removals are still tried.
 func TestDeregisterMesh_StartMeshError(t *testing.T) {
 	var m mock.Executor
 	base := meshDeregisterOnCall("controller.dev.sind.sind ssh-ed25519 K1\n")
@@ -287,12 +286,11 @@ func TestDeregisterMesh_StartMeshError(t *testing.T) {
 		return base(args, stdin)
 	}
 	c := docker.NewClient(&m)
-	var logs strings.Builder
-	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+	var warned []string
+	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
 	DeregisterMesh(ctx, mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
-	assert.Contains(t, logs.String(), "starting the mesh failed, continuing")
-	assert.Contains(t, logs.String(), "inspecting SSH container: daemon gone")
+	assert.Equal(t, []string{"starting the mesh to remove the deleted nodes from it: inspecting SSH container: daemon gone"}, warned)
 	assert.Equal(t, 1, countCalls(m.Calls, "exec", "-i", "sind-ssh"), "known_hosts written")
 	assert.Equal(t, 1, countCalls(m.Calls, "kill", "-s", "USR1", "sind-dns"), "CoreDNS reloaded")
 }

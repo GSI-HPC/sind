@@ -729,7 +729,7 @@ func TestTheDisplayCarriesWhatTheCommandWrites(t *testing.T) {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "output")
 		c.draw()
 		_, _ = fmt.Fprintln(stderrFrom(ctx), "Warning: from the context")
-		meshMgrFrom(ctx, clientFrom(ctx), "sind").OnWarning("from the mesh")
+		meshMgrFrom(ctx, clientFrom(ctx), "sind").Warn(ctx, "from the mesh")
 		c.draw()
 		sindlog.From(ctx).InfoContext(ctx, "from the logger")
 		resume := progress.Suspend(ctx)
