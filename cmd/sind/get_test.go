@@ -299,10 +299,11 @@ func TestGetDNS_Empty(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
 
-	stdout, _, err := executeWithMock(&m, "get", "dns")
+	stdout, stderr, err := executeWithMock(&m, "get", "dns")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "HOSTNAME")
 	assert.NotContains(t, stdout, "sind.sind")
+	assert.Equal(t, "No DNS records found in realm \"sind\".\n", stderr)
 }
 
 func TestGetDNS_Error(t *testing.T) {
@@ -1173,13 +1174,23 @@ func TestGetSSHConfig_Exists(t *testing.T) {
 	assert.Empty(t, stderr)
 }
 
-func TestGetClusters_NoneSaysSoOnStderr(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
+// TestGetEmptyListings_SaySoOnStderr checks that every get listing that
+// lists nothing says so on stderr, as get clusters does, so that a lone
+// header is not mistaken for a failure; -o json says nothing.
+func TestGetEmptyListings_SaySoOnStderr(t *testing.T) {
+	for _, what := range []string{"networks", "volumes", "nodes", "clusters"} {
+		t.Run(what, func(t *testing.T) {
+			m := &mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{} }}
 
-	stdout, stderr, err := executeWithMock(&m, "get", "clusters")
+			stdout, stderr, err := executeWithMock(m, "--realm", "ci", "get", what)
 
-	require.NoError(t, err)
-	assert.Equal(t, 1, strings.Count(stdout, "\n"), "only the header")
-	assert.Equal(t, "No clusters found in realm \"sind\".\n", stderr)
+			require.NoError(t, err)
+			assert.Equal(t, 1, strings.Count(stdout, "\n"), "only the header")
+			assert.Equal(t, "No "+what+" found in realm \"ci\".\n", stderr)
+
+			_, stderr, err = executeWithMock(m, "--realm", "ci", "get", what, "-o", "json")
+			require.NoError(t, err)
+			assert.Empty(t, stderr)
+		})
+	}
 }

@@ -201,9 +201,11 @@ func TestMCPList(t *testing.T) {
 		"web                https://example.com/mcp\n"+
 		`evil\x1b]0;x\x07   x`+"\n", stdout)
 
-	stdout, _, err = executeCommand("mcp", "claude", "list", "--config-path", filepath.Join(t.TempDir(), "none.json"))
+	none := filepath.Join(t.TempDir(), "none.json")
+	stdout, stderr, err := executeCommand("mcp", "claude", "list", "--config-path", none)
 	require.NoError(t, err)
 	assert.Equal(t, "NAME   COMMAND\n", stdout)
+	assert.Equal(t, "No MCP servers found in \""+none+"\".\n", stderr, "the note names the file, so that a mistyped path shows")
 }
 
 func TestMCPEditor_LoadError(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -261,12 +262,19 @@ func runMCPList(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 	}
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tCOMMAND")
-	for _, s := range cfg.Servers() {
+	servers := cfg.Servers()
+	for _, s := range servers {
 		command := s.URL
 		if s.Command != "" {
 			command = strings.Join(append([]string{s.Command}, s.Args...), " ")
 		}
 		_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(s.Name), cell(command))
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	// The file names where sind looked: a mistyped --config-path reads
+	// as an empty file.
+	noteNone(cmd, len(servers), "MCP servers", strconv.Quote(cfg.Path()))
+	return nil
 }

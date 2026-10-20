@@ -275,6 +275,7 @@ Rules:
 | Mutations (`create`, `delete`, `power`) | nothing on success where stderr is not a terminal; on a terminal, their progress display (see Progress Display) | stderr |
 | Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
+| Notes | `No <things> found in <where>.` below a table that lists nothing; `Note: ...` for any other remark on the output (`get ssh-config`) | stderr |
 | Logs (`-v`) | structured key=value, colorized on TTYs | stderr |
 | Progress (`--progress`) | live tree, counter or plain lines; a summary line for a command that failed or was interrupted | stderr |
 
@@ -283,6 +284,7 @@ Rules:
 - Errors are always visible (slog error level is always enabled, even without `-v`), except that `ssh`, `exec`, `enter` and `logs` add none when the program they run fails: it writes its own
 - A docker CLI that is missing or cannot reach the daemon fails every command with the same line, which names no step and no exit status: `Docker is not reachable: ` and the line of docker's error that says so (`docker CLI not found in PATH` for a missing CLI), then ``; run `sind doctor` for the fix`` (`docker.UnreachableError`, matched by `errors.Is(err, docker.ErrUnreachable)`; every `docker.Client` call classifies its error)
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. The cells of `get` tables (`cell`), whose text comes from labels, containers and docker, and the details of `doctor` checks are escaped the same way; a table cell also shows tab and newline as `\t` and `\n`, which would otherwise start a column or a row. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
+- A table that lists nothing still prints its header on stdout, and a note on stderr says so and where sind looked, so that a lone header is not taken for a failure (`noteNone`): `No clusters found in realm "sind".`, and the same for `get nodes`, `get networks`, `get volumes`, `get dns`, `get realms` (`No realms found.`), the `CLUSTERS` table of `get monitoring` (`No monitored clusters found ...`) and `mcp <editor> list`, which names the file it read (`No MCP servers found in "<path>".`), as a mistyped `--config-path` reads as an empty file. JSON output has an empty list and no note
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗; `!` for the warnings of `doctor`) only in `get cluster`, `get node` and `doctor` output, and in the progress display, which draws ASCII marks unless the locale is UTF-8
