@@ -16,8 +16,11 @@ const (
 const MungeKeySize = 128
 
 // GenerateMungeKey generates a random munge authentication key.
-func GenerateMungeKey() []byte {
-	key := make([]byte, MungeKeySize)
+func GenerateMungeKey() []byte { return randomKey(MungeKeySize) }
+
+// randomKey returns n random bytes; crypto/rand.Read never fails.
+func randomKey(n int) []byte {
+	key := make([]byte, n)
 	_, _ = rand.Read(key)
 	return key
 }

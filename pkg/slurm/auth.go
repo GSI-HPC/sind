@@ -2,8 +2,6 @@
 
 package slurm
 
-import "crypto/rand"
-
 // slurm.key, the key of auth/slurm and cred/slurm with identity clientIds.
 // sind writes it to the config volume, which every node mounts at ConfDir,
 // where the daemons look for it.
@@ -17,11 +15,7 @@ const (
 const SlurmKeySize = 1024
 
 // GenerateSlurmKey generates a random slurm.key.
-func GenerateSlurmKey() []byte {
-	key := make([]byte, SlurmKeySize)
-	_, _ = rand.Read(key)
-	return key
-}
+func GenerateSlurmKey() []byte { return randomKey(SlurmKeySize) }
 
 // jwt_hs256.key, the HS256 key auth/jwt signs and checks tokens with, for
 // slurmrestd on a managed api node. sind writes it to the config volume,
@@ -36,8 +30,4 @@ const (
 const JWTKeySize = 32
 
 // GenerateJWTKey generates a random jwt_hs256.key.
-func GenerateJWTKey() []byte {
-	key := make([]byte, JWTKeySize)
-	_, _ = rand.Read(key)
-	return key
-}
+func GenerateJWTKey() []byte { return randomKey(JWTKeySize) }
