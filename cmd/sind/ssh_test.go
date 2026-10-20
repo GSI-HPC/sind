@@ -377,22 +377,16 @@ func TestSSHAccess(t *testing.T) {
 	require.NoError(t, err, "create cluster: stdout=%q stderr=%q", stdout, stderr)
 
 	// --- sind ssh: run command on specific node ---
-	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "controller."+cluster, "--", "hostname")
-	require.NoError(t, err, "ssh controller: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "controller")
-
-	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", "worker-0."+cluster, "--", "hostname")
-	require.NoError(t, err, "ssh worker-0: stdout=%q stderr=%q", stdout, stderr)
-	assert.Contains(t, stdout, "worker-0")
+	for _, node := range []string{"controller", "worker-0"} {
+		stdout, stderr, err = executeWithRealmCtx(ctx, realm, "ssh", node+"."+cluster, "--", "hostname")
+		require.NoError(t, err, "ssh %s: stdout=%q stderr=%q", node, stdout, stderr)
+		assert.Contains(t, stdout, node)
+	}
 
 	// --- sind enter: routes to submitter when present ---
-	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "enter", cluster)
-	// enter opens an interactive shell — will exit immediately since stdin is not a TTY.
-	// But the connection itself should succeed (exit code 0 or similar).
-	// We can't assert much about stdout here since it's an interactive session.
-	_ = stdout
-	_ = stderr
-	_ = err
+	// enter opens an interactive shell, which exits at once since stdin is
+	// not a TTY: there is nothing to assert about an interactive session.
+	_, _, _ = executeWithRealmCtx(ctx, realm, "enter", cluster)
 
 	// --- sind exec: routes to submitter when present ---
 	stdout, stderr, err = executeWithRealmCtx(ctx, realm, "exec", cluster, "--", "hostname")
@@ -415,26 +409,12 @@ func TestSSHAccess(t *testing.T) {
 		assert.NotContains(t, string(data), "%h")
 
 		// Test direct SSH access.
-		sshCmd := exec.CommandContext(ctx, "ssh",
-			"-F", sshConfigPath,
-			"-o", "BatchMode=yes",
-			"controller."+cluster+"."+realm+".sind",
-			"hostname",
-		)
-		out, sshErr := sshCmd.CombinedOutput()
-		require.NoError(t, sshErr, "user ssh: %s", string(out))
-		assert.Contains(t, string(out), "controller")
-
-		// Also test worker access.
-		sshCmd = exec.CommandContext(ctx, "ssh",
-			"-F", sshConfigPath,
-			"-o", "BatchMode=yes",
-			"worker-0."+cluster+"."+realm+".sind",
-			"hostname",
-		)
-		out, sshErr = sshCmd.CombinedOutput()
-		require.NoError(t, sshErr, "user ssh worker: %s", string(out))
-		assert.Contains(t, string(out), "worker-0")
+		for _, node := range []string{"controller", "worker-0"} {
+			out, sshErr := exec.CommandContext(ctx, "ssh", "-F", sshConfigPath, "-o", "BatchMode=yes",
+				node+"."+cluster+"."+realm+".sind", "hostname").CombinedOutput()
+			require.NoError(t, sshErr, "user ssh %s: %s", node, string(out))
+			assert.Contains(t, string(out), node)
+		}
 	}
 
 	// --- delete cluster ---
