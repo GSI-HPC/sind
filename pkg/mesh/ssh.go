@@ -161,14 +161,6 @@ func (m *Manager) readSSHFile(ctx context.Context, path, what string) (string, e
 	return content, nil
 }
 
-// AddKnownHost adds a host key entry to the known_hosts file in the SSH
-// container, replacing an existing entry for the hostname, as AddKnownHosts
-// does. The hostKey should be the full key type and data (e.g.
-// "ssh-ed25519 AAAA...").
-func (m *Manager) AddKnownHost(ctx context.Context, hostname, hostKey string) error {
-	return m.AddKnownHosts(ctx, []KnownHostEntry{{Hostname: hostname, HostKey: hostKey}})
-}
-
 // KnownHostEntry holds a hostname and its SSH host key for batch registration.
 type KnownHostEntry struct {
 	Hostname string
@@ -270,12 +262,6 @@ func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) erro
 	}
 
 	return nil
-}
-
-// RemoveKnownHost removes all entries for the given hostname from the
-// known_hosts file in the SSH container.
-func (m *Manager) RemoveKnownHost(ctx context.Context, hostname string) error {
-	return m.RemoveKnownHosts(ctx, []string{hostname})
 }
 
 // generateKeypair creates a new ed25519 keypair and returns the private key

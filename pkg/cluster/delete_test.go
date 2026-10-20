@@ -1001,8 +1001,8 @@ const dnsRunningInspectJSON = `[{"Id":"dns123","Name":"/sind-dns","State":{"Stat
 // deregistration.
 const sshRunningInspectJSON = `[{"Id":"ssh123","Name":"/sind-ssh","State":{"Status":"running"},"Config":{"Labels":{}},"NetworkSettings":{"Networks":{}}}]`
 
-// meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecord
-// and RemoveKnownHost operations for DeregisterMesh tests.
+// meshDeregisterOnCall returns a mock OnCall that handles RemoveDNSRecords
+// and RemoveKnownHosts operations for DeregisterMesh tests.
 func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.Result {
 	return func(args []string, _ string) mock.Result {
 		if len(args) == 0 {

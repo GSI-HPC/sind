@@ -585,13 +585,6 @@ func (m *Manager) startDNS(ctx context.Context, info *docker.ContainerInfo) (*do
 	return started, nil
 }
 
-// AddDNSRecord adds an A record to the mesh DNS Corefile and reloads CoreDNS.
-// The hostname should be a fully qualified sind DNS name (e.g. "controller.dev.sind.sind").
-// An existing entry for the hostname is replaced, as AddDNSRecords does.
-func (m *Manager) AddDNSRecord(ctx context.Context, hostname, ip string) error {
-	return m.AddDNSRecords(ctx, []DNSRecord{{Hostname: hostname, IP: ip}})
-}
-
 // AddDNSRecords adds multiple A records to the mesh DNS Corefile and reloads
 // CoreDNS once. Existing entries for the same hostnames are replaced,
 // making the operation idempotent on retry.
@@ -644,12 +637,6 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 	}
 
 	return m.writeDNSEntries(ctx, kept)
-}
-
-// RemoveDNSRecord removes all A records for the given hostname from the mesh DNS
-// Corefile and reloads CoreDNS.
-func (m *Manager) RemoveDNSRecord(ctx context.Context, hostname string) error {
-	return m.RemoveDNSRecords(ctx, []string{hostname})
 }
 
 // RemoveDNSRecords removes all A records for the given hostnames from the
