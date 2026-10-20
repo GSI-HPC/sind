@@ -127,12 +127,7 @@ func TestInteractive(t *testing.T) {
 	}
 }
 
-func TestStdinIsTTY_Terminal(t *testing.T) {
-	assert.True(t, stdinIsTTY(openPTY(t)))
-}
-
-func TestStdoutIsTTY(t *testing.T) {
-	assert.True(t, stdoutIsTTY(openPTY(t)))
-	assert.False(t, stdoutIsTTY(new(bytes.Buffer)))
-	assert.False(t, stdoutIsTTY(noStdout(t)))
+func TestIsTerminal_Terminal(t *testing.T) {
+	assert.True(t, isTerminal(openPTY(t)))
+	assert.False(t, isTerminal(noStdout(t)))
 }

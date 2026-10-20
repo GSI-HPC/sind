@@ -453,8 +453,10 @@ func TestSSHAccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestStdinIsTTY_NotATerminal(t *testing.T) {
-	// A reader set with cmd.SetIn, and a file that is not a terminal.
-	assert.False(t, stdinIsTTY(strings.NewReader("")))
-	assert.False(t, stdinIsTTY(noStdin(t)))
+func TestIsTerminal_NotATerminal(t *testing.T) {
+	// A reader or writer set with cmd.SetIn or cmd.SetOut, and a file that
+	// is not a terminal.
+	assert.False(t, isTerminal(strings.NewReader("")))
+	assert.False(t, isTerminal(new(bytes.Buffer)))
+	assert.False(t, isTerminal(noStdin(t)))
 }

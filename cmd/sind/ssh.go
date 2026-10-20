@@ -4,7 +4,6 @@ package main
 
 import (
 	"errors"
-	"io"
 	"os"
 	"os/exec"
 	"slices"
@@ -125,27 +124,27 @@ func userFlag(cmd *cobra.Command) (string, error) {
 }
 
 func runEnter(cmd *cobra.Command, clusterName string) error {
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
+	return execOnEnterTarget(cmd, clusterName, isTerminal(cmd.InOrStdin()), nil)
+}
+
+// execOnEnterTarget runs command, or a login shell when it is nil, as --user
+// on the node enter and exec go to: the submitter or the controller.
+func execOnEnterTarget(cmd *cobra.Command, clusterName string, isTTY bool, command []string) error {
 	user, err := userFlag(cmd)
 	if err != nil {
 		return err
 	}
-
-	target, workDir, err := cluster.EnterTarget(ctx, client, realm, clusterName)
+	ctx := cmd.Context()
+	realm, err := realmFromFlag(cmd)
 	if err != nil {
 		return err
 	}
-
+	target, workDir, err := cluster.EnterTarget(ctx, clientFrom(ctx), realm, clusterName)
+	if err != nil {
+		return err
+	}
 	containerName := cluster.ContainerName(realm, clusterName, target)
-	isTTY := stdinIsTTY(cmd.InOrStdin())
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, isTTY, nil)
-
-	return dockerExec(cmd, dockerArgs)
+	return dockerExec(cmd, cluster.BuildContainerExecArgs(containerName, user, workDir, isTTY, command))
 }
 
 func newExecCommand() *cobra.Command {
@@ -187,27 +186,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	user, err := userFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	target, workDir, err := cluster.EnterTarget(ctx, client, realm, clusterName)
-	if err != nil {
-		return err
-	}
-
-	containerName := cluster.ContainerName(realm, clusterName, target)
-	dockerArgs := cluster.BuildContainerExecArgs(containerName, user, workDir, interactive(cmd), command)
-
-	return dockerExec(cmd, dockerArgs)
+	return execOnEnterTarget(cmd, clusterName, interactive(cmd), command)
 }
 
 // interactive reports whether the command talks to a terminal at both ends.
@@ -215,22 +194,11 @@ func runExec(cmd *cobra.Command, args []string) error {
 // output must not come back with CRLF line endings. MCP tool calls have no
 // terminal, so they never get one.
 func interactive(cmd *cobra.Command) bool {
-	return stdinIsTTY(cmd.InOrStdin()) && stdoutIsTTY(cmd.OutOrStdout())
+	return isTerminal(cmd.InOrStdin()) && isTerminal(cmd.OutOrStdout())
 }
 
-// stdinIsTTY reports whether stdin, the command's input, is a terminal. A
-// reader that is not a file, as set with cmd.SetIn, is not.
-func stdinIsTTY(stdin io.Reader) bool {
-	return isTerminal(stdin)
-}
-
-// stdoutIsTTY reports whether stdout, the command's output, is a terminal.
-// A writer that is not a file, as set with cmd.SetOut, is not.
-func stdoutIsTTY(stdout io.Writer) bool {
-	return isTerminal(stdout)
-}
-
-// isTerminal reports whether stream is a file open on a terminal.
+// isTerminal reports whether stream is a file open on a terminal. A reader
+// or writer that is not a file, as set with cmd.SetIn or cmd.SetOut, is not.
 func isTerminal(stream any) bool {
 	f, ok := stream.(*os.File)
 	if !ok {
@@ -371,10 +339,8 @@ func completeSSHNodeArg(cmd *cobra.Command, args []string, toComplete string) ([
 // completeExecClusterArg provides completion for the CLUSTER argument of the exec command.
 func completeExecClusterArg(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// After --, we're in command territory.
-	for _, a := range args {
-		if a == "--" {
-			return nil, cobra.ShellCompDirectiveDefault
-		}
+	if slices.Contains(args, "--") {
+		return nil, cobra.ShellCompDirectiveDefault
 	}
 
 	// Cluster name already provided — wait for --.
