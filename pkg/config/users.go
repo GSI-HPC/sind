@@ -28,8 +28,8 @@ var ReservedIDs = []int{65534, 65535}
 type User struct {
 	Name string `yaml:"name"`
 	// UID is the ID of the user and, without Group, of its private group.
-	// Zero assigns the lowest free ID from MinUID up (see
-	// Cluster.ApplyDefaults).
+	// Zero, which a config gets by leaving uid out, assigns the lowest
+	// free ID from MinUID up (see Cluster.ApplyDefaults).
 	UID int `yaml:"uid,omitempty"`
 	// Group is the user's primary group, one of the cluster's groups.
 	// Empty gives the user a private group of its own name, with gid = uid.
@@ -59,8 +59,9 @@ func (u *User) UnmarshalYAML(v *yaml.Node) error {
 // cluster users, as a primary or supplementary group of the users.
 type Group struct {
 	Name string `yaml:"name"`
-	// GID is the ID of the group. Zero assigns the lowest ID from MinUID up
-	// that no user or group has (see Cluster.ApplyDefaults).
+	// GID is the ID of the group. Zero, which a config gets by leaving gid
+	// out, assigns the lowest ID from MinUID up that no user or group has
+	// (see Cluster.ApplyDefaults).
 	GID int `yaml:"gid,omitempty"`
 }
 

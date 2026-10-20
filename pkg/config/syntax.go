@@ -304,8 +304,25 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 		if err := walk(fields[j].typ, value, join(path, key.Value)); err != nil {
 			return err
 		}
+		if err := checkID0(key, value, join(path, key.Value)); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// checkID0 reports a uid or gid of 0, root's, which the decoder would take
+// for one left out, to be assigned.
+func checkID0(key, value *yaml.Node, path string) error {
+	value = resolve(value)
+	if (key.Value != "uid" && key.Value != "gid") || value.Tag != "!!int" {
+		return nil
+	}
+	var id int
+	if value.Decode(&id) != nil || id != 0 { // walk reports a number out of range
+		return nil
+	}
+	return errorAt(value, path, "must be between %d and %d, got 0; leave it out for the lowest free ID", MinUID, MaxUID)
 }
 
 // walkShorthand checks a node object without a role, which is the

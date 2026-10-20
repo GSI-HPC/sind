@@ -50,6 +50,8 @@ func TestParse_SyntaxErrors(t *testing.T) {
 		{"cpus too large", "kind: Cluster\ndefaults:\n  cpus: 99999999999999999999\n", "line 3: defaults.cpus: 99999999999999999999 is out of range"},
 		{"cpus too small", "kind: Cluster\ndefaults:\n  cpus: -99999999999999999999\n", "line 3: defaults.cpus: -99999999999999999999 is out of range"},
 		{"count too large", "kind: Cluster\nnodes:\n  - role: worker\n    count: 18446744073709551615\n", "line 4: nodes[0].count: 18446744073709551615 is out of range"},
+		{"uid 0", "kind: Cluster\nusers:\n  - name: alice\n    uid: 0\n", "line 4: users[0].uid: must be between 1000 and 2147483647, got 0; leave it out for the lowest free ID"},
+		{"gid 0", "kind: Cluster\ngroups:\n  - name: hpc\n    gid: 0x0\n", "line 4: groups[0].gid: must be between 1000 and 2147483647, got 0"},
 		{"role a number", "kind: Cluster\nnodes: [controller, worker, 3]\n", `line 2: nodes[2]: invalid role "3" (valid: controller, db, api, submitter, worker)`},
 		{"role case", "kind: Cluster\nnodes: [Controller, worker]\n", `line 2: nodes[0]: invalid role "Controller" (valid: controller, db, api, submitter, worker); did you mean "controller"? roles are case-sensitive`},
 		{"role key a number", "kind: Cluster\nnodes:\n  - role: 1\n", `line 3: nodes[0].role: invalid role "1" (valid:`},
@@ -125,6 +127,12 @@ func TestParse_SyntaxAccepts(t *testing.T) {
 
 	_, err = Parse([]byte("kind: Cluster\ndefaults:\nnodes:\n"))
 	require.NoError(t, err)
+
+	// A uid or gid left out, or null, is assigned.
+	c, err = Parse([]byte("kind: Cluster\nusers:\n  - name: alice\n    uid:\n  - name: bob\n    uid: 2000\ngroups:\n  - hpc\n"))
+	require.NoError(t, err)
+	assert.Equal(t, []int{0, 2000}, []int{c.Users[0].UID, c.Users[1].UID})
+	assert.Zero(t, c.Groups[0].GID)
 
 	// An empty value is left to Validate, which reports a role but takes
 	// no admin level.
