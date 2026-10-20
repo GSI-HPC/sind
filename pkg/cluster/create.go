@@ -551,28 +551,18 @@ func resolveInfra(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 		dnsIP, sshPubKey, meshErr = resolveMeshInfra(gctx, client, meshMgr)
 		return meshErr
 	})
-	if cfg.Monitoring {
-		g.Go(func() error {
-			if err := pull.wait(gctx); err != nil {
+	if cfg.Monitoring || cfg.Managed() {
+		g.Go(func() (err error) {
+			if err = pull.wait(gctx); err != nil {
 				return err
 			}
-			ver, err := probeMonitoringImages(gctx, client, meshMgr, cfg)
-			if err != nil {
+			if cfg.Monitoring {
+				slurmVersion, err = probeMonitoringImages(gctx, client, meshMgr, cfg)
 				return err
 			}
-			slurmVersion = ver
-			return nil
-		})
-	} else if cfg.Managed() {
-		g.Go(func() error {
-			if err := pull.wait(gctx); err != nil {
-				return err
-			}
-			ver, err := slurm.DiscoverVersion(gctx, client, image)
-			if err != nil {
+			if slurmVersion, err = slurm.DiscoverVersion(gctx, client, image); err != nil {
 				return fmt.Errorf("discovering Slurm version: %w", err)
 			}
-			slurmVersion = ver
 			return nil
 		})
 	}
