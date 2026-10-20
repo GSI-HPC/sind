@@ -177,6 +177,8 @@ scp file.txt worker-0.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller   # port forwarding to your machine
 ```
 
+The config authenticates to the nodes with sind's key only (`IdentitiesOnly yes`). ssh does not offer them the keys of your ssh-agent, which it would otherwise try first: with six or more of them, the nodes' sshd would end the connection before sind's key got its turn.
+
 The `Include` relies on these OpenSSH behaviours:
 
 - An `Include` after a `Host` or `Match` line belongs to that block and applies only to the hosts it matches, hence its place at the top.

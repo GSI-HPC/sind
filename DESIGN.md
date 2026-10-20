@@ -1729,6 +1729,7 @@ Host controller controller.* controller-backup controller-backup.* db db.* api a
     CanonicalDomains default.sind.sind sind.sind
 
 Host *.sind.sind
+    IdentitiesOnly yes
     IdentityFile /home/user/.local/state/sind/sind/id_ed25519
     UserKnownHostsFile /home/user/.local/state/sind/sind/known_hosts
     User root
@@ -1742,6 +1743,8 @@ Host worker-0.default.sind.sind
 ```
 
 The first block enables short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. ssh looks the candidates up in the host's DNS, which knows them where sind has pointed systemd-resolved at the mesh DNS for `*.<realm>.sind`, and reads the config again for the name it found. The block applies only to host names shaped like a node's, the node names alone or followed by `.<cluster>`, so ssh does not look up every other host it connects to under the sind domains first; `CanonicalizeMaxDots` keeps its default, 1, as these names have at most one dot. Other realms get no such block; use full names such as `controller.dev.ci.sind` there. While a node of that name exists, its short name reaches it rather than a host of the same name on the user's network. Short names need that host DNS (systemd-resolved with the polkit authorization `sind doctor` checks): without it, ssh falls back to the bare name, which matches no `Host` block (`Could not resolve hostname controller`); full names still work.
+
+The realm's block authenticates with sind's key only (`IdentitiesOnly yes`). ssh would otherwise offer the keys of the user's agent first, and the nodes' sshd ends the connection after `MaxAuthTries` (6) failed keys, so six agent keys would lock the user out; the nodes need not see those keys either.
 
 Each node in the realm's `known_hosts` gets a `Host` block of its own with the relay's `ProxyCommand`, the node's name written into it. ssh substitutes `%h` into a `ProxyCommand` unquoted and runs it in a shell, and a wildcard `Host *.sind.sind` matches any name with that suffix, so a host name with shell syntax in it, e.g. from a git submodule URL, would have run in the user's shell and in the relay's bash (the CVE-2023-51385 pattern). A name in `known_hosts` that is not `<node>.<cluster>.<realm>.sind` with lowercase host name labels gets no block. The file is rewritten whenever a cluster or worker of the realm is created or deleted, as `known_hosts` is.
 

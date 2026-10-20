@@ -71,6 +71,7 @@ func TestGenerateSSHConfig_DefaultRealm(t *testing.T) {
     CanonicalDomains default.sind.sind sind.sind
 
 Host *.sind.sind
+    IdentitiesOnly yes
     IdentityFile /home/user/.sind/id_ed25519
     UserKnownHostsFile /home/user/.sind/known_hosts
     User root
@@ -89,6 +90,7 @@ func TestGenerateSSHConfig_NamedRealm(t *testing.T) {
 		[]string{"controller.dev.ci42.sind"})
 
 	assert.Equal(t, `Host *.ci42.sind
+    IdentitiesOnly yes
     IdentityFile /home/user/.sind/id_ed25519
     UserKnownHostsFile /home/user/.sind/known_hosts
     User root

@@ -68,8 +68,12 @@ const sshCanonicalTemplate = `Host controller controller.* controller-backup con
 `
 
 // sshRealmTemplate holds the settings for every node of the realm.
+// IdentitiesOnly keeps ssh from offering the keys of the user's agent
+// before sind's: sshd ends the connection after MaxAuthTries, 6 by default,
+// failed keys, and the nodes need not see the user's other public keys.
 // Placeholders: realm, dir.
 const sshRealmTemplate = `Host *.%[1]s.sind
+    IdentitiesOnly yes
     IdentityFile %[2]s/id_ed25519
     UserKnownHostsFile %[2]s/known_hosts
     User root
