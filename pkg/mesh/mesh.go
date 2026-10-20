@@ -225,25 +225,8 @@ func (m *Manager) ensureHostDNS(ctx context.Context) {
 // the realm has a DNS container. A relay created with another DNS address is
 // reported with Warn (see WarnStaleDNS).
 func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err error) {
-	var dns, relay *docker.ContainerInfo
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, m.DNSContainerName()))
-		if err != nil {
-			return fmt.Errorf("inspecting DNS container: %w", err)
-		}
-		dns = info
-		return nil
-	})
-	g.Go(func() error {
-		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, m.SSHContainerName()))
-		if err != nil {
-			return fmt.Errorf("inspecting SSH container: %w", err)
-		}
-		relay = info
-		return nil
-	})
-	if err := g.Wait(); err != nil {
+	dns, relay, err := m.inspectMesh(ctx)
+	if err != nil {
 		return "", false, err
 	}
 
@@ -264,6 +247,28 @@ func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err 
 		m.WarnStaleDNS(ctx, dnsIP, relay)
 	}
 	return dnsIP, dns != nil, nil
+}
+
+// inspectMesh inspects the DNS and the SSH relay container at once; a
+// container that does not exist is nil.
+func (m *Manager) inspectMesh(ctx context.Context) (dns, relay *docker.ContainerInfo, err error) {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() (err error) {
+		if dns, err = docker.IfExists(m.Docker.InspectContainer(gctx, m.DNSContainerName())); err != nil {
+			return fmt.Errorf("inspecting DNS container: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() (err error) {
+		if relay, err = docker.IfExists(m.Docker.InspectContainer(gctx, m.SSHContainerName())); err != nil {
+			return fmt.Errorf("inspecting SSH container: %w", err)
+		}
+		return nil
+	})
+	// Not `return dns, relay, g.Wait()`: Go may read dns and relay before
+	// it calls g.Wait.
+	err = g.Wait()
+	return dns, relay, err
 }
 
 // WarnStaleDNS warns about the containers in infos that were created to
@@ -685,25 +690,8 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	dnsName := m.DNSContainerName()
 	netName := m.NetworkName()
 
-	var dnsInfo, sshInfo *docker.ContainerInfo
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, dnsName))
-		if err != nil {
-			return fmt.Errorf("inspecting DNS container: %w", err)
-		}
-		dnsInfo = info
-		return nil
-	})
-	g.Go(func() error {
-		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, m.SSHContainerName()))
-		if err != nil {
-			return fmt.Errorf("inspecting SSH container: %w", err)
-		}
-		sshInfo = info
-		return nil
-	})
-	if err := g.Wait(); err != nil {
+	dnsInfo, sshInfo, err := m.inspectMesh(ctx)
+	if err != nil {
 		return nil, err
 	}
 	if dnsInfo == nil {
