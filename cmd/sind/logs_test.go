@@ -13,20 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLogs_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"logs"})
+func TestLogs_CommandAndFlags(t *testing.T) {
+	c, _, err := NewRootCommand().Find([]string{"logs"})
 	require.NoError(t, err)
 	assert.Equal(t, "logs NODE [SERVICE]", c.Use)
-}
-
-func TestLogs_HasFollowFlag(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"logs"})
-	require.NoError(t, err)
-	f := c.Flags().Lookup("follow")
-	require.NotNil(t, f)
-	assert.Equal(t, "f", f.Shorthand)
+	assert.Equal(t, "f", c.Flags().Lookup("follow").Shorthand)
+	assert.Equal(t, "n", c.Flags().Lookup("tail").Shorthand)
 }
 
 // TestLogs_MissingNode checks that logs, like ssh, names the missing cluster
@@ -57,15 +49,6 @@ func TestLogs_MissingNode(t *testing.T) {
 			assert.Contains(t, stderr.String(), `cluster "nosuch" not found in realm "sind"`)
 		})
 	}
-}
-
-func TestLogs_HasTailFlag(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"logs"})
-	require.NoError(t, err)
-	f := c.Flags().Lookup("tail")
-	require.NotNil(t, f)
-	assert.Equal(t, "n", f.Shorthand)
 }
 
 func TestLogs_NegativeTail(t *testing.T) {

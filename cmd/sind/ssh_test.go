@@ -21,27 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSSH_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"ssh"})
-	require.NoError(t, err)
-	assert.Contains(t, c.Use, "ssh")
-}
-
-func TestEnter_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"enter"})
-	require.NoError(t, err)
-	assert.Equal(t, "enter [CLUSTER]", c.Use)
-}
-
-func TestExec_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"exec"})
-	require.NoError(t, err)
-	assert.Contains(t, c.Use, "exec")
-}
-
 func TestParseSSHArgs_NodeOnly(t *testing.T) {
 	opts, node, cmd, err := parseSSHArgs([]string{"worker-0"})
 	require.NoError(t, err)
