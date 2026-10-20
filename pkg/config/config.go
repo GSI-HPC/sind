@@ -7,8 +7,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -202,15 +203,7 @@ func (s Section) IsMap() bool {
 
 // FragmentNames returns the sorted keys from Fragments.
 func (s Section) FragmentNames() []string {
-	if len(s.Fragments) == 0 {
-		return nil
-	}
-	names := make([]string, 0, len(s.Fragments))
-	for k := range s.Fragments {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(s.Fragments))
 }
 
 // UnmarshalJSON supports two YAML/JSON forms:

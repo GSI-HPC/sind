@@ -10,62 +10,56 @@ import (
 // validCapabilities lists all Linux capabilities recognized by Docker.
 // Names follow Docker convention (without the CAP_ prefix).
 // See capabilities(7) and https://docs.docker.com/reference/cli/docker/container/run/#privileged
-var validCapabilities = map[string]struct{}{
-	"ALL":                {},
-	"AUDIT_CONTROL":      {},
-	"AUDIT_READ":         {},
-	"AUDIT_WRITE":        {},
-	"BLOCK_SUSPEND":      {},
-	"BPF":                {},
-	"CHECKPOINT_RESTORE": {},
-	"CHOWN":              {},
-	"DAC_OVERRIDE":       {},
-	"DAC_READ_SEARCH":    {},
-	"FOWNER":             {},
-	"FSETID":             {},
-	"IPC_LOCK":           {},
-	"IPC_OWNER":          {},
-	"KILL":               {},
-	"LEASE":              {},
-	"LINUX_IMMUTABLE":    {},
-	"MAC_ADMIN":          {},
-	"MAC_OVERRIDE":       {},
-	"MKNOD":              {},
-	"NET_ADMIN":          {},
-	"NET_BIND_SERVICE":   {},
-	"NET_BROADCAST":      {},
-	"NET_RAW":            {},
-	"PERFMON":            {},
-	"SETFCAP":            {},
-	"SETGID":             {},
-	"SETPCAP":            {},
-	"SETUID":             {},
-	"SYS_ADMIN":          {},
-	"SYS_BOOT":           {},
-	"SYS_CHROOT":         {},
-	"SYS_MODULE":         {},
-	"SYS_NICE":           {},
-	"SYS_PACCT":          {},
-	"SYS_PTRACE":         {},
-	"SYS_RAWIO":          {},
-	"SYS_RESOURCE":       {},
-	"SYS_TIME":           {},
-	"SYS_TTY_CONFIG":     {},
-	"SYSLOG":             {},
-	"WAKE_ALARM":         {},
-}
-
-// isValidCapability reports whether name is a recognized Linux capability.
-func isValidCapability(name string) bool {
-	_, ok := validCapabilities[name]
-	return ok
+var validCapabilities = map[string]bool{
+	"ALL":                true,
+	"AUDIT_CONTROL":      true,
+	"AUDIT_READ":         true,
+	"AUDIT_WRITE":        true,
+	"BLOCK_SUSPEND":      true,
+	"BPF":                true,
+	"CHECKPOINT_RESTORE": true,
+	"CHOWN":              true,
+	"DAC_OVERRIDE":       true,
+	"DAC_READ_SEARCH":    true,
+	"FOWNER":             true,
+	"FSETID":             true,
+	"IPC_LOCK":           true,
+	"IPC_OWNER":          true,
+	"KILL":               true,
+	"LEASE":              true,
+	"LINUX_IMMUTABLE":    true,
+	"MAC_ADMIN":          true,
+	"MAC_OVERRIDE":       true,
+	"MKNOD":              true,
+	"NET_ADMIN":          true,
+	"NET_BIND_SERVICE":   true,
+	"NET_BROADCAST":      true,
+	"NET_RAW":            true,
+	"PERFMON":            true,
+	"SETFCAP":            true,
+	"SETGID":             true,
+	"SETPCAP":            true,
+	"SETUID":             true,
+	"SYS_ADMIN":          true,
+	"SYS_BOOT":           true,
+	"SYS_CHROOT":         true,
+	"SYS_MODULE":         true,
+	"SYS_NICE":           true,
+	"SYS_PACCT":          true,
+	"SYS_PTRACE":         true,
+	"SYS_RAWIO":          true,
+	"SYS_RESOURCE":       true,
+	"SYS_TIME":           true,
+	"SYS_TTY_CONFIG":     true,
+	"SYSLOG":             true,
+	"WAKE_ALARM":         true,
 }
 
 // CheckCapabilities reports the first name in caps that is not a recognized
 // Linux capability; field names the setting in the error, e.g. "capAdd".
 func CheckCapabilities(field string, caps []string) error {
 	for _, c := range caps {
-		if !isValidCapability(c) {
+		if !validCapabilities[c] {
 			return fmt.Errorf("unknown capability %q in %s", c, field)
 		}
 	}

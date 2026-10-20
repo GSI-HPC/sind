@@ -8,6 +8,7 @@ import (
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -149,16 +150,11 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 		if key.Value == "<<" {
 			continue
 		}
-		var match *field
-		for j := range fields {
-			if fields[j].key == key.Value {
-				match = &fields[j]
-			}
-		}
-		if match == nil {
+		j := slices.IndexFunc(fields, func(f field) bool { return f.key == key.Value })
+		if j < 0 {
 			return unknownKey(fields, key, join(path, key.Value))
 		}
-		if err := walk(match.typ, value, join(path, key.Value)); err != nil {
+		if err := walk(fields[j].typ, value, join(path, key.Value)); err != nil {
 			return err
 		}
 	}
