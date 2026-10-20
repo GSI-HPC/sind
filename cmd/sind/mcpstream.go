@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/atomicfile"
 	"github.com/GSI-HPC/sind/pkg/state"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -52,7 +53,19 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 	ctx := cmd.Context()
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
-	if logLevel, _ := cmd.Flags().GetString("log-level"); logLevel != "" {
+	// An unset variable in --host "$HOST" must not open the stream to the
+	// network, which is what an empty host means to net.Listen.
+	if host == "" {
+		return cobratree.Usagef("--host must not be empty: give an address, or 0.0.0.0 for all interfaces")
+	}
+	if port < 0 || port > 65535 {
+		return invalidValue("port", strconv.Itoa(port), "a port from 0 to 65535")
+	}
+	logLevel, _ := cmd.Flags().GetString("log-level")
+	if err := checkMCPLogLevel(logLevel); err != nil {
+		return err
+	}
+	if logLevel != "" {
 		_ = start.Flags().Set("log-level", logLevel)
 	}
 
@@ -81,19 +94,25 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 		_ = server.Shutdown(shutdownCtx)
 	})()
 
-	printMCPStreamHint(cmd, streamURL(ln.Addr()), tokenPath)
+	printMCPStreamHint(cmd, ln.Addr(), tokenPath)
 	if err := server.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
 }
 
-// printMCPStreamHint tells on stderr where the stream listens and how a
-// client authenticates. It names the token's file, never the token, which
-// stderr may carry into a log.
-func printMCPStreamHint(cmd *cobra.Command, url, tokenPath string) {
+// printMCPStreamHint tells on stderr where the stream listens, at addr,
+// and how a client authenticates. It names the token's file, never the
+// token, which stderr may carry into a log. A stream that listens on all
+// interfaces says so: the URL it prints for clients is localhost's.
+func printMCPStreamHint(cmd *cobra.Command, addr net.Addr, tokenPath string) {
 	w := cmd.ErrOrStderr()
-	_, _ = fmt.Fprintf(w, "MCP server listening on %s\n", url)
+	url := streamURL(addr)
+	if tcp, ok := addr.(*net.TCPAddr); ok && tcp.IP.IsUnspecified() {
+		_, _ = fmt.Fprintf(w, "MCP server listening on %s (all interfaces)\n", url)
+	} else {
+		_, _ = fmt.Fprintf(w, "MCP server listening on %s\n", url)
+	}
 	if tokenPath != "" {
 		_, _ = fmt.Fprintf(w, "Bearer token in %s (new at every start; set %s to keep one)\n", tokenPath, mcpTokenEnv)
 	} else {

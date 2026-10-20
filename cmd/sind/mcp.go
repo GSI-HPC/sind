@@ -439,8 +439,10 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 }
 
 // asMCPServer prepares `sind mcp start`, which `sind mcp stream` runs too,
-// for the sind processes it runs for its tool calls. They run with the
-// call's own flags and this process's environment, so it sets:
+// for the sind processes it runs for its tool calls, once it checked its
+// --log-level, which ophis would read as info if it does not know it. The
+// tool processes run with the call's own flags and this process's
+// environment, so it sets:
 //   - SIND_REALM to the root's --realm, or `sind --realm ci mcp start`
 //     would serve the default realm;
 //   - SIND_PROGRESS=none and no SIND_PROGRESS_LOG: a SIND_PROGRESS=plain
@@ -456,6 +458,10 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 func asMCPServer(cmd *cobra.Command) {
 	run := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		logLevel, _ := cmd.Flags().GetString("log-level")
+		if err := checkMCPLogLevel(logLevel); err != nil {
+			return err
+		}
 		root := cmd.Root()
 		if root.Flags().Changed("realm") {
 			realm, _ := root.Flags().GetString("realm")
@@ -467,6 +473,20 @@ func asMCPServer(cmd *cobra.Command) {
 		root.Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
 	}
+}
+
+// mcpLogLevels are the values of the --log-level of `sind mcp start` and
+// `sind mcp stream`, which ophis reads case-insensitively and turns any
+// other value into info.
+var mcpLogLevels = []string{"debug", "info", "warn", "error"}
+
+// checkMCPLogLevel returns a usage error for a --log-level value that is
+// not one of mcpLogLevels; empty is ophis's default.
+func checkMCPLogLevel(level string) error {
+	if level == "" || slices.Contains(mcpLogLevels, strings.ToLower(level)) {
+		return nil
+	}
+	return invalidFlagValue("log-level", level, mcpLogLevels...)
 }
 
 // refuseArgs makes the commands of ophis's tree that take no arguments refuse

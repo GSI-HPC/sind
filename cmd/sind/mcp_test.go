@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -741,6 +742,35 @@ func TestAsMCPServer_NoTimestamps(t *testing.T) {
 	server.SetArgs(nil)
 	require.NoError(t, server.Execute())
 	assert.Equal(t, "false", got)
+}
+
+// TestPrintMCPStreamHint checks that a stream on all interfaces says so,
+// while its client URL stays localhost's.
+func TestPrintMCPStreamHint(t *testing.T) {
+	for addr, want := range map[string]string{
+		"127.0.0.1:8080": "MCP server listening on http://127.0.0.1:8080/\n",
+		"0.0.0.0:8080":   "MCP server listening on http://localhost:8080/ (all interfaces)\n",
+		"[::]:8080":      "MCP server listening on http://localhost:8080/ (all interfaces)\n",
+	} {
+		tcp, err := net.ResolveTCPAddr("tcp", addr)
+		require.NoError(t, err)
+		var stderr bytes.Buffer
+		cmd := &cobra.Command{}
+		cmd.SetErr(&stderr)
+		printMCPStreamHint(cmd, tcp, "/state/mcp-token")
+		lines := strings.SplitAfter(stderr.String(), "\n")
+		assert.Equal(t, want, lines[0], addr)
+		assert.Contains(t, lines[2], strconv.Quote(streamURL(tcp)), addr)
+	}
+}
+
+func TestCheckMCPLogLevel(t *testing.T) {
+	for _, level := range []string{"", "debug", "info", "warn", "error", "DEBUG"} {
+		require.NoError(t, checkMCPLogLevel(level), level)
+	}
+	err := checkMCPLogLevel("warning")
+	require.EqualError(t, err, `invalid --log-level value "warning": want debug, info, warn or error`)
+	assert.True(t, cobratree.IsUsage(err))
 }
 
 func TestStreamURL(t *testing.T) {

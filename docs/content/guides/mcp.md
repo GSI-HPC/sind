@@ -99,7 +99,7 @@ For multi-client setups, sind can serve MCP over HTTP:
 sind mcp stream --port 8080
 ```
 
-The stream listens on `127.0.0.1` unless `--host` names another address. Every request needs the header `Authorization: Bearer <token>`; without it the stream answers `401 Unauthorized`. Loopback keeps other hosts out, but not the other users of your machine, and every tool runs sind with your Docker access, so the token is what keeps them from creating containers as you.
+The stream listens on `127.0.0.1` unless `--host` names another address; an empty `--host` is an error. With `--host 0.0.0.0` the first line it prints ends in `(all interfaces)`, and the URL in it stays `http://localhost:PORT/`, where a client on this machine connects. Every request needs the header `Authorization: Bearer <token>`; without it the stream answers `401 Unauthorized`. Loopback keeps other hosts out, but not the other users of your machine, and every tool runs sind with your Docker access, so the token is what keeps them from creating containers as you.
 
 The token comes from `SIND_MCP_TOKEN`. When that is not set, the stream generates a new random token at every start and writes it, readable only by you, to `mcp-token` in sind's state directory (`$XDG_STATE_HOME/sind`, by default `~/.local/state/sind`). It prints where the token is, never the token itself, and a client configuration to stderr:
 
