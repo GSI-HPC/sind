@@ -302,7 +302,7 @@ Exit status and signals:
 
 Logging uses `pkg/log` with context-based injection. Silent by default. All log lines include millisecond timestamps (`HH:MM:SS.mmm`) for timing analysis.
 
-Logs and progress are separate channels: the logger writes the records `-v` asks for, and a progress display shows the spans the work reports (see Progress Display). Under a display the logger is rebuilt on the display's terminal (`Terminal.Lines`), so every record, from whatever goroutine, is written whole above the display and never into it, in the colours of the real stderr; without one it writes to stderr as before.
+Logs and progress are separate channels: the logger writes the records `-v` asks for, and a progress display shows the spans the work reports (see Progress Display). Under a display the logger is rebuilt on the display's terminal (`Terminal.Lines`), so every record, from whatever goroutine, is written whole above the display and never into it, in the colours of the real stderr; without one it writes to stderr as before. The logger takes its colours from the colour profile of stderr, which lipgloss reads from the environment, and never asks the terminal for its colours: charmbracelet/log would have termenv query a terminal it writes to, and a pseudo-terminal that answers nothing, as under `script`, `expect` or `docker run -t`, would hold every command for 10 seconds and keep the queries in its output.
 
 | Level | Flag | What to log |
 |-------|------|------------|

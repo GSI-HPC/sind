@@ -5,12 +5,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -68,6 +71,32 @@ func TestNewLogger_HighVerbosityClamped(t *testing.T) {
 	ctx := context.Background()
 	l.Log(ctx, sindlog.LevelTrace, "deep trace")
 	assert.Contains(t, buf.String(), "deep trace")
+}
+
+// TestNewLogger_Colours checks that the logger draws in the colours its
+// writer shows, as colourProfile tells, though it hides from termenv what
+// the writer is (terminalQuiet).
+func TestNewLogger_Colours(t *testing.T) {
+	saved := colourProfile
+	t.Cleanup(func() { colourProfile = saved })
+	for _, tc := range []struct {
+		profile termenv.Profile
+		escapes bool
+	}{
+		{termenv.ANSI256, true},
+		{termenv.Ascii, false},
+	} {
+		t.Run(tc.profile.Name(), func(t *testing.T) {
+			var buf bytes.Buffer
+			colourProfile = func(w io.Writer) termenv.Profile {
+				assert.Same(t, &buf, w)
+				return tc.profile
+			}
+			newLogger(&buf, 0).ErrorContext(context.Background(), "boom")
+			assert.Contains(t, buf.String(), "boom")
+			assert.Equal(t, tc.escapes, strings.Contains(buf.String(), "\x1b["))
+		})
+	}
 }
 
 func TestVerboseFlag_AcceptedByRoot(t *testing.T) {
