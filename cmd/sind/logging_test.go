@@ -29,6 +29,17 @@ func TestNewLogger_ErrorOnly(t *testing.T) {
 	assert.Contains(t, buf.String(), "should appear")
 }
 
+func TestNewLogger_Timestamps(t *testing.T) {
+	var buf bytes.Buffer
+	newLogger(&buf, 0).ErrorContext(t.Context(), "failed")
+	assert.Regexp(t, `^\d\d:\d\d:\d\d\.\d{3} ERRO failed\n$`, buf.String())
+
+	t.Setenv(envLogTimestamps, "false")
+	buf.Reset()
+	newLogger(&buf, 0).ErrorContext(t.Context(), "failed")
+	assert.Equal(t, "ERRO failed\n", buf.String())
+}
+
 func TestNewLogger_Info(t *testing.T) {
 	var buf bytes.Buffer
 	l := newLogger(&buf, 1)

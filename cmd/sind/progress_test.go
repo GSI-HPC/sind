@@ -688,6 +688,7 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 func TestMCPTools_NoProgress(t *testing.T) {
 	t.Setenv(envProgress, "plain")
 	t.Setenv(envProgressLog, "/dev/stderr")
+	t.Setenv(envLogTimestamps, "") // the server sets it, in this process
 	for name, tool := range exportMCPTools(t) {
 		flags := tool.InputSchema.Properties.Flags.Properties
 		assert.NotContains(t, flags, "progress", name)

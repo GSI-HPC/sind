@@ -76,7 +76,7 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	}
-	for _, name := range []string{"SIND_REALM", "XDG_STATE_HOME", envProgress, envProgressLog} {
+	for _, name := range []string{"SIND_REALM", "XDG_STATE_HOME", envProgress, envProgressLog, envLogTimestamps} {
 		_ = os.Unsetenv(name)
 	}
 	os.Exit(m.Run())

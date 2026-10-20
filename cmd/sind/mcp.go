@@ -398,6 +398,8 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 //     a SIND_PROGRESS_LOG of /dev/stderr its events, and one that cannot be
 //     opened a note. Their stderr is no terminal, so nothing else would
 //     draw;
+//   - SIND_LOG_TIMESTAMPS=false: the time an error line was written means
+//     nothing to the client, which gets the line with the call's result;
 //   - the root's Version, which ophis reports to MCP clients, only while
 //     the server runs: set on the root for good, it would give every sind
 //     command a --version flag.
@@ -411,6 +413,7 @@ func asMCPServer(cmd *cobra.Command) {
 		}
 		_ = os.Setenv(envProgress, cliprogress.ModeNone.String())
 		_ = os.Unsetenv(envProgressLog)
+		_ = os.Setenv(envLogTimestamps, "false")
 		root.Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
 	}

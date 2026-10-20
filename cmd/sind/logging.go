@@ -5,12 +5,18 @@ package main
 import (
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/charmbracelet/lipgloss"
 	charmlog "github.com/charmbracelet/log"
 
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
+
+// envLogTimestamps names the variable that, set to "false", leaves the
+// time stamp off log lines. The MCP server sets it for the sind processes
+// of its tool calls (asMCPServer), whose stderr a call returns.
+const envLogTimestamps = "SIND_LOG_TIMESTAMPS"
 
 // newLogger builds a slog.Logger for the given verbosity level.
 // At verbosity 0, only errors are shown. Higher levels add info, debug, and trace output.
@@ -43,7 +49,7 @@ func newLogHandler(w io.Writer, verbosity int) *charmlog.Logger {
 	handler := charmlog.NewWithOptions(terminalQuiet{w}, charmlog.Options{
 		Level:           level,
 		TimeFormat:      "15:04:05.000",
-		ReportTimestamp: true,
+		ReportTimestamp: os.Getenv(envLogTimestamps) != "false",
 	})
 	handler.SetColorProfile(colourProfile(w))
 

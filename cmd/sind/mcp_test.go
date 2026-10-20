@@ -200,6 +200,8 @@ func TestMCPEffects_NameTools(t *testing.T) {
 // with their hints.
 func TestMCPServer_VersionAndTools(t *testing.T) {
 	setVersion(t, "v1.2.3", "")
+	// The server sets it for its tool calls, in this process.
+	t.Setenv(envLogTimestamps, "")
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	cfg := mcpConfig()
 	cfg.Transport = serverTransport
@@ -346,6 +348,8 @@ func (b *syncBuffer) String() string {
 func startMCPStream(t *testing.T, args ...string) (string, *syncBuffer, func() error) {
 	t.Helper()
 	setVersion(t, "v1.2.3", "")
+	// The server sets it for its tool calls, in this process.
+	t.Setenv(envLogTimestamps, "")
 	root := NewRootCommand()
 	root.SetArgs(append([]string{"mcp", "stream", "--port", "0"}, args...))
 	stderr := &syncBuffer{}
@@ -625,6 +629,8 @@ func TestMCPStreamToken(t *testing.T) {
 // --realm to the sind processes of its tool calls through SIND_REALM.
 func TestAsMCPServer_Realm(t *testing.T) {
 	t.Setenv("SIND_REALM", "env")
+	// The server sets it for its tool calls, in this process.
+	t.Setenv(envLogTimestamps, "")
 	root := &cobra.Command{Use: "sind"}
 	root.PersistentFlags().String("realm", "", "")
 	var got string
@@ -642,6 +648,21 @@ func TestAsMCPServer_Realm(t *testing.T) {
 	root.SetArgs([]string{"--realm", "ci", "start"})
 	require.NoError(t, root.Execute())
 	assert.Equal(t, "ci", got)
+}
+
+// TestAsMCPServer_NoTimestamps checks that the error lines of a server's
+// tool calls carry no time stamp.
+func TestAsMCPServer_NoTimestamps(t *testing.T) {
+	t.Setenv(envLogTimestamps, "")
+	var got string
+	server := &cobra.Command{Use: "start", RunE: func(*cobra.Command, []string) error {
+		got = os.Getenv(envLogTimestamps)
+		return nil
+	}}
+	asMCPServer(server)
+	server.SetArgs(nil)
+	require.NoError(t, server.Execute())
+	assert.Equal(t, "false", got)
 }
 
 func TestStreamURL(t *testing.T) {
