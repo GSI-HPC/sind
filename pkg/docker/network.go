@@ -72,12 +72,12 @@ var addressPoolsExhausted = []string{
 	"could not find an available, non-overlapping IPv4 address pool",
 }
 
-// createNetwork runs docker network create with the given IPAM flags. When
-// the default address pools are used up, the error wraps
-// ErrAddressPoolsExhausted and says how to get more.
-func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Labels, ipamArgs []string) (NetworkID, error) {
+// createNetwork runs docker network create with the given extra flags
+// (IPAM, --config-only). When the default address pools are used up, the
+// error wraps ErrAddressPoolsExhausted and says how to get more.
+func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Labels, flags []string) (NetworkID, error) {
 	args := []string{"network", "create"}
-	args = append(args, ipamArgs...)
+	args = append(args, flags...)
 	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))
 	stdout, _, err := c.run(ctx, args...)
@@ -106,14 +106,7 @@ func (c *Client) RemoveNetwork(ctx context.Context, name NetworkName) error {
 // bridge device, and attaches no container to it. Like every network create,
 // it fails when another network has the name (see IsAlreadyExists).
 func (c *Client) CreateConfigOnlyNetwork(ctx context.Context, name NetworkName, labels Labels) (NetworkID, error) {
-	args := []string{"network", "create", "--config-only"}
-	args = append(args, SortedLabelFlags(labels)...)
-	args = append(args, string(name))
-	stdout, _, err := c.run(ctx, args...)
-	if err != nil {
-		return "", err
-	}
-	return NetworkID(strings.TrimSpace(stdout)), nil
+	return c.createNetwork(ctx, name, labels, []string{"--config-only"})
 }
 
 // RemoveNetworkByID removes the network with the given ID. Unlike a name,
