@@ -100,7 +100,7 @@ func newMCPEnableCommand(e mcpEditor) *cobra.Command {
 entry of that name. The rest of the configuration file stays as it is, and
 the file as it was is first copied to <file>.<time>.bak. The root --realm
 sets SIND_REALM in the entry's environment, so the server serves that realm.`,
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPEnable(cmd, e, f)
 		},
@@ -123,7 +123,7 @@ func newMCPDisableCommand(e mcpEditor) *cobra.Command {
 		Long: `Remove the entry of sind's MCP server from ` + e.title + `'s configuration.
 The rest of the file stays as it is, and the file as it was is first copied
 to <file>.<time>.bak. A server that is not registered is an error.`,
-		Args: cobra.NoArgs,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPDisable(cmd, e, f)
 		},
@@ -138,7 +138,7 @@ func newMCPListCommand(e mcpEditor) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List the MCP servers registered with " + e.title,
-		Args:  cobra.NoArgs,
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPList(cmd, e, f)
 		},

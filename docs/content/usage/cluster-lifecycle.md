@@ -126,7 +126,7 @@ sind delete realm
 sind --realm ci-42 delete realm
 ```
 
-Deletes everything sind made for the realm, as `sind delete cluster --all` does: every cluster, the mesh, the [monitoring stack]({{< relref "/guides/monitoring" >}}) and the exported SSH configuration. The realm is the one `--realm`, `SIND_REALM` or the default names. External containers attached to the realm's networks are detached, not removed.
+Deletes everything sind made for the realm, as `sind delete cluster --all` does: every cluster, the mesh, the [monitoring stack]({{< relref "/guides/monitoring" >}}) and the exported SSH configuration. The realm is the one `--realm`, `SIND_REALM` or the default names; `sind delete realm ci-42` is a usage error that points to `--realm`. External containers attached to the realm's networks are detached, not removed.
 
 ## Connect containers outside sind
 

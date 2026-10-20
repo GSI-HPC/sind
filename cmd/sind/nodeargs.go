@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -12,6 +13,16 @@ import (
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/cobra"
 )
+
+// noArgs is the argument check of a command that takes no argument. It
+// says so in the words of cobra's other arity checks, where cobra.NoArgs
+// reports the first argument as an unknown command.
+func noArgs(_ *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("accepts no arguments, received %d", len(args))
+	}
+	return nil
+}
 
 // optionalCluster is the argument check of a command whose only, optional
 // argument is a cluster name.

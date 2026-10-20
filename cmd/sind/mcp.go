@@ -308,7 +308,7 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 	host.DefValue = mcpStreamHost
 	_ = host.Value.Set(mcpStreamHost)
 	host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
-	noArgs(cmd)
+	refuseArgs(cmd)
 	return cmd
 }
 
@@ -340,14 +340,14 @@ func asMCPServer(cmd *cobra.Command) {
 	}
 }
 
-// noArgs makes the commands of ophis's tree that take no arguments refuse
+// refuseArgs makes the commands of ophis's tree that take no arguments refuse
 // them, as sind's own commands do (usageArgs then makes that a usage
 // error): ophis leaves Args unset, which accepts any.
-func noArgs(cmd *cobra.Command) {
+func refuseArgs(cmd *cobra.Command) {
 	if cmd.Args == nil && cmd.Runnable() && !cmd.HasSubCommands() {
-		cmd.Args = cobra.NoArgs
+		cmd.Args = noArgs
 	}
 	for _, sub := range cmd.Commands() {
-		noArgs(sub)
+		refuseArgs(sub)
 	}
 }

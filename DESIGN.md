@@ -254,7 +254,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 Rules:
 - Cluster names are **always positional**, never flags
 - Node targets are node set expressions; a command joins its node arguments with a space, which is a union
-- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, read with `clusterArg` (the default cluster without one), `cobra.MinimumNArgs(1)` for required nodes
+- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, read with `clusterArg` (the default cluster without one), `cobra.MinimumNArgs(1)` for required nodes, and `noArgs` for none: it says `accepts no arguments, received N` in the words of cobra's other arity checks, where `cobra.NoArgs` calls the argument an unknown command
 
 ### Flag Conventions
 
@@ -442,7 +442,7 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 
 `sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh, the monitoring stack and the exported SSH configuration, as `sind delete realm` does. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
-`sind delete realm` deletes everything sind made for the realm: every cluster, the mesh, the monitoring stack and the exported SSH configuration, as `sind delete cluster --all` does, and fails the same way. It takes the realm from `--realm`, `SIND_REALM` or the default, as every command does, and no arguments. Containers outside sind attached to the realm's networks are detached, not removed.
+`sind delete realm` deletes everything sind made for the realm: every cluster, the mesh, the monitoring stack and the exported SSH configuration, as `sind delete cluster --all` does, and fails the same way. It takes the realm from `--realm`, `SIND_REALM` or the default, as every command does, and no arguments: `sind delete realm ci-42` is a usage error that points to `sind --realm ci-42 delete realm`. Containers outside sind attached to the realm's networks are detached, not removed.
 
 `sind connect container` and `sind disconnect container` manage external containers, see External Containers.
 

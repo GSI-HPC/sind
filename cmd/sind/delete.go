@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -61,7 +62,12 @@ func newDeleteRealmCommand() *cobra.Command {
 exported SSH configuration, as delete cluster --all does. The realm is the
 one --realm, SIND_REALM or the default names. Containers outside sind
 attached to the realm's networks are detached, not removed.`,
-		Args: cobra.NoArgs,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := noArgs(cmd, args); err != nil {
+				return fmt.Errorf("%w; name the realm with --realm, as in sind --realm %s delete realm", err, args[0])
+			}
+			return nil
+		},
 		RunE: withProgress(func(cmd *cobra.Command, _ []string) error {
 			return runDeleteClustersAll(cmd)
 		}),

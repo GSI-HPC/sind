@@ -129,7 +129,7 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 			"--config-path and --workspace are mutually exclusive",
 		},
 		{[]string{"mcp", "claude", "enable", "--workspace"}, "unknown flag: --workspace"},
-		{[]string{"mcp", "claude", "disable", "extra"}, `unknown command "extra" for "sind mcp claude disable"`},
+		{[]string{"mcp", "claude", "disable", "extra"}, "accepts no arguments, received 1 (usage: sind mcp claude disable)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.wantErr, func(t *testing.T) {

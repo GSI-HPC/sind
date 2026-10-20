@@ -56,7 +56,7 @@ func newGetCommand() *cobra.Command {
 		{"ssh-public-key", "Output SSH public key", getSSHKey("public_key", (*mesh.Manager).GetSSHPublicKey)},
 		{"ssh-known-hosts", "Output SSH known_hosts", getSSHKey("known_hosts", (*mesh.Manager).GetSSHKnownHosts)},
 	} {
-		cmd.AddCommand(&cobra.Command{Use: c.use, Short: c.short, Args: cobra.NoArgs, RunE: c.run})
+		cmd.AddCommand(&cobra.Command{Use: c.use, Short: c.short, Args: noArgs, RunE: c.run})
 	}
 
 	return cmd
