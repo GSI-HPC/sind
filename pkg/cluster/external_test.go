@@ -108,13 +108,7 @@ func (f *externalFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{}
 	case args[0] == "network" && args[1] == "disconnect":
 		c := f.containers[args[3]]
-		var kept []string
-		for _, n := range c.networks {
-			if n != args[2] {
-				kept = append(kept, n)
-			}
-		}
-		c.networks = kept
+		c.networks = slices.DeleteFunc(c.networks, func(n string) bool { return n == args[2] })
 		f.containers[args[3]] = c
 		return mock.Result{}
 	}
