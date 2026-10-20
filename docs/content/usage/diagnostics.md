@@ -141,6 +141,8 @@ Prints the version and, for a release build, the commit it was built from:
 sind 0.12.0 (0a57d68)
 ```
 
+`sind --version` prints the same line.
+
 `--json` prints all fields as one JSON object, for scripts such as [sind-action](https://github.com/GSI-HPC/sind-action), which reads `version`:
 
 ```bash
