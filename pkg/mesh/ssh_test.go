@@ -4,10 +4,6 @@ package mesh
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
-	"encoding/binary"
-	"encoding/pem"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,6 +14,7 @@ import (
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 )
 
 // --- KnownHost Lifecycle ---
@@ -379,62 +376,13 @@ func TestRemoveKnownHost_WriteError(t *testing.T) {
 func TestGenerateKeypair(t *testing.T) {
 	privPEM, pubLine := generateKeypair()
 
-	// Verify private key PEM structure.
-	block, rest := pem.Decode(privPEM)
-	require.NotNil(t, block, "failed to decode PEM")
-	assert.Equal(t, "OPENSSH PRIVATE KEY", block.Type)
+	signer, err := ssh.ParsePrivateKey(privPEM)
+	require.NoError(t, err)
+	pub, _, _, rest, err := ssh.ParseAuthorizedKey(pubLine)
+	require.NoError(t, err)
 	assert.Empty(t, rest)
-
-	// Verify AUTH_MAGIC.
-	assert.True(t, strings.HasPrefix(string(block.Bytes), "openssh-key-v1\x00"))
-
-	// Verify public key format.
-	line := strings.TrimSpace(string(pubLine))
-	parts := strings.SplitN(line, " ", 3)
-	require.Len(t, parts, 2)
-	assert.Equal(t, "ssh-ed25519", parts[0])
-
-	// Decode public key blob and verify structure.
-	blob, err := base64.StdEncoding.DecodeString(parts[1])
-	require.NoError(t, err)
-
-	// blob = string("ssh-ed25519") + string(pubkey_32_bytes)
-	keyType, blob := parseSSHString(t, blob)
-	assert.Equal(t, "ssh-ed25519", string(keyType))
-
-	pubKeyBytes, _ := parseSSHString(t, blob)
-	assert.Len(t, pubKeyBytes, ed25519.PublicKeySize)
-}
-
-func TestGenerateKeypair_KeysMatch(t *testing.T) {
-	privPEM, pubLine := generateKeypair()
-
-	// Extract public key from the public key line.
-	line := strings.TrimSpace(string(pubLine))
-	parts := strings.SplitN(line, " ", 3)
-	blob, err := base64.StdEncoding.DecodeString(parts[1])
-	require.NoError(t, err)
-	_, blob = parseSSHString(t, blob) // skip keytype
-	pubFromLine, _ := parseSSHString(t, blob)
-
-	// Extract public key from the private key PEM.
-	block, _ := pem.Decode(privPEM)
-	data := block.Bytes[len("openssh-key-v1\x00"):]
-
-	// Skip cipher, kdf, kdfoptions.
-	_, data = parseSSHString(t, data)
-	_, data = parseSSHString(t, data)
-	_, data = parseSSHString(t, data)
-
-	// Skip number of keys.
-	data = data[4:]
-
-	// Parse public key section.
-	pubSection, _ := parseSSHString(t, data)
-	_, pubSection = parseSSHString(t, pubSection) // skip keytype
-	pubFromPriv, _ := parseSSHString(t, pubSection)
-
-	assert.Equal(t, pubFromLine, pubFromPriv, "public keys from private and public files should match")
+	assert.Equal(t, ssh.KeyAlgoED25519, pub.Type())
+	assert.Equal(t, pub.Marshal(), signer.PublicKey().Marshal(), "the files hold one keypair")
 }
 
 // --- GetSSH* ---
@@ -550,15 +498,4 @@ func TestGetSSHKnownHosts_NoMesh(t *testing.T) {
 	_, err := mgr.GetSSHKnownHosts(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `no mesh found for realm "sind"`)
-}
-
-// --- test helpers ---
-
-// parseSSHString reads an SSH wire string (uint32 length + data) from buf.
-func parseSSHString(t *testing.T, buf []byte) (data, rest []byte) {
-	t.Helper()
-	require.True(t, len(buf) >= 4, "buffer too short for SSH string length")
-	n := binary.BigEndian.Uint32(buf[:4])
-	require.True(t, len(buf) >= int(4+n), "buffer too short for SSH string data")
-	return buf[4 : 4+n], buf[4+n:]
 }
