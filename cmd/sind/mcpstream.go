@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/GSI-HPC/sind/pkg/state"
@@ -33,18 +34,6 @@ const mcpTokenFile = "mcp-token"
 // mcpShutdownTimeout bounds how long a stopped stream waits for requests
 // in flight.
 const mcpShutdownTimeout = 5 * time.Second
-
-// waitUntil waits for done to close, for at most d. A tool call that runs to
-// completion after its client is gone (mcpRunsToCompletion) must not hold
-// up the shutdown of the stream.
-func waitUntil(done <-chan struct{}, d time.Duration) {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-done:
-	case <-timer.C:
-	}
-}
 
 // runMCPStream serves sind's MCP tools over streamable HTTP, on --host and
 // --port, to clients that send the bearer token from mcpStreamToken.
@@ -84,18 +73,11 @@ func runMCPStream(cmd *cobra.Command, cfg *ophis.Config, start *cobra.Command) e
 	defer stop()
 
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	served := make(chan struct{})
-	defer close(served)
-	go func() {
-		select {
-		case <-ctx.Done():
-		case <-served:
-			return
-		}
+	defer context.AfterFunc(ctx, func() {
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mcpShutdownTimeout)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
-	}()
+	})()
 
 	printMCPStreamHint(cmd, streamURL(ln.Addr()), tokenPath)
 	if err := server.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
@@ -143,10 +125,8 @@ func mcpStreamToken() (token, path string, err error) {
 		if len(token) < mcpMinTokenLength {
 			return "", "", fmt.Errorf("%s: a token has at least %d characters, e.g. from openssl rand -hex 32", mcpTokenEnv, mcpMinTokenLength)
 		}
-		for _, c := range []byte(token) {
-			if c <= ' ' || c > '~' {
-				return "", "", fmt.Errorf("%s: a token is printable ASCII without spaces", mcpTokenEnv)
-			}
+		if strings.ContainsFunc(token, func(c rune) bool { return c <= ' ' || c > '~' }) {
+			return "", "", fmt.Errorf("%s: a token is printable ASCII without spaces", mcpTokenEnv)
 		}
 		return token, "", nil
 	}
@@ -199,9 +179,14 @@ func mcpStreamHandler(ctx context.Context, cfg *ophis.Config, start *cobra.Comma
 		defer close(served)
 		_ = start.RunE(start, nil)
 	}()
+	// A tool call that runs to completion after its client is gone
+	// (mcpRunsToCompletion) must not hold up the shutdown of the stream.
 	stopInner := func() {
 		cancel()
-		waitUntil(served, mcpShutdownTimeout)
+		select {
+		case <-served:
+		case <-time.After(mcpShutdownTimeout):
+		}
 	}
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "sind-mcp-stream"}, nil)

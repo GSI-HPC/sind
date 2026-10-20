@@ -495,13 +495,6 @@ func TestRefuseFlagArgs_RunsToCompletion(t *testing.T) {
 	}
 }
 
-func TestWaitUntil(*testing.T) {
-	done := make(chan struct{})
-	close(done)
-	waitUntil(done, time.Hour)
-	waitUntil(make(chan struct{}), time.Millisecond)
-}
-
 func TestMCPStream_TokenFromEnv(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
