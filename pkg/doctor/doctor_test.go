@@ -57,14 +57,12 @@ func TestCheckDockerVersion(t *testing.T) {
 
 func TestCheckDockerVersion_TooOld(t *testing.T) {
 	err := CheckDockerVersion("27.5.0")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "requires >= 28.0")
+	require.ErrorContains(t, err, "requires >= 28.0")
 }
 
 func TestCheckDockerVersion_Invalid(t *testing.T) {
 	err := CheckDockerVersion("bogus")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unable to parse version")
+	require.ErrorContains(t, err, "unable to parse version")
 }
 
 func TestCgroupInfo_MemFs(t *testing.T) {

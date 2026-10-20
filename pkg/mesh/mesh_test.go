@@ -426,8 +426,7 @@ func TestEnsureMesh_Errors(t *testing.T) {
 			mgr := NewManager(c, DefaultRealm)
 
 			err := mgr.EnsureMesh(t.Context())
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 		})
 	}
 }
@@ -455,8 +454,7 @@ func TestEnsureMesh_DNSInspectAfterStartError(t *testing.T) {
 	mgr := NewManager(docker.NewClient(&m), DefaultRealm)
 
 	err := mgr.EnsureMesh(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting DNS container")
+	require.ErrorContains(t, err, "inspecting DNS container")
 }
 
 // --- EnsureMeshNetwork ---
@@ -730,8 +728,7 @@ func TestEnsureMeshNetwork_InspectError(t *testing.T) {
 	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMeshNetwork(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network")
+	assert.ErrorContains(t, err, "checking mesh network")
 }
 
 func TestEnsureMeshNetwork_CreateError(t *testing.T) {
@@ -745,8 +742,7 @@ func TestEnsureMeshNetwork_CreateError(t *testing.T) {
 	mgr := NewManager(c, DefaultRealm)
 
 	err := mgr.EnsureMeshNetwork(t.Context())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating mesh network")
+	assert.ErrorContains(t, err, "creating mesh network")
 	assert.False(t, mgr.Created(), "no network was created")
 }
 
@@ -837,8 +833,7 @@ func TestStartMesh_Errors(t *testing.T) {
 			mgr := NewManager(c, DefaultRealm)
 
 			_, _, err := mgr.StartMesh(t.Context())
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 		})
 	}
 }
@@ -1011,8 +1006,7 @@ func TestAddDNSRecords_DNSStoppedStartError(t *testing.T) {
 	err := mgr.AddDNSRecords(t.Context(), []DNSRecord{
 		{Hostname: "controller.dev.sind.sind", IP: "172.18.0.2"},
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reloading DNS")
+	require.ErrorContains(t, err, "reloading DNS")
 }
 
 // --- generateCorefile / parseEntries ---
@@ -1162,8 +1156,7 @@ func TestCleanupMesh_Errors(t *testing.T) {
 			mgr := NewManager(c, DefaultRealm)
 
 			err := mgr.CleanupMesh(t.Context())
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 		})
 	}
 }
@@ -1303,8 +1296,7 @@ func TestGetInfo_NoMesh(t *testing.T) {
 	mgr := NewManager(c, DefaultRealm)
 
 	_, err := mgr.GetInfo(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no mesh found for realm")
+	require.ErrorContains(t, err, "no mesh found for realm")
 	assert.Contains(t, err.Error(), DefaultRealm)
 }
 
@@ -1351,8 +1343,7 @@ func TestGetInfo_InspectErrors(t *testing.T) {
 			mgr := NewManager(c, DefaultRealm)
 
 			_, err := mgr.GetInfo(t.Context())
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.match)
+			require.ErrorContains(t, err, tt.match)
 		})
 	}
 }
@@ -1413,8 +1404,7 @@ func TestGetDNSRecords_NoMesh(t *testing.T) {
 	mgr := NewManager(c, DefaultRealm)
 
 	_, err := mgr.GetDNSRecords(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `no mesh found for realm "sind"`)
+	require.ErrorContains(t, err, `no mesh found for realm "sind"`)
 	assert.NotContains(t, err.Error(), "exit status")
 }
 
@@ -1428,8 +1418,7 @@ func TestGetDNSRecords_CheckError(t *testing.T) {
 	mgr := NewManager(c, DefaultRealm)
 
 	_, err := mgr.GetDNSRecords(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking sind-dns: docker daemon unreachable")
+	require.ErrorContains(t, err, "checking sind-dns: docker daemon unreachable")
 }
 
 // --- HostDNS branches ---

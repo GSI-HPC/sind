@@ -115,8 +115,7 @@ func TestUntilReady_EndKeepsTheFailingProbe(t *testing.T) {
 
 			err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
 
-			require.Error(t, err)
-			assert.Equal(t, tc.want, err.Error())
+			require.EqualError(t, err, tc.want)
 			w.Finish()
 			var end spans.Event
 			for _, e := range w.Events() {

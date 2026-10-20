@@ -230,8 +230,7 @@ func TestExportConfig_ReadError(t *testing.T) {
 	fs := afero.NewMemMapFs()
 
 	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reading private key and known_hosts")
+	assert.ErrorContains(t, err, "reading private key and known_hosts")
 	assert.False(t, docker.IsNotFound(err))
 
 	// Nothing is written.
@@ -267,8 +266,7 @@ func TestExportConfig_MkdirError(t *testing.T) {
 	fs := afero.NewReadOnlyFs(afero.NewMemMapFs())
 
 	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating directory")
+	assert.ErrorContains(t, err, "creating directory")
 }
 
 // errFs wraps an afero.Fs and fails OpenFile on a specific path.

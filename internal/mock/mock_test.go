@@ -58,8 +58,7 @@ func TestExecutor_Exhausted(t *testing.T) {
 	_, _, _ = m.Run(t.Context(), "docker", "ps")
 
 	_, _, err := m.Run(t.Context(), "docker", "inspect")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected call")
+	require.ErrorContains(t, err, "unexpected call")
 }
 
 func TestExecutor_RunWithStdin(t *testing.T) {
@@ -81,8 +80,7 @@ func TestExecutor_RunWithStdin_ReadError(t *testing.T) {
 	m.AddResult("ok", "", nil)
 
 	_, _, err := m.RunWithStdin(t.Context(), errReader{}, "docker", "cp")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reading stdin")
+	require.ErrorContains(t, err, "reading stdin")
 }
 
 func TestRecorder_Unit(t *testing.T) {
@@ -185,8 +183,7 @@ func TestExecutor_Start_OnStart(t *testing.T) {
 func TestExecutor_Start_NoOnStart(t *testing.T) {
 	var m Executor
 	_, err := m.Start(t.Context(), "docker", "events")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected Start call")
+	require.ErrorContains(t, err, "unexpected Start call")
 }
 
 func TestPipes(t *testing.T) {
@@ -221,8 +218,7 @@ func TestPipes_CloseWithError(t *testing.T) {
 
 	buf := make([]byte, 1)
 	_, err = proc.Stdout.Read(buf)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "connection reset")
+	require.ErrorContains(t, err, "connection reset")
 	_ = proc.Close()
 }
 

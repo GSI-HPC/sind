@@ -34,8 +34,7 @@ func TestPinnedDNSIP(t *testing.T) {
 	assert.Empty(t, ip, "no mesh")
 
 	_, err = mgr.PinnedDNSIP(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network: ")
+	require.ErrorContains(t, err, "checking mesh network: ")
 }
 
 func TestServiceIP(t *testing.T) {

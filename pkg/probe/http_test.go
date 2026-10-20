@@ -51,12 +51,10 @@ func TestSlurmctldHTTP_NotServed(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SlurmctldHTTP("/metrics/nodes")(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, `slurmctld serves no HTTP on port 6817 (got "HTTP/1.1 404 Not Found" for GET /metrics/nodes); check CommunicationParameters, or raise SlurmctldDebug to see why the http_parser plugin did not load`, err.Error())
+	require.EqualError(t, err, `slurmctld serves no HTTP on port 6817 (got "HTTP/1.1 404 Not Found" for GET /metrics/nodes); check CommunicationParameters, or raise SlurmctldDebug to see why the http_parser plugin did not load`)
 
 	err = SlurmctldHTTP("/livez")(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmctld serves no HTTP on port 6817 (exit status 1 for GET /livez)")
+	require.ErrorContains(t, err, "slurmctld serves no HTTP on port 6817 (exit status 1 for GET /livez)")
 	var te *TerminalError
 	assert.NotErrorAs(t, err, &te, "slurmctld may still be reconfiguring")
 }

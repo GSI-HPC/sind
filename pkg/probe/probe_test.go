@@ -54,8 +54,7 @@ func TestContainerRunning_NotRunning(t *testing.T) {
 			c := docker.NewClient(&m)
 
 			err := ContainerRunning(t.Context(), c, testContainer)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), status)
+			require.ErrorContains(t, err, status)
 			assert.Contains(t, err.Error(), "expected running")
 		})
 	}
@@ -69,8 +68,7 @@ func TestContainerRunning_Terminal(t *testing.T) {
 			c := docker.NewClient(&m)
 
 			err := ContainerRunning(t.Context(), c, testContainer)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), status)
+			require.ErrorContains(t, err, status)
 
 			var te *TerminalError
 			assert.ErrorAs(t, err, &te)
@@ -84,8 +82,7 @@ func TestContainerRunning_InspectError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ContainerRunning(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "inspecting container")
+	require.ErrorContains(t, err, "inspecting container")
 }
 
 func TestSystemdReady_Running(t *testing.T) {
@@ -120,8 +117,7 @@ func TestSystemdReady_NotReady(t *testing.T) {
 			c := docker.NewClient(&m)
 
 			err := SystemdReady(t.Context(), c, testContainer)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), state)
+			require.ErrorContains(t, err, state)
 		})
 	}
 }
@@ -132,8 +128,7 @@ func TestSystemdReady_ExecError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SystemdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking systemd state")
+	require.ErrorContains(t, err, "checking systemd state")
 }
 
 func TestSSHDReady(t *testing.T) {
@@ -156,8 +151,7 @@ func TestSSHDReady_UnexpectedBanner(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SSHDReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected banner")
+	require.ErrorContains(t, err, "unexpected banner")
 }
 
 func TestSSHDReady_EmptyBanner(t *testing.T) {
@@ -166,8 +160,7 @@ func TestSSHDReady_EmptyBanner(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SSHDReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected banner")
+	require.ErrorContains(t, err, "unexpected banner")
 }
 
 func TestSSHDReady_ConnectionRefused(t *testing.T) {
@@ -176,8 +169,7 @@ func TestSSHDReady_ConnectionRefused(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SSHDReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sshd not ready")
+	require.ErrorContains(t, err, "sshd not ready")
 }
 
 func TestSlurmctldReady(t *testing.T) {
@@ -200,8 +192,7 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SlurmctldReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmctld not ready")
+	require.ErrorContains(t, err, "slurmctld not ready")
 	var te *TerminalError
 	assert.NotErrorAs(t, err, &te)
 	require.Len(t, m.Calls, 2)
@@ -215,8 +206,7 @@ func TestSlurmctldReady_UnitStateUnknown(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SlurmctldReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "slurmctld not ready: exit status 1", err.Error())
+	require.EqualError(t, err, "slurmctld not ready: exit status 1")
 }
 
 func TestSlurmctldReady_Failed(t *testing.T) {
@@ -256,8 +246,7 @@ func TestSlurmctldReady_BackupController(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -298,8 +287,7 @@ func TestSlurmrestdReady_NotListening(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := SlurmrestdReady(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "slurmrestd not listening on port 6820")
+	require.ErrorContains(t, err, "slurmrestd not listening on port 6820")
 	var te *TerminalError
 	assert.NotErrorAs(t, err, &te, "slurmrestd may still be starting")
 }
@@ -333,8 +321,7 @@ func TestClusterRegistered_NotYet(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ClusterRegistered("dev")(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "cluster dev not registered with slurmdbd yet", err.Error())
+	require.EqualError(t, err, "cluster dev not registered with slurmdbd yet")
 }
 
 func TestClusterRegistered_Error(t *testing.T) {
@@ -343,8 +330,7 @@ func TestClusterRegistered_Error(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ClusterRegistered("dev")(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Equal(t, "listing clusters: exit status 1", err.Error())
+	require.EqualError(t, err, "listing clusters: exit status 1")
 }
 
 func TestUnitJournal(t *testing.T) {
@@ -517,8 +503,7 @@ func TestUntilReady_Timeout(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 	assert.Contains(t, err.Error(), "probe container")
 }
 
@@ -580,8 +565,7 @@ func TestUntilReady_TimeoutSecondProbe(t *testing.T) {
 		{Name: "systemd", Check: SystemdReady},
 	}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 	assert.Contains(t, err.Error(), "probe systemd")
 }
 
@@ -623,8 +607,7 @@ func TestUntilReady_ContextCanceled(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -639,8 +622,7 @@ func TestUntilReady_TerminalError(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReady(ctx, c, testContainer, probes, time.Millisecond)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 	assert.Contains(t, err.Error(), "exited")
 	// Only one call — no retries for terminal state.
 	assert.Len(t, m.Calls, 1)
@@ -652,8 +634,7 @@ func TestContainerRunning_OOMKilled(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	err := ContainerRunning(t.Context(), c, testContainer)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "OOM killed")
+	require.ErrorContains(t, err, "OOM killed")
 	assert.Contains(t, err.Error(), "137")
 
 	var te *TerminalError
@@ -715,11 +696,10 @@ func TestUntilReadyWithEvents_ContainerDie(t *testing.T) {
 
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Minute, events)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "not ready")
 
 	var te *TerminalError
 	assert.ErrorAs(t, err, &te)
-	assert.Contains(t, err.Error(), "not ready")
 	assert.Contains(t, err.Error(), "died")
 }
 
@@ -834,8 +814,7 @@ func TestUntilReadyWithEvents_ContextCanceled(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -852,8 +831,7 @@ func TestUntilReadyWithEvents_Timeout(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not ready")
+	require.ErrorContains(t, err, "not ready")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "last probe error: probe container")
 }
@@ -869,8 +847,7 @@ func TestUntilReadyWithEvents_TerminalError(t *testing.T) {
 	events := make(chan monitor.Event)
 	probes := []Probe{{Name: "container", Check: ContainerRunning}}
 	err := UntilReadyWithEvents(ctx, c, testContainer, probes, time.Millisecond, events)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exited")
+	require.ErrorContains(t, err, "exited")
 	assert.Len(t, m.Calls, 1)
 }
 
@@ -1278,8 +1255,7 @@ func TestSnapshot_ExecDaemonError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	_, err := Snapshot(t.Context(), c, testContainer, workerServices)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "systemctl is-active")
+	require.ErrorContains(t, err, "systemctl is-active")
 }
 
 func TestSnapshot_MalformedOutput(t *testing.T) {
@@ -1289,8 +1265,7 @@ func TestSnapshot_MalformedOutput(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	_, err := Snapshot(t.Context(), c, testContainer, workerServices)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "got 2 lines")
+	require.ErrorContains(t, err, "got 2 lines")
 }
 
 func TestWaitEnded_NoProbeFailure(t *testing.T) {
@@ -1299,7 +1274,7 @@ func TestWaitEnded_NoProbeFailure(t *testing.T) {
 
 	err := waitEnded(ctx, testContainer, nil)
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled", err.Error())
+	assert.EqualError(t, err, "node "+string(testContainer)+" not ready: context canceled")
 }
 
 func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
@@ -1311,7 +1286,7 @@ func TestWaitEnded_KeepsLastProbeError(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	var te *TerminalError
 	require.ErrorAs(t, err, &te)
-	assert.Equal(t, "node "+string(testContainer)+" not ready: context canceled; last probe error: boom", err.Error())
+	assert.EqualError(t, err, "node "+string(testContainer)+" not ready: context canceled; last probe error: boom")
 }
 
 // endsOnDemand is a wait whose deadline passes when end is called, not at
@@ -1367,5 +1342,5 @@ func TestUntilReady_EndReportsTheProbeThatHangs(t *testing.T) {
 	err := UntilReady(ctx, docker.NewClient(&m), testContainer, probes, time.Millisecond)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Equal(t, "node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: signal: killed", err.Error())
+	assert.EqualError(t, err, "node sind-dev-controller not ready: context deadline exceeded; last probe error: probe munge: signal: killed")
 }

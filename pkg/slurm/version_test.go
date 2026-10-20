@@ -85,8 +85,7 @@ func TestParseVersion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := parseVersion(tt.input)
 			if tt.wantErr != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				assert.ErrorContains(t, err, tt.wantErr)
 				assert.Empty(t, got)
 			} else {
 				require.NoError(t, err)
@@ -136,8 +135,7 @@ func TestDiscoverVersion_RunError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	version, err := DiscoverVersion(t.Context(), c, "missing:latest")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "running slurmctld -V")
+	assert.ErrorContains(t, err, "running slurmctld -V")
 	assert.Empty(t, version)
 }
 
@@ -147,7 +145,6 @@ func TestDiscoverVersion_ParseError(t *testing.T) {
 	c := docker.NewClient(&m)
 
 	version, err := DiscoverVersion(t.Context(), c, "bad:image")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected slurmctld -V output")
+	assert.ErrorContains(t, err, "unexpected slurmctld -V output")
 	assert.Empty(t, version)
 }

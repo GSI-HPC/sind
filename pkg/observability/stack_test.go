@@ -172,8 +172,7 @@ func TestEnsureStack_Errors(t *testing.T) {
 			}
 			f.fail[tt.fail] = exit(t)
 			_, err := m.EnsureStack(t.Context(), "", "")
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
@@ -183,8 +182,7 @@ func TestEnsureStack_NotReady(t *testing.T) {
 	f.down["http://sind-loki:3100/ready"] = true
 
 	_, err := m.EnsureStack(t.Context(), "", "")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "waiting for the monitoring stack: ")
+	require.ErrorContains(t, err, "waiting for the monitoring stack: ")
 	assert.Contains(t, err.Error(), "loki not ready")
 }
 
@@ -220,13 +218,11 @@ func TestSync(t *testing.T) {
 
 	f.down["http://sind-alloy:12345/-/reload"] = true
 	err = m.Sync(t.Context(), "third\n")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "reloading Alloy configuration: ")
+	require.ErrorContains(t, err, "reloading Alloy configuration: ")
 
 	f.fail["cp - sind-alloy"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.Sync(t.Context(), "fourth\n")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "writing Alloy configuration: ")
+	require.ErrorContains(t, err, "writing Alloy configuration: ")
 }
 
 func TestJournals(t *testing.T) {
@@ -245,11 +241,9 @@ func TestJournals(t *testing.T) {
 
 	f.containers["sind-alloy"].state = docker.StateExited
 	err = m.ResetJournals(t.Context(), "dev", "worker-0")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "resetting journal directories: ")
+	require.ErrorContains(t, err, "resetting journal directories: ")
 	err = m.RemoveJournals(t.Context(), "dev")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing journal directories: ")
+	require.ErrorContains(t, err, "removing journal directories: ")
 }
 
 func TestRemove(t *testing.T) {
@@ -289,23 +283,19 @@ func TestRemove_Errors(t *testing.T) {
 	require.NoError(t, err)
 	f.fail["rm -f -v sind-alloy"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.Remove(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing alloy container: ")
+	require.ErrorContains(t, err, "removing alloy container: ")
 
 	f.fail["volume rm sind-grafana"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.RemoveVolumes(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing volume sind-grafana: ")
+	require.ErrorContains(t, err, "removing volume sind-grafana: ")
 
 	f.fail["ps"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.Remove(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing the monitoring containers: ")
+	require.ErrorContains(t, err, "listing the monitoring containers: ")
 
 	f.fail["volume ls"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	err = m.RemoveVolumes(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "listing the monitoring volumes: ")
+	require.ErrorContains(t, err, "listing the monitoring volumes: ")
 }
 
 func TestStatus(t *testing.T) {
@@ -398,19 +388,16 @@ func TestStart_Errors(t *testing.T) {
 
 	delete(f.containers, "sind-loki")
 	found, err := m.Start(t.Context())
-	require.Error(t, err)
+	require.EqualError(t, err, "the monitoring stack lacks sind-loki: creating a monitored cluster creates it again")
 	assert.True(t, found)
-	assert.Equal(t, "the monitoring stack lacks sind-loki: creating a monitored cluster creates it again", err.Error())
 
 	f.fail["inspect sind-prometheus"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	_, err = m.Start(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking prometheus container: ")
+	require.ErrorContains(t, err, "checking prometheus container: ")
 	delete(f.fail, "inspect sind-prometheus")
 
 	f.containers["sind-alloy"].state = docker.StateExited
 	f.fail["start sind-alloy"] = mock.Result{Stderr: "boom\n", Err: testutil.ExitCode1(t)}
 	_, err = m.Start(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "starting alloy container: ")
+	require.ErrorContains(t, err, "starting alloy container: ")
 }
