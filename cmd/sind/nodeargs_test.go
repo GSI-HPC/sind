@@ -134,17 +134,6 @@ func TestPaddingClash_SkipsATermThatDoesNotParse(t *testing.T) {
 	assert.False(t, found)
 }
 
-func TestWithoutPadding(t *testing.T) {
-	for in, want := range map[string]string{
-		"worker-01.dev002": "worker-1.dev2",
-		"worker-0.dev00":   "worker-0.dev0",
-		"rack10n0010":      "rack10n10",
-		"controller":       "controller",
-	} {
-		assert.Equal(t, want, withoutPadding(in), in)
-	}
-}
-
 func TestNoGroups(t *testing.T) {
 	_, err := noGroups{}.Resolve("", "compute")
 	require.ErrorIs(t, err, errNoGroups)

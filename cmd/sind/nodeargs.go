@@ -131,7 +131,7 @@ func paddingClash(expr string) (first, second string, found bool) {
 	}) {
 		return "", "", false
 	}
-	seen := make(map[string]string)
+	seen := nodeset.New()
 	for _, term := range terms {
 		set, err := nodeset.Parse(term)
 		if err != nil {
@@ -140,11 +140,10 @@ func paddingClash(expr string) (first, second string, found bool) {
 			continue
 		}
 		for _, name := range set.Expand() {
-			key := withoutPadding(name)
-			prev, ok := seen[key]
+			prev, ok := seen.Canonical(name)
 			switch {
 			case !ok:
-				seen[key] = name
+				_ = seen.Add(name) // a name Expand returned parses
 			case clusterOf(prev) != clusterOf(name):
 				return prev, name, true
 			}
@@ -178,31 +177,6 @@ func nodeTerms(expr string) []string {
 	}
 	end(len(expr))
 	return terms
-}
-
-// withoutPadding returns name with the leading zeros of each of its
-// numbers taken off, the form go-nodeset compares names in: worker-01.dev02
-// is worker-1.dev2.
-func withoutPadding(name string) string {
-	var b strings.Builder
-	for i := 0; i < len(name); {
-		j := i
-		for j < len(name) && name[j] >= '0' && name[j] <= '9' {
-			j++
-		}
-		if j == i {
-			b.WriteByte(name[i])
-			i++
-			continue
-		}
-		digits := strings.TrimLeft(name[i:j], "0")
-		if digits == "" {
-			digits = "0"
-		}
-		b.WriteString(digits)
-		i = j
-	}
-	return b.String()
 }
 
 // clusterNodes is the short names of the targets in one cluster.
