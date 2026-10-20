@@ -38,10 +38,11 @@ type File struct {
 	path string // the file itself, after symbolic links
 	key  string // the member that holds the servers: mcpServers or servers
 
-	exists bool
-	mode   fs.FileMode
-	orig   []byte
-	root   hujson.Value
+	exists  bool
+	mode    fs.FileMode
+	orig    []byte
+	root    hujson.Value
+	newline string // the file's line break: \r\n if it has one, else \n
 }
 
 // Server is an entry of a configuration's server list.
@@ -63,7 +64,7 @@ func Load(fsys afero.Fs, path, key string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := &File{fs: fsys, path: path, key: key, mode: 0o600}
+	f := &File{fs: fsys, path: path, key: key, mode: 0o600, newline: "\n"}
 	data, err := afero.ReadFile(fsys, path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -76,6 +77,9 @@ func Load(fsys afero.Fs, path, key string) (*File, error) {
 		}
 		f.exists, f.mode, f.orig = true, info.Mode().Perm(), bytes.Clone(data)
 	}
+	if bytes.Contains(data, []byte("\r\n")) {
+		f.newline = "\r\n"
+	}
 	if len(bytes.TrimSpace(data)) == 0 {
 		data = []byte("{}\n")
 	}
@@ -86,12 +90,35 @@ func Load(fsys afero.Fs, path, key string) (*File, error) {
 	if _, ok := f.root.Value.(*hujson.Object); !ok {
 		return nil, fmt.Errorf("parsing %s: not a JSON object", path)
 	}
+	// An editor reads the last of two members of the same name, while
+	// Set and Remove would change the first.
+	if duplicate(f.object()) == key {
+		return nil, fmt.Errorf("parsing %s: %q is defined more than once", path, key)
+	}
 	if m := member(f.object(), key); m != nil {
-		if _, ok := m.Value.Value.(*hujson.Object); !ok {
+		obj, ok := m.Value.Value.(*hujson.Object)
+		if !ok {
 			return nil, fmt.Errorf("parsing %s: %q is not an object", path, key)
+		}
+		if name := duplicate(obj); name != "" {
+			return nil, fmt.Errorf("parsing %s: server %q is defined more than once in %q", path, name, key)
 		}
 	}
 	return f, nil
+}
+
+// duplicate returns the first member name that obj has more than once, or
+// "" if it has none.
+func duplicate(obj *hujson.Object) string {
+	seen := make(map[string]bool, len(obj.Members))
+	for _, m := range obj.Members {
+		name := m.Name.Value.(hujson.Literal).String()
+		if seen[name] {
+			return name
+		}
+		seen[name] = true
+	}
+	return ""
 }
 
 // resolve follows the symbolic links of path, if fsys has any, to the file
@@ -260,11 +287,17 @@ func (f *File) insert(obj *hujson.Object, ptr string, depth int, name string, va
 	// overwrite what follows them.
 	before := bytes.TrimRight(m.Name.BeforeExtra, " \t")
 	if !bytes.HasSuffix(before, []byte("\n")) {
-		before = slices.Concat(before, []byte("\n"))
+		before = slices.Concat(before, []byte(f.newline))
 	}
 	m.Name.BeforeExtra = slices.Concat(before, []byte(indent))
 	if !bytes.ContainsRune(obj.AfterExtra, '\n') {
-		obj.AfterExtra = slices.Concat(bytes.TrimRight(obj.AfterExtra, " \t"), []byte("\n"+strings.Repeat(f.indentUnit(), depth-1)))
+		obj.AfterExtra = slices.Concat(bytes.TrimRight(obj.AfterExtra, " \t"), []byte(f.newline+strings.Repeat(f.indentUnit(), depth-1)))
+	}
+	// The patch leaves a \n before the closing brace, even where the file
+	// had \r\n.
+	if f.newline != "\n" {
+		lf := bytes.ReplaceAll(obj.AfterExtra, []byte("\r\n"), []byte("\n"))
+		obj.AfterExtra = bytes.ReplaceAll(lf, []byte("\n"), []byte(f.newline))
 	}
 }
 
@@ -284,7 +317,7 @@ func (f *File) patch(op, ptr string, value hujson.ValueTrimmed) {
 // render marshals s as JSON, with the members of old, the entry s
 // replaces, that Server has no field for, in their place, and those of s
 // after them: indented with the file's indentation after the prefix
-// indent, if lines is set, or on one line. A Server always marshals, to
+// indent, and with its line breaks, if lines is set, or on one line. A Server always marshals, to
 // JSON that always parses, and the members of old, standardized, are JSON.
 func (f *File) render(s Server, old *hujson.Object, indent string, lines bool) hujson.Value {
 	var buf bytes.Buffer
@@ -301,7 +334,7 @@ func (f *File) render(s Server, old *hujson.Object, indent string, lines bool) h
 	} else {
 		buf.Write(v.Pack())
 	}
-	v, _ = hujson.Parse(buf.Bytes())
+	v, _ = hujson.Parse(bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte(f.newline)))
 	return v
 }
 

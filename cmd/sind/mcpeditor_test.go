@@ -275,6 +275,22 @@ func TestMCPList(t *testing.T) {
 	assert.Equal(t, "No MCP servers found in \""+none+"\".\n", stderr, "the note names the file, so that a mistyped path shows")
 }
 
+// TestMCPEditor_DuplicateServer checks that a file that has a server twice,
+// of which an editor reads the last and sind would change the first, is
+// left alone with an error that names the server.
+func TestMCPEditor_DuplicateServer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.json")
+	orig := `{"mcpServers": {"sind": {"command": "a"}, "sind": {"command": "b"}}}`
+	require.NoError(t, os.WriteFile(path, []byte(orig), 0o644))
+	for _, sub := range []string{"enable", "disable", "list"} {
+		_, _, err := executeCommand("mcp", "claude", sub, "--config-path", path)
+		require.EqualError(t, err, "parsing "+path+`: server "sind" is defined more than once in "mcpServers"`, sub)
+	}
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, orig, string(data))
+}
+
 func TestMCPEditor_LoadError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "c.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers": [`), 0o644))
