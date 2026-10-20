@@ -19,14 +19,12 @@ func (c *Client) CreateVolume(ctx context.Context, name VolumeName, labels Label
 	args := []string{"volume", "create"}
 	args = append(args, SortedLabelFlags(labels)...)
 	args = append(args, string(name))
-	_, _, err := c.run(ctx, args...)
-	return err
+	return c.do(ctx, args...)
 }
 
 // RemoveVolume removes a Docker volume.
 func (c *Client) RemoveVolume(ctx context.Context, name VolumeName) error {
-	_, _, err := c.run(ctx, "volume", "rm", string(name))
-	return err
+	return c.do(ctx, "volume", "rm", string(name))
 }
 
 // IsVolumeInUse reports whether err indicates the volume is still held by a

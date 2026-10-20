@@ -49,7 +49,7 @@ pkg/cmdexec/       Command executor abstraction
   └── logging.go   LoggingExecutor (TRACE-level command logging)
 
 pkg/docker/        Docker CLI wrapper
-  ├── client.go    Client type, run/exists helpers, each docker command a hidden progress call
+  ├── client.go    Client type, run/do/output/exists helpers, each docker command a hidden progress call
   ├── container.go Container operations
   ├── network.go   Network operations
   ├── volume.go    Volume operations
@@ -184,7 +184,7 @@ The CLI layer should be thin — argument parsing, flag handling, and output for
 ## Adding a Docker operation
 
 1. **Add the method** to `pkg/docker/client.go` (or the appropriate resource file)
-2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output. Both report the command as a hidden progress call named after its subcommand, and both wait for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
+2. **Follow the pattern**: call `c.run()` or `c.runWithStdin()`, parse output; `c.do()` runs a command for its effect alone and `c.output()` returns its stdout. They all report the command as a hidden progress call named after its subcommand, and each waits for one of the client's `docker.MaxConcurrentCalls` slots, so a command must not wait for another docker command while it runs; long-lived streams go through `Executor.Start` and take no slot
 3. **Use strong types**: `ContainerName`, `NetworkName`, `VolumeName`, etc.
 4. **Write unit tests** using `mock.Executor`
 

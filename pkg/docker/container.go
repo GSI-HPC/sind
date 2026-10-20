@@ -27,11 +27,8 @@ func (c *Client) ContainerExists(ctx context.Context, name ContainerName) (bool,
 // Use StartContainer to start it afterwards. Returns the container ID.
 func (c *Client) CreateContainer(ctx context.Context, args ...string) (ContainerID, error) {
 	createArgs := append([]string{"create"}, args...)
-	stdout, _, err := c.run(ctx, createArgs...)
-	if err != nil {
-		return "", err
-	}
-	return ContainerID(strings.TrimSpace(stdout)), nil
+	stdout, err := c.output(ctx, createArgs...)
+	return ContainerID(strings.TrimSpace(stdout)), err
 }
 
 // RunContainer creates and starts a container in detached mode (docker run -d).
@@ -39,23 +36,18 @@ func (c *Client) CreateContainer(ctx context.Context, args ...string) (Container
 // element. Returns the container ID.
 func (c *Client) RunContainer(ctx context.Context, args ...string) (ContainerID, error) {
 	runArgs := append([]string{"run", "-d"}, args...)
-	stdout, _, err := c.run(ctx, runArgs...)
-	if err != nil {
-		return "", err
-	}
-	return ContainerID(strings.TrimSpace(stdout)), nil
+	stdout, err := c.output(ctx, runArgs...)
+	return ContainerID(strings.TrimSpace(stdout)), err
 }
 
 // StartContainer starts a stopped container.
 func (c *Client) StartContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "start", string(name))
-	return err
+	return c.do(ctx, "start", string(name))
 }
 
 // StopContainer gracefully stops a running container.
 func (c *Client) StopContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "stop", string(name))
-	return err
+	return c.do(ctx, "stop", string(name))
 }
 
 // RemoveContainer force-removes a container and its anonymous volumes. If the
@@ -65,41 +57,32 @@ func (c *Client) StopContainer(ctx context.Context, name ContainerName) error {
 // as a config helper or the SSH relay, gets anonymous ones. Named volumes
 // are left alone.
 func (c *Client) RemoveContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "rm", "-f", "-v", string(name))
-	return err
+	return c.do(ctx, "rm", "-f", "-v", string(name))
 }
 
 // KillContainer sends SIGKILL to a running container (docker kill).
 func (c *Client) KillContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "kill", string(name))
-	return err
+	return c.do(ctx, "kill", string(name))
 }
 
 // SignalContainer sends a signal to a running container (docker kill -s).
 func (c *Client) SignalContainer(ctx context.Context, name ContainerName, signal string) error {
-	_, _, err := c.run(ctx, "kill", "-s", signal, string(name))
-	return err
+	return c.do(ctx, "kill", "-s", signal, string(name))
 }
 
 // PauseContainer suspends all processes in a container (docker pause).
 func (c *Client) PauseContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "pause", string(name))
-	return err
+	return c.do(ctx, "pause", string(name))
 }
 
 // UnpauseContainer resumes a paused container (docker unpause).
 func (c *Client) UnpauseContainer(ctx context.Context, name ContainerName) error {
-	_, _, err := c.run(ctx, "unpause", string(name))
-	return err
+	return c.do(ctx, "unpause", string(name))
 }
 
 // Logs returns the last n lines of a container's log output.
 func (c *Client) Logs(ctx context.Context, name ContainerName, n int) (string, error) {
-	stdout, _, err := c.run(ctx, "logs", "--tail", fmt.Sprintf("%d", n), string(name))
-	if err != nil {
-		return "", err
-	}
-	return stdout, nil
+	return c.output(ctx, "logs", "--tail", fmt.Sprintf("%d", n), string(name))
 }
 
 // ContainerState represents the state of a Docker container.
@@ -341,11 +324,7 @@ func parseLabels(s string) Labels {
 // Exec runs a command inside a container and returns its stdout.
 func (c *Client) Exec(ctx context.Context, container ContainerName, command ...string) (string, error) {
 	args := append([]string{"exec", string(container)}, command...)
-	stdout, _, err := c.run(ctx, args...)
-	if err != nil {
-		return "", err
-	}
-	return stdout, nil
+	return c.output(ctx, args...)
 }
 
 // ExecAllowNonZero is like Exec but returns stdout even when the inner

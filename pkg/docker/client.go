@@ -92,6 +92,22 @@ func (c *Client) run(ctx context.Context, args ...string) (string, string, error
 	})
 }
 
+// do runs a docker command for its effect alone.
+func (c *Client) do(ctx context.Context, args ...string) error {
+	_, _, err := c.run(ctx, args...)
+	return err
+}
+
+// output runs a docker command and returns its standard output, or the
+// error and no output.
+func (c *Client) output(ctx context.Context, args ...string) (string, error) {
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		return "", err
+	}
+	return stdout, nil
+}
+
 func (c *Client) runWithStdin(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
 	return c.call(ctx, args, func(ctx context.Context) (string, string, error) {
 		return c.Executor.RunWithStdin(ctx, stdin, c.Command, args...)

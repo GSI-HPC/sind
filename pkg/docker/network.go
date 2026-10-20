@@ -96,8 +96,7 @@ func (c *Client) createNetwork(ctx context.Context, name NetworkName, labels Lab
 
 // RemoveNetwork removes a Docker network.
 func (c *Client) RemoveNetwork(ctx context.Context, name NetworkName) error {
-	_, _, err := c.run(ctx, "network", "rm", string(name))
-	return err
+	return c.do(ctx, "network", "rm", string(name))
 }
 
 // CreateConfigOnlyNetwork creates a configuration-only network (docker
@@ -113,8 +112,7 @@ func (c *Client) CreateConfigOnlyNetwork(ctx context.Context, name NetworkName, 
 // an ID never comes to stand for another network, so a caller that
 // inspected a network removes that one and no other.
 func (c *Client) RemoveNetworkByID(ctx context.Context, id NetworkID) error {
-	_, _, err := c.run(ctx, "network", "rm", string(id))
-	return err
+	return c.do(ctx, "network", "rm", string(id))
 }
 
 // NetworkMeta is a network's ID, name, creation time and labels.
@@ -154,14 +152,12 @@ func (c *Client) InspectNetworkMeta(ctx context.Context, name NetworkName) (*Net
 
 // ConnectNetwork connects a container to a network.
 func (c *Client) ConnectNetwork(ctx context.Context, network NetworkName, container ContainerName) error {
-	_, _, err := c.run(ctx, "network", "connect", string(network), string(container))
-	return err
+	return c.do(ctx, "network", "connect", string(network), string(container))
 }
 
 // DisconnectNetwork disconnects a container from a network.
 func (c *Client) DisconnectNetwork(ctx context.Context, network NetworkName, container ContainerName) error {
-	_, _, err := c.run(ctx, "network", "disconnect", string(network), string(container))
-	return err
+	return c.do(ctx, "network", "disconnect", string(network), string(container))
 }
 
 // NetworkContainers returns the names of the containers attached to a
