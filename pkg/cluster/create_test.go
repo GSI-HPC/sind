@@ -1598,7 +1598,7 @@ func TestSetupNodes_HostKeyError(t *testing.T) {
 	assert.Contains(t, err.Error(), "node controller: setting up SSH: no ed25519 host key found")
 }
 
-func TestRegisterMesh_DNSError(t *testing.T) {
+func TestRegisterNodes_DNSError(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		// CopyFromContainer (read Corefile) fails
@@ -1616,13 +1616,13 @@ func TestRegisterMesh_DNSError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerMesh(t.Context(), meshMgr, "dev", "25.11.0", configs, results)
+	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "registering DNS")
 }
 
-func TestRegisterMesh_KnownHostError(t *testing.T) {
+func TestRegisterNodes_KnownHostError(t *testing.T) {
 	var m mock.Executor
 	callIdx := 0
 	m.OnCall = func(args []string, _ string) mock.Result {
@@ -1661,7 +1661,7 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 		hostKey: "ssh-ed25519 AAAA-key",
 	}}
 
-	_, err := registerMesh(t.Context(), meshMgr, "dev", "25.11.0", configs, results)
+	_, err := registerNodes(t.Context(), meshMgr, "dev", configs, results)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "registering host key")

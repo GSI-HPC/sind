@@ -326,7 +326,7 @@ func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.
 
 // DeregisterMesh removes DNS records and known_hosts entries for all
 // containers in batch, starting a stopped mesh first (see
-// deregisterHostnames). This is the inverse of registerMesh during cluster
+// deregisterHostnames). This is the inverse of registerNodes during cluster
 // creation. Failures are logged and swallowed: the cluster is being torn
 // down, and stale entries in a mesh helper that's already unreachable will
 // be overwritten on next register or cleared when the mesh itself is torn

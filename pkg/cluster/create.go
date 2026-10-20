@@ -219,7 +219,7 @@ type nodeResult struct {
 //	├ CheckNsdelegate ──────────────────────────────────┤
 //	└ pullImages (missing images; all with cfg.Pull) ───┘
 //	                        │
-//	registerMesh ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only) ║ ensureMonitoring (monitoring only)
+//	registerNodes ║ enableSlurm → createSlurmAccounts (accounts only) ║ createHomes (users only) ║ ensureMonitoring (monitoring only)
 //	                        │
 //	              registerStackDNS (monitoring only)
 //	                        │
@@ -416,7 +416,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	}
 	log.InfoContext(ctx, "nodes ready", "count", len(nodeConfigs))
 
-	// registerMesh, enableSlurm and createHomes are independent: Slurm uses
+	// registerNodes, enableSlurm and createHomes are independent: Slurm uses
 	// short hostnames resolved by Docker embedded DNS on the cluster network.
 	// Mesh DNS records are for SSH relay and host-side resolution only.
 	readyCtx, cancelReady := rd.context(ctx)
@@ -424,11 +424,11 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 	var cluster *Cluster
 	g, gctx := errgroup.WithContext(readyCtx)
 	g.Go(func() error {
-		var meshErr error
-		cluster, meshErr = registerMesh(gctx, meshMgr, cfg.Name, slurmVersion, nodeConfigs, nodeResults)
-		if meshErr != nil {
-			return meshErr
+		nodes, err := registerNodes(gctx, meshMgr, cfg.Name, nodeConfigs, nodeResults)
+		if err != nil {
+			return err
 		}
+		cluster = &Cluster{Name: cfg.Name, SlurmVersion: slurmVersion, State: StateRunning, Nodes: nodes}
 		log.DebugContext(gctx, "mesh registration complete")
 		return nil
 	})
@@ -739,21 +739,6 @@ func setupNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 		})
 	}
 	return results, g.Wait()
-}
-
-// registerMesh writes DNS records and known hosts for all nodes in batch,
-// and builds the Cluster result.
-func registerMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName, slurmVersion string, nodeConfigs []RunConfig, results []nodeResult) (*Cluster, error) {
-	nodes, err := registerNodes(ctx, meshMgr, clusterName, nodeConfigs, results)
-	if err != nil {
-		return nil, err
-	}
-	return &Cluster{
-		Name:         clusterName,
-		SlurmVersion: slurmVersion,
-		State:        StateRunning,
-		Nodes:        nodes,
-	}, nil
 }
 
 // registerNodes registers DNS records and known_hosts entries for all nodes

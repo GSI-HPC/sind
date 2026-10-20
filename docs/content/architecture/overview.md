@@ -45,7 +45,7 @@ Creating and deleting clusters and workers acquire a per-realm lock to serialize
 ├ DetectCVMFS (storage.cvmfs only) ────────────────────┼→ setupNodes
 └ CheckNsdelegate ─────────────────────────────────────┘
                            │
-  registerMesh ║ enableSlurm → createSlurmAccounts ║ createHomes
+  registerNodes ║ enableSlurm → createSlurmAccounts ║ createHomes
                            │
                        *Cluster
 ```
@@ -62,7 +62,7 @@ Creating and deleting clusters and workers acquire a per-realm lock to serialize
 - `createHomes` creates the users' home directories on the shared home volume, once, on `controller` (`users` only).
 - If any step fails, `sind create cluster` removes what it created, the mesh only if no other cluster uses it.
 
-The creation reports these phases as the steps of its [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}): `mesh` (`EnsureMesh`), `pull images`, `preflight` (the four branches above), `nodes` (`setupNodes`, a target for each node), `mesh registration` (`registerMesh`), `slurm` (`enableSlurm`, a target for each managed node), `accounts` (`createSlurmAccounts`), `home directories` (`createHomes`) and, after a failure, `rollback`.
+The creation reports these phases as the steps of its [progress display]({{< relref "/usage/progress#what-the-commands-show" >}}): `mesh` (`EnsureMesh`), `pull images`, `preflight` (the four branches above), `nodes` (`setupNodes`, a target for each node), `mesh registration` (`registerNodes`), `slurm` (`enableSlurm`, a target for each managed node), `accounts` (`createSlurmAccounts`), `home directories` (`createHomes`) and, after a failure, `rollback`.
 
 Each node is created, monitored, and probed in a single pipeline — no barrier between node creation and readiness checking. Early-starting nodes begin probing while later nodes are still being created.
 
