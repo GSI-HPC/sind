@@ -21,13 +21,7 @@ func TestDockerMonitor_Run(t *testing.T) {
 		`{"Type":"container","Action":"unpause","Actor":{"Attributes":{"name":"sind-dev-controller","sind.cluster":"dev"}},"time":1234567894}`,
 	}, "\n")
 
-	m := NewDockerMonitor("sind-dev-")
-	ch := make(chan Event, 10)
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
+	events := runOn(t, NewDockerMonitor("sind-dev-").Run, input)
 	require.Len(t, events, 5)
 
 	tests := []struct {
@@ -53,69 +47,32 @@ func TestDockerMonitor_LongLine(t *testing.T) {
 	users := strings.Repeat("user:2001:2001,", 10000)
 	input := `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-worker-0","sind.users":"` + users + `"}},"time":1234567890}` + "\n"
 	require.Greater(t, len(input), 64*1024)
-	m := NewDockerMonitor("sind-dev-")
-	ch := make(chan Event, 10)
-
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
+	events := runOn(t, NewDockerMonitor("sind-dev-").Run, input)
 	require.Len(t, events, 1)
 	assert.Equal(t, "worker-0", events[0].Node)
 }
 
 func TestDockerMonitor_DieDetail(t *testing.T) {
 	input := `{"Type":"container","Action":"die","Actor":{"Attributes":{"name":"sind-dev-controller","exitCode":"1"}},"time":1234567890}` + "\n"
-	m := NewDockerMonitor("sind-dev-")
-	ch := make(chan Event, 10)
-
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
+	events := runOn(t, NewDockerMonitor("sind-dev-").Run, input)
 	require.Len(t, events, 1)
 	assert.Equal(t, "exitCode=1", events[0].Detail)
 }
 
-func TestDockerMonitor_SkipsUnknownActions(t *testing.T) {
-	input := `{"Type":"container","Action":"create","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1234567890}` + "\n"
-	m := NewDockerMonitor("sind-dev-")
-	ch := make(chan Event, 10)
-
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
-	assert.Empty(t, events)
-}
-
-func TestDockerMonitor_SkipsForeignContainers(t *testing.T) {
-	input := `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"other-container"}},"time":1234567890}` + "\n"
-	m := NewDockerMonitor("sind-dev-")
-	ch := make(chan Event, 10)
-
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
-	assert.Empty(t, events)
+func TestDockerMonitor_Skips(t *testing.T) {
+	for _, tt := range []struct{ name, input string }{
+		{"unknown action", `{"Type":"container","Action":"create","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1234567890}` + "\n"},
+		{"foreign container", startLine("other-container")},
+		{"prefix-only name", startLine("sind-dev-")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Empty(t, runOn(t, NewDockerMonitor("sind-dev-").Run, tt.input))
+		})
+	}
 }
 
 func TestDockerMonitor_SkipsMalformedJSON(t *testing.T) {
-	input := "not json\n" +
-		`{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-controller"}},"time":1234567890}` + "\n"
-	m := NewDockerMonitor("sind-dev-")
-	ch := make(chan Event, 10)
-
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
+	events := runOn(t, NewDockerMonitor("sind-dev-").Run, "not json\n"+startLine("sind-dev-controller"))
 	require.Len(t, events, 1)
 	assert.Equal(t, EventContainerStart, events[0].Kind)
 }
@@ -134,19 +91,6 @@ func TestDockerEventsArgs(t *testing.T) {
 		"--format", "{{json .}}",
 	}
 	assert.Equal(t, want, args)
-}
-
-func TestDockerMonitor_SkipsPrefixOnlyName(t *testing.T) {
-	input := `{"Type":"container","Action":"start","Actor":{"Attributes":{"name":"sind-dev-"}},"time":1234567890}` + "\n"
-	m := NewDockerMonitor("sind-dev-")
-	ch := make(chan Event, 10)
-
-	err := m.Run(t.Context(), strings.NewReader(input), ch)
-	require.NoError(t, err, "Run")
-	close(ch)
-
-	events := drainEvents(ch)
-	assert.Empty(t, events, "prefix-only name should be skipped")
 }
 
 func TestDockerMonitor_ContextCancelledMidScan(t *testing.T) {
@@ -204,7 +148,12 @@ func TestDockerMonitor_ContextCancelledDuringSend(t *testing.T) {
 	}
 }
 
-func drainEvents(ch <-chan Event) []Event {
+// runOn runs a monitor's Run on input and returns the events it sent.
+func runOn(t *testing.T, run func(context.Context, io.Reader, chan<- Event) error, input string) []Event {
+	t.Helper()
+	ch := make(chan Event, 10)
+	require.NoError(t, run(t.Context(), strings.NewReader(input), ch), "Run")
+	close(ch)
 	var events []Event
 	for ev := range ch {
 		events = append(events, ev)
