@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -14,31 +15,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func executeCommand(args ...string) (string, string, error) {
+// execute runs a command line in ctx, with stdin as its input (nil leaves
+// it at os.Stdin), and returns what it wrote to its output and error
+// streams.
+func execute(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
 	cmd := NewRootCommand()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.SetArgs(args)
+	if stdin != nil {
+		cmd.SetIn(stdin)
+	}
+	cmd.SetContext(ctx)
 	err := cmd.Execute()
 	return stdout.String(), stderr.String(), err
 }
 
+func executeCommand(args ...string) (string, string, error) {
+	return execute(context.Background(), nil, args...)
+}
+
 func executeWithMock(mock *mock.Executor, args ...string) (string, string, error) {
-	cmd := NewRootCommand()
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-	cmd.SetArgs(args)
-
-	client := docker.NewClient(mock)
-	ctx := withClient(context.Background(), client)
-	cmd.SetContext(ctx)
-
-	err := cmd.Execute()
-	return stdout.String(), stderr.String(), err
+	return execute(withClient(context.Background(), docker.NewClient(mock)), nil, args...)
 }
 
 func TestRootCommand_Help(t *testing.T) {

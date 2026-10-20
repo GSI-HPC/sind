@@ -5,7 +5,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -62,22 +61,7 @@ func executeWithDockerCtx(ctx context.Context, args ...string) (string, string, 
 // executeWithDockerIn is executeWithDockerCtx with stdin as the command's
 // input; nil leaves it at os.Stdin.
 func executeWithDockerIn(ctx context.Context, stdin io.Reader, args ...string) (string, string, error) {
-	cmd := NewRootCommand()
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-	cmd.SetArgs(args)
-	if stdin != nil {
-		cmd.SetIn(stdin)
-	}
-
-	client := docker.NewClient(&cmdexec.OSExecutor{})
-	ctx = withClient(ctx, client)
-	cmd.SetContext(ctx)
-
-	err := cmd.Execute()
-	return stdout.String(), stderr.String(), err
+	return execute(withClient(ctx, docker.NewClient(&cmdexec.OSExecutor{})), stdin, args...)
 }
 
 // executeWithStdin runs a CLI command with the given string as its input.

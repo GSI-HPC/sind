@@ -236,14 +236,8 @@ func resolvedWithPolkit(authorized bool) *mock.Executor {
 // wrote to its output stream.
 func executeDoctor(ctx context.Context, t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	cmd := NewRootCommand()
-	out := new(bytes.Buffer)
-	cmd.SetOut(out)
-	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs(append([]string{"doctor"}, args...))
-	cmd.SetContext(ctx)
-	err := cmd.Execute()
-	return out.String(), err
+	out, _, err := execute(ctx, nil, append([]string{"doctor"}, args...)...)
+	return out, err
 }
 
 // captureStdout runs fn with os.Stdout redirected to a file and returns what
