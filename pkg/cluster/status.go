@@ -220,19 +220,13 @@ func GetMountPoints(ctx context.Context, client *docker.Client, realm, clusterNa
 
 	// Primary/backup controller pairs share the slurmctld state volume.
 	backup := ContainerName(realm, clusterName, ControllerBackupShortName)
-	for _, c := range containers {
-		if c.Name == backup {
-			mounts = append(mounts, MountPoint{Path: slurm.StateSaveLocation, Source: string(VolumeName(realm, clusterName, VolumeState)), Type: config.StorageVolume})
-			break
-		}
+	if slices.ContainsFunc(containers, func(c *docker.ContainerInfo) bool { return c.Name == backup }) {
+		mounts = append(mounts, MountPoint{Path: slurm.StateSaveLocation, Source: string(VolumeName(realm, clusterName, VolumeState)), Type: config.StorageVolume})
 	}
 
 	// Clusters with users mount the home volume.
-	for _, c := range containers {
-		if c.Labels[LabelUsers] != "" {
-			mounts = append(mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume})
-			break
-		}
+	if slices.ContainsFunc(containers, func(c *docker.ContainerInfo) bool { return c.Labels[LabelUsers] != "" }) {
+		mounts = append(mounts, MountPoint{Path: HomeMountPath, Source: string(VolumeName(realm, clusterName, VolumeHome)), Type: config.StorageVolume})
 	}
 
 	// Check existence of Docker volumes, with one listing for all of them.
