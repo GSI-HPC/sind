@@ -213,8 +213,13 @@ func TestMCPServer_VersionAndTools(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	served := make(chan error, 1)
-	go func() { served <- root.ExecuteContext(ctx) }()
+	// The server ends with nil or context.Canceled, whichever of the
+	// session's close and the cancel it sees first.
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		_ = root.ExecuteContext(ctx)
+	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)

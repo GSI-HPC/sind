@@ -137,8 +137,7 @@ func waitFor(t *testing.T, cmd *exec.Cmd, d time.Duration) error {
 		return err
 	case <-time.After(d):
 		_ = cmd.Process.Kill()
-		<-done
-		t.Fatalf("the process was still running %v after it was interrupted", d)
+		t.Fatalf("the process was still running %v after it was interrupted, then %v", d, <-done)
 		return nil
 	}
 }
