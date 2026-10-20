@@ -75,6 +75,7 @@ func NewRootCommand() *cobra.Command {
 	requireKnownSubcommand(cmd)
 	usageArgs(cmd)
 	annotateMCPTools(cmd)
+	noFileCompletions(cmd)
 
 	return cmd
 }

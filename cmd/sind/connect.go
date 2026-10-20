@@ -23,7 +23,8 @@ func newConnectCommand() *cobra.Command {
 network and every cluster network, so that they resolve the realm's names
 and reach its nodes. Clusters created later are connected to them too, and
 deleting a cluster or the realm detaches them.`,
-		Args: cobra.MinimumNArgs(1),
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: completeContainers(cluster.ConnectableContainers),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExternal(cmd, args, cluster.Connect)
 		},
@@ -42,7 +43,8 @@ func newDisconnectCommand() *cobra.Command {
 		Long: `Detach containers outside sind from every network of the realm that they
 join, the mesh network last, so that clusters created later are not
 connected to them. The containers keep running.`,
-		Args: cobra.MinimumNArgs(1),
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: completeContainers(cluster.ExternalContainers),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExternal(cmd, args, cluster.Disconnect)
 		},

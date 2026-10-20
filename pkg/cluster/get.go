@@ -135,16 +135,17 @@ func GetNodes(ctx context.Context, client *docker.Client, realm, clusterName str
 }
 
 // GetNodeNames returns the nodes of every cluster in the realm as
-// NODE.CLUSTER, ordered by cluster name, then like GetNodes. It lists the
-// realm's containers once and inspects none, for shell completion.
-func GetNodeNames(ctx context.Context, client *docker.Client, realm string) ([]string, error) {
+// NODE.CLUSTER, ordered by cluster name, then like GetNodes, only those of
+// roles when any are given. It lists the realm's containers once and
+// inspects none, for shell completion.
+func GetNodeNames(ctx context.Context, client *docker.Client, realm string, roles ...config.Role) ([]string, error) {
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	// Mesh containers carry the realm label but no cluster label.
 	containers = slices.DeleteFunc(containers, func(c docker.ContainerListEntry) bool {
-		return c.Labels[LabelCluster] == ""
+		return c.Labels[LabelCluster] == "" || len(roles) > 0 && !slices.Contains(roles, config.Role(c.Labels[LabelRole]))
 	})
 	slices.SortFunc(containers, func(a, b docker.ContainerListEntry) int {
 		return cmp.Or(strings.Compare(a.Labels[LabelCluster], b.Labels[LabelCluster]),

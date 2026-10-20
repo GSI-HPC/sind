@@ -425,6 +425,23 @@ func TestGetNodeNames(t *testing.T) {
 	assert.Equal(t, []string{"ps", "-a", "--no-trunc", "--format", "json", "--filter", "label=sind.realm=sind"}, m.Calls[0].Args)
 }
 
+func TestGetNodeNames_Roles(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{ID: "a", Names: "sind-dev-worker-0", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=worker"},
+		testutil.PsEntry{ID: "b", Names: "sind-dev-controller", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller"},
+		testutil.PsEntry{ID: "c", Names: "sind-dev-submitter", State: "running", Image: "img",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=submitter"},
+	), "", nil)
+
+	names, err := GetNodeNames(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, config.RoleWorker, config.RoleSubmitter)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"submitter.dev", "worker-0.dev"}, names)
+}
+
 func TestGetNodes_SkipsEmptyClusterLabel(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(testutil.NDJSON(

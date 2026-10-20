@@ -125,7 +125,7 @@ func newDeleteWorkerCommand() *cobra.Command {
 		Long:              "Remove worker nodes from a cluster.\n\n" + nodesHelp,
 		Example:           nodesExample("sind delete worker", "worker-0.dev"),
 		Args:              cobra.MinimumNArgs(1),
-		ValidArgsFunction: completeNodeNames,
+		ValidArgsFunction: completeWorkerNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
 			return runDeleteWorker(cmd, strings.Join(args, " "))
 		}),

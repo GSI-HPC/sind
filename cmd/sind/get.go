@@ -159,7 +159,7 @@ func newGetNodeCommand() *cobra.Command {
 		Use:               "node NODE[.CLUSTER]",
 		Short:             "Show node health status (accepts bare name or NODE.CLUSTER)",
 		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: completeNodeNames,
+		ValidArgsFunction: completeNodeName,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGetNode(cmd, args[0])
 		},

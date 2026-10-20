@@ -68,17 +68,19 @@ func (f *externalFake) onCall(args []string, _ string) mock.Result {
 		}
 		return mock.Result{Stdout: strings.Join(lines, "\n") + "\n"}
 	case args[0] == "ps":
-		net := strings.TrimPrefix(args[len(args)-1], "network=")
+		// Without a network filter, ps lists every container.
+		net, filtered := strings.CutPrefix(args[len(args)-1], "network=")
 		var entries []testutil.PsEntry
 		for name, c := range f.containers {
-			if !slices.Contains(c.networks, net) {
+			if filtered && !slices.Contains(c.networks, net) {
 				continue
 			}
 			var labels []string
 			for k, v := range c.labels {
 				labels = append(labels, k+"="+v)
 			}
-			entries = append(entries, testutil.PsEntry{ID: name, Names: name, State: "running", Image: "img", Labels: strings.Join(labels, ",")})
+			entries = append(entries, testutil.PsEntry{ID: name, Names: name, State: "running", Image: "img",
+				Labels: strings.Join(labels, ","), Networks: strings.Join(c.networks, ",")})
 		}
 		return mock.Result{Stdout: testutil.NDJSON(entries...)}
 	case args[0] == "inspect":
@@ -135,6 +137,28 @@ func TestExternalContainers_Error(t *testing.T) {
 	_, err := ExternalContainers(t.Context(), c, mesh.NewManager(c, "sind"))
 
 	require.ErrorContains(t, err, "listing containers on the mesh")
+}
+
+func TestConnectableContainers(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.containers["kind-worker"] = externalContainer{networks: []string{"kind", "sind-mesh"}}
+	f.containers["db"] = externalContainer{networks: []string{"bridge"}}
+	f.containers["ci-dev-controller"] = externalContainer{labels: map[string]string{LabelRealm: "ci"}, networks: []string{"ci-dev-net"}}
+
+	names, err := ConnectableContainers(t.Context(), c, mesh.NewManager(c, "sind"))
+
+	require.NoError(t, err)
+	assert.Equal(t, []docker.ContainerName{"db", "kind-control-plane"}, names,
+		"kind-worker joins the mesh already, and sind's containers of any realm are left out")
+}
+
+func TestConnectableContainers_Error(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.fail["ps"] = mock.Result{Err: fmt.Errorf("daemon unreachable")}
+
+	_, err := ConnectableContainers(t.Context(), c, mesh.NewManager(c, "sind"))
+
+	require.EqualError(t, err, "listing containers: daemon unreachable")
 }
 
 func TestConnect(t *testing.T) {

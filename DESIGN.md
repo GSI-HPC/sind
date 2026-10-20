@@ -356,11 +356,14 @@ Rules:
 All commands that accept cluster names or node names must set `ValidArgsFunction`:
 
 - **Cluster name commands** → `completeClusterNames`
-- **Node name commands** → `completeNodeNames`
+- **Node name commands** → `completeNodeNames`; `completeNodeName` for a command that takes one node (`get node`), which completes nothing after it, and `completeWorkerNames` for `delete worker`, which removes workers only
 - **Commands with DisableFlagParsing** (ssh, exec) → `ValidArgsFunction` with heuristics (best-effort despite cobra limitations)
+- **External containers** → `completeContainers`: `connect container` offers the containers outside sind that are not on the mesh yet (`cluster.ConnectableContainers`), `disconnect container` those that are (`cluster.ExternalContainers`), each but the ones already named
+- **Commands without arguments** complete nothing: `NewRootCommand` gives every leaf without a `ValidArgsFunction` `cobra.NoFileCompletions` (`noFileCompletions`), where the shell would offer file names
+- **Aliases**: cobra completes none, so the `power` group completes `off` once a prefix of it is typed (`completeAliases`)
 
 When adding a `get` subcommand with positional arg completion for a second argument
-(like `logs NODE SERVICE`), write a dedicated completion function that switches on `len(args)`.
+(like `logs NODE SERVICE`), write a dedicated completion function that switches on `len(args)`. `logs NODE SERVICE` offers the services of the node's role, those `get node` checks (`cluster.NodeServices`).
 
 ### New Command Checklist
 
