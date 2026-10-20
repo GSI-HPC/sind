@@ -85,61 +85,35 @@ func TestCgroupInfo_ReadError(t *testing.T) {
 	assert.False(t, hasNsd)
 }
 
-func TestParseCgroupInfo_WithNsdelegate(t *testing.T) {
-	mounts := "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup", path)
-	assert.True(t, hasV2)
-	assert.True(t, hasNsd)
-}
-
-func TestParseCgroupInfo_WithoutNsdelegate(t *testing.T) {
-	mounts := "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup", path)
-	assert.True(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-func TestParseCgroupInfo_NoCgroup2(t *testing.T) {
-	mounts := "tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Empty(t, path)
-	assert.False(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-// TestParseCgroupInfo_Hybrid checks that a systemd host in hybrid mode,
-// whose cgroup2 mount at /sys/fs/cgroup/unified has nsdelegate, does not
-// pass: Docker runs containers on cgroup v1 there.
-func TestParseCgroupInfo_Hybrid(t *testing.T) {
-	mounts := "tmpfs /sys/fs/cgroup tmpfs ro,nosuid,nodev,noexec,mode=755 0 0\n" +
-		"cgroup2 /sys/fs/cgroup/unified cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate 0 0\n" +
-		"cgroup /sys/fs/cgroup/systemd cgroup rw,nosuid,nodev,noexec,relatime,xattr,name=systemd 0 0\n" +
-		"cgroup /sys/fs/cgroup/memory cgroup rw,nosuid,nodev,noexec,relatime,memory 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup/unified", path)
-	assert.False(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-// TestParseCgroupInfo_RootAfterOther checks that the mount at
-// /sys/fs/cgroup counts wherever it is in the table, and that an option
-// that only contains "nsdelegate" is not taken for it.
-func TestParseCgroupInfo_RootAfterOther(t *testing.T) {
-	mounts := "cgroup2 /run/other cgroup2 rw,nsdelegate 0 0\n" +
-		"cgroup2 /sys/fs/cgroup cgroup2 rw,nonsdelegate 0 0\n"
-	path, hasV2, hasNsd := parseCgroupInfo(mounts)
-	assert.Equal(t, "/sys/fs/cgroup", path)
-	assert.True(t, hasV2)
-	assert.False(t, hasNsd)
-}
-
-func TestParseCgroupInfo_Empty(t *testing.T) {
-	path, hasV2, hasNsd := parseCgroupInfo("")
-	assert.Empty(t, path)
-	assert.False(t, hasV2)
-	assert.False(t, hasNsd)
+func TestParseCgroupInfo(t *testing.T) {
+	tests := []struct {
+		name, mounts, path string
+		hasV2, hasNsd      bool
+	}{
+		{"with nsdelegate", "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0\n", "/sys/fs/cgroup", true, true},
+		{"without nsdelegate", "cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime 0 0\n", "/sys/fs/cgroup", true, false},
+		{"no cgroup2", "tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n", "", false, false},
+		// A systemd host in hybrid mode, whose cgroup2 mount at
+		// /sys/fs/cgroup/unified has nsdelegate, does not pass: Docker runs
+		// containers on cgroup v1 there.
+		{"hybrid", "tmpfs /sys/fs/cgroup tmpfs ro,nosuid,nodev,noexec,mode=755 0 0\n" +
+			"cgroup2 /sys/fs/cgroup/unified cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate 0 0\n" +
+			"cgroup /sys/fs/cgroup/systemd cgroup rw,nosuid,nodev,noexec,relatime,xattr,name=systemd 0 0\n" +
+			"cgroup /sys/fs/cgroup/memory cgroup rw,nosuid,nodev,noexec,relatime,memory 0 0\n", "/sys/fs/cgroup/unified", false, false},
+		// The mount at /sys/fs/cgroup counts wherever it is in the table,
+		// and an option that only contains "nsdelegate" is not taken for it.
+		{"root after other", "cgroup2 /run/other cgroup2 rw,nsdelegate 0 0\n" +
+			"cgroup2 /sys/fs/cgroup cgroup2 rw,nonsdelegate 0 0\n", "/sys/fs/cgroup", true, false},
+		{"empty", "", "", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, hasV2, hasNsd := parseCgroupInfo(tt.mounts)
+			assert.Equal(t, tt.path, path)
+			assert.Equal(t, tt.hasV2, hasV2)
+			assert.Equal(t, tt.hasNsd, hasNsd)
+		})
+	}
 }
 
 func TestInotifyInstances(t *testing.T) {
