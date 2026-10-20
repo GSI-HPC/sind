@@ -573,7 +573,7 @@ func TestValidate_Valid(t *testing.T) {
 	}
 }
 
-func TestValidate_RequiredFields(t *testing.T) {
+func TestValidate_Constraints(t *testing.T) {
 	tests := []struct {
 		name    string
 		nodes   []Node
@@ -607,26 +607,6 @@ func TestValidate_RequiredFields(t *testing.T) {
 			nodes:   []Node{},
 			wantErr: "exactly one controller",
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &Cluster{
-				Kind:  "Cluster",
-				Name:  "default",
-				Nodes: tt.nodes,
-			}
-			require.ErrorContains(t, cfg.Validate(), tt.wantErr)
-		})
-	}
-}
-
-func TestValidate_Constraints(t *testing.T) {
-	tests := []struct {
-		name    string
-		nodes   []Node
-		wantErr string
-	}{
 		{
 			name: "multiple dbs",
 			nodes: []Node{
