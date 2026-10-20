@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -300,19 +301,22 @@ func TestExec_UnknownFlag(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown flag: --bogus")
 }
 
-// dockerArgs runs sind with args, with the default cluster's submitter as
-// the target of enter and exec, and returns the arguments of the docker
-// command it ran.
-func dockerArgs(t *testing.T, args ...string) []string {
+// dockerArgs runs sind with args, stdin and stdout, with the default
+// cluster's submitter as the target of enter and exec, and returns the
+// arguments of the docker command it ran.
+func dockerArgs(t *testing.T, stdin io.Reader, stdout io.Writer, args ...string) []string {
 	t.Helper()
 	fakeDockerOnPath(t, "0")
 	file := filepath.Join(t.TempDir(), "args")
 	t.Setenv(fakeDockerArgsEnv, file)
-	var stderr bytes.Buffer
+	cmd := NewRootCommand()
+	cmd.SetIn(stdin)
+	cmd.SetOut(stdout)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs(args)
+	cmd.SetContext(submitterCtx(t.Context()))
 
-	code := run(submitterCtx(t.Context()), args, &stderr)
-
-	require.Equal(t, 0, code, stderr.String())
+	require.NoError(t, cmd.Execute())
 	data, err := os.ReadFile(file)
 	require.NoError(t, err)
 	return strings.Split(string(data), "\n")
@@ -342,7 +346,7 @@ func TestUser_DockerArgs(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, dockerArgs(t, tc.args...))
+			assert.Equal(t, tc.want, dockerArgs(t, noStdin(t), io.Discard, tc.args...))
 		})
 	}
 }

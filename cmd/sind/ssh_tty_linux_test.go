@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -20,16 +19,9 @@ import (
 )
 
 // openPTY returns the terminal end of a new pseudo-terminal, and skips the
-// test where the system gives none.
+// test where the system gives none. The master end stays open until the
+// test ends.
 func openPTY(t *testing.T) *os.File {
-	t.Helper()
-	_, pts := openPTYPair(t)
-	return pts
-}
-
-// openPTYPair returns both ends of a new pseudo-terminal, the master and
-// the terminal, and skips the test where the system gives none.
-func openPTYPair(t *testing.T) (ptmx, pts *os.File) {
 	t.Helper()
 	ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
@@ -44,32 +36,12 @@ func openPTYPair(t *testing.T) (ptmx, pts *os.File) {
 	if err != nil {
 		t.Skipf("numbering the pseudo-terminal: %v", err)
 	}
-	pts, err = os.OpenFile(fmt.Sprintf("/dev/pts/%d", n), os.O_RDWR|syscall.O_NOCTTY, 0)
+	pts, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", n), os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		t.Skipf("opening the pseudo-terminal: %v", err)
 	}
 	t.Cleanup(func() { _ = pts.Close() })
-	return ptmx, pts
-}
-
-// sshDockerArgs runs sind with args, stdin and stdout, and returns the
-// arguments of the docker command it ran.
-func sshDockerArgs(t *testing.T, stdin io.Reader, stdout io.Writer, args ...string) []string {
-	t.Helper()
-	fakeDockerOnPath(t, "0")
-	file := filepath.Join(t.TempDir(), "args")
-	t.Setenv(fakeDockerArgsEnv, file)
-	cmd := NewRootCommand()
-	cmd.SetIn(stdin)
-	cmd.SetOut(stdout)
-	cmd.SetErr(io.Discard)
-	cmd.SetArgs(args)
-	cmd.SetContext(submitterCtx(t.Context()))
-
-	require.NoError(t, cmd.Execute())
-	data, err := os.ReadFile(file)
-	require.NoError(t, err)
-	return strings.Split(string(data), "\n")
+	return pts
 }
 
 // TestSSH_TTYOnlyWithTerminalsAtBothEnds checks that ssh passes -t to docker
@@ -91,7 +63,7 @@ func TestSSH_TTYOnlyWithTerminalsAtBothEnds(t *testing.T) {
 		"input piped":           {strings.NewReader(""), tty, withoutTTY},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got := sshDockerArgs(t, tc.stdin, tc.stdout, "ssh", "worker-0", "--", "hostname")
+			got := dockerArgs(t, tc.stdin, tc.stdout, "ssh", "worker-0", "--", "hostname")
 			assert.Equal(t, tc.want, got)
 		})
 	}
