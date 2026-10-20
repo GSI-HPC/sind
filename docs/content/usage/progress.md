@@ -96,7 +96,6 @@ $ sind create cluster --config dev.yaml --wait 12s
 ✓ mesh  12s  4 ok
 ✓ pull images  9.4s  2 ok
 ✓ preflight  10s
-12:00:31.605 ERRO cleaning up partial resources, please wait
 ✗ nodes  12s  3 ok, 1 failed, 2 canceled
   ✗ worker-2  timeout: node {}: timed out; last probe error: probe munge: munge not ready: activating
 ✓ rollback  3.1s

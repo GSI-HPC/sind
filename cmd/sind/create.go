@@ -154,20 +154,20 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	meshMgr := meshMgrFrom(ctx, client, realm)
 	meshMgr.Pull = pull
 	if err := meshMgr.EnsureMesh(ctx); err != nil {
+		err = fmt.Errorf("setting up mesh: %w", err)
 		if meshMgr.Created() {
-			// The cleanup is the progress step "rollback", as
-			// cluster.Create's is.
-			log := sindlog.From(ctx)
-			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
+			// The cleanup is the progress step "rollback", and its
+			// failure is joined to the error, as cluster.Create's are.
+			sindlog.From(ctx).WarnContext(ctx, "cleaning up partial resources, please wait")
 			cleanupCtx, rollback := progress.Start(context.WithoutCancel(ctx), progress.KindStep, "rollback")
 			if cleanupErr := meshMgr.CleanupMesh(cleanupCtx); cleanupErr != nil {
 				rollback.End(rollbackFailed{cleanupErr})
-				log.ErrorContext(ctx, "mesh cleanup failed", "error", cleanupErr)
+				err = errors.Join(err, fmt.Errorf("rolling back: removing the mesh: %w", cleanupErr))
 			} else {
 				rollback.End(nil)
 			}
 		}
-		return fmt.Errorf("setting up mesh: %w", err)
+		return err
 	}
 
 	_, err = cluster.Create(ctx, client, meshMgr, cfg, cluster.DefaultReadinessInterval)

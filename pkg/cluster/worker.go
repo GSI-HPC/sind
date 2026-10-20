@@ -297,7 +297,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			retErr = fmt.Errorf("workers of cluster %q %w within %s: %w", opts.ClusterName, ErrNotReady, rd.wait, retErr)
 		}
 		if retErr != nil && needsCleanup {
-			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
+			log.WarnContext(ctx, "cleaning up partial resources, please wait")
 			cleanupCtx, endRollback := startRollback(ctx)
 			var rollbackErrs []error
 			failed := func(err error) {
