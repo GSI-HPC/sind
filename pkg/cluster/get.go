@@ -36,9 +36,6 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
-	if len(containers) == 0 {
-		return []*Summary{}, nil
-	}
 
 	// Group containers by cluster name.
 	type clusterData struct {
@@ -170,10 +167,6 @@ func GetNodeNames(ctx context.Context, client *docker.Client, realm string) ([]s
 
 // buildNodeSummaries converts container list entries into node summaries.
 func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string, containers []docker.ContainerListEntry) ([]*NodeSummary, error) {
-	if len(containers) == 0 {
-		return []*NodeSummary{}, nil
-	}
-
 	// Filter containers that belong to a cluster and collect names for a
 	// single batched docker inspect call.
 	filtered := make([]docker.ContainerListEntry, 0, len(containers))
@@ -184,9 +177,6 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 		}
 		filtered = append(filtered, c)
 		names = append(names, c.Name)
-	}
-	if len(filtered) == 0 {
-		return []*NodeSummary{}, nil
 	}
 
 	// IPs are best-effort: GetNodes/GetAllNodes drives user-facing listings
@@ -296,9 +286,6 @@ func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*N
 	}
 	lock := state.LockNetworkName(realm)
 	entries = slices.DeleteFunc(entries, func(e docker.NetworkListEntry) bool { return e.Name == lock })
-	if len(entries) == 0 {
-		return []*NetworkSummary{}, nil
-	}
 	// One inspect for all networks. IPAM details are best-effort: a
 	// network that cannot be inspected, e.g. one removed since it was
 	// listed, is reported without them.
@@ -343,9 +330,6 @@ func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*Vo
 	entries, err := client.ListVolumes(ctx, "label="+LabelRealm+"="+realm)
 	if err != nil {
 		return nil, fmt.Errorf("listing volumes: %w", err)
-	}
-	if len(entries) == 0 {
-		return []*VolumeSummary{}, nil
 	}
 	result := make([]*VolumeSummary, 0, len(entries))
 	for _, e := range entries {
@@ -443,9 +427,6 @@ func GetRealms(ctx context.Context, client *docker.Client) ([]*RealmSummary, err
 	containers, err := client.ListContainers(ctx, "label="+LabelRealm)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
-	}
-	if len(containers) == 0 {
-		return []*RealmSummary{}, nil
 	}
 
 	// Group by realm, tracking unique cluster names per realm.

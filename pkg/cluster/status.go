@@ -365,19 +365,16 @@ func GetStatus(ctx context.Context, client *docker.Client, realm, clusterName st
 	// per-node probe loop below has status + IP without additional round
 	// trips. One docker CLI fork instead of one per node.
 	infoByName := make(map[docker.ContainerName]*docker.ContainerInfo, len(containers))
-	var infos []*docker.ContainerInfo
-	if len(containers) > 0 {
-		names := make([]docker.ContainerName, len(containers))
-		for i, c := range containers {
-			names[i] = c.Name
-		}
-		infos, err = client.InspectContainers(ctx, names...)
-		if err != nil {
-			return nil, fmt.Errorf("inspecting cluster containers: %w", err)
-		}
-		for _, info := range infos {
-			infoByName[info.Name] = info
-		}
+	names := make([]docker.ContainerName, len(containers))
+	for i, c := range containers {
+		names[i] = c.Name
+	}
+	infos, err := client.InspectContainers(ctx, names...)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting cluster containers: %w", err)
+	}
+	for _, info := range infos {
+		infoByName[info.Name] = info
 	}
 
 	prefix := ContainerPrefix(realm, clusterName)
