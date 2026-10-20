@@ -630,7 +630,7 @@ For a local daemon, `nsdelegate` comes from this machine's `/proc/mounts`, which
 ```bash
 sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND]  # SSH into a specific node (passthrough)
 sind enter [CLUSTER] [--user USER]               # Interactive shell on submitter/controller
-sind exec [CLUSTER] [--user USER] -- <cmd>       # One-shot command on submitter/controller
+sind exec [CLUSTER] [--user USER] -- <cmd>       # Command on submitter/controller
 ```
 
 NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `default`.
@@ -1548,6 +1548,8 @@ with the working directory set to the data mount point (`/data` by default). Thi
 With `--user USER` they run as that cluster user (`docker exec -u USER`) in its home directory,
 `/home/USER`, which is shared too (see Users).
 
+`docker exec` always gets `-i`. `enter` adds `-t` when stdin is a terminal, for the login shell. `exec` adds `-t` only when stdin and stdout are both terminals, the rule of `sind ssh` (see sind ssh Implementation): `sind exec -- top` and `sind exec -- srun --pty bash` then get a pseudo-terminal, while output that a script captures or redirects keeps its line endings and its separate stderr.
+
 `sind ssh` continues to use the SSH relay container, for a login through the node's sshd. Its ssh client runs in the relay container, so port forwarding (`-L`, `-R`, `-D`) and the files that options name (`-i`, `-F`) are the relay's; forwarding to the host goes through the exported `ssh_config` (see User SSH Client Integration).
 
 ## Networking
@@ -1945,7 +1947,7 @@ Opens an interactive shell on the submitter (or, without a submitter, on the con
 
 ### sind exec
 
-One-shot command execution on the same target as `sind enter`, through `docker exec` in `/data` rather than the SSH relay.
+Runs a command on the same target as `sind enter`, through `docker exec` in `/data` rather than the SSH relay, with a pseudo-terminal when stdin and stdout are terminals (see Enter and Exec).
 
 ## Container Images
 
