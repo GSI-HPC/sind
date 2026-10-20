@@ -49,10 +49,10 @@ slurm:
 
 ```
 NODES
-NAME                    ROLE        HA         IP            STATUS    SERVICES
-controller.dev          controller  primary*   172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-controller-backup.dev   controller  backup     172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
+NAME                    ROLE         HA         IP           STATUS    SERVICES
+controller.dev          controller   primary*   172.19.0.2   running   munge ✓ slurmctld ✓ sshd ✓
+controller-backup.dev   controller   backup     172.19.0.3   running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev            worker       -          172.19.0.4   running   munge ✓ slurmd ✓ sshd ✓
 ```
 
 With `-o json`, each controller's `health` carries `"ha": {"position": "primary", "in_control": true}`. `sind get node controller-backup.dev` shows the same information for one node.

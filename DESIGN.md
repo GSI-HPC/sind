@@ -344,7 +344,7 @@ Rules:
 - On success the tree leaves only the lines of its finished steps, the counter nothing and `plain` its lines, and `exit 0` says the rest. A command that failed or was interrupted after a second or longer also gets, under any display, a summary line (`display.Summary`) below the display and above the final error line: `sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled`. The Bus, the display, the event log and the summary live inside the decorated `RunE`, which takes them down before it returns, and so before `run` prints the error line: cobra does not run `PersistentPostRunE` for a command that failed.
 - Under a display, everything the command writes goes through the display's `Terminal`, which takes the tree or the counter off first: cobra's stderr (`Warning:` lines, help), stdout when it is the same terminal, the context's stderr (`withStderr`: the warnings `pkg/` reports, the realm lock's and the mesh's among them) and the logger (see Logging Conventions). Nothing in `pkg/` writes to a stream itself.
 - On a terminal the displays and the summary draw go-clikit's Classic theme: its marks in green, red, amber and blue, `⋅` and `⋯` as separators, and a mark in front of the summary (`sind: ✗ create cluster: failed in 38s: ...`). It draws in 256 colours, in the terminal's own 16 where the colour profile of stderr shows no more, and in its marks alone under `NO_COLOR` (`progressTheme`, from the profile lipgloss reads for the logger). Off a terminal, and on one whose `TERM` is `dumb`, the displays draw plain text, as the lines then go to a log.
-- The tree draws ASCII marks unless `LC_ALL`, `LC_CTYPE` or `LANG` names UTF-8 (`cliprogress.UTF8Locale`). It draws its clocks in tenths of a second, `0:41.3` for the command and `4.2s` for a running step, so that every frame differs while anything runs; the summary and the durations of finished steps keep their formats. go-clikit asks the terminal for its size at each frame and draws nothing in the background of a terminal (`cliprogress.TerminalSize`, `cliprogress.InForeground`); sind passes both the stream and decides nothing about them.
+- The tree draws ASCII marks, and plain lines join the parts of a path with `>` instead of `›`, unless `LC_ALL`, `LC_CTYPE` or `LANG` names UTF-8 (`cliprogress.UTF8Locale`). It draws its clocks in tenths of a second, `0:41.3` for the command and `4.2s` for a running step, so that every frame differs while anything runs; the summary and the durations of finished steps keep their formats. go-clikit asks the terminal for its size at each frame and draws nothing in the background of a terminal (`cliprogress.TerminalSize`, `cliprogress.InForeground`); sind passes both the stream and decides nothing about them.
 - Once the first SIGINT or SIGTERM has arrived, the command's row says `interrupting`, with how many running targets will stop and how many queued ones will not start, and every span that fails from then on ends canceled (`progressClass`), as a docker command the interrupt killed fails with `signal: killed` alone. Otherwise a usage error is of the class `usage`, `cluster.ErrNotReady` (`--wait`) a `timeout`, and any other failure the target's.
 - `create cluster --config -` takes the display off the terminal while it reads stdin, which may be the terminal (`progress.Suspend`).
 - `--progress-log FILE`, else `SIND_PROGRESS_LOG`, appends the command's events to FILE as JSON lines, go-clikit's [event log](https://github.com/GSI-HPC/go-clikit/blob/v0.4.0/doc/event-log.md) version 1 (`progress.NewLog`, with sind's version), with any mode, `none` included, and writes nothing on stderr. `cliprogress` opens it privately: it creates the file with mode `0600` and appends to it (`O_APPEND`), so that the commands of a CI job can share one log, each a `run` of its own, and refuses a file that is not the user's, that others can read or write (`run chmod 600 <path>`), that has other names (`<path> has other names than this one (N hard links)`), or that a link or a named pipe of another user leads to; it writes `/dev/stdout`, `/dev/stderr`, `/dev/fd/N` and `/proc/self/fd/N` through a duplicate of that descriptor. A log on the file the display draws on, such as `/dev/stderr` on the terminal, goes through the display's `Terminal`, so that its lines, written from the log's goroutine, land above the display and never in it. A log the flag names that cannot be used is a usage error before the command acts; one the variable names is a note on stderr, and no log. `--progress-log ""` writes no log even when the variable names one. A log that cannot be written once the command runs fails nothing, and sind says once that it stops short.
@@ -468,23 +468,23 @@ NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / *
 
 ```
 $ sind get nodes dev
-CONTAINER            ROLE         FQDN                         IP           STATUS
-sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
-sind-dev-db          db           db.dev.sind.sind             172.19.0.5   running
-sind-dev-worker-0    worker       worker-0.dev.sind.sind       172.19.0.3   running
-sind-dev-worker-1    worker       worker-1.dev.sind.sind       172.19.0.4   running
+CONTAINER             ROLE         FQDN                       IP           STATUS
+sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
+sind-dev-db           db           db.dev.sind.sind           172.19.0.5   running
+sind-dev-worker-0     worker       worker-0.dev.sind.sind     172.19.0.3   running
+sind-dev-worker-1     worker       worker-1.dev.sind.sind     172.19.0.4   running
 ```
 
 Without a cluster argument, `sind get nodes` lists every node in the realm and adds a `CLUSTER` column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`:
 
 ```
 $ sind get nodes
-CONTAINER                CLUSTER   ROLE         FQDN                             IP           STATUS
-sind-default-controller  default   controller   controller.default.sind.sind     172.19.0.2   running
-sind-default-worker-0    default   worker       worker-0.default.sind.sind       172.19.0.3   running
-sind-dev-controller      dev       controller   controller.dev.sind.sind         172.20.0.2   running
-sind-dev-worker-2        dev       worker       worker-2.dev.sind.sind           172.20.0.3   running
-sind-dev-worker-10       dev       worker       worker-10.dev.sind.sind          172.20.0.4   running
+CONTAINER                 CLUSTER   ROLE         FQDN                           IP           STATUS
+sind-default-controller   default   controller   controller.default.sind.sind   172.19.0.2   running
+sind-default-worker-0     default   worker       worker-0.default.sind.sind     172.19.0.3   running
+sind-dev-controller       dev       controller   controller.dev.sind.sind       172.20.0.2   running
+sind-dev-worker-2         dev       worker       worker-2.dev.sind.sind         172.20.0.3   running
+sind-dev-worker-10        dev       worker       worker-10.dev.sind.sind        172.20.0.4   running
 ```
 
 ### Cluster Diagnostics
@@ -497,9 +497,9 @@ CLUSTER   SLURM     STATUS (R/S/P/T)
 dev       25.11.8   running (4/0/0/4)
 
 NETWORKS
-NAME             DRIVER   SUBNET           GATEWAY        STATUS
-sind-mesh        bridge   172.18.0.0/16    172.18.0.1     ✓
-sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
+NAME           DRIVER   SUBNET          GATEWAY      STATUS
+sind-mesh      bridge   172.18.0.0/16   172.18.0.1   ✓
+sind-dev-net   bridge   172.19.0.0/16   172.19.0.1   ✓
 
 MESH SERVICES
 NAME   CONTAINER   STATUS
@@ -507,17 +507,17 @@ dns    sind-dns    ✓
 ssh    sind-ssh    ✓
 
 MOUNTS
-MOUNT        SOURCE                    TYPE       STATUS
-/etc/slurm   sind-dev-config           volume     ✓
-/etc/munge   sind-dev-munge            volume     ✓
-/data        /home/user/project        hostPath   ✓
+MOUNT        SOURCE               TYPE       STATUS
+/etc/slurm   sind-dev-config      volume     ✓
+/etc/munge   sind-dev-munge       volume     ✓
+/data        /home/user/project   hostPath   ✓
 
 NODES
-NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
+NAME             ROLE         IP           STATUS    SERVICES
+controller.dev   controller   172.19.0.2   running   munge ✓ slurmctld ✓ sshd ✓
+db.dev           db           172.19.0.5   running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev     worker       172.19.0.3   running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev     worker       172.19.0.4   running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart). When the realm has a monitoring stack, `MESH SERVICES` adds a row for each of its four containers, with ✓ while the service is ready (its readiness endpoint, see Monitoring), and the JSON output adds `grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` next to `dns_ok` and `ssh_ok`; without a stack the rows and the fields are left out. The JSON output has `"monitoring": true|false` at the top: whether a node of the cluster mounts the realm's journal volume.
@@ -550,10 +550,10 @@ Clusters with a backup controller add an `HA` column to the `NODES` table: each 
 
 ```
 NODES
-NAME                    ROLE        HA         IP            STATUS    SERVICES
-controller.dev          controller  primary    172.19.0.2    running   munge ✓ slurmctld ✗ sshd ✓
-controller-backup.dev   controller  backup*    172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
+NAME                    ROLE         HA        IP           STATUS    SERVICES
+controller.dev          controller   primary   172.19.0.2   running   munge ✓ slurmctld ✗ sshd ✓
+controller-backup.dev   controller   backup*   172.19.0.3   running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev            worker       -         172.19.0.4   running   munge ✓ slurmd ✓ sshd ✓
 ```
 
 The `STATUS` of a node, in `sind get cluster`, `sind get node` and `sind get nodes`, and its JSON `status`, map its container's state (`containerStateToState`): `running`, `stopped` (exited, dead or created), `paused`, or `unknown` for another state, such as `restarting`, which the header counts under `S`. The cluster's state in the header and in `sind get clusters` uses the same words, plus `mixed` and `empty`.

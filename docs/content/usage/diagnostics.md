@@ -235,9 +235,9 @@ CLUSTER   SLURM     STATUS (R/S/P/T)
 dev       25.11.8   running (4/0/0/4)
 
 NETWORKS
-NAME             DRIVER   SUBNET           GATEWAY        STATUS
-sind-mesh        bridge   172.18.0.0/16    172.18.0.1     ✓
-sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
+NAME           DRIVER   SUBNET          GATEWAY      STATUS
+sind-mesh      bridge   172.18.0.0/16   172.18.0.1   ✓
+sind-dev-net   bridge   172.19.0.0/16   172.19.0.1   ✓
 
 MESH SERVICES
 NAME   CONTAINER   STATUS
@@ -251,11 +251,11 @@ MOUNT        SOURCE               TYPE       STATUS
 /data        /home/user/project   hostPath   ✓
 
 NODES
-NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
+NAME             ROLE         IP           STATUS    SERVICES
+controller.dev   controller   172.19.0.2   running   munge ✓ slurmctld ✓ sshd ✓
+db.dev           db           172.19.0.5   running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev     worker       172.19.0.3   running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev     worker       172.19.0.4   running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters. The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
@@ -365,10 +365,10 @@ sind get nodes [CLUSTER]
 Without a `CLUSTER` argument, lists every node in the realm with an extra `CLUSTER` column; with a cluster name, scopes to that cluster and drops the column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`.
 
 ```
-CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
-sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
-sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
-sind-default-worker-1    default   worker       worker-1.default.sind.sind      172.19.0.4   running
+CONTAINER                 CLUSTER   ROLE         FQDN                           IP           STATUS
+sind-default-controller   default   controller   controller.default.sind.sind   172.19.0.2   running
+sind-default-worker-0     default   worker       worker-0.default.sind.sind     172.19.0.3   running
+sind-default-worker-1     default   worker       worker-1.default.sind.sind     172.19.0.4   running
 ```
 
 ## List networks
@@ -378,9 +378,9 @@ sind get networks
 ```
 
 ```
-NAME              DRIVER   SUBNET           GATEWAY
-sind-default-net  bridge   172.19.0.0/16    172.19.0.1
-sind-mesh         bridge   172.18.0.0/16    172.18.0.1
+NAME               DRIVER   SUBNET          GATEWAY
+sind-default-net   bridge   172.19.0.0/16   172.19.0.1
+sind-mesh          bridge   172.18.0.0/16   172.18.0.1
 ```
 
 ## List realms
@@ -418,9 +418,9 @@ sind get dns
 ```
 
 ```
-HOSTNAME                              IP
-controller.default.sind.sind         172.19.0.2
-worker-0.default.sind.sind           172.19.0.3
+HOSTNAME                       IP
+controller.default.sind.sind   172.19.0.2
+worker-0.default.sind.sind     172.19.0.3
 ```
 
 ## Authentication key

@@ -38,7 +38,7 @@ After Ctrl-C or SIGTERM, the command's row says so while sind cleans up, with ho
 
 On a terminal, the tree, the counter and the summary line draw in colour: ok in green, failed in red, canceled in amber and running in blue. They use the terminal's own 16 colours where it shows no more, and the marks alone when `NO_COLOR` is set. Where stderr is no terminal, or `TERM` is `dumb`, they write plain text, as a log wants.
 
-The tree draws with ASCII marks (`+`, `x`, `~`, `>`) unless `LC_ALL`, `LC_CTYPE` or `LANG` names a UTF-8 locale. On a terminal smaller than 40 columns or 8 rows it draws the counter's single line instead. A sind started in the background (`&`, or Ctrl-Z and `bg`) draws nothing, so that the shell's prompt stays as it is. `sind create cluster --config -` takes the tree off the terminal while it reads the configuration from standard input.
+The tree draws with ASCII marks (`+`, `x`, `~`, `>`), and [plain lines](#plain-lines) join the parts of a path with `>`, unless `LC_ALL`, `LC_CTYPE` or `LANG` names a UTF-8 locale. On a terminal smaller than 40 columns or 8 rows it draws the counter's single line instead. A sind started in the background (`&`, or Ctrl-Z and `bg`) draws nothing, so that the shell's prompt stays as it is. `sind create cluster --config -` takes the tree off the terminal while it reads the configuration from standard input.
 
 ## What the commands show
 
@@ -99,7 +99,7 @@ $ sind create cluster --config dev.yaml --wait 12s
 ✗ nodes  12s  3 ok, 1 failed, 2 canceled
   ✗ worker-2  timeout: node {}: timed out; last probe error: probe munge: munge not ready: activating
 ✓ rollback  3.1s
-sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
+sind: ✗ create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled
 12:00:34.839 ERRO cluster "dev" not ready within 12s: node worker-2: timed out; last probe error: probe munge: munge not ready: activating
 ```
 
@@ -162,7 +162,7 @@ sind: SIND_PROGRESS is "plian"; it takes one of auto, tty, counter, plain, none;
 `--progress plain` writes a line when a step starts and when it ends, when a wait with a limit starts, when a wait or a target fails, and every ten seconds for each step under way that counts its targets. Each line starts with the time since the command started and names what it tells of by its path from the command. Plain lines have no escape codes and need no terminal, so they suit a CI log or a file. `mesh` and `preflight`, which the tree shows only after a second, get no line, and neither do the docker commands or the lines docker writes. The same creation as above, trimmed to two nodes of each step:
 
 ```text
-$ sind create cluster --config dev.yaml --progress plain
+$ sind create cluster --config dev.yaml --progress plain 2>&1 | tee create.log
 [0:12] create cluster › pull images: start, 2 targets
 [0:21] create cluster › pull images: done in 9.4s: 2 ok
 [0:22] create cluster › nodes: start, 6 targets
@@ -180,7 +180,7 @@ $ sind create cluster --config dev.yaml --progress plain
 [0:36] create cluster › accounts: done in 1.7s
 ```
 
-The waits `ready` say how much of the `--wait` limit they have left.
+The waits `ready` say how much of the `--wait` limit they have left. The parts of a path are joined by `›` when `LC_ALL`, `LC_CTYPE` or `LANG` names a UTF-8 locale, and by `>` otherwise (`[0:12] create cluster > pull images: start, 2 targets`), as the tree then draws ASCII marks. On a terminal, each line also takes a mark after the time, in the colours of the tree; in a pipe or a file, as above, it is plain text.
 
 ## Event log
 

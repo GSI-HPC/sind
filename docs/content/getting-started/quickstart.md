@@ -60,9 +60,9 @@ sind get nodes
 ```
 
 ```
-CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
-sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
-sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
+CONTAINER                 CLUSTER   ROLE         FQDN                           IP           STATUS
+sind-default-controller   default   controller   controller.default.sind.sind   172.19.0.2   running
+sind-default-worker-0     default   worker       worker-0.default.sind.sind     172.19.0.3   running
 ```
 
 For detailed health information:
