@@ -44,11 +44,12 @@ type File struct {
 
 // Server is an entry of a configuration's server list.
 type Server struct {
-	Name    string
-	Type    string   `json:"type"`
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-	URL     string   `json:"url"`
+	Name    string            `json:"-"`
+	Type    string            `json:"type,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 // Load reads the configuration file at path, whose servers are the members
@@ -165,33 +166,29 @@ func (f *File) Has(name string) bool {
 	return obj != nil && member(obj, name) != nil
 }
 
-// Set adds the server entry, marshalled as JSON, under name, or replaces
-// the entry that has that name. Comments around a replaced entry stay.
-func (f *File) Set(name string, entry any) error {
+// Set adds the server s under its name, or replaces the entry that has
+// that name. Comments around a replaced entry stay.
+func (f *File) Set(s Server) {
 	obj := f.servers()
 	var m *hujson.ObjectMember
 	if obj != nil {
-		m = member(obj, name)
+		m = member(obj, s.Name)
 	}
 	indent, lines := f.layout(obj, 2)
 	if m != nil {
 		indent, lines = indentOf(m.Name.BeforeExtra), multiline(m.Name.BeforeExtra)
 	}
-	value, err := f.render(entry, indent, lines)
-	if err != nil {
-		return err
-	}
+	value := f.render(s, indent, lines)
 	if m != nil {
 		m.Value.Value = value.Value
-		return nil
+		return
 	}
 	if obj == nil {
 		indent, lines := f.layout(f.object(), 1)
 		f.insert(f.object(), "", 1, f.key, hujson.Value{Value: &hujson.Object{}}, indent, lines)
 		obj = f.servers()
 	}
-	f.insert(obj, "/"+pointerToken(f.key), 2, name, value, indent, lines)
-	return nil
+	f.insert(obj, "/"+pointerToken(f.key), 2, s.Name, value, indent, lines)
 }
 
 // Remove removes the server entry name and reports whether there was one.
@@ -269,19 +266,19 @@ func (f *File) patch(op, ptr string, value hujson.ValueTrimmed) {
 	}
 }
 
-// render marshals value as JSON: indented with the file's indentation
-// after the prefix indent, if lines is set, or on one line.
-func (f *File) render(value any, indent string, lines bool) (hujson.Value, error) {
+// render marshals s as JSON: indented with the file's indentation after
+// the prefix indent, if lines is set, or on one line. A Server always
+// marshals, to JSON that always parses.
+func (f *File) render(s Server, indent string, lines bool) hujson.Value {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	if lines {
 		enc.SetIndent(indent, f.indentUnit())
 	}
-	if err := enc.Encode(value); err != nil {
-		return hujson.Value{}, fmt.Errorf("editing %s: %w", f.path, err)
-	}
-	return hujson.Parse(bytes.TrimSpace(buf.Bytes()))
+	_ = enc.Encode(s)
+	v, _ := hujson.Parse(bytes.TrimSpace(buf.Bytes()))
+	return v
 }
 
 // indentUnit returns the indentation of the file's first top-level member,

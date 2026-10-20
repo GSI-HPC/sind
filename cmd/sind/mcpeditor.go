@@ -72,14 +72,6 @@ var mcpEditors = []mcpEditor{
 	},
 }
 
-// mcpServerEntry is the entry `enable` writes.
-type mcpServerEntry struct {
-	Type    string            `json:"type,omitempty"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env,omitempty"`
-}
-
 // mcpEditorFlags are the flags of an editor's subcommands.
 type mcpEditorFlags struct {
 	configPath string
@@ -214,9 +206,7 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 	if err != nil {
 		return err
 	}
-	if err := cfg.Set(f.serverName, entry); err != nil {
-		return err
-	}
+	cfg.Set(entry)
 	return saveMCPConfig(cmd, cfg)
 }
 
@@ -224,12 +214,12 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 // path, running `mcp start`, with the environment of --env and the root's
 // --realm. An editor starts its MCP servers with its own environment, not
 // the shell's, so a realm the entry does not name is the default one.
-func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpServerEntry, error) {
+func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Server, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return mcpServerEntry{}, fmt.Errorf("locating the sind binary: %w", err)
+		return mcpconfig.Server{}, fmt.Errorf("locating the sind binary: %w", err)
 	}
-	entry := mcpServerEntry{Command: exe, Args: []string{"mcp", "start"}}
+	entry := mcpconfig.Server{Name: f.serverName, Command: exe, Args: []string{"mcp", "start"}}
 	if e.stdio {
 		entry.Type = "stdio"
 	}
@@ -242,10 +232,10 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpServerEntr
 	if cmd.Root().Flags().Changed("realm") {
 		realm, err := realmFromFlag(cmd)
 		if err != nil {
-			return mcpServerEntry{}, err
+			return mcpconfig.Server{}, err
 		}
 		if env, ok := f.env["SIND_REALM"]; ok && env != realm {
-			return mcpServerEntry{}, usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
+			return mcpconfig.Server{}, usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
 		}
 		if entry.Env == nil {
 			entry.Env = map[string]string{}

@@ -18,15 +18,8 @@ import (
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
 )
 
-type entry struct {
-	Type    string            `json:"type,omitempty"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env,omitempty"`
-}
-
 var (
-	sindEntry = entry{Command: "/usr/bin/sind", Args: []string{"mcp", "start"}}
+	sindEntry = mcpconfig.Server{Name: "sind", Command: "/usr/bin/sind", Args: []string{"mcp", "start"}}
 	now       = time.Date(2026, 10, 19, 16, 30, 5, 0, time.Local)
 )
 
@@ -246,19 +239,12 @@ func TestSet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fsys, f := load(t, tt.in, tt.key)
-			require.NoError(t, f.Set("sind", sindEntry))
+			f.Set(sindEntry)
 			_, err := f.Save(now)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, read(t, fsys, "/cfg/c.json"))
 		})
 	}
-}
-
-func TestSet_MarshalError(t *testing.T) {
-	_, f := load(t, nil, "mcpServers")
-	err := f.Set("sind", make(chan int))
-	require.ErrorContains(t, err, "editing /cfg/c.json: json: unsupported type: chan int")
-	assert.False(t, f.Has("sind"))
 }
 
 func TestRemove(t *testing.T) {
@@ -344,7 +330,7 @@ func TestServers(t *testing.T) {
   }
 }`), "mcpServers")
 	assert.Equal(t, []mcpconfig.Server{
-		{Name: "z", Type: "stdio", Command: "/bin/z", Args: []string{"a", "b"}},
+		{Name: "z", Type: "stdio", Command: "/bin/z", Args: []string{"a", "b"}, Env: map[string]string{"K": "secret"}},
 		{Name: "web", Type: "http", URL: "https://example.com/mcp"},
 		{Name: "bad"},
 		{Name: "odd"},
@@ -404,7 +390,7 @@ func TestLoad_FollowsSymlinks(t *testing.T) {
 	f, err := mcpconfig.Load(afero.NewOsFs(), filepath.Join(dir, "abs.json"), "mcpServers")
 	require.NoError(t, err)
 	assert.Equal(t, target, f.Path())
-	require.NoError(t, f.Set("sind", sindEntry))
+	f.Set(sindEntry)
 	backup, err := f.Save(now)
 	require.NoError(t, err)
 	assert.Equal(t, target+".20261019-163005.bak", backup)
@@ -446,7 +432,7 @@ func TestSave_Backups(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, backup)
 
-	require.NoError(t, f.Set("sind", sindEntry))
+	f.Set(sindEntry)
 	backup, err = f.Save(now)
 	require.NoError(t, err)
 	assert.Equal(t, "/cfg/c.json.20261019-163005.bak", backup)
@@ -454,7 +440,7 @@ func TestSave_Backups(t *testing.T) {
 	saved := read(t, fsys, "/cfg/c.json")
 
 	// A second change in the same second keeps the first backup.
-	require.NoError(t, f.Set("sind", entry{Command: "/opt/sind", Args: []string{"mcp", "start"}}))
+	f.Set(mcpconfig.Server{Name: "sind", Command: "/opt/sind", Args: []string{"mcp", "start"}})
 	backup, err = f.Save(now)
 	require.NoError(t, err)
 	assert.Equal(t, "/cfg/c.json.20261019-163005-1.bak", backup)
@@ -468,7 +454,7 @@ func TestSave_Backups(t *testing.T) {
 
 func TestSave_NewFile(t *testing.T) {
 	fsys, f := load(t, nil, "mcpServers")
-	require.NoError(t, f.Set("sind", sindEntry))
+	f.Set(sindEntry)
 	backup, err := f.Save(now)
 	require.NoError(t, err)
 	assert.Empty(t, backup)
@@ -512,7 +498,7 @@ func TestSave_Errors(t *testing.T) {
 			}
 			f, err := mcpconfig.Load(fsys, "/cfg/c.json", "mcpServers")
 			require.NoError(t, err)
-			require.NoError(t, f.Set("sind", sindEntry))
+			f.Set(sindEntry)
 			fsys.fail = map[string]error{tt.fail: failure}
 
 			_, err = f.Save(now)
