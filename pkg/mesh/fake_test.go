@@ -52,7 +52,7 @@ type fakeNetwork struct {
 type fakeDocker struct {
 	t          *testing.T
 	networks   map[string]*fakeNetwork
-	volumes    map[string]bool
+	volumes    map[string]docker.Labels // existing volumes, with their labels
 	containers map[string]*fakeContainer
 	fail       map[string]mock.Result
 }
@@ -62,7 +62,7 @@ func newFake(t *testing.T) *fakeDocker {
 	return &fakeDocker{
 		t:          t,
 		networks:   map[string]*fakeNetwork{},
-		volumes:    map[string]bool{},
+		volumes:    map[string]docker.Labels{},
 		containers: map[string]*fakeContainer{},
 		fail:       map[string]mock.Result{},
 	}
@@ -103,7 +103,9 @@ func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned b
 		nw.labels[LabelDNSIP] = dnsIP
 		dns.ip = dnsIP
 	}
-	f.volumes[string(mgr.SSHVolumeName())] = true
+	f.volumes[string(mgr.SSHVolumeName())] = docker.Labels{
+		LabelRealm: realm, docker.ComposeProjectLabel: mgr.ComposeProject(), docker.ComposeVolumeLabel: sshVolumeLabel,
+	}
 	f.containers[string(mgr.DNSContainerName())] = dns
 	require.NoError(f.t, f.start(string(mgr.DNSContainerName())))
 	f.containers[string(mgr.SSHContainerName())] = &fakeContainer{
@@ -268,15 +270,27 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		delete(f.networks, last)
 		return mock.Result{}
 	case joined == "volume inspect "+last:
-		if !f.volumes[last] {
+		if _, ok := f.volumes[last]; !ok {
 			return notFound(f.t, testutil.NoSuchVolume(last))
 		}
 		return mock.Result{Stdout: "[{}]\n"}
+	case len(args) == 5 && joined == "volume inspect "+args[2]+" --format {{json .Labels}}":
+		labels, ok := f.volumes[args[2]]
+		if !ok {
+			return notFound(f.t, testutil.NoSuchVolume(args[2]))
+		}
+		out, _ := json.Marshal(labels)
+		return mock.Result{Stdout: string(out) + "\n"}
 	case strings.HasPrefix(joined, "volume create "):
-		f.volumes[last] = true
+		labels := docker.Labels{}
+		for i := 2; i < len(args)-2; i += 2 {
+			k, v, _ := strings.Cut(args[i+1], "=")
+			labels[k] = v
+		}
+		f.volumes[last] = labels
 		return mock.Result{Stdout: last + "\n"}
 	case joined == "volume rm "+last:
-		if !f.volumes[last] {
+		if _, ok := f.volumes[last]; !ok {
 			return notFound(f.t, testutil.NoSuchVolume(last))
 		}
 		delete(f.volumes, last)

@@ -24,7 +24,15 @@ func TestCheckName(t *testing.T) {
 	// the realm's SSH volume.
 	require.NoError(t, CheckName("realm", ReservedClusterName))
 	require.EqualError(t, CheckName("cluster", ReservedClusterName),
-		`invalid cluster name "ssh": it is reserved: the cluster's config volume, <realm>-ssh-config, would be the realm's SSH volume`)
+		`invalid cluster name "ssh": it is reserved: the cluster's config volume, <realm>-ssh-config, would be the SSH volume of realm <realm>`)
+
+	// Nor is a name ending in -ssh: the config volume of cluster x-ssh in
+	// realm a would be realm a-x's SSH volume.
+	require.NoError(t, CheckName("realm", "x-ssh"))
+	require.NoError(t, CheckName("cluster", "xssh"))
+	require.NoError(t, CheckName("cluster", "ssh-x"))
+	require.EqualError(t, CheckName("cluster", "x-ssh"),
+		`invalid cluster name "x-ssh": it is reserved: the cluster's config volume, <realm>-x-ssh-config, would be the SSH volume of realm <realm>-x`)
 }
 
 func TestValidate_AccountingClusterName(t *testing.T) {

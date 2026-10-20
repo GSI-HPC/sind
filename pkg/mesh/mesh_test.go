@@ -211,7 +211,9 @@ func TestEnsureMesh(t *testing.T) {
 	assert.True(t, mgr.Created())
 	assert.Empty(t, *got)
 
-	assert.True(t, f.volumes["sind-ssh-config"])
+	assert.Equal(t, docker.Labels{
+		LabelRealm: "sind", docker.ComposeProjectLabel: "sind-mesh", docker.ComposeVolumeLabel: "ssh-config",
+	}, f.volumes["sind-ssh-config"])
 
 	// The mesh network pins the DNS address outside its ip-range.
 	mesh := f.networks["sind-mesh"]
@@ -402,6 +404,38 @@ func TestEnsureMesh_ExistingVolumeKeepsKeys(t *testing.T) {
 	assert.Equal(t, docker.StateRunning, f.containers["sind-ssh"].state)
 }
 
+// TestEnsureMesh_ForeignSSHVolume checks that the relay never mounts a
+// volume of the SSH volume's name that is not the realm's: realm a-x's
+// a-x-ssh-config is also the config volume of cluster x-ssh in realm a.
+func TestEnsureMesh_ForeignSSHVolume(t *testing.T) {
+	for name, labels := range map[string]docker.Labels{
+		"other realm":  {LabelRealm: "a", "sind.cluster": "x-ssh", docker.ComposeVolumeLabel: "config"},
+		"other volume": {docker.ComposeVolumeLabel: "config"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, c, m := newFakeDocker(t)
+			f.volumes["a-x-ssh-config"] = labels
+			mgr := NewManager(c, "a-x")
+
+			err := mgr.EnsureMesh(t.Context())
+			require.ErrorContains(t, err, `volume a-x-ssh-config is not the SSH volume of realm "a-x"`)
+			assert.Empty(t, calls(m, "create --name a-x-ssh"), "no relay mounts the volume")
+		})
+	}
+}
+
+// TestEnsureMesh_UnlabeledSSHVolume checks that a volume without labels,
+// as docker run makes for a volume it mounts, is taken as the SSH volume.
+func TestEnsureMesh_UnlabeledSSHVolume(t *testing.T) {
+	f, c, m := newFakeDocker(t)
+	f.volumes["sind-ssh-config"] = docker.Labels{}
+	mgr := NewManager(c, DefaultRealm)
+
+	require.NoError(t, mgr.EnsureMesh(t.Context()))
+	assert.Empty(t, calls(m, "volume create"))
+	assert.Len(t, calls(m, "create --name sind-ssh"), 1)
+}
+
 func TestEnsureMesh_Errors(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -443,8 +477,8 @@ func TestEnsureMesh_DNSInspectAfterStartError(t *testing.T) {
 		switch {
 		case joined == "network inspect sind-mesh --format {{json .Labels}}":
 			return mock.Result{Stdout: "{}\n"}
-		case joined == "volume inspect sind-ssh-config":
-			return mock.Result{Stdout: "[{}]\n"}
+		case joined == "volume inspect sind-ssh-config --format {{json .Labels}}":
+			return mock.Result{Stdout: "{}\n"}
 		case joined == "inspect sind-dns" && !inspected:
 			inspected = true
 			return mock.Result{Stdout: dnsInspectExitedJSON()}
@@ -1201,7 +1235,7 @@ func TestCustomRealm_EnsureMesh(t *testing.T) {
 	require.NoError(t, mgr.EnsureMesh(t.Context()))
 
 	assert.Contains(t, f.networks, "myrealm-mesh")
-	assert.True(t, f.volumes["myrealm-ssh-config"])
+	assert.Contains(t, f.volumes, "myrealm-ssh-config")
 	require.Contains(t, f.containers, "myrealm-dns")
 	require.Contains(t, f.containers, "myrealm-ssh")
 	assert.Equal(t, []string{"myrealm-mesh"}, f.containers["myrealm-dns"].networks)

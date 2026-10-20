@@ -67,8 +67,8 @@ func createDaemon(t *testing.T) func(args []string, stdin string) mock.Result {
 		// The mesh runs.
 		case joined == "network inspect sind-mesh --format {{json .Labels}}":
 			return mock.Result{Stdout: `{"sind.realm":"sind"}` + "\n"}
-		case joined == "volume inspect sind-ssh-config":
-			return mock.Result{Stdout: "[{}]\n"}
+		case joined == "volume inspect sind-ssh-config --format {{json .Labels}}":
+			return mock.Result{Stdout: `{"sind.realm":"sind"}` + "\n"}
 		case args[0] == "inspect" && args[1] == "sind-dns":
 			return mock.Result{Stdout: inspect("sind-dns", map[string]string{"sind-mesh": "10.0.255.254"})}
 		case args[0] == "inspect" && args[1] == "sind-ssh":
