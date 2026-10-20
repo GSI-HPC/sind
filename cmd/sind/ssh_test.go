@@ -206,6 +206,8 @@ func TestSSH_Help(t *testing.T) {
 			stdout, _, err := executeCommand("ssh", flag)
 			require.NoError(t, err)
 			assert.Contains(t, stdout, "SSH into a cluster node")
+			assert.Contains(t, stdout, "sind's\nown flags, such as --realm, go before ssh")
+			assert.Contains(t, stdout, "  sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]]\n")
 		})
 	}
 }
@@ -216,6 +218,7 @@ func TestExec_Help(t *testing.T) {
 			stdout, _, err := executeCommand("exec", flag)
 			require.NoError(t, err)
 			assert.Contains(t, stdout, "Run a command on the submitter or controller")
+			assert.Contains(t, stdout, "  sind exec [flags] [CLUSTER] -- COMMAND [ARGS...]\n")
 		})
 	}
 }

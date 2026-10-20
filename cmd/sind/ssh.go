@@ -23,7 +23,8 @@ func newSSHCommand() *cobra.Command {
 		Long: `SSH into a cluster node.
 
 SSH options, before or after NODE, are passed through to ssh. A remote
-command must follow --: NODE is the only other argument before it.
+command must follow --: NODE is the only other argument before it. sind's
+own flags, such as --realm, go before ssh: sind --realm R ssh NODE.
 
 ssh runs in the realm's SSH relay container, so the ports and files that
 options such as -L and -i name are the relay's. To forward a port to this
@@ -31,7 +32,10 @@ machine, use your own ssh with the exported config:
 
   ssh -F "$(sind get ssh-config)" -L 8080:localhost:80 controller.default.sind.sind`,
 		DisableFlagParsing: true,
-		ValidArgsFunction:  completeSSHNodeArg,
+		// Every argument after ssh is passed through: sind's flags go
+		// before it.
+		DisableFlagsInUseLine: true,
+		ValidArgsFunction:     completeSSHNodeArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSSH(cmd, args)
 		},
@@ -150,13 +154,15 @@ func execOnEnterTarget(cmd *cobra.Command, clusterName string, isTTY bool, comma
 
 func newExecCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "exec [CLUSTER] -- COMMAND [ARGS...]",
+		Use:   "exec [flags] [CLUSTER] -- COMMAND [ARGS...]",
 		Short: "Run a command on the submitter or controller",
 		Long:  "Run a command on the submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
 		// runExec parses the flags itself: with cobra parsing them, shell
 		// completion could not tell whether the -- was typed yet.
 		DisableFlagParsing: true,
-		ValidArgsFunction:  completeExecClusterArg,
+		// The flags go before the --; after it, they are the command's.
+		DisableFlagsInUseLine: true,
+		ValidArgsFunction:     completeExecClusterArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExec(cmd, args)
 		},

@@ -263,7 +263,7 @@ Rules:
 - **Boolean flags** for mode switches: `--all`, `--pull`, `--unmanaged`
 - **Three persistent root flags**: `--realm`, `--progress` and `--progress-log` (inherited by every subcommand). `PersistentPreRunE` checks `--realm` and `--progress` for every command before it acts (`checkRealmFlag`, `checkProgressFlag`), so a value that is not valid is a usage error even for a command that does not use it; `--progress-log` is opened only by the commands that show progress, as opening it creates the file
 - **One persistent root counter**: `-v` (repeatable, controls log verbosity; inherited by every subcommand)
-- `ssh` passes its arguments through to SSH, so the root flags and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's, and an argument that begins with `--` before the `--` separator is a usage error, as SSH has no long options. `exec` parses its own flags up to its `--`
+- `ssh` passes its arguments through to SSH, so the root flags and `-v` must precede it (`sind -v ssh worker-0`); only a leading `-h` or `--help` is sind's, and an argument that begins with `--` before the `--` separator is a usage error, as SSH has no long options. `exec` parses its own flags up to its `--`. Their usage lines put `[flags]` where the flags go (`DisableFlagsInUseLine`): `sind exec [flags] [CLUSTER] -- COMMAND [ARGS...]`, and none for `ssh`, whose help says that sind's flags go before it
 
 ### Output Conventions
 
