@@ -57,59 +57,33 @@ const (
 	AlloyPort      = "12345"
 )
 
-// Port returns the port a service listens on.
-func (s Service) Port() string {
-	switch s {
-	case ServiceGrafana:
-		return GrafanaPort
-	case ServicePrometheus:
-		return PrometheusPort
-	case ServiceLoki:
-		return LokiPort
-	default:
-		return AlloyPort
-	}
+// serviceSpec is what sets a service's container apart.
+type serviceSpec struct {
+	image string
+	port  string // the port it listens on, on the mesh network
+	// pinnedOffset is how far below the mesh DNS address the service's
+	// pinned address is (see mesh.ServiceIP), 0 for Alloy, which has a
+	// dynamic one and no DNS name.
+	pinnedOffset int
+	memoryLimit  string   // the --memory cap of its container
+	dataDir      string   // where it keeps its data, on its volume
+	readyPath    string   // the path of its readiness endpoint
+	args         []string // its command's arguments, after its image
 }
+
+// specs are the services' specs.
+var specs = map[Service]serviceSpec{
+	ServiceGrafana:    {image: GrafanaImage, port: GrafanaPort, pinnedOffset: 1, memoryLimit: "1g", dataDir: "/var/lib/grafana", readyPath: "/api/health"},
+	ServicePrometheus: {image: PrometheusImage, port: PrometheusPort, pinnedOffset: 2, memoryLimit: "1g", dataDir: "/prometheus", readyPath: "/-/ready", args: prometheusArgs},
+	ServiceLoki:       {image: LokiImage, port: LokiPort, pinnedOffset: 3, memoryLimit: "1g", dataDir: "/loki", readyPath: "/ready", args: lokiArgs},
+	ServiceAlloy:      {image: AlloyImage, port: AlloyPort, memoryLimit: "512m", dataDir: "/var/lib/alloy/data", readyPath: "/-/ready", args: alloyArgs},
+}
+
+// Port returns the port a service listens on.
+func (s Service) Port() string { return specs[s].port }
 
 // Image returns the image a service runs.
-func (s Service) Image() string {
-	switch s {
-	case ServiceGrafana:
-		return GrafanaImage
-	case ServicePrometheus:
-		return PrometheusImage
-	case ServiceLoki:
-		return LokiImage
-	default:
-		return AlloyImage
-	}
-}
-
-// pinnedOffset is how far below the mesh DNS address a service's pinned
-// address is (see mesh.ServiceIP), 0 for Alloy, which has a dynamic one
-// and no DNS name.
-func (s Service) pinnedOffset() int {
-	switch s {
-	case ServiceGrafana:
-		return 1
-	case ServicePrometheus:
-		return 2
-	case ServiceLoki:
-		return 3
-	default:
-		return 0
-	}
-}
-
-// memoryLimit is the --memory cap of a service's container.
-func (s Service) memoryLimit() string {
-	switch s {
-	case ServicePrometheus, ServiceLoki, ServiceGrafana:
-		return "1g"
-	default:
-		return "512m"
-	}
-}
+func (s Service) Image() string { return specs[s].image }
 
 // ContainerName returns the container of a service in a realm:
 // <realm>-<service>. Two-part names never equal a cluster's

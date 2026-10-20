@@ -60,34 +60,6 @@ func (m *Manager) composeProject() string {
 	return m.Realm + "-mesh"
 }
 
-// dataDir is where a service keeps its data, on its volume.
-func (s Service) dataDir() string {
-	switch s {
-	case ServiceGrafana:
-		return "/var/lib/grafana"
-	case ServicePrometheus:
-		return "/prometheus"
-	case ServiceLoki:
-		return "/loki"
-	default:
-		return "/var/lib/alloy/data"
-	}
-}
-
-// args are the arguments of a service's command, after its image.
-func (s Service) args() []string {
-	switch s {
-	case ServicePrometheus:
-		return prometheusArgs
-	case ServiceLoki:
-		return lokiArgs
-	case ServiceAlloy:
-		return alloyArgs
-	default:
-		return nil
-	}
-}
-
 // createArgs returns the docker create arguments of a service's container:
 // on the mesh network, at ip unless it is empty, with the Compose labels
 // of the mesh's project, the fingerprint fp, its memory cap and its data
@@ -105,8 +77,8 @@ func (m *Manager) createArgs(s Service, ip, fp string, pull bool) []string {
 	}
 	args = append(args, docker.SortedLabelFlags(labels)...)
 	args = append(args,
-		"--memory", s.memoryLimit(),
-		"--mount", docker.VolumeMount(VolumeName(m.Realm, s), s.dataDir(), "", false, false),
+		"--memory", specs[s].memoryLimit,
+		"--mount", docker.VolumeMount(VolumeName(m.Realm, s), specs[s].dataDir, "", false, false),
 	)
 	switch s {
 	case ServiceGrafana:
@@ -126,7 +98,7 @@ func (m *Manager) createArgs(s Service, ip, fp string, pull bool) []string {
 		args = append(args, "--pull", "always")
 	}
 	args = append(args, s.Image())
-	return append(args, s.args()...)
+	return append(args, specs[s].args...)
 }
 
 // Fingerprint returns the fingerprint of the stack a realm gets from this
@@ -248,7 +220,7 @@ func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 // its configuration into it.
 func (m *Manager) create(ctx context.Context, s Service, dnsIP, fp, alloyConfig string) error {
 	ip := ""
-	if n := s.pinnedOffset(); n > 0 && dnsIP != "" {
+	if n := specs[s].pinnedOffset; n > 0 && dnsIP != "" {
 		ip = mesh.ServiceIP(dnsIP, n)
 	}
 	if _, err := m.Docker.CreateContainer(ctx, m.createArgs(s, ip, fp, m.Pull)...); err != nil {
@@ -259,18 +231,6 @@ func (m *Manager) create(ctx context.Context, s Service, dnsIP, fp, alloyConfig 
 		return fmt.Errorf("writing %s configuration: %w", s, err)
 	}
 	return nil
-}
-
-// readyPath is the path of a service's readiness endpoint.
-func (s Service) readyPath() string {
-	switch s {
-	case ServiceGrafana:
-		return "/api/health"
-	case ServiceLoki:
-		return "/ready"
-	default:
-		return "/-/ready"
-	}
 }
 
 // URL returns the address of a service's endpoint path on the mesh
@@ -293,7 +253,7 @@ func (m *Manager) ServiceReady(ctx context.Context, s Service) error {
 	if err := probe.ContainerRunning(ctx, m.Docker, ContainerName(m.Realm, s)); err != nil {
 		return err
 	}
-	if _, err := m.curl(ctx, "-o", "/dev/null", m.URL(s, s.readyPath())); err != nil {
+	if _, err := m.curl(ctx, "-o", "/dev/null", m.URL(s, specs[s].readyPath)); err != nil {
 		return fmt.Errorf("%s not ready: %w", s, err)
 	}
 	return nil
@@ -497,7 +457,7 @@ func (m *Manager) Status(ctx context.Context) ([]ServiceStatus, bool, error) {
 		}
 		g.Go(func() error {
 			s := statuses[i].Service
-			_, err := m.curl(gctx, "-o", "/dev/null", m.URL(s, s.readyPath()))
+			_, err := m.curl(gctx, "-o", "/dev/null", m.URL(s, specs[s].readyPath))
 			statuses[i].Ready = err == nil
 			statuses[i].Checked = true
 			return nil

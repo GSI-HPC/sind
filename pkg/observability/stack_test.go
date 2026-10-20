@@ -42,19 +42,22 @@ func TestEnsureStack_Creates(t *testing.T) {
 		assert.Equal(t, string(s), c.labels[docker.ComposeServiceLabel])
 		assert.NotContains(t, c.labels, labelRealm, "a container with sind.realm would count as a cluster's")
 		mem, _ := testutil.ArgValue(c.args, "--memory")
-		assert.Equal(t, s.memoryLimit(), mem)
+		assert.Equal(t, specs[s].memoryLimit, mem)
 
 		labels := f.volumes[string(VolumeName("sind", s))]
 		assert.Equal(t, map[string]string{labelRealm: "sind", docker.ComposeProjectLabel: "sind-mesh", docker.ComposeVolumeLabel: string(s)}, labels)
 	}
-	ip := func(s Service) string {
-		v, _ := testutil.ArgValue(f.containers[string(ContainerName("sind", s))].args, "--ip")
+	arg := func(s Service, flag string) string {
+		v, _ := testutil.ArgValue(f.containers[string(ContainerName("sind", s))].args, flag)
 		return v
 	}
-	assert.Equal(t, "172.30.255.253", ip(ServiceGrafana))
-	assert.Equal(t, "172.30.255.252", ip(ServicePrometheus))
-	assert.Equal(t, "172.30.255.251", ip(ServiceLoki))
-	assert.Empty(t, ip(ServiceAlloy))
+	assert.Equal(t, "172.30.255.253", arg(ServiceGrafana, "--ip"))
+	assert.Equal(t, "172.30.255.252", arg(ServicePrometheus, "--ip"))
+	assert.Equal(t, "172.30.255.251", arg(ServiceLoki, "--ip"))
+	assert.Empty(t, arg(ServiceAlloy, "--ip"))
+	assert.Equal(t, "type=volume,source=sind-grafana,target=/var/lib/grafana", arg(ServiceGrafana, "--mount"))
+	assert.Equal(t, "type=volume,source=sind-prometheus,target=/prometheus", arg(ServicePrometheus, "--mount"))
+	assert.Equal(t, "type=volume,source=sind-loki,target=/loki", arg(ServiceLoki, "--mount"))
 
 	alloy := f.containers["sind-alloy"]
 	assert.Equal(t, "// alloy\n", alloy.files[AlloyConfigPath])
