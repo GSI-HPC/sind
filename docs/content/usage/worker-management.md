@@ -109,4 +109,6 @@ sind delete worker 'worker-[2-4]'
 sind delete worker 'worker-[0-1].dev'
 ```
 
+With workers of several clusters, sind handles the clusters one after another, as `sind power` does. A cluster that fails does not stop the others: sind removes the workers of the rest, reports every failure and exits non-zero. The [exported SSH configuration]({{< relref "/usage/node-access#user-ssh-client-integration" >}}) follows the workers that are gone, also after a failure.
+
 See [Node Arguments](../node-arguments/) for the full node set syntax, set operators included.

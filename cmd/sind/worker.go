@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -143,12 +144,14 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 	}
 
 	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		// A cluster that fails does not keep the others from losing their
+		// workers, as with power, and the SSH export follows the workers
+		// that are gone even when some fail.
+		var errs []error
 		for _, g := range groupByCluster(targets) {
-			if err := cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames); err != nil {
-				return err
-			}
+			errs = append(errs, cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames))
 		}
 		updateSSHExport(cmd, client, meshMgr)
-		return nil
+		return errors.Join(errs...)
 	})
 }

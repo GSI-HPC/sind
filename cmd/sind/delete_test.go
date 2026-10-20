@@ -4,8 +4,13 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -31,6 +36,58 @@ func TestDeleteCluster_HasAllFlag(t *testing.T) {
 func TestDeleteCluster_AllRejectsArgs(t *testing.T) {
 	_, _, err := executeCommand("delete", "cluster", "--all", "extra")
 	assert.Error(t, err)
+}
+
+// emptyRealmCtx returns a context whose docker client answers the realm
+// lock like dockerd, a realm without SSH relay, and, with psErr, every
+// docker ps with that error, else with no container. It also points
+// XDG_STATE_HOME at a directory holding a stale ssh_config export of realm
+// sind, whose path it returns.
+func emptyRealmCtx(t *testing.T, psErr error) (context.Context, string) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	export := filepath.Join(stateHome, "sind", "sind", "ssh_config")
+	require.NoError(t, os.MkdirAll(filepath.Dir(export), 0o700))
+	require.NoError(t, os.WriteFile(export, []byte("stale"), 0o600))
+
+	d := newLockDaemon(t)
+	exit1 := testutil.ExitCode1(t)
+	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+		switch {
+		case args[0] == "network" && (args[1] == "create" || args[1] == "inspect" || args[1] == "rm"):
+			return d.onCall(args, stdin)
+		case args[0] == "exec":
+			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: exit1}
+		case args[0] == "ps" && psErr != nil:
+			return mock.Result{Err: psErr}
+		}
+		return mock.Result{}
+	}}
+	return withClient(t.Context(), docker.NewClient(m)), export
+}
+
+// TestDeleteWorker_AcrossClusters covers workers of two clusters that both
+// fail: each cluster is tried, the failures are joined, and the SSH export
+// is brought up to date anyway.
+func TestDeleteWorker_AcrossClusters(t *testing.T) {
+	ctx, export := emptyRealmCtx(t, nil)
+
+	_, _, err := execute(ctx, nil, "delete", "worker", "worker-0.dev", "worker-0.prod")
+
+	require.ErrorContains(t, err, `cluster "dev" not found in realm "sind"`)
+	require.ErrorContains(t, err, `cluster "prod" not found in realm "sind"`)
+	assert.NoFileExists(t, export, "SSH export synced")
+}
+
+// TestDeleteCluster_SyncsExportOnFailure covers a delete that fails: the
+// SSH export is brought up to date anyway, as with --all.
+func TestDeleteCluster_SyncsExportOnFailure(t *testing.T) {
+	ctx, export := emptyRealmCtx(t, fmt.Errorf("daemon unreachable"))
+
+	_, _, err := execute(ctx, nil, "delete", "cluster", "dev")
+
+	require.ErrorContains(t, err, "daemon unreachable")
+	assert.NoFileExists(t, export, "SSH export synced")
 }
 
 // --- Integration ---
