@@ -254,9 +254,7 @@ func TestDeregisterMesh(t *testing.T) {
 		{Name: "sind-dev-controller"},
 		{Name: "sind-dev-worker-0"},
 	}
-	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
-
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", containers)
 }
 
 func TestDeregisterMesh_Empty(t *testing.T) {
@@ -264,9 +262,7 @@ func TestDeregisterMesh_Empty(t *testing.T) {
 	c := docker.NewClient(&m)
 	mgr := mesh.NewManager(c, mesh.DefaultRealm)
 
-	err := DeregisterMesh(t.Context(), mgr, "dev", nil)
-
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", nil)
 	assert.Empty(t, m.Calls)
 }
 
@@ -289,8 +285,7 @@ func TestDeregisterMesh_DNSError(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", containers)
 }
 
 func TestDeregisterMesh_KnownHostError(t *testing.T) {
@@ -328,8 +323,7 @@ func TestDeregisterMesh_KnownHostError(t *testing.T) {
 	containers := []docker.ContainerListEntry{
 		{Name: "sind-dev-controller"},
 	}
-	err := DeregisterMesh(t.Context(), mgr, "dev", containers)
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mgr, "dev", containers)
 }
 
 // TestDeregisterMesh_StartsStoppedMesh covers a delete after a host
@@ -370,9 +364,7 @@ func TestDeregisterMesh_StartsStoppedMesh(t *testing.T) {
 	}
 	c := docker.NewClient(&m)
 
-	err := DeregisterMesh(t.Context(), mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
-
-	require.NoError(t, err)
+	DeregisterMesh(t.Context(), mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
 	assert.True(t, started["sind-ssh"], "relay started")
 	var written []string
 	for _, call := range m.Calls {
@@ -398,9 +390,7 @@ func TestDeregisterMesh_StartMeshError(t *testing.T) {
 	var logs strings.Builder
 	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
 
-	err := DeregisterMesh(ctx, mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
-
-	require.NoError(t, err)
+	DeregisterMesh(ctx, mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
 	assert.Contains(t, logs.String(), "starting the mesh failed, continuing")
 	assert.Contains(t, logs.String(), "inspecting SSH container: daemon gone")
 	assert.Equal(t, 1, countCalls(m.Calls, "exec", "-i", "sind-ssh"), "known_hosts written")

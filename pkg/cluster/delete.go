@@ -218,7 +218,7 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	// cluster is told by its containers, so before they go.
 	monitored := false
 	if deregister {
-		_ = DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
+		DeregisterMesh(ctx, meshMgr, clusterName, res.Containers)
 		var err error
 		if monitored, err = clusterMonitored(ctx, client, meshMgr.Realm, clusterName); err != nil {
 			return err
@@ -312,9 +312,8 @@ func removeEach[N ~string](ctx context.Context, kind string, names []N, remove f
 // down, and stale entries in a mesh helper that's already unreachable will
 // be overwritten on next register or cleared when the mesh itself is torn
 // down.
-func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) error {
+func DeregisterMesh(ctx context.Context, meshMgr *mesh.Manager, clusterName string, containers []docker.ContainerListEntry) {
 	deregisterHostnames(ctx, meshMgr, meshHostnames(meshMgr.Realm, clusterName, containers))
-	return nil
 }
 
 // meshHostnames returns the mesh DNS names of a cluster's node containers.

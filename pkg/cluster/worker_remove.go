@@ -103,9 +103,7 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 			return removeNodesConf(ctx, client, controller.Name, nodesConf, shortNames)
 		})
 	}
-	g.Go(func() error {
-		return DeregisterMesh(ctx, meshMgr, clusterName, targets)
-	})
+	DeregisterMesh(ctx, meshMgr, clusterName, targets)
 	if err := g.Wait(); err != nil {
 		return err
 	}
