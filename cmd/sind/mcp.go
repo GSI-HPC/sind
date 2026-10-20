@@ -162,9 +162,17 @@ var mcpNoDefault = map[string][]string{
 	"logs": {"tail"},
 }
 
+// mcpFlagUsage replaces, by command path below the root and flag name, the
+// help of a flag that describes a form a tool call cannot use: a tool's
+// sind process reads no stdin, so create cluster --config - would read
+// an empty configuration.
+var mcpFlagUsage = map[string]map[string]string{
+	"create cluster": {"config": "path to cluster configuration file"},
+}
+
 // withMCPFlagSchemas makes cmd, `sind mcp start` or `sind mcp tools`,
-// apply mcpNoDefault to the flags before ophis builds the tools from
-// them. It changes the flags of this process alone, which only
+// apply mcpNoDefault and mcpFlagUsage to the flags before ophis builds the
+// tools from them. It changes the flags of this process alone, which only
 // serves or exports the tools, so the help of the commands stays as it is.
 func withMCPFlagSchemas(cmd *cobra.Command) {
 	run := cmd.RunE
@@ -174,7 +182,8 @@ func withMCPFlagSchemas(cmd *cobra.Command) {
 	}
 }
 
-// adaptMCPFlags applies mcpNoDefault to cmd and the commands below it.
+// adaptMCPFlags applies mcpNoDefault and mcpFlagUsage to cmd and the
+// commands below it.
 func adaptMCPFlags(cmd *cobra.Command) {
 	for _, sub := range cmd.Commands() {
 		adaptMCPFlags(sub)
@@ -182,6 +191,9 @@ func adaptMCPFlags(cmd *cobra.Command) {
 	path := commandPath(cmd)
 	for _, name := range mcpNoDefault[path] {
 		cmd.Flags().Lookup(name).DefValue = ""
+	}
+	for name, usage := range mcpFlagUsage[path] {
+		cmd.Flags().Lookup(name).Usage = usage
 	}
 }
 

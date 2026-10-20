@@ -155,8 +155,26 @@ func TestMCPTools_NoDefault(t *testing.T) {
 	assert.Equal(t, "0", logs.Flags().Lookup("tail").DefValue, "the command keeps its default")
 }
 
-// TestMCPFlags_NameExistingFlags checks that mcpNoDefault names flags that
-// exist.
+// TestMCPTools_FlagUsage checks that the schema of a flag whose help names
+// a form a tool call cannot use describes it without that form.
+func TestMCPTools_FlagUsage(t *testing.T) {
+	tools := exportMCPTools(t)
+	for path, usages := range mcpFlagUsage {
+		flags := tools[mcpToolName(path)].InputSchema.Properties.Flags.Properties
+		for name, usage := range usages {
+			var schema map[string]any
+			require.NoError(t, json.Unmarshal(flags[name], &schema))
+			assert.Equal(t, usage, schema["description"], path+" --"+name)
+		}
+	}
+
+	create, _, err := NewRootCommand().Find([]string{"create", "cluster"})
+	require.NoError(t, err)
+	assert.Contains(t, create.Flags().Lookup("config").Usage, `"-" for stdin`, "the command keeps its help")
+}
+
+// TestMCPFlags_NameExistingFlags checks that mcpNoDefault and
+// mcpFlagUsage name flags that exist.
 func TestMCPFlags_NameExistingFlags(t *testing.T) {
 	root := NewRootCommand()
 	check := func(path, name string) {
@@ -167,6 +185,11 @@ func TestMCPFlags_NameExistingFlags(t *testing.T) {
 	}
 	for path, names := range mcpNoDefault {
 		for _, name := range names {
+			check(path, name)
+		}
+	}
+	for path, usages := range mcpFlagUsage {
+		for name := range usages {
 			check(path, name)
 		}
 	}

@@ -190,7 +190,7 @@ func TestCreateCluster_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	createCmd, _, err := cmd.Find([]string{"create", "cluster"})
 	require.NoError(t, err)
-	assert.Equal(t, "cluster [NAME] [--config FILE]", createCmd.Use)
+	assert.Equal(t, "cluster [NAME]", createCmd.Use)
 
 	// Check flags exist with correct defaults
 	assert.Nil(t, createCmd.Flags().Lookup("name"), "--name flag should not exist")
