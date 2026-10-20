@@ -20,11 +20,7 @@ func newCreateWorkerCommand() *cobra.Command {
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runCreateWorker(cmd, name)
+			return runCreateWorker(cmd, clusterArg(args))
 		}),
 	}
 

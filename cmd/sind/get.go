@@ -425,11 +425,7 @@ otherwise.`,
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runGetAuthKey(cmd, name)
+			return runGetAuthKey(cmd, clusterArg(args))
 		},
 	}
 	cmd.Flags().String("type", "", "authentication plugin of the key: munge, slurm or jwt (default: the cluster's AuthType)")
@@ -658,11 +654,7 @@ func newGetClusterCommand() *cobra.Command {
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runGetCluster(cmd, name)
+			return runGetCluster(cmd, clusterArg(args))
 		},
 	}
 }

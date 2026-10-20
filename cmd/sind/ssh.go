@@ -99,11 +99,7 @@ func newEnterCommand() *cobra.Command {
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runEnter(cmd, name)
+			return runEnter(cmd, clusterArg(args))
 		},
 	}
 	addUserFlag(cmd, "shell")

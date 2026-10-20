@@ -254,7 +254,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 Rules:
 - Cluster names are **always positional**, never flags
 - Node targets are node set expressions; a command joins its node arguments with a space, which is a union
-- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, `cobra.MinimumNArgs(1)` for required nodes
+- Use `optionalCluster` (`cobra.MaximumNArgs(1)` plus the name check) for optional cluster, read with `clusterArg` (the default cluster without one), `cobra.MinimumNArgs(1)` for required nodes
 
 ### Flag Conventions
 

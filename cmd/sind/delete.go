@@ -5,7 +5,6 @@ package main
 import (
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -37,11 +36,7 @@ func newDeleteClusterCommand() *cobra.Command {
 				}
 				return runDeleteClustersAll(cmd)
 			}
-			name := config.DefaultClusterName
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return runDeleteCluster(cmd, name)
+			return runDeleteCluster(cmd, clusterArg(args))
 		}),
 	}
 

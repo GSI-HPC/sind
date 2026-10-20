@@ -25,6 +25,15 @@ func optionalCluster(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// clusterArg returns the cluster named by the argument of a command that
+// optionalCluster checks, the default cluster without one.
+func clusterArg(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return config.DefaultClusterName
+}
+
 // nodeTarget is a resolved node with its short name and cluster.
 type nodeTarget struct {
 	ShortName string
