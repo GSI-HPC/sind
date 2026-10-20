@@ -48,8 +48,7 @@ CI runs for every pull request and every push to `main` and `next`.
 | Image Targets | lists the bake targets and platforms the Integration Test jobs run (`docker/bake-action/subaction/matrix`) |
 | Integration Test (slurm-YY-MM, platform) | one job per Slurm release line (bake target) and platform, on a native runner (`ubuntu-24.04-arm` for linux/arm64): `sind doctor`, builds that node image with `docker buildx bake` (BuildKit from `mirror.gcr.io`), pulls the Docker Hub images the tests run from `mirror.gcr.io`, then `make test-integration` |
 | Integration Test | passes when every Integration Test (slurm-YY-MM, platform) job passed |
-| Build | `make build` |
-| Release Snapshot | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
+| Build | `goreleaser release --snapshot --clean` (`.goreleaser.yaml`, every release platform) |
 
 - Integration Test fetches sources while building the image: the Slurm, UCX, PMIx,
   PRRTE and Open MPI tarballs, and a `git clone` of libjwt from github.com. A failure in
