@@ -5,6 +5,7 @@ package config
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -299,63 +300,28 @@ func (c *Cluster) ApplyDefaults() {
 		}
 	}
 
-	// Resolve effective defaults: user defaults → built-in defaults
-	image := c.Defaults.Image
-	if image == "" {
-		image = DefaultImage
-	}
-	cpus := c.Defaults.CPUs
-	if cpus == 0 {
-		cpus = DefaultCPUs
-	}
-	memory := c.Defaults.Memory
-	if memory == "" {
-		memory = DefaultMemory
-	}
-	tmpSize := c.Defaults.TmpSize
-	if tmpSize == "" {
-		tmpSize = DefaultTmpSize
-	}
-
-	// Apply to each node where not already set
+	// Each node field falls back to defaults, then to the built-in default.
+	d := c.Defaults
 	for i := range c.Nodes {
-		if c.Nodes[i].Image == "" {
-			c.Nodes[i].Image = image
-		}
-		if c.Nodes[i].CPUs == 0 {
-			c.Nodes[i].CPUs = cpus
-		}
-		if c.Nodes[i].Memory == "" {
-			c.Nodes[i].Memory = memory
-		}
-		if c.Nodes[i].TmpSize == "" {
-			c.Nodes[i].TmpSize = tmpSize
-		}
+		n := &c.Nodes[i]
+		n.Image = cmp.Or(n.Image, d.Image, DefaultImage)
+		n.CPUs = cmp.Or(n.CPUs, d.CPUs, DefaultCPUs)
+		n.Memory = cmp.Or(n.Memory, d.Memory, DefaultMemory)
+		n.TmpSize = cmp.Or(n.TmpSize, d.TmpSize, DefaultTmpSize)
 		// Security fields: per-node values merge with (not replace) defaults
-		c.Nodes[i].CapAdd = mergeStringSlices(c.Defaults.CapAdd, c.Nodes[i].CapAdd)
-		c.Nodes[i].CapDrop = mergeStringSlices(c.Defaults.CapDrop, c.Nodes[i].CapDrop)
-		c.Nodes[i].Devices = mergeStringSlices(c.Defaults.Devices, c.Nodes[i].Devices)
-		c.Nodes[i].SecurityOpt = mergeStringSlices(c.Defaults.SecurityOpt, c.Nodes[i].SecurityOpt)
+		n.CapAdd = mergeStringSlices(d.CapAdd, n.CapAdd)
+		n.CapDrop = mergeStringSlices(d.CapDrop, n.CapDrop)
+		n.Devices = mergeStringSlices(d.Devices, n.Devices)
+		n.SecurityOpt = mergeStringSlices(d.SecurityOpt, n.SecurityOpt)
 	}
 }
 
 // mergeStringSlices merges two string slices, deduplicating entries.
 // Returns nil if both inputs are empty.
 func mergeStringSlices(base, overlay []string) []string {
-	if len(base) == 0 && len(overlay) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(base)+len(overlay))
 	var result []string
-	for _, s := range base {
-		if _, ok := seen[s]; !ok {
-			seen[s] = struct{}{}
-			result = append(result, s)
-		}
-	}
-	for _, s := range overlay {
-		if _, ok := seen[s]; !ok {
-			seen[s] = struct{}{}
+	for _, s := range slices.Concat(base, overlay) {
+		if !slices.Contains(result, s) {
 			result = append(result, s)
 		}
 	}
