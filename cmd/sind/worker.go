@@ -71,6 +71,9 @@ func createWorkerOptions(cmd *cobra.Command, clusterName string) (cluster.Worker
 	if err != nil {
 		return cluster.WorkerAddOptions{}, err
 	}
+	if err := checkNotEmpty(cmd, "image", "memory", "tmp-size"); err != nil {
+		return cluster.WorkerAddOptions{}, err
+	}
 	count, _ := cmd.Flags().GetInt("count")
 	image, _ := cmd.Flags().GetString("image")
 	cpus, _ := cmd.Flags().GetInt("cpus")

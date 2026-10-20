@@ -37,6 +37,10 @@ func TestCreateWorker_InvalidFlags(t *testing.T) {
 		{[]string{"--cap-add", "BOGUS"}, `unknown capability "BOGUS" in --cap-add`},
 		{[]string{"--cap-drop", "net_raw"}, `unknown capability "net_raw" in --cap-drop`},
 		{[]string{"--device", "relative/dev"}, `device "relative/dev" in --device: host path must be absolute`},
+		// An unset variable in --image "$IMAGE" is not the default.
+		{[]string{"--image", ""}, "--image must not be empty: leave it out for the default"},
+		{[]string{"--memory="}, "--memory must not be empty: leave it out for the default"},
+		{[]string{"--tmp-size", ""}, "--tmp-size must not be empty: leave it out for the default"},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {

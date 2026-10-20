@@ -79,6 +79,7 @@ func TestRun_UsageErrorExits2(t *testing.T) {
 		{[]string{"create", "worker", "--pull=maybe"}, `invalid --pull value "maybe": want true or false`},
 		{[]string{"logs", "-n", "x", "controller"}, `invalid --tail value "x": want a whole number`},
 		{[]string{"exec", "-v=x", "--", "true"}, `invalid --verbose value "x": want a whole number`},
+		{[]string{"create", "cluster", "--config", ""}, "--config must not be empty: leave it out for the default"},
 		{[]string{"create", "worker", "--device", "rel/path"}, `device "rel/path" in --device: host path must be absolute`},
 		{[]string{"--realm", "Not_A_Realm", "get", "clusters"}, `--realm: invalid realm name "Not_A_Realm"`},
 		{[]string{"get", "node", "worker-0.dev.sind.sind"}, "not the FQDN"},

@@ -83,6 +83,9 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkNotEmpty(cmd, "config"); err != nil {
+		return err
+	}
 
 	// --config - may read what the user types at the terminal; the
 	// progress display is off it meanwhile.
@@ -193,6 +196,18 @@ func applyDataStorage(cfg *config.Cluster, dataFlag string) error {
 		return fmt.Errorf("resolving data path %q: %w", ds.HostPath, err)
 	}
 	ds.HostPath = abs
+	return nil
+}
+
+// checkNotEmpty rejects each of the flags names that is given but empty,
+// as a usage error: an unset variable in --config "$CFG" would otherwise
+// quietly stand for the flag's default.
+func checkNotEmpty(cmd *cobra.Command, names ...string) error {
+	for _, name := range names {
+		if value, _ := cmd.Flags().GetString(name); value == "" && cmd.Flags().Changed(name) {
+			return usagef("--%s must not be empty: leave it out for the default", name)
+		}
+	}
 	return nil
 }
 
