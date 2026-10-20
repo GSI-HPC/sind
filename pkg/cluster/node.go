@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -339,14 +338,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 	}
 	labels[LabelIdentity] = string(identity)
 	labels[LabelMonitoring] = strconv.FormatBool(cfg.Monitoring)
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		args = append(args, "--label", k+"="+labels[k])
-	}
+	args = append(args, docker.SortedLabelFlags(labels)...)
 
 	// Entrypoint: delegate the cgroup controllers, then start systemd
 	args = append(args, "--entrypoint", "/bin/sh")
