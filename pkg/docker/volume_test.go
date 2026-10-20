@@ -185,27 +185,6 @@ func TestCreateVolume_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestRemoveVolume(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testVolumeName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.RemoveVolume(t.Context(), testVolumeName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"volume", "rm", string(testVolumeName)}, m.Calls[0].Args)
-}
-
-func TestRemoveVolume_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such volume: "+string(testVolumeName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.RemoveVolume(t.Context(), testVolumeName)
-	assert.Error(t, err)
-}
-
 const volumeLsJSON = `{"Name":"sind-dev-config","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-dev-config/_data","Scope":"local"}
 {"Name":"sind-dev-munge","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-dev-munge/_data","Scope":"local"}
 {"Name":"sind-dev-data","Driver":"local","Mountpoint":"/var/lib/docker/volumes/sind-dev-data/_data","Scope":"local"}`

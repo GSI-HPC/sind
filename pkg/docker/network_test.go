@@ -199,15 +199,6 @@ func TestCreateConfigOnlyNetwork_Error(t *testing.T) {
 	assert.Empty(t, id)
 }
 
-func TestRemoveNetworkByID(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("net-id\n", "", nil)
-	c := NewClient(&m)
-
-	require.NoError(t, c.RemoveNetworkByID(t.Context(), "net-id"))
-	assert.Equal(t, []string{"network", "rm", "net-id"}, m.Calls[0].Args)
-}
-
 func TestInspectNetworkMeta(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(`{"Name":"sind-lock","Id":"net-id","Created":"2026-10-04T10:02:03.123456789Z","ConfigOnly":true,"Labels":{"sind.realm":"sind"}}`+"\n", "", nil)
@@ -524,69 +515,6 @@ func TestCreateNetworkWithSubnet_Error(t *testing.T) {
 	id, err := c.CreateNetworkWithSubnet(t.Context(), testNetworkName, nil, NetworkIPAM{Subnet: "172.18.0.0/16"})
 	assert.Error(t, err)
 	assert.Empty(t, id)
-}
-
-func TestRemoveNetwork(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(string(testNetworkName)+"\n", "", nil)
-	c := NewClient(&m)
-
-	err := c.RemoveNetwork(t.Context(), testNetworkName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "rm", string(testNetworkName)}, m.Calls[0].Args)
-}
-
-func TestRemoveNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such network: "+string(testNetworkName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.RemoveNetwork(t.Context(), testNetworkName)
-	assert.Error(t, err)
-}
-
-func TestConnectNetwork(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	err := c.ConnectNetwork(t.Context(), testNetworkName, testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "connect", string(testNetworkName), string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestConnectNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.ConnectNetwork(t.Context(), testNetworkName, testContainerName)
-	assert.Error(t, err)
-}
-
-func TestDisconnectNetwork(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	err := c.DisconnectNetwork(t.Context(), testNetworkName, testContainerName)
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"network", "disconnect", string(testNetworkName), string(testContainerName)}, m.Calls[0].Args)
-}
-
-func TestDisconnectNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error response from daemon: No such container: "+string(testContainerName)+"\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.DisconnectNetwork(t.Context(), testNetworkName, testContainerName)
-	assert.Error(t, err)
 }
 
 // --- NetworkContainers ---

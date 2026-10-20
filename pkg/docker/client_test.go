@@ -4,6 +4,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -248,4 +249,38 @@ func TestClient_WithoutNewClientIsUnbounded(t *testing.T) {
 	close(e.release)
 	wg.Wait()
 	assert.Equal(t, MaxConcurrentCalls+1, e.peak)
+}
+
+// TestCommands checks the methods that run one docker command for its
+// effect: the arguments they pass, and that they return docker's error.
+func TestCommands(t *testing.T) {
+	const n, net = testContainerName, testNetworkName
+	tests := []struct {
+		call func(context.Context, *Client) error
+		args []string
+	}{
+		{func(ctx context.Context, c *Client) error { return c.StartContainer(ctx, n) }, []string{"start", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.StopContainer(ctx, n) }, []string{"stop", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveContainer(ctx, n) }, []string{"rm", "-f", "-v", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.PauseContainer(ctx, n) }, []string{"pause", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.UnpauseContainer(ctx, n) }, []string{"unpause", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.KillContainer(ctx, n) }, []string{"kill", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.SignalContainer(ctx, n, "HUP") }, []string{"kill", "-s", "HUP", string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveNetwork(ctx, net) }, []string{"network", "rm", string(net)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveNetworkByID(ctx, "net-id") }, []string{"network", "rm", "net-id"}},
+		{func(ctx context.Context, c *Client) error { return c.ConnectNetwork(ctx, net, n) }, []string{"network", "connect", string(net), string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.DisconnectNetwork(ctx, net, n) }, []string{"network", "disconnect", string(net), string(n)}},
+		{func(ctx context.Context, c *Client) error { return c.RemoveVolume(ctx, testVolumeName) }, []string{"volume", "rm", string(testVolumeName)}},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", "", nil)
+			m.AddResult("", "Error response from daemon: failed\n", errors.New("exit status 1"))
+			c := NewClient(&m)
+			require.NoError(t, tt.call(t.Context(), c))
+			assert.Equal(t, tt.args, m.Calls[0].Args)
+			assert.Error(t, tt.call(t.Context(), c))
+		})
+	}
 }
