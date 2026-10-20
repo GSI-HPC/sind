@@ -83,7 +83,7 @@ func (f *externalFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{Stdout: testutil.NDJSON(entries...)}
 	case args[0] == "inspect":
 		var docs []map[string]any
-		for _, name := range args[1:] {
+		for _, name := range args[1 : len(args)-2] {
 			c, ok := f.containers[name]
 			if !ok {
 				return mock.Result{Stderr: testutil.NoSuchContainer(name), Err: testutil.ExitCode1(f.t)}

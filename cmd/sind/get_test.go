@@ -511,9 +511,9 @@ func TestGetSSHConfig_JSON(t *testing.T) {
 // meshInspectCall answers the inspects of get mesh for a running mesh.
 func meshInspectCall(args []string, _ string) mock.Result {
 	switch {
-	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-dns":
+	case len(args) == 4 && args[0] == "inspect" && args[1] == "sind-dns":
 		return mock.Result{Stdout: `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Image":"coredns/coredns:1.14.7","Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`}
-	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-ssh":
+	case len(args) == 4 && args[0] == "inspect" && args[1] == "sind-ssh":
 		return mock.Result{Stdout: `[{"Id":"ssh1","Name":"/sind-ssh","State":{"Status":"running"},"Config":{"Image":"ghcr.io/gsi-hpc/sind-node:latest","Labels":{}}}]`}
 	}
 	return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
@@ -540,7 +540,7 @@ func TestGetMesh_Output(t *testing.T) {
 // which printed "dns-ip" and trailing spaces, and "" in the JSON output.
 func TestGetMesh_StoppedDNS(t *testing.T) {
 	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
-		if len(args) == 2 && args[0] == "inspect" && args[1] == "sind-dns" {
+		if len(args) == 4 && args[0] == "inspect" && args[1] == "sind-dns" {
 			return mock.Result{Stdout: `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"exited"},"Config":{"Image":"coredns/coredns:1.14.7","Labels":{}},"NetworkSettings":{"Networks":{}}}]`}
 		}
 		return meshInspectCall(args, stdin)
@@ -983,7 +983,7 @@ func pairOnCall(t *testing.T) func([]string, string) mock.Result {
 			)}
 		case args[0] == "inspect":
 			entries := make([]string, 0, len(args)-1)
-			for _, name := range args[1:] {
+			for _, name := range args[1 : len(args)-2] {
 				role := "controller"
 				if strings.Contains(name, "worker") {
 					role = "worker"

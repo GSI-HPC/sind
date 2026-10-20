@@ -717,9 +717,9 @@ func (f *realmFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 	case args[0] == "cp", args[0] == "kill":
 		return mock.Result{}
-	case joined == "inspect sind-dns":
+	case joined == "inspect sind-dns --type container":
 		return mock.Result{Stdout: dnsRunningInspectJSON}
-	case joined == "inspect sind-ssh":
+	case joined == "inspect sind-ssh --type container":
 		return mock.Result{Stdout: sshRunningInspectJSON}
 	case args[0] == "inspect" && isStackContainer(args[1]):
 		return notFound

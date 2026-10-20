@@ -43,7 +43,7 @@ func monitoredOnCall(t *testing.T) func([]string, string) mock.Result {
 			)}
 		case args[0] == "inspect" && stack(args[1]):
 			var infos []map[string]any
-			for i, name := range args[1:] {
+			for i, name := range args[1 : len(args)-2] {
 				state, networks := "running", map[string]any{"sind-mesh": map[string]string{"IPAddress": "172.18.255.25" + string(rune('3'-i))}}
 				if strings.HasSuffix(name, "-alloy") {
 					state, networks = "exited", nil

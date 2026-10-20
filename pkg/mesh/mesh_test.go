@@ -479,7 +479,7 @@ func TestEnsureMesh_DNSInspectAfterStartError(t *testing.T) {
 			return mock.Result{Stdout: "{}\n"}
 		case joined == "volume inspect sind-ssh-config --format {{json .Labels}}":
 			return mock.Result{Stdout: "{}\n"}
-		case joined == "inspect sind-dns" && !inspected:
+		case joined == "inspect sind-dns --type container" && !inspected:
 			inspected = true
 			return mock.Result{Stdout: dnsInspectExitedJSON()}
 		case joined == "start sind-dns":
@@ -955,7 +955,7 @@ func TestEditDNSRecords(t *testing.T) {
 
 			require.NoError(t, tt.edit(NewManager(c, DefaultRealm)))
 			assert.Equal(t, tt.want, parseEntries(dns.files[corefilePath]))
-			assert.Equal(t, []string{"cp sind-dns:/Corefile -", "cp - sind-dns:/", "inspect sind-dns", "kill -s USR1 sind-dns"},
+			assert.Equal(t, []string{"cp sind-dns:/Corefile -", "cp - sind-dns:/", "inspect sind-dns --type container", "kill -s USR1 sind-dns"},
 				calls(m, ""), "CoreDNS reloads in place")
 		})
 	}

@@ -295,12 +295,17 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		}
 		delete(f.volumes, last)
 		return mock.Result{}
-	case joined == "inspect "+last, joined == "container inspect "+last:
-		c, ok := f.containers[last]
-		if !ok {
+	case joined == "container inspect "+last:
+		if _, ok := f.containers[last]; !ok {
 			return notFound(f.t, testutil.NoSuchContainer(last))
 		}
-		return mock.Result{Stdout: f.inspectJSON(last, c)}
+		return mock.Result{Stdout: "[{}]\n"}
+	case len(args) == 4 && joined == "inspect "+args[1]+" --type container":
+		c, ok := f.containers[args[1]]
+		if !ok {
+			return notFound(f.t, testutil.NoSuchContainer(args[1]))
+		}
+		return mock.Result{Stdout: f.inspectJSON(args[1], c)}
 	case args[0] == "create":
 		return f.create(args[1:])
 	case args[0] == "start":

@@ -71,8 +71,11 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 	}
 	switch args[0] {
 	case "inspect":
+		if !slices.Equal(args[len(args)-2:], []string{"--type", "container"}) {
+			f.t.Errorf("inspect without --type container: %s", joined)
+		}
 		var out []map[string]any
-		for _, name := range args[1:] {
+		for _, name := range args[1 : len(args)-2] {
 			c, ok := f.containers[name]
 			if !ok {
 				return mock.Result{Stderr: testutil.NoSuchContainer(name), Err: f.exitErr()}

@@ -114,7 +114,7 @@ func (f *stackFake) dns(args []string) (mock.Result, bool) {
 	case joined == "cp - sind-dns:/", joined == "kill -s USR1 sind-dns":
 		f.calls = append(f.calls, args)
 		return mock.Result{}, true
-	case joined == "inspect sind-dns":
+	case joined == "inspect sind-dns --type container":
 		return mock.Result{Stdout: inspectJSON(f.t, "sind-dns", "running", nil)}, true
 	}
 	return mock.Result{}, false
@@ -220,7 +220,7 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 	switch args[0] {
 	case "inspect":
 		var out []map[string]any
-		for _, name := range args[1:] {
+		for _, name := range args[1 : len(args)-2] {
 			c, ok := f.containers[name]
 			if !ok {
 				return notFound(testutil.NoSuchContainer(name)), true

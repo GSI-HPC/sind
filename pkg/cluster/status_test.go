@@ -29,12 +29,13 @@ func statusInspectJSON(t *testing.T, name, status, ip string, labels docker.Labe
 }
 
 // statusInspectJSONBatch builds a docker inspect JSON response covering every
-// container name in inspectArgs[1:]. resolver maps each name to (status, ip).
+// container name in inspectArgs, which end in --type container. resolver
+// maps each name to (status, ip).
 // Used by mock dispatchers when GetStatus issues a batched inspect.
 func statusInspectJSONBatch(t *testing.T, inspectArgs []string, resolver func(name string) (status, ip string)) string {
 	t.Helper()
 	entries := make([]string, 0, len(inspectArgs)-1)
-	for _, name := range inspectArgs[1:] {
+	for _, name := range inspectArgs[1 : len(inspectArgs)-2] {
 		status, ip := resolver(name)
 		entries = append(entries, statusInspectJSON(t, name, status, ip, nil))
 	}
@@ -572,7 +573,7 @@ func TestGetStatus_UnmanagedNodes(t *testing.T) {
 			)}
 		case "inspect":
 			entries := make([]string, 0, len(args)-1)
-			for _, name := range args[1:] {
+			for _, name := range args[1 : len(args)-2] {
 				entries = append(entries, statusInspectJSON(t, name, "running", "172.18.0.9", labels[name]))
 			}
 			return mock.Result{Stdout: inspectBatch(entries...)}
