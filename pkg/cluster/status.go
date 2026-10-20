@@ -68,30 +68,19 @@ func nodeHealthFromInfo(ctx context.Context, client *docker.Client, info *docker
 	}
 
 	services := nodeServices(role, info.Labels)
-
-	// If container is not running, skip all service checks.
-	if info.Status != docker.StateRunning {
-		for _, svc := range services {
-			health.Services[svc] = false
+	// A stopped container or a failed probe leaves snap nil: every
+	// service reads unhealthy. One fused readiness exec per node (plus
+	// scontrol ping for controllers) instead of serial docker execs.
+	var snap map[probe.Service]bool
+	if info.Status == docker.StateRunning {
+		var err error
+		if snap, err = probe.Snapshot(ctx, client, info.Name, services); err != nil {
+			sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
 		}
-		return health
 	}
-
-	// One fused readiness exec per node (plus scontrol ping for
-	// controllers) instead of three or four serial docker execs.
-	snap, err := probe.Snapshot(ctx, client, info.Name, services)
-	if err != nil {
-		sindlog.From(ctx).DebugContext(ctx, "node probe snapshot failed", "container", string(info.Name), "err", err)
-		for _, svc := range services {
-			health.Services[svc] = false
-		}
-		return health
-	}
-
 	for _, svc := range services {
 		health.Services[svc] = snap[svc]
 	}
-
 	return health
 }
 
