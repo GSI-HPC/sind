@@ -597,11 +597,10 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 		return err
 	}
 
-	// Build set of hostnames being added for dedup.
-	newHostnames := make(map[string]bool, len(records))
+	hostnames := make([]string, len(records))
 	newEntries := make(map[string]bool, len(records))
-	for _, r := range records {
-		newHostnames[r.Hostname] = true
+	for i, r := range records {
+		hostnames[i] = r.Hostname
 		newEntries[r.IP+" "+r.Hostname] = true
 	}
 
@@ -610,7 +609,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 	present, stale := 0, false
 	for _, entry := range entries {
 		fields := strings.Fields(entry)
-		if len(fields) < 2 || !newHostnames[fields[1]] {
+		if len(fields) < 2 || !slices.Contains(hostnames, fields[1]) {
 			continue
 		}
 		if newEntries[fields[0]+" "+fields[1]] {
@@ -624,14 +623,7 @@ func (m *Manager) AddDNSRecords(ctx context.Context, records []DNSRecord) error 
 	}
 
 	// Keep existing entries that don't conflict with new ones.
-	kept := make([]string, 0, len(entries)+len(records))
-	for _, entry := range entries {
-		fields := strings.Fields(entry)
-		if len(fields) >= 2 && newHostnames[fields[1]] {
-			continue
-		}
-		kept = append(kept, entry)
-	}
+	kept := withoutNames(entries, 1, hostnames)
 	for _, r := range records {
 		kept = append(kept, r.IP+" "+r.Hostname)
 	}
@@ -650,21 +642,7 @@ func (m *Manager) RemoveDNSRecords(ctx context.Context, hostnames []string) erro
 		return err
 	}
 
-	remove := make(map[string]bool, len(hostnames))
-	for _, h := range hostnames {
-		remove[h] = true
-	}
-
-	kept := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		fields := strings.Fields(entry)
-		if len(fields) >= 2 && remove[fields[1]] {
-			continue
-		}
-		kept = append(kept, entry)
-	}
-
-	return m.writeDNSEntries(ctx, kept)
+	return m.writeDNSEntries(ctx, withoutNames(entries, 1, hostnames))
 }
 
 // Info holds information about the mesh infrastructure for a realm.
@@ -882,4 +860,14 @@ func parseEntries(corefile string) []string {
 		}
 	}
 	return entries
+}
+
+// withoutNames returns lines without the blank ones and those whose field i
+// is one of names: a host name in a known_hosts line (0) or a hosts entry
+// of the Corefile (1). It filters lines in place.
+func withoutNames(lines []string, i int, names []string) []string {
+	return slices.DeleteFunc(lines, func(line string) bool {
+		fields := strings.Fields(line)
+		return len(fields) == 0 || len(fields) > i && slices.Contains(names, fields[i])
+	})
 }

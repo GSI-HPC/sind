@@ -171,44 +171,36 @@ type KnownHostEntry struct {
 // entries for the same hostnames are replaced, making the operation
 // idempotent on retry.
 func (m *Manager) AddKnownHosts(ctx context.Context, entries []KnownHostEntry) error {
-	if len(entries) == 0 {
+	hostnames := make([]string, len(entries))
+	lines := make([]string, len(entries))
+	for i, e := range entries {
+		hostnames[i], lines[i] = e.Hostname, e.Hostname+" "+e.HostKey
+	}
+	return m.editKnownHosts(ctx, hostnames, lines)
+}
+
+// RemoveKnownHosts removes all entries for the given hostnames from the
+// known_hosts file in a single operation.
+func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) error {
+	return m.editKnownHosts(ctx, hostnames, nil)
+}
+
+// editKnownHosts drops the known_hosts lines of hostnames and appends add.
+// It does nothing without hostnames.
+func (m *Manager) editKnownHosts(ctx context.Context, hostnames, add []string) error {
+	if len(hostnames) == 0 {
 		return nil
 	}
-	name := m.SSHContainerName()
-	content, err := m.Docker.ReadFile(ctx, name, knownHostsPath)
+	content, err := m.Docker.ReadFile(ctx, m.SSHContainerName(), knownHostsPath)
 	if err != nil {
 		return fmt.Errorf("reading known_hosts: %w", err)
 	}
-
-	// Build set of hostnames being added for dedup.
-	newHostnames := make(map[string]bool, len(entries))
-	for _, e := range entries {
-		newHostnames[e.Hostname] = true
+	lines := append(withoutNames(strings.Split(content, "\n"), 0, hostnames), add...)
+	var result string
+	if len(lines) > 0 {
+		result = strings.Join(lines, "\n") + "\n"
 	}
-
-	// Keep existing lines that don't conflict with new entries.
-	lines := strings.Split(content, "\n")
-	var buf strings.Builder
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 1 && newHostnames[fields[0]] {
-			continue
-		}
-		buf.WriteString(line)
-		buf.WriteByte('\n')
-	}
-	for _, e := range entries {
-		buf.WriteString(e.Hostname)
-		buf.WriteByte(' ')
-		buf.WriteString(e.HostKey)
-		buf.WriteByte('\n')
-	}
-
-	err = m.writeKnownHosts(ctx, buf.String())
-	if err != nil {
+	if err := m.writeKnownHosts(ctx, result); err != nil {
 		return fmt.Errorf("writing known_hosts: %w", err)
 	}
 	return nil
@@ -219,49 +211,6 @@ func (m *Manager) AddKnownHosts(ctx context.Context, entries []KnownHostEntry) e
 // short by Ctrl+C would drop the host keys of every cluster in the realm.
 func (m *Manager) writeKnownHosts(ctx context.Context, content string) error {
 	return m.Docker.WriteFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
-}
-
-// RemoveKnownHosts removes all entries for the given hostnames from the
-// known_hosts file in a single operation.
-func (m *Manager) RemoveKnownHosts(ctx context.Context, hostnames []string) error {
-	if len(hostnames) == 0 {
-		return nil
-	}
-	name := m.SSHContainerName()
-	content, err := m.Docker.ReadFile(ctx, name, knownHostsPath)
-	if err != nil {
-		return fmt.Errorf("reading known_hosts: %w", err)
-	}
-
-	remove := make(map[string]bool, len(hostnames))
-	for _, h := range hostnames {
-		remove[h] = true
-	}
-
-	lines := strings.Split(content, "\n")
-	kept := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 1 && remove[fields[0]] {
-			continue
-		}
-		kept = append(kept, line)
-	}
-
-	var result string
-	if len(kept) > 0 {
-		result = strings.Join(kept, "\n") + "\n"
-	}
-
-	err = m.writeKnownHosts(ctx, result)
-	if err != nil {
-		return fmt.Errorf("writing known_hosts: %w", err)
-	}
-
-	return nil
 }
 
 // generateKeypair creates a new ed25519 keypair and returns the private key
