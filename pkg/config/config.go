@@ -343,19 +343,11 @@ func (c *Cluster) Validate() error {
 		}
 	}
 
-	var controllers, dbs, apis, submitters, workers int
+	roles := make(map[Role]int)
 	for _, n := range c.Nodes {
 		switch n.Role {
-		case RoleController:
-			controllers++
-		case RoleDB:
-			dbs++
-		case RoleAPI:
-			apis++
-		case RoleSubmitter:
-			submitters++
-		case RoleWorker:
-			workers++
+		case RoleController, RoleDB, RoleAPI, RoleSubmitter, RoleWorker:
+			roles[n.Role]++
 		default:
 			return fmt.Errorf("invalid role %q, must be one of: controller, db, api, submitter, worker", n.Role)
 		}
@@ -374,20 +366,20 @@ func (c *Cluster) Validate() error {
 		}
 	}
 
-	if controllers != 1 {
-		return fmt.Errorf("exactly one controller required, got %d", controllers)
+	if roles[RoleController] != 1 {
+		return fmt.Errorf("exactly one controller required, got %d", roles[RoleController])
 	}
-	if dbs > 1 {
-		return fmt.Errorf("at most one db node allowed, got %d", dbs)
+	if roles[RoleDB] > 1 {
+		return fmt.Errorf("at most one db node allowed, got %d", roles[RoleDB])
 	}
-	if apis > 1 {
-		return fmt.Errorf("at most one api node allowed, got %d", apis)
+	if roles[RoleAPI] > 1 {
+		return fmt.Errorf("at most one api node allowed, got %d", roles[RoleAPI])
 	}
-	if submitters > 1 {
-		return fmt.Errorf("at most one submitter allowed, got %d", submitters)
+	if roles[RoleSubmitter] > 1 {
+		return fmt.Errorf("at most one submitter allowed, got %d", roles[RoleSubmitter])
 	}
-	if workers < 1 {
-		return fmt.Errorf("at least one worker node required, got %d", workers)
+	if roles[RoleWorker] < 1 {
+		return fmt.Errorf("at least one worker node required, got %d", roles[RoleWorker])
 	}
 
 	if err := c.validateResources(); err != nil {
