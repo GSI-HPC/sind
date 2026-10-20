@@ -5,8 +5,6 @@ package docker
 import (
 	"context"
 	"encoding/csv"
-	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -46,34 +44,15 @@ type VolumeListEntry struct {
 	Labels Labels
 }
 
-// volumeLsEntry maps the docker volume ls --format json output.
-type volumeLsEntry struct {
-	Name   string `json:"Name"`
-	Driver string `json:"Driver"`
-	Labels string `json:"Labels"`
-}
-
 // ListVolumes returns volumes matching the given filters.
 // Each filter is passed as a --filter flag (e.g. "name=sind-dev").
 func (c *Client) ListVolumes(ctx context.Context, filters ...string) ([]VolumeListEntry, error) {
-	args := []string{"volume", "ls", "--format", "json"}
-	for _, f := range filters {
-		args = append(args, "--filter", f)
-	}
-	stdout, _, err := c.run(ctx, args...)
+	ls, err := listJSON[lsEntry](ctx, c, "volume ls", filters, "volume", "ls")
 	if err != nil {
 		return nil, err
 	}
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
-		return nil, nil
-	}
 	var entries []VolumeListEntry
-	for _, line := range strings.Split(stdout, "\n") {
-		var v volumeLsEntry
-		if err := json.Unmarshal([]byte(line), &v); err != nil {
-			return nil, fmt.Errorf("parsing volume ls output: %w", err)
-		}
+	for _, v := range ls {
 		entries = append(entries, VolumeListEntry{
 			Name:   VolumeName(v.Name),
 			Driver: v.Driver,

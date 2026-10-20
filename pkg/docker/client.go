@@ -198,6 +198,36 @@ func (c *Client) labels(ctx context.Context, args ...string) (Labels, bool, erro
 	return labels, true, nil
 }
 
+// listJSON runs a docker list command (ps, network ls, volume ls) with
+// --format json and the filters as --filter flags, and decodes its output,
+// one JSON object per line, to T. what names the command in the error.
+func listJSON[T any](ctx context.Context, c *Client, what string, filters []string, args ...string) ([]T, error) {
+	args = append(args, "--format", "json")
+	for _, f := range filters {
+		args = append(args, "--filter", f)
+	}
+	stdout, _, err := c.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	var entries []T
+	for dec := json.NewDecoder(strings.NewReader(stdout)); dec.More(); {
+		var e T
+		if err := dec.Decode(&e); err != nil {
+			return nil, fmt.Errorf("parsing %s output: %w", what, err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, nil
+}
+
+// lsEntry maps the docker network ls and docker volume ls --format json output.
+type lsEntry struct {
+	Name   string `json:"Name"`
+	Driver string `json:"Driver"`
+	Labels string `json:"Labels"`
+}
+
 func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 	_, _, err := c.run(ctx, args...)
 	if err != nil {

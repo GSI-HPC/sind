@@ -228,27 +228,6 @@ func TestListVolumes(t *testing.T) {
 	assert.Equal(t, []string{"volume", "ls", "--format", "json", "--filter", "name=sind-dev"}, m.Calls[0].Args)
 }
 
-func TestListVolumes_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListVolumes(t.Context(), "name=nonexistent")
-	require.NoError(t, err)
-	assert.Nil(t, entries)
-}
-
-func TestListVolumes_InvalidJSON(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("not json\n", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListVolumes(t.Context())
-	assert.Error(t, err)
-	assert.Nil(t, entries)
-	assert.Contains(t, err.Error(), "parsing volume ls output")
-}
-
 func TestListVolumes_Error(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))

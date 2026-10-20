@@ -292,24 +292,12 @@ type psEntry struct {
 // filter key, and any of the values a key is given more than once with
 // ("network=a", "network=b").
 func (c *Client) ListContainers(ctx context.Context, filters ...string) ([]ContainerListEntry, error) {
-	args := []string{"ps", "-a", "--no-trunc", "--format", "json"}
-	for _, f := range filters {
-		args = append(args, "--filter", f)
-	}
-	stdout, _, err := c.run(ctx, args...)
+	ps, err := listJSON[psEntry](ctx, c, "ps", filters, "ps", "-a", "--no-trunc")
 	if err != nil {
 		return nil, err
 	}
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
-		return nil, nil
-	}
 	var entries []ContainerListEntry
-	for _, line := range strings.Split(stdout, "\n") {
-		var p psEntry
-		if err := json.Unmarshal([]byte(line), &p); err != nil {
-			return nil, fmt.Errorf("parsing ps output: %w", err)
-		}
+	for _, p := range ps {
 		entry := ContainerListEntry{
 			ID:     ContainerID(p.ID),
 			Name:   ContainerName(p.Names),

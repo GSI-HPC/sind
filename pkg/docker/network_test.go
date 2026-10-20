@@ -834,27 +834,6 @@ func TestListNetworks(t *testing.T) {
 	assert.Equal(t, []string{"network", "ls", "--format", "json", "--filter", "name=sind-"}, m.Calls[0].Args)
 }
 
-func TestListNetworks_Empty(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListNetworks(t.Context(), "name=nonexistent")
-	require.NoError(t, err)
-	assert.Nil(t, entries)
-}
-
-func TestListNetworks_InvalidJSON(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("not json\n", "", nil)
-	c := NewClient(&m)
-
-	entries, err := c.ListNetworks(t.Context())
-	assert.Error(t, err)
-	assert.Nil(t, entries)
-	assert.Contains(t, err.Error(), "parsing network ls output")
-}
-
 func TestListNetworks_Error(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))

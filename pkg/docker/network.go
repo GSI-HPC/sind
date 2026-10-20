@@ -300,34 +300,15 @@ type NetworkListEntry struct {
 	Labels Labels
 }
 
-// networkLsEntry maps the docker network ls --format json output.
-type networkLsEntry struct {
-	Name   string `json:"Name"`
-	Driver string `json:"Driver"`
-	Labels string `json:"Labels"`
-}
-
 // ListNetworks returns networks matching the given filters.
 // Each filter is passed as a --filter flag (e.g. "name=sind").
 func (c *Client) ListNetworks(ctx context.Context, filters ...string) ([]NetworkListEntry, error) {
-	args := []string{"network", "ls", "--format", "json"}
-	for _, f := range filters {
-		args = append(args, "--filter", f)
-	}
-	stdout, _, err := c.run(ctx, args...)
+	ls, err := listJSON[lsEntry](ctx, c, "network ls", filters, "network", "ls")
 	if err != nil {
 		return nil, err
 	}
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
-		return nil, nil
-	}
 	var entries []NetworkListEntry
-	for _, line := range strings.Split(stdout, "\n") {
-		var n networkLsEntry
-		if err := json.Unmarshal([]byte(line), &n); err != nil {
-			return nil, fmt.Errorf("parsing network ls output: %w", err)
-		}
+	for _, n := range ls {
 		entries = append(entries, NetworkListEntry{
 			Name:   NetworkName(n.Name),
 			Driver: n.Driver,
