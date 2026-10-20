@@ -7,9 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -113,12 +113,7 @@ func (m *Manager) Fingerprint() string {
 			_, _ = fmt.Fprintf(h, "%s\x00", a) // a hash never fails a write
 		}
 		dir, files := serviceFiles(m.Realm, s, "")
-		names := make([]string, 0, len(files))
-		for name := range files {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
+		for _, name := range slices.Sorted(maps.Keys(files)) {
 			_, _ = fmt.Fprintf(h, "%s\x00%o\x00%s\x00", path.Join(dir, name), files[name].Mode, files[name].Content)
 		}
 	}

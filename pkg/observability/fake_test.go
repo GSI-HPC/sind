@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -80,7 +81,10 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 			if c.state == docker.StateRunning {
 				networks["sind-mesh"] = map[string]string{"IPAddress": c.ip}
 			}
-			image, _ := lastImage(c.args)
+			image := ""
+			if i := slices.IndexFunc(c.args, func(a string) bool { return slices.Contains(Images(), a) }); i >= 0 {
+				image = c.args[i]
+			}
 			out = append(out, map[string]any{
 				"Id": "id-" + name, "Name": "/" + name,
 				"State":           map[string]any{"Status": c.state},
@@ -178,19 +182,6 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 	}
 	f.t.Fatalf("fake docker: unexpected call %v", args)
 	return mock.Result{}
-}
-
-// lastImage returns the image of docker create arguments: the first
-// argument after the flags that names a stack image.
-func lastImage(args []string) (string, bool) {
-	for _, a := range args {
-		for _, img := range Images() {
-			if a == img {
-				return a, true
-			}
-		}
-	}
-	return "", false
 }
 
 // curls returns the URLs curl was run on, in order.

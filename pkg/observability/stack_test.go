@@ -4,6 +4,7 @@ package observability
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -261,12 +262,12 @@ func TestRemove(t *testing.T) {
 	f.volumes["sind-ssh-config"] = map[string]string{docker.ComposeProjectLabel: "sind-mesh"}
 
 	require.NoError(t, m.Remove(t.Context()))
-	assert.Equal(t, []string{"sind-dns"}, keys(f.containers), "the mesh's containers stay")
+	assert.Equal(t, []string{"sind-dns"}, slices.Sorted(maps.Keys(f.containers)), "the mesh's containers stay")
 	assert.Len(t, f.volumes, 6, "Remove keeps the volumes")
 
 	delete(f.volumes, "sind-loki")
 	require.NoError(t, m.RemoveVolumes(t.Context()))
-	assert.Equal(t, []string{"sind-ssh-config"}, keys(f.volumes), "the mesh's volumes stay")
+	assert.Equal(t, []string{"sind-ssh-config"}, slices.Sorted(maps.Keys(f.volumes)), "the mesh's volumes stay")
 }
 
 func TestRemove_Gone(t *testing.T) {
@@ -280,16 +281,6 @@ func TestRemove_Gone(t *testing.T) {
 	require.NoError(t, m.Remove(t.Context()))
 	f.fail["volume rm sind-alloy"] = mock.Result{Stderr: testutil.NoSuchVolume("sind-alloy"), Err: testutil.ExitCode1(t)}
 	require.NoError(t, m.RemoveVolumes(t.Context()))
-}
-
-// keys returns the sorted keys of a map.
-func keys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
 }
 
 func TestRemove_Errors(t *testing.T) {

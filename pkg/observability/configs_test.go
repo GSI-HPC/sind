@@ -3,6 +3,8 @@
 package observability
 
 import (
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,10 +13,6 @@ import (
 
 func TestGrafanaProvisioning(t *testing.T) {
 	files := GrafanaProvisioning("dev")
-	var names []string
-	for name := range files {
-		names = append(names, name)
-	}
 	assert.ElementsMatch(t, []string{
 		"datasources/sind.yaml",
 		"dashboards/sind.yaml",
@@ -23,7 +21,7 @@ func TestGrafanaProvisioning(t *testing.T) {
 		"dashboards/sind/service-health.json",
 		"dashboards/sind/users-accounts.json",
 		"dashboards/sind/logs.json",
-	}, names)
+	}, slices.Collect(maps.Keys(files)))
 	ds := string(files["datasources/sind.yaml"])
 	assert.Contains(t, ds, "uid: sind-prometheus\n    access: proxy\n    url: http://dev-prometheus:9090\n")
 	assert.Contains(t, ds, "uid: sind-loki\n    access: proxy\n    url: http://dev-loki:3100\n")
