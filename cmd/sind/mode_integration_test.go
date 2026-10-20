@@ -10,11 +10,11 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/doctor"
@@ -90,15 +90,8 @@ func executeWithStdin(ctx context.Context, stdin string, args ...string) (string
 // realClient returns a docker.Client backed by a real executor.
 func realClient(t *testing.T) *docker.Client {
 	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker not found in PATH")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-		t.Skip("docker daemon not running")
-	}
-	return docker.NewClient(&cmdexec.OSExecutor{})
+	c, _ := testutil.NewClient(t)
+	return c
 }
 
 // checkPrerequisites skips the test if the host does not meet sind
