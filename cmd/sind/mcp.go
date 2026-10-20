@@ -145,7 +145,7 @@ var mcpExcludedFlags = []string{
 	// the command exits.
 	"follow",
 	// A tool's output is no terminal, and holds no progress and no
-	// events (withoutProgress).
+	// events (asMCPServer).
 	"progress", "progress-log",
 }
 
@@ -268,7 +268,7 @@ func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 	for _, sub := range cmd.Commands() {
 		switch sub.Name() {
 		case "start":
-			withServerVersion(sub)
+			asMCPServer(sub)
 			start = sub
 		case "stream":
 			stream = sub
@@ -291,41 +291,34 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 	host.DefValue = mcpStreamHost
 	_ = host.Value.Set(mcpStreamHost)
 	host.Usage = "host to listen on (use 0.0.0.0 for all interfaces)"
-	withMCPRealm(start)
-	withMCPRealm(stream)
-	withoutProgress(start)
-	withoutProgress(stream)
 	noArgs(cmd)
 	return cmd
 }
 
-// withMCPRealm passes the root's --realm on to the sind processes a server
-// command runs for its tool calls, through SIND_REALM: each runs with the
-// call's own flags and this process's environment, so `sind --realm ci
-// mcp start` would otherwise serve the default realm.
-func withMCPRealm(cmd *cobra.Command) {
+// asMCPServer prepares `sind mcp start`, which `sind mcp stream` runs too,
+// for the sind processes it runs for its tool calls. They run with the
+// call's own flags and this process's environment, so it sets:
+//   - SIND_REALM to the root's --realm, or `sind --realm ci mcp start`
+//     would serve the default realm;
+//   - SIND_PROGRESS=none and no SIND_PROGRESS_LOG: a SIND_PROGRESS=plain
+//     set for the user's shell would add its lines to every tool's output,
+//     a SIND_PROGRESS_LOG of /dev/stderr its events, and one that cannot be
+//     opened a note. Their stderr is no terminal, so nothing else would
+//     draw;
+//   - the root's Version, which ophis reports to MCP clients, only while
+//     the server runs: set on the root for good, it would give every sind
+//     command a --version flag.
+func asMCPServer(cmd *cobra.Command) {
 	run := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if cmd.Root().Flags().Changed("realm") {
-			realm, _ := cmd.Root().Flags().GetString("realm")
+		root := cmd.Root()
+		if root.Flags().Changed("realm") {
+			realm, _ := root.Flags().GetString("realm")
 			_ = os.Setenv("SIND_REALM", realm)
 		}
-		return run(cmd, args)
-	}
-}
-
-// withoutProgress has the sind processes a server command runs for its
-// tool calls show no progress and write no event log, through
-// SIND_PROGRESS=none and no SIND_PROGRESS_LOG: they run with this
-// process's environment, and a SIND_PROGRESS=plain set for the user's
-// shell would add its lines to every tool's output, a SIND_PROGRESS_LOG of
-// /dev/stderr its events, and one that cannot be opened a note. Their
-// stderr is no terminal, so nothing else would draw.
-func withoutProgress(cmd *cobra.Command) {
-	run := cmd.RunE
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv(envProgress, cliprogress.ModeNone.String())
 		_ = os.Unsetenv(envProgressLog)
+		root.Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
 	}
 }
@@ -339,17 +332,5 @@ func noArgs(cmd *cobra.Command) {
 	}
 	for _, sub := range cmd.Commands() {
 		noArgs(sub)
-	}
-}
-
-// withServerVersion makes a server command report sind's version to MCP
-// clients. ophis takes the server version from the root command's Version,
-// which is set only while the server runs: set on the root for good, it
-// would give every sind command a --version flag.
-func withServerVersion(cmd *cobra.Command) {
-	run := cmd.RunE
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		cmd.Root().Version = strings.TrimPrefix(resolveVersion(), "v")
-		return run(cmd, args)
 	}
 }

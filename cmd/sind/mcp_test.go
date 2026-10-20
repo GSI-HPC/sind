@@ -624,9 +624,9 @@ func TestMCPStreamToken(t *testing.T) {
 	})
 }
 
-// TestWithMCPRealm checks that a server command hands the root's --realm
-// to the sind processes of its tool calls through SIND_REALM.
-func TestWithMCPRealm(t *testing.T) {
+// TestAsMCPServer_Realm checks that a server command hands the root's
+// --realm to the sind processes of its tool calls through SIND_REALM.
+func TestAsMCPServer_Realm(t *testing.T) {
 	t.Setenv("SIND_REALM", "env")
 	root := &cobra.Command{Use: "sind"}
 	root.PersistentFlags().String("realm", "", "")
@@ -636,7 +636,7 @@ func TestWithMCPRealm(t *testing.T) {
 		return nil
 	}}
 	root.AddCommand(server)
-	withMCPRealm(server)
+	asMCPServer(server)
 
 	root.SetArgs([]string{"start"})
 	require.NoError(t, root.Execute())

@@ -103,7 +103,7 @@ func (c *displays) shown() string {
 // 160 columns wide and 40 rows high, with sind in their foreground. A
 // stream that is a pipe is one only when pipe says so. Neither progress
 // variable is set: the MCP server tests leave SIND_PROGRESS=none behind
-// (withoutProgress).
+// (asMCPServer).
 func onTerminals(t *testing.T, pipe func(io.Writer) bool, terminals ...io.Writer) {
 	t.Helper()
 	t.Setenv(envProgress, "")
@@ -702,7 +702,7 @@ func TestMCPTools_NoProgress(t *testing.T) {
 		_, logSet = os.LookupEnv(envProgressLog)
 		return nil
 	}}
-	withoutProgress(server)
+	asMCPServer(server)
 	server.SetArgs(nil)
 	require.NoError(t, server.Execute())
 	assert.Equal(t, cliprogress.ModeNone.String(), got)
