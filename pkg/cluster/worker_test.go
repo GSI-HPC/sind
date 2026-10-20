@@ -478,34 +478,13 @@ func TestWorkerAdd_Managed(t *testing.T) {
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
-	// Verify key docker calls were made.
-	var createArgs, scontrolCalled, slurmdEnabled bool
-	var writeStdin string
-	for _, call := range m.Calls {
-		args := call.Args
-		joined := strings.Join(args, " ")
-		// Container created with correct name
-		if args[0] == "create" && strings.Contains(joined, "sind-dev-worker-1") {
-			createArgs = true
-		}
-		// sind-nodes.conf updated (WriteFile via exec -i on controller)
-		if args[0] == "exec" && args[1] == "-i" && strings.Contains(joined, "sind-dev-controller") {
-			writeStdin = call.Stdin
-		}
-		// scontrol reconfigure called
-		if args[0] == "exec" && len(args) > 2 && args[1] == "sind-dev-controller" && args[2] == "scontrol" {
-			scontrolCalled = true
-		}
-		// slurmd enabled on new node
-		if args[0] == "exec" && len(args) > 3 && strings.Contains(args[1], "worker-1") && args[2] == "systemctl" && args[3] == "enable" {
-			slurmdEnabled = true
-		}
-	}
-
-	assert.True(t, createArgs, "worker-1 container should be created")
-	assert.True(t, scontrolCalled, "scontrol reconfigure should be called")
-	assert.True(t, slurmdEnabled, "slurmd should be enabled on new node")
-	assert.Contains(t, writeStdin, "worker-1", "sind-nodes.conf should include worker-1")
+	_, created := createArgs(m.Calls, "sind-dev-worker-1")
+	assert.True(t, created, "worker-1 container should be created")
+	assert.Positive(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"), "scontrol reconfigure should be called")
+	assert.Positive(t, countCalls(m.Calls, "exec", "sind-dev-worker-1", "systemctl", "enable"), "slurmd should be enabled on new node")
+	writes := nodesConfWrites(m.Calls)
+	require.Len(t, writes, 1)
+	assert.Contains(t, writes[0], "worker-1", "sind-nodes.conf should include worker-1")
 }
 
 func TestWorkerAdd_UsesNewestWorkerImageID(t *testing.T) {
@@ -722,15 +701,10 @@ func TestWorkerAdd_InheritsDataMount(t *testing.T) {
 	m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.NoError(t, err)
 
-	var created bool
-	for _, call := range m.Calls {
-		if call.Args[0] == "create" {
-			created = true
-			assert.Contains(t, testutil.ArgValues(call.Args, "--mount"), `type=bind,"source=/srv/run,2024",target=/shared`)
-			assert.Contains(t, testutil.ArgValues(call.Args, "--label"), LabelDataMountPath+"=/shared")
-		}
-	}
-	assert.True(t, created)
+	args, ok := createArgs(m.Calls, "sind-dev-worker-0")
+	require.True(t, ok)
+	assert.Contains(t, testutil.ArgValues(args, "--mount"), `type=bind,"source=/srv/run,2024",target=/shared`)
+	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelDataMountPath+"=/shared")
 }
 
 func TestWorkerAdd_RelativeDataHostPath(t *testing.T) {
@@ -762,15 +736,10 @@ func TestWorkerAdd_InheritsCVMFS(t *testing.T) {
 	m, _, err := addWorkers(t, onCall, WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.NoError(t, err)
 
-	var created bool
-	for _, call := range m.Calls {
-		if call.Args[0] == "create" {
-			created = true
-			assert.Equal(t, []string{"type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"}, testutil.ArgValues(call.Args, "--mount"))
-			assert.Contains(t, testutil.ArgValues(call.Args, "--label"), LabelCVMFS+"=volume")
-		}
-	}
-	assert.True(t, created)
+	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
+	require.True(t, ok)
+	assert.Equal(t, []string{"type=volume,volume-driver=cvmfs,source=cvmfs,target=/cvmfs,readonly"}, testutil.ArgValues(args, "--mount"))
+	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelCVMFS+"=volume")
 }
 
 func TestWorkerAdd_ChecksCapabilitiesAndDevices(t *testing.T) {
@@ -839,25 +808,7 @@ func TestWorkerAdd_Unmanaged(t *testing.T) {
 	assert.Equal(t, config.RoleWorker, nodes[0].Role)
 	assert.Equal(t, StateRunning, nodes[0].State)
 
-	// Verify slurm config was NOT updated and slurmd was NOT enabled.
-	for _, call := range m.Calls {
-		args := call.Args
-		joined := strings.Join(args, " ")
-		// Should not read/write sind-nodes.conf on controller
-		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "cat" &&
-			strings.Contains(joined, "sind-nodes.conf") {
-			assert.Fail(t, "should not read sind-nodes.conf for unmanaged worker")
-		}
-		// Should not call scontrol reconfigure
-		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
-			assert.Fail(t, "should not call scontrol reconfigure for unmanaged worker")
-		}
-		// Should not enable slurmd on new node
-		if args[0] == "exec" && len(args) > 3 && strings.Contains(args[1], "worker-1") &&
-			args[2] == "systemctl" && args[3] == "enable" {
-			assert.Fail(t, "should not enable slurmd for unmanaged worker")
-		}
-	}
+	assertNoSlurmChanges(t, m.Calls)
 }
 
 func TestWorkerAdd_UnmanagedCluster(t *testing.T) {
@@ -879,11 +830,9 @@ func TestWorkerAdd_UnmanagedCluster(t *testing.T) {
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "worker-1", nodes[0].Name)
 	assertNoSlurmChanges(t, m.Calls)
-	for _, call := range m.Calls {
-		if call.Args[0] == "create" {
-			assert.Contains(t, testutil.ArgValues(call.Args, "--label"), LabelManaged+"=false")
-		}
-	}
+	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
+	require.True(t, ok)
+	assert.Contains(t, testutil.ArgValues(args, "--label"), LabelManaged+"=false")
 }
 
 // --- WorkerRemove (managed) ---
@@ -920,27 +869,12 @@ func TestWorkerRemove_Managed(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Verify key operations.
-	var scontrolCalled, containerRemoved bool
-	var writeStdin string
-	for _, call := range m.Calls {
-		args := call.Args
-		joined := strings.Join(args, " ")
-		if args[0] == "exec" && args[1] == "-i" && strings.Contains(joined, "sind-dev-controller") {
-			writeStdin = call.Stdin
-		}
-		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
-			scontrolCalled = true
-		}
-		if args[0] == "rm" && strings.Contains(joined, "worker-1") {
-			containerRemoved = true
-		}
-	}
-
-	assert.True(t, scontrolCalled, "scontrol reconfigure should be called")
-	assert.True(t, containerRemoved, "container should be removed")
-	assert.Contains(t, writeStdin, "worker-0", "updated conf should still have worker-0")
-	assert.NotContains(t, writeStdin, "worker-1", "updated conf should not have worker-1")
+	assert.Positive(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"), "scontrol reconfigure should be called")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "container should be removed")
+	writes := nodesConfWrites(m.Calls)
+	require.Len(t, writes, 1)
+	assert.Contains(t, writes[0], "worker-0", "updated conf should still have worker-0")
+	assert.NotContains(t, writes[0], "worker-1", "updated conf should not have worker-1")
 }
 
 func TestWorkerRemove_NodeNotFound(t *testing.T) {
@@ -977,23 +911,8 @@ func TestWorkerRemove_Unmanaged(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Verify no scontrol reconfigure was called.
-	for _, call := range m.Calls {
-		args := call.Args
-		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
-			assert.Fail(t, "should not call scontrol reconfigure for unmanaged removal")
-		}
-	}
-
-	// Verify container was removed (rm -f handles kill internally).
-	var removed bool
-	for _, call := range m.Calls {
-		joined := strings.Join(call.Args, " ")
-		if call.Args[0] == "rm" && strings.Contains(joined, "worker-1") {
-			removed = true
-		}
-	}
-	assert.True(t, removed, "container should be removed")
+	assert.Zero(t, countCalls(m.Calls, "exec", "sind-dev-controller", "scontrol"), "should not call scontrol reconfigure for unmanaged removal")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "container should be removed")
 }
 
 func TestWorkerRemove_ControllerNotRunning(t *testing.T) {
@@ -1167,15 +1086,11 @@ func TestWorkerAdd_MultipleNodes(t *testing.T) {
 	assert.Equal(t, "worker-1", nodes[0].Name)
 	assert.Equal(t, "worker-2", nodes[1].Name)
 
-	// Verify both nodes appear in sind-nodes.conf update.
-	for _, call := range m.Calls {
-		if call.Args[0] == "exec" && call.Args[1] == "-i" &&
-			strings.Contains(strings.Join(call.Args, " "), "sind-dev-controller") {
-			assert.Contains(t, call.Stdin, "worker-1")
-			assert.Contains(t, call.Stdin, "worker-2")
-			break
-		}
-	}
+	// Both nodes appear in the sind-nodes.conf update.
+	writes := nodesConfWrites(m.Calls)
+	require.Len(t, writes, 1)
+	assert.Contains(t, writes[0], "worker-1")
+	assert.Contains(t, writes[0], "worker-2")
 }
 
 func TestWorkerAdd_ExplicitImage(t *testing.T) {
@@ -1190,13 +1105,10 @@ func TestWorkerAdd_ExplicitImage(t *testing.T) {
 
 	require.NoError(t, err)
 
-	for _, call := range m.Calls {
-		if call.Args[0] == "create" {
-			assert.Contains(t, call.Args, "custom:v1", "should use explicit image")
-			assert.NotContains(t, call.Args, "img:1", "should not use controller image")
-			break
-		}
-	}
+	args, ok := createArgs(m.Calls, "sind-dev-worker-1")
+	require.True(t, ok)
+	assert.Contains(t, args, "custom:v1", "should use explicit image")
+	assert.NotContains(t, args, "img:1", "should not use controller image")
 	assert.Equal(t, 1, countCalls(m.Calls, "run", "--rm", "custom:v1", "slurmctld", "-V"), "Slurm version checked")
 }
 
@@ -1443,13 +1355,9 @@ func TestWorkerAdd_DockerMemorySyntax(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var written string
-	for _, c := range m.Calls {
-		if c.Args[0] == "exec" && c.Args[1] == "-i" && strings.Contains(strings.Join(c.Args, " "), "sind-nodes.conf") {
-			written = c.Stdin
-		}
-	}
-	assert.Contains(t, written, "NodeName=worker-1 CPUs=2 RealMemory=1536 State=UNKNOWN")
+	writes := nodesConfWrites(m.Calls)
+	require.Len(t, writes, 1)
+	assert.Contains(t, writes[0], "NodeName=worker-1 CPUs=2 RealMemory=1536 State=UNKNOWN")
 }
 
 func TestUpdateNodesConf_InvalidMemory(t *testing.T) {
@@ -1474,14 +1382,9 @@ func TestWorkerRemove_MultipleNodes(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Verify both worker containers were removed (rm -f handles kill internally).
-	var removeCount int
-	for _, call := range m.Calls {
-		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
-			removeCount++
-		}
-	}
-	assert.Equal(t, 2, removeCount, "both containers should be removed")
+	// Both worker containers are removed (rm -f handles kill internally).
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-0"))
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"))
 }
 
 func TestWorkerRemove_ListContainersError(t *testing.T) {
@@ -1530,13 +1433,7 @@ func TestWorkerAdd_Unmanaged_MultipleNodes(t *testing.T) {
 	assert.Equal(t, "worker-1", nodes[0].Name)
 	assert.Equal(t, "worker-2", nodes[1].Name)
 
-	// Verify no slurm operations were performed.
-	for _, call := range m.Calls {
-		args := call.Args
-		if args[0] == "exec" && args[1] == "sind-dev-controller" && len(args) > 2 && args[2] == "scontrol" {
-			assert.Fail(t, "should not call scontrol reconfigure for unmanaged workers")
-		}
-	}
+	assertNoSlurmChanges(t, m.Calls)
 }
 
 func TestWorkerRemove_NoController(t *testing.T) {
@@ -1555,22 +1452,8 @@ func TestWorkerRemove_NoController(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Verify no slurm config operations were attempted.
-	for _, call := range m.Calls {
-		args := call.Args
-		if args[0] == "exec" && len(args) > 1 && args[1] == "sind-dev-controller" {
-			assert.Fail(t, "should not interact with controller when it doesn't exist")
-		}
-	}
-
-	// Verify container was still removed.
-	var removed bool
-	for _, call := range m.Calls {
-		if call.Args[0] == "rm" && strings.Contains(strings.Join(call.Args, " "), "worker-0") {
-			removed = true
-		}
-	}
-	assert.True(t, removed, "container should be removed even without controller")
+	assert.Zero(t, countCalls(m.Calls, "exec", "sind-dev-controller"), "should not interact with controller when it doesn't exist")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-0"), "container should be removed even without controller")
 }
 
 func TestWorkerRemove_RejectsNonWorkers(t *testing.T) {
@@ -1602,13 +1485,7 @@ func TestWorkerRemove_DuplicateNames(t *testing.T) {
 
 	require.NoError(t, err)
 
-	var removeCount int
-	for _, call := range m.Calls {
-		if call.Args[0] == "rm" && strings.Contains(strings.Join(call.Args, " "), "worker-1") {
-			removeCount++
-		}
-	}
-	assert.Equal(t, 1, removeCount, "container should be removed exactly once")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "container should be removed exactly once")
 }
 
 func TestWorkerRemove_EmptyNames(t *testing.T) {
@@ -1719,14 +1596,7 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	// Verify cleanup ran: look for "docker rm -f" on the new worker container.
-	var removed bool
-	for _, call := range m.Calls {
-		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
-			removed = true
-		}
-	}
-	assert.True(t, removed, "cleanup should remove the new worker container")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "cleanup should remove the new worker container")
 }
 
 func TestWorkerAdd_CleanupErrors(t *testing.T) {
@@ -1787,12 +1657,7 @@ func TestWorkerAdd_NoCleanupOnValidationFailure(t *testing.T) {
 	})
 
 	require.ErrorContains(t, err, "inspecting controller")
-	// No "docker rm" calls on worker containers → cleanup did not run.
-	for _, call := range m.Calls {
-		if call.Args[0] == "rm" && len(call.Args) >= 2 && strings.HasPrefix(call.Args[len(call.Args)-1], "sind-dev-worker-") {
-			require.Fail(t, "cleanup should not run when validation fails")
-		}
-	}
+	assert.Zero(t, countCalls(m.Calls, "rm"), "cleanup should not run when validation fails")
 }
 
 func TestWorkerAdd_ReadsNodesConfOnce(t *testing.T) {
@@ -2168,20 +2033,9 @@ func TestWorkerAddRemoveLifecycle(t *testing.T) {
 	err = WorkerRemove(ctx, client, mgr, "dev", []string{"worker-1"})
 	require.NoError(t, err)
 
-	// Verify both add and remove operations happened.
-	var created, removed bool
-	for _, call := range m.Calls {
-		args := call.Args
-		joined := strings.Join(args, " ")
-		if args[0] == "create" && strings.Contains(joined, "sind-dev-worker-1") {
-			created = true
-		}
-		if args[0] == "rm" && strings.Contains(joined, "worker-1") {
-			removed = true
-		}
-	}
+	_, created := createArgs(m.Calls, "sind-dev-worker-1")
 	assert.True(t, created, "worker-1 should be created during add")
-	assert.True(t, removed, "worker-1 should be removed during remove")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "worker-1 should be removed during remove")
 }
 
 // --- findController ---
