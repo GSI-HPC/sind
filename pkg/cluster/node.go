@@ -480,7 +480,7 @@ func NodeRunConfigs(cfg *config.Cluster, realm, dnsIP, slurmVersion string, cvmf
 				Monitoring:      cfg.Monitoring,
 			}
 			if n.Role == config.RoleDB && nodeManaged {
-				base.StoragePass = slurmdbdStoragePass(cfg.Slurm.Slurmdbd)
+				base.StoragePass, _ = cfg.Slurm.Slurmdbd.Parameter("StoragePass")
 			}
 			if n.Role != config.RoleController || !n.BackupController {
 				configs = append(configs, base)

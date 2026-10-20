@@ -20,10 +20,12 @@ var keyValuePattern = regexp.MustCompile(`^\s*([[:alnum:]_.]+)\s*[-*+/]?=\s*(?:"
 var lineKeys = []string{"DownNodes", "FrontendName", "NodeName", "NodeSet", "PartitionName", "PowerAction"}
 
 // LinePairs returns the key=value pairs of one slurm.conf-style line, in
-// order, as Slurm's parser reads them: a "#" starts a comment, a line may
-// hold several pairs, and a value may be quoted.
+// order, as Slurm's parser reads them: a "#" that no backslash escapes
+// starts a comment, a backslash escapes the next character (\# is #, \\
+// is \), a line may hold several pairs, and a value may be quoted. A line
+// continued with a trailing backslash is not joined to the next.
 func LinePairs(line string) [][2]string {
-	line, _, _ = strings.Cut(line, "#")
+	line = unescape(stripComment(line))
 	var pairs [][2]string
 	for {
 		m := keyValuePattern.FindStringSubmatch(line)
@@ -33,6 +35,39 @@ func LinePairs(line string) [][2]string {
 		pairs = append(pairs, [2]string{m[1], m[2] + m[3]})
 		line = line[len(m[0]):]
 	}
+}
+
+// stripComment cuts a slurm.conf-style line at its comment: a # that an
+// even number of backslashes precedes.
+func stripComment(line string) string {
+	backslashes := 0
+	for i := range len(line) {
+		switch {
+		case line[i] == '\\':
+			backslashes++
+			continue
+		case line[i] == '#' && backslashes%2 == 0:
+			return line[:i]
+		}
+		backslashes = 0
+	}
+	return line
+}
+
+// unescape removes the backslash before each escaped character of a
+// slurm.conf-style line, as Slurm's parser does: \# is #, \\ is \.
+func unescape(line string) string {
+	var b strings.Builder
+	for i := 0; i < len(line); i++ {
+		if line[i] == '\\' {
+			i++
+			if i == len(line) {
+				break
+			}
+		}
+		b.WriteByte(line[i])
+	}
+	return b.String()
 }
 
 // LineParameter returns the value one slurm.conf-style line assigns to a

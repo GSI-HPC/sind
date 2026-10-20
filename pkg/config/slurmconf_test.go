@@ -42,6 +42,18 @@ func TestLinePairs(t *testing.T) {
 	assert.Nil(t, LinePairs("# PartitionName=p\n"))
 	assert.Equal(t, [][2]string{{"PartitionName", "p"}, {"Nodes", "worker-[0-1]"}, {"Default", "YES"}, {"AllowGroups", "a b"}},
 		LinePairs(`PartitionName=p Nodes=worker-[0-1]  Default = YES AllowGroups="a b" # MaxTime=1`))
+
+	// A backslash escapes the next character, so \# starts no comment.
+	for line, want := range map[string]string{
+		`StoragePass=a\#b # c`: "a#b",
+		`StoragePass="a\#b c"`: "a#b c",
+		`StoragePass=a\\#b`:    `a\`,
+		`StoragePass=ab\`:      "ab",
+		`StoragePass="a#b c"`:  `"a`, // as in Slurm, the comment goes first
+		`StoragePass=a\b\\c`:   `ab\c`,
+	} {
+		assert.Equal(t, [][2]string{{"StoragePass", want}}, LinePairs(line), line)
+	}
 }
 
 func TestSection_Lines(t *testing.T) {
