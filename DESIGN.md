@@ -1721,7 +1721,7 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 | `known_hosts` | Host keys (copy from volume) |
 | `lock` | The realm lock's file part (see Realm Advisory Locking) |
 
-The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path):
+The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path, in double quotes with `%` doubled and `\` and `"` escaped, as ssh would otherwise split a path with a space and expand its `%` tokens; a line it cannot parse makes ssh reject the file, and with it every connection that includes it):
 
 ```
 Host controller controller.* controller-backup controller-backup.* db db.* api api.* submitter submitter.* worker-*
@@ -1730,8 +1730,8 @@ Host controller controller.* controller-backup controller-backup.* db db.* api a
 
 Host *.sind.sind
     IdentitiesOnly yes
-    IdentityFile /home/user/.local/state/sind/sind/id_ed25519
-    UserKnownHostsFile /home/user/.local/state/sind/sind/known_hosts
+    IdentityFile "/home/user/.local/state/sind/sind/id_ed25519"
+    UserKnownHostsFile "/home/user/.local/state/sind/sind/known_hosts"
     User root
     StrictHostKeyChecking yes
 

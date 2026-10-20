@@ -71,11 +71,12 @@ const sshCanonicalTemplate = `Host controller controller.* controller-backup con
 // IdentitiesOnly keeps ssh from offering the keys of the user's agent
 // before sind's: sshd ends the connection after MaxAuthTries, 6 by default,
 // failed keys, and the nodes need not see the user's other public keys.
-// Placeholders: realm, dir.
+// Placeholders: realm, the private key's path and the known_hosts path,
+// quoted with configPath.
 const sshRealmTemplate = `Host *.%[1]s.sind
     IdentitiesOnly yes
-    IdentityFile %[2]s/id_ed25519
-    UserKnownHostsFile %[2]s/known_hosts
+    IdentityFile %[2]s
+    UserKnownHostsFile %[3]s
     User root
     StrictHostKeyChecking yes
 `
@@ -104,7 +105,8 @@ func GenerateSSHConfig(sshContainer docker.ContainerName, dir, realm string, hos
 	if realm == defaultRealm {
 		fmt.Fprintf(&config, sshCanonicalTemplate, realm)
 	}
-	fmt.Fprintf(&config, sshRealmTemplate, realm, dir)
+	fmt.Fprintf(&config, sshRealmTemplate, realm,
+		configPath(filepath.Join(dir, "id_ed25519")), configPath(filepath.Join(dir, "known_hosts")))
 	seen := make(map[string]bool, len(hosts))
 	for _, host := range hosts {
 		if seen[host] || !isNodeHost(host, realm) {
@@ -114,6 +116,20 @@ func GenerateSSHConfig(sshContainer docker.ContainerName, dir, realm string, hos
 		fmt.Fprintf(&config, sshProxyTemplate, host, sshContainer)
 	}
 	return config.String()
+}
+
+// configPathEscaper escapes a path for a double-quoted ssh_config argument:
+// ssh reads a backslash or a double quote after a backslash as itself, and
+// expands % tokens such as %d in IdentityFile and UserKnownHostsFile, %%
+// being a literal %.
+var configPathEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, `%`, `%%`)
+
+// configPath returns path as an ssh_config argument: in double quotes, so
+// that a space in it, as in a home directory such as /home/John Doe, does
+// not split it, and escaped. An unquoted space makes ssh reject the file,
+// and with it every connection of a user who includes it.
+func configPath(path string) string {
+	return `"` + configPathEscaper.Replace(path) + `"`
 }
 
 // isNodeHost reports whether host is a node's DNS name in realm,
