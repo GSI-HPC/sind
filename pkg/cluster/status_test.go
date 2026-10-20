@@ -298,54 +298,27 @@ func TestGetNetworkHealth_MeshStopped(t *testing.T) {
 	assert.False(t, health.SSH)
 }
 
-func TestGetNetworkHealth_MeshCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("docker daemon not running"))
-	c := docker.NewClient(&m)
+// TestGetNetworkHealth_CheckError fails each inspect in turn, after the
+// ones before it succeed.
+func TestGetNetworkHealth_CheckError(t *testing.T) {
+	ok := []string{
+		netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"),
+		meshContainerInspect("sind-dns", "running"),
+		meshContainerInspect("sind-ssh", "running"),
+	}
+	for i, want := range []string{"checking mesh network", "checking DNS container", "checking SSH container", "checking cluster network"} {
+		t.Run(want, func(t *testing.T) {
+			var m mock.Executor
+			for _, out := range ok[:i] {
+				m.AddResult(out, "", nil)
+			}
+			m.AddResult("", "", fmt.Errorf("docker daemon error"))
 
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
+			_, err := GetNetworkHealth(t.Context(), docker.NewClient(&m), mesh.DefaultRealm, "dev")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking mesh network")
-}
-
-func TestGetNetworkHealth_DNSCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // dns error
-	c := docker.NewClient(&m)
-
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking DNS container")
-}
-
-func TestGetNetworkHealth_SSHCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // ssh error
-	c := docker.NewClient(&m)
-
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking SSH container")
-}
-
-func TestGetNetworkHealth_ClusterNetCheckError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult(netInspect("sind-mesh", "172.19.0.0/16", "172.19.0.1"), "", nil) // inspect mesh
-	m.AddResult(meshContainerInspect("sind-dns", "running"), "", nil)            // inspect dns
-	m.AddResult(meshContainerInspect("sind-ssh", "running"), "", nil)            // inspect ssh
-	m.AddResult("", "", fmt.Errorf("docker daemon error"))                       // cluster net error
-	c := docker.NewClient(&m)
-
-	_, err := GetNetworkHealth(t.Context(), c, mesh.DefaultRealm, "dev")
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "checking cluster network")
+			require.ErrorContains(t, err, want)
+		})
+	}
 }
 
 func TestGetNetworkHealth_DefaultCluster(t *testing.T) {
