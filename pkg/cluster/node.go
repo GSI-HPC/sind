@@ -295,7 +295,7 @@ func BuildRunArgs(cfg RunConfig) []string {
 		"--memory", cfg.Memory,
 		"--memory-swap", cfg.Memory,
 	)
-	if memMB, err := slurm.ParseMemoryMB(cfg.Memory); err == nil {
+	if memMB, err := config.MemoryMB(cfg.Memory); err == nil {
 		args = append(args, "--shm-size", strconv.Itoa(memMB/2)+"m")
 	}
 

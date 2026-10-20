@@ -424,14 +424,3 @@ func TestDefMemPerCPU(t *testing.T) {
 	// A worker without CPUs (no ApplyDefaults) counts as one CPU.
 	assert.Equal(t, 512, DefMemPerCPU([]NodeEntry{{Name: "worker-0", MemoryMB: 512}}))
 }
-
-// --- ParseMemoryMB ---
-
-func TestParseMemoryMB(t *testing.T) {
-	got, err := ParseMemoryMB("2gb")
-	require.NoError(t, err)
-	assert.Equal(t, 2048, got)
-
-	_, err = ParseMemoryMB("2x")
-	assert.Error(t, err)
-}

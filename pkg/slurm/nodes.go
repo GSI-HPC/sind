@@ -232,9 +232,3 @@ func RemoveNodesFromConf(existing string, names []string) string {
 
 	return strings.Join(kept, "\n") + "\n"
 }
-
-// ParseMemoryMB parses a memory limit in Docker's size syntax (e.g. "2g",
-// "512m", "1.5GiB") and returns it in megabytes (see config.MemoryMB).
-func ParseMemoryMB(s string) (int, error) {
-	return config.MemoryMB(s)
-}

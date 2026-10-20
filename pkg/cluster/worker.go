@@ -557,7 +557,7 @@ func checkWorkerImage(ctx context.Context, client *docker.Client, opts WorkerAdd
 func updateNodesConf(ctx context.Context, client *docker.Client, controllerName docker.ContainerName, current string, slurmConf config.Section, nodeConfigs []RunConfig) error {
 	var entries []slurm.NodeEntry
 	for _, nc := range nodeConfigs {
-		memMB, err := slurm.ParseMemoryMB(nc.Memory)
+		memMB, err := config.MemoryMB(nc.Memory)
 		if err != nil {
 			return fmt.Errorf("parsing memory %q for %s: %w", nc.Memory, nc.ShortName, err)
 		}
