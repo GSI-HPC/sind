@@ -215,7 +215,7 @@ func TestExec_Help(t *testing.T) {
 		t.Run(flag, func(t *testing.T) {
 			stdout, _, err := executeCommand("exec", flag)
 			require.NoError(t, err)
-			assert.Contains(t, stdout, "Run a command on submitter or controller")
+			assert.Contains(t, stdout, "Run a command on the submitter or controller")
 		})
 	}
 }

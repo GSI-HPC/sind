@@ -87,7 +87,7 @@ This exports the tool definitions to `mcp-tools.json`. The tools follow the nami
 | `sind_get_monitoring` | Show the realm's monitoring stack |
 | `sind_power_shutdown` | Graceful shutdown |
 | `sind_power_reboot` | Graceful reboot |
-| `sind_exec` | Run a command on submitter or controller |
+| `sind_exec` | Run a command on the submitter or controller |
 
 ## HTTP mode
 

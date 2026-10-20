@@ -264,16 +264,33 @@ func commandPath(cmd *cobra.Command) string {
 // (newMCPEditorCommand).
 func newMCPCommand(cfg *ophis.Config) *cobra.Command {
 	cmd := ophis.Command(cfg)
+	// ophis's help strings are worded unlike sind's own: noun phrases and
+	// capitalized flag usages.
+	cmd.Short = "Serve sind's commands as MCP tools"
+	cmd.Long = `Serve sind's commands as MCP tools to AI assistants, over stdio (start) or
+HTTP (stream), and register the server with an editor.`
 	var start, stream *cobra.Command
 	for _, sub := range cmd.Commands() {
 		switch sub.Name() {
 		case "start":
 			asMCPServer(sub)
 			start = sub
+			sub.Short = "Serve the MCP tools on stdio"
+			sub.Long = `Serve sind's MCP tools on standard input and output, for an AI assistant
+that starts sind as its MCP server.`
 		case "stream":
 			stream = sub
+			sub.Short = "Serve the MCP tools over HTTP"
+		case "tools":
+			sub.Short = "Write the MCP tool definitions to mcp-tools.json"
+			sub.Long = `Write the definitions of the MCP tools that start and stream serve, with
+their input schemas, to mcp-tools.json in the working directory.`
 		case "claude", "vscode", "cursor":
 			cmd.RemoveCommand(sub)
+			continue
+		}
+		if f := sub.Flags().Lookup("log-level"); f != nil {
+			f.Usage = "log level of the MCP server (debug, info, warn, error)"
 		}
 	}
 	for _, e := range mcpEditors {

@@ -94,8 +94,8 @@ func runSSH(cmd *cobra.Command, args []string) error {
 func newEnterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "enter [CLUSTER]",
-		Short:             "Interactive shell on submitter or controller",
-		Long:              "Interactive shell on submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
+		Short:             "Open a shell on the submitter or controller",
+		Long:              "Open an interactive login shell on the submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -151,8 +151,8 @@ func execOnEnterTarget(cmd *cobra.Command, clusterName string, isTTY bool, comma
 func newExecCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "exec [CLUSTER] -- COMMAND [ARGS...]",
-		Short: "Run a command on submitter or controller",
-		Long:  "Run a command on submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
+		Short: "Run a command on the submitter or controller",
+		Long:  "Run a command on the submitter or controller.\n\n" + defaultClusterHelp("CLUSTER"),
 		// runExec parses the flags itself: with cobra parsing them, shell
 		// completion could not tell whether the -- was typed yet.
 		DisableFlagParsing: true,

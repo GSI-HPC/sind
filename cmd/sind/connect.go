@@ -19,9 +19,10 @@ func newConnectCommand() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "container CONTAINER...",
 		Short: "Attach containers outside sind to the realm's networks",
-		Long: "Attach containers outside sind, such as kind nodes, to the realm's mesh network and every cluster network, " +
-			"so that they resolve the realm's names and reach its nodes. Clusters created later are connected to them too, " +
-			"and deleting a cluster or the realm detaches them.",
+		Long: `Attach containers outside sind, such as kind nodes, to the realm's mesh
+network and every cluster network, so that they resolve the realm's names
+and reach its nodes. Clusters created later are connected to them too, and
+deleting a cluster or the realm detaches them.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExternal(cmd, args, cluster.Connect)
@@ -38,7 +39,10 @@ func newDisconnectCommand() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "container CONTAINER...",
 		Short: "Detach containers outside sind from the realm's networks",
-		Args:  cobra.MinimumNArgs(1),
+		Long: `Detach containers outside sind from every network of the realm that they
+join, the mesh network last, so that clusters created later are not
+connected to them. The containers keep running.`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExternal(cmd, args, cluster.Disconnect)
 		},

@@ -655,3 +655,20 @@ func TestStreamURL(t *testing.T) {
 		assert.Equal(t, want, streamURL(tcp), addr)
 	}
 }
+
+// TestMCPCommand_HelpStrings verifies that sind words the help of ophis's
+// commands as its own: imperative Shorts and lowercase flag usages.
+func TestMCPCommand_HelpStrings(t *testing.T) {
+	stdout, _, err := executeCommand("--help")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "mcp         Serve sind's commands as MCP tools\n")
+
+	for _, sub := range []string{"start", "stream", "tools"} {
+		t.Run(sub, func(t *testing.T) {
+			stdout, _, err := executeCommand("mcp", sub, "--help")
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "--log-level string   log level of the MCP server (debug, info, warn, error)\n")
+			assert.NotContains(t, stdout, "Log level")
+		})
+	}
+}
