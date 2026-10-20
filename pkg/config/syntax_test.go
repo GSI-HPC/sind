@@ -20,7 +20,19 @@ func TestParse_SyntaxErrors(t *testing.T) {
 		{"key case hint", "kind: Cluster\nNAME: x\n", `did you mean "name"? keys are case-sensitive`},
 		{"comment only", "# nothing here\n", "empty configuration"},
 		{"null document", "~\n", "empty configuration"},
-		{"yaml syntax", "kind: [Cluster\n", "line 1: did not find expected"},
+		{"unclosed flow sequence", "kind: Cluster\nname: t\nnodes: [controller, worker\nrealm: r\n", "line 3: did not find expected ',' or ']'"},
+		{"unclosed flow mapping", "kind: Cluster\ndefaults: {cpus: 2\n", "line 2: did not find expected ',' or '}'"},
+		{"under-indented key", "kind: Cluster\ndefaults:\n  cpus: 2\n memory: 1g\n", "line 4: did not find expected key"},
+		{"under-indented list item", "kind: Cluster\nnodes:\n  - controller\n - worker\n", "line 4: did not find expected key"},
+		{"over-indented key", "kind: Cluster\ndefaults:\n  cpus: 2\n   memory: 1g\n", "line 4: mapping values are not allowed in this context"},
+		{"list after a key", "kind: Cluster\n- worker\n", "line 2: did not find expected key"},
+		{"key after a list", "- worker\nkind: Cluster\n", "line 2: did not find expected '-' indicator"},
+		{"tab after a key", "kind: Cluster\nname: t\n\trealm: r\n", "line 3: found a tab character that violates indentation"},
+		{"tab after a list item", "kind: Cluster\nnodes:\n  - controller\n  - worker\n  \t- db\n", "line 5: found a tab character that violates indentation"},
+		{"tab in a block scalar", "kind: Cluster\nslurm:\n  main: |\n    a\n\tb\n", "line 5: found a tab character where an indentation space is expected"},
+		{"tab before a list item", "kind: Cluster\nnodes:\n\t- worker\n", "line 3: found character that cannot start any token"},
+		{"unclosed quote", "kind: Cluster\nname: \"t\n", "line 2: found unexpected end of stream"},
+		{"unknown anchor", "kind: Cluster\nname: *x\n", "unknown anchor 'x' referenced"},
 		{"mis-indented list item", "kind: Cluster\nnodes:\n  - controller\n    - worker\n", `line 3: nodes[0]: "controller - worker" is not a role; check the indentation of the list`},
 		{"shorthand with options", "kind: Cluster\nnodes:\n  - worker: 2\n    cpus: 4\n", `line 3: nodes[0]: a node object needs "role: NAME"`},
 		{"shorthand count", "kind: Cluster\nnodes:\n  - worker: [2]\n", "line 3: nodes[0].worker: expected a whole number, got a list"},
@@ -54,6 +66,28 @@ func TestParse_SyntaxErrors(t *testing.T) {
 			assert.NotContains(t, err.Error(), "Go ")
 		})
 	}
+}
+
+func TestParse_SyntaxErrorOnFirstLine(t *testing.T) {
+	// The parser gives no line for a mark on its line 0, nor for a
+	// character it cannot decode.
+	_, err := Parse([]byte("]\n"))
+	require.ErrorContains(t, err, "line 1: did not find expected node content")
+	_, err = Parse([]byte("!x!y z\n"))
+	require.ErrorContains(t, err, "line 1: found undefined tag handle")
+	_, err = Parse([]byte("kind: [Cluster\n"))
+	require.ErrorContains(t, err, "line 1: did not find expected ',' or ']'")
+	_, err = Parse([]byte("a: b: c\n"))
+	require.ErrorContains(t, err, "line 1: mapping values are not allowed in this context")
+	_, err = Parse([]byte("kind: Cluster\nname: \x01\n"))
+	require.ErrorContains(t, err, "control characters are not allowed")
+	assert.NotContains(t, err.Error(), "line")
+}
+
+func TestTabLine(t *testing.T) {
+	assert.Equal(t, 3, tabLine([]byte("a\n b\n\tc\n"), 1))
+	assert.Equal(t, 2, tabLine([]byte("a\nb\n"), 2))
+	assert.Equal(t, 9, tabLine([]byte("a\n"), 9))
 }
 
 func TestParse_SyntaxAccepts(t *testing.T) {

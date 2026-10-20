@@ -3,11 +3,14 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"reflect"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -20,12 +23,84 @@ import (
 func checkSyntax(data []byte) (*yaml.Node, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil && !errors.Is(err, io.EOF) {
-		return nil, errors.New(strings.TrimPrefix(err.Error(), "yaml: "))
+		return nil, syntaxError(data, err)
 	}
 	if doc.Kind == 0 || len(doc.Content) == 0 || doc.Content[0].Tag == "!!null" {
 		return nil, errors.New("empty configuration")
 	}
 	return &doc, walk(reflect.TypeFor[Cluster](), doc.Content[0], "")
+}
+
+// parserProblems are the problems the YAML parser, rather than its
+// scanner, reports. The parser counts lines from 0 and names the line where
+// the enclosing block or flow collection begins, or failing that, the line
+// of the token it could not take.
+var parserProblems = []string{
+	"did not find expected ',' or ']'",
+	"did not find expected ',' or '}'",
+	"did not find expected '-' indicator",
+	"did not find expected <document start>",
+	"did not find expected key",
+	"did not find expected node content",
+	"found duplicate %TAG directive",
+	"found duplicate %YAML directive",
+	"found incompatible YAML document",
+	"found undefined tag handle",
+}
+
+// positionless are the starts of the YAML parser's messages that name no
+// place in the input: an alias without its anchor, and errors decoding the
+// input's characters. Its other messages leave out only line 1.
+var positionless = []string{
+	"unknown anchor", "input error", "invalid ", "incomplete ", "unexpected low surrogate",
+	"expected low surrogate", "control characters",
+}
+
+// yamlLine matches the line number the YAML parser puts in front of its
+// error messages.
+var yamlLine = regexp.MustCompile(`(?s)^line (\d+): (.*)$`)
+
+// syntaxError returns the YAML parser's error err for data, with the line of
+// the mistake counted from 1.
+func syntaxError(data []byte, err error) error {
+	msg := strings.TrimPrefix(err.Error(), "yaml: ")
+	line := 0
+	if m := yamlLine.FindStringSubmatch(msg); m != nil {
+		line, _ = strconv.Atoi(m[1])
+		msg = m[2]
+	}
+	switch {
+	case line == 0 && slices.ContainsFunc(positionless, func(p string) bool { return strings.HasPrefix(msg, p) }):
+		return errors.New(msg)
+	case slices.Contains(parserProblems, msg):
+		line++
+	case line == 0:
+		line = 1
+	case strings.HasPrefix(msg, "found a tab character"):
+		// The scanner names the line where the scalar with the tab
+		// begins.
+		line = tabLine(data, line)
+	}
+	// The parser can name the line after the last, where the input ends.
+	return fmt.Errorf("line %d: %s", min(line, lineCount(data)), msg)
+}
+
+// lineCount returns the number of lines of data, the last one with or
+// without its line break.
+func lineCount(data []byte) int {
+	return bytes.Count(bytes.TrimSuffix(data, []byte("\n")), []byte("\n")) + 1
+}
+
+// tabLine returns the number of the first line after line (counted from 1)
+// with a tab in its indentation, or line if there is none.
+func tabLine(data []byte, line int) int {
+	lines := strings.Split(string(data), "\n")
+	for i, l := range lines[min(line, len(lines)):] {
+		if strings.Contains(l[:len(l)-len(strings.TrimLeft(l, " \t"))], "\t") {
+			return line + i + 1
+		}
+	}
+	return line
 }
 
 // unmarshalerType is the interface of the types that accept more than
