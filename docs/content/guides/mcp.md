@@ -65,7 +65,7 @@ Each tool tells the client what it does, so that the client can decide when to a
 
 The `sind_get_*` tools and `sind_doctor` always return JSON: the server runs them with `-o json`, so they take no `-o` flag.
 
-Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`, and `sind_exec` returns the exit status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`); see [Exit Status]({{< relref "/usage/exit-status" >}}).
+Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`, a flag in `args` among them, and `sind_exec` returns the exit status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`); see [Exit Status]({{< relref "/usage/exit-status" >}}). A flag the tool does not have fails the validation of the call's input before sind runs, with an error result and no `exitCode`.
 
 A client that cancels a call of a read-only tool or of `sind_exec` gets its answer at once: the server stops the sind process and the docker command it runs. The command `sind_exec` started in the node runs on until it ends, since Docker cannot stop it, so bound a long one with `timeout`, as in `"args": ["--", "timeout", "60", "srun", "hostname"]`. The tools that change state run to completion, or roll back a failed create, and answer when they end.
 

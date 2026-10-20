@@ -250,30 +250,41 @@ func TestRefuseFlagArgs(t *testing.T) {
 		called = in
 		return nil, ophis.ToolOutput{}, nil
 	}
-	call := func(mw ophis.MiddlewareFunc, tool string, args ...string) error {
+	// refused reports whether the call was refused, as a usage error
+	// with the exit status and the error line of one, without running.
+	refused := func(mw ophis.MiddlewareFunc, tool string, args ...string) bool {
 		called = ophis.ToolInput{}
 		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tool}}
-		_, _, err := mw(t.Context(), req, ophis.ToolInput{Args: args}, run)
-		return err
+		res, out, err := mw(t.Context(), req, ophis.ToolInput{Args: args}, run)
+		require.NoError(t, err, args)
+		if out.ExitCode == 0 {
+			assert.NotNil(t, called.Args, "the tool ran", args)
+			return false
+		}
+		assert.Equal(t, exitUsage, out.ExitCode, args)
+		assert.Regexp(t, `^ERRO argument "-.*" is a flag; pass flags in "flags"\n$`, out.StdErr, args)
+		require.NotNil(t, res)
+		assert.True(t, res.IsError, args)
+		assert.Nil(t, called.Args, "the tool did not run", args)
+		return true
 	}
 
 	plain := refuseFlagArgs(nil)
-	require.NoError(t, call(plain, "sind_get_node", "worker-0.dev"))
+	assert.False(t, refused(plain, "sind_get_node", "worker-0.dev"))
 	assert.Equal(t, []string{"worker-0.dev"}, called.Args)
 	for _, args := range [][]string{{"-v"}, {"worker-0", "--follow"}, {"--", "-x"}} {
-		err := call(plain, "sind_logs", args...)
-		require.ErrorContains(t, err, "is a flag", args)
+		assert.True(t, refused(plain, "sind_logs", args...), args)
 	}
 
 	// exec's command after "--" may hold flags; its own arguments may not.
-	require.NoError(t, call(plain, "sind_exec", "dev", "--", "ls", "-la"))
-	require.Error(t, call(plain, "sind_exec", "-v", "dev", "--", "ls"))
-	require.Error(t, call(plain, "sind_logs", "controller", "--", "-f"))
+	assert.False(t, refused(plain, "sind_exec", "dev", "--", "ls", "-la"))
+	assert.True(t, refused(plain, "sind_exec", "-v", "dev", "--", "ls"))
+	assert.True(t, refused(plain, "sind_logs", "controller", "--", "-f"))
 
 	// A -o in the arguments cannot override the forced JSON output.
 	withJSON := refuseFlagArgs(forceJSONOutput)
-	require.Error(t, call(withJSON, "sind_get_nodes", "-o", "human"))
-	require.NoError(t, call(withJSON, "sind_get_nodes", "dev"))
+	assert.True(t, refused(withJSON, "sind_get_nodes", "-o", "human"))
+	assert.False(t, refused(withJSON, "sind_get_nodes", "dev"))
 	assert.Equal(t, map[string]any{"output": "json"}, called.Flags)
 
 	// An empty array reaches the tool as the flag given empty.
@@ -466,8 +477,12 @@ func TestMCPStream_RequiresToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
-	require.NotEmpty(t, res.Content)
-	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `argument "-o" is a flag`)
+	var out ophis.ToolOutput
+	raw, err := json.Marshal(res.StructuredContent)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &out))
+	assert.Equal(t, exitUsage, out.ExitCode)
+	assert.Contains(t, out.StdErr, `argument "-o" is a flag`)
 
 	require.NoError(t, session.Close())
 	assert.NoError(t, stop(), "a stopped stream exits 0")

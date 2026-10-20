@@ -163,7 +163,8 @@ func forceJSONOutput(ctx context.Context, req *mcp.CallToolRequest, in ophis.Too
 }
 
 // refuseFlagArgs returns a middleware that refuses a tool call whose
-// positional arguments hold a flag, and otherwise calls next, or the tool
+// positional arguments hold a flag, as a usage error that reads as the
+// tool's own (exit status 2, isError), and otherwise calls next, or the tool
 // itself when next is nil, with the flags of emptyListsAsNone. ophis puts
 // the arguments after the flags on the command line, so a flag among them
 // would get past the input schema: -v, --follow, or a -o that overrides the
@@ -176,7 +177,10 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 				break
 			}
 			if strings.HasPrefix(arg, "-") {
-				return nil, ophis.ToolOutput{}, fmt.Errorf("argument %q is a flag; pass flags in \"flags\"", arg)
+				return &mcp.CallToolResult{IsError: true}, ophis.ToolOutput{
+					StdErr:   fmt.Sprintf("ERRO argument %q is a flag; pass flags in \"flags\"\n", arg),
+					ExitCode: exitUsage,
+				}, nil
 			}
 		}
 		in.Flags = emptyListsAsNone(in.Flags)
