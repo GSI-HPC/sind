@@ -67,9 +67,10 @@ func (n *Node) UnmarshalYAML(v *yaml.Node) error {
 		n.Role = Role(v.Value)
 	case hasKey(v, "role"):
 		return v.Decode((*alias)(n))
-	case len(v.Content) == 2:
-		n.Role = Role(v.Content[0].Value)
-		return v.Content[1].Decode(&n.Count)
+	default:
+		pairs := pairsOf(v)
+		n.Role = Role(pairs[0].Value)
+		return pairs[1].Decode(&n.Count)
 	}
 	return nil
 }

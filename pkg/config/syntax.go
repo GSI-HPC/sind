@@ -86,9 +86,7 @@ func join(path, key string) string {
 
 // walk checks node n against type t, which is at path.
 func walk(t reflect.Type, n *yaml.Node, path string) error {
-	for n.Kind == yaml.AliasNode {
-		n = n.Alias
-	}
+	n = resolve(n)
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -111,8 +109,12 @@ func walk(t reflect.Type, n *yaml.Node, path string) error {
 		if n.Kind != yaml.MappingNode {
 			return errorAt(n, path, "expected an object, got %s", describe(n))
 		}
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			if err := walk(t.Elem(), n.Content[i+1], join(path, n.Content[i].Value)); err != nil {
+		if err := checkMerges(n, path, nil); err != nil {
+			return err
+		}
+		pairs := pairsOf(n)
+		for i := 0; i < len(pairs); i += 2 {
+			if err := walk(t.Elem(), pairs[i+1], join(path, pairs[i].Value)); err != nil {
 				return err
 			}
 		}
@@ -150,14 +152,15 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 	if n.Kind != yaml.MappingNode {
 		return errorAt(n, path, "expected an object, got %s", describe(n))
 	}
+	if err := checkMerges(n, path, nil); err != nil {
+		return err
+	}
 	if t == reflect.TypeFor[Node]() && !hasKey(n, "role") {
 		return walkShorthand(n, path)
 	}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		key, value := n.Content[i], n.Content[i+1]
-		if key.Value == "<<" {
-			continue
-		}
+	pairs := pairsOf(n)
+	for i := 0; i < len(pairs); i += 2 {
+		key, value := pairs[i], pairs[i+1]
 		j := slices.IndexFunc(fields, func(f field) bool { return f.key == key.Value })
 		if j < 0 {
 			return unknownKey(fields, key, join(path, key.Value))
@@ -171,18 +174,86 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 
 // walkShorthand checks a node of the form "worker: 3".
 func walkShorthand(n *yaml.Node, path string) error {
-	if len(n.Content) != 2 {
+	pairs := pairsOf(n)
+	if len(pairs) != 2 {
 		return errorAt(n, path, `a node object needs "role: NAME"; the shorthand "NAME: COUNT" takes no other keys`)
 	}
-	if v := n.Content[1]; v.Kind != yaml.ScalarNode || (v.Tag != "!!int" && v.Tag != "!!null") {
-		return errorAt(v, join(path, n.Content[0].Value), "expected a whole number, got %s", describe(v))
+	if v := resolve(pairs[1]); v.Kind != yaml.ScalarNode || (v.Tag != "!!int" && v.Tag != "!!null") {
+		return errorAt(v, join(path, pairs[0].Value), "expected a whole number, got %s", describe(v))
 	}
 	return nil
 }
 
-func hasKey(n *yaml.Node, name string) bool {
+// resolve follows the alias n to the node it names.
+func resolve(n *yaml.Node) *yaml.Node {
+	for n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	return n
+}
+
+// isMerge reports whether key is a merge key, <<, whose value is an object
+// or a list of objects whose keys the mapping takes on.
+func isMerge(key *yaml.Node) bool {
+	return key.Tag == "!!merge"
+}
+
+// mergeSources returns the objects that the value of a merge key names.
+func mergeSources(value *yaml.Node) []*yaml.Node {
+	value = resolve(value)
+	if value.Kind == yaml.SequenceNode {
+		return value.Content
+	}
+	return []*yaml.Node{value}
+}
+
+// checkMerges checks that the merge keys of mapping n, and of the objects
+// they merge, name objects or lists of objects, and that no object merges
+// itself; outer holds the objects whose merges are being checked.
+func checkMerges(n *yaml.Node, path string, outer []*yaml.Node) error {
+	outer = append(outer, n)
 	for i := 0; i+1 < len(n.Content); i += 2 {
-		if n.Content[i].Value == name {
+		if !isMerge(n.Content[i]) {
+			continue
+		}
+		for _, src := range mergeSources(n.Content[i+1]) {
+			src = resolve(src)
+			switch {
+			case src.Kind != yaml.MappingNode:
+				return errorAt(src, join(path, "<<"), "expected an object or a list of objects, got %s", describe(src))
+			case slices.Contains(outer, src):
+				return errorAt(n.Content[i], join(path, "<<"), "an object cannot merge itself")
+			}
+			if err := checkMerges(src, path, outer); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// pairsOf returns the keys and values of mapping n, alternating: its own,
+// then those of the objects its merge keys name, which checkMerges has
+// checked.
+func pairsOf(n *yaml.Node) []*yaml.Node {
+	var pairs, merged []*yaml.Node
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if !isMerge(n.Content[i]) {
+			pairs = append(pairs, n.Content[i], n.Content[i+1])
+			continue
+		}
+		for _, src := range mergeSources(n.Content[i+1]) {
+			merged = append(merged, pairsOf(resolve(src))...)
+		}
+	}
+	return append(pairs, merged...)
+}
+
+// hasKey reports whether mapping n has the key name, itself or by a merge.
+func hasKey(n *yaml.Node, name string) bool {
+	pairs := pairsOf(n)
+	for i := 0; i < len(pairs); i += 2 {
+		if pairs[i].Value == name {
 			return true
 		}
 	}

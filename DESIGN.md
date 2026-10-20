@@ -1116,7 +1116,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `monitoring` - requires a managed controller; `slurm.main` must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers` (the collector has no token), and with `PrivateData` it must set `MetricsParameters=ignore_private_data` (see Monitoring)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
-- the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`
+- the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`; anchors, aliases and merge keys (`<<: *worker`) are followed, so an object, a node's `role` included, can take its keys from another
 
 Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as
 trusted as a script run with Docker access: `image` runs any image's services as root,

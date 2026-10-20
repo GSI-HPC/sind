@@ -35,6 +35,12 @@ func TestParse_SyntaxErrors(t *testing.T) {
 		{"fragment a list", "kind: Cluster\nslurm:\n  cgroup:\n    a.conf: [b]\n", "line 4: slurm.cgroup.a.conf: expected a string, got a list"},
 		{"duplicate limit", "kind: Cluster\naccounts:\n  - name: a\n    limits: {MaxJobs: 1, MaxJobs: 2}\n", `mapping key "MaxJobs" already defined`},
 		{"duplicate fragment", "kind: Cluster\nslurm:\n  cgroup: {a: b, a: c}\n", `mapping key "a" already defined`},
+		{"merged key unknown", "kind: Cluster\nnodes:\n  - &w {role: worker, cpu: 2}\n  - {<<: *w}\n", "line 3: nodes[0].cpu: unknown key"},
+		{"merge of a string", "kind: Cluster\nnodes:\n  - role: worker\n    <<: x\n", "line 4: nodes[0].<<: expected an object or a list of objects, got a string"},
+		{"merge of a list of strings", "kind: Cluster\nslurm:\n  cgroup: {<<: [{a: b}, c]}\n", "line 3: slurm.cgroup.<<: expected an object or a list of objects, got a string"},
+		{"merge of itself", "kind: Cluster\ndefaults: &d {<<: *d}\n", "line 2: defaults.<<: an object cannot merge itself"},
+		{"nested merge of itself", "kind: Cluster\nnodes:\n  - &a {role: worker, <<: {<<: *a}}\n", "line 3: nodes[0].<<: an object cannot merge itself"},
+		{"merged shorthand count", "kind: Cluster\nnodes:\n  - <<: {worker: x}\n", "line 3: nodes[0].worker: expected a whole number, got a string"},
 		{"count a string", "kind: Cluster\nnodes:\n  - role: worker\n    count: many\n", "nodes[0].count: expected a whole number, got a string"},
 	}
 	for _, tt := range tests {
@@ -71,6 +77,25 @@ func TestParse_SyntaxAccepts(t *testing.T) {
 	assert.Equal(t, "no", c.Realm)
 	assert.Equal(t, "1024", c.Nodes[0].Memory)
 	assert.True(t, *c.Nodes[0].Managed)
+
+	// A merge key (<<) adds the keys of the objects it names, which may
+	// give a node its role, through an alias and a list of objects, and
+	// recursively.
+	c, err = Parse([]byte("kind: Cluster\nnodes: [controller, &w {role: worker, cpus: 2}, {<<: *w, memory: 4g}]\n"))
+	require.NoError(t, err)
+	assert.Equal(t, Node{Role: RoleWorker, CPUs: 2, Memory: "4g"}, c.Nodes[2])
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - controller\n  - <<: {role: worker}\n"))
+	require.NoError(t, err)
+	assert.Equal(t, RoleWorker, c.Nodes[1].Role)
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - controller\n  - &a {role: worker}\n  - &b {<<: *a, cpus: 2}\n  - <<: [*b, {memory: 1g}]\n    count: 2\n"))
+	require.NoError(t, err)
+	assert.Equal(t, Node{Role: RoleWorker, Count: 2, CPUs: 2, Memory: "1g"}, c.Nodes[3])
+	c, err = Parse([]byte("kind: Cluster\nnodes:\n  - <<: {worker: 3}\n"))
+	require.NoError(t, err)
+	assert.Equal(t, Node{Role: RoleWorker, Count: 3}, c.Nodes[0])
+	c, err = Parse([]byte("kind: Cluster\nslurm:\n  cgroup: &f {a.conf: x}\n  gres: {<<: *f, b.conf: y}\n"))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"a.conf": "x", "b.conf": "y"}, c.Slurm.Gres.Fragments)
 
 	// An alias of a node is followed.
 	_, err = Parse([]byte("kind: Cluster\nnodes:\n  - &n {role: worker, cpu: 1}\n  - *n\n"))
