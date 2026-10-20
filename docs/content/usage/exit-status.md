@@ -32,7 +32,7 @@ An error in the arguments ends with the usage line of the command, as above; one
 
 This covers:
 
-- an unknown command or help topic: `sind get bogus`, `sind help bogus`, `sind completion fishy`
+- an unknown command or help topic, with `--help` too: `sind get bogus`, `sind get bogus --help`, `sind help bogus`, `sind completion fishy`
 - an unknown flag, a flag without its value, or a value that is not valid: `sind get clusters -o yaml`, `sind --realm Not_A_Realm get clusters`
 - the wrong number of arguments, or an argument that is not valid: `sind get cluster a b`, `sind get cluster Not_A_Name`
 - a node argument that does not parse, that names no node, or that names several nodes where one is needed: `sind power on 'worker-['`, `sind power on @compute`, `sind ssh 'worker-[0-1]'`

@@ -238,7 +238,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 - Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
-- Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2); `NewRootCommand` applies this to every group, including ones added later
+- Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2), with `--help` too (`sind get bogus --help`): a group's help flag (`groupHelp`) reads as unset to cobra, which would print the help before it checks the arguments, and the group's `RunE` prints it once the check has passed; `NewRootCommand` applies this to every group, including ones added later
 - cobra's built-in `help` and `completion` commands follow the same rule: `sind completion fish-typo` fails like any group, and `sind help TOPIC` fails unless TOPIC names a command in full (`sind help bogus`, `sind help get bogus`)
 
 ### Argument Conventions

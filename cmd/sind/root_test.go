@@ -85,6 +85,37 @@ func TestUnknownSubcommand(t *testing.T) {
 	}
 }
 
+// TestUnknownSubcommandWithHelp verifies that the help flag does not make
+// an unknown subcommand succeed: a script that probes for one with --help
+// gets the error it gets without.
+func TestUnknownSubcommandWithHelp(t *testing.T) {
+	for _, tt := range []struct {
+		args    []string
+		wantErr string
+	}{
+		{[]string{"get", "bogus", "--help"}, `unknown command "bogus" for "sind get"`},
+		{[]string{"get", "munge-key", "-h"}, `unknown command "munge-key" for "sind get"`},
+		{[]string{"power", "stop", "-h"}, `unknown command "stop" for "sind power" (did you mean "shutdown"?)`},
+		{[]string{"--help", "bogus"}, `unknown command "bogus" for "sind" (did you mean "logs"?)`},
+		{[]string{"get", "--help=bogus"}, `invalid argument "bogus" for "-h, --help" flag: strconv.ParseBool: parsing "bogus": invalid syntax`},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(tt.args...)
+			require.EqualError(t, err, tt.wantErr)
+			assert.True(t, isUsageError(err))
+			assert.Empty(t, stdout)
+		})
+	}
+	for _, args := range [][]string{{"get", "--help"}, {"get", "-h"}, {"-h"}, {"mcp", "claude", "--help"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(args...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, "Available Commands:")
+			assert.Contains(t, stdout, "  -h, --help ")
+		})
+	}
+}
+
 // TestHelpTopic verifies that help still prints the help of every command
 // it names in full.
 func TestHelpTopic(t *testing.T) {
