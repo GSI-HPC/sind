@@ -262,11 +262,18 @@ type clusterNodes struct {
 }
 
 // groupByCluster groups node targets by cluster, keeping their order: the
-// clusters come in the order of their first node.
+// clusters come in the order of their first node. A node named twice, such
+// as worker-0 and worker-0.default, is kept once, so that a command acts on
+// it once.
 func groupByCluster(targets []nodeTarget) []clusterNodes {
 	var groups []clusterNodes
 	index := make(map[string]int)
+	seen := make(map[nodeTarget]bool, len(targets))
 	for _, t := range targets {
+		if seen[t] {
+			continue
+		}
+		seen[t] = true
 		i, ok := index[t.Cluster]
 		if !ok {
 			i = len(groups)
