@@ -3,8 +3,6 @@
 package main
 
 import (
-	"context"
-
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/spf13/cobra"
 )
@@ -15,9 +13,6 @@ func completeClusterNames(cmd *cobra.Command, args []string, _ string) ([]string
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	client := clientFrom(ctx)
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
@@ -33,9 +28,6 @@ func completeClusterNames(cmd *cobra.Command, args []string, _ string) ([]string
 // completeRealmNames provides shell completion for the --realm flag.
 func completeRealmNames(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	realms, err := cluster.GetRealms(ctx, clientFrom(ctx))
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
@@ -55,9 +47,6 @@ func registerOutputCompletion(cmd *cobra.Command) {
 // completeNodeNames provides shell completion for node name arguments.
 func completeNodeNames(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	client := clientFrom(ctx)
 	realm, err := realmFromFlag(cmd)
 	if err != nil {
