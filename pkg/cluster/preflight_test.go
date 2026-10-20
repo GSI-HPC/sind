@@ -84,7 +84,7 @@ func TestNodeShortNames(t *testing.T) {
 			name: "unmanaged nodes still get indexed",
 			nodes: []config.Node{
 				{Role: config.RoleController},
-				{Role: config.RoleWorker, Count: 2, Managed: testutil.Ptr(false)},
+				{Role: config.RoleWorker, Count: 2, Managed: new(false)},
 				{Role: config.RoleWorker, Count: 1},
 			},
 			want: []string{"controller", "worker-0", "worker-1", "worker-2"},

@@ -121,7 +121,7 @@ func identityCfg(identity config.Identity) *config.Cluster {
 	db.Role = config.RoleDB
 	worker.Role = config.RoleWorker
 	unmanaged.Role = config.RoleWorker
-	unmanaged.Managed = testutil.Ptr(false)
+	unmanaged.Managed = new(false)
 	cfg.Nodes = []config.Node{controller, submitter, db, worker, unmanaged}
 	return cfg
 }
@@ -200,7 +200,7 @@ func TestNodeRunConfigs_APIUsers(t *testing.T) {
 		{config.IdentityLocal, nil, true},
 		{config.IdentityNSSSlurm, nil, true},
 		{config.IdentityClientIDs, nil, false},
-		{config.IdentityClientIDs, testutil.Ptr(false), true},
+		{config.IdentityClientIDs, new(false), true},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s/managed=%v", tt.mode, tt.managed), func(t *testing.T) {

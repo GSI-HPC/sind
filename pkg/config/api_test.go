@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +53,7 @@ func TestValidate_APIAuthAltTypes(t *testing.T) {
 	}
 
 	t.Run("bare api node", func(t *testing.T) {
-		bare := Node{Role: RoleAPI, Managed: testutil.Ptr(false)}
+		bare := Node{Role: RoleAPI, Managed: new(false)}
 		assert.NoError(t, apiCluster(Slurm{Main: Section{Content: "AuthAltTypes=auth/munge\n"}}, bare).Validate())
 	})
 }

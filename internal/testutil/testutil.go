@@ -47,9 +47,6 @@ func TarArchive(name, content string) string {
 	return buf.String()
 }
 
-// Ptr returns a pointer to the given value.
-func Ptr[T any](v T) *T { return &v }
-
 // ArgValue returns the value following the first occurrence of flag in args.
 func ArgValue(args []string, flag string) (string, bool) {
 	if i := slices.Index(args, flag); i >= 0 && i+1 < len(args) {

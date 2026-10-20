@@ -326,7 +326,7 @@ func TestWriteClusterConfig_DefMemPerCPU(t *testing.T) {
 	cfg := &config.Cluster{Name: "dev", Nodes: []config.Node{
 		{Role: config.RoleController, CPUs: 1, Memory: "64m"},
 		{Role: config.RoleWorker, Count: 2, CPUs: 2, Memory: "1g"},
-		{Role: config.RoleWorker, CPUs: 4, Memory: "64m", Managed: testutil.Ptr(false)},
+		{Role: config.RoleWorker, CPUs: 4, Memory: "64m", Managed: new(false)},
 	}}
 	require.NoError(t, WriteClusterConfig(t.Context(), c, mesh.DefaultRealm, cfg, "busybox:latest"))
 
@@ -461,7 +461,7 @@ func TestWriteClusterConfig_UnmanagedDB(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: config.RoleController},
-			{Role: config.RoleDB, Managed: testutil.Ptr(false)},
+			{Role: config.RoleDB, Managed: new(false)},
 			{Role: config.RoleWorker, CPUs: 1, Memory: "512m"},
 		},
 	}

@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -81,7 +80,7 @@ func TestValidate_MonitoringNeedsManagedController(t *testing.T) {
 			Kind:       "Cluster",
 			Name:       "default",
 			Monitoring: true,
-			Nodes:      []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleWorker}},
+			Nodes:      []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleWorker}},
 		}
 		cfg.ApplyDefaults()
 		return cfg
@@ -112,8 +111,8 @@ func TestValidate_MonitoringNeedsManagedController(t *testing.T) {
 		Monitoring: true,
 		Nodes: []Node{
 			{Role: RoleController},
-			{Role: RoleDB, Managed: testutil.Ptr(false)},
-			{Role: RoleWorker, Managed: testutil.Ptr(false)},
+			{Role: RoleDB, Managed: new(false)},
+			{Role: RoleWorker, Managed: new(false)},
 		},
 	}
 	cfg.ApplyDefaults()

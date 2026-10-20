@@ -138,7 +138,7 @@ func TestCreate_APINode(t *testing.T) {
 }
 
 func TestCreate_UnmanagedAPINode(t *testing.T) {
-	calls, err := createAPICluster(t, apiCfg(config.IdentityLocal, testutil.Ptr(false)), nil)
+	calls, err := createAPICluster(t, apiCfg(config.IdentityLocal, new(false)), nil)
 	require.NoError(t, err)
 
 	ic := collectIdentityCalls(calls)

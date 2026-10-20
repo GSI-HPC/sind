@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -478,7 +477,7 @@ func TestValidate_Valid(t *testing.T) {
 			name: "unmanaged api in a managed cluster",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleAPI, Managed: testutil.Ptr(false)},
+				{Role: RoleAPI, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 		},
@@ -486,14 +485,14 @@ func TestValidate_Valid(t *testing.T) {
 			name: "managed: true on api",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleAPI, Managed: testutil.Ptr(true)},
+				{Role: RoleAPI, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 		},
 		{
 			name: "api in an unmanaged cluster",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
 				{Role: RoleAPI},
 				{Role: RoleWorker},
 			},
@@ -502,7 +501,7 @@ func TestValidate_Valid(t *testing.T) {
 			name: "unmanaged db in a managed cluster",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleDB, Managed: testutil.Ptr(false)},
+				{Role: RoleDB, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 		},
@@ -510,22 +509,22 @@ func TestValidate_Valid(t *testing.T) {
 			name: "managed: true on db",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleDB, Managed: testutil.Ptr(true)},
+				{Role: RoleDB, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 		},
 		{
 			name: "unmanaged db in an unmanaged cluster",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleDB, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleDB, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 		},
 		{
 			name: "db in an unmanaged cluster",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
 				{Role: RoleDB},
 				{Role: RoleWorker},
 			},
@@ -540,14 +539,14 @@ func TestValidate_Valid(t *testing.T) {
 		{
 			name: "managed true on controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(true)},
-				{Role: RoleWorker, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(true)},
+				{Role: RoleWorker, Managed: new(true)},
 			},
 		},
 		{
 			name: "unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
 				{Role: RoleSubmitter},
 				{Role: RoleWorker, Count: 2},
 			},
@@ -555,14 +554,14 @@ func TestValidate_Valid(t *testing.T) {
 		{
 			name: "unmanaged controller with explicitly unmanaged worker",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleWorker, Managed: testutil.Ptr(false)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleWorker, Managed: new(false)},
 			},
 		},
 		{
 			name: "unmanaged controller with backupController",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false), BackupController: true},
+				{Role: RoleController, Managed: new(false), BackupController: true},
 				{Role: RoleWorker},
 			},
 		},
@@ -686,8 +685,8 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed api under unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleAPI, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleAPI, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 			wantErr: "api managed: true requires a managed controller",
@@ -695,8 +694,8 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed db under unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleDB, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleDB, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 			wantErr: "db managed: true requires a managed controller",
@@ -750,7 +749,7 @@ func TestValidate_Constraints(t *testing.T) {
 			name: "managed false on submitter",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleSubmitter, Managed: testutil.Ptr(false)},
+				{Role: RoleSubmitter, Managed: new(false)},
 				{Role: RoleWorker},
 			},
 			wantErr: `managed is only valid for controller, db, api and worker nodes, not "submitter"`,
@@ -759,7 +758,7 @@ func TestValidate_Constraints(t *testing.T) {
 			name: "managed true on submitter",
 			nodes: []Node{
 				{Role: RoleController},
-				{Role: RoleSubmitter, Managed: testutil.Ptr(true)},
+				{Role: RoleSubmitter, Managed: new(true)},
 				{Role: RoleWorker},
 			},
 			wantErr: `managed is only valid for controller, db, api and worker nodes, not "submitter"`,
@@ -767,9 +766,9 @@ func TestValidate_Constraints(t *testing.T) {
 		{
 			name: "managed worker under unmanaged controller",
 			nodes: []Node{
-				{Role: RoleController, Managed: testutil.Ptr(false)},
-				{Role: RoleWorker, Managed: testutil.Ptr(false)},
-				{Role: RoleWorker, Managed: testutil.Ptr(true)},
+				{Role: RoleController, Managed: new(false)},
+				{Role: RoleWorker, Managed: new(false)},
+				{Role: RoleWorker, Managed: new(true)},
 			},
 			wantErr: "worker managed: true requires a managed controller",
 		},
@@ -1259,7 +1258,7 @@ func TestValidate_UnmanagedSlurmSections(t *testing.T) {
 				Kind: "Cluster",
 				Name: "default",
 				Nodes: []Node{
-					{Role: RoleController, Managed: testutil.Ptr(false), BackupController: true},
+					{Role: RoleController, Managed: new(false), BackupController: true},
 					{Role: RoleWorker},
 				},
 			}
@@ -1272,11 +1271,11 @@ func TestValidate_UnmanagedSlurmSections(t *testing.T) {
 }
 
 func TestCluster_Managed(t *testing.T) {
-	c := &Cluster{Nodes: []Node{{Role: RoleController}, {Role: RoleWorker, Managed: testutil.Ptr(false)}}}
+	c := &Cluster{Nodes: []Node{{Role: RoleController}, {Role: RoleWorker, Managed: new(false)}}}
 	assert.True(t, c.Managed(), "controller without managed")
-	c.Nodes[0].Managed = testutil.Ptr(true)
+	c.Nodes[0].Managed = new(true)
 	assert.True(t, c.Managed(), "managed: true")
-	c.Nodes[0].Managed = testutil.Ptr(false)
+	c.Nodes[0].Managed = new(false)
 	assert.False(t, c.Managed(), "managed: false")
 	assert.True(t, (&Cluster{}).Managed(), "no controller")
 }
@@ -1302,7 +1301,7 @@ func TestValidate_SlurmdbdSection(t *testing.T) {
 	err := cfg.Validate()
 	require.EqualError(t, err, wantErr)
 
-	cfg.Nodes = append(cfg.Nodes, Node{Role: RoleDB, Managed: testutil.Ptr(false)})
+	cfg.Nodes = append(cfg.Nodes, Node{Role: RoleDB, Managed: new(false)})
 	require.EqualError(t, cfg.Validate(), wantErr)
 
 	cfg.Nodes[2].Managed = nil
@@ -1321,9 +1320,9 @@ func TestCluster_HasManagedDB(t *testing.T) {
 	}{
 		{"no db", []Node{{Role: RoleController}, {Role: RoleWorker}}, false},
 		{"db", []Node{{Role: RoleController}, {Role: RoleDB}, {Role: RoleWorker}}, true},
-		{"managed: true db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(true)}, {Role: RoleWorker}}, true},
-		{"unmanaged db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, false},
-		{"db in an unmanaged cluster", []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleDB}, {Role: RoleWorker}}, false},
+		{"managed: true db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: new(true)}, {Role: RoleWorker}}, true},
+		{"unmanaged db", []Node{{Role: RoleController}, {Role: RoleDB, Managed: new(false)}, {Role: RoleWorker}}, false},
+		{"db in an unmanaged cluster", []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleDB}, {Role: RoleWorker}}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1341,9 +1340,9 @@ func TestCluster_HasManagedAPI(t *testing.T) {
 	}{
 		{"no api", []Node{{Role: RoleController}, {Role: RoleDB}, {Role: RoleWorker}}, false},
 		{"api", []Node{{Role: RoleController}, {Role: RoleAPI}, {Role: RoleWorker}}, true},
-		{"managed: true api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: testutil.Ptr(true)}, {Role: RoleWorker}}, true},
-		{"unmanaged api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, false},
-		{"api in an unmanaged cluster", []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleAPI}, {Role: RoleWorker}}, false},
+		{"managed: true api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: new(true)}, {Role: RoleWorker}}, true},
+		{"unmanaged api", []Node{{Role: RoleController}, {Role: RoleAPI, Managed: new(false)}, {Role: RoleWorker}}, false},
+		{"api in an unmanaged cluster", []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleAPI}, {Role: RoleWorker}}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

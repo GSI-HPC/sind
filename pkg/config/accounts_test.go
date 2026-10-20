@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -142,9 +141,9 @@ func TestValidate_Accounts(t *testing.T) {
 		}},
 		{name: "no db node", nodes: []Node{{Role: RoleController}, {Role: RoleWorker}}, accounts: []Account{{Name: "physics"}},
 			wantErr: "accounts, and the users' accounts, coordinator and adminLevel, require a managed db node: sind creates Slurm accounts with sacctmgr, which needs slurmdbd"},
-		{name: "unmanaged db node", nodes: []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, users: []User{{Name: "alice", AdminLevel: AdminAdmin}},
+		{name: "unmanaged db node", nodes: []Node{{Role: RoleController}, {Role: RoleDB, Managed: new(false)}, {Role: RoleWorker}}, users: []User{{Name: "alice", AdminLevel: AdminAdmin}},
 			wantErr: "require a managed db node"},
-		{name: "unmanaged cluster", nodes: []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleDB}, {Role: RoleWorker}}, accounts: []Account{{Name: "physics"}},
+		{name: "unmanaged cluster", nodes: []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleDB}, {Role: RoleWorker}}, accounts: []Account{{Name: "physics"}},
 			wantErr: "require a managed db node"},
 		{name: "uppercase name", accounts: []Account{{Name: "Physics"}},
 			wantErr: `invalid account name "Physics": it must contain only lowercase letters, digits, underscores and hyphens, not start with a hyphen, and have at most 64 characters`},

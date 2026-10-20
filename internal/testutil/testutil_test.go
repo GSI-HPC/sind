@@ -38,15 +38,6 @@ func TestTarArchive(t *testing.T) {
 	assert.Equal(t, "world", string(content))
 }
 
-func TestPtr(t *testing.T) {
-	b := Ptr(true)
-	require.NotNil(t, b)
-	assert.True(t, *b)
-
-	s := Ptr("hello")
-	assert.Equal(t, "hello", *s)
-}
-
 func TestArgValue(t *testing.T) {
 	args := []string{"--name", "foo", "--count", "3"}
 

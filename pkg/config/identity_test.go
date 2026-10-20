@@ -5,7 +5,6 @@ package config
 import (
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,7 +110,7 @@ func TestIdentityMode_SlurmParameters(t *testing.T) {
 }
 
 func TestValidate_Identity(t *testing.T) {
-	unmanaged := []Node{{Role: RoleController, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}
+	unmanaged := []Node{{Role: RoleController, Managed: new(false)}, {Role: RoleWorker}}
 	tests := []struct {
 		name     string
 		identity Identity

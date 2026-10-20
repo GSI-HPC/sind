@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +40,7 @@ func TestValidate_AccountingClusterName(t *testing.T) {
 	}{
 		{name40, withDB, ""},
 		{name41, []Node{{Role: RoleController}, {Role: RoleWorker}}, ""},
-		{name41, []Node{{Role: RoleController}, {Role: RoleDB, Managed: testutil.Ptr(false)}, {Role: RoleWorker}}, ""},
+		{name41, []Node{{Role: RoleController}, {Role: RoleDB, Managed: new(false)}, {Role: RoleWorker}}, ""},
 		{name41, withDB, `cluster name "` + name41 + `" has 41 characters: with a managed db node it may have at most 40, as slurmdbd builds its table names from it`},
 	} {
 		cfg := &Cluster{Kind: "Cluster", Name: tt.name, Nodes: tt.nodes}

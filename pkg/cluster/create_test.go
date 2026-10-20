@@ -1249,7 +1249,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
-				Managed: testutil.Ptr(false)},
+				Managed: new(false)},
 		},
 	}
 
@@ -1281,7 +1281,7 @@ func TestCreate_UnmanagedCluster(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: config.RoleController, Managed: testutil.Ptr(false), BackupController: true,
+			{Role: config.RoleController, Managed: new(false), BackupController: true,
 				Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: config.RoleSubmitter, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},

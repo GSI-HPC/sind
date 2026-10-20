@@ -636,7 +636,7 @@ func TestNodeRunConfigs_UnmanagedAPI(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: config.RoleController},
-			{Role: config.RoleAPI, Managed: testutil.Ptr(false)},
+			{Role: config.RoleAPI, Managed: new(false)},
 			{Role: config.RoleWorker},
 		},
 	}
@@ -650,7 +650,7 @@ func TestNodeRunConfigs_UnmanagedAPI(t *testing.T) {
 	inUnmanaged := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: config.RoleController, Managed: testutil.Ptr(false)},
+			{Role: config.RoleController, Managed: new(false)},
 			{Role: config.RoleAPI},
 			{Role: config.RoleWorker},
 		},
@@ -665,7 +665,7 @@ func TestNodeRunConfigs_UnmanagedDBInManagedCluster(t *testing.T) {
 		Name: "dev",
 		Nodes: []config.Node{
 			{Role: config.RoleController},
-			{Role: config.RoleDB, Managed: testutil.Ptr(false)},
+			{Role: config.RoleDB, Managed: new(false)},
 			{Role: config.RoleSubmitter},
 			{Role: config.RoleWorker},
 		},
@@ -685,7 +685,7 @@ func TestNodeRunConfigs_UnmanagedDB(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: config.RoleController, Managed: testutil.Ptr(false)},
+			{Role: config.RoleController, Managed: new(false)},
 			{Role: config.RoleDB},
 			{Role: config.RoleWorker},
 		},
@@ -719,7 +719,7 @@ func TestNodeRunConfigs_UnmanagedCompute(t *testing.T) {
 		Nodes: []config.Node{
 			{Role: config.RoleController, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 			{Role: config.RoleWorker, Count: 2, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g",
-				Managed: testutil.Ptr(false)},
+				Managed: new(false)},
 			{Role: config.RoleWorker, Count: 1, Image: "img:1", CPUs: 2, Memory: "2g", TmpSize: "1g"},
 		},
 	}
@@ -736,10 +736,10 @@ func TestNodeRunConfigs_UnmanagedController(t *testing.T) {
 	cfg := &config.Cluster{
 		Name: "dev",
 		Nodes: []config.Node{
-			{Role: config.RoleController, Managed: testutil.Ptr(false), BackupController: true},
+			{Role: config.RoleController, Managed: new(false), BackupController: true},
 			{Role: config.RoleSubmitter},
 			{Role: config.RoleWorker, Count: 2},
-			{Role: config.RoleWorker, Managed: testutil.Ptr(false)},
+			{Role: config.RoleWorker, Managed: new(false)},
 		},
 	}
 
