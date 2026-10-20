@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestParse_MinimalYAML(t *testing.T) {
@@ -934,37 +935,20 @@ func TestParse_Realm(t *testing.T) {
 
 // --- Section type ---
 
-func TestSection_UnmarshalJSON(t *testing.T) {
-	t.Run("string form", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`"SchedulerType=sched/backfill\n"`))
-		require.NoError(t, err)
-		assert.Equal(t, "SchedulerType=sched/backfill\n", s.Content)
-		assert.Nil(t, s.Fragments)
-	})
+func TestSection_UnmarshalYAML(t *testing.T) {
+	var s Section
+	require.NoError(t, yaml.Unmarshal([]byte("|\n  SchedulerType=sched/backfill\n"), &s))
+	assert.Equal(t, "SchedulerType=sched/backfill\n", s.Content)
+	assert.Nil(t, s.Fragments)
 
-	t.Run("map form", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`{"scheduling":"SchedulerType=sched/backfill\n","resources":"SelectType=select/cons_tres\n"}`))
-		require.NoError(t, err)
-		assert.Empty(t, s.Content)
-		require.Len(t, s.Fragments, 2)
-		assert.Equal(t, "SchedulerType=sched/backfill\n", s.Fragments["scheduling"])
-		assert.Equal(t, "SelectType=select/cons_tres\n", s.Fragments["resources"])
-	})
+	s = Section{}
+	require.NoError(t, yaml.Unmarshal([]byte("{scheduling: a, resources: b}"), &s))
+	assert.Empty(t, s.Content)
+	assert.Equal(t, map[string]string{"scheduling": "a", "resources": "b"}, s.Fragments)
 
-	t.Run("null", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`null`))
-		require.NoError(t, err)
-		assert.True(t, s.IsEmpty())
-	})
-
-	t.Run("invalid type", func(t *testing.T) {
-		var s Section
-		err := s.UnmarshalJSON([]byte(`42`))
-		require.Error(t, err)
-	})
+	s = Section{}
+	require.NoError(t, yaml.Unmarshal([]byte("~"), &s))
+	assert.True(t, s.IsEmpty())
 }
 
 func TestSection_IsEmpty(t *testing.T) {

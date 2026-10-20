@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -16,23 +15,22 @@ import (
 
 // checkSyntax walks the YAML document against the Cluster type and reports
 // the first mistake with its line and key path, e.g. `line 7:
-// nodes[1].cpu: unknown key (valid: ...)`. The decoder that follows
-// (sigs.k8s.io/yaml) goes through JSON and reports neither, and names Go
-// types.
-func checkSyntax(data []byte) error {
+// nodes[1].cpu: unknown key (valid: ...)`, and returns the document for
+// Parse to decode. The decoder reports neither, and names Go types.
+func checkSyntax(data []byte) (*yaml.Node, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil && !errors.Is(err, io.EOF) {
-		return errors.New(strings.TrimPrefix(err.Error(), "yaml: "))
+		return nil, errors.New(strings.TrimPrefix(err.Error(), "yaml: "))
 	}
 	if doc.Kind == 0 || len(doc.Content) == 0 || doc.Content[0].Tag == "!!null" {
-		return errors.New("empty configuration")
+		return nil, errors.New("empty configuration")
 	}
-	return walk(reflect.TypeFor[Cluster](), doc.Content[0], "")
+	return &doc, walk(reflect.TypeFor[Cluster](), doc.Content[0], "")
 }
 
-// jsonUnmarshalerType is the interface of the types that accept more than
+// unmarshalerType is the interface of the types that accept more than
 // one YAML form (a name or an object).
-var jsonUnmarshalerType = reflect.TypeFor[interface{ UnmarshalJSON([]byte) error }]()
+var unmarshalerType = reflect.TypeFor[yaml.Unmarshaler]()
 
 // field is a key of a struct, as the YAML file spells it.
 type field struct {
@@ -41,11 +39,11 @@ type field struct {
 }
 
 // fieldsOf returns the keys of struct type t in declaration order, or nil if
-// t has none with a json tag.
+// t has none with a yaml tag.
 func fieldsOf(t reflect.Type) []field {
 	var fields []field
 	for f := range t.Fields() {
-		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
 		if name == "" || name == "-" {
 			continue
 		}
@@ -113,6 +111,11 @@ func walk(t reflect.Type, n *yaml.Node, path string) error {
 		if n.Kind != yaml.MappingNode {
 			return errorAt(n, path, "expected an object, got %s", describe(n))
 		}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			if err := walk(t.Elem(), n.Content[i+1], join(path, n.Content[i].Value)); err != nil {
+				return err
+			}
+		}
 	case reflect.Int:
 		if n.Kind != yaml.ScalarNode || n.Tag != "!!int" {
 			return errorAt(n, path, "expected a whole number, got %s", describe(n))
@@ -121,13 +124,18 @@ func walk(t reflect.Type, n *yaml.Node, path string) error {
 		if n.Kind != yaml.ScalarNode {
 			return errorAt(n, path, "expected a string, got %s", describe(n))
 		}
+	case reflect.Bool:
+		var b bool
+		if n.Decode(&b) != nil {
+			return errorAt(n, path, "expected true or false, got %s", describe(n))
+		}
 	}
 	return nil
 }
 
 func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 	fields := fieldsOf(t)
-	custom := reflect.PointerTo(t).Implements(jsonUnmarshalerType)
+	custom := reflect.PointerTo(t).Implements(unmarshalerType)
 	if n.Kind == yaml.ScalarNode && custom {
 		// A name, mode or role. A space means a list item that got
 		// glued to the one above by its indentation.
@@ -136,8 +144,8 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 		}
 		return nil
 	}
-	if len(fields) == 0 {
-		return nil
+	if t == reflect.TypeFor[Section]() {
+		return walk(reflect.TypeFor[map[string]string](), n, path) // fragments
 	}
 	if n.Kind != yaml.MappingNode {
 		return errorAt(n, path, "expected an object, got %s", describe(n))
@@ -191,56 +199,4 @@ func unknownKey(fields []field, key *yaml.Node, path string) error {
 		}
 	}
 	return errorAt(key, "", "%s: unknown key (valid: %s)%s", path, strings.Join(names, ", "), hint)
-}
-
-// goTypeError matches the message of a JSON decoding type error.
-var goTypeError = regexp.MustCompile(`json: cannot unmarshal (\w+) into Go (?:struct field [\w.\[\]]*?(\w+) |value )?of type (\S+)`)
-
-// friendlyType names a Go type for a config author.
-func friendlyType(goType string) string {
-	switch {
-	case strings.HasPrefix(goType, "[]"), strings.HasPrefix(goType, "map["):
-		return "a list or an object"
-	case goType == "string":
-		return "a string"
-	case strings.HasPrefix(goType, "int"), strings.HasPrefix(goType, "uint"):
-		return "a whole number"
-	case goType == "bool":
-		return "true or false"
-	}
-	return "an object"
-}
-
-// jsonKind names the JSON kind of a decoding error for a config author.
-func jsonKind(kind string) string {
-	switch kind {
-	case "object":
-		return "an object"
-	case "array":
-		return "a list"
-	case "bool":
-		return "a boolean"
-	}
-	return "a " + kind
-}
-
-// plainError rewrites an error of the JSON decoding that checkSyntax does
-// not catch: it names JSON, and Go fields and types.
-func plainError(err error) error {
-	msg := err.Error()
-	msg = strings.ReplaceAll(msg, "error unmarshaling JSON: while decoding JSON: ", "")
-	msg = goTypeError.ReplaceAllStringFunc(msg, func(m string) string {
-		sub := goTypeError.FindStringSubmatch(m)
-		want := friendlyType(sub[3])
-		got := jsonKind(sub[1])
-		hint := ""
-		if want == "a string" && got == "a number" {
-			hint = " (quote it)"
-		}
-		if sub[2] != "" {
-			return fmt.Sprintf("%q must be %s, got %s%s", sub[2], want, got, hint)
-		}
-		return fmt.Sprintf("expected %s, got %s%s", want, got, hint)
-	})
-	return errors.New(strings.TrimPrefix(msg, "json: "))
 }

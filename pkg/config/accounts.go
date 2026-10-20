@@ -3,13 +3,14 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // RootAccount is the account at the top of every cluster's account tree.
@@ -20,62 +21,48 @@ const RootAccount = "root"
 // Account is a Slurm account that sind creates with sacctmgr once the
 // cluster is registered with slurmdbd.
 type Account struct {
-	Name string `json:"name"`
+	Name string `yaml:"name"`
 	// Parent is the parent account: RootAccount, the default, or an
 	// account declared before this one.
-	Parent string `json:"parent,omitempty"`
+	Parent string `yaml:"parent,omitempty"`
 	// Limits are further sacctmgr options of the account, passed as
 	// key=value, e.g. GrpTRES: cpu=4 or MaxJobs: 1.
-	Limits Limits `json:"limits,omitempty"`
+	Limits Limits `yaml:"limits,omitempty"`
 }
 
-// UnmarshalJSON supports two YAML forms:
+// UnmarshalYAML supports two YAML forms:
 //   - bare string: "physics"
 //   - full object: "name: theory\n  parent: physics"
-func (a *Account) UnmarshalJSON(data []byte) error {
-	var name string
-	if err := json.Unmarshal(data, &name); err == nil {
-		a.Name = name
-		return nil
-	}
-
-	type accountAlias Account // prevents infinite recursion
-	var alias accountAlias
-	if err := decodeStrict(data, &alias); err != nil {
-		return fmt.Errorf("account must be a name or an object: %w", err)
-	}
-	*a = Account(alias)
-	return nil
+func (a *Account) UnmarshalYAML(v *yaml.Node) error {
+	type alias Account // prevents infinite recursion
+	return nameOrObject(v, &a.Name, (*alias)(a))
 }
 
 // Limits are sacctmgr options of an account, by option name. Numbers are
-// passed in plain decimal form, as YAML 1.1 reads them before sind sees
-// them: MaxJobs: 1 becomes MaxJobs=1, but 010 is octal and becomes 8, and
-// 1.10 becomes 1.1. A quoted value is passed as written.
+// passed in plain decimal form, as the YAML parser reads them before sind
+// sees them: MaxJobs: 1 becomes MaxJobs=1, but 010 is octal and becomes 8,
+// and 1.10 becomes 1.1. A quoted value is passed as written.
 type Limits map[string]string
 
-// UnmarshalJSON accepts a map of strings and numbers.
-func (l *Limits) UnmarshalJSON(data []byte) error {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("limits must be a map of option names to values: %w", err)
+// UnmarshalYAML accepts a map of strings and numbers.
+func (l *Limits) UnmarshalYAML(v *yaml.Node) error {
+	var raw map[string]any
+	if err := v.Decode(&raw); err != nil {
+		return err
 	}
-	limits := make(Limits, len(raw))
+	*l = make(Limits, len(raw))
 	for key, value := range raw {
-		var s string
-		if err := json.Unmarshal(value, &s); err == nil {
-			limits[key] = s
-			continue
+		switch value := value.(type) {
+		case nil:
+			(*l)[key] = "" // Validate reports the empty value
+		case string, int, uint64:
+			(*l)[key] = fmt.Sprint(value)
+		case float64:
+			(*l)[key] = strconv.FormatFloat(value, 'f', -1, 64)
+		default:
+			return fmt.Errorf("limit %s must be a string or a number, got %v", key, value)
 		}
-		dec := json.NewDecoder(bytes.NewReader(value))
-		dec.UseNumber()
-		var n json.Number
-		if err := dec.Decode(&n); err != nil {
-			return fmt.Errorf("limit %s must be a string or a number, got %s", key, value)
-		}
-		limits[key] = n.String()
 	}
-	*l = limits
 	return nil
 }
 

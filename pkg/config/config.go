@@ -4,9 +4,7 @@
 package config
 
 import (
-	"bytes"
 	"cmp"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -14,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"sigs.k8s.io/yaml"
+	"go.yaml.in/yaml/v3"
 )
 
 // Defaults holds default settings applied to all nodes unless overridden.
 type Defaults struct {
-	Image       string   `json:"image,omitempty"`
-	CPUs        int      `json:"cpus,omitempty"`
-	Memory      string   `json:"memory,omitempty"`
-	TmpSize     string   `json:"tmpSize,omitempty"`
-	CapAdd      []string `json:"capAdd,omitempty"`
-	CapDrop     []string `json:"capDrop,omitempty"`
-	Devices     []string `json:"devices,omitempty"`
-	SecurityOpt []string `json:"securityOpt,omitempty"`
+	Image       string   `yaml:"image,omitempty"`
+	CPUs        int      `yaml:"cpus,omitempty"`
+	Memory      string   `yaml:"memory,omitempty"`
+	TmpSize     string   `yaml:"tmpSize,omitempty"`
+	CapAdd      []string `yaml:"capAdd,omitempty"`
+	CapDrop     []string `yaml:"capDrop,omitempty"`
+	Devices     []string `yaml:"devices,omitempty"`
+	SecurityOpt []string `yaml:"securityOpt,omitempty"`
 }
 
 // Role identifies the function of a node within a cluster.
@@ -44,62 +42,34 @@ const (
 
 // Node represents a single node or node group in the cluster configuration.
 type Node struct {
-	Role             Role     `json:"role"`
-	Count            int      `json:"count,omitempty"`
-	Image            string   `json:"image,omitempty"`
-	CPUs             int      `json:"cpus,omitempty"`
-	Memory           string   `json:"memory,omitempty"`
-	TmpSize          string   `json:"tmpSize,omitempty"`
-	Managed          *bool    `json:"managed,omitempty"`
-	BackupController bool     `json:"backupController,omitempty"`
-	CapAdd           []string `json:"capAdd,omitempty"`
-	CapDrop          []string `json:"capDrop,omitempty"`
-	Devices          []string `json:"devices,omitempty"`
-	SecurityOpt      []string `json:"securityOpt,omitempty"`
+	Role             Role     `yaml:"role"`
+	Count            int      `yaml:"count,omitempty"`
+	Image            string   `yaml:"image,omitempty"`
+	CPUs             int      `yaml:"cpus,omitempty"`
+	Memory           string   `yaml:"memory,omitempty"`
+	TmpSize          string   `yaml:"tmpSize,omitempty"`
+	Managed          *bool    `yaml:"managed,omitempty"`
+	BackupController bool     `yaml:"backupController,omitempty"`
+	CapAdd           []string `yaml:"capAdd,omitempty"`
+	CapDrop          []string `yaml:"capDrop,omitempty"`
+	Devices          []string `yaml:"devices,omitempty"`
+	SecurityOpt      []string `yaml:"securityOpt,omitempty"`
 }
 
-// UnmarshalJSON supports three YAML forms:
+// UnmarshalYAML supports three YAML forms, which checkSyntax has checked:
 //   - bare string: "controller"
 //   - shorthand map: "worker: 3"  (role: count)
 //   - full object: "role: worker\n  count: 3\n  cpus: 4"
-func (n *Node) UnmarshalJSON(data []byte) error {
-	// Try bare string: "controller"
-	var s string
-	if err := json.Unmarshal(data, &s); err == nil {
-		n.Role = Role(s)
-		return nil
-	}
-
-	// Try object form
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("node must be a string, role:count map, or full object: %w", err)
-	}
-
-	// If "role" key exists, it's the full form
-	if _, ok := raw["role"]; ok {
-		type nodeAlias Node // prevents infinite recursion
-		var alias nodeAlias
-		dec := json.NewDecoder(bytes.NewReader(data))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&alias); err != nil {
-			return err
-		}
-		*n = Node(alias)
-		return nil
-	}
-
-	// Shorthand map: {"worker": 3}
-	if len(raw) != 1 {
-		return fmt.Errorf("shorthand node must have exactly one key (role), got %d", len(raw))
-	}
-	for role, countRaw := range raw {
-		n.Role = Role(role)
-		var count int
-		if err := json.Unmarshal(countRaw, &count); err != nil {
-			return fmt.Errorf("shorthand node count for %q: %w", role, err)
-		}
-		n.Count = count
+func (n *Node) UnmarshalYAML(v *yaml.Node) error {
+	type alias Node // prevents infinite recursion
+	switch {
+	case v.Kind == yaml.ScalarNode:
+		n.Role = Role(v.Value)
+	case hasKey(v, "role"):
+		return v.Decode((*alias)(n))
+	case len(v.Content) == 2:
+		n.Role = Role(v.Content[0].Value)
+		return v.Content[1].Decode(&n.Count)
 	}
 	return nil
 }
@@ -115,9 +85,9 @@ const (
 
 // DataStorage configures the shared data volume.
 type DataStorage struct {
-	Type      StorageType `json:"type,omitempty"`
-	HostPath  string      `json:"hostPath,omitempty"`
-	MountPath string      `json:"mountPath,omitempty"`
+	Type      StorageType `yaml:"type,omitempty"`
+	HostPath  string      `yaml:"hostPath,omitempty"`
+	MountPath string      `yaml:"mountPath,omitempty"`
 }
 
 // UsesHostPath reports whether the data is a bind mount of HostPath rather
@@ -178,10 +148,10 @@ func (c *Cluster) validateDataMountPath() error {
 
 // Storage configures cluster storage options.
 type Storage struct {
-	DataStorage DataStorage `json:"dataStorage,omitempty"`
+	DataStorage DataStorage `yaml:"dataStorage,omitempty"`
 	// CVMFS mounts CVMFS read-only at /cvmfs on every node, from the cvmfs
 	// Docker volume plugin or from the Docker host's /cvmfs.
-	CVMFS bool `json:"cvmfs,omitempty"`
+	CVMFS bool `yaml:"cvmfs,omitempty"`
 }
 
 // Section represents a Slurm config file section that can be either:
@@ -207,64 +177,54 @@ func (s Section) FragmentNames() []string {
 	return slices.Sorted(maps.Keys(s.Fragments))
 }
 
-// UnmarshalJSON supports two YAML/JSON forms:
+// UnmarshalYAML supports two YAML forms, which checkSyntax has checked:
 //   - string: "content" → Section{Content: "content"}
 //   - map: {"key": "content"} → Section{Fragments: {"key": "content"}}
-func (s *Section) UnmarshalJSON(data []byte) error {
-	// Try string form (also handles null → empty string)
-	var str string
-	if err := json.Unmarshal(data, &str); err == nil {
-		s.Content = str
+func (s *Section) UnmarshalYAML(v *yaml.Node) error {
+	if v.Kind == yaml.ScalarNode {
+		s.Content = v.Value
 		return nil
 	}
-
-	// Try map form
-	var m map[string]string
-	if err := json.Unmarshal(data, &m); err == nil {
-		s.Fragments = m
-		return nil
-	}
-
-	return fmt.Errorf("section must be a string or map of fragments")
+	return v.Decode(&s.Fragments)
 }
 
 // Slurm configures custom Slurm configuration files.
 // Each field maps to a Slurm config file: main → slurm.conf,
 // cgroup → cgroup.conf, gres → gres.conf, etc.
 type Slurm struct {
-	Main      Section `json:"main,omitempty"`
-	Cgroup    Section `json:"cgroup,omitempty"`
-	Gres      Section `json:"gres,omitempty"`
-	Topology  Section `json:"topology,omitempty"`
-	Plugstack Section `json:"plugstack,omitempty"`
-	Slurmdbd  Section `json:"slurmdbd,omitempty"`
+	Main      Section `yaml:"main,omitempty"`
+	Cgroup    Section `yaml:"cgroup,omitempty"`
+	Gres      Section `yaml:"gres,omitempty"`
+	Topology  Section `yaml:"topology,omitempty"`
+	Plugstack Section `yaml:"plugstack,omitempty"`
+	Slurmdbd  Section `yaml:"slurmdbd,omitempty"`
 }
 
 // Cluster represents a sind cluster configuration.
 type Cluster struct {
-	Kind     string    `json:"kind"`
-	Name     string    `json:"name,omitempty"`
-	Realm    string    `json:"realm,omitempty"`
-	Defaults Defaults  `json:"defaults,omitempty"`
-	Storage  Storage   `json:"storage,omitempty"`
-	Slurm    Slurm     `json:"slurm,omitempty"`
-	Users    []User    `json:"users,omitempty"`
-	Groups   []Group   `json:"groups,omitempty"`
-	Accounts []Account `json:"accounts,omitempty"`
-	Identity Identity  `json:"identity,omitempty"`
-	Nodes    []Node    `json:"nodes,omitempty"`
+	Kind     string    `yaml:"kind"`
+	Name     string    `yaml:"name,omitempty"`
+	Realm    string    `yaml:"realm,omitempty"`
+	Defaults Defaults  `yaml:"defaults,omitempty"`
+	Storage  Storage   `yaml:"storage,omitempty"`
+	Slurm    Slurm     `yaml:"slurm,omitempty"`
+	Users    []User    `yaml:"users,omitempty"`
+	Groups   []Group   `yaml:"groups,omitempty"`
+	Accounts []Account `yaml:"accounts,omitempty"`
+	Identity Identity  `yaml:"identity,omitempty"`
+	Nodes    []Node    `yaml:"nodes,omitempty"`
 	// Monitoring collects the cluster's Slurm metrics, container resource
 	// use and logs into the realm's monitoring stack. It needs a managed
 	// cluster, and is fixed for the cluster's life.
-	Monitoring bool `json:"monitoring,omitempty"`
+	Monitoring bool `yaml:"monitoring,omitempty"`
 
 	// Pull is a runtime flag (not part of the config file) that forces
 	// fresh image pulls when creating containers.
-	Pull bool `json:"-" yaml:"-"`
+	Pull bool `yaml:"-"`
 	// Wait is a runtime setting (not part of the config file): when
 	// positive, how long cluster.Create waits for the nodes and Slurm to
 	// become ready, counted from when the node containers have started.
-	Wait time.Duration `json:"-" yaml:"-"`
+	Wait time.Duration `yaml:"-"`
 }
 
 // Default resource values for cluster nodes.
@@ -538,17 +498,14 @@ func validateSection(sectionName string, s Section) error {
 
 // Parse parses a YAML cluster configuration and returns a Cluster.
 func Parse(data []byte) (*Cluster, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("empty configuration")
-	}
-
-	if err := checkSyntax(data); err != nil {
+	doc, err := checkSyntax(data)
+	if err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
 	var cfg Cluster
-	if err := yaml.UnmarshalStrict(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", plainError(err))
+	if err := doc.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
 	if cfg.Kind == "" {

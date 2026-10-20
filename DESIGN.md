@@ -161,7 +161,7 @@ sind uses a minimal set of dependencies, following [kind](https://kind.sigs.k8s.
 |------------|---------|
 | `github.com/spf13/cobra` | CLI framework |
 | `github.com/spf13/pflag` | Flag library under cobra: the MCP tool flag filter, and the flag errors that exit 2 as usage errors |
-| `sigs.k8s.io/yaml` | YAML configuration parsing |
+| `go.yaml.in/yaml/v3` | YAML configuration parsing (YAML 1.2) |
 | `log/slog` (stdlib) | Structured logging interface |
 | `github.com/charmbracelet/log` | Colorized log output (slog handler) |
 | `github.com/charmbracelet/lipgloss` | Style of the TRACE level in the log output, and the colour profile of stderr for the log lines a progress display carries and for the progress theme |
@@ -1097,6 +1097,7 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `monitoring` - requires a managed controller; `slurm.main` must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers` (the collector has no token), and with `PrivateData` it must set `MetricsParameters=ignore_private_data` (see Monitoring)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
+- the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`
 
 Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as
 trusted as a script run with Docker access: `image` runs any image's services as root,
@@ -1252,7 +1253,7 @@ sacctmgr -i add user carol account=physics defaultaccount=physics adminlevel=ope
 sacctmgr -i add coordinator account=physics names=bob
 ```
 
-- Accounts are created in list order, so a parent is declared before its children. `limits` are passed as `key=value`, in key order. Numbers are passed in plain decimal form, as YAML 1.1 reads them before sind sees them: `MaxJobs: 1` becomes `MaxJobs=1`, but `010` is octal and becomes `8`, `0x10` becomes `16`, `1e3` `1000` and `1.10` `1.1`, also for options that take text, such as `Description: 1.0`. A quoted value is passed as written.
+- Accounts are created in list order, so a parent is declared before its children. `limits` are passed as `key=value`, in key order. Numbers are passed in plain decimal form, as the YAML parser reads them before sind sees them: `MaxJobs: 1` becomes `MaxJobs=1`, but `010` is octal and becomes `8`, `0x10` becomes `16`, `1e3` `1000` and `1.10` `1.1`, also for options that take text, such as `Description: 1.0`. A quoted value is passed as written.
 - `limits` take these `sacctmgr add account` options, matched case-insensitively: `Description`, `Organization` and `Flags` of the account, and `Comment`, `DefaultQOS`, `Fairshare` (or `Shares`), `GrpJobs`, `GrpJobsAccrue`, `GrpSubmitJobs`, `GrpTRES`, `GrpTRESMins`, `GrpTRESRunMins`, `GrpWall`, `MaxJobs`, `MaxJobsAccrue`, `MaxSubmitJobs`, `MaxTRES` (or `MaxTRESPerJob`), `MaxTRESMins` (or `MaxTRESMinsPerJob`), `MaxTRESPerNode`, `MaxTRESRunMins`, `MaxWall` (or `MaxWallDurationPerJob`), `MinPrioThresh`, `Priority` and `QOS` (or `QosLevel`) of its association. It is an allow list because sacctmgr accepts any prefix of an option name: a deny list could not keep `A`, `Acct`, `N`, `C` or `Pa` off the name, cluster and parent sind sets, and `Where` makes `sacctmgr add account` loop forever.
 - Every account a user names must be declared in `accounts`: a typo fails validation instead of creating a new account.
 - The Linux users exist on the controller before `sacctmgr` runs (setupNodes), so slurmctld resolves the uids of the new associations right away; it would otherwise retry only once an hour. slurmdbd pushes the associations to slurmctld before `sacctmgr` returns, so jobs can use them as soon as `sind create cluster` returns.

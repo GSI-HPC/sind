@@ -36,8 +36,9 @@ users:
 }
 
 func TestParse_LimitNumbers(t *testing.T) {
-	// YAML 1.1 reads unquoted numbers first; sind passes them in plain
-	// decimal form. Quoted values stay as written.
+	// The YAML parser reads unquoted numbers first; sind passes them in
+	// plain decimal form. Quoted values stay as written, and an empty value
+	// stays empty for Validate to report.
 	input := `kind: Cluster
 accounts:
   - name: physics
@@ -45,15 +46,18 @@ accounts:
       MaxJobs: 010
       MaxSubmitJobs: 0x10
       GrpJobs: 1e3
+      GrpTRESRunMins: 1.5e10
       Fairshare: 1.10
+      GrpTRESMins: 18446744073709551615
       Description: "1.10"
-      Organization: "007"`
+      Organization: "007"
+      Comment: ~`
 
 	cfg, err := Parse([]byte(input))
 	require.NoError(t, err)
 	assert.Equal(t, Limits{
-		"MaxJobs": "8", "MaxSubmitJobs": "16", "GrpJobs": "1000", "Fairshare": "1.1",
-		"Description": "1.10", "Organization": "007",
+		"MaxJobs": "8", "MaxSubmitJobs": "16", "GrpJobs": "1000", "GrpTRESRunMins": "15000000000", "Fairshare": "1.1",
+		"GrpTRESMins": "18446744073709551615", "Description": "1.10", "Organization": "007", "Comment": "",
 	}, cfg.Accounts[0].Limits)
 }
 
@@ -86,7 +90,7 @@ func TestParse_AccountsErrors(t *testing.T) {
 		{
 			name:    "limit is a map",
 			input:   "kind: Cluster\naccounts:\n  - name: physics\n    limits:\n      GrpTRES: {cpu: 4}",
-			wantErr: `limit GrpTRES must be a string or a number, got {"cpu":4}`,
+			wantErr: "line 5: accounts[0].limits.GrpTRES: expected a string, got an object",
 		},
 	}
 	for _, tt := range tests {
