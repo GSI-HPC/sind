@@ -265,38 +265,17 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // one fails, so that one failure does not cancel the removals still waiting
 // for a docker call slot, and returns every failure.
 func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
-	log := sindlog.From(ctx)
-	errs := make([]error, len(containers))
-	var wg sync.WaitGroup
+	names := make([]docker.ContainerName, len(containers))
 	for i, c := range containers {
-		wg.Go(func() {
-			err := client.RemoveContainer(ctx, c.Name)
-			switch {
-			case err == nil:
-			case docker.IsNotFound(err):
-				log.WarnContext(ctx, "container already gone, skipping", "name", string(c.Name))
-			default:
-				errs[i] = fmt.Errorf("removing container %s: %w", c.Name, err)
-			}
-		})
+		names[i] = c.Name
 	}
-	wg.Wait()
-	return errors.Join(errs...)
+	return removeEach(ctx, "container", names, client.RemoveContainer)
 }
 
 // DeleteNetwork removes the cluster network. A network that is already gone
 // is logged and treated as success.
 func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.NetworkName) error {
-	err := client.RemoveNetwork(ctx, name)
-	if err == nil {
-		return nil
-	}
-	if docker.IsNotFound(err) {
-		sindlog.From(ctx).WarnContext(ctx, "network already gone, skipping",
-			"name", string(name))
-		return nil
-	}
-	return fmt.Errorf("removing network %s: %w", name, err)
+	return removeEach(ctx, "network", []docker.NetworkName{name}, client.RemoveNetwork)
 }
 
 // DeleteVolumes removes the given cluster volumes in parallel. Each removal
@@ -305,18 +284,25 @@ func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.Netwo
 // volume is attempted; the errors of those that could not be removed are
 // joined in argument order.
 func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
+	return removeEach(ctx, "volume", volumes, client.RemoveVolume)
+}
+
+// removeEach removes the named resources of a kind in parallel. A resource
+// that is already gone is logged and treated as success; the errors of the
+// others are joined in argument order.
+func removeEach[N ~string](ctx context.Context, kind string, names []N, remove func(context.Context, N) error) error {
 	log := sindlog.From(ctx)
-	errs := make([]error, len(volumes))
+	errs := make([]error, len(names))
 	var wg sync.WaitGroup
-	for i, v := range volumes {
+	for i, name := range names {
 		wg.Go(func() {
-			err := client.RemoveVolume(ctx, v)
+			err := remove(ctx, name)
 			switch {
 			case err == nil:
 			case docker.IsNotFound(err):
-				log.WarnContext(ctx, "volume already gone, skipping", "name", string(v))
+				log.WarnContext(ctx, kind+" already gone, skipping", "name", string(name))
 			default:
-				errs[i] = fmt.Errorf("removing volume %s: %w", v, err)
+				errs[i] = fmt.Errorf("removing %s %s: %w", kind, name, err)
 			}
 		})
 	}
