@@ -17,7 +17,8 @@ import (
 // server, and every cluster network, for the addresses DNS answers with.
 // Joining the mesh is what makes a container one of the realm's external
 // containers, so a cluster created later is connected to them too, and
-// deleting the realm's networks detaches them.
+// deleting the realm's networks detaches them. Deleting the realm's last
+// cluster removes the mesh, and with it the record of them (see Delete).
 
 // ownContainer reports whether a container with these labels is sind's:
 // a node or mesh container, which carry the realm label, or a container of
@@ -120,7 +121,8 @@ func missingContainer(ctx context.Context, client *docker.Client, names []docker
 
 // Connect attaches containers outside sind to the realm's mesh network and
 // every cluster network, skipping the ones they already join. Clusters
-// created later are connected to them as well (ConnectExternal). It fails
+// created later, while the realm has a cluster, are connected to them as
+// well (ConnectExternal). It fails
 // for a realm without mesh, and for a container that does not exist or is
 // sind's own.
 func Connect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, names ...docker.ContainerName) error {

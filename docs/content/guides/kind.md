@@ -28,7 +28,7 @@ A kind node needs the mesh network to reach the DNS server, and each cluster net
 sind connect container $(kind get nodes --name bridge)
 ```
 
-A sind cluster created later is connected to the kind nodes as well.
+A sind cluster created later is connected to the kind nodes as well, as long as the realm keeps a cluster. Deleting its last cluster removes the mesh, and sind forgets the kind nodes: `sind delete cluster` names them in a warning, and after the next `sind create cluster`, `sind connect container` attaches them again. The new mesh can have another DNS address, so re-apply the forward below too.
 
 ## Forward the realm's zone
 

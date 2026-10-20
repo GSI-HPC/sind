@@ -34,6 +34,11 @@ import (
 // Whether other clusters remain does not depend on this cluster's
 // containers, so Delete settles it first: when the mesh goes too, removing
 // the nodes' DNS records and known_hosts entries would be wasted work.
+//
+// The mesh is what makes a container one of the realm's external
+// containers (see ExternalContainers). Removing it detaches them, so a
+// cluster created later is not connected to them: Delete then names them
+// through meshMgr.Warn.
 func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -54,7 +59,32 @@ func Delete(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		return nil
 	}
 	log.InfoContext(ctx, "last cluster deleted, cleaning up mesh")
-	return cleanupRealm(ctx, client, meshMgr)
+	external, err := ExternalContainers(ctx, client, meshMgr)
+	if err != nil {
+		log.WarnContext(ctx, "listing external containers failed, continuing", "error", err)
+	}
+	if err := cleanupRealm(ctx, client, meshMgr); err != nil {
+		return err
+	}
+	warnDetached(ctx, meshMgr, external)
+	return nil
+}
+
+// warnDetached tells the user, through meshMgr.Warn, that deleting the
+// realm's last cluster detached its external containers, which sind then no
+// longer knows: it keeps no list of them, only the mesh.
+func warnDetached(ctx context.Context, meshMgr *mesh.Manager, external []docker.ContainerName) {
+	if len(external) == 0 {
+		return
+	}
+	names := make([]string, len(external))
+	for i, n := range external {
+		names[i] = string(n)
+	}
+	list := strings.Join(names, " ")
+	meshMgr.Warn(ctx, fmt.Sprintf("deleting the last cluster of realm %s detached %s from its networks: "+
+		"a cluster created later is not connected to them; run sind connect container %s after creating it",
+		meshMgr.Realm, strings.Join(names, ", "), list))
 }
 
 // cleanupRealm removes a realm's shared resources once its last cluster is

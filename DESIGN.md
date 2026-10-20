@@ -1574,6 +1574,8 @@ Containers outside sind, such as kind nodes, reach a realm's nodes by joining it
 
 sind keeps no list of them: an external container is any container on the mesh network that is not sind's own (`cluster.ExternalContainers`), whether `sind connect container` or `docker network connect` put it there. `sind create cluster` connects them to the new cluster network right after the SSH relay (`cluster.ConnectExternal`); a container that cannot be connected is a warning, not a failed create. Deleting a cluster network or the mesh detaches whatever is still attached, stopped containers included, so external containers never block a delete and still start afterwards.
 
+So external containers are connected to the clusters created while the realm has a cluster, that is, while its mesh exists. Deleting the realm's last cluster with `sind delete cluster` takes the mesh with it, and with it what made them external containers: sind then writes a `Warning:` to stderr that names the detached containers and the `sind connect container` command that attaches them to a cluster created later. `sind delete cluster --all` and `sind delete realm`, which delete everything on purpose, detach them without a warning. sind keeps no state to connect them again on its own; a new mesh may also have another DNS address, which a CoreDNS forward to the old one (`sind get coredns-config`) then misses.
+
 ### DNS
 
 The `sind-dns` container (CoreDNS) names every node of the realm, for the SSH relay and host-side resolution, using a realm-aware zone:
