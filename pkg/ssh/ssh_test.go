@@ -284,29 +284,12 @@ func (f *errFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, e
 	return f.Fs.OpenFile(name, flag, perm)
 }
 
-func TestExportConfig_WriteSSHConfigError(t *testing.T) {
-	_, c := exportDockerMock()
-	fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/ssh_config"}
+func TestExportConfig_WriteErrors(t *testing.T) {
+	for _, name := range []string{"ssh_config", "id_ed25519", "known_hosts"} {
+		_, c := exportDockerMock()
+		fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/" + name}
 
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "writing ssh_config")
-}
-
-func TestExportConfig_WritePrivKeyError(t *testing.T) {
-	_, c := exportDockerMock()
-	fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/id_ed25519"}
-
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "writing id_ed25519")
-}
-
-func TestExportConfig_WriteKnownHostsError(t *testing.T) {
-	_, c := exportDockerMock()
-	fs := &errFs{Fs: afero.NewMemMapFs(), errOn: testExportDir + "/known_hosts"}
-
-	err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "writing known_hosts")
+		err := ExportConfig(t.Context(), c, fs, testExportDir, "sind", docker.ContainerName("sind-ssh"))
+		assert.ErrorContains(t, err, "writing "+name)
+	}
 }
