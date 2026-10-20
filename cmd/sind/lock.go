@@ -9,8 +9,39 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 )
+
+// inLockedRealm runs op, a change to the realm of --realm, under the realm
+// lock, with the realm's mesh manager.
+func inLockedRealm(cmd *cobra.Command, op func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error) error {
+	ctx := cmd.Context()
+	client := clientFrom(ctx)
+	realm, err := realmFromFlag(cmd)
+	if err != nil {
+		return err
+	}
+	unlock, err := acquireRealmLock(ctx, realm, "")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return op(ctx, client, meshMgrFrom(ctx, client, realm))
+}
+
+// updateSSHExport brings the SSH config export of the mesh manager's realm
+// up to date after a change to its clusters; a failure is a warning.
+func updateSSHExport(cmd *cobra.Command, client *docker.Client, meshMgr *mesh.Manager) {
+	if dir, err := state.RealmDir(meshMgr.Realm); err == nil {
+		if err := syncSSHExport(cmd.Context(), client, meshMgr, afero.NewOsFs(), dir); err != nil {
+			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(err.Error()))
+		}
+	}
+}
 
 // acquireRealmLock takes the realm lock (state.LockRealm) for a command
 // that changes the realm: the file lock in the state directory and the

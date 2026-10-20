@@ -3,14 +3,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/state"
-	"github.com/spf13/afero"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -108,33 +108,13 @@ func runCreateWorker(cmd *cobra.Command, clusterName string) error {
 		return err
 	}
 
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	unlock, err := acquireRealmLock(ctx, realm, "")
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	_, err = cluster.WorkerAdd(ctx, client, meshMgr, opts, cluster.DefaultReadinessInterval)
-	if err != nil {
-		return err
-	}
-
-	if dir, dirErr := state.RealmDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		if _, err := cluster.WorkerAdd(ctx, client, meshMgr, opts, cluster.DefaultReadinessInterval); err != nil {
+			return err
 		}
-	}
-
-	return nil
+		updateSSHExport(cmd, client, meshMgr)
+		return nil
+	})
 }
 
 func newDeleteWorkerCommand() *cobra.Command {
@@ -155,32 +135,13 @@ func runDeleteWorker(cmd *cobra.Command, nodeSpec string) error {
 		return err
 	}
 
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	unlock, lockErr := acquireRealmLock(ctx, realm, "")
-	if lockErr != nil {
-		return lockErr
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	for _, g := range groupByCluster(targets) {
-		if err := cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames); err != nil {
-			return err
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		for _, g := range groupByCluster(targets) {
+			if err := cluster.WorkerRemove(ctx, client, meshMgr, g.Cluster, g.ShortNames); err != nil {
+				return err
+			}
 		}
-	}
-
-	if dir, dirErr := state.RealmDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
-		}
-	}
-
-	return nil
+		updateSSHExport(cmd, client, meshMgr)
+		return nil
+	})
 }

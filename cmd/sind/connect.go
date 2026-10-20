@@ -52,21 +52,11 @@ func newDisconnectCommand() *cobra.Command {
 func runExternal(cmd *cobra.Command, args []string,
 	op func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, names ...docker.ContainerName) error,
 ) error {
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-	unlock, err := acquireRealmLock(ctx, realm, "")
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
 	names := make([]docker.ContainerName, len(args))
 	for i, a := range args {
 		names[i] = docker.ContainerName(a)
 	}
-	return op(ctx, client, meshMgrFrom(ctx, client, realm), names...)
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		return op(ctx, client, meshMgr, names...)
+	})
 }

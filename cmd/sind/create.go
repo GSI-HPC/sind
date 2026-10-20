@@ -17,8 +17,6 @@ import (
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
-	"github.com/GSI-HPC/sind/pkg/state"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -172,12 +170,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 		return err
 	}
 
-	if dir, dirErr := state.RealmDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
-		}
-	}
-
+	updateSSHExport(cmd, client, meshMgr)
 	return nil
 }
 

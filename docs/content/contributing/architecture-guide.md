@@ -15,7 +15,7 @@ cmd/sind/          CLI commands (cobra)
   ├── context.go   Dependency injection via context
   ├── exitcode.go  Exit statuses, usage errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
-  ├── lock.go      Realm lock for mutating commands (pkg/state)
+  ├── lock.go      Realm lock for mutating commands (pkg/state): inLockedRealm, and updateSSHExport after the change
   ├── completion.go Shell completion for cluster/node names
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/

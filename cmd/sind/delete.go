@@ -3,10 +3,11 @@
 package main
 
 import (
-	"github.com/GSI-HPC/go-clikit/termtext"
+	"context"
+
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/state"
-	"github.com/spf13/afero"
+	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/spf13/cobra"
 )
 
@@ -60,59 +61,21 @@ func newDeleteRealmCommand() *cobra.Command {
 }
 
 func runDeleteCluster(cmd *cobra.Command, name string) error {
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
-		return err
-	}
-
-	unlock, err := acquireRealmLock(ctx, realm, "")
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
-		return err
-	}
-
-	if dir, dirErr := state.RealmDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
+			return err
 		}
-	}
-
-	return nil
+		updateSSHExport(cmd, client, meshMgr)
+		return nil
+	})
 }
 
 func runDeleteClustersAll(cmd *cobra.Command) error {
-	ctx := cmd.Context()
-	client := clientFrom(ctx)
-	realm, err := realmFromFlag(cmd)
-	if err != nil {
+	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
+		// The SSH export follows the mesh even when some clusters fail to
+		// delete.
+		err := cluster.DeleteAll(ctx, client, meshMgr)
+		updateSSHExport(cmd, client, meshMgr)
 		return err
-	}
-
-	unlock, err := acquireRealmLock(ctx, realm, "")
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	meshMgr := meshMgrFrom(ctx, client, realm)
-
-	// The SSH export follows the mesh even when some clusters fail to
-	// delete.
-	err = cluster.DeleteAll(ctx, client, meshMgr)
-
-	if dir, dirErr := state.RealmDir(realm); dirErr == nil {
-		if exportErr := syncSSHExport(ctx, client, meshMgr, afero.NewOsFs(), dir); exportErr != nil {
-			cmd.PrintErrln("Warning: could not update SSH config:", termtext.EscapeLines(exportErr.Error()))
-		}
-	}
-
-	return err
+	})
 }
