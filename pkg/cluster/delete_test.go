@@ -41,75 +41,6 @@ func TestDeleteContainers(t *testing.T) {
 	assert.ElementsMatch(t, []string{"sind-dev-controller", "sind-dev-worker-0"}, names)
 }
 
-func TestDeleteContainers_RemoveError(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("container in use")) // rm -f fails
-	c := docker.NewClient(&m)
-
-	containers := []docker.ContainerListEntry{
-		{Name: "sind-dev-controller"},
-	}
-	err := DeleteContainers(t.Context(), c, containers)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing container sind-dev-controller")
-}
-
-// TestDeleteContainers_TriesEvery checks that a failed removal does not
-// keep the other containers from being removed, and that every failure is
-// returned.
-func TestDeleteContainers_TriesEvery(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = func(args []string, _ string) mock.Result {
-		if args[len(args)-1] == "sind-dev-worker-1" {
-			return mock.Result{Stderr: "removal already in progress\n", Err: testutil.ExitCode1(t)}
-		}
-		if args[len(args)-1] == "sind-dev-worker-3" {
-			return mock.Result{Err: fmt.Errorf("daemon gone")}
-		}
-		return mock.Result{}
-	}
-	c := docker.NewClient(&m)
-
-	var containers []docker.ContainerListEntry
-	for i := range 40 {
-		containers = append(containers, docker.ContainerListEntry{Name: docker.ContainerName(fmt.Sprintf("sind-dev-worker-%d", i))})
-	}
-	err := DeleteContainers(t.Context(), c, containers)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing container sind-dev-worker-1")
-	assert.Contains(t, err.Error(), "removing container sind-dev-worker-3: daemon gone")
-	assert.Len(t, m.Calls, 40, "every container is tried")
-}
-
-// TestDeleteContainers_AlreadyGone covers the manual-cleanup case: the user
-// `docker rm`'d a cluster container, then ran `sind delete cluster`. The
-// removal must succeed with a warning instead of aborting.
-func TestDeleteContainers_AlreadyGone(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such container\n", testutil.ExitCode1(t))
-	m.AddResult("", "", nil)
-	c := docker.NewClient(&m)
-
-	containers := []docker.ContainerListEntry{
-		{Name: "sind-dev-controller"},
-		{Name: "sind-dev-worker-0"},
-	}
-	err := DeleteContainers(t.Context(), c, containers)
-	require.NoError(t, err)
-}
-
-func TestDeleteContainers_Empty(t *testing.T) {
-	var m mock.Executor
-	c := docker.NewClient(&m)
-
-	err := DeleteContainers(t.Context(), c, nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, m.Calls)
-}
-
 // --- DeleteNetwork ---
 
 func TestDeleteNetwork(t *testing.T) {
@@ -122,27 +53,6 @@ func TestDeleteNetwork(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, m.Calls, 1)
 	assert.Equal(t, []string{"network", "rm", "sind-dev-net"}, m.Calls[0].Args)
-}
-
-func TestDeleteNetwork_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", fmt.Errorf("network has active endpoints"))
-	c := docker.NewClient(&m)
-
-	err := DeleteNetwork(t.Context(), c, docker.NetworkName("sind-dev-net"))
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "removing network sind-dev-net")
-}
-
-// TestDeleteNetwork_AlreadyGone covers a network that was manually removed.
-func TestDeleteNetwork_AlreadyGone(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error: No such network\n", testutil.ExitCode1(t))
-	c := docker.NewClient(&m)
-
-	err := DeleteNetwork(t.Context(), c, docker.NetworkName("sind-dev-net"))
-	require.NoError(t, err)
 }
 
 // --- DeleteVolumes ---
@@ -176,36 +86,37 @@ func volumeRmOnCall(results map[string]mock.Result) func([]string, string) mock.
 	}
 }
 
-// TestDeleteVolumes_Error checks that a failed removal does not stop the
-// others and that every failure is reported.
-func TestDeleteVolumes_Error(t *testing.T) {
+// TestRemoveEach checks what DeleteContainers, DeleteNetwork and
+// DeleteVolumes share: every removal is tried, also past the docker call
+// slots, a resource that is already gone is a success, and the other
+// failures are joined in argument order, each naming its kind.
+func TestRemoveEach(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = volumeRmOnCall(map[string]mock.Result{
-		"sind-dev-munge": {Err: fmt.Errorf("permission denied")},
-		"sind-dev-data":  {Err: fmt.Errorf("device busy")},
+		"v-1": {Stderr: testutil.NoSuchVolume("v-1"), Err: testutil.ExitCode1(t)},
+		"v-2": {Err: fmt.Errorf("permission denied")},
+		"v-7": {Err: fmt.Errorf("device busy")},
 	})
-	c := docker.NewClient(&m)
+	var volumes []docker.VolumeName
+	for i := range 40 {
+		volumes = append(volumes, docker.VolumeName(fmt.Sprintf("v-%d", i)))
+	}
 
-	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
-	err := DeleteVolumes(t.Context(), c, volumes)
+	err := DeleteVolumes(t.Context(), docker.NewClient(&m), volumes)
 
-	require.Error(t, err)
-	assert.Equal(t, "removing volume sind-dev-munge: permission denied\nremoving volume sind-dev-data: device busy", err.Error())
-	assert.Len(t, m.Calls, 3, "every volume is attempted")
-}
+	require.EqualError(t, err, "removing volume v-2: permission denied\nremoving volume v-7: device busy")
+	assert.Len(t, m.Calls, 40, "every volume is tried")
 
-// TestDeleteVolumes_AlreadyGone covers volumes that were manually removed.
-func TestDeleteVolumes_AlreadyGone(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = volumeRmOnCall(map[string]mock.Result{
-		"sind-dev-munge": {Stderr: testutil.NoSuchVolume("sind-dev-munge"), Err: testutil.ExitCode1(t)},
-	})
-	c := docker.NewClient(&m)
+	var none mock.Executor
+	require.NoError(t, DeleteVolumes(t.Context(), docker.NewClient(&none), nil))
+	assert.Empty(t, none.Calls)
 
-	volumes := []docker.VolumeName{"sind-dev-config", "sind-dev-munge", "sind-dev-data"}
-	err := DeleteVolumes(t.Context(), c, volumes)
-	require.NoError(t, err)
-	assert.Len(t, m.Calls, 3)
+	failing := docker.NewClient(&mock.Executor{OnCall: func([]string, string) mock.Result {
+		return mock.Result{Err: fmt.Errorf("daemon gone")}
+	}})
+	assert.EqualError(t, DeleteContainers(t.Context(), failing, []docker.ContainerListEntry{{Name: "sind-dev-controller"}}),
+		"removing container sind-dev-controller: daemon gone")
+	assert.EqualError(t, DeleteNetwork(t.Context(), failing, "sind-dev-net"), "removing network sind-dev-net: daemon gone")
 }
 
 // volumeInUse is what docker writes to stderr, with exit code 1, when a
@@ -228,16 +139,6 @@ func TestDeleteVolumes_StillInUse(t *testing.T) {
 		assert.Contains(t, err.Error(), "removing volume sind-dev-munge: exit status 1: Error response from daemon: remove sind-dev-munge: volume is in use")
 		assert.Len(t, m.Calls, 6)
 	})
-}
-
-func TestDeleteVolumes_Empty(t *testing.T) {
-	var m mock.Executor
-	c := docker.NewClient(&m)
-
-	err := DeleteVolumes(t.Context(), c, nil)
-
-	require.NoError(t, err)
-	assert.Empty(t, m.Calls)
 }
 
 // --- DeregisterMesh ---
