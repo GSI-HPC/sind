@@ -40,7 +40,7 @@ and its exported SSH configuration, as delete realm does.`,
 			all, _ := cmd.Flags().GetBool("all")
 			if all {
 				if len(args) > 0 {
-					return usagef("--all does not accept arguments")
+					return argsErrorf("--all does not accept arguments")
 				}
 				return runDeleteClustersAll(cmd)
 			}

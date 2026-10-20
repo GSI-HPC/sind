@@ -60,7 +60,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	// USER@NODE logs in as USER, as ssh -l USER NODE does.
 	if user, host, ok := strings.Cut(node, "@"); ok {
 		if err := config.CheckUserName(user); err != nil {
-			return usage(err)
+			return argsError(err)
 		}
 		sshOptions = append(sshOptions, "-l", user)
 		node = host
@@ -71,7 +71,7 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(target) != 1 {
-		return usagef("ssh requires exactly one node, got %d", len(target))
+		return argsErrorf("ssh requires exactly one node, got %d", len(target))
 	}
 
 	// Through a pseudo-terminal, the remote output would come back with CRLF
@@ -234,12 +234,12 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 		a := preArgs[i]
 		switch {
 		case strings.HasPrefix(a, "--"):
-			return nil, "", nil, usagef("ssh has no option %s: sind's own flags go before ssh, as in sind --realm R ssh NODE", a)
+			return nil, "", nil, argsErrorf("ssh has no option %s: sind's own flags go before ssh, as in sind --realm R ssh NODE", a)
 		case isSSHOption(a):
 			sshOptions = append(sshOptions, a)
 			if sshOptionTakesNext(a) {
 				if i+1 == len(preArgs) {
-					return nil, "", nil, usagef("ssh option %s needs a value", a)
+					return nil, "", nil, argsErrorf("ssh option %s needs a value", a)
 				}
 				i++
 				sshOptions = append(sshOptions, preArgs[i])
@@ -247,12 +247,12 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 		case node == "":
 			node = a
 		default:
-			return nil, "", nil, usagef("unexpected argument %q after node %q: a remote command goes after --, as in sind ssh NODE -- COMMAND", a, node)
+			return nil, "", nil, argsErrorf("unexpected argument %q after node %q: a remote command goes after --, as in sind ssh NODE -- COMMAND", a, node)
 		}
 	}
 
 	if node == "" {
-		return nil, "", nil, usagef("node argument required")
+		return nil, "", nil, argsErrorf("node argument required")
 	}
 	return sshOptions, node, command, nil
 }
@@ -263,23 +263,23 @@ func parseSSHArgs(args []string) (sshOptions []string, node string, command []st
 // when there was none.
 func parseExecArgs(args []string, dashIdx int) (clusterName string, command []string, err error) {
 	if dashIdx < 0 {
-		return "", nil, usagef("-- separator and command required")
+		return "", nil, argsErrorf("-- separator and command required")
 	}
 
 	command = args[dashIdx:]
 	if len(command) == 0 {
-		return "", nil, usagef("command required after --")
+		return "", nil, argsErrorf("command required after --")
 	}
 
 	if dashIdx > 1 {
-		return "", nil, usagef("expected at most one argument before --, got %d", dashIdx)
+		return "", nil, argsErrorf("expected at most one argument before --, got %d", dashIdx)
 	}
 
 	clusterName = "default"
 	if dashIdx == 1 {
 		clusterName = args[0]
 		if err := config.CheckName("cluster", clusterName); err != nil {
-			return "", nil, usage(err)
+			return "", nil, argsError(err)
 		}
 	}
 

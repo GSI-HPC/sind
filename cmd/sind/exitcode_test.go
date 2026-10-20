@@ -15,6 +15,7 @@ import (
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -276,6 +277,42 @@ func TestArityErrorNamesTheUsage(t *testing.T) {
 
 	require.ErrorContains(t, err, "only received 0 (usage: sind power on NODES)")
 	assert.True(t, isUsageError(err))
+}
+
+// TestArgumentErrorsNameTheUsage checks that the errors in the arguments
+// that a command finds itself end with its usage line, as cobra's arity
+// errors do, and that those in flag values do not.
+func TestArgumentErrorsNameTheUsage(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"ssh"}, "node argument required (usage: sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND [ARGS...]])"},
+		{[]string{"exec", "dev"}, "-- separator and command required (usage: sind exec [flags] [CLUSTER] -- COMMAND [ARGS...])"},
+		{[]string{"exec", "a", "b", "--", "x"}, "expected at most one argument before --, got 2 (usage: sind exec [flags] [CLUSTER] -- COMMAND [ARGS...])"},
+		{[]string{"delete", "cluster", "--all", "x"}, "--all does not accept arguments (usage: sind delete cluster [NAME])"},
+		{[]string{"power", "on", "@compute"}, "expanding nodes: group @compute: sind has no node groups (usage: sind power on NODES)"},
+		{[]string{"get", "clusters", "-o", "yaml"}, `invalid --output value "yaml": must be "human" or "json"`},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			_, _, err := executeCommand(tt.args...)
+			require.EqualError(t, err, tt.want)
+			assert.True(t, isUsageError(err))
+		})
+	}
+}
+
+func TestWithUsageLine(t *testing.T) {
+	cmd := &cobra.Command{Use: "x ARG"}
+	assert.NoError(t, withUsageLine(cmd, nil))
+	assert.EqualError(t, withUsageLine(cmd, assert.AnError), assert.AnError.Error())
+	assert.EqualError(t, withUsageLine(cmd, usagef("bad flag")), "bad flag")
+
+	err := withUsageLine(cmd, fmt.Errorf("context: %w", argsErrorf("bad arg")))
+	require.EqualError(t, err, "context: bad arg (usage: x ARG)")
+	assert.Equal(t, err, withUsageLine(cmd, err), "a second usage line")
+	assert.NoError(t, argsError(nil))
 }
 
 func TestRemovedStatusCommandPointsToGetCluster(t *testing.T) {

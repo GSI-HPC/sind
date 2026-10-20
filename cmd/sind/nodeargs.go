@@ -83,16 +83,16 @@ func (noGroups) All(string) (string, error)             { return "", errNoGroups
 func parseNodeArgs(expr string) ([]nodeTarget, error) {
 	set, err := nodeset.ParseWith(expr, noGroups{})
 	if err != nil {
-		return nil, usagef("expanding nodes: %w", err)
+		return nil, argsErrorf("expanding nodes: %w", err)
 	}
 	if first, second, found := paddingClash(expr); found {
-		return nil, usagef("expanding nodes: %s and %s differ only in zero padding, so a node set takes them for one node, "+
+		return nil, argsErrorf("expanding nodes: %s and %s differ only in zero padding, so a node set takes them for one node, "+
 			"but they are in two clusters, %s and %s; name the nodes of each cluster in a command of its own",
 			first, second, clusterOf(first), clusterOf(second))
 	}
 	names := set.Expand()
 	if len(names) == 0 {
-		return nil, usagef("expanding nodes: %q names no node", expr)
+		return nil, argsErrorf("expanding nodes: %q names no node", expr)
 	}
 
 	targets := make([]nodeTarget, 0, len(names))
@@ -116,19 +116,19 @@ func parseNodeName(name string) (nodeTarget, error) {
 		t.ShortName = name[:i]
 	}
 	if t.ShortName == "" || t.Cluster == "" {
-		return nodeTarget{}, usagef("invalid node name %q", name)
+		return nodeTarget{}, argsErrorf("invalid node name %q", name)
 	}
 	if strings.Contains(t.ShortName, ".") {
 		if strings.HasSuffix(name, "."+cluster.DNSSuffix) {
-			return nodeTarget{}, usagef("use NODE[.CLUSTER], not the FQDN %q", name)
+			return nodeTarget{}, argsErrorf("use NODE[.CLUSTER], not the FQDN %q", name)
 		}
-		return nodeTarget{}, usagef("invalid node name %q: want NODE[.CLUSTER]", name)
+		return nodeTarget{}, argsErrorf("invalid node name %q: want NODE[.CLUSTER]", name)
 	}
 	if err := config.CheckName("node", t.ShortName); err != nil {
-		return nodeTarget{}, usage(err)
+		return nodeTarget{}, argsError(err)
 	}
 	if err := config.CheckName("cluster", t.Cluster); err != nil {
-		return nodeTarget{}, usagef("invalid node name %q: %w", name, err)
+		return nodeTarget{}, argsErrorf("invalid node name %q: %w", name, err)
 	}
 	return t, nil
 }

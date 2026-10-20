@@ -34,7 +34,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(targets) != 1 {
-		return usagef("logs requires exactly one node, got %d", len(targets))
+		return argsErrorf("logs requires exactly one node, got %d", len(targets))
 	}
 
 	opts := cluster.LogOptions{}

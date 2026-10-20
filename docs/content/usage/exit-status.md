@@ -23,10 +23,12 @@ Status `2` means that the command line has to change before the command can succ
 
 ```console
 $ sind get cluster dev extra
-12:00:00.000 ERRO accepts at most 1 arg(s), received 2
+12:00:00.000 ERRO accepts at most 1 arg(s), received 2 (usage: sind get cluster [NAME])
 $ echo $?
 2
 ```
+
+An error in the arguments ends with the usage line of the command, as above; one in a flag value names the flag.
 
 This covers:
 
