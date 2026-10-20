@@ -6,7 +6,7 @@ description: "What create, delete and power show while they run, and the event l
 toc: true
 ---
 
-`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `doctor`, `version`, `mcp`, `completion`) never do.
+`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `connect container`, `disconnect container`, `doctor`, `version`, `mcp`, `completion`) never do.
 
 By default sind shows it only on a terminal. Where standard error is not a terminal, in a pipe, a file or a CI log, these commands print nothing on success, as they did before, and their standard error holds exactly what it did: errors, `Warning:` lines and the `-v` logs.
 

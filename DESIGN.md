@@ -235,7 +235,8 @@ Commands follow **verb-noun** ordering with a two-level hierarchy:
 sind <verb> <noun> [ARGS] [FLAGS]
 ```
 
-- Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
+- Multi-resource verbs (`create`, `delete`, `get`, `power`, `connect`, `disconnect`) group noun subcommands
+- `mcp` groups the MCP server commands (`start`, `stream`, `tools`) and one command per editor (`sind mcp claude enable`)
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
 - Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2), naming the closest subcommand or, for the removed `sind status`, the command that replaced it (`cobratree.Strict` in `NewRootCommand`, once the tree is built, so it covers every group). They fail with `--help` too (`sind get bogus --help`): a group's help flag (`groupHelp`, which `groupHelpFlags` gives every group after `cobratree.Strict`) reads as unset to cobra, which would print the help before it checks the arguments, and the group's `RunE` prints it once the check has passed
@@ -272,7 +273,7 @@ Rules:
 | List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
 | Single value (`get auth-key`) | raw value, one line | stdout |
 | Checks (`doctor`) | one ✓/✗/! line per check (`!` for an advisory check that did not pass), fix instructions below a check that did not pass | stdout |
-| Mutations (`create`, `delete`, `power`) | nothing on success where stderr is not a terminal; on a terminal, their progress display (see Progress Display) | stderr |
+| Mutations (`create`, `delete`, `power`, `connect`, `disconnect`) | nothing on success where stderr is not a terminal; on a terminal, the progress display of the commands that have one (see Progress Display) | stderr |
 | Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
 | Notes | `No <things> found in <where>.` below a table that lists nothing; `Note: ...` for any other remark on the output (`get ssh-config`) | stderr |
@@ -325,7 +326,7 @@ Rules:
 
 ### Progress Display
 
-`create cluster`, `create worker`, `delete cluster` (also `--all`), `delete worker` and the `power` commands show their progress on stderr while they run, with the `progress`, `progress/display` and `progress/cliprogress` packages of [go-clikit](https://github.com/GSI-HPC/go-clikit) v0.4.0, as clusterctl does. `withProgress` (`cmd/sind/progress.go`) decorates their `RunE`: the command runs in a progress span of its own, named by its path below the root (`create cluster`), and the code it calls in `pkg/` reports its work under that span as steps, targets, waits and calls (`progress.Start` on the command's context; without a Bus in the context, as for a library caller, every span is a no-op). `ssh`, `enter`, `exec`, `logs`, `mcp`, `get`, `doctor`, `version` and `completion` never show progress.
+`create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker` and the `power` commands show their progress on stderr while they run, with the `progress`, `progress/display` and `progress/cliprogress` packages of [go-clikit](https://github.com/GSI-HPC/go-clikit) v0.4.0, as clusterctl does. `withProgress` (`cmd/sind/progress.go`) decorates their `RunE`: the command runs in a progress span of its own, named by its path below the root (`create cluster`), and the code it calls in `pkg/` reports its work under that span as steps, targets, waits and calls (`progress.Start` on the command's context; without a Bus in the context, as for a library caller, every span is a no-op). `ssh`, `enter`, `exec`, `logs`, `connect container`, `disconnect container`, `mcp`, `get`, `doctor`, `version` and `completion` never show progress.
 
 `--progress MODE`, else `SIND_PROGRESS`, else `auto`, says how stderr shows it:
 
