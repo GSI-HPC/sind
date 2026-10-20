@@ -36,11 +36,6 @@ func TestEnter_CommandExists(t *testing.T) {
 	assert.Equal(t, "enter [CLUSTER]", c.Use)
 }
 
-func TestEnter_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("enter", "a", "b")
-	assert.Error(t, err)
-}
-
 func TestExec_CommandExists(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"exec"})

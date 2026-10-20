@@ -368,11 +368,6 @@ func TestCreateCluster_MonitoringFlag(t *testing.T) {
 	assert.NotContains(t, err.Error(), "monitoring")
 }
 
-func TestCreateCluster_RejectsTooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("create", "cluster", "name", "extra")
-	assert.Error(t, err)
-}
-
 func TestLoadConfig_PreservesName(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

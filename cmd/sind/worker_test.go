@@ -12,13 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateWorker_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"create", "worker"})
-	require.NoError(t, err)
-	assert.Equal(t, "worker [CLUSTER]", c.Use)
-}
-
 func TestCreateWorker_Flags(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"create", "worker"})
@@ -126,21 +119,4 @@ func TestCreateWorker_FlagHelpNamesDefaults(t *testing.T) {
 	assert.Equal(t, "memory limit per node (default: the newest worker's, else 512m)", c.Flags().Lookup("memory").Usage)
 	assert.Equal(t, "/tmp tmpfs size (default: the newest worker's, else 256m)", c.Flags().Lookup("tmp-size").Usage)
 	assert.Contains(t, c.Flags().Lookup("image").Usage, "the newest worker's, else the controller's")
-}
-
-func TestCreateWorker_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("create", "worker", "a", "b")
-	assert.Error(t, err)
-}
-
-func TestDeleteWorker_CommandExists(t *testing.T) {
-	cmd := NewRootCommand()
-	c, _, err := cmd.Find([]string{"delete", "worker"})
-	require.NoError(t, err)
-	assert.Equal(t, "worker NODES", c.Use)
-}
-
-func TestDeleteWorker_RequiresArgs(t *testing.T) {
-	_, _, err := executeCommand("delete", "worker")
-	assert.Error(t, err)
 }

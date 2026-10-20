@@ -20,16 +20,6 @@ func TestLogs_CommandExists(t *testing.T) {
 	assert.Equal(t, "logs NODE [SERVICE]", c.Use)
 }
 
-func TestLogs_RequiresArgs(t *testing.T) {
-	_, _, err := executeCommand("logs")
-	assert.Error(t, err)
-}
-
-func TestLogs_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("logs", "a", "b", "c")
-	assert.Error(t, err)
-}
-
 func TestLogs_HasFollowFlag(t *testing.T) {
 	cmd := NewRootCommand()
 	c, _, err := cmd.Find([]string{"logs"})

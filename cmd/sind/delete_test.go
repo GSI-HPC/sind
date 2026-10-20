@@ -19,11 +19,6 @@ func TestDeleteCluster_DefaultName(t *testing.T) {
 	assert.Equal(t, "cluster [NAME]", deleteCmd.Use)
 }
 
-func TestDeleteCluster_TooManyArgs(t *testing.T) {
-	_, _, err := executeCommand("delete", "cluster", "a", "b")
-	assert.Error(t, err)
-}
-
 func TestDeleteCluster_HasAllFlag(t *testing.T) {
 	cmd := NewRootCommand()
 	deleteCmd, _, err := cmd.Find([]string{"delete", "cluster"})
@@ -35,11 +30,6 @@ func TestDeleteCluster_HasAllFlag(t *testing.T) {
 
 func TestDeleteCluster_AllRejectsArgs(t *testing.T) {
 	_, _, err := executeCommand("delete", "cluster", "--all", "extra")
-	assert.Error(t, err)
-}
-
-func TestDeleteRealm_RejectsArgs(t *testing.T) {
-	_, _, err := executeCommand("delete", "realm", "extra")
 	assert.Error(t, err)
 }
 

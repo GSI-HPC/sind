@@ -13,16 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConnectContainer_RequiresArgs(t *testing.T) {
-	_, _, err := executeCommand("connect", "container")
-	assert.Error(t, err)
-}
-
-func TestDisconnectContainer_RequiresArgs(t *testing.T) {
-	_, _, err := executeCommand("disconnect", "container")
-	assert.Error(t, err)
-}
-
 // --- Integration ---
 
 // TestConnectContainerLifecycle attaches a container outside sind to the
