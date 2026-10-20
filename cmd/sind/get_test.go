@@ -753,10 +753,11 @@ func TestGetNode_RejectsFQDN(t *testing.T) {
 func TestGetNode_ClusterNamedSind(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error: No such container: sind-sind-controller\n", testutil.ExitCode1(t))
+	m.AddResult(`{"Names":"sind-sind-worker-0","Labels":"sind.role=worker"}`+"\n", "", nil)
 
 	_, _, err := executeWithMock(&m, "get", "node", "controller.sind")
 	require.EqualError(t, err, `node "controller" not found in cluster "sind"`)
-	require.Len(t, m.Calls, 1)
+	require.Len(t, m.Calls, 2)
 	assert.Contains(t, m.Calls[0].Args, "sind-sind-controller")
 }
 
@@ -767,10 +768,37 @@ func TestGetNode_ClusterNamedSind(t *testing.T) {
 func TestGetNode_NotFound(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "Error: No such container: sind-dev-ghost\n", testutil.ExitCode1(t))
+	m.AddResult(`{"Names":"sind-dev-controller","Labels":"sind.role=controller"}`+"\n", "", nil)
 
 	_, _, err := executeWithMock(&m, "get", "node", "ghost.dev")
 	require.ErrorContains(t, err, `node "ghost" not found in cluster "dev"`)
 	assert.NotContains(t, err.Error(), "exit status")
+}
+
+// TestGetNode_ClusterNotFound checks that a node of a missing cluster is
+// reported as a missing cluster, with the realm, as logs and ssh do.
+func TestGetNode_ClusterNotFound(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[0] == "inspect" {
+			return mock.Result{Stderr: "Error: No such container: sind-nope-worker-0\n", Err: testutil.ExitCode1(t)}
+		}
+		return mock.Result{}
+	}}
+
+	_, _, err := executeWithMock(m, "get", "node", "worker-0.nope")
+	require.EqualError(t, err, `cluster "nope" not found in realm "sind"`)
+	assert.ErrorIs(t, err, cluster.ErrClusterNotFound)
+}
+
+// TestGetNode_NotFoundRace checks the fallback when the node exists by the
+// time the cluster is listed: it is still reported as not found.
+func TestGetNode_NotFoundRace(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such container: sind-dev-ghost\n", testutil.ExitCode1(t))
+	m.AddResult(`{"Names":"sind-dev-ghost","Labels":"sind.role=worker"}`+"\n", "", nil)
+
+	_, _, err := executeWithMock(&m, "get", "node", "ghost.dev")
+	require.EqualError(t, err, `node "ghost" not found in cluster "dev"`)
 }
 
 // nodeHealthMock answers get node for a running controller of cluster dev

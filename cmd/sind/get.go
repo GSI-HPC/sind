@@ -181,6 +181,10 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 		containerName := cluster.ContainerName(realm, clusterName, shortName)
 		info, err := client.InspectContainer(ctx, containerName)
 		if docker.IsNotFound(err) {
+			// Tell a missing cluster from a missing node, as logs and ssh do.
+			if err := cluster.CheckNode(ctx, client, realm, clusterName, shortName); err != nil {
+				return nil, err
+			}
 			return nil, fmt.Errorf("node %q not found in cluster %q", shortName, clusterName)
 		}
 		if err != nil {
