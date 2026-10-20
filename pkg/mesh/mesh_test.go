@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1453,11 +1451,7 @@ func TestEnsureMesh_HostDNS_Skipped(t *testing.T) {
 }
 
 func TestEnsureMesh_HostDNS_ConfigureFails(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+	fakeBridges(t, "br-abcdef012345")
 
 	f, c, _ := newFakeDocker(t)
 	f.withMesh(DefaultRealm, docker.StateRunning)
@@ -1480,11 +1474,7 @@ func TestEnsureMesh_HostDNS_ConfigureFails(t *testing.T) {
 }
 
 func TestEnsureMesh_HostDNS_Success(t *testing.T) {
-	dir := t.TempDir()
-	old := sysClassNet
-	sysClassNet = dir
-	t.Cleanup(func() { sysClassNet = old })
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "br-abcdef012345"), 0o755))
+	fakeBridges(t, "br-abcdef012345")
 
 	f, c, _ := newFakeDocker(t)
 	f.withMesh(DefaultRealm, docker.StateRunning)
