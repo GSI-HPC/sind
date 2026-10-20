@@ -5,7 +5,6 @@ package cluster
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -50,60 +49,10 @@ func TestControllerImage_Fallback(t *testing.T) {
 
 // --- Create (end-to-end) ---
 
-// inspectJSONLabels builds docker inspect JSON output with custom labels.
-func inspectJSONLabels(t *testing.T, name, status string, networks map[docker.NetworkName]string, labels docker.Labels) string {
-	t.Helper()
-	type netInfo struct {
-		IPAddress string `json:"IPAddress"`
-	}
-	type result struct {
-		ID    string `json:"Id"`
-		Name  string `json:"Name"`
-		State struct {
-			Status string `json:"Status"`
-		} `json:"State"`
-		Config struct {
-			Labels map[string]string `json:"Labels"`
-		} `json:"Config"`
-		NetworkSettings struct {
-			Networks map[string]netInfo `json:"Networks"`
-		} `json:"NetworkSettings"`
-	}
-	r := result{ID: "id-" + name, Name: "/" + name}
-	r.State.Status = status
-	r.Config.Labels = labels
-	nets := make(map[string]netInfo)
-	for n, ip := range networks {
-		nets[string(n)] = netInfo{IPAddress: ip}
-	}
-	r.NetworkSettings.Networks = nets
-	data, err := json.Marshal([]result{r})
-	require.NoError(t, err)
-	return string(data)
-}
-
 // inspectJSON builds the JSON output that docker inspect returns for a container.
 func inspectJSON(t *testing.T, name, status string, networks map[docker.NetworkName]string) string {
 	t.Helper()
-	return inspectJSONLabels(t, name, status, networks, docker.Labels{})
-}
-
-// inspectEntry describes one entry for inspectJSONBatch.
-type inspectEntry struct {
-	Name     string
-	Status   string
-	Networks map[docker.NetworkName]string
-}
-
-// inspectJSONBatch builds a JSON array for docker inspect with multiple
-// containers, matching the format of a single batched inspect call.
-func inspectJSONBatch(t *testing.T, entries ...inspectEntry) string {
-	t.Helper()
-	parts := make([]string, 0, len(entries))
-	for _, e := range entries {
-		parts = append(parts, strings.TrimPrefix(strings.TrimSuffix(inspectJSON(t, e.Name, e.Status, e.Networks), "]"), "["))
-	}
-	return "[" + strings.Join(parts, ",") + "]"
+	return nodeInspectJSON(t, name, nodeInspect{Status: status, Networks: networks})
 }
 
 // emptyCorefileContent returns a Corefile with no host entries.

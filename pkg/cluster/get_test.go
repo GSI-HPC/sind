@@ -155,10 +155,10 @@ func TestGetNodes(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}},
-		inspectEntry{Name: "sind-dev-worker-1", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.4"}},
-		inspectEntry{Name: "sind-dev-worker-0", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.3"}},
+	m.AddResult(inspectBatch(
+		statusInspectJSON(t, "sind-dev-controller", "running", "10.0.0.2", nil),
+		statusInspectJSON(t, "sind-dev-worker-1", "running", "10.0.0.4", nil),
+		statusInspectJSON(t, "sind-dev-worker-0", "running", "10.0.0.3", nil),
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -201,10 +201,10 @@ func TestGetNodes_WithStatus(t *testing.T) {
 			Labels: "sind.cluster=dev,sind.role=worker",
 		},
 	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: net},
-		inspectEntry{Name: "sind-dev-worker-0", Status: "exited", Networks: net},
-		inspectEntry{Name: "sind-dev-worker-1", Status: "paused", Networks: net},
+	m.AddResult(inspectBatch(
+		inspectJSON(t, "sind-dev-controller", "running", net),
+		inspectJSON(t, "sind-dev-worker-0", "exited", net),
+		inspectJSON(t, "sind-dev-worker-1", "paused", net),
 	), "", nil)
 	c := docker.NewClient(&m)
 
@@ -303,9 +303,9 @@ func TestGetAllNodes(t *testing.T) {
 			Labels: "sind.cluster=prod,sind.role=controller",
 		},
 	), "", nil)
-	m.AddResult(inspectJSONBatch(t,
-		inspectEntry{Name: "sind-dev-controller", Status: "running", Networks: map[docker.NetworkName]string{"sind-dev-net": "10.0.0.2"}},
-		inspectEntry{Name: "sind-prod-controller", Status: "running", Networks: map[docker.NetworkName]string{"sind-prod-net": "10.1.0.2"}},
+	m.AddResult(inspectBatch(
+		statusInspectJSON(t, "sind-dev-controller", "running", "10.0.0.2", nil),
+		inspectJSON(t, "sind-prod-controller", "running", map[docker.NetworkName]string{"sind-prod-net": "10.1.0.2"}),
 	), "", nil)
 	c := docker.NewClient(&m)
 

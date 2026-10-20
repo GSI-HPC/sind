@@ -108,7 +108,7 @@ func pairStatusOnCall(t *testing.T, states map[string]string, labels, ping strin
 			}
 			return mock.Result{Stdout: testutil.NDJSON(entries...)}
 		case args[0] == "inspect":
-			return mock.Result{Stdout: statusInspectJSONBatch(args, func(name string) (string, string) {
+			return mock.Result{Stdout: statusInspectJSONBatch(t, args, func(name string) (string, string) {
 				return state(strings.TrimPrefix(name, "sind-dev-")), "172.18.0.9"
 			})}
 		case isHeartbeatRead(args):
@@ -222,7 +222,7 @@ func nodeHAOnCall(t *testing.T, states map[string]string, inspectErr error, hb m
 			if !ok {
 				return mock.Result{Stderr: "Error: No such object: " + args[1] + "\n", Err: notFound}
 			}
-			return mock.Result{Stdout: statusInspectJSON(args[1], s, "172.18.0.9")}
+			return mock.Result{Stdout: statusInspectJSON(t, args[1], s, "172.18.0.9", nil)}
 		case isHeartbeatRead(args):
 			return hb
 		case args[0] == "exec" && args[2] == "systemctl":
@@ -239,8 +239,7 @@ func TestGetNodeHealth_UnmanagedControllerHasNoHA(t *testing.T) {
 	m.OnCall = func(args []string, _ string) mock.Result {
 		switch {
 		case args[0] == "inspect" && args[1] == "sind-dev-controller-backup":
-			return mock.Result{Stdout: "[" + statusInspectEntryLabels(args[1], "running", "172.18.0.9",
-				docker.Labels{LabelManaged: "false"}) + "]"}
+			return mock.Result{Stdout: statusInspectJSON(t, args[1], "running", "172.18.0.9", docker.Labels{LabelManaged: "false"})}
 		case args[0] == "exec" && args[2] == "systemctl":
 			return fusedIsActiveResponse(t, args)
 		}

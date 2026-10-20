@@ -21,35 +21,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func statusInspectJSON(name, status, ip string) string {
-	return "[" + statusInspectEntry(name, status, ip) + "]"
-}
-
-func statusInspectEntry(name, status, ip string) string {
-	return statusInspectEntryLabels(name, status, ip, docker.Labels{})
-}
-
-func statusInspectEntryLabels(name, status, ip string, labels docker.Labels) string {
-	labelsJSON, _ := json.Marshal(labels)
-	return fmt.Sprintf(`{
-  "Id": "abc123",
-  "Name": "/%s",
-  "State": {"Status": %q},
-  "Config": {"Labels": %s},
-  "NetworkSettings": {"Networks": {"sind-dev-net": {"IPAddress": %q}}}
-}`, name, status, labelsJSON, ip)
+// statusInspectJSON builds the docker inspect output of a container with
+// address ip on sind-dev-net.
+func statusInspectJSON(t *testing.T, name, status, ip string, labels docker.Labels) string {
+	t.Helper()
+	return nodeInspectJSON(t, name, nodeInspect{Status: status, Labels: labels, Networks: map[docker.NetworkName]string{"sind-dev-net": ip}})
 }
 
 // statusInspectJSONBatch builds a docker inspect JSON response covering every
 // container name in inspectArgs[1:]. resolver maps each name to (status, ip).
 // Used by mock dispatchers when GetStatus issues a batched inspect.
-func statusInspectJSONBatch(inspectArgs []string, resolver func(name string) (status, ip string)) string {
+func statusInspectJSONBatch(t *testing.T, inspectArgs []string, resolver func(name string) (status, ip string)) string {
+	t.Helper()
 	entries := make([]string, 0, len(inspectArgs)-1)
 	for _, name := range inspectArgs[1:] {
 		status, ip := resolver(name)
-		entries = append(entries, statusInspectEntry(name, status, ip))
+		entries = append(entries, statusInspectJSON(t, name, status, ip, nil))
 	}
-	return "[" + strings.Join(entries, ",") + "]"
+	return inspectBatch(entries...)
 }
 
 // fusedIsActiveResponse emits one state line per unit in args[4:].
@@ -160,7 +149,7 @@ func TestGetNodeHealth(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			container := "sind-dev-" + tt.node
 			status := cmp.Or(tt.status, "running")
-			inspect := "[" + statusInspectEntryLabels(container, status, "172.18.0.2", tt.labels) + "]"
+			inspect := statusInspectJSON(t, container, status, "172.18.0.2", tt.labels)
 			var m mock.Executor
 			m.OnCall = nodeHealthOnCall(t, inspect, tt.down, tt.execErr)
 
@@ -585,9 +574,9 @@ func TestGetStatus_UnmanagedNodes(t *testing.T) {
 		case "inspect":
 			entries := make([]string, 0, len(args)-1)
 			for _, name := range args[1:] {
-				entries = append(entries, statusInspectEntryLabels(name, "running", "172.18.0.9", labels[name]))
+				entries = append(entries, statusInspectJSON(t, name, "running", "172.18.0.9", labels[name]))
 			}
-			return mock.Result{Stdout: "[" + strings.Join(entries, ",") + "]"}
+			return mock.Result{Stdout: inspectBatch(entries...)}
 		}
 		return base(args, stdin)
 	}
@@ -624,7 +613,7 @@ func statusOnCall(t *testing.T, ps []testutil.PsEntry, resolve func(name string)
 		case args[0] == "ps":
 			return mock.Result{Stdout: testutil.NDJSON(ps...)}
 		case args[0] == "inspect":
-			return mock.Result{Stdout: statusInspectJSONBatch(args, resolve)}
+			return mock.Result{Stdout: statusInspectJSONBatch(t, args, resolve)}
 		case args[0] == "exec" && args[2] == "systemctl":
 			return mock.Result{Stdout: strings.Repeat("active\n", len(args)-4)}
 		case args[0] == "exec" && args[2] == "scontrol":
@@ -972,7 +961,7 @@ func TestGetStatus_InspectMissingEntry(t *testing.T) {
 		}
 		// Return only the controller, omitting worker-0 entirely.
 		if args[0] == "inspect" {
-			return mock.Result{Stdout: statusInspectJSON("sind-dev-controller", "running", "172.18.0.2")}
+			return mock.Result{Stdout: statusInspectJSON(t, "sind-dev-controller", "running", "172.18.0.2", nil)}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected: %v", args)}
 	}

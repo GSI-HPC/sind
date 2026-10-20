@@ -66,6 +66,15 @@ func nodeInspectJSON(t *testing.T, name string, n nodeInspect) string {
 	return string(data)
 }
 
+// inspectBatch joins the docker inspect outputs of single containers into
+// the output of one inspect of them all.
+func inspectBatch(outputs ...string) string {
+	for i, o := range outputs {
+		outputs[i] = strings.Trim(o, "[]")
+	}
+	return "[" + strings.Join(outputs, ",") + "]"
+}
+
 // Image IDs of the controller and worker-0 in workerAddOnCall's cluster.
 const (
 	testControllerImageID = "sha256:c0ffee"
