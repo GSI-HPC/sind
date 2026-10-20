@@ -8,6 +8,8 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"syscall"
+	"time"
 
 	"github.com/GSI-HPC/go-clikit/progress"
 )
@@ -32,9 +34,27 @@ type Executor interface {
 // OSExecutor runs commands using os/exec.
 type OSExecutor struct{}
 
+// processGroupWaitDelay bounds how long a command run WithProcessGroup
+// waits, once its context ended or it exited, for the processes that hold
+// its output open, before its output is closed.
+const processGroupWaitDelay = 2 * time.Second
+
+// inProcessGroup makes cmd run in a process group of its own, which the
+// end of its context kills whole (WithProcessGroup).
+func inProcessGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = processGroupWaitDelay
+}
+
 func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = stdin
+	if InProcessGroup(ctx) {
+		inProcessGroup(cmd)
+	}
 	var outBuf, errBuf bytes.Buffer
 	// Under a progress span that shows lines, such as the target of an
 	// image docker pulls, its display shows the newest line the command

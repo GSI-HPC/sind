@@ -21,7 +21,7 @@ cmd/sind/          CLI commands (cobra)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
   ├── progress.go  Progress of create, delete and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
-  ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations
+  ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations, tool processes in a process group of their own
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── mcpeditor.go sind mcp <editor> enable/disable/list: register sind's MCP server with Claude Desktop, VS Code, Cursor
   ├── worker.go    Worker create/delete commands
@@ -47,7 +47,7 @@ internal/testutil/ Shared test helpers
 
 pkg/cmdexec/       Command executor abstraction
   ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)
-  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show
+  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show; WithProcessGroup: a cancel kills the command's process group
   ├── stream.go    Process, Start (long-lived commands with streamed stdout)
   ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)

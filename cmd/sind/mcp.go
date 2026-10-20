@@ -4,13 +4,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -117,13 +121,13 @@ func mcpConfig() *ophis.Config {
 				},
 				LocalFlagSelector:     ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
 				InheritedFlagSelector: ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
-				Middleware:            refuseFlagArgs(forceJSONOutput),
+				Middleware:            inProcessGroup(refuseFlagArgs(forceJSONOutput)),
 			},
 			{
 				CmdSelector:           isMCPTool,
 				LocalFlagSelector:     ophis.ExcludeFlags(mcpExcludedFlags...),
 				InheritedFlagSelector: ophis.ExcludeFlags(mcpExcludedFlags...),
-				Middleware:            refuseFlagArgs(nil),
+				Middleware:            inProcessGroup(refuseFlagArgs(nil)),
 			},
 		},
 	}
@@ -187,6 +191,76 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 	}
 }
 
+// inProcessGroup returns a middleware that calls mw with mcpExecute in
+// place of ophis's own run function.
+func inProcessGroup(mw ophis.MiddlewareFunc) ophis.MiddlewareFunc {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput, _ ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		return mw(ctx, req, in, mcpExecute)
+	}
+}
+
+// mcpExecute runs a tool call as ophis does, the sind binary with the
+// call's command path, flags and arguments (mcpToolArgs), but in a process
+// group of its own (cmdexec.WithProcessGroup). ophis kills only the sind
+// process when the call's context ends, and the docker exec or docker logs
+// it started would go on, holding its output open: the cancelled call
+// would answer only when that docker command ended, if ever. Killing the
+// group ends both, and the call answers at once.
+func mcpExecute(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, ophis.ToolOutput{}, fmt.Errorf("locating the sind binary: %w", err)
+	}
+	var e cmdexec.OSExecutor
+	stdout, stderr, err := e.Run(cmdexec.WithProcessGroup(ctx), exe, mcpToolArgs(req.Params.Name, in)...)
+	out := ophis.ToolOutput{StdOut: stdout, StdErr: stderr}
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		out.ExitCode = exitErr.ExitCode()
+	} else if err != nil {
+		return nil, ophis.ToolOutput{}, err
+	}
+	return nil, out, nil
+}
+
+// mcpToolArgs returns the command line of a tool call, as ophis builds it:
+// the command path from the tool's name ("sind_get_nodes" is "get nodes"),
+// the flags, and the positional arguments. A list flag is given once per
+// item, a map flag once per KEY=VALUE, a boolean flag only when true, and
+// a null flag not at all. The flags come in name order.
+func mcpToolArgs(tool string, in ophis.ToolInput) []string {
+	args := strings.Split(tool, "_")[1:]
+	for _, name := range slices.Sorted(maps.Keys(in.Flags)) {
+		switch value := in.Flags[name].(type) {
+		case []any:
+			for _, item := range value {
+				args = append(args, mcpFlagArgs(name, item)...)
+			}
+		case map[string]any:
+			for _, key := range slices.Sorted(maps.Keys(value)) {
+				args = append(args, "--"+name, fmt.Sprintf("%s=%v", key, value[key]))
+			}
+		default:
+			args = append(args, mcpFlagArgs(name, value)...)
+		}
+	}
+	return append(args, in.Args...)
+}
+
+// mcpFlagArgs returns the arguments that give the flag name the value.
+func mcpFlagArgs(name string, value any) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case bool:
+		if v {
+			return []string{"--" + name}
+		}
+		return nil
+	default:
+		return []string{"--" + name, fmt.Sprint(v)}
+	}
+}
+
 // failedAsError wraps a tool run so that a command that exits non-zero
 // comes back as an error result (isError: true). ophis returns it as an
 // ordinary result with the exit code in the output, and clients that key
@@ -206,14 +280,16 @@ func failedAsError(run ophis.ExecuteFunc) ophis.ExecuteFunc {
 }
 
 // mcpRunsToCompletion reports whether the tool changes state and so runs
-// on after its call is cancelled or its client disconnects. ophis ends a
-// tool's sind process with SIGKILL when the call's context ends, which
-// skips the rollback of a failed create and leaves partial resources, the
-// realm lock and orphaned docker children behind. Run to completion, the
-// command finishes or rolls back on its own, bounded by its own timeouts
-// (--wait), and the client gets no result. Read-only tools and exec keep
-// their cancellation: exec runs a command in a node that nothing rolls
-// back, and a client that stops waiting for it means to stop it.
+// on after its call is cancelled or its client disconnects. mcpExecute
+// kills a tool's sind process and the docker commands it started with
+// SIGKILL when the call's context ends, which skips the rollback of a
+// failed create and leaves partial resources and the realm lock behind.
+// Run to completion, the command finishes or rolls back on its own,
+// bounded by its own timeouts (--wait), and the call answers when it ends.
+// Read-only tools and exec keep their cancellation: exec runs a command in
+// a node that nothing rolls back, and a client that stops waiting for it
+// means to stop it. Killing docker exec does not stop that command, though:
+// Docker has no way to signal a process that docker exec started.
 func mcpRunsToCompletion(tool string) bool {
 	for path, effect := range mcpEffects {
 		if mcpToolName(path) == tool {

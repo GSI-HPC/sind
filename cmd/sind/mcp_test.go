@@ -672,3 +672,130 @@ func TestMCPCommand_HelpStrings(t *testing.T) {
 		})
 	}
 }
+
+func TestMCPToolArgs(t *testing.T) {
+	in := ophis.ToolInput{
+		Flags: map[string]any{
+			"wait":    "5m",
+			"count":   float64(2),
+			"pull":    true,
+			"dry-run": false,
+			"image":   nil,
+			"device":  []any{"/dev/a", "/dev/b"},
+			"label":   map[string]any{"b": "2", "a": float64(1)},
+		},
+		Args: []string{"dev"},
+	}
+	assert.Equal(t, []string{
+		"create", "worker",
+		"--count", "2",
+		"--device", "/dev/a", "--device", "/dev/b",
+		"--label", "a=1", "--label", "b=2",
+		"--pull",
+		"--wait", "5m",
+		"dev",
+	}, mcpToolArgs("sind_create_worker", in))
+	assert.Equal(t, []string{"get", "ssh-config"}, mcpToolArgs("sind_get_ssh-config", ophis.ToolInput{}))
+}
+
+func TestInProcessGroup(t *testing.T) {
+	var got ophis.ExecuteFunc
+	mw := inProcessGroup(func(_ context.Context, _ *mcp.CallToolRequest, _ ophis.ToolInput, run ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		got = run
+		return nil, ophis.ToolOutput{}, nil
+	})
+	ophisRun := func(context.Context, *mcp.CallToolRequest, ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		t.Fatal("ophis's run function was called")
+		return nil, ophis.ToolOutput{}, nil
+	}
+	_, _, err := mw(t.Context(), &mcp.CallToolRequest{}, ophis.ToolInput{}, ophisRun)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+}
+
+// mcpToolProcesses makes the sind processes mcpExecute starts the test
+// binary acting as sind, with the fake docker on PATH, which hangs after
+// it recorded its PID in the file it returns.
+func mcpToolProcesses(t *testing.T) string {
+	t.Helper()
+	started := fakeDockerOnPath(t, "")
+	t.Setenv(childEnv, "main")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	return started
+}
+
+func TestMCPExecute_ExitCode(t *testing.T) {
+	mcpToolProcesses(t)
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "sind_version"}}
+	_, out, err := mcpExecute(t.Context(), req, ophis.ToolInput{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, out.ExitCode, out.StdErr)
+	assert.Contains(t, out.StdOut, "sind")
+
+	req.Params.Name = "sind_logs"
+	_, out, err = mcpExecute(t.Context(), req, ophis.ToolInput{Args: []string{"Bad_Name"}})
+	require.NoError(t, err)
+	assert.Equal(t, exitUsage, out.ExitCode)
+	assert.Contains(t, out.StdErr, "Bad_Name")
+}
+
+// TestMCPExecute_CancelKillsDocker checks that a cancelled call of a tool
+// that runs docker ends at once, and takes the docker process with it:
+// killed alone, the sind process left docker running, and docker held the
+// call's output open until it ended.
+func TestMCPExecute_CancelKillsDocker(t *testing.T) {
+	for _, tc := range []struct {
+		tool string
+		args []string
+	}{
+		{"sind_logs", []string{"controller"}},
+		{"sind_exec", []string{"--", "sleep", "60"}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			started := mcpToolProcesses(t)
+			// The cluster has a submitter and a controller, so it is the
+			// docker exec or docker logs that hangs, holding the call's
+			// output.
+			t.Setenv(fakeDockerPSEnv, `{"ID":"abc","Names":"sind-default-submitter","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=submitter"}`+"\n"+
+				`{"ID":"def","Names":"sind-default-controller","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=controller"}`+"\n")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := make(chan ophis.ToolOutput, 1)
+			go func() {
+				req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tc.tool}}
+				_, out, _ := mcpExecute(ctx, req, ophis.ToolInput{Args: tc.args})
+				done <- out
+			}()
+
+			var pid int
+			require.Eventually(t, func() bool {
+				data, _ := os.ReadFile(started)
+				pid, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+				return pid > 0
+			}, 10*time.Second, 20*time.Millisecond, "docker was never started")
+			cancel()
+
+			select {
+			case out := <-done:
+				assert.NotEqual(t, 0, out.ExitCode)
+			case <-time.After(5 * time.Second):
+				t.Fatal("the cancelled call did not end")
+			}
+			assert.Eventually(t, func() bool { return !processRunning(pid) }, 5*time.Second, 20*time.Millisecond,
+				"docker is still running")
+		})
+	}
+}
+
+// processRunning reports whether the process pid exists and is no zombie.
+func processRunning(pid int) bool {
+	stat, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return false
+	}
+	// The state follows the command name in parentheses, which may hold
+	// spaces.
+	fields := strings.Fields(string(stat[bytes.LastIndexByte(stat, ')')+1:]))
+	return len(fields) > 0 && fields[0] != "Z"
+}
