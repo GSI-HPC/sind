@@ -108,7 +108,10 @@ sets SIND_REALM in the entry's environment, so the server serves that realm.`,
 	addMCPEditorFlags(cmd, e, f)
 	cmd.Flags().StringVar(&f.serverName, "server-name", mcpServerName, "name of the MCP server entry")
 	cmd.Flags().StringVar(&f.logLevel, "log-level", "", "log level of the MCP server (debug, info, warn, error)")
-	cmd.Flags().StringToStringVarP(&f.env, "env", "e", nil, "environment variable of the MCP server, KEY=VALUE (repeatable)")
+	// The back quotes name the value KEY=VALUE rather than pflag's type, and
+	// the help shows no default, which pflag would print as [].
+	cmd.Flags().StringToStringVarP(&f.env, "env", "e", nil, "environment variable of the MCP server, `KEY=VALUE` (repeatable)")
+	cmd.Flags().Lookup("env").DefValue = ""
 	return cmd
 }
 

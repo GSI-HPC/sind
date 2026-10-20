@@ -125,3 +125,27 @@ func TestRootCommand_RealmFlagAfterSubcommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "[]\n", stdout)
 }
+
+// TestFlagHelpDefaults verifies that the help shows each flag's default
+// once, and in words where pflag would show a misleading one.
+func TestFlagHelpDefaults(t *testing.T) {
+	tests := []struct {
+		args    []string
+		want    string
+		notWant string
+	}{
+		{[]string{"create", "cluster", "--help"}, `"volume" for a Docker volume (default ".")`, "default: the working directory"},
+		{[]string{"logs", "--help"}, "show only the last N lines (default: all lines; 0 shows none)", ""},
+		{[]string{"mcp", "claude", "enable", "--help"}, "-e, --env KEY=VALUE ", "(default [])"},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			stdout, _, err := executeCommand(tt.args...)
+			require.NoError(t, err)
+			assert.Contains(t, stdout, tt.want)
+			if tt.notWant != "" {
+				assert.NotContains(t, stdout, tt.notWant)
+			}
+		})
+	}
+}

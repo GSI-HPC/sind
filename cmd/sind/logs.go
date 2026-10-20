@@ -23,7 +23,7 @@ With a SERVICE argument, shows journalctl output for that systemd unit.`,
 	}
 
 	cmd.Flags().BoolP("follow", "f", false, "follow log output")
-	cmd.Flags().IntP("tail", "n", 0, "show only the last N lines (0 shows none)")
+	cmd.Flags().IntP("tail", "n", 0, "show only the last N lines (default: all lines; 0 shows none)")
 
 	return cmd
 }

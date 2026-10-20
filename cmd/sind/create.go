@@ -70,7 +70,7 @@ func newCreateClusterCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configFile, "config", "", `path to cluster configuration file, or "-" for stdin`)
-	cmd.Flags().String("data", ".", `host directory to mount read-write as /data on every node (default: the working directory; "volume" for a Docker volume)`)
+	cmd.Flags().String("data", ".", `host directory to mount read-write as /data on every node, or "volume" for a Docker volume`)
 	cmd.Flags().Bool("pull", false, "pull images before creating containers")
 	cmd.Flags().Bool("monitoring", false, "collect the cluster's metrics and logs in the realm's monitoring stack (adds to the config's monitoring)")
 	addWaitFlag(cmd)
