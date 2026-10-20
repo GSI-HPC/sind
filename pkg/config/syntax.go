@@ -308,14 +308,32 @@ func walkStruct(t reflect.Type, n *yaml.Node, path string) error {
 	return nil
 }
 
-// walkShorthand checks a node of the form "worker: 3".
+// walkShorthand checks a node object without a role, which is the
+// shorthand "worker: 3" unless it is an object that lacks its role.
 func walkShorthand(n *yaml.Node, path string) error {
+	fields := fieldsOf(reflect.TypeFor[Node]())
 	pairs := pairsOf(n)
+	for i := 0; i < len(pairs); i += 2 {
+		if strings.EqualFold(pairs[i].Value, "role") {
+			return unknownKey(fields, pairs[i], join(path, pairs[i].Value))
+		}
+	}
 	if len(pairs) != 2 {
 		return errorAt(n, path, `a node object needs "role: NAME"; the shorthand "NAME: COUNT" takes no other keys`)
 	}
-	if v := resolve(pairs[1]); v.Kind != yaml.ScalarNode || (v.Tag != "!!int" && v.Tag != "!!null") {
-		return errorAt(v, join(path, pairs[0].Value), "expected a whole number, got %s", describe(v))
+	key, v := pairs[0], resolve(pairs[1])
+	roles := enums[reflect.TypeFor[Role]()]
+	isCount := v.Kind == yaml.ScalarNode && (v.Tag == "!!int" || v.Tag == "!!null")
+	isField := slices.ContainsFunc(fields, func(f field) bool { return f.key == key.Value })
+	isRole := slices.ContainsFunc(roles.values, func(r string) bool { return strings.EqualFold(r, key.Value) })
+	if isField || (!isCount && !isRole) {
+		return errorAt(n, path, `a node object needs "role: NAME"`)
+	}
+	if err := roles.check(key, path); err != nil {
+		return err
+	}
+	if !isCount {
+		return errorAt(v, join(path, key.Value), "expected a whole number, got %s", describe(v))
 	}
 	return nil
 }
