@@ -419,7 +419,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 	}
 	for attempt := 1; ; attempt++ {
 		if _, err := m.Docker.CreateNetwork(ctx, name, labels); err != nil {
-			if isAlreadyExists(err) {
+			if docker.IsAlreadyExists(err) {
 				return "", nil
 			}
 			return "", fmt.Errorf("creating mesh network: %w", err)
@@ -451,7 +451,7 @@ func (m *Manager) createMeshNetwork(ctx context.Context) (string, error) {
 			m.created = true
 			log.DebugContext(ctx, "mesh network created", "subnet", ipam.Subnet, "ip-range", ipam.IPRange, "dns", dnsIP)
 			return dnsIP, nil
-		case isAlreadyExists(err):
+		case docker.IsAlreadyExists(err):
 			return "", nil
 		case !isSubnetTaken(err):
 			return "", fmt.Errorf("creating mesh network: %w", err)
@@ -497,12 +497,6 @@ func pinnedLayout(subnet, gateway string) (docker.NetworkIPAM, string, bool) {
 		Gateway: gw.String(),
 		IPRange: netip.PrefixFrom(prefix.Addr(), prefix.Bits()+1).String(),
 	}, dnsIP.String(), true
-}
-
-// isAlreadyExists reports whether err is Docker's error for a network name
-// that is taken ("network with name X already exists").
-func isAlreadyExists(err error) bool {
-	return strings.Contains(err.Error(), "already exists")
 }
 
 // isSubnetTaken reports whether err is Docker's error for a configured
