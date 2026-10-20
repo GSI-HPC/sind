@@ -251,6 +251,25 @@ func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 	return true, nil
 }
 
+// IgnoreNotFound returns err, or nil when IsNotFound reports it: for a
+// remove that counts a missing resource as removed.
+func IgnoreNotFound(err error) error {
+	if IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+// IfExists returns v and err, or v's zero value and nil when IsNotFound
+// reports err: for an inspect that counts a missing resource as none.
+func IfExists[T any](v T, err error) (T, error) {
+	if IsNotFound(err) {
+		var zero T
+		return zero, nil
+	}
+	return v, err
+}
+
 // IsNotFound reports whether err is a docker CLI "resource not found" error
 // rather than a genuine failure. Callers that want the info from a single
 // inspect or rm call can use this to distinguish missing resources without

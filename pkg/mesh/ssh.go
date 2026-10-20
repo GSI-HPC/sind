@@ -62,7 +62,7 @@ func (m *Manager) ensureSSHVolume(ctx context.Context) (bool, error) {
 // it starts.
 func (m *Manager) ensureSSH(ctx context.Context, dnsIP string, writeKeys bool) (bool, error) {
 	name := m.SSHContainerName()
-	info, err := m.inspectIfExists(ctx, name)
+	info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
 	if err != nil {
 		return false, fmt.Errorf("checking SSH container: %w", err)
 	}

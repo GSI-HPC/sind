@@ -83,6 +83,21 @@ func TestIsNotFound_OtherError(t *testing.T) {
 	assert.False(t, IsNotFound(fmt.Errorf("connection refused")))
 }
 
+func TestIgnoreNotFound(t *testing.T) {
+	other := errors.New("boom")
+	assert.NoError(t, IgnoreNotFound(exitError(t, 1, "Error: No such container: x\n")))
+	assert.Equal(t, other, IgnoreNotFound(other))
+}
+
+func TestIfExists(t *testing.T) {
+	v, err := IfExists(&ContainerInfo{}, exitError(t, 1, "Error: No such container: x\n"))
+	assert.NoError(t, err)
+	assert.Nil(t, v)
+	n, err := IfExists(1, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, n)
+}
+
 func TestIsAlreadyExists(t *testing.T) {
 	err := exitError(t, 1, "Error response from daemon: network with name sind-lock already exists\n")
 	assert.True(t, IsAlreadyExists(err))

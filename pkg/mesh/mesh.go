@@ -228,7 +228,7 @@ func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err 
 	var dns, relay *docker.ContainerInfo
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, m.DNSContainerName())
+		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, m.DNSContainerName()))
 		if err != nil {
 			return fmt.Errorf("inspecting DNS container: %w", err)
 		}
@@ -236,7 +236,7 @@ func (m *Manager) StartMesh(ctx context.Context) (dnsIP string, found bool, err 
 		return nil
 	})
 	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, m.SSHContainerName())
+		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, m.SSHContainerName()))
 		if err != nil {
 			return fmt.Errorf("inspecting SSH container: %w", err)
 		}
@@ -300,19 +300,6 @@ func (m *Manager) WarnStaleDNS(ctx context.Context, dnsIP string, infos ...*dock
 	m.Warn(ctx, msg)
 }
 
-// inspectIfExists inspects a container, returning nil without error when
-// it does not exist.
-func (m *Manager) inspectIfExists(ctx context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
-	info, err := m.Docker.InspectContainer(ctx, name)
-	if err != nil {
-		if docker.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return info, nil
-}
-
 // CleanupMesh removes all global infrastructure resources. This should only
 // be called when the last cluster is deleted.
 func (m *Manager) CleanupMesh(ctx context.Context) error {
@@ -338,7 +325,7 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 		{m.DNSContainerName(), "DNS"},
 	} {
 		g.Go(func() error {
-			if err := m.removeContainerIfExists(gctx, c.name); err != nil {
+			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(gctx, c.name)); err != nil {
 				return fmt.Errorf("removing %s container: %w", c.what, err)
 			}
 			return nil
@@ -353,40 +340,14 @@ func (m *Manager) CleanupMesh(ctx context.Context) error {
 	if err := m.Docker.DisconnectAll(ctx, m.NetworkName()); err != nil {
 		return fmt.Errorf("detaching containers from mesh network: %w", err)
 	}
-	if err := m.removeNetworkIfExists(ctx, m.NetworkName()); err != nil {
+	if err := docker.IgnoreNotFound(m.Docker.RemoveNetwork(ctx, m.NetworkName())); err != nil {
 		return fmt.Errorf("removing mesh network: %w", err)
 	}
 
-	if err := m.removeVolumeIfExists(ctx, m.SSHVolumeName()); err != nil {
+	if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, m.SSHVolumeName())); err != nil {
 		return fmt.Errorf("removing SSH volume: %w", err)
 	}
 
-	return nil
-}
-
-// removeContainerIfExists removes a container, treating "not found" as
-// success so the delete path survives a TOCTOU race or a user-driven manual
-// removal.
-func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.ContainerName) error {
-	if err := m.Docker.RemoveContainer(ctx, name); err != nil && !docker.IsNotFound(err) {
-		return err
-	}
-	return nil
-}
-
-// removeNetworkIfExists removes a network, treating "not found" as success.
-func (m *Manager) removeNetworkIfExists(ctx context.Context, name docker.NetworkName) error {
-	if err := m.Docker.RemoveNetwork(ctx, name); err != nil && !docker.IsNotFound(err) {
-		return err
-	}
-	return nil
-}
-
-// removeVolumeIfExists removes a volume, treating "not found" as success.
-func (m *Manager) removeVolumeIfExists(ctx context.Context, name docker.VolumeName) error {
-	if err := m.Docker.RemoveVolume(ctx, name); err != nil && !docker.IsNotFound(err) {
-		return err
-	}
 	return nil
 }
 
@@ -559,7 +520,7 @@ func isSubnetTaken(err error) bool {
 // serving <realm>.sind records from inline hosts entries in the Corefile. A
 // new container gets the address pinnedIP, unless it is empty.
 func (m *Manager) ensureDNS(ctx context.Context, pinnedIP string) (string, bool, error) {
-	info, err := m.inspectIfExists(ctx, m.DNSContainerName())
+	info, err := docker.IfExists(m.Docker.InspectContainer(ctx, m.DNSContainerName()))
 	if err != nil {
 		return "", false, fmt.Errorf("checking DNS container: %w", err)
 	}
@@ -762,7 +723,7 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 	var dnsInfo, sshInfo *docker.ContainerInfo
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, dnsName)
+		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, dnsName))
 		if err != nil {
 			return fmt.Errorf("inspecting DNS container: %w", err)
 		}
@@ -770,7 +731,7 @@ func (m *Manager) GetInfo(ctx context.Context) (*Info, error) {
 		return nil
 	})
 	g.Go(func() error {
-		info, err := m.inspectIfExists(gctx, m.SSHContainerName())
+		info, err := docker.IfExists(m.Docker.InspectContainer(gctx, m.SSHContainerName()))
 		if err != nil {
 			return fmt.Errorf("inspecting SSH container: %w", err)
 		}

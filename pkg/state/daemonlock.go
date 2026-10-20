@@ -222,7 +222,7 @@ func lockDaemon(ctx context.Context, realm string, o *LockOptions) (func(), erro
 			return nil, fmt.Errorf("network %s exists but is not a sind realm lock: remove or rename it", name)
 		case me.sees(h) && !o.alive(h.PID):
 			o.warn(ctx, fmt.Sprintf("removing the realm lock of %s, which no longer runs", h))
-			if err := client.RemoveNetworkByID(ctx, h.id); err != nil && !docker.IsNotFound(err) {
+			if err := docker.IgnoreNotFound(client.RemoveNetworkByID(ctx, h.id)); err != nil {
 				return nil, fmt.Errorf("removing %s: %w", name, err)
 			}
 			continue

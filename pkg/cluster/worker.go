@@ -850,7 +850,7 @@ func cleanupWorkers(ctx context.Context, client *docker.Client, meshMgr *mesh.Ma
 	for _, nc := range nodeConfigs {
 		containerName := ContainerName(realm, clusterName, nc.ShortName)
 		logContainerDiagnostics(ctx, client, containerName)
-		if err := client.RemoveContainer(ctx, containerName); err != nil && !docker.IsNotFound(err) {
+		if err := docker.IgnoreNotFound(client.RemoveContainer(ctx, containerName)); err != nil {
 			log.DebugContext(ctx, "cleanup: removing container", "node", nc.ShortName, "error", err)
 			errs = append(errs, fmt.Errorf("removing container %s: %w", containerName, err))
 		}

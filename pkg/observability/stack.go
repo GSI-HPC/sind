@@ -181,14 +181,14 @@ func (m *Manager) EnsureStack(ctx context.Context, dnsIP, alloyConfig string) (c
 	}
 	for _, s := range startOrder {
 		name := ContainerName(m.Realm, s)
-		info, err := m.inspectIfExists(ctx, name)
+		info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
 		if err != nil {
 			return changed, fmt.Errorf("checking %s container: %w", s, err)
 		}
 		if info != nil && info.Labels[LabelVersion] != fp {
 			log.InfoContext(ctx, "recreating monitoring container", "container", string(name),
 				"fingerprint", info.Labels[LabelVersion], "want", fp)
-			if err := m.removeContainerIfExists(ctx, name); err != nil {
+			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(ctx, name)); err != nil {
 				return changed, fmt.Errorf("removing %s container: %w", s, err)
 			}
 			info = nil
@@ -218,7 +218,7 @@ func (m *Manager) Start(ctx context.Context) (found bool, err error) {
 	var missing []string
 	for _, s := range startOrder {
 		name := ContainerName(m.Realm, s)
-		info, err := m.inspectIfExists(ctx, name)
+		info, err := docker.IfExists(m.Docker.InspectContainer(ctx, name))
 		if err != nil {
 			return found, fmt.Errorf("checking %s container: %w", s, err)
 		}
@@ -393,7 +393,7 @@ func (m *Manager) Remove(ctx context.Context) error {
 			continue
 		}
 		g.Go(func() error {
-			if err := m.removeContainerIfExists(gctx, name); err != nil {
+			if err := docker.IgnoreNotFound(m.Docker.RemoveContainer(gctx, name)); err != nil {
 				return fmt.Errorf("removing %s container: %w", s, err)
 			}
 			return nil
@@ -429,7 +429,7 @@ func (m *Manager) RemoveVolumes(ctx context.Context) error {
 		if !slices.ContainsFunc(existing, func(e docker.VolumeListEntry) bool { return e.Name == v }) {
 			continue
 		}
-		if err := m.Docker.RemoveVolume(ctx, v); err != nil && !docker.IsNotFound(err) {
+		if err := docker.IgnoreNotFound(m.Docker.RemoveVolume(ctx, v)); err != nil {
 			return fmt.Errorf("removing volume %s: %w", v, err)
 		}
 	}
@@ -505,23 +505,4 @@ func (m *Manager) Status(ctx context.Context) ([]ServiceStatus, bool, error) {
 	}
 	_ = g.Wait() // the checks report through Ready
 	return statuses, true, nil
-}
-
-// inspectIfExists inspects a container, nil without an error when it does
-// not exist.
-func (m *Manager) inspectIfExists(ctx context.Context, name docker.ContainerName) (*docker.ContainerInfo, error) {
-	info, err := m.Docker.InspectContainer(ctx, name)
-	if docker.IsNotFound(err) {
-		return nil, nil
-	}
-	return info, err
-}
-
-// removeContainerIfExists removes a container, a missing one counting as
-// removed.
-func (m *Manager) removeContainerIfExists(ctx context.Context, name docker.ContainerName) error {
-	if err := m.Docker.RemoveContainer(ctx, name); err != nil && !docker.IsNotFound(err) {
-		return err
-	}
-	return nil
 }

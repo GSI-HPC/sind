@@ -151,7 +151,7 @@ func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 			if _, ok := info.IPs[net]; !ok {
 				continue
 			}
-			if err := client.DisconnectNetwork(ctx, net, info.Name); err != nil && !docker.IsNotFound(err) {
+			if err := docker.IgnoreNotFound(client.DisconnectNetwork(ctx, net, info.Name)); err != nil {
 				return fmt.Errorf("disconnecting %s from %s: %w", info.Name, net, err)
 			}
 		}

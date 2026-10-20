@@ -198,7 +198,7 @@ func (c *Client) DisconnectAll(ctx context.Context, name NetworkName) error {
 		return err
 	}
 	for _, ctr := range containers {
-		if err := c.DisconnectNetwork(ctx, name, ctr); err != nil && !IsNotFound(err) {
+		if err := IgnoreNotFound(c.DisconnectNetwork(ctx, name, ctr)); err != nil {
 			return fmt.Errorf("disconnecting %s: %w", ctr, err)
 		}
 	}
