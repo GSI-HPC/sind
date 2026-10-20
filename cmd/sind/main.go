@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/GSI-HPC/go-clikit/termtext"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -53,6 +54,9 @@ func interruptContext() (context.Context, context.CancelFunc) {
 // that exited non-zero gives its own status and adds no error line: it has
 // written its own diagnostics.
 //
+// Docker that cannot be reached (docker.UnreachableError) is reported by
+// its own message alone, the same for every command.
+//
 // The error is written to stderr escaped: it can quote what docker or a
 // container wrote, and the logger quotes attribute values but not the
 // message, so a control sequence in it would otherwise reach the terminal.
@@ -80,7 +84,11 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		}
 		return child.code
 	}
-	msg := termtext.EscapeLines(err.Error())
+	shown := err
+	if unreachable, ok := errors.AsType[*docker.UnreachableError](err); ok {
+		shown = unreachable
+	}
+	msg := termtext.EscapeLines(shown.Error())
 	log := sindlog.From(cmd.Context())
 	if ctx.Err() != nil {
 		log.ErrorContext(cmd.Context(), "interrupted: "+msg)

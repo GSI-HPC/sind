@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
@@ -140,6 +141,7 @@ func (c *Client) call(ctx context.Context, args []string, exec func(context.Cont
 		runCtx = cmdexec.WithStdoutAsData(ctx)
 	}
 	stdout, stderr, err := exec(runCtx)
+	err = classifyUnreachable(err)
 	var end []progress.Option
 	if exitErr, ok := errors.AsType[*cmdexec.ExitError](err); ok {
 		end = append(end, progress.Exit(exitErr.ExitCode()))
@@ -285,6 +287,66 @@ func IfExists[T any](v T, err error) (T, error) {
 func IsNotFound(err error) bool {
 	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
 	return ok && exitErr.ExitCode() == 1 && notFound.MatchString(strings.ToLower(exitErr.Stderr))
+}
+
+// ErrUnreachable is matched (errors.Is) by the error of a docker command
+// that could not reach the Docker daemon: the docker CLI is not installed,
+// or the daemon is not running or refuses the user. Every Client call
+// returns such a failure as an *UnreachableError.
+var ErrUnreachable = errors.New("docker is not reachable")
+
+// DoctorHint ends an error whose fix `sind doctor` prints.
+const DoctorHint = "; run `sind doctor` for the fix"
+
+// UnreachableError is the error of a docker command that could not reach
+// the Docker daemon. Its message is the same whatever the command, says
+// why in docker's own words, and points to `sind doctor`, which names the
+// fix; it leaves out the exit status. It matches ErrUnreachable and
+// unwraps to the command's error, an *exec.Error for a missing CLI or an
+// *cmdexec.ExitError.
+type UnreachableError struct {
+	Err    error
+	Reason string // why, such as "docker CLI not found in PATH"
+}
+
+// Error returns the reason with the pointer to `sind doctor`.
+func (e *UnreachableError) Error() string {
+	return "Docker is not reachable: " + e.Reason + DoctorHint
+}
+
+// Is reports whether target is ErrUnreachable.
+func (e *UnreachableError) Is(target error) bool { return target == ErrUnreachable }
+
+// Unwrap returns the command's error.
+func (e *UnreachableError) Unwrap() error { return e.Err }
+
+// unreachable matches, lowercased, the lines of docker CLI errors that say
+// it could not reach the daemon: one that does not run or listen where the
+// CLI looks ("Cannot connect to the Docker daemon at …", or "failed to
+// connect to the docker API at …" from Docker 28.2), one that refuses the
+// user ("permission denied while trying to connect to the Docker daemon
+// socket", or "… the docker API"), and an endpoint the CLI cannot dial
+// ("error during connect: …").
+var unreachable = regexp.MustCompile(`^(docker: )?(cannot connect to the docker daemon|failed to connect to the docker api|permission denied while trying to connect to the docker|error during connect)`)
+
+// classifyUnreachable returns err as an *UnreachableError when it says the
+// docker CLI is missing or could not reach the daemon, and unchanged
+// otherwise.
+func classifyUnreachable(err error) error {
+	if errors.Is(err, exec.ErrNotFound) {
+		return &UnreachableError{Err: err, Reason: "docker CLI not found in PATH"}
+	}
+	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
+	if !ok {
+		return err
+	}
+	for line := range strings.SplitSeq(exitErr.Stderr, "\n") {
+		line = strings.TrimSpace(line)
+		if unreachable.MatchString(strings.ToLower(line)) {
+			return &UnreachableError{Err: err, Reason: strings.TrimPrefix(line, "docker: ")}
+		}
+	}
+	return err
 }
 
 // IsAlreadyExists reports whether err is docker's error for a network name

@@ -260,6 +260,30 @@ func TestRun_EscapesTheError(t *testing.T) {
 	assert.Contains(t, stderr.String(), `Error response from daemon: \x1b]52;c;ZXZpbA==\x07\r\x1b[1Aforged`)
 }
 
+// TestRun_DockerUnreachable checks that every command reports a daemon it
+// cannot reach with the same message, which points to sind doctor and
+// leaves out the steps and the exit status.
+func TestRun_DockerUnreachable(t *testing.T) {
+	const want = "Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix"
+	for _, args := range [][]string{
+		{"get", "clusters"},
+		{"get", "node", "worker-0.dev"},
+		{"delete", "cluster", "dev"},
+		{"create", "cluster"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			ctx := failingDocker(t.Context(), t, "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n")
+			var stderr bytes.Buffer
+
+			code := run(ctx, args, &stderr)
+
+			assert.Equal(t, exitFailure, code)
+			assert.Contains(t, stderr.String(), want)
+			assert.NotContains(t, stderr.String(), "exit status")
+		})
+	}
+}
+
 func TestRun_Interrupted(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

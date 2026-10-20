@@ -330,10 +330,20 @@ func TestCheckDaemon(t *testing.T) {
 
 func TestCheckDaemon_InfoError(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", "Cannot connect to the Docker daemon\n", testutil.ExitCode1(t))
+	m.AddResult("", "unexpected EOF\n", testutil.ExitCode1(t))
 	err := CheckDaemon(t.Context(), docker.NewClient(&m))
-	require.ErrorContains(t, err, "querying the Docker daemon: exit status 1: Cannot connect to the Docker daemon")
-	require.ErrorContains(t, err, "run `sind doctor` for the fix")
+	require.EqualError(t, err, "querying the Docker daemon: exit status 1: unexpected EOF; run `sind doctor` for the fix")
+}
+
+// TestCheckDaemon_Unreachable checks that a daemon that cannot be reached
+// fails with docker.ErrUnreachable's message alone, which points to sind
+// doctor once.
+func TestCheckDaemon_Unreachable(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n", testutil.ExitCode1(t))
+	err := CheckDaemon(t.Context(), docker.NewClient(&m))
+	require.ErrorIs(t, err, docker.ErrUnreachable)
+	require.EqualError(t, err, "Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix")
 }
 
 // --- CheckNsdelegate ---

@@ -484,7 +484,7 @@ func TestLockRealm_DaemonCreateFails(t *testing.T) {
 
 	_, err := LockRealm(t.Context(), "sind", opts)
 
-	require.ErrorContains(t, err, "taking the realm lock on the Docker daemon: creating sind-lock: exit status 1: failed to connect")
+	require.ErrorContains(t, err, "taking the realm lock on the Docker daemon: creating sind-lock: Docker is not reachable: failed to connect")
 	unlock, err := LockRealm(t.Context(), "sind", &LockOptions{Dir: opts.Dir})
 	require.NoError(t, err, "the file lock was released")
 	unlock()

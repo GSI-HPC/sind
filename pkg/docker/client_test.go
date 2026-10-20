@@ -299,3 +299,65 @@ func TestCommands(t *testing.T) {
 		})
 	}
 }
+
+// TestClient_Unreachable checks that a call whose docker CLI is missing or
+// cannot reach the daemon fails with an *UnreachableError, whose message
+// leaves out the exit status and the command, and which still unwraps to
+// the command's error.
+func TestClient_Unreachable(t *testing.T) {
+	for _, tt := range []struct {
+		name, stderr, want string
+	}{
+		{"daemon down", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
+			"Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix"},
+		{"docker run prefix", "docker: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n\nRun 'docker run --help' for more information\n",
+			"Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix"},
+		{"docker API", "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory\n",
+			"Docker is not reachable: failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory; run `sind doctor` for the fix"},
+		{"permission", "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: dial unix /var/run/docker.sock: connect: permission denied\n",
+			"Docker is not reachable: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: dial unix /var/run/docker.sock: connect: permission denied; run `sind doctor` for the fix"},
+		{"error during connect", "error during connect: Get \"http://h:2375/v1.47/info\": dial tcp: lookup h: no such host\n",
+			"Docker is not reachable: error during connect: Get \"http://h:2375/v1.47/info\": dial tcp: lookup h: no such host; run `sind doctor` for the fix"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult("", tt.stderr, exitError(t, 1, tt.stderr))
+			_, err := NewClient(&m).ListContainers(t.Context())
+			require.ErrorIs(t, err, ErrUnreachable)
+			assert.EqualError(t, err, tt.want)
+			_, ok := errors.AsType[*cmdexec.ExitError](err)
+			assert.True(t, ok)
+			assert.False(t, IsNotFound(err))
+		})
+	}
+}
+
+func TestClient_DockerMissing(t *testing.T) {
+	var m mock.Executor
+	missing := &exec.Error{Name: "docker", Err: exec.ErrNotFound}
+	m.AddResult("", "", missing)
+	err := NewClient(&m).do(t.Context(), "info")
+	require.ErrorIs(t, err, ErrUnreachable)
+	require.ErrorIs(t, err, exec.ErrNotFound)
+	assert.EqualError(t, err, "Docker is not reachable: docker CLI not found in PATH; run `sind doctor` for the fix")
+}
+
+// TestClient_OtherErrorsReachable checks that failures that do not say the
+// daemon is unreachable keep their error, even when a container's output
+// mentions the daemon.
+func TestClient_OtherErrorsReachable(t *testing.T) {
+	for _, stderr := range []string{
+		"Error response from daemon: No such container: sind-dev-controller\n",
+		"some tool: Cannot connect to the Docker daemon\n",
+		"",
+	} {
+		var m mock.Executor
+		m.AddResult("", stderr, exitError(t, 1, stderr))
+		err := NewClient(&m).do(t.Context(), "inspect", "x")
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrUnreachable)
+	}
+	var m mock.Executor
+	m.AddResult("", "", context.Canceled)
+	assert.NotErrorIs(t, NewClient(&m).do(t.Context(), "info"), ErrUnreachable)
+}

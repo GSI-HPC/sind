@@ -42,7 +42,14 @@ Add your user to the docker group, then log in again (or run newgrp docker):
 sudo usermod -aG docker $USER
 ```
 
-A missing `docker` CLI and a daemon that is not running get their own hint. A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The Docker host, inotify and DNS policy checks are advisory: a warning does not affect the exit status. The inotify check prints the `sysctl` commands that raise the limit; it is left out when the limit cannot be read or the daemon does not run on this machine. The DNS policy check only appears when systemd-resolved is running; when the daemon does not run on this machine it reports host resolution as not available, since the mesh bridge that the host resolver would use is on the daemon's host. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
+A missing `docker` CLI and a daemon that is not running get their own hint. Every other command fails on such a host with one line that points here:
+
+```console
+$ sind get cluster
+12:00:00.000 ERRO Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `sind doctor` for the fix
+```
+
+A host in systemd's hybrid mode, which mounts cgroup2 only at `/sys/fs/cgroup/unified` and runs containers on cgroup v1, fails the cgroupv2 check with the kernel option that switches to the unified hierarchy. A daemon in rootless mode or with `userns-remap` fails the Docker daemon check, with the way back to a rootful daemon; `sind create cluster` refuses such a daemon too, before it pulls an image. The Docker host, inotify and DNS policy checks are advisory: a warning does not affect the exit status. The inotify check prints the `sysctl` commands that raise the limit; it is left out when the limit cannot be read or the daemon does not run on this machine. The DNS policy check only appears when systemd-resolved is running; when the daemon does not run on this machine it reports host resolution as not available, since the mesh bridge that the host resolver would use is on the daemon's host. When the DNS check fails, `sind doctor` prints two polkit rule profiles (desktop and server) with copyable install commands — see [Polkit policy](../../architecture/networking/#polkit-policy) for details.
 
 Example output when `nsdelegate` is missing:
 

@@ -338,7 +338,7 @@ func TestProgressLeavesStderrAloneWithoutADisplay(t *testing.T) {
 	wantCode, want := stderrOf(t, "--progress=none")
 	require.Equal(t, exitFailure, wantCode)
 	require.Contains(t, want, "TRAC")
-	require.Contains(t, want, "ERRO listing containers")
+	require.Contains(t, want, "ERRO Docker is not reachable")
 
 	t.Run("auto", func(t *testing.T) {
 		code, got := stderrOf(t)
@@ -413,7 +413,8 @@ func TestTheTreeIsDrawnOnATerminal(t *testing.T) {
 	assert.Equal(t, exitFailure, code)
 	assert.Equal(t, []string{"power cut · 0:01.0\n  docker ps  1.0s\n"}, frames)
 	assert.Equal(t, `sind: power cut: failed in 1.0s
-HH:MM:SS.mmm ERRO listing containers: exit status 1: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
+HH:MM:SS.mmm ERRO Docker is not reachable: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?; run `+"`sind doctor` "+`
+for the fix
 `, withoutTimestamps(screen.String()))
 }
 
