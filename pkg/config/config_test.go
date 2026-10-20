@@ -806,7 +806,7 @@ func TestParse_Errors(t *testing.T) {
 		{
 			name:    "invalid YAML",
 			input:   "{{invalid",
-			wantErr: "parsing config",
+			wantErr: "line 1: did not find expected ',' or '}'",
 		},
 		{
 			name:    "explicit tag that does not fit",
@@ -836,7 +836,7 @@ nodes:
 nodes:
   - role: controller
     cpus: not-a-number`,
-			wantErr: "parsing config",
+			wantErr: "line 4: nodes[0].cpus: expected a whole number, got a string",
 		},
 		{
 			name: "shorthand node with multiple keys",

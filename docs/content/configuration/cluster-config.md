@@ -355,3 +355,12 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; `limits` keys must be among the options in the [Accounts section](#accounts-section), with non-empty values; every account a user names must be declared, at most once in each of `accounts` and `coordinator`; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - Unknown keys are rejected
 - The file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`, unquoted; anchors, aliases and merge keys (`<<: *worker`) are followed, so an object, a node's `role` included, can take its keys from another
+
+`sind create cluster` reports the first rule a config breaks and names the config, as `config <stdin>` when it reads it from stdin. A mistake in the config's form, such as YAML syntax, an unknown or repeated key, a value of the wrong type, or a role that is not one, also gets its line and key path:
+
+```console
+$ sind create cluster --config dev.yaml
+12:00:00.000 ERRO config dev.yaml: line 7: nodes[1].Cpus: unknown key (valid: role, count, image, cpus, memory, tmpSize, managed, backupController, capAdd, capDrop, devices, securityOpt); did you mean "cpus"? keys are case-sensitive
+```
+
+A config without content, or with only comments, is `config dev.yaml: empty configuration`.

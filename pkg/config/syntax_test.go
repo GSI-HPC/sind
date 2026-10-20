@@ -98,12 +98,19 @@ func TestParse_SyntaxErrorOnFirstLine(t *testing.T) {
 	_, err = Parse([]byte("!x!y z\n"))
 	require.ErrorContains(t, err, "line 1: found undefined tag handle")
 	_, err = Parse([]byte("kind: [Cluster\n"))
-	require.ErrorContains(t, err, "line 1: did not find expected ',' or ']'")
+	require.EqualError(t, err, "line 1: did not find expected ',' or ']'")
 	_, err = Parse([]byte("a: b: c\n"))
-	require.ErrorContains(t, err, "line 1: mapping values are not allowed in this context")
+	require.EqualError(t, err, "line 1: mapping values are not allowed in this context")
 	_, err = Parse([]byte("kind: Cluster\nname: \x01\n"))
-	require.ErrorContains(t, err, "control characters are not allowed")
-	assert.NotContains(t, err.Error(), "line")
+	require.EqualError(t, err, "control characters are not allowed")
+}
+
+func TestParse_ErrorsNameNoSource(t *testing.T) {
+	// The caller names the source.
+	_, err := Parse([]byte("# nothing\n"))
+	require.EqualError(t, err, "empty configuration")
+	_, err = Parse([]byte("kind: Cluster\nname: !!int x\n"))
+	require.EqualError(t, err, "cannot decode !!str `x` as a !!int")
 }
 
 func TestTabLine(t *testing.T) {

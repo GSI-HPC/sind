@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -94,7 +95,7 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 	if configFile == configStdin {
 		resume = progress.Suspend(cmd.Context())
 	}
-	cfg, err := loadConfig(cmd.InOrStdin(), cmd.ErrOrStderr(), configFile)
+	cfg, source, err := loadConfig(cmd.InOrStdin(), cmd.ErrOrStderr(), configFile)
 	resume()
 	if err != nil {
 		return err
@@ -124,6 +125,9 @@ func runCreateCluster(cmd *cobra.Command, name, configFile string) error {
 
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
+		if source != "" {
+			return fmt.Errorf("config %s: %w", source, err)
+		}
 		return err
 	}
 	for _, w := range cfg.Warnings() {
@@ -242,10 +246,15 @@ const configStdin = "-"
 const stdinDeprecation = "Warning: reading the cluster configuration from stdin without --config - is deprecated; " +
 	"pass --config - to read it, or redirect stdin from /dev/null for the default cluster"
 
+// stdinSource names stdin as the source of the configuration.
+const stdinSource = "<stdin>"
+
 // loadConfig reads the cluster configuration from path, from stdin when
-// path is "-", or else returns the default configuration. stdin is the
-// command's input (cmd.InOrStdin()), so that tests can set it with
-// cmd.SetIn instead of replacing the process-wide os.Stdin.
+// path is "-", or else returns the default configuration, and names where
+// it came from: path, stdinSource, or "" for the default. An error names
+// that source too. stdin is the command's input (cmd.InOrStdin()), so that
+// tests can set it with cmd.SetIn instead of replacing the process-wide
+// os.Stdin.
 //
 // Without a path, a stdin that is not a terminal is still read, for one
 // release: sind writes a deprecation warning to stderr first, since it
@@ -253,38 +262,45 @@ const stdinDeprecation = "Warning: reading the cluster configuration from stdin 
 // configuration. An inherited pipe, as with ssh HOST sind create cluster,
 // or a read loop's input, would otherwise hang sind or be taken for the
 // configuration. With --config -, empty input is an error.
-func loadConfig(stdin io.Reader, stderr io.Writer, path string) (*config.Cluster, error) {
+func loadConfig(stdin io.Reader, stderr io.Writer, path string) (*config.Cluster, string, error) {
 	switch path {
 	case "":
 	case configStdin:
 		data, err := io.ReadAll(stdin)
-		if err != nil {
-			return nil, fmt.Errorf("reading config from stdin: %w", err)
-		}
-		if len(bytes.TrimSpace(data)) == 0 {
-			return nil, errors.New("reading config from stdin: empty configuration")
-		}
-		return config.Parse(data)
+		return parseConfig(stdinSource, data, err)
 	default:
 		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("reading config: %w", err)
-		}
-		return config.Parse(data)
+		return parseConfig(path, data, err)
 	}
 
 	if stdinHasData(stdin) {
 		_, _ = fmt.Fprintln(stderr, stdinDeprecation)
 		data, err := io.ReadAll(stdin)
-		if err != nil {
-			return nil, fmt.Errorf("reading config from stdin: %w", err)
-		}
-		if len(bytes.TrimSpace(data)) > 0 {
-			return config.Parse(data)
+		if err != nil || len(bytes.TrimSpace(data)) > 0 {
+			return parseConfig(stdinSource, data, err)
 		}
 	}
 
-	return config.Parse([]byte("kind: Cluster\n"))
+	cfg, err := config.Parse([]byte("kind: Cluster\n"))
+	return cfg, "", err
+}
+
+// parseConfig parses the configuration data read from source, or returns
+// readErr, the error reading it, naming source in the error.
+func parseConfig(source string, data []byte, readErr error) (*config.Cluster, string, error) {
+	err := readErr
+	if err == nil {
+		var cfg *config.Cluster
+		if cfg, err = config.Parse(data); err == nil {
+			return cfg, source, nil
+		}
+	}
+	// The source names the file already.
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		err = pathErr.Err
+	}
+	return nil, source, fmt.Errorf("config %s: %w", source, err)
 }
 
 // stdinHasData reports whether stdin is a pipe or file (not a terminal). A

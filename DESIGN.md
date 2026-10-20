@@ -1118,6 +1118,8 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - unknown keys are rejected
 - the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`, unquoted; anchors, aliases and merge keys (`<<: *worker`) are followed, so an object, a node's `role` included, can take its keys from another
 
+An error names the config it is about, `config FILE:` or, read from stdin, `config <stdin>:`, and a mistake in its form (YAML syntax, an unknown or repeated key, a value of the wrong type, or a role, identity mode, admin level or storage type that is not one) also the line and key path: `config dev.yaml: line 7: nodes[1].Cpus: unknown key (valid: role, count, …); did you mean "cpus"? keys are case-sensitive`. A config without content, only comments or `null` is `config FILE: empty configuration`.
+
 Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as
 trusted as a script run with Docker access: `image` runs any image's services as root,
 `storage.dataStorage.hostPath` bind-mounts any host directory read-write (`/` included),
