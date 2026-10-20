@@ -6,8 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -168,12 +166,9 @@ func realmClusterNames(ctx context.Context, client *docker.Client, realm string)
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
 	for _, c := range containers {
-		if name := c.Labels[LabelCluster]; name != "" && !slices.Contains(names, name) {
-			names = append(names, name)
-		}
+		names = append(names, c.Labels[LabelCluster])
 	}
-	sort.Strings(names)
-	return names, nil
+	return sortedClusterNames(names), nil
 }
 
 // deleteClusterResources removes containers, network, and volumes for a
