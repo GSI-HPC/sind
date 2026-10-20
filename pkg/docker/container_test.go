@@ -115,8 +115,7 @@ func TestContainerExecAndFiles(t *testing.T) {
 		rec.AddResult("abc123\n", "", nil)                 // run
 		rec.AddResult("hello\n", "", nil)                  // exec echo
 		rec.AddResult("", "", nil)                         // write
-		rec.AddResult("", "", nil)                         // append
-		rec.AddResult("line1\nline2\n", "", nil)           // read
+		rec.AddResult("line1\n", "", nil)                  // read
 		rec.AddResult("", "", nil)                         // replace
 		rec.AddResult("", "", errors.New("exit status 1")) // short replace
 		rec.AddResult("new\n", "", nil)                    // read
@@ -140,16 +139,13 @@ func TestContainerExecAndFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", stdout)
 
-	// Write + Append + Read.
+	// Write + Read.
 	err = c.WriteFile(ctx, name, "/tmp/test.txt", "line1\n")
-	require.NoError(t, err)
-
-	err = c.AppendFile(ctx, name, "/tmp/test.txt", "line2\n")
 	require.NoError(t, err)
 
 	content, err := c.ReadFile(ctx, name, "/tmp/test.txt")
 	require.NoError(t, err)
-	assert.Equal(t, "line1\nline2\n", content)
+	assert.Equal(t, "line1\n", content)
 
 	// Replace, and a replace whose input ends early, as when the docker
 	// CLI dies mid-write: the file and its directory stay as they were.
@@ -952,28 +948,6 @@ func TestReplaceFile_Error(t *testing.T) {
 	c := NewClient(&m)
 
 	err := c.ReplaceFile(t.Context(), testContainerName, "/tmp/out", "data")
-	assert.Error(t, err)
-}
-
-func TestAppendFile(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
-	c := NewClient(&m)
-
-	err := c.AppendFile(t.Context(), testContainerName, "/tmp/log", "new line\n")
-	require.NoError(t, err)
-
-	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"exec", "-i", string(testContainerName), "sh", "-c", "cat >> /tmp/log"}, m.Calls[0].Args)
-	assert.Equal(t, "new line\n", m.Calls[0].Stdin)
-}
-
-func TestAppendFile_Error(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "Error\n", fmt.Errorf("exit status 1"))
-	c := NewClient(&m)
-
-	err := c.AppendFile(t.Context(), testContainerName, "/tmp/log", "data")
 	assert.Error(t, err)
 }
 

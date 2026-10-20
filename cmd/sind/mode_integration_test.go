@@ -100,11 +100,11 @@ func checkPrerequisites(t *testing.T, c *docker.Client) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	version, err := c.ServerVersion(ctx)
+	info, err := c.Info(ctx)
 	if err != nil {
 		t.Skipf("cannot query Docker version: %v", err)
 	}
-	if vErr := doctor.CheckDockerVersion(version); vErr != nil {
+	if vErr := doctor.CheckDockerVersion(info.ServerVersion); vErr != nil {
 		t.Skipf("%v", vErr)
 	}
 	_, _, hasNsd := doctor.CgroupInfo(afero.NewOsFs())

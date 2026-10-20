@@ -423,12 +423,6 @@ func (c *Client) ReplaceFile(ctx context.Context, container ContainerName, path,
 // removes it and fails.
 const replaceFileScript = `tmp="$1.tmp.$$"; cat > "$tmp" && [ $(wc -c < "$tmp") -eq "$2" ] && mv -f "$tmp" "$1" || { rm -f "$tmp"; exit 1; }`
 
-// AppendFile appends content to a file in a running container via docker exec.
-func (c *Client) AppendFile(ctx context.Context, container ContainerName, path, content string) error {
-	return c.ExecWithStdin(ctx, container, strings.NewReader(content),
-		"sh", "-c", "cat >> "+path)
-}
-
 // FileContents maps file paths to their raw content for copying into containers.
 type FileContents map[string][]byte
 

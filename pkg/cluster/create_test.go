@@ -1617,7 +1617,7 @@ func TestRegisterMesh_KnownHostError(t *testing.T) {
 		if args[0] == "kill" || args[0] == "start" {
 			return mock.Result{}
 		}
-		// AppendFile → ExecWithStdin (exec -i)
+		// WriteFile of known_hosts → ExecWithStdin (exec -i)
 		if args[0] == "exec" && args[1] == "-i" {
 			callIdx++
 			if callIdx == 1 {

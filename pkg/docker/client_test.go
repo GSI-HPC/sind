@@ -230,9 +230,9 @@ func TestClient_EndedContextTakesFreeSlot(t *testing.T) {
 	m.AddResult("27.0.0\n", "", nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	v, err := NewClient(&m).ServerVersion(ctx)
+	v, _, err := NewClient(&m).run(ctx, "version")
 	require.NoError(t, err)
-	assert.Equal(t, "27.0.0", v)
+	assert.Equal(t, "27.0.0\n", v)
 }
 
 func TestClient_WithoutNewClientIsUnbounded(t *testing.T) {
