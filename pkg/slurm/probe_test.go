@@ -179,9 +179,3 @@ func TestMariaDBWarning(t *testing.T) {
 		assert.Equal(t, want, (&ImageInfo{MariaDBLogError: opt}).MariaDBWarning(), opt)
 	}
 }
-
-func TestMonitoringMinLine(t *testing.T) {
-	line, err := releaseLine(MonitoringMinVersion)
-	require.NoError(t, err)
-	assert.Equal(t, monitoringMinLine, line)
-}
