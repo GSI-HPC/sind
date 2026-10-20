@@ -212,21 +212,6 @@ func TestDeleteVolumes_AlreadyGone(t *testing.T) {
 // volume is still mounted by a container.
 const volumeInUse = "Error response from daemon: remove sind-dev-munge: volume is in use - [0123456789ab]\n"
 
-// TestDeleteVolumes_InUseRetried checks that a volume still held by a
-// container that is going away is retried until the removal succeeds.
-func TestDeleteVolumes_InUseRetried(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var m mock.Executor
-		m.AddResult("", volumeInUse, testutil.ExitCode1(t)) // munge still in use
-		m.AddResult("", "", nil)                            // munge removed on retry
-		c := docker.NewClient(&m)
-
-		err := DeleteVolumes(t.Context(), c, []docker.VolumeName{"sind-dev-munge"})
-		require.NoError(t, err)
-		assert.Len(t, m.Calls, 2)
-	})
-}
-
 // TestDeleteVolumes_StillInUse checks that a volume that stays in use is
 // reported, not mistaken for one that is already gone and leaked. docker
 // exits 1 for both, so only its stderr tells them apart.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"testing"
+	"testing/synctest"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -128,6 +129,35 @@ func TestIsVolumeInUse(t *testing.T) {
 			assert.Equal(t, tc.want, isVolumeInUse(tc.err))
 		})
 	}
+}
+
+// volumeInUse is what docker writes to stderr, with exit code 1, when a
+// volume is still mounted by a container.
+const volumeInUse = "Error response from daemon: remove sind-dev-config: volume is in use - [abc123]\n"
+
+// TestRemoveVolume_InUseRetried checks that a volume still held by a
+// container that is going away is removed on a later attempt.
+func TestRemoveVolume_InUseRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var m mock.Executor
+		m.AddResult("", volumeInUse, &exec.ExitError{ProcessState: exitCode1(t)})
+		m.AddResult("", "", nil)
+
+		require.NoError(t, NewClient(&m).RemoveVolume(t.Context(), testVolumeName))
+		assert.Len(t, m.Calls, 2)
+	})
+}
+
+// TestRemoveVolume_CanceledWhileInUse checks that the retry stops when
+// the context ends.
+func TestRemoveVolume_CanceledWhileInUse(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", volumeInUse, &exec.ExitError{ProcessState: exitCode1(t)})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	require.ErrorIs(t, NewClient(&m).RemoveVolume(ctx, testVolumeName), context.Canceled)
+	assert.Len(t, m.Calls, 1)
 }
 
 func TestVolumeExists_True(t *testing.T) {
