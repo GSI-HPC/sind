@@ -624,17 +624,18 @@ func failedUnit(ctx context.Context, client *docker.Client, name docker.Containe
 func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerName, services []Service) (map[Service]bool, error) {
 	var units []Service
 	var slurmctld bool
+	args := []string{"systemctl", "is-active"}
 	for _, svc := range services {
 		if svc == ServiceSlurmctld {
 			slurmctld = true
 			continue
 		}
 		units = append(units, svc)
+		args = append(args, string(svc))
 	}
 
 	result := make(map[Service]bool, len(services))
 	if len(units) > 0 {
-		args := append([]string{"systemctl", "is-active"}, serviceStrings(units)...)
 		stdout, err := client.ExecAllowNonZero(ctx, name, args...)
 		if err != nil {
 			return nil, fmt.Errorf("systemctl is-active: %w", err)
@@ -655,14 +656,4 @@ func Snapshot(ctx context.Context, client *docker.Client, name docker.ContainerN
 	}
 
 	return result, nil
-}
-
-// serviceStrings converts a slice of Service values to plain strings for
-// passing to exec argv.
-func serviceStrings(svcs []Service) []string {
-	out := make([]string, len(svcs))
-	for i, s := range svcs {
-		out[i] = string(s)
-	}
-	return out
 }
