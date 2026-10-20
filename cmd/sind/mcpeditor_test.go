@@ -116,6 +116,10 @@ func TestMCPEnable_Environment(t *testing.T) {
 }
 
 func TestMCPEnable_UsageErrors(t *testing.T) {
+	// An empty --config-path must not fall through to the default files.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	path := filepath.Join(t.TempDir(), "mcp.json")
 	tests := []struct {
 		args    []string
@@ -129,6 +133,18 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 			[]string{"mcp", "cursor", "enable", "--config-path", path, "--workspace"},
 			"--config-path and --workspace are mutually exclusive",
 		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_REALM=Bad_Realm"},
+			`--env SIND_REALM: invalid realm name "Bad_Realm"`,
+		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--log-level", "bogus"},
+			`invalid --log-level value "bogus": want debug, info, warn or error`,
+		},
+		{[]string{"mcp", "cursor", "enable", "--config-path", path, "--server-name", ""}, "--server-name must not be empty"},
+		{[]string{"mcp", "cursor", "disable", "--config-path", path, "--server-name", ""}, "--server-name must not be empty"},
+		{[]string{"mcp", "cursor", "enable", "--config-path", ""}, "--config-path must not be empty: give a file, or leave the flag out for the default one"},
+		{[]string{"mcp", "cursor", "list", "--config-path", ""}, "--config-path must not be empty"},
 		{[]string{"mcp", "claude", "enable", "--workspace"}, "unknown flag: --workspace"},
 		{[]string{"mcp", "claude", "disable", "extra"}, "accepts no arguments, received 1 (usage: sind mcp claude disable)"},
 	}
@@ -141,6 +157,9 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 	}
 	_, err := os.Stat(path)
 	assert.ErrorIs(t, err, os.ErrNotExist, "nothing is written")
+	entries, err := os.ReadDir(home)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "nothing is written")
 }
 
 func TestMCPEditor_DefaultPaths(t *testing.T) {

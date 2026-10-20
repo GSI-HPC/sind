@@ -15,6 +15,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
+	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -172,8 +173,16 @@ func (f *mcpEditorFlags) path(e mcpEditor) (string, error) {
 	return filepath.Join(dir, e.userFile), nil
 }
 
-// loadMCPConfig loads the configuration file the flags select.
-func loadMCPConfig(e mcpEditor, f *mcpEditorFlags) (*mcpconfig.File, error) {
+// loadMCPConfig loads the configuration file the flags of cmd select. An
+// empty --config-path or --server-name is a usage error: an unset variable
+// in --config-path "$FILE" would otherwise edit the editor's own file.
+func loadMCPConfig(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (*mcpconfig.File, error) {
+	if cmd.Flags().Changed("config-path") && f.configPath == "" {
+		return nil, cobratree.Usagef("--config-path must not be empty: give a file, or leave the flag out for the default one")
+	}
+	if cmd.Flags().Lookup("server-name") != nil && f.serverName == "" {
+		return nil, cobratree.Usagef("--server-name must not be empty")
+	}
 	if f.configPath != "" && f.workspace {
 		return nil, cobratree.Usagef("--config-path and --workspace are mutually exclusive")
 	}
@@ -198,7 +207,7 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := loadMCPConfig(e, f)
+	cfg, err := loadMCPConfig(cmd, e, f)
 	if err != nil {
 		return err
 	}
@@ -219,8 +228,16 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 	if e.stdio {
 		entry.Type = "stdio"
 	}
+	if err := checkMCPLogLevel(f.logLevel); err != nil {
+		return mcpconfig.Server{}, err
+	}
 	if f.logLevel != "" {
 		entry.Args = append(entry.Args, "--log-level", f.logLevel)
+	}
+	if env, ok := f.env["SIND_REALM"]; ok {
+		if err := config.CheckName("realm", env); err != nil {
+			return mcpconfig.Server{}, cobratree.Usagef("--env SIND_REALM: %w", err)
+		}
 	}
 	if len(f.env) > 0 {
 		entry.Env = f.env
@@ -242,7 +259,7 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 }
 
 func runMCPDisable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
-	cfg, err := loadMCPConfig(e, f)
+	cfg, err := loadMCPConfig(cmd, e, f)
 	if err != nil {
 		return err
 	}
@@ -256,7 +273,7 @@ func runMCPDisable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 // command with its arguments, one reached over HTTP with its URL. It
 // leaves out their environment, which can hold secrets.
 func runMCPList(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
-	cfg, err := loadMCPConfig(e, f)
+	cfg, err := loadMCPConfig(cmd, e, f)
 	if err != nil {
 		return err
 	}
