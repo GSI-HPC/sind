@@ -162,9 +162,7 @@ func TestInotifyInstances(t *testing.T) {
 // writing stderr.
 func exitError(t *testing.T, stderr string) error {
 	t.Helper()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, exec.Command("sh", "-c", "exit 1").Run(), &exitErr)
-	return &cmdexec.ExitError{Err: exitErr, Stderr: stderr}
+	return &cmdexec.ExitError{Err: testutil.ExitCode1(t), Stderr: stderr}
 }
 
 func TestDockerUnreachable(t *testing.T) {

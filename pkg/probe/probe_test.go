@@ -5,13 +5,12 @@ package probe
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/monitor"
@@ -20,17 +19,6 @@ import (
 )
 
 const testContainer docker.ContainerName = "sind-dev-controller"
-
-// exitCode1 runs a command that exits with code 1 and returns its
-// ProcessState so tests can construct a realistic *exec.ExitError.
-func exitCode1(t *testing.T) *os.ProcessState {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr.ProcessState
-}
 
 func inspectJSON(status string) string {
 	return inspectJSONFull(status, 0, false)
@@ -208,7 +196,7 @@ func TestSlurmctldReady_NotReady(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "slurm_persist_conn_open_without_init: failed to open persistent connection\n",
 		fmt.Errorf("exit status 1"))
-	m.AddResult("activating\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("activating\n", "", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	err := SlurmctldReady(t.Context(), c, testContainer)
@@ -236,7 +224,7 @@ func TestSlurmctldReady_Failed(t *testing.T) {
 	// slurm.conf line it rejects: the wait ends at once with its journal.
 	var m mock.Executor
 	m.AddResult("", "", fmt.Errorf("exit status 1"))
-	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("failed\n", "", testutil.ExitCode1(t))
 	m.AddResult("slurmctld: fatal: Unable to process configuration file\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -445,7 +433,7 @@ func TestUnitProbes_Failed(t *testing.T) {
 	} {
 		t.Run(tt.unit, func(t *testing.T) {
 			var m mock.Executor
-			m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+			m.AddResult("failed\n", "", testutil.ExitCode1(t))
 			m.AddResult("fatal: something\n", "", nil)
 			c := docker.NewClient(&m)
 
@@ -464,7 +452,7 @@ func TestUnitProbes_Failed(t *testing.T) {
 
 func TestUnitActive_Inactive(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("inactive\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("inactive\n", "", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	err := UnitActive(t.Context(), c, testContainer, "munge")
@@ -499,7 +487,7 @@ func TestSlurmdbdReady_ExecError(t *testing.T) {
 
 func TestSlurmdbdReady_Activating(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("activating\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("activating\n", "", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	err := SlurmdbdReady(t.Context(), c, testContainer)
@@ -512,7 +500,7 @@ func TestSlurmdbdReady_Activating(t *testing.T) {
 
 func TestSlurmdbdReady_Failed(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("failed\n", "", testutil.ExitCode1(t))
 	m.AddResult("slurmdbd: fatal: mysql_real_connect failed\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -1115,7 +1103,7 @@ func TestUntilReadyWithEvents_FailedUnitEndsTheWait(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("active\n", "", nil)
 	m.AddResult("", "", fmt.Errorf("connection refused"))
-	m.AddResult("failed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("failed\n", "", testutil.ExitCode1(t))
 	m.AddResult("munge: fatal: bad key\n", "", nil)
 	c := docker.NewClient(&m)
 
@@ -1307,7 +1295,7 @@ func TestSnapshot_WorkerOneInactive(t *testing.T) {
 	var m mock.Executor
 	// systemctl exits non-zero when any unit is inactive but still prints
 	// the per-unit states. ExecAllowNonZero surfaces that stdout.
-	m.AddResult("active\nactive\nfailed\n", "", &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("active\nactive\nfailed\n", "", testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 
 	snap, err := Snapshot(t.Context(), c, testContainer, workerServices)

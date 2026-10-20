@@ -106,16 +106,6 @@ func inspectJSONBatch(t *testing.T, entries ...inspectEntry) string {
 	return "[" + strings.Join(parts, ",") + "]"
 }
 
-// notFoundErr returns an exec.ExitError with exit code 1 for "not found" mocking.
-func notFoundErr(t *testing.T) *exec.ExitError {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr
-}
-
 // emptyCorefileContent returns a Corefile with no host entries.
 func emptyCorefileContent() string {
 	return "sind.sind:53 {\n    hosts {\n        fallthrough\n    }\n    log\n    errors\n}\n\n.:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n"
@@ -267,7 +257,7 @@ func createCfg() *config.Cluster {
 
 func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	client := docker.NewClient(&m)
 
 	cfg := createCfg()
@@ -288,7 +278,7 @@ func TestCreateResources_BackupControllerStateVolume(t *testing.T) {
 func createdVolumes(t *testing.T, cfg *config.Cluster) []string {
 	t.Helper()
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	require.NoError(t, createResources(t.Context(), docker.NewClient(&m), mesh.NewManager(docker.NewClient(&m), mesh.DefaultRealm), cfg, startPull(t.Context(), nil, docker.NewClient(&m), nil, false)))
 
 	var created []string
@@ -329,7 +319,7 @@ func TestCreateResources_DataVolume(t *testing.T) {
 }
 
 func TestCreate_FullCluster(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 
 	pipes := &mock.Pipes{}
 	defer pipes.CloseAll()
@@ -366,7 +356,7 @@ func TestCreate_NonPositiveReadinessInterval(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 
 	client := docker.NewClient(&m)
@@ -411,7 +401,7 @@ func TestCreate_ConfigRealmMatches(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	cfg := createCfg()
@@ -421,7 +411,7 @@ func TestCreate_ConfigRealmMatches(t *testing.T) {
 }
 
 func TestCreate_BackupController(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 
 	pipes := &mock.Pipes{}
 	defer pipes.CloseAll()
@@ -467,7 +457,7 @@ func TestCreate_BackupController(t *testing.T) {
 }
 
 func TestCreate_BackupControllerNotReady(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 
 	pipes := &mock.Pipes{}
 	defer pipes.CloseAll()
@@ -511,7 +501,7 @@ func TestCreate_CVMFS(t *testing.T) {
 			defer pipes.CloseAll()
 
 			var m mock.Executor
-			m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+			m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 				if args[0] == "plugin" {
 					return mock.Result{Stdout: tt.plugins}, true
 				}
@@ -552,7 +542,7 @@ func TestCreate_CVMFSUnavailable(t *testing.T) {
 	// Neither the plugin nor the host's /cvmfs: creation fails and cleans
 	// up whatever the other preparation branches created.
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "plugin" {
 			return mock.Result{}, true
 		}
@@ -581,7 +571,7 @@ func TestCreate_NoNsdelegate(t *testing.T) {
 	// container, with the commands that enable it, and the rollback
 	// removes what the other preparation branches created.
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if isNsdelegateProbe(args) {
 			return mock.Result{Stdout: "cgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime 0 0\n"}, true
 		}
@@ -613,7 +603,7 @@ func TestCreate_NoCVMFS(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -633,7 +623,7 @@ func TestCreate_PreflightFails(t *testing.T) {
 	// Network already exists → preflight returns conflict error.
 	// resolveInfra runs in parallel, so its happy-path responses are supplied
 	// too; otherwise the race could surface a resolveInfra error instead.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
@@ -652,7 +642,7 @@ func TestCreate_PreflightFails(t *testing.T) {
 }
 
 func TestCreate_ResolveInfraFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "inspect" && args[1] == "sind-dns" {
@@ -672,7 +662,7 @@ func TestCreate_ResolveInfraFails(t *testing.T) {
 }
 
 func TestCreate_CreateResourcesFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "network" && args[1] == "create" {
@@ -692,7 +682,7 @@ func TestCreate_CreateResourcesFails(t *testing.T) {
 }
 
 func TestCreate_VolumeCreateFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "volume" && args[1] == "create" {
@@ -712,7 +702,7 @@ func TestCreate_VolumeCreateFails(t *testing.T) {
 }
 
 func TestCreate_SSHRelayConnectFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	connectCount := 0
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
@@ -737,7 +727,7 @@ func TestCreate_SSHRelayConnectFails(t *testing.T) {
 }
 
 func TestCreate_NodeCreationFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		// Let helper containers succeed, fail node containers
@@ -758,7 +748,7 @@ func TestCreate_NodeCreationFails(t *testing.T) {
 }
 
 func TestCreate_SetupNodesFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		// Probes inspect the node: return "created" instead of "running" to fail ContainerRunning
@@ -784,7 +774,7 @@ func TestCreate_SetupNodesFails(t *testing.T) {
 }
 
 func TestCreate_RegisterMeshFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		// CopyFromContainer for Corefile fails
@@ -807,7 +797,7 @@ func TestCreate_RegisterMeshFails(t *testing.T) {
 }
 
 func TestCreate_EnableSlurmFails(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
@@ -830,7 +820,7 @@ func TestCreate_EnableSlurmFails(t *testing.T) {
 
 func TestCreate_CleansUpOnFailure(t *testing.T) {
 	// When enableSlurm fails (after resources + nodes exist), cleanup should run.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
@@ -862,7 +852,7 @@ func TestCreate_CleansUpOnFailure(t *testing.T) {
 
 func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 	// When mesh was freshly created and Create fails, mesh should also be cleaned up.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
@@ -902,7 +892,7 @@ func TestCreate_CleansUpMeshWhenFreshlyCreated(t *testing.T) {
 
 func TestCreate_SkipsMeshCleanupWhenPreExisting(t *testing.T) {
 	// When mesh already existed, cleanup should NOT remove it.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
@@ -941,7 +931,7 @@ func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 	// When preflight fails (before resourcesCreated=true), cluster cleanup
 	// should NOT run. resolveInfra is allowed to succeed in parallel; the
 	// absence of network/volume rm calls proves no cluster cleanup happened.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
@@ -965,7 +955,7 @@ func TestCreate_NoCleanupOnPreflightFailure(t *testing.T) {
 
 func TestCreate_MeshCleanupOnResolveInfraFailure(t *testing.T) {
 	// When resolveInfra fails and mesh was freshly created, mesh should be cleaned up.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "inspect" && args[1] == "sind-dns" {
@@ -1014,7 +1004,7 @@ func isRealmListing(args []string) bool {
 // for the earlier cluster.
 func TestCreate_KeepsMeshOfOtherClusters(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
 			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
 		}
@@ -1040,7 +1030,7 @@ func TestCreate_KeepsMeshOfOtherClusters(t *testing.T) {
 // mesh.
 func TestCreate_KeepsMeshOnDuplicateName(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" && args[2] == "sind-dev-net" {
 			return mock.Result{}, true // network exists → preflight conflict
 		}
@@ -1065,7 +1055,7 @@ func TestCreate_KeepsMeshOnDuplicateName(t *testing.T) {
 // whether clusters use the mesh: it keeps the mesh.
 func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
 			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
 		}
@@ -1091,7 +1081,7 @@ func TestCreate_KeepsMeshWhenUsageUnknown(t *testing.T) {
 func TestCreate_RollbackSkipsDeregistrationOfRemovedMesh(t *testing.T) {
 	failed := false
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 3 && args[2] == "systemctl" && args[3] == "enable" {
 			failed = true
 			return mock.Result{Err: fmt.Errorf("systemctl failed")}, true
@@ -1123,7 +1113,7 @@ func TestResolveMeshInfra_NoDNSContainer(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if args[0] == "inspect" {
-			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: notFoundErr(t)}
+			return mock.Result{Stderr: testutil.NoSuchContainer(args[1]), Err: testutil.ExitCode1(t)}
 		}
 		return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
 	}
@@ -1176,7 +1166,7 @@ func TestCreate_CleanupResourcesError(t *testing.T) {
 	// When Create fails and the cleanup itself fails, the error carries the
 	// original failure and the cleanup's, so the caller learns that
 	// resources were left behind.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	inCleanup := false
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
@@ -1208,7 +1198,7 @@ func TestCreate_CleanupResourcesError(t *testing.T) {
 func TestCreate_CleanupMeshError(t *testing.T) {
 	// When Create fails with freshly-created mesh and mesh cleanup also fails,
 	// the error carries the original failure and the mesh cleanup's.
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	inCleanup := false
 	var m mock.Executor
 	m.OnCall = happyOnCall(t, exitErr, func(args []string, _ string) (mock.Result, bool) {
@@ -1242,7 +1232,7 @@ func TestCreate_CleanupMeshError(t *testing.T) {
 }
 
 func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 
 	cfg := &config.Cluster{
 		Name: "dev",
@@ -1276,7 +1266,7 @@ func TestCreate_UnmanagedComputeSkipsSlurm(t *testing.T) {
 }
 
 func TestCreate_UnmanagedCluster(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 
 	cfg := &config.Cluster{
 		Name: "dev",
@@ -1336,7 +1326,7 @@ func TestCreate_UnmanagedCluster(t *testing.T) {
 }
 
 func TestCreate_SubmitterSkipsSlurm(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 
 	cfg := &config.Cluster{
 		Name: "dev",
@@ -1750,7 +1740,7 @@ func TestEnableSlurm_DBFirst(t *testing.T) {
 }
 
 func TestEnableSlurm_DBFailedIsTerminal(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if len(args) > 4 && args[2] == "systemctl" && args[3] == "is-active" && args[4] == "slurmdbd" {

@@ -330,7 +330,7 @@ func TestCreate_Users(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -362,7 +362,7 @@ func TestCreate_TaskAffinity(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -382,7 +382,7 @@ func TestCreate_NoUsers(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -406,7 +406,7 @@ func TestCreate_NoUsers(t *testing.T) {
 
 func TestCreate_AddUsersFails(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if container, steps, ok := setupCall(args); ok && container == "sind-dev-worker-0" && steps["users"] != "" {
 			return failedSetup(t, 1, "useradd: cannot lock /etc/passwd\n", "users"), true
 		}
@@ -425,7 +425,7 @@ func TestCreate_AddUsersFails(t *testing.T) {
 
 func TestCreate_CreateHomesFails(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 4 && args[4] == createHomesScript {
 			return mock.Result{Err: fmt.Errorf("exit status 1")}, true
 		}

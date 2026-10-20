@@ -195,7 +195,7 @@ func TestSetupNodes_AFailedNodeCancelsTheOthers(t *testing.T) {
 // The pull is the step "pull images", with a target for each image it
 // pulls, only when it pulls one.
 func TestStartPull_ReportsThePulls(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	for _, tc := range []struct {
 		name    string
 		present []string
@@ -233,7 +233,7 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
 	client := docker.NewClient(&m)
 	cfg := createCfg()
 	cfg.Pull = true
@@ -255,7 +255,7 @@ step rollback: ok
 func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if isImageExists(args) {
 			return mock.Result{Err: errors.New("docker daemon unavailable")}, true
 		}
@@ -281,7 +281,7 @@ func TestCreate_ReportsItsSteps(t *testing.T) {
 	defer pipes.CloseAll()
 	var registered atomic.Int32
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), accountsOnCall(&registered, mock.Result{}))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), accountsOnCall(&registered, mock.Result{}))
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 

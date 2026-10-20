@@ -27,7 +27,7 @@ func createMonitored(t *testing.T, f *stackFake, cfg *config.Cluster, override f
 	pipes := &mock.Pipes{}
 	t.Cleanup(pipes.CloseAll)
 	m := &mock.Executor{OnStart: pipes.OnStart}
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, stdin string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, stdin string) (mock.Result, bool) {
 		if override != nil {
 			if r, ok := override(args, stdin); ok {
 				return r, true
@@ -101,7 +101,7 @@ func TestCreate_NotMonitored(t *testing.T) {
 	pipes := &mock.Pipes{}
 	defer pipes.CloseAll()
 	m := &mock.Executor{OnStart: pipes.OnStart}
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	client := docker.NewClient(m)
 	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), time.Millisecond)
 	require.NoError(t, err)

@@ -1000,7 +1000,7 @@ func TestGetStatus_EmptyButClusterNetworkExists(t *testing.T) {
 // containers exist AND the cluster network is absent. GetStatus must return
 // a clear error rather than synthesize a plausible-looking empty report.
 func TestGetStatus_ClusterNotFound(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	var m mock.Executor
 	m.OnCall = func(args []string, _ string) mock.Result {
 		if args[0] == "ps" {

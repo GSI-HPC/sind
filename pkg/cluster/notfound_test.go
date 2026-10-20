@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func psLine(realm, clusterName, node string) string {
 // "dev": no containers and no network there, while the listing of every
 // realm's "dev" containers returns others.
 func notFoundExecutor(t *testing.T, others mock.Result) *mock.Executor {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	return &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
 		switch {
 		case args[0] == "ps" && slices.Contains(args, "label=sind.realm=ci-42"):
@@ -64,7 +65,7 @@ func TestGetStatus_NotFoundNamesOtherRealms(t *testing.T) {
 // TestClusterNotFound_NamesExistingClusters checks that the error names the
 // clusters the realm does hold.
 func TestClusterNotFound_NamesExistingClusters(t *testing.T) {
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
 		switch {
 		case args[0] == "ps" && slices.Contains(args, "label=sind.realm=sind") && slices.Contains(args, "label=sind.cluster=dev"):

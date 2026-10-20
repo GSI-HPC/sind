@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +41,7 @@ func TestWorkerAdd_RollbackFailuresJoined(t *testing.T) {
 		case args[0] == "rm" && strings.HasSuffix(joined, "sind-dev-worker-1"):
 			return mock.Result{Stderr: "Error response from daemon: cannot remove container\n", Err: fmt.Errorf("exit status 2")}
 		case args[0] == "rm" && strings.HasSuffix(joined, "sind-dev-worker-2"):
-			return mock.Result{Stderr: "Error: No such container: sind-dev-worker-2\n", Err: notFoundErr(t)}
+			return mock.Result{Stderr: "Error: No such container: sind-dev-worker-2\n", Err: testutil.ExitCode1(t)}
 		}
 		return onCall(args, stdin)
 	}

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -263,7 +264,7 @@ func TestCreate_Accounts(t *testing.T) {
 
 	var registered atomic.Int32
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), accountsOnCall(&registered, mock.Result{}))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), accountsOnCall(&registered, mock.Result{}))
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -298,7 +299,7 @@ func TestCreate_NoAccounts(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -320,7 +321,7 @@ func TestCreate_NoAccounts(t *testing.T) {
 func TestCreate_AccountsFail(t *testing.T) {
 	var registered atomic.Int32
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), accountsOnCall(&registered, mock.Result{
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), accountsOnCall(&registered, mock.Result{
 		Stderr: "sacctmgr add account physics:  Nothing new added.\n",
 		Err:    fmt.Errorf("exit status 1"),
 	}))

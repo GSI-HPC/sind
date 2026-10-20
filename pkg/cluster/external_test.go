@@ -86,7 +86,7 @@ func (f *externalFake) onCall(args []string, _ string) mock.Result {
 		for _, name := range args[1:] {
 			c, ok := f.containers[name]
 			if !ok {
-				return mock.Result{Stderr: testutil.NoSuchContainer(name), Err: notFoundErr(f.t)}
+				return mock.Result{Stderr: testutil.NoSuchContainer(name), Err: testutil.ExitCode1(f.t)}
 			}
 			nets := map[string]map[string]string{}
 			for _, n := range c.networks {
@@ -214,7 +214,7 @@ func TestDisconnect_MissingContainer(t *testing.T) {
 func TestDisconnect_MissingContainerGoneMeanwhile(t *testing.T) {
 	f, c, _ := newExternalFake(t)
 	f.containers["kind-worker"] = externalContainer{networks: []string{"kind"}}
-	f.fail["inspect kind-worker kind-control-plane"] = mock.Result{Stderr: testutil.NoSuchContainer("kind-worker"), Err: notFoundErr(t)}
+	f.fail["inspect kind-worker kind-control-plane"] = mock.Result{Stderr: testutil.NoSuchContainer("kind-worker"), Err: testutil.ExitCode1(t)}
 
 	err := Disconnect(t.Context(), c, mesh.NewManager(c, "sind"), "kind-worker", "kind-control-plane")
 
@@ -239,7 +239,7 @@ func TestDisconnect(t *testing.T) {
 func TestDisconnect_AlreadyGone(t *testing.T) {
 	f, c, _ := newExternalFake(t)
 	f.containers["kind-control-plane"] = externalContainer{networks: []string{"sind-mesh"}}
-	f.fail["network disconnect"] = mock.Result{Stderr: testutil.NoSuchNetwork("sind-mesh"), Err: notFoundErr(t)}
+	f.fail["network disconnect"] = mock.Result{Stderr: testutil.NoSuchNetwork("sind-mesh"), Err: testutil.ExitCode1(t)}
 
 	err := Disconnect(t.Context(), c, mesh.NewManager(c, "sind"), "kind-control-plane")
 

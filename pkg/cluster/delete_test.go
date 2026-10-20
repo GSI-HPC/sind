@@ -426,7 +426,7 @@ func TestDeregisterMesh_StartMeshError(t *testing.T) {
 
 func TestDelete_FullCluster(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -447,7 +447,7 @@ func TestDelete_FullCluster(t *testing.T) {
 
 func TestDelete_NonExistent(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "gone", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: false,
@@ -464,7 +464,7 @@ func TestDelete_NonExistent(t *testing.T) {
 func TestDelete_Partial(t *testing.T) {
 	// Partial cluster: containers gone, but network and some volumes remain
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: true,
@@ -482,7 +482,7 @@ func TestDelete_Partial(t *testing.T) {
 func TestDelete_PreserveMesh(t *testing.T) {
 	// Other clusters exist, mesh should be preserved
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -520,7 +520,7 @@ func TestDelete_ListResourcesError(t *testing.T) {
 // network and volumes.
 func TestDelete_DeregisterMeshFailureContinues(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -553,7 +553,7 @@ func TestDelete_DeregisterMeshFailureContinues(t *testing.T) {
 
 func TestDelete_ContainerRemoveError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
@@ -574,7 +574,7 @@ func TestDelete_ContainerRemoveError(t *testing.T) {
 
 func TestDelete_NetworkRemoveError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:        nil,
 		networkExists:     true,
@@ -595,7 +595,7 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 // the network can go, and they are not removed.
 func TestDelete_DetachesForeignContainers(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
@@ -626,7 +626,7 @@ func TestDelete_DetachesForeignContainers(t *testing.T) {
 
 func TestDelete_DetachError(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		networkExists:     true,
 		otherClusters:     true,
 		networkContainers: []string{"kind-control-plane"},
@@ -641,7 +641,7 @@ func TestDelete_DetachError(t *testing.T) {
 
 func TestDelete_HasOtherClustersError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: false,
@@ -671,7 +671,7 @@ func TestDelete_HasOtherClustersError(t *testing.T) {
 
 func TestDelete_VolumeRemoveError(t *testing.T) {
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:       nil,
 		networkExists:    false,
@@ -690,7 +690,7 @@ func TestDelete_VolumeRemoveError(t *testing.T) {
 func TestDelete_CleanupMeshError(t *testing.T) {
 	// No other clusters → CleanupMesh runs and fails.
 	var m mock.Executor
-	exitErr := notFoundErr(t)
+	exitErr := testutil.ExitCode1(t)
 	m.OnCall = deleteOnCall(t, exitErr, "dev", deleteOnCallOpts{
 		containers:    nil,
 		networkExists: false,
@@ -732,7 +732,7 @@ func meshUpdates(m *mock.Executor) []string {
 // realm: the mesh goes with it, so its nodes are not deregistered first.
 func TestDelete_LastClusterSkipsDeregistration(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
@@ -759,7 +759,7 @@ func TestDelete_LastClusterSkipsDeregistration(t *testing.T) {
 // nodes leave the Corefile and known_hosts.
 func TestDelete_OtherClusterDeregisters(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
@@ -801,7 +801,7 @@ func (f *realmFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{Err: fmt.Errorf("docker daemon unavailable")}
 	}
 	joined := strings.Join(args, " ")
-	notFound := mock.Result{Stderr: "Error: No such object\n", Err: notFoundErr(f.t)}
+	notFound := mock.Result{Stderr: "Error: No such object\n", Err: testutil.ExitCode1(f.t)}
 	lsEntries := func() string {
 		var lines []string
 		for name := range f.clusters {

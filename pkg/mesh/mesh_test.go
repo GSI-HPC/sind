@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/netip"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,17 +20,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// exitCode1 runs a trivial shell command that exits with code 1 so tests can
-// synthesise a real *os.ProcessState for use with *exec.ExitError.
-func exitCode1(t *testing.T) *os.ProcessState {
-	t.Helper()
-	cmd := exec.Command("sh", "-c", "exit 1")
-	err := cmd.Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, err, &exitErr)
-	return exitErr.ProcessState
-}
 
 // failure is a docker error result that is not "not found".
 func failure() mock.Result {
@@ -1771,7 +1759,7 @@ func TestGetDNSRecords_ReadError(t *testing.T) {
 // of leaking the raw docker exec failure.
 func TestGetDNSRecords_NoMesh(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("sind-dns"), &exec.ExitError{ProcessState: exitCode1(t)}) // DNS container missing
+	m.AddResult("", testutil.NoSuchContainer("sind-dns"), testutil.ExitCode1(t)) // DNS container missing
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 

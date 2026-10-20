@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -906,12 +905,8 @@ func TestGetNode_ClusterNamedSind(t *testing.T) {
 // "node %q not found in cluster %q" error rather than leak the raw docker
 // exit status.
 func TestGetNode_NotFound(t *testing.T) {
-	runErr := exec.Command("sh", "-c", "exit 1").Run()
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, runErr, &exitErr, "sanity: sh -c 'exit 1' produced an ExitError")
-
 	var m mock.Executor
-	m.AddResult("", "Error: No such container: sind-dev-ghost\n", exitErr)
+	m.AddResult("", "Error: No such container: sind-dev-ghost\n", testutil.ExitCode1(t))
 
 	_, _, err := executeWithMock(&m, "get", "node", "ghost.dev")
 	require.Error(t, err)

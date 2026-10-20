@@ -96,7 +96,7 @@ func createAPICluster(t *testing.T, cfg *config.Cluster, override func([]string,
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), override)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), override)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)

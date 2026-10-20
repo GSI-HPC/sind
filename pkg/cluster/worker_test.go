@@ -29,7 +29,7 @@ import (
 // there: cat fails inside the running controller.
 func nodesConfMissing(t *testing.T) mock.Result {
 	t.Helper()
-	return mock.Result{Stderr: "cat: /etc/slurm/sind-nodes.conf: No such file or directory\n", Err: notFoundErr(t)}
+	return mock.Result{Stderr: "cat: /etc/slurm/sind-nodes.conf: No such file or directory\n", Err: testutil.ExitCode1(t)}
 }
 
 // nodeInspect describes a node container for nodeInspectJSON.
@@ -212,7 +212,7 @@ func TestReadNodesConf_ReadError(t *testing.T) {
 	// Only a missing file means that the user replaced the configuration.
 	var m mock.Executor
 	m.OnCall = func([]string, string) mock.Result {
-		return mock.Result{Stderr: "Error response from daemon: OCI runtime exec failed\n", Err: notFoundErr(t)}
+		return mock.Result{Stderr: "Error response from daemon: OCI runtime exec failed\n", Err: testutil.ExitCode1(t)}
 	}
 	client := docker.NewClient(&m)
 	controller := docker.ContainerListEntry{Name: "sind-dev-controller", State: docker.StateRunning}
@@ -425,7 +425,7 @@ func workerAddOnCall(t *testing.T) func([]string, string) mock.Result {
 
 		// ImageLabels: the image is not local
 		case args[0] == "image" && args[1] == "inspect":
-			return mock.Result{Stderr: "Error: No such image: " + args[2] + "\n", Err: notFoundErr(t)}
+			return mock.Result{Stderr: "Error: No such image: " + args[2] + "\n", Err: testutil.ExitCode1(t)}
 
 		// ConnectNetwork (mesh)
 		case args[0] == "network" && args[1] == "connect":

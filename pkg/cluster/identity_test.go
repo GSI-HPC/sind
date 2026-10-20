@@ -233,7 +233,7 @@ func TestCheckIdentityImage(t *testing.T) {
 		result  mock.Result
 		wantErr string
 	}{
-		{"not local", "img:1", mock.Result{Stderr: "Error: No such image: img:1\n", Err: notFoundErr(t)}, ""},
+		{"not local", "img:1", mock.Result{Stderr: "Error: No such image: img:1\n", Err: testutil.ExitCode1(t)}, ""},
 		{"current sind-node", "img:1", mock.Result{Stdout: currentSindNodeLabels}, ""},
 		{"other image", "img:1", mock.Result{Stdout: `{"org.opencontainers.image.title":"site-node"}`}, ""},
 		{"no labels", "img:1", mock.Result{Stdout: "null\n"}, ""},
@@ -448,7 +448,7 @@ func createIdentityCluster(t *testing.T, cfg *config.Cluster) *identityCalls {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), imageLabels(currentSindNodeLabels))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), imageLabels(currentSindNodeLabels))
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -476,7 +476,7 @@ func TestCreate_IdentityOldImage(t *testing.T) {
 	// A cached sind-node image from before identity modes is refused
 	// before anything is created.
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), imageLabels(oldSindNodeLabels))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), imageLabels(oldSindNodeLabels))
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
 
@@ -519,7 +519,7 @@ func TestCreate_ClientIDs(t *testing.T) {
 
 func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, stdin string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, stdin string) (mock.Result, bool) {
 		if _, steps, ok := setupCall(args); ok && steps["nss_slurm"] != "" {
 			return failedSetup(t, 1, "", "nss_slurm"), true
 		}

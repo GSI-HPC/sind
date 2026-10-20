@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -538,7 +537,7 @@ func TestGetSSHKnownHosts_Error(t *testing.T) {
 // of leaking the raw docker exec failure.
 func TestGetSSHPrivateKey_NoMesh(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -550,7 +549,7 @@ func TestGetSSHPrivateKey_NoMesh(t *testing.T) {
 
 func TestGetSSHPublicKey_NoMesh(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 
@@ -561,7 +560,7 @@ func TestGetSSHPublicKey_NoMesh(t *testing.T) {
 
 func TestGetSSHKnownHosts_NoMesh(t *testing.T) {
 	var m mock.Executor
-	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), &exec.ExitError{ProcessState: exitCode1(t)})
+	m.AddResult("", testutil.NoSuchContainer("sind-ssh"), testutil.ExitCode1(t))
 	c := docker.NewClient(&m)
 	mgr := NewManager(c, DefaultRealm)
 

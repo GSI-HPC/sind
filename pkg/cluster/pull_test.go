@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -51,7 +52,7 @@ func TestCreate_PullsEachImageOnce(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), pullOnCall(mock.Result{}))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), pullOnCall(mock.Result{}))
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -89,7 +90,7 @@ func TestCreate_PullFails(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -162,7 +163,7 @@ func imageExistsOnCall(t *testing.T, missing ...string) func(args []string, _ st
 	return func(args []string, _ string) (mock.Result, bool) {
 		switch {
 		case isImageExists(args) && slices.Contains(missing, args[4]):
-			return mock.Result{Stderr: "Error: No such image: " + args[4] + "\n", Err: notFoundErr(t)}, true
+			return mock.Result{Stderr: "Error: No such image: " + args[4] + "\n", Err: testutil.ExitCode1(t)}, true
 		case args[0] == "pull":
 			return mock.Result{}, true
 		}
@@ -177,7 +178,7 @@ func TestCreate_PullsMissingImages(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), imageExistsOnCall(t, "other:2"))
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), imageExistsOnCall(t, "other:2"))
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(&m)
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -209,7 +210,7 @@ func TestCreate_PullsMissingImages(t *testing.T) {
 
 func TestCreate_ImageInspectFails(t *testing.T) {
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if isImageExists(args) {
 			return mock.Result{Stderr: "Cannot connect to the Docker daemon\n", Err: fmt.Errorf("exit status 1")}, true
 		}

@@ -226,7 +226,7 @@ func TestCleanupRealm(t *testing.T) {
 func TestDelete_Monitored(t *testing.T) {
 	f := newStackFake(t).withStack()
 	f.nodes = []docker.ContainerListEntry{monitoredNode("dev", "controller", "controller")}
-	base := deleteOnCall(t, notFoundErr(t), "dev", deleteOnCallOpts{
+	base := deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers:    []testutil.PsEntry{{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"}},
 		networkExists: true,
 		volumes:       []string{"config", "munge", "data"},

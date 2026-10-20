@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -72,9 +73,9 @@ func TestReadiness_ParentCancelledIsNotExpiry(t *testing.T) {
 
 // neverReadyOnCall is happyOnCall with munge never active on worker-0.
 func neverReadyOnCall(t *testing.T) func([]string, string) mock.Result {
-	return happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	return happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && args[1] == "sind-dev-worker-0" && strings.HasSuffix(strings.Join(args, " "), "is-active munge") {
-			return mock.Result{Stdout: "activating\n", Err: notFoundErr(t)}, true
+			return mock.Result{Stdout: "activating\n", Err: testutil.ExitCode1(t)}, true
 		}
 		return mock.Result{}, false
 	})
@@ -116,7 +117,7 @@ func TestCreate_WaitLimitAfterNodes(t *testing.T) {
 	defer pipes.CloseAll()
 
 	var m mock.Executor
-	m.OnCall = happyOnCall(t, notFoundErr(t), func(args []string, _ string) (mock.Result, bool) {
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 2 && args[2] == "scontrol" {
 			return mock.Result{Stdout: "Slurmctld(primary) at controller is DOWN\n"}, true
 		}
@@ -178,7 +179,7 @@ func TestCreate_WaitLimitExcludesContainerCreation(t *testing.T) {
 	defer pipes.CloseAll()
 
 	m := &mock.Executor{}
-	m.OnCall = happyOnCall(t, notFoundErr(t), nil)
+	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
 	m.OnStart = pipes.OnStart
 	client := docker.NewClient(slowCreate{Executor: m, name: "sind-dev-worker-0", delay: 1500 * time.Millisecond})
 	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
@@ -197,7 +198,7 @@ func TestWorkerAdd_WaitLimit(t *testing.T) {
 	onCall := workerAddOnCall(t)
 	m.OnCall = func(args []string, stdin string) mock.Result {
 		if args[0] == "exec" && args[1] == "sind-dev-worker-1" && strings.HasSuffix(strings.Join(args, " "), "is-active munge") {
-			return mock.Result{Stdout: "activating\n", Err: notFoundErr(t)}
+			return mock.Result{Stdout: "activating\n", Err: testutil.ExitCode1(t)}
 		}
 		return onCall(args, stdin)
 	}
