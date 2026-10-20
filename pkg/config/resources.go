@@ -3,6 +3,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"regexp"
@@ -106,13 +107,11 @@ func (c *Cluster) validateResources() error {
 		all = append(all, limits{string(n.Role) + " ", n.CPUs, n.Memory, n.TmpSize})
 	}
 	for _, l := range all {
-		if err := CheckCPUs(l.prefix+"cpus", l.cpus); err != nil {
-			return err
-		}
-		if err := CheckMemory(l.prefix+"memory", l.memory); err != nil {
-			return err
-		}
-		if err := CheckTmpSize(l.prefix+"tmpSize", l.size); err != nil {
+		if err := cmp.Or(
+			CheckCPUs(l.prefix+"cpus", l.cpus),
+			CheckMemory(l.prefix+"memory", l.memory),
+			CheckTmpSize(l.prefix+"tmpSize", l.size),
+		); err != nil {
 			return err
 		}
 	}

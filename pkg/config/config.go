@@ -382,47 +382,28 @@ func (c *Cluster) Validate() error {
 		return fmt.Errorf("at least one worker node required, got %d", roles[RoleWorker])
 	}
 
-	if err := c.validateResources(); err != nil {
-		return err
-	}
-
-	if err := c.Storage.DataStorage.validate(); err != nil {
-		return err
-	}
-	if err := c.validateDataMountPath(); err != nil {
-		return err
-	}
-
-	if err := validateUsers(c.Users, c.Groups); err != nil {
-		return err
-	}
-	if err := c.validateAccounts(); err != nil {
-		return err
-	}
-	if err := c.Identity.validate(c.Managed(), c.Slurm.Main); err != nil {
-		return err
-	}
-	if err := c.validateAPI(); err != nil {
-		return err
-	}
-	if err := c.validateSlurmdbd(); err != nil {
-		return err
-	}
-	if err := c.validateMonitoring(); err != nil {
+	// The first failing check, in this order, is the one reported.
+	if err := cmp.Or(
+		c.validateResources(),
+		c.Storage.DataStorage.validate(),
+		c.validateDataMountPath(),
+		validateUsers(c.Users, c.Groups),
+		c.validateAccounts(),
+		c.Identity.validate(c.Managed(), c.Slurm.Main),
+		c.validateAPI(),
+		c.validateSlurmdbd(),
+		c.validateMonitoring(),
+	); err != nil {
 		return err
 	}
 
 	for _, n := range c.Nodes {
-		if err := CheckCapabilities("capAdd", n.CapAdd); err != nil {
-			return err
-		}
-		if err := CheckCapabilities("capDrop", n.CapDrop); err != nil {
-			return err
-		}
-		if err := CheckDevices(n.Devices); err != nil {
-			return err
-		}
-		if err := CheckSecurityOpts("securityOpt", n.SecurityOpt); err != nil {
+		if err := cmp.Or(
+			CheckCapabilities("capAdd", n.CapAdd),
+			CheckCapabilities("capDrop", n.CapDrop),
+			CheckDevices(n.Devices),
+			CheckSecurityOpts("securityOpt", n.SecurityOpt),
+		); err != nil {
 			return err
 		}
 	}
