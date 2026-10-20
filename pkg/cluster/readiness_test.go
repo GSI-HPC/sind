@@ -157,30 +157,14 @@ func TestCreate_WaitLimitExcludesContainerCreation(t *testing.T) {
 }
 
 func TestWorkerAdd_WaitLimit(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
 	onCall := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if args[0] == "exec" && args[1] == "sind-dev-worker-1" && strings.HasSuffix(strings.Join(args, " "), "is-active munge") {
 			return mock.Result{Stdout: "activating\n", Err: testutil.ExitCode1(t)}
 		}
 		return onCall(args, stdin)
-	}
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 1, Wait: 200 * time.Millisecond}, time.Millisecond)
-
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1, Wait: 200 * time.Millisecond})
 	require.ErrorIs(t, err, ErrNotReady)
 	assert.Contains(t, err.Error(), "workers not ready within 200ms: waiting for worker-1")
-	var removed bool
-	for _, c := range m.Calls {
-		if c.Args[0] == "rm" && strings.Contains(strings.Join(c.Args, " "), "sind-dev-worker-1") {
-			removed = true
-		}
-	}
-	assert.True(t, removed, "the new worker should be removed")
+	assert.Equal(t, 1, countCalls(m.Calls, "rm", "-f", "-v", "sind-dev-worker-1"), "the new worker should be removed")
 }

@@ -3,13 +3,11 @@
 package cluster
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -426,15 +424,7 @@ func psWithLabels(base func([]string, string) mock.Result, labels string) func([
 func TestWorkerAdd_InheritsUsers(t *testing.T) {
 	// New workers get the cluster's users and groups and mount the home
 	// volume; the homes on it exist already.
-	var m mock.Executor
-	m.OnCall = psWithLabels(workerAddOnCall(t), "sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice")
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	m, _, err := addWorkers(t, psWithLabels(workerAddOnCall(t), "sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice"), WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -449,9 +439,8 @@ func TestWorkerAdd_InheritsUsers(t *testing.T) {
 func TestWorkerAdd_TaskAffinity(t *testing.T) {
 	// A worker added to a cluster whose slurm.conf enables task/affinity
 	// gets CAP_SYS_NICE; sind reads it from the config volume.
-	var m mock.Executor
 	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}) {
 			return mock.Result{Stdout: "ClusterName=dev\ninclude /etc/slurm/slurm.conf.d/tasks.conf\n"}
 		}
@@ -459,48 +448,29 @@ func TestWorkerAdd_TaskAffinity(t *testing.T) {
 			return mock.Result{Stdout: "TaskPlugin=task/cgroup,task/affinity\n"}
 		}
 		return inner(args, stdin)
-	}
-	client := docker.NewClient(&m)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string][]string{"sind-dev-worker-1": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
 }
 
 func TestWorkerAdd_ReadSlurmConfError(t *testing.T) {
-	var m mock.Executor
 	inner := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if slices.Equal(args, []string{"exec", "sind-dev-controller", "cat", "/etc/slurm/slurm.conf"}) {
 			return mock.Result{Err: fmt.Errorf("exit status 1")}
 		}
 		return inner(args, stdin)
-	}
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
-
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.EqualError(t, err, "reading /etc/slurm/slurm.conf: exit status 1")
-	for _, c := range m.Calls {
-		assert.NotEqual(t, "create", c.Args[0], "no worker container")
-	}
+	assert.Zero(t, countCalls(m.Calls, "create"), "no worker container")
 }
 
 func TestWorkerAdd_InvalidUsersLabel(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = psWithLabels(workerAddOnCall(t), "sind.managed=false,sind.users=alice")
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1}, time.Millisecond)
-
+	m, _, err := addWorkers(t, psWithLabels(workerAddOnCall(t), "sind.managed=false,sind.users=alice"), WorkerAddOptions{ClusterName: "dev", Count: 1})
 	require.Error(t, err)
 	assert.Equal(t, `invalid sind.users label "alice": want name:uid:gid entries`, err.Error())
-	for _, c := range m.Calls {
-		assert.NotEqual(t, "create", c.Args[0], "no worker container")
-	}
+	assert.Zero(t, countCalls(m.Calls, "create"), "no worker container")
 }
 
 func TestGetMountPoints_Home(t *testing.T) {

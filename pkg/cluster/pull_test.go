@@ -8,13 +8,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
-	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,22 +86,13 @@ func TestCreate_PullFails(t *testing.T) {
 }
 
 func TestWorkerAdd_PullsOnce(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
 	onCall := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if args[0] == "pull" {
 			return mock.Result{}
 		}
 		return onCall(args, stdin)
-	}
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 2, Image: "img:1", Pull: true}, time.Millisecond)
+	}, WorkerAddOptions{ClusterName: "dev", Count: 2, Image: "img:1", Pull: true})
 	require.NoError(t, err)
 
 	var pulls int
@@ -119,22 +107,15 @@ func TestWorkerAdd_PullsOnce(t *testing.T) {
 }
 
 func TestWorkerAdd_PullFails(t *testing.T) {
-	var m mock.Executor
 	onCall := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if args[0] == "pull" {
 			return mock.Result{Err: fmt.Errorf("manifest unknown")}
 		}
 		return onCall(args, stdin)
-	}
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{ClusterName: "dev", Image: "img:1", Pull: true}, time.Millisecond)
+	}, WorkerAddOptions{ClusterName: "dev", Image: "img:1", Pull: true})
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
-	for _, c := range m.Calls {
-		assert.NotEqual(t, "create", c.Args[0])
-	}
+	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
 // imageExistsOnCall answers ImageExists: the daemon has every image but
@@ -193,13 +174,7 @@ func TestCreate_ImageInspectFails(t *testing.T) {
 
 func TestWorkerAdd_PullsMissingImage(t *testing.T) {
 	// An --image the daemon does not have is pulled once without --pull.
-	var m mock.Executor
-	m.OnCall = workerAddOnCall(t)
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
-		ClusterName: "dev", Count: 2, Image: "custom:v3",
-	}, time.Millisecond)
+	m, _, err := addWorkers(t, workerAddOnCall(t), WorkerAddOptions{ClusterName: "dev", Count: 2, Image: "custom:v3"})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "--format", "{{.Id}}", "custom:v3"))
@@ -207,19 +182,13 @@ func TestWorkerAdd_PullsMissingImage(t *testing.T) {
 }
 
 func TestWorkerAdd_LocalImageNotPulled(t *testing.T) {
-	var m mock.Executor
 	onCall := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if isImageExists(args) {
 			return mock.Result{Stdout: "sha256:local\n"}
 		}
 		return onCall(args, stdin)
-	}
-	client := docker.NewClient(&m)
-
-	_, err := WorkerAdd(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{
-		ClusterName: "dev", Count: 1, Image: "custom:v3",
-	}, time.Millisecond)
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "custom:v3"})
 	require.NoError(t, err)
 
 	assert.Zero(t, countCalls(m.Calls, "pull"))

@@ -119,10 +119,12 @@ func workerContainers(computes ...string) string {
 }
 
 // addWorkers runs WorkerAdd with opts, within 10 seconds, against a mock
-// that onCall answers, in the default realm.
+// that onCall answers, with docker events, in the default realm.
 func addWorkers(t *testing.T, onCall func([]string, string) mock.Result, opts WorkerAddOptions) (*mock.Executor, []*Node, error) {
 	t.Helper()
-	m := &mock.Executor{OnCall: onCall}
+	pipes := &mock.Pipes{}
+	t.Cleanup(pipes.CloseAll)
+	m := &mock.Executor{OnCall: onCall, OnStart: pipes.OnStart}
 	client := docker.NewClient(m)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -452,25 +454,13 @@ func countCalls(calls []mock.Call, prefix ...string) int {
 }
 
 func TestWorkerAdd_Managed(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = workerAddOnCall(t)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	nodes, err := WorkerAdd(ctx, client, mgr, WorkerAddOptions{
+	m, nodes, err := addWorkers(t, workerAddOnCall(t), WorkerAddOptions{
 		ClusterName: "dev",
 		Count:       1,
 		CPUs:        4,
 		Memory:      "8g",
 		TmpSize:     "1g",
-	}, time.Millisecond)
+	})
 
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)

@@ -3,12 +3,10 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -526,13 +524,8 @@ func TestWorkerAdd_Identity(t *testing.T) {
 		{"clientIds", true, false, true},
 	} {
 		t.Run(fmt.Sprintf("%s/unmanaged=%v", tt.mode, tt.unmanaged), func(t *testing.T) {
-			var m mock.Executor
-			m.OnCall = psWithLabels(workerAddOnCall(t), "sind.identity="+tt.mode+",sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice")
-			client := docker.NewClient(&m)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-
-			_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Unmanaged: tt.unmanaged}, time.Millisecond)
+			m, _, err := addWorkers(t, psWithLabels(workerAddOnCall(t), "sind.identity="+tt.mode+",sind.users=alice:1000:1000 bob:2001:3000,sind.groups=alice:1000 hpc:3000:alice"),
+				WorkerAddOptions{ClusterName: "dev", Count: 1, Unmanaged: tt.unmanaged})
 			require.NoError(t, err)
 
 			ic := collectIdentityCalls(m.Calls)
@@ -563,19 +556,14 @@ func TestWorkerAdd_IdentityImage(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			base := psWithLabels(workerAddOnCall(t), "sind.identity=nssSlurm")
-			var m mock.Executor
-			m.OnCall = func(args []string, stdin string) mock.Result {
+			tt.opts.ClusterName, tt.opts.Count = "dev", 1
+
+			m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 				if args[0] == "image" {
 					return tt.result
 				}
 				return base(args, stdin)
-			}
-			client := docker.NewClient(&m)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-			tt.opts.ClusterName, tt.opts.Count = "dev", 1
-
-			_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), tt.opts, time.Millisecond)
+			}, tt.opts)
 
 			assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", tt.checked))
 			if tt.wantErr == "" {
@@ -593,18 +581,12 @@ func TestWorkerAdd_IdentityImagePulled(t *testing.T) {
 	// --pull pulls an explicit image once, before anything checks it; the
 	// pulled image is then checked like a local one.
 	base := psWithLabels(workerAddOnCall(t), "sind.identity=nssSlurm")
-	var m mock.Executor
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	m, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		if args[0] == "inspect" && args[1] == "sind-dev-controller" {
 			return mock.Result{Stdout: nodeInspectJSON(t, args[1], nodeInspect{Image: testControllerImageID, Labels: docker.Labels{LabelIdentity: "nssSlurm"}})}
 		}
 		return base(args, stdin)
-	}
-	client := docker.NewClient(&m)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := WorkerAdd(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "img:2", Pull: true}, time.Millisecond)
+	}, WorkerAddOptions{ClusterName: "dev", Count: 1, Image: "img:2", Pull: true})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "pull", "img:2"))

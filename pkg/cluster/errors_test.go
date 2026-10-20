@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -28,12 +27,8 @@ func TestErrorWith(t *testing.T) {
 func TestWorkerAdd_RollbackFailuresJoined(t *testing.T) {
 	// enable slurmd fails, and so does every step of the rollback but the
 	// removal of a container that is already gone.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
 	onCall := workerAddOnCall(t)
-	m.OnCall = func(args []string, stdin string) mock.Result {
+	_, _, err := addWorkers(t, func(args []string, stdin string) mock.Result {
 		joined := strings.Join(args, " ")
 		switch {
 		case args[0] == "exec" && strings.HasSuffix(joined, "systemctl enable --now slurmd"):
@@ -44,13 +39,7 @@ func TestWorkerAdd_RollbackFailuresJoined(t *testing.T) {
 			return mock.Result{Stderr: "Error: No such container: sind-dev-worker-2\n", Err: testutil.ExitCode1(t)}
 		}
 		return onCall(args, stdin)
-	}
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	mgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := WorkerAdd(t.Context(), client, mgr, WorkerAddOptions{ClusterName: "dev", Count: 2}, time.Millisecond)
-
+	}, WorkerAddOptions{ClusterName: "dev", Count: 2})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "enable failed")
 	assert.Contains(t, err.Error(), "\nrolling back: removing container sind-dev-worker-1: ")
