@@ -21,6 +21,12 @@ sind mcp vscode enable
 sind mcp cursor enable
 ```
 
+Claude Code has its own command, which registers sind's stdio server under the name `sind` (`claude mcp remove sind` removes it):
+
+```bash
+claude mcp add sind -- sind mcp start
+```
+
 To unregister:
 
 ```bash
@@ -83,12 +89,12 @@ This exports the tool definitions to `mcp-tools.json`. The tools follow the nami
 | `sind_create_worker` | Add worker nodes to a cluster |
 | `sind_delete_cluster` | Delete a cluster |
 | `sind_get_cluster` | Show cluster health status |
-| `sind_get_nodes` | List nodes |
+| `sind_get_nodes` | List the nodes of a cluster, or of every cluster of the realm |
 | `sind_get_realms` | List all realms |
 | `sind_get_mesh` | Show mesh infrastructure info |
 | `sind_get_monitoring` | Show the realm's monitoring stack |
-| `sind_power_shutdown` | Graceful shutdown |
-| `sind_power_reboot` | Graceful reboot |
+| `sind_power_shutdown` | Gracefully shut down nodes (docker stop) |
+| `sind_power_reboot` | Gracefully reboot nodes (shutdown, then on) |
 | `sind_exec` | Run a command on the submitter or controller |
 
 ## HTTP mode
