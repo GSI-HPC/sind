@@ -10,9 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os/exec"
 	"path"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -437,14 +438,8 @@ func (c *Client) CopyFilesToContainer(ctx context.Context, container ContainerNa
 func buildFilesTar(w io.Writer, files map[string]File) error {
 	tw := tar.NewWriter(w)
 
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
 	dirs := make(map[string]bool)
-	for _, name := range names {
+	for _, name := range slices.Sorted(maps.Keys(files)) {
 		if dir := path.Dir(name); dir != "." && !dirs[dir] {
 			dirs[dir] = true
 			if err := tw.WriteHeader(&tar.Header{Name: dir + "/", Typeflag: tar.TypeDir, Mode: 0755}); err != nil {

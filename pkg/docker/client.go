@@ -9,8 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
@@ -164,13 +165,8 @@ func SortedLabelFlags(labels Labels) []string {
 	if len(labels) == 0 {
 		return nil
 	}
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
 	args := make([]string, 0, len(labels)*2)
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(labels)) {
 		args = append(args, "--label", k+"="+labels[k])
 	}
 	return args
