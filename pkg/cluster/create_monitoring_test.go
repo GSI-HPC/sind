@@ -3,18 +3,15 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
-	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,10 +21,8 @@ import (
 // the stack calls answered by f, and the override before both.
 func createMonitored(t *testing.T, f *stackFake, cfg *config.Cluster, override func([]string, string) (mock.Result, bool)) (*Cluster, *mock.Executor, error) {
 	t.Helper()
-	pipes := &mock.Pipes{}
-	t.Cleanup(pipes.CloseAll)
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, stdin string) (mock.Result, bool) {
+	cfg.Monitoring = true
+	m, c, err := runCreate(t.Context(), t, cfg, false, func(args []string, stdin string) (mock.Result, bool) {
 		if override != nil {
 			if r, ok := override(args, stdin); ok {
 				return r, true
@@ -35,11 +30,6 @@ func createMonitored(t *testing.T, f *stackFake, cfg *config.Cluster, override f
 		}
 		return f.handle(args, stdin)
 	})
-	client := docker.NewClient(m)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	cfg.Monitoring = true
-	c, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
 	return c, m, err
 }
 
@@ -98,12 +88,7 @@ func TestCreate_Monitoring(t *testing.T) {
 func TestCreate_NotMonitored(t *testing.T) {
 	// A cluster without monitoring makes no call of the stack.
 	f := newStackFake(t)
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-	m := &mock.Executor{OnStart: pipes.OnStart}
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
-	client := docker.NewClient(m)
-	_, err := Create(t.Context(), client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 	for _, c := range m.Calls {
 		r, mine := f.handle(c.Args, c.Stdin)

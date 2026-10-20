@@ -215,13 +215,10 @@ func TestStartPull_ReportsThePulls(t *testing.T) {
 // created.
 func TestCreate_AFailedPullStopsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
-	client := docker.NewClient(&m)
 	cfg := createCfg()
 	cfg.Pull = true
 
-	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), cfg, time.Millisecond)
+	_, _, err := runCreate(ctx, t, cfg, false, pullOnCall(mock.Result{Err: errors.New("manifest unknown")}))
 
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	w.Finish()
@@ -237,16 +234,9 @@ step rollback: ok
 // the preflight is not stopped by a pull.
 func TestCreate_AFailedImageInspectionFailsThePreflight(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
-		if isImageExists(args) {
-			return mock.Result{Err: errors.New("docker daemon unavailable")}, true
-		}
-		return mock.Result{}, false
+	_, _, err := runCreate(ctx, t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
+		return mock.Result{Err: errors.New("docker daemon unavailable")}, isImageExists(args)
 	})
-	client := docker.NewClient(&m)
-
-	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), createCfg(), time.Millisecond)
 
 	require.EqualError(t, err, "inspecting image img:1: docker daemon unavailable")
 	w.Finish()
@@ -260,15 +250,9 @@ step rollback: ok
 // a target of the nodes and of Slurm.
 func TestCreate_ReportsItsSteps(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
 	var registered atomic.Int32
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), accountsOnCall(&registered, mock.Result{}))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
 
-	_, err := Create(ctx, client, mesh.NewManager(client, mesh.DefaultRealm), accountsCfg(), time.Millisecond)
+	_, _, err := runCreate(ctx, t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
 
 	require.NoError(t, err)
 	w.Finish()

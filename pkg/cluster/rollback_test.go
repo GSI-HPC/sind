@@ -13,7 +13,6 @@ import (
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/GSI-HPC/sind/internal/mock"
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/stretchr/testify/assert"
@@ -83,7 +82,7 @@ func TestCreate_RollbackIsAStep(t *testing.T) {
 			run := func(ctx context.Context) error {
 				inCleanup := false
 				var m mock.Executor
-				m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
+				m.OnCall = happyOnCall(t, func(args []string, _ string) (mock.Result, bool) {
 					if args[0] == "exec" && len(args) > 3 && args[1] == "sind-dev-controller" && args[2] == "systemctl" && args[3] == "enable" {
 						inCleanup = true
 						return mock.Result{Err: errors.New("systemctl failed")}, true

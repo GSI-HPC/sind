@@ -3,11 +3,9 @@
 package cluster
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
@@ -92,18 +90,7 @@ func configCopy(t *testing.T, calls []mock.Call) string {
 // and returns its calls and error.
 func createAPICluster(t *testing.T, cfg *config.Cluster, override func([]string, string) (mock.Result, bool)) ([]mock.Call, error) {
 	t.Helper()
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), override)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, override)
 	return m.Calls, err
 }
 

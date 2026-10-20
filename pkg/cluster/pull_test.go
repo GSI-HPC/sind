@@ -48,21 +48,10 @@ func pullOnCall(result mock.Result) func(args []string, _ string) (mock.Result, 
 }
 
 func TestCreate_PullsEachImageOnce(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), pullOnCall(mock.Result{}))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
 	cfg := createCfg()
 	cfg.Nodes = append(cfg.Nodes, config.Node{Role: config.RoleWorker, Count: 2, Image: "other:2", CPUs: 1, Memory: "1g", TmpSize: "1g"})
 	cfg.Pull = true
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, pullOnCall(mock.Result{}))
 	require.NoError(t, err)
 
 	var pulls []string
@@ -86,19 +75,10 @@ func TestCreate_PullsEachImageOnce(t *testing.T) {
 func TestCreate_PullFails(t *testing.T) {
 	// The pull fails before anything is created; the version check, the
 	// resources and the CVMFS check all wait for it.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
 	cfg := createCfg()
 	cfg.Pull = true
 	cfg.Storage.CVMFS = true
-	_, err := Create(t.Context(), client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, pullOnCall(mock.Result{Err: fmt.Errorf("manifest unknown")}))
 	require.EqualError(t, err, "pulling img:1: manifest unknown")
 	// The network and volumes may exist (and are rolled back), but nothing
 	// ran the image.
@@ -174,20 +154,9 @@ func imageExistsOnCall(t *testing.T, missing ...string) func(args []string, _ st
 func TestCreate_PullsMissingImages(t *testing.T) {
 	// Without --pull, the images the daemon does not have are pulled once,
 	// before any container runs one, so that no node's docker create pulls.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), imageExistsOnCall(t, "other:2"))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
 	cfg := createCfg()
 	cfg.Nodes = append(cfg.Nodes, config.Node{Role: config.RoleWorker, Count: 2, Image: "other:2", CPUs: 1, Memory: "1g", TmpSize: "1g"})
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, imageExistsOnCall(t, "other:2"))
 	require.NoError(t, err)
 
 	var pulls []string
@@ -209,17 +178,12 @@ func TestCreate_PullsMissingImages(t *testing.T) {
 }
 
 func TestCreate_ImageInspectFails(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
+	m, _, err := runCreate(t.Context(), t, createCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if isImageExists(args) {
 			return mock.Result{Stderr: "Cannot connect to the Docker daemon\n", Err: fmt.Errorf("exit status 1")}, true
 		}
 		return mock.Result{}, false
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := Create(t.Context(), client, meshMgr, createCfg(), time.Millisecond)
 	require.ErrorContains(t, err, "inspecting image img:1: exit status 1")
 	for _, c := range m.Calls {
 		a := c.Args

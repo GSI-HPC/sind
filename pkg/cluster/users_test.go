@@ -326,18 +326,7 @@ func collectUserCalls(calls []mock.Call) *userCalls {
 }
 
 func TestCreate_Users(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, usersCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, usersCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -358,38 +347,16 @@ func TestCreate_Users(t *testing.T) {
 func TestCreate_TaskAffinity(t *testing.T) {
 	// With task/affinity in slurm.main, the worker binds tasks and gets
 	// CAP_SYS_NICE; the controller does not.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
 	cfg := createCfg()
 	cfg.Slurm.Main = config.Section{Content: "TaskPlugin=task/cgroup,task/affinity\n"}
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string][]string{"sind-dev-worker-0": {"SYS_NICE"}}, collectUserCalls(m.Calls).caps)
 }
 
 func TestCreate_NoUsers(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, createCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, createCfg(), false, nil)
 	require.NoError(t, err)
 
 	uc := collectUserCalls(m.Calls)
@@ -405,38 +372,24 @@ func TestCreate_NoUsers(t *testing.T) {
 }
 
 func TestCreate_AddUsersFails(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
+	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if container, steps, ok := setupCall(args); ok && container == "sind-dev-worker-0" && steps["users"] != "" {
 			return failedSetup(t, 1, "useradd: cannot lock /etc/passwd\n", "users"), true
 		}
 		return mock.Result{}, false
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, usersCfg(), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "node worker-0: adding users: exit status 1: useradd: cannot lock /etc/passwd")
 }
 
 func TestCreate_CreateHomesFails(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, _ string) (mock.Result, bool) {
+	_, _, err := runCreate(t.Context(), t, usersCfg(), false, func(args []string, _ string) (mock.Result, bool) {
 		if args[0] == "exec" && len(args) > 4 && args[4] == createHomesScript {
 			return mock.Result{Err: fmt.Errorf("exit status 1")}, true
 		}
 		return mock.Result{}, false
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, usersCfg(), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating home directories: exit status 1")

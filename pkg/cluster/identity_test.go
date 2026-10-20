@@ -444,18 +444,7 @@ func collectIdentityCalls(calls []mock.Call) *identityCalls {
 // its calls.
 func createIdentityCluster(t *testing.T, cfg *config.Cluster) *identityCalls {
 	t.Helper()
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), imageLabels(currentSindNodeLabels))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, imageLabels(currentSindNodeLabels))
 	require.NoError(t, err)
 	assert.Equal(t, 1, countCalls(m.Calls, "image", "inspect", "img:1"), "image checked once")
 	return collectIdentityCalls(m.Calls)
@@ -475,12 +464,7 @@ func imageLabels(labels string) func([]string, string) (mock.Result, bool) {
 func TestCreate_IdentityOldImage(t *testing.T) {
 	// A cached sind-node image from before identity modes is refused
 	// before anything is created.
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), imageLabels(oldSindNodeLabels))
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-
-	_, err := Create(t.Context(), client, meshMgr, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, imageLabels(oldSindNodeLabels))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "image img:1 is a sind-node image from before identity modes")
@@ -518,20 +502,13 @@ func TestCreate_ClientIDs(t *testing.T) {
 }
 
 func TestCreate_NSSSlurmModuleMissing(t *testing.T) {
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), func(args []string, stdin string) (mock.Result, bool) {
+	_, _, err := runCreate(t.Context(), t, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), false, func(args []string, stdin string) (mock.Result, bool) {
 		if _, steps, ok := setupCall(args); ok && steps["nss_slurm"] != "" {
 			return failedSetup(t, 1, "", "nss_slurm"), true
 		}
 		// A custom image: only the check on the node finds what it lacks.
 		return imageLabels("{}")(args, stdin)
 	})
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, identityCfg(config.Identity{Mode: config.IdentityNSSSlurm}), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "node worker-0: image img:1 has no libnss_slurm.so.2, which identity nssSlurm needs on managed workers; use a current sind-node image (--pull refreshes a cached one), or build yours with contribs/nss_slurm: exit status 1")

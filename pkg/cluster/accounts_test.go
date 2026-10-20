@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/GSI-HPC/sind/internal/mock"
-	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -259,19 +258,9 @@ func TestCreateSlurmAccounts_Timeout(t *testing.T) {
 }
 
 func TestCreate_Accounts(t *testing.T) {
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
 	var registered atomic.Int32
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), accountsOnCall(&registered, mock.Result{}))
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
 
-	_, err := Create(ctx, client, meshMgr, accountsCfg(), time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{}))
 	require.NoError(t, err)
 
 	require.Equal(t, []string{accountsScript(wantAccountCommands)}, accountsScripts(t, m.Calls))
@@ -295,21 +284,10 @@ func TestCreate_Accounts(t *testing.T) {
 
 func TestCreate_NoAccounts(t *testing.T) {
 	// Without accounts, sind runs no sacctmgr, even with a db node.
-	pipes := &mock.Pipes{}
-	defer pipes.CloseAll()
-
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), nil)
-	m.OnStart = pipes.OnStart
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
 	cfg := accountsCfg()
 	cfg.Accounts = nil
 	cfg.Users = nil
-	_, err := Create(ctx, client, meshMgr, cfg, time.Millisecond)
+	m, _, err := runCreate(t.Context(), t, cfg, false, nil)
 	require.NoError(t, err)
 
 	for _, c := range m.Calls {
@@ -320,17 +298,11 @@ func TestCreate_NoAccounts(t *testing.T) {
 
 func TestCreate_AccountsFail(t *testing.T) {
 	var registered atomic.Int32
-	var m mock.Executor
-	m.OnCall = happyOnCall(t, testutil.ExitCode1(t), accountsOnCall(&registered, mock.Result{
+
+	_, _, err := runCreate(t.Context(), t, accountsCfg(), false, accountsOnCall(&registered, mock.Result{
 		Stderr: "sacctmgr add account physics:  Nothing new added.\n",
 		Err:    fmt.Errorf("exit status 1"),
 	}))
-	client := docker.NewClient(&m)
-	meshMgr := mesh.NewManager(client, mesh.DefaultRealm)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := Create(ctx, client, meshMgr, accountsCfg(), time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating Slurm accounts: exit status 1")
