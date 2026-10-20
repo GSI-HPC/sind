@@ -1600,7 +1600,7 @@ func TestWorkerAdd_CleansUpOnFailure(t *testing.T) {
 }
 
 func TestWorkerAdd_CleanupErrors(t *testing.T) {
-	// When cleanup itself encounters errors (RemoveKnownHost, RemoveContainer),
+	// When cleanup itself encounters errors (RemoveKnownHosts, RemoveContainer),
 	// those errors are logged but do not mask the original failure.
 	inner := workerAddOnCall(t)
 	inCleanup := false
