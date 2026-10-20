@@ -188,9 +188,6 @@ func SortedLabelFlags(labels Labels) []string {
 	return args
 }
 
-// exists runs an inspect-style command and returns true if the resource exists.
-// Docker inspect commands exit with code 1 for missing resources; other errors
-// are propagated.
 // labels runs an inspect command that prints a resource's labels as JSON
 // and reports them, and whether the resource exists.
 func (c *Client) labels(ctx context.Context, args ...string) (Labels, bool, error) {
@@ -240,6 +237,9 @@ type lsEntry struct {
 	Labels string `json:"Labels"`
 }
 
+// exists runs an inspect-style command and returns true if the resource exists.
+// Docker inspect commands exit with code 1 for missing resources; other errors
+// are propagated.
 func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 	_, _, err := c.run(ctx, args...)
 	if err != nil {
@@ -265,16 +265,7 @@ func (c *Client) exists(ctx context.Context, args ...string) (bool, error) {
 // "get x: no such volume", "No such network: x" or "network x not found".
 func IsNotFound(err error) bool {
 	exitErr, ok := errors.AsType[*cmdexec.ExitError](err)
-	if !ok || exitErr.ExitCode() != 1 {
-		return false
-	}
-	msg := strings.ToLower(exitErr.Stderr)
-	for _, form := range notFoundForms {
-		if strings.Contains(msg, form) {
-			return true
-		}
-	}
-	return networkNotFound.MatchString(msg)
+	return ok && exitErr.ExitCode() == 1 && notFound.MatchString(strings.ToLower(exitErr.Stderr))
 }
 
 // IsAlreadyExists reports whether err is docker's error for a network name
@@ -287,14 +278,5 @@ func IsAlreadyExists(err error) bool {
 	return ok && exitErr.ExitCode() == 1 && strings.Contains(strings.ToLower(exitErr.Stderr), "already exists")
 }
 
-// notFoundForms are docker's messages for a missing resource, lowercased.
-var notFoundForms = []string{
-	"no such container",
-	"no such image",
-	"no such object",
-	"no such volume",
-	"no such network",
-}
-
-// networkNotFound matches the daemon's message for a missing network.
-var networkNotFound = regexp.MustCompile(`\bnetwork \S+ not found\b`)
+// notFound matches docker's messages for a missing resource, lowercased.
+var notFound = regexp.MustCompile(`no such (container|image|object|volume|network)|\bnetwork \S+ not found\b`)
