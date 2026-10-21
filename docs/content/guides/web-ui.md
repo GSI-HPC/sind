@@ -119,9 +119,9 @@ The browser tab title shows the step that is running, such as `▸ nodes 3/8 · 
 
 Press **Stop** on the task card or on the run page. sind ui sends SIGINT to the command, the same signal as Ctrl-C in a terminal. The command then rolls back what it has made, and the run ends as canceled. The button shows **Stopping…** until the rollback ends. Steps that have not started do not start.
 
-**Stop** acts at once. It asks for no confirmation.
+**Stop** asks you to confirm first.
 
-sind ui never sends SIGKILL to a running command. If you stop the UI while a command runs, sind ui interrupts the command and waits up to 60 seconds for the rollback. After that, it kills the command. A command that runs from a terminal is not stopped by the UI at all.
+**Stop** sends SIGINT only, never SIGKILL. If you stop the UI while a command runs, sind ui interrupts the command and waits up to 60 seconds for the rollback. Only after that does it kill the command. A command that runs from a terminal is not stopped by the UI at all.
 
 ## Security
 

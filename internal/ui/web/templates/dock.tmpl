@@ -11,7 +11,7 @@ cards are built in dock.go. */}}
   <div class="tl"><span>{{.Line}}</span>{{template "run-elapsed" .}}</div>
   {{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
   {{if and .Output (not .Terminal)}}{{if eq .Class "failed"}}<pre class="term tout">{{.Output}}</pre>{{end}}{{end}}
-  <div class="tf">{{if .Cancel}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel">{{template "csrf-field" $}}<button type="submit" class="btn sm">Stop</button></form>{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}">{{.Action}}</a></div>
+  <div class="tf">{{if .Cancel}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none" hx-confirm="Stop this command? sind stops it and removes what it made so far.">{{template "csrf-field" $}}<button type="submit" class="btn sm">Stop</button></form>{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}">{{.Action}}</a></div>
 </div>
 {{end}}{{if .More}}<a class="task more" href="/activity">{{.More}} more in Activity</a>{{end}}{{end}}{{end}}
 

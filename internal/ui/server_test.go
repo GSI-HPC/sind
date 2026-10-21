@@ -47,7 +47,7 @@ func TestSecurityHeaders(t *testing.T) {
 		h := ts.get(target).Header()
 		for k, want := range map[string]string{
 			"Content-Security-Policy":      contentSecurityPolicy,
-			"Referrer-Policy":              "no-referrer",
+			"Referrer-Policy":              "same-origin",
 			"X-Content-Type-Options":       "nosniff",
 			"X-Frame-Options":              "DENY",
 			"Cross-Origin-Opener-Policy":   "same-origin",

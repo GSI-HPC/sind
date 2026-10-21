@@ -163,7 +163,10 @@ func (s *Server) headers(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("Content-Security-Policy", contentSecurityPolicy)
-		h.Set("Referrer-Policy", "no-referrer")
+		// same-origin, not no-referrer: under no-referrer a browser sends
+		// a form's POST with the origin "null", which the origin check
+		// refuses. Other sites still get no referrer.
+		h.Set("Referrer-Policy", "same-origin")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")

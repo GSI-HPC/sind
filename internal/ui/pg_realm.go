@@ -107,9 +107,7 @@ func pgListRoute(p Page) Route {
 // pgRealmRoute is POST /realm: it keeps the realm picked in the top bar in
 // the cookie sind_realm, and goes back to a list page. An empty realm is
 // all realms and removes the cookie. The picker sends it with htmx, which
-// is answered with HX-Redirect: a browser sends a plain form with the
-// origin "null" under the Referrer-Policy no-referrer, which the origin
-// check refuses.
+// is answered with HX-Redirect; a plain form gets a 303.
 func pgRealmRoute() Route {
 	return Route{Pattern: "POST /realm", Handle: func(s *Server, w http.ResponseWriter, r *http.Request) {
 		v, err := s.View(r, "realm", "next")

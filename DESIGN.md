@@ -862,7 +862,7 @@ Only the user who started `sind ui` may use it, and it can do what that user's D
 2. **Host.** The `Host` header must be `127.0.0.1:PORT` or `localhost:PORT`, which stops DNS rebinding.
 3. **Session.** The first `GET` with `?token=` must carry the token of this run (32 random bytes). It sets an `HttpOnly`, `SameSite=Strict` cookie, named for the port, and redirects to the same page without the token. Any other request without a session gets `403`.
 4. **Writes.** Requests that change something (every method but `GET` and `HEAD`) need an `Origin` of `http://` followed by the `Host` header, and the session's CSRF token in the `X-Sind-CSRF` header or the `csrf` form field. Forms are capped at 64 KiB. Every path and query value is checked again on the server.
-5. **Responses.** `Content-Security-Policy` allows only files of the same origin (`default-src 'none'`, `frame-ancestors 'none'`), with `X-Frame-Options: DENY`, `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. Text from containers and the event log is escaped.
+5. **Responses.** `Content-Security-Policy` allows only files of the same origin (`default-src 'none'`, `frame-ancestors 'none'`), with `X-Frame-Options: DENY`, `Cache-Control: no-store` and `Referrer-Policy: same-origin` (a form POST then carries its origin). Text from containers and the event log is escaped.
 
 No secret has a page: the munge key, the JWT key and the SSH private key (`sind get auth-key`, `sind get ssh-private-key`) are not shown in the UI. Long-running commands are stopped with SIGINT only. When `sind ui` stops, it interrupts its commands so that they roll back, and kills any that have not ended after 60 seconds.
 
