@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
 	"github.com/GSI-HPC/go-clikit/progress/display"
@@ -214,7 +215,7 @@ func TestTheProgressDisplayIsDrawnWhereItCan(t *testing.T) {
 			err := executeOn(ctx, &stdout, &stderr, append(args, "--count", "0")...)
 
 			require.EqualError(t, err, tc.msg)
-			assert.True(t, isUsageError(err), "a usage error: %v", err)
+			assert.True(t, cobratree.IsUsage(err), "a usage error: %v", err)
 			assert.Equal(t, tc.shown, c.shown(), "displays made")
 			assert.Empty(t, stdout.String())
 			if w != nil {
@@ -268,7 +269,7 @@ func TestEveryCommandChecksTheProgressFlag(t *testing.T) {
 				return
 			}
 			require.EqualError(t, err, tc.msg)
-			assert.True(t, isUsageError(err), "a usage error: %v", err)
+			assert.True(t, cobratree.IsUsage(err), "a usage error: %v", err)
 			assert.Empty(t, stdout.String())
 			assert.Zero(t, calls, "nothing runs")
 		})
@@ -653,7 +654,7 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 			err := executeOn(powerCutFails(t.Context(), t, func() { calls++ }), io.Discard, &stderr,
 				"--progress-log", path, "power", "cut", "worker-0")
 			require.ErrorContains(t, err, "--progress-log names a progress log that cannot be used: ")
-			assert.True(t, isUsageError(err), "a usage error: %v", err)
+			assert.True(t, cobratree.IsUsage(err), "a usage error: %v", err)
 			assert.Zero(t, calls, "nothing runs")
 			assert.Empty(t, stderr.String())
 		}
@@ -785,7 +786,7 @@ func TestTheDisplayIsTakenOffWhenTheCommandPanics(t *testing.T) {
 func TestProgressClass(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	classify := progressClass(ctx)
-	assert.Equal(t, progress.ClassUsage, classify(usagef("bad flag")))
+	assert.Equal(t, progress.ClassUsage, classify(cobratree.Usagef("bad flag")))
 	assert.Equal(t, progress.ClassTimeout, classify(fmt.Errorf("cluster x %w within 5m0s: probe", cluster.ErrNotReady)))
 	assert.Equal(t, progress.ClassNone, classify(errors.New("signal: killed")))
 	cancel()

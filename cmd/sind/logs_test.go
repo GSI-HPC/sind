@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/pkg/docker"
 
@@ -54,5 +55,5 @@ func TestLogs_MissingNode(t *testing.T) {
 func TestLogs_NegativeTail(t *testing.T) {
 	_, _, err := executeCommand("logs", "controller", "--tail", "-1")
 	require.Error(t, err)
-	assert.True(t, isUsageError(err))
+	assert.True(t, cobratree.IsUsage(err))
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
@@ -114,7 +115,7 @@ func resolveRealm(cmd *cobra.Command, configRealm string) (string, error) {
 	if cmd.Root().Flags().Changed("realm") {
 		r, _ := cmd.Root().Flags().GetString("realm")
 		if err := config.CheckName("realm", r); err != nil {
-			return "", usagef("--realm: %w", err)
+			return "", cobratree.Usagef("--realm: %w", err)
 		}
 		return r, nil
 	}

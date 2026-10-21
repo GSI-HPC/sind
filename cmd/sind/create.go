@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -33,7 +34,7 @@ func addWaitFlag(cmd *cobra.Command) {
 func waitFlag(cmd *cobra.Command) (time.Duration, error) {
 	wait, _ := cmd.Flags().GetDuration("wait")
 	if wait < 0 {
-		return 0, usagef("--wait must not be negative, got %s", wait)
+		return 0, cobratree.Usagef("--wait must not be negative, got %s", wait)
 	}
 	return wait, nil
 }
@@ -205,7 +206,7 @@ func applyDataStorage(cfg *config.Cluster, dataFlag string) error {
 func checkNotEmpty(cmd *cobra.Command, names ...string) error {
 	for _, name := range names {
 		if value, _ := cmd.Flags().GetString(name); value == "" && cmd.Flags().Changed(name) {
-			return usagef("--%s must not be empty: leave it out for the default", name)
+			return cobratree.Usagef("--%s must not be empty: leave it out for the default", name)
 		}
 	}
 	return nil
@@ -221,7 +222,7 @@ func applyDataFlag(cfg *config.Cluster, value string) error {
 	// filepath.Abs("") is the working directory: an unset variable in
 	// --data "$DATA" would mount it read-write into every node.
 	if value == "" {
-		return usagef(`--data must not be empty: give a host directory or "volume"`)
+		return cobratree.Usagef(`--data must not be empty: give a host directory or "volume"`)
 	}
 	abs, err := filepath.Abs(value)
 	if err != nil {

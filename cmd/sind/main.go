@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -95,7 +96,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		return exitInterrupted
 	}
 	log.ErrorContext(cmd.Context(), msg)
-	if isUsageError(err) {
+	if cobratree.IsUsage(err) {
 		return exitUsage
 	}
 	return exitFailure

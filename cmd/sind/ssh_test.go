@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/state"
@@ -66,7 +67,7 @@ func TestParseSSHArgs_OnlyDash(t *testing.T) {
 func TestParseSSHArgs_OnlyOptions(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"-v", "-l", "alice", "--", "id"})
 	require.ErrorContains(t, err, "node argument required")
-	assert.True(t, isUsageError(err))
+	assert.True(t, cobratree.IsUsage(err))
 }
 
 // TestParseSSHArgs_OptionValues checks that the node is found among SSH
@@ -110,7 +111,7 @@ func TestParseSSHArgs_CommandWithoutDash(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			_, _, _, err := parseSSHArgs(args)
 			require.Error(t, err)
-			assert.True(t, isUsageError(err))
+			assert.True(t, cobratree.IsUsage(err))
 			assert.EqualError(t, err, `unexpected argument "hostname" after node "worker-0": a remote command goes after --, as in sind ssh NODE -- COMMAND`)
 		})
 	}
@@ -119,14 +120,14 @@ func TestParseSSHArgs_CommandWithoutDash(t *testing.T) {
 func TestParseSSHArgs_MissingOptionValue(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"worker-0", "-L", "--", "id"})
 	require.Error(t, err)
-	assert.True(t, isUsageError(err))
+	assert.True(t, cobratree.IsUsage(err))
 	assert.EqualError(t, err, "ssh option -L needs a value")
 }
 
 func TestParseSSHArgs_LongOption(t *testing.T) {
 	_, _, _, err := parseSSHArgs([]string{"--realm", "ci", "worker-0"})
 	require.ErrorContains(t, err, "ssh has no option --realm")
-	assert.True(t, isUsageError(err))
+	assert.True(t, cobratree.IsUsage(err))
 }
 
 func TestSSH_CommandWithoutDashExits2(t *testing.T) {

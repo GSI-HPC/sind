@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -21,7 +22,7 @@ const (
 	// exitFailure is the exit status of a command that ran and failed.
 	exitFailure = 1
 	// exitUsage is the exit status of a command line that sind rejected
-	// before acting on it (usageError).
+	// before acting on it (cobratree.IsUsage).
 	exitUsage = 2
 	// exitInterrupted is the exit status of a command that SIGINT or
 	// SIGTERM stopped: 128 + SIGINT, as a shell reports an interrupt.
@@ -29,40 +30,6 @@ const (
 	// "interrupted".
 	exitInterrupted = 130
 )
-
-// usageError marks an error in the command line: an unknown command or
-// flag, a flag value or argument that is not valid, or the wrong number of
-// arguments. It exits exitUsage.
-type usageError struct {
-	err error
-	// inArgs marks an error in the arguments, such as the wrong number of
-	// them, whose message ends with the usage line of the command,
-	// line (withUsageLine).
-	inArgs bool
-	line   string
-}
-
-func (e *usageError) Error() string {
-	if e.line == "" {
-		return e.err.Error()
-	}
-	return fmt.Sprintf("%s (usage: %s)", e.err, e.line)
-}
-
-func (e *usageError) Unwrap() error { return e.err }
-
-// usage marks err as a usage error; nil stays nil.
-func usage(err error) error {
-	if err == nil {
-		return nil
-	}
-	return &usageError{err: err}
-}
-
-// usagef returns a usage error with a formatted message.
-func usagef(format string, args ...any) error {
-	return usage(fmt.Errorf(format, args...))
-}
 
 // invalidFlagValue returns the usage error for a value of the flag --name
 // that is not one of the words it takes, the one form of every such error:
@@ -74,7 +41,7 @@ func invalidFlagValue(name, value string, words ...string) error {
 // invalidValue returns the usage error for a value of the flag --name, with
 // what the flag wants instead.
 func invalidValue(name, value, want string) error {
-	return usagef("invalid --%s value %q: want %s", name, value, want)
+	return cobratree.Usagef("invalid --%s value %q: want %s", name, value, want)
 }
 
 // oneOf lists words as "a, b or c".
@@ -98,7 +65,7 @@ var flagValueWants = map[string]string{
 // flagError is the FlagErrorFunc of every command. A value that pflag
 // cannot parse as the flag's type reads as the other invalid flag values
 // do (invalidValue), instead of Go's parser error; every other flag error
-// is kept. Both are usage errors (isUsageError).
+// is kept. Both are usage errors (cobratree.IsUsage).
 func flagError(_ *cobra.Command, err error) error {
 	if invalid, ok := errors.AsType[*pflag.InvalidValueError](err); ok {
 		if want, ok := flagValueWants[invalid.GetFlag().Value.Type()]; ok {
@@ -108,13 +75,29 @@ func flagError(_ *cobra.Command, err error) error {
 	return err
 }
 
+// argsUsageError marks an error in the arguments of a command, whose
+// message ends with the usage line of the command, line (withUsageLine).
+type argsUsageError struct {
+	err  error
+	line string
+}
+
+func (e *argsUsageError) Error() string {
+	if e.line == "" {
+		return e.err.Error()
+	}
+	return fmt.Sprintf("%s (usage: %s)", e.err, e.line)
+}
+
+func (e *argsUsageError) Unwrap() error { return e.err }
+
 // argsError marks err as a usage error in the arguments, whose message
 // ends with the usage line of the command (withUsageLine); nil stays nil.
 func argsError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return &usageError{err: err, inArgs: true}
+	return cobratree.Usage(&argsUsageError{err: err})
 }
 
 // argsErrorf returns a usage error in the arguments with a formatted
@@ -123,34 +106,18 @@ func argsErrorf(format string, args ...any) error {
 	return argsError(fmt.Errorf(format, args...))
 }
 
-// usageArgs makes every argument check in the tree report a usage error,
-// and every usage error in the arguments of a command that runs end with
-// the command's usage line (withUsageLine). cobra's own checks, such as cobra.ExactArgs,
-// return plain errors, which would otherwise exit exitFailure.
-//
-// Adapted from GSI-HPC/clusterctl internal/cli/root.go.
-func usageArgs(cmd *cobra.Command) {
-	// A command group's errors name the subcommand they do not know, and
-	// help's the topic: their usage line would not help.
-	leaf := !cmd.HasSubCommands() && cmd.Name() != "help"
-	if check := cmd.Args; check != nil {
-		cmd.Args = func(c *cobra.Command, args []string) error {
-			err := check(c, args)
-			if !leaf {
-				return usage(err)
-			}
-			// cobra's arity messages name neither the argument nor the
-			// command, and the usage block is silenced.
-			return withUsageLine(c, argsError(err))
-		}
-	}
-	if run := cmd.RunE; run != nil && leaf {
+// usageLines makes a usage error in the arguments that a command which
+// runs returns end with the command's usage line (withUsageLine).
+// cobratree.Strict ends the errors of argument checks with it; sind also
+// checks some arguments, such as node names, only when the command runs.
+func usageLines(cmd *cobra.Command) {
+	if run := cmd.RunE; run != nil && !cmd.HasSubCommands() {
 		cmd.RunE = func(c *cobra.Command, args []string) error {
 			return withUsageLine(c, run(c, args))
 		}
 	}
 	for _, sub := range cmd.Commands() {
-		usageArgs(sub)
+		usageLines(sub)
 	}
 }
 
@@ -159,30 +126,11 @@ func usageArgs(cmd *cobra.Command) {
 // ends with one. Any other error, a flag value that is not valid among
 // them, is returned as it is: the usage line does not show the flags.
 func withUsageLine(cmd *cobra.Command, err error) error {
-	var marked *usageError
-	if !errors.As(err, &marked) || !marked.inArgs || marked.line != "" {
+	marked, ok := errors.AsType[*argsUsageError](err)
+	if !ok || marked.line != "" {
 		return err
 	}
-	return &usageError{err: err, inArgs: true, line: strings.TrimSuffix(cmd.UseLine(), " [flags]")}
-}
-
-// isUsageError reports whether err is an error in the command line. A flag
-// that pflag cannot parse is one wherever it is parsed: cobra passes only
-// the flags of the command that runs through its FlagErrorFunc, not those
-// of the parents it traverses (TraverseChildren), and exec parses its own.
-func isUsageError(err error) bool {
-	var (
-		notExist      *pflag.NotExistError
-		valueRequired *pflag.ValueRequiredError
-		invalidValue  *pflag.InvalidValueError
-		invalidSyntax *pflag.InvalidSyntaxError
-		marked        *usageError
-	)
-	return errors.As(err, &marked) ||
-		errors.As(err, &notExist) ||
-		errors.As(err, &valueRequired) ||
-		errors.As(err, &invalidValue) ||
-		errors.As(err, &invalidSyntax)
+	return cobratree.Usage(&argsUsageError{err: err, line: strings.TrimSuffix(cmd.UseLine(), " [flags]")})
 }
 
 // childExitError is the error of a program that sind ran on the user's

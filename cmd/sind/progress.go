@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
 	"github.com/GSI-HPC/go-clikit/progress/display"
@@ -102,7 +103,7 @@ func withProgress(run func(*cobra.Command, []string) error) func(*cobra.Command,
 		returned := false
 		p, startErr := startRun(interrupt, progressOptions(interrupt, cmd))
 		if startErr != nil {
-			return usage(startErr)
+			return cobratree.Usage(startErr)
 		}
 		ctx, restore := throughDisplay(cmd, p)
 		defer func() {
@@ -165,7 +166,7 @@ func progressClass(interrupt context.Context) func(error) progress.Class {
 		switch {
 		case interrupt.Err() != nil:
 			return progress.ClassCanceled
-		case isUsageError(err):
+		case cobratree.IsUsage(err):
 			return progress.ClassUsage
 		case errors.Is(err, cluster.ErrNotReady):
 			return progress.ClassTimeout
@@ -281,7 +282,7 @@ func checkProgressFlag(cmd *cobra.Command) error {
 		return invalidFlagValue("progress", mode, progressModeNames()...)
 	}
 	_, _, err := cliprogress.Choose(progressOptions(cmd.Context(), cmd))
-	return usage(err)
+	return cobratree.Usage(err)
 }
 
 // takeTraceContext returns the W3C trace context sind was started with,

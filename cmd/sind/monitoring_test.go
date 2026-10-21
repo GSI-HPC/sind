@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -122,7 +123,7 @@ func TestGetMonitoring_NoStack(t *testing.T) {
 	m := &mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{} }}
 	_, _, err := executeWithMock(m, "get", "monitoring")
 	require.EqualError(t, err, `no monitoring stack in realm "sind"`)
-	assert.False(t, isUsageError(err))
+	assert.False(t, cobratree.IsUsage(err))
 
 	_, _, err = executeWithMock(m, "get", "monitoring", "-o", "yaml")
 	require.Error(t, err)

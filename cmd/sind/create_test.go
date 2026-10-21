@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/cluster"
@@ -210,7 +211,7 @@ func TestCreate_WaitFlag(t *testing.T) {
 			// A negative limit is a usage error, reported before sind acts.
 			_, _, err = executeCommand("create", sub, "--wait", "-1s")
 			require.EqualError(t, err, "--wait must not be negative, got -1s")
-			assert.True(t, isUsageError(err))
+			assert.True(t, cobratree.IsUsage(err))
 		})
 	}
 }
@@ -242,7 +243,7 @@ func TestApplyDataFlag_Empty(t *testing.T) {
 	err = applyDataFlag(cfg, "")
 
 	require.Error(t, err)
-	assert.True(t, isUsageError(err))
+	assert.True(t, cobratree.IsUsage(err))
 	assert.Empty(t, cfg.Storage.DataStorage.HostPath)
 }
 
@@ -357,7 +358,7 @@ func TestCreateCluster_MonitoringFlag(t *testing.T) {
 		var m mock.Executor
 		_, _, err := executeWithMock(&m, append([]string{"create", "cluster"}, args...)...)
 		require.EqualError(t, err, "monitoring requires a managed controller: sind writes no Slurm configuration for an unmanaged cluster", "%v", args)
-		assert.False(t, isUsageError(err))
+		assert.False(t, cobratree.IsUsage(err))
 		assert.Empty(t, m.Calls)
 	}
 

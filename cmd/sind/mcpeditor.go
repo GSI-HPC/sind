@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
@@ -173,7 +174,7 @@ func (f *mcpEditorFlags) path(e mcpEditor) (string, error) {
 // loadMCPConfig loads the configuration file the flags select.
 func loadMCPConfig(e mcpEditor, f *mcpEditorFlags) (*mcpconfig.File, error) {
 	if f.configPath != "" && f.workspace {
-		return nil, usagef("--config-path and --workspace are mutually exclusive")
+		return nil, cobratree.Usagef("--config-path and --workspace are mutually exclusive")
 	}
 	path, err := f.path(e)
 	if err != nil {
@@ -229,7 +230,7 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 			return mcpconfig.Server{}, err
 		}
 		if env, ok := f.env["SIND_REALM"]; ok && env != realm {
-			return mcpconfig.Server{}, usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
+			return mcpconfig.Server{}, cobratree.Usagef("--realm %s and --env SIND_REALM=%s name different realms", realm, env)
 		}
 		if entry.Env == nil {
 			entry.Env = map[string]string{}

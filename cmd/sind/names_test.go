@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,7 +67,7 @@ func TestInvalidRealm(t *testing.T) {
 			var m mock.Executor
 			_, _, err := executeWithMock(&m, append([]string{"--realm", "Not_A_Realm"}, args...)...)
 			require.EqualError(t, err, `--realm: invalid realm name "Not_A_Realm": '_' is not a letter, a digit or a hyphen`, args)
-			assert.True(t, isUsageError(err), args)
+			assert.True(t, cobratree.IsUsage(err), args)
 			assert.Empty(t, m.Calls, args)
 		}
 	})

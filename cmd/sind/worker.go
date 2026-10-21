@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -59,9 +60,9 @@ func listFlag(cmd *cobra.Command, name string) []string {
 // usage errors, before it takes the realm lock or calls docker.
 func checkCreateWorkerFlags(opts cluster.WorkerAddOptions) error {
 	if opts.Count < 1 {
-		return usagef("--count must be at least 1, got %d", opts.Count)
+		return cobratree.Usagef("--count must be at least 1, got %d", opts.Count)
 	}
-	return usage(opts.Check())
+	return cobratree.Usage(opts.Check())
 }
 
 // createWorkerOptions returns the options of create worker's flags, with a
