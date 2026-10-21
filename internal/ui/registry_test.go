@@ -56,6 +56,8 @@ func TestFragmentDepends(t *testing.T) {
 		{"watched item", Fragment{Watch: watch}, pending(store.RunTopic("abc")), true},
 		{"another item", Fragment{Watch: watch}, pending(store.RunTopic("def")), false},
 		{"no dependency", Fragment{}, pending(store.TopicTasks), false},
+		{"all topics", Fragment{Topics: []store.Topic{store.TopicRuns}}, pending(store.TopicAll), true},
+		{"all topics, watched", Fragment{Watch: watch}, pending(store.TopicAll), true},
 	} {
 		assert.Equal(t, tc.want, tc.f.depends(tc.pending, p), tc.name)
 	}

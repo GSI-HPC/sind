@@ -59,13 +59,23 @@ func TestTasks(t *testing.T) {
 	assert.Len(t, s.Snapshot().Tasks, 1)
 }
 
-func TestSlowSubscriberMissesOnlyPendingNotices(t *testing.T) {
+func TestSlowSubscriberGetsTopicAllForWhatDidNotFit(t *testing.T) {
 	s := New()
 	ch, done := s.Subscribe()
 	for range 20 {
 		s.AddTask(Task{})
 	}
-	assert.Len(t, ch, cap(ch))
+	s.SetRuns(nil, "x") // did not fit either
+	require.Len(t, ch, cap(ch))
+	for range cap(ch) - 1 {
+		assert.Equal(t, TopicTasks, <-ch)
+	}
+	assert.Equal(t, TopicAll, <-ch, "the last place stands for the rest")
+
+	// With room again, the notices are exact.
+	s.SetRuns(nil, "x")
+	assert.Equal(t, TopicRuns, <-ch)
+	assert.Equal(t, RunTopic("x"), <-ch)
 	done()
 	s.AddTask(Task{})
 	assert.Len(t, s.Snapshot().Tasks, 21)

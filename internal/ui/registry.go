@@ -126,6 +126,9 @@ type Fragment struct {
 
 // depends reports whether a change of any topic in pending makes f stale.
 func (f Fragment) depends(pending map[store.Topic]bool, p Params) bool {
+	if pending[store.TopicAll] {
+		return true
+	}
 	for t := range pending {
 		if slices.Contains(f.Topics, t) {
 			return true

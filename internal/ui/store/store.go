@@ -27,6 +27,9 @@ const (
 	TopicRuns Topic = "runs"
 	// TopicTasks changes when a task starts, ends or is dismissed.
 	TopicTasks Topic = "tasks"
+	// TopicAll stands for every topic. A subscriber gets it in place of
+	// the notices that did not fit its channel.
+	TopicAll Topic = "*"
 )
 
 // RunTopic is the topic of one run, which changes with every event of it,
@@ -79,12 +82,16 @@ func (s *Store) Snapshot() Snapshot {
 	return s.snap
 }
 
+// subscriberQueue is how many notices a subscriber can have pending.
+const subscriberQueue = 8
+
 // Subscribe returns a channel that receives the topic of each change, and
 // a function that ends the subscription. A subscriber that falls behind
-// misses notifications while it has some pending, and then renders from
-// the snapshot it reads, which holds every change.
+// gets TopicAll in the last place of its channel, for the notices that did
+// not fit, and then renders all from the snapshot it reads, which holds
+// every change.
 func (s *Store) Subscribe() (<-chan Topic, func()) {
-	ch := make(chan Topic, 8)
+	ch := make(chan Topic, subscriberQueue)
 	s.mu.Lock()
 	s.subs[ch] = struct{}{}
 	s.mu.Unlock()
@@ -109,11 +116,15 @@ func (s *Store) update(fn func(*Snapshot), ts ...Topic) {
 // notify tells the subscribers that t changed. The caller holds the lock.
 func (s *Store) notify(t Topic) {
 	for ch := range s.subs {
-		select {
-		case ch <- t:
+		// Only this function sends, under the lock, so the channel cannot
+		// fill between the length and the send.
+		switch len(ch) {
+		case cap(ch):
+			// TopicAll is pending already.
+		case cap(ch) - 1:
+			ch <- TopicAll
 		default:
-			// The subscriber has notices pending and renders from the
-			// snapshot it reads then, which includes this change.
+			ch <- t
 		}
 	}
 }
