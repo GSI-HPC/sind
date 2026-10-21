@@ -50,6 +50,20 @@ func TestUICommand_Defaults(t *testing.T) {
 	assert.Empty(t, got.RuntimeDir)
 }
 
+func TestUICommand_Demo(t *testing.T) {
+	got := fakeUI(t, nil)
+	_, _, err := executeCommand("ui", "--demo", "--still", "--no-open")
+	require.NoError(t, err)
+	assert.True(t, got.Demo)
+	assert.True(t, got.Still)
+
+	got = fakeUI(t, nil)
+	_, _, err = executeCommand("ui")
+	require.NoError(t, err)
+	assert.False(t, got.Demo)
+	assert.False(t, got.Still)
+}
+
 func TestUICommand_Error(t *testing.T) {
 	fakeUI(t, errors.New("port 80 is in use"))
 	_, _, err := executeCommand("ui")
@@ -69,4 +83,6 @@ func TestUICommand_Help(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "--no-open")
 	assert.Contains(t, stdout, "--port")
+	assert.Contains(t, stdout, "--demo")
+	assert.NotContains(t, stdout, "--still", "--still is for screenshots and stays out of the help")
 }

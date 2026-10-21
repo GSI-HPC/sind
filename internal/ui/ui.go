@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/GSI-HPC/sind/internal/ui/demo"
 	"github.com/GSI-HPC/sind/internal/ui/store"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
@@ -35,6 +36,13 @@ type Options struct {
 	Exec cmdexec.Executor
 	// Stderr gets the URL and the log; nil discards both.
 	Stderr io.Writer
+	// Demo serves made-up clusters and plays the commands of the dialogs:
+	// no Docker, no child process, nothing written. It does not record
+	// itself in RuntimeDir, so that it never stands in for a real sind ui.
+	Demo bool
+	// Still makes the demo stand at demo.Epoch and play nothing, so that its
+	// pages are the same on every run. It is for screenshots and needs Demo.
+	Still bool
 
 	// registry is what is served; nil is the default registry.
 	registry *Registry
@@ -53,6 +61,9 @@ const shutdownGrace = 5 * time.Second
 // Run serves sind ui until ctx ends. When another sind ui of the user runs,
 // it opens that one's URL and returns.
 func Run(ctx context.Context, o Options) error {
+	if o.Still && !o.Demo {
+		return errors.New("--still needs --demo")
+	}
 	if o.Exec == nil {
 		o.Exec = &cmdexec.OSExecutor{}
 	}
@@ -71,7 +82,7 @@ func Run(ctx context.Context, o Options) error {
 	log := slog.New(slog.NewTextHandler(o.Stderr, nil))
 
 	var inst *instance
-	if o.RuntimeDir != "" {
+	if o.RuntimeDir != "" && !o.Demo {
 		var err error
 		if inst, err = newInstance(o.RuntimeDir); err != nil {
 			return fmt.Errorf("preparing the runtime directory: %w", err)
@@ -118,6 +129,15 @@ func Run(ctx context.Context, o Options) error {
 
 	env := &Env{Store: store.New(), Exec: o.Exec, Log: log, Opts: o, Addr: addr}
 	services := o.registry.snapshot().services
+	cfg := serverConfig{Env: env, Token: token, Port: port, Registry: o.registry}
+	if o.Demo {
+		d := demo.New(env.Store, o.Still)
+		env.Exec = d.Exec()
+		services = demoServices(d, services)
+		if o.Still {
+			cfg.Now = d.Now
+		}
+	}
 	for _, svc := range services {
 		if svc.Setup == nil {
 			continue
@@ -126,7 +146,7 @@ func Run(ctx context.Context, o Options) error {
 			return fmt.Errorf("starting %s: %w", svc.Name, err)
 		}
 	}
-	srv, err := newServer(ctx, serverConfig{Env: env, Token: token, Port: port, Registry: o.registry})
+	srv, err := newServer(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -154,6 +174,9 @@ func Run(ctx context.Context, o Options) error {
 		defer inst.retire()
 	}
 	_, _ = fmt.Fprintf(o.Stderr, "sind ui: %s\nPress Ctrl-C to stop.\n", url)
+	if o.Demo {
+		_, _ = fmt.Fprintln(o.Stderr, "Demo: made-up clusters; nothing touches Docker.")
+	}
 	if !o.NoOpen {
 		openBrowser(ctx, o.Exec, inst, url, log)
 	}

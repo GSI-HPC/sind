@@ -24,7 +24,10 @@ your realms, clusters and nodes, and updates live.
 Only you can open it: it prints a URL with a token that is new each run,
 and it refuses other users' connections. A second sind ui opens the
 running one instead. To use it from another machine, forward the port
-with ssh -L and pass --no-open.`,
+with ssh -L and pass --no-open.
+
+--demo serves made-up clusters and plays the commands of the dialogs instead
+of running them: it needs no Docker, starts no process and writes nothing.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.RuntimeDir = os.Getenv("XDG_RUNTIME_DIR")
@@ -36,6 +39,9 @@ with ssh -L and pass --no-open.`,
 	f := cmd.Flags()
 	f.IntVar(&o.Port, "port", 0, "port on 127.0.0.1 to listen on (default: a free one)")
 	f.BoolVar(&o.NoOpen, "no-open", false, "print the URL without opening a browser")
+	f.BoolVar(&o.Demo, "demo", false, "serve made-up clusters and play commands instead of running them; no Docker is used")
+	f.BoolVar(&o.Still, "still", false, "with --demo: freeze the clock and play nothing, for screenshots")
+	_ = f.MarkHidden("still")
 
 	return cmd
 }

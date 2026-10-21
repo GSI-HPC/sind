@@ -1,0 +1,226 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package demo
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/probe"
+)
+
+func seededStore(t *testing.T) (*World, *store.Store) {
+	t.Helper()
+	w, st := Seeded(), store.New()
+	w.Publish(st)
+	return w, st
+}
+
+func TestSeeded(t *testing.T) {
+	_, st := seededStore(t)
+	sn := st.Snapshot()
+
+	assert.True(t, sn.Docker.Reachable())
+	require.Len(t, sn.Realms, 2)
+	assert.Equal(t, "ci", sn.Realms[0].Name)
+	assert.Equal(t, 1, sn.Realms[0].Clusters)
+	assert.Equal(t, 3, sn.Realms[1].Clusters)
+
+	byName := map[string]cluster.Summary{}
+	for _, c := range sn.Clusters["sind"] {
+		byName[c.Name] = c
+	}
+	assert.Equal(t, cluster.StateRunning, byName["default"].State)
+	assert.Equal(t, cluster.StateRunning, byName["dev"].State)
+	assert.Equal(t, cluster.StateMixed, byName["legacy"].State, "a stopped worker")
+	dev := byName["dev"]
+	assert.Equal(t, 11, dev.NodeCount)
+	assert.Equal(t, 2, dev.Controllers)
+	assert.Equal(t, 1, dev.DBs)
+	assert.Equal(t, 1, dev.APIs)
+	assert.Equal(t, 1, dev.Submitters)
+	assert.Equal(t, 6, dev.Workers)
+	assert.Equal(t, "25.11.8", byName["legacy"].SlurmVersion)
+
+	assert.NotNil(t, sn.MonitoringOf("sind"))
+	assert.Nil(t, sn.MonitoringOf("ci"), "monitoring in one realm only")
+	m, ok := sn.MeshOf("sind")
+	require.True(t, ok)
+	assert.Equal(t, []string{"kind-control-plane"}, m.External)
+	assert.Equal(t, "sind-mesh", m.Info.Network)
+	assert.Len(t, m.Records, 11+2+3)
+	ci, _ := sn.MeshOf("ci")
+	assert.Equal(t, "ci-mesh", ci.Info.Network)
+
+	status := sn.Status("sind", "dev")
+	require.NotNil(t, status)
+	assert.True(t, *status.Network.Grafana)
+	var down []string
+	for _, n := range status.Nodes {
+		for s, ok := range n.Health.Services {
+			if !ok {
+				down = append(down, n.Name+" "+string(s))
+			}
+		}
+		if n.Name == "controller-backup.dev" {
+			assert.Equal(t, "backup", n.Health.HA.Position)
+		}
+		if n.Name == "controller.dev" {
+			assert.True(t, n.Health.HA.InControl)
+		}
+	}
+	assert.Equal(t, []string{"worker-4.dev slurmd"}, down)
+	assert.Len(t, status.Mounts, 3)
+	assert.Equal(t, config.StorageVolume, status.Mounts[2].Type)
+	assert.Equal(t, config.StorageHostPath, sn.Status("sind", "default").Mounts[2].Type)
+	assert.Nil(t, sn.Status("ci", "pr-145").Network.Grafana)
+
+	assert.Len(t, sn.Networks["sind"], 4, "the mesh and a network for each cluster")
+	assert.NotEmpty(t, sn.Volumes["sind"])
+	assert.Len(t, sn.Nodes["sind"], 11+2+3)
+}
+
+func TestWorld_Lifecycle(t *testing.T) {
+	w, st := seededStore(t)
+	n := func(name string) node { return node{name: name, cluster: "new", role: "worker"} }
+	apply := func(op, name string) { w.apply("sind", op, n(name)); w.Publish(st) }
+	state := func() map[string]cluster.State {
+		out := map[string]cluster.State{}
+		for _, ns := range st.Snapshot().Nodes["sind"] {
+			if ns.Cluster == "new" {
+				out[ns.FQDN] = ns.State
+			}
+		}
+		return out
+	}
+
+	apply(opCreate, "w0")
+	assert.Equal(t, map[string]cluster.State{"w0.new.sind.sind": cluster.StateStopped}, state())
+	apply(opCreate, "w0")
+	assert.Len(t, state(), 1, "a node that exists is not made twice")
+
+	apply(opStart, "w0")
+	assert.Equal(t, cluster.StateRunning, state()["w0.new.sind.sind"])
+	assert.False(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services[probe.ServiceSlurmd], "no services yet")
+	apply(opReady, "w0")
+	assert.True(t, st.Snapshot().Status("sind", "new").Nodes[0].Health.Services[probe.ServiceSlurmd])
+	apply(opPause, "w0")
+	assert.Equal(t, cluster.StatePaused, state()["w0.new.sind.sind"])
+	apply(opUnpause, "w0")
+	assert.Equal(t, cluster.StateRunning, state()["w0.new.sind.sind"])
+	apply(opStop, "w0")
+	assert.Equal(t, cluster.StateStopped, state()["w0.new.sind.sind"])
+	assert.Equal(t, cluster.StateStopped, st.Snapshot().ClustersOf("sind")[3].State)
+
+	apply(opStart, "nobody") // a node that is not there
+	w.apply("sind", opStart, node{name: "w0", cluster: "nowhere"})
+	apply(opRemove, "w0")
+	assert.Empty(t, state())
+	_, ok := st.Snapshot().Cluster("sind", "new")
+	assert.False(t, ok, "a cluster without containers does not exist")
+	assert.Nil(t, st.Snapshot().Status("sind", "new"))
+}
+
+func TestWorld_RealmGoes(t *testing.T) {
+	w, st := seededStore(t)
+	for _, c := range w.clustersOf("ci") {
+		for _, n := range w.nodesOf("ci", c) {
+			w.apply("ci", opRemove, n)
+		}
+	}
+	w.Publish(st)
+	sn := st.Snapshot()
+	require.Len(t, sn.Realms, 1)
+	assert.Empty(t, sn.Clusters["ci"])
+	assert.Empty(t, sn.Nodes["ci"])
+	_, ok := sn.MeshOf("ci")
+	assert.False(t, ok)
+	assert.Nil(t, sn.Status("ci", "pr-145"))
+}
+
+func TestWorld_Monitoring(t *testing.T) {
+	w, st := seededStore(t)
+	w.apply("ci", opMonitor, node{})
+	w.Publish(st)
+	m := st.Snapshot().MonitoringOf("ci")
+	require.NotNil(t, m)
+	assert.Len(t, m.Services, 4)
+	assert.Equal(t, "http://grafana.ci.sind:3000", m.Services[0].URL)
+	assert.Equal(t, "http://172.22.0.9:12345", m.Services[3].URL, "alloy has no DNS name")
+}
+
+func TestWorld_Connect(t *testing.T) {
+	w, st := seededStore(t)
+	w.apply("sind", opConnect, node{name: "minio"})
+	w.apply("sind", opConnect, node{name: "minio"})
+	w.Publish(st)
+	m, _ := st.Snapshot().MeshOf("sind")
+	assert.Equal(t, []string{"kind-control-plane", "minio"}, m.External)
+	w.apply("sind", opDisconn, node{name: "kind-control-plane"})
+	w.Publish(st)
+	m, _ = st.Snapshot().MeshOf("sind")
+	assert.Equal(t, []string{"minio"}, m.External)
+
+	// A realm that only has a connected container is no realm.
+	w.apply("other", opConnect, node{name: "x"})
+	w.Publish(st)
+	assert.Len(t, st.Snapshot().Realms, 2)
+}
+
+func TestWorld_Drift(t *testing.T) {
+	w, st := seededStore(t)
+	up := func() bool {
+		for _, n := range st.Snapshot().Status("sind", "dev").Nodes {
+			if n.Name == "worker-4.dev" {
+				return n.Health.Services[probe.ServiceSlurmd]
+			}
+		}
+		return false
+	}
+	require.False(t, up())
+	assert.True(t, w.Drift())
+	w.Publish(st)
+	assert.True(t, up())
+	assert.True(t, w.Drift())
+	w.Publish(st)
+	assert.False(t, up())
+
+	w.apply("sind", opStop, node{name: "worker-4", cluster: "dev"})
+	assert.False(t, w.Drift(), "a node that is stopped has nothing to flip")
+	w.apply("sind", opRemove, node{name: "worker-4", cluster: "dev"})
+	assert.False(t, w.Drift())
+	for _, n := range w.nodesOf("sind", "dev") {
+		w.apply("sind", opRemove, n)
+	}
+	assert.False(t, w.Drift(), "no dev")
+}
+
+func TestWorld_Queries(t *testing.T) {
+	w := Seeded()
+	assert.Equal(t, []string{"default", "dev", "legacy"}, w.clustersOf("sind"))
+	assert.Equal(t, 3, w.Count("sind"))
+	assert.Equal(t, 0, w.Count("nowhere"))
+	assert.Nil(t, w.nodesOf("sind", "nowhere"))
+	assert.Len(t, w.nodesOf("sind", "dev"), 11)
+	assert.Nil(t, w.lookup("nowhere", "dev"))
+	assert.Nil(t, w.lookup("sind", "nowhere"))
+	assert.Nil(t, w.clusterOf("sind", "dev").find("nobody"))
+
+	w.configure("sind", "dev", func(c *clusterState) { c.users = nil })
+	assert.Nil(t, w.lookup("sind", "dev").users)
+	assert.NotPanics(t, func() { w.configure("sind", "nowhere", func(*clusterState) { panic("not called") }) })
+}
+
+func TestServices(t *testing.T) {
+	want := map[config.Role]int{config.RoleController: 3, config.RoleDB: 4, config.RoleAPI: 3, config.RoleSubmitter: 3, config.RoleWorker: 3}
+	for role, n := range want {
+		got := services(role)
+		assert.Contains(t, got, probe.ServiceMunge, role)
+		assert.Len(t, got, n, role)
+	}
+}
