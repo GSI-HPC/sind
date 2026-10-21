@@ -621,6 +621,28 @@ func TestTheEventLogOfACommand(t *testing.T) {
 	assert.Greater(t, len(readJSONLines(t, file)), len(lines))
 }
 
+// connect container and disconnect container report their progress, as the
+// commands that create, delete and power do: their span is the command in
+// the event log.
+func TestConnectAndDisconnectWriteAnEventLog(t *testing.T) {
+	for _, verb := range []string{"connect", "disconnect"} {
+		t.Run(verb, func(t *testing.T) {
+			onTerminals(t, nil)
+			file := filepath.Join(t.TempDir(), "events.jsonl")
+
+			code := run(powerCutFails(t.Context(), t, nil),
+				[]string{"--progress", "none", "--progress-log", file, verb, "container", "kind-worker"}, io.Discard)
+
+			assert.Equal(t, exitFailure, code)
+			lines := readJSONLines(t, file)
+			require.GreaterOrEqual(t, len(lines), 3)
+			assert.Equal(t, verb+" container", lines[1]["name"])
+			assert.Equal(t, "command", lines[1]["kind"])
+			assert.Equal(t, "failed", lines[len(lines)-1]["status"])
+		})
+	}
+}
+
 func readJSONLines(t *testing.T, file string) []map[string]any {
 	t.Helper()
 	f, err := os.Open(file)

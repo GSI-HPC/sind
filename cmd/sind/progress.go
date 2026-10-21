@@ -80,7 +80,8 @@ var (
 
 // withProgress returns run, the function of a command that changes
 // clusters and asks nothing, decorated to report the command's progress:
-// create cluster, create worker, delete cluster, delete worker and power.
+// create cluster, create worker, delete cluster, delete worker, connect
+// container, disconnect container and power.
 // The command runs in a progress span of its own, the root of what it
 // reports, named by its path below the root ("create cluster").
 //

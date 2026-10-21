@@ -1,11 +1,11 @@
 ---
 weight: 355
 title: "Progress Display"
-description: "What create, delete and power show while they run, and the event log"
+description: "What create, delete, connect, disconnect and power show while they run, and the event log"
 toc: true
 ---
 
-`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `connect container`, `disconnect container`, `doctor`, `version`, `mcp`, `completion`) never do.
+`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker`, `connect container`, `disconnect container` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `doctor`, `version`, `mcp`, `completion`) never do.
 
 By default sind shows it only on a terminal. Where standard error is not a terminal, in a pipe, a file or a CI log, these commands print nothing on success, as they did before, and their standard error holds exactly what it did: errors, `Warning:` lines and the `-v` logs.
 
@@ -139,6 +139,8 @@ $ sind power reboot 'worker-[0-23]'
 
 `sind delete worker` shows `slurm` (takes the workers out of `sind-nodes.conf` and reconfigures slurmctld, on a managed cluster) and `mesh deregistration` at the same time, then `nodes`, with a target for each worker, and on a monitored cluster `monitoring`. A node that cannot be removed fails its target, and the other nodes are removed still.
 
+`sind connect container` shows the step `connecting`, and `sind disconnect container` the step `disconnecting`, each with a target for each container, named as you name it: the containers are attached or detached one after another, and one that is on every network of the realm already, or on none, is skipped, as `skipped: connected` or `skipped: not connected`. The first container that fails ends the step, and those not yet tried are canceled.
+
 `sind delete cluster --all` and `sind delete realm` show the step `clusters`, with a target for each cluster; what each cluster's removal does shows as `nodes`, `network` and `volumes` steps below its target, without targets of their own. `mesh deregistration` follows, for the clusters that were deleted when another one failed to be, then `monitoring stack`, `mesh` and `monitoring volumes` for the realm.
 
 ## Choosing the display
@@ -202,7 +204,7 @@ The waits `ready` say how much of the `--wait` limit they have left. The parts o
 - An existing file must be yours, have no other name (no hard link to it) and be readable or writable by nobody else: sind refuses one that is not, and for one that others can read or write says `run chmod 600 FILE`. A symbolic link on the way to it, and a named pipe, must be yours or root's: sind follows no link put at the file's name after it looked, and refuses another user's named pipe at once instead of waiting for someone to read it. `/dev/stderr`, `/dev/stdout` and `/dev/fd/N` are written to where that stream goes; on the terminal the tree is drawn on, the lines go above the tree, as the `-v` logs do.
 - A file named by `--progress-log` that sind cannot use is a usage error, before the command does anything. One named by `SIND_PROGRESS_LOG` is not: sind says why in one line and runs without a log. `--progress-log ""` writes no log, whatever the variable says.
 - A log that cannot be written while the command runs, such as on a full disk, does not fail the command: sind says once that the log stops short.
-- Only `create`, `delete` and `power` open the file; other commands leave it alone.
+- Only `create`, `delete`, `connect`, `disconnect` and `power` open the file; other commands leave it alone.
 
 When sind is started with a W3C trace context in `TRACEPARENT` (and `TRACESTATE`), the log continues that trace. While sind shows progress or writes a log, it removes both variables from the environment of the programs it runs, such as docker; otherwise they inherit them.
 

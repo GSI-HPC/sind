@@ -19,7 +19,7 @@ cmd/sind/          CLI commands (cobra)
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
-  ├── progress.go  Progress of create, delete and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
+  ├── progress.go  Progress of create, delete, connect, disconnect and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations, tool processes in a process group of their own
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── mcpeditor.go sind mcp <editor> enable/disable/list: register sind's MCP server with Claude Desktop, VS Code, Cursor
