@@ -241,13 +241,13 @@ RUN tar xf slurm.tar.bz2 && \
 # ==============================================================================
 FROM builder-base AS ompi-builder
 
-ARG OMPI_VERSION=5.0.10
+ARG OMPI_VERSION=5.0.11
 
 COPY --from=ucx-builder /install/usr /usr
 COPY --from=pmix-builder /install/usr /usr
 COPY --from=prrte-builder /install/usr /usr
 
-ADD --checksum=sha256:0acecc4fc218e5debdbcb8a41d182c6b0f1d29393015ed763b2a91d5d7374cc6 \
+ADD --checksum=sha256:e668a3c4acd50c41dc204c8a6dd98a611e0f26af89cf677577fa9be8a2698003 \
     https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-${OMPI_VERSION}.tar.bz2 \
     /tmp/openmpi.tar.bz2
 
@@ -418,7 +418,7 @@ ARG SLURM_VERSION
 ARG UCX_VERSION=1.22.0
 ARG PMIX_VERSION=6.1.0
 ARG PRRTE_VERSION=4.1.0
-ARG OMPI_VERSION=5.0.10
+ARG OMPI_VERSION=5.0.11
 ARG LIBJWT_VERSION=1.18.4
 
 LABEL org.opencontainers.image.title="sind-node" \
