@@ -34,6 +34,7 @@ var mcpExcluded = map[string]bool{
 	"ssh":                 true, // interactive shell or remote command without a terminal
 	"get ssh-private-key": true, // the mesh's SSH private key
 	"get auth-key":        true, // the cluster's munge key or slurm.key
+	"ui":                  true, // serves a web UI until interrupted
 }
 
 // mcpEffect is what an MCP tool does to its environment, which sets the

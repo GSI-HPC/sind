@@ -67,6 +67,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newExecCommand())
 	cmd.AddCommand(newLogsCommand())
 	cmd.AddCommand(newDoctorCommand())
+	cmd.AddCommand(newUICommand())
 	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(newMCPCommand(mcpConfig()))
 
