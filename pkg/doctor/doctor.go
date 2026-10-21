@@ -149,13 +149,38 @@ func parseCgroupInfo(mounts string) (mountPath string, hasV2, hasNsdelegate bool
 // mounted at CgroupRoot, and the kernel shows nsdelegate, an option of the
 // whole cgroup2 hierarchy, in every cgroup2 mount, in a container's cgroup
 // namespace too. docker run pulls image if the daemon does not have it.
+//
+// Docker mounts a cgroup filesystem in every container, so a mount table
+// without one is output docker run lost, as it can for a container that
+// exits at once on a busy daemon, and not a verdict: the probe runs again,
+// up to probeAttempts times, and then fails.
 func ProbeCgroupInfo(ctx context.Context, client *docker.Client, image string) (mountPath string, hasV2, hasNsdelegate bool, err error) {
-	mounts, err := client.RunEphemeralWith(ctx, []string{"--network", "none", "--entrypoint", "cat"}, image, "/proc/self/mounts")
-	if err != nil {
-		return "", false, false, fmt.Errorf("reading the mount table in a container of %s: %w", image, err)
+	for range probeAttempts {
+		mounts, err := client.RunEphemeralWith(ctx, []string{"--network", "none", "--entrypoint", "cat"}, image, "/proc/self/mounts")
+		if err != nil {
+			return "", false, false, fmt.Errorf("reading the mount table in a container of %s: %w", image, err)
+		}
+		if hasCgroupMount(mounts) {
+			mountPath, hasV2, hasNsdelegate = parseCgroupInfo(mounts)
+			return mountPath, hasV2, hasNsdelegate, nil
+		}
 	}
-	mountPath, hasV2, hasNsdelegate = parseCgroupInfo(mounts)
-	return mountPath, hasV2, hasNsdelegate, nil
+	return "", false, false, fmt.Errorf("reading the mount table in a container of %s: docker run showed no cgroup mount in %d attempts", image, probeAttempts)
+}
+
+// probeAttempts is how often ProbeCgroupInfo runs its container for a
+// mount table with a cgroup filesystem in it.
+const probeAttempts = 3
+
+// hasCgroupMount reports whether the mount table mounts lists a cgroup or
+// cgroup2 filesystem.
+func hasCgroupMount(mounts string) bool {
+	for line := range strings.Lines(mounts) {
+		if fields := strings.Fields(line); len(fields) >= 3 && (fields[2] == "cgroup" || fields[2] == "cgroup2") {
+			return true
+		}
+	}
+	return false
 }
 
 // NsdelegateRemediation returns the commands that remount cgroup2 at

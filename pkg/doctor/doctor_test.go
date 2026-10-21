@@ -211,6 +211,31 @@ func TestProbeCgroupInfo(t *testing.T) {
 	assert.Equal(t, []string{"run", "--rm", "--network", "none", "--entrypoint", "cat", "img:1", "/proc/self/mounts"}, m.Calls[0].Args)
 }
 
+// TestProbeCgroupInfo_LostOutput checks that a mount table without a cgroup
+// filesystem, output docker run lost, runs the probe again instead of
+// reading as cgroup v1, and fails after probeAttempts.
+func TestProbeCgroupInfo_LostOutput(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "", nil)
+	m.AddResult("overlay / overlay rw 0 0\n", "", nil)
+	m.AddResult("cgroup /sys/fs/cgroup cgroup2 ro,nsdelegate 0 0\n", "", nil)
+
+	mountPath, hasV2, hasNsd, err := ProbeCgroupInfo(t.Context(), docker.NewClient(&m), "img:1")
+	require.NoError(t, err)
+	assert.Equal(t, CgroupRoot, mountPath)
+	assert.True(t, hasV2)
+	assert.True(t, hasNsd)
+	assert.Len(t, m.Calls, probeAttempts)
+
+	var lost mock.Executor
+	for range probeAttempts {
+		lost.AddResult("", "", nil)
+	}
+	_, _, _, err = ProbeCgroupInfo(t.Context(), docker.NewClient(&lost), "img:1")
+	require.EqualError(t, err, "reading the mount table in a container of img:1: docker run showed no cgroup mount in 3 attempts")
+	assert.Len(t, lost.Calls, probeAttempts)
+}
+
 func TestProbeCgroupInfo_RunError(t *testing.T) {
 	var m mock.Executor
 	m.AddResult("", "docker: Error response from daemon: pull access denied for img\n", fmt.Errorf("exit status 125"))
