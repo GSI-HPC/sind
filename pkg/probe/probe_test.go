@@ -43,7 +43,7 @@ func TestContainerRunning(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"inspect", string(testContainer)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"inspect", string(testContainer), "--type", "container"}, m.Calls[0].Args)
 }
 
 func TestContainerRunning_NotRunning(t *testing.T) {

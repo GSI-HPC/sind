@@ -65,7 +65,7 @@ $ echo $?
 
 ## Interrupts
 
-The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A `--wait` limit of `sind create cluster` or `sind create worker` that runs out is not an interrupt: the command rolls back the same way and exits `1`. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish. On a terminal, the [progress display]({{< relref "/usage/progress" >}}) says `interrupting` while the cleanup runs, and the summary line it leaves says the command was `canceled`.
+The first SIGINT or SIGTERM stops the command and runs its cleanup, such as the rollback of a failed `sind create cluster`; sind then exits `130`. A `--wait` limit of `sind create cluster` or `sind create worker` that runs out is not an interrupt: the command rolls back the same way and exits `1`. SIGTERM exits `130` too, not `143`, so that a script checks one status for "interrupted". A second signal ends sind at once, without waiting for the cleanup to finish. `sind mcp stream` is the exception: SIGINT or SIGTERM is how a server is stopped, so it shuts down and exits `0`. On a terminal, the [progress display]({{< relref "/usage/progress" >}}) says `interrupting` while the cleanup runs, and the summary line it leaves says the command was `canceled`.
 
 ## MCP tools
 

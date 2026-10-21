@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -77,7 +78,7 @@ func GetClusters(ctx context.Context, client *docker.Client, realm string) ([]*S
 	}
 
 	result := make([]*Summary, 0, len(byCluster))
-	for _, name := range slices.Sorted(maps.Keys(byCluster)) {
+	for _, name := range slices.SortedFunc(maps.Keys(byCluster), natsort.Compare) {
 		cd := byCluster[name]
 		cd.summary.State = aggregateState(cd.states)
 		result = append(result, cd.summary)
@@ -101,15 +102,15 @@ type NodeSummary struct {
 // nodes the role's Slurm service, or mariadb and slurmdbd on a db node) are
 // reported under Services.
 type NodeDetail struct {
-	Container string                `json:"container"`
-	Cluster   string                `json:"cluster"`
-	Role      config.Role           `json:"role"`
-	Managed   bool                  `json:"managed"` // sind manages Slurm on the node (see IsManaged)
-	FQDN      string                `json:"fqdn"`
-	IP        string                `json:"ip"`
-	Status    docker.ContainerState `json:"status"`
-	Services  ServiceHealth         `json:"services"`
-	HA        *HAStatus             `json:"ha,omitempty"` // controllers of a primary/backup pair only
+	Container string        `json:"container"`
+	Cluster   string        `json:"cluster"`
+	Role      config.Role   `json:"role"`
+	Managed   bool          `json:"managed"` // sind manages Slurm on the node (see IsManaged)
+	FQDN      string        `json:"fqdn"`
+	IP        string        `json:"ip"`
+	Status    State         `json:"status"`
+	Services  ServiceHealth `json:"services"`
+	HA        *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
 }
 
 // GetAllNodes lists all nodes across all clusters in the realm.
@@ -148,7 +149,7 @@ func GetNodeNames(ctx context.Context, client *docker.Client, realm string, role
 		return c.Labels[LabelCluster] == "" || len(roles) > 0 && !slices.Contains(roles, config.Role(c.Labels[LabelRole]))
 	})
 	slices.SortFunc(containers, func(a, b docker.ContainerListEntry) int {
-		return cmp.Or(strings.Compare(a.Labels[LabelCluster], b.Labels[LabelCluster]),
+		return cmp.Or(natsort.Compare(a.Labels[LabelCluster], b.Labels[LabelCluster]),
 			strings.Compare(nodeOrder(config.Role(a.Labels[LabelRole]), string(a.Name)), nodeOrder(config.Role(b.Labels[LabelRole]), string(b.Name))))
 	})
 	names := make([]string, len(containers))
@@ -175,11 +176,10 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 
 	// IPs are best-effort: GetNodes/GetAllNodes drives user-facing listings
 	// and shell completion, so an inspect failure should degrade to empty
-	// IPs rather than fail the whole call. Log the cause so it is still
-	// visible under -v.
+	// IPs rather than fail the whole call, with a warning that says why.
 	ipByName := make(map[docker.ContainerName]map[docker.NetworkName]string, len(names))
 	if infos, err := client.InspectContainers(ctx, names...); err != nil {
-		sindlog.From(ctx).WarnContext(ctx, "inspecting cluster containers for IPs", "err", err)
+		sindlog.Warn(ctx, fmt.Sprintf("listing the nodes without their IPs: %v", err))
 	} else {
 		for _, info := range infos {
 			ipByName[info.Name] = info.IPs
@@ -202,7 +202,7 @@ func buildNodeSummaries(ctx context.Context, client *docker.Client, realm string
 		})
 	}
 	slices.SortFunc(result, func(a, b *NodeSummary) int {
-		return cmp.Or(strings.Compare(naturalSortKey(a.Cluster), naturalSortKey(b.Cluster)),
+		return cmp.Or(natsort.Compare(a.Cluster, b.Cluster),
 			strings.Compare(nodeOrder(a.Role, a.Container), nodeOrder(b.Role, b.Container)))
 	})
 	return result, nil
@@ -218,35 +218,7 @@ func nodeOrder(role config.Role, name string) string {
 	if rank < 0 {
 		rank = len(roleOrder)
 	}
-	return strconv.Itoa(rank) + naturalSortKey(name)
-}
-
-// naturalSortKey returns a comparison key where runs of ASCII digits are
-// zero-padded to a fixed width so that lexical comparison yields natural
-// order (e.g. "worker-2" < "worker-10").
-func naturalSortKey(s string) string {
-	const padWidth = 20
-	var b strings.Builder
-	b.Grow(len(s) + padWidth)
-	i := 0
-	for i < len(s) {
-		if s[i] >= '0' && s[i] <= '9' {
-			j := i
-			for j < len(s) && s[j] >= '0' && s[j] <= '9' {
-				j++
-			}
-			run := s[i:j]
-			for k := len(run); k < padWidth; k++ {
-				b.WriteByte('0')
-			}
-			b.WriteString(run)
-			i = j
-			continue
-		}
-		b.WriteByte(s[i])
-		i++
-	}
-	return b.String()
+	return strconv.Itoa(rank) + natsort.Key(name)
 }
 
 // NetworkSummary holds summary information about a sind network.
@@ -295,7 +267,7 @@ func GetNetworks(ctx context.Context, client *docker.Client, realm string) ([]*N
 		}
 		result = append(result, ns)
 	}
-	slices.SortFunc(result, func(a, b *NetworkSummary) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(result, func(a, b *NetworkSummary) int { return natsort.Compare(a.Name, b.Name) })
 	return result, nil
 }
 
@@ -318,7 +290,7 @@ func GetVolumes(ctx context.Context, client *docker.Client, realm string) ([]*Vo
 			Driver: e.Driver,
 		})
 	}
-	slices.SortFunc(result, func(a, b *VolumeSummary) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(result, func(a, b *VolumeSummary) int { return natsort.Compare(a.Name, b.Name) })
 	return result, nil
 }
 
@@ -423,7 +395,7 @@ func GetRealms(ctx context.Context, client *docker.Client) ([]*RealmSummary, err
 	}
 
 	result := make([]*RealmSummary, 0, len(byRealm))
-	for _, name := range slices.Sorted(maps.Keys(byRealm)) {
+	for _, name := range slices.SortedFunc(maps.Keys(byRealm), natsort.Compare) {
 		result = append(result, &RealmSummary{Name: name, Clusters: len(byRealm[name])})
 	}
 	return result, nil
@@ -445,7 +417,9 @@ func aggregateState(states []docker.ContainerState) State {
 	return first
 }
 
-// containerStateToState maps a docker container state to a cluster State.
+// containerStateToState maps a docker container state to the State of a
+// node: running, paused, stopped (exited, dead or created), or unknown
+// (restarting, removing).
 func containerStateToState(state docker.ContainerState) State {
 	switch state {
 	case docker.StateRunning:

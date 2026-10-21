@@ -43,7 +43,7 @@ func monitoredOnCall(t *testing.T) func([]string, string) mock.Result {
 			)}
 		case args[0] == "inspect" && stack(args[1]):
 			var infos []map[string]any
-			for i, name := range args[1:] {
+			for i, name := range args[1 : len(args)-2] {
 				state, networks := "running", map[string]any{"sind-mesh": map[string]string{"IPAddress": "172.18.255.25" + string(rune('3'-i))}}
 				if strings.HasSuffix(name, "-alloy") {
 					state, networks = "exited", nil
@@ -119,6 +119,24 @@ dev    2       26.05.4
 	assert.Equal(t, []cluster.MonitoredCluster{{Name: "dev", Nodes: 2, SlurmVersion: "26.05.4"}}, m.Clusters)
 }
 
+// TestGetMonitoring_NoClusters checks that a stack that collects no
+// cluster says so on stderr, below the empty CLUSTERS table.
+func TestGetMonitoring_NoClusters(t *testing.T) {
+	base := monitoredOnCall(t)
+	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+		if args[0] == "ps" && slices.Contains(testutil.ArgValues(args, "--filter"), "volume=sind-journal") {
+			return mock.Result{}
+		}
+		return base(args, stdin)
+	}}
+
+	stdout, stderr, err := executeWithMock(m, "get", "monitoring")
+
+	require.NoError(t, err)
+	assert.True(t, strings.HasSuffix(stdout, "\nCLUSTERS\nNAME   NODES   SLURM\n"), stdout)
+	assert.Equal(t, "No monitored clusters found in realm \"sind\".\n", stderr)
+}
+
 func TestGetMonitoring_NoStack(t *testing.T) {
 	m := &mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{} }}
 	_, _, err := executeWithMock(m, "get", "monitoring")
@@ -132,7 +150,7 @@ func TestGetMonitoring_NoStack(t *testing.T) {
 }
 
 func TestFormatServiceState(t *testing.T) {
-	assert.Equal(t, "missing", formatServiceState(cluster.MonitoringService{}))
+	assert.Equal(t, "missing", formatServiceState(cluster.MonitoringService{State: cluster.ServiceMissing}))
 	assert.Equal(t, "not ready", formatServiceState(cluster.MonitoringService{State: "running", Checked: true}))
 	assert.Equal(t, "unchecked", formatServiceState(cluster.MonitoringService{State: "running"}))
 	assert.Equal(t, "running", formatServiceState(cluster.MonitoringService{State: "running", Ready: true, Checked: true}))

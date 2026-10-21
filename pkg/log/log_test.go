@@ -51,3 +51,22 @@ func TestLevelTrace_FilteredAtDebug(t *testing.T) {
 	l.Log(ctx, LevelTrace, "should not appear")
 	assert.Empty(t, buf.String())
 }
+
+func TestWarn_WithWarn(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	var got []string
+	ctx := WithWarn(With(context.Background(), logger), func(msg string) { got = append(got, msg) })
+
+	Warn(ctx, "careful")
+	assert.Equal(t, []string{"careful"}, got)
+	assert.Empty(t, buf.String(), "the warning goes to the user, not to the log")
+}
+
+func TestWarn_WithoutWarnLogs(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	Warn(With(context.Background(), logger), "careful")
+	assert.Contains(t, buf.String(), "level=WARN msg=careful")
+}

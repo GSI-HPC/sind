@@ -305,7 +305,7 @@ func TestInspectContainer(t *testing.T) {
 	}, info.Mounts)
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"inspect", string(testContainerName)}, m.Calls[0].Args)
+	assert.Equal(t, []string{"inspect", string(testContainerName), "--type", "container"}, m.Calls[0].Args)
 }
 
 func TestInspectContainer_ImageAndHostConfig(t *testing.T) {
@@ -409,7 +409,7 @@ func TestInspectContainers_Multiple(t *testing.T) {
 	assert.Equal(t, "172.18.0.3", infos[1].IPs["sind-dev-net"])
 
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"inspect", "sind-dev-controller", "sind-dev-worker-0"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"inspect", "sind-dev-controller", "sind-dev-worker-0", "--type", "container"}, m.Calls[0].Args)
 }
 
 func TestInspectContainers_Empty(t *testing.T) {

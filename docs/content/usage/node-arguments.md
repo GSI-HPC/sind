@@ -65,7 +65,7 @@ sind power on worker-0 worker-1 worker-3
 
 Quote an expression with `[`, `!`, `&` or `^`, which the shell would otherwise read itself: it expands `worker-[0-3]` to the names of the files in the working directory that match it, such as a job's output file `worker-1`, and sind then acts on those nodes only.
 
-The operators compare the names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing, because `worker-2.default` is not one of the names `worker-[0-3]` gives. Write the suffix the same way throughout an expression.
+The operators compare the names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing, because `worker-2.default` is not one of the names `worker-[0-3]` gives. Write the suffix the same way throughout an expression. A node named both ways, as in `controller,controller.default`, is still one node: `sind power` and `sind delete worker` act on it once.
 
 ## Zero padding
 

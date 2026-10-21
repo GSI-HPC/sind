@@ -235,7 +235,8 @@ Commands follow **verb-noun** ordering with a two-level hierarchy:
 sind <verb> <noun> [ARGS] [FLAGS]
 ```
 
-- Multi-resource verbs (`create`, `delete`, `get`, `power`) group noun subcommands
+- Multi-resource verbs (`create`, `delete`, `get`, `power`, `connect`, `disconnect`) group noun subcommands
+- `mcp` groups the MCP server commands (`start`, `stream`, `tools`) and one command per editor (`sind mcp claude enable`)
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
 - Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2), naming the closest subcommand or, for the removed `sind status`, the command that replaced it (`cobratree.Strict` in `NewRootCommand`, once the tree is built, so it covers every group). They fail with `--help` too (`sind get bogus --help`): a group's help flag (`groupHelp`, which `groupHelpFlags` gives every group after `cobratree.Strict`) reads as unset to cobra, which would print the help before it checks the arguments, and the group's `RunE` prints it once the check has passed
@@ -272,9 +273,10 @@ Rules:
 | List resources (`get`) | tabwriter table, uppercase headers, 3-space padding | stdout |
 | Single value (`get auth-key`) | raw value, one line | stdout |
 | Checks (`doctor`) | one ✓/✗/! line per check (`!` for an advisory check that did not pass), fix instructions below a check that did not pass | stdout |
-| Mutations (`create`, `delete`, `power`) | nothing on success where stderr is not a terminal; on a terminal, their progress display (see Progress Display) | stderr |
+| Mutations (`create`, `delete`, `power`, `connect`, `disconnect`) | nothing on success where stderr is not a terminal; on a terminal, the progress display of the commands that have one (see Progress Display) | stderr |
 | Errors | structured slog at error level (always visible) | stderr |
 | Warnings | `Warning: ...` prefix | stderr |
+| Notes | `No <things> found in <where>.` below a table that lists nothing; `Note: ...` for any other remark on the output (`get ssh-config`) | stderr |
 | Logs (`-v`) | structured key=value, colorized on TTYs | stderr |
 | Progress (`--progress`) | live tree, counter or plain lines; a summary line for a command that failed or was interrupted | stderr |
 
@@ -283,6 +285,9 @@ Rules:
 - Errors are always visible (slog error level is always enabled, even without `-v`), except that `ssh`, `exec`, `enter` and `logs` add none when the program they run fails: it writes its own
 - A docker CLI that is missing or cannot reach the daemon fails every command with the same line, which names no step and no exit status: `Docker is not reachable: ` and the line of docker's error that says so (`docker CLI not found in PATH` for a missing CLI), then ``; run `sind doctor` for the fix`` (`docker.UnreachableError`, matched by `errors.Is(err, docker.ErrUnreachable)`; every `docker.Client` call classifies its error)
 - The final error line, and the `Warning:` line printed when the SSH config export fails, are escaped: it can quote what docker or a container wrote, so control characters, bidirectional controls and invalid UTF-8 in it are shown as `\x1b`, `\u202e` or `\xff` instead of reaching the terminal; newline and tab are kept. The cells of `get` tables (`cell`), whose text comes from labels, containers and docker, and the details of `doctor` checks are escaped the same way; a table cell also shows tab and newline as `\t` and `\n`, which would otherwise start a column or a row. JSON output, the `sind logs` stream and key or `known_hosts` output are written unchanged
+- Listings are in natural order of their names, digits by value (`dev2` before `dev10`, `worker-2` before `worker-10`, `internal/natsort`), in tables and JSON alike: clusters, realms, networks, volumes, the clusters of `get monitoring` and of `delete cluster --all`, shell completion, and `get dns` by host name; `get nodes` orders by cluster, then role, then name
+- An empty table cell is `-`, such as the IP of a stopped node or the `HA` of a worker, so that every row has all its columns for `awk` and `cut`; JSON output keeps `""`
+- A table that lists nothing still prints its header on stdout, and a note on stderr says so and where sind looked, so that a lone header is not taken for a failure (`noteNone`): `No clusters found in realm "sind".`, and the same for `get nodes`, `get networks`, `get volumes`, `get dns`, `get realms` (`No realms found.`), the `CLUSTERS` table of `get monitoring` (`No monitored clusters found ...`) and `mcp <editor> list`, which names the file it read (`No MCP servers found in "<path>".`), as a mistyped `--config-path` reads as an empty file. JSON output has an empty list and no note
 - Command output (tables, status, doctor) is monochrome — no ANSI escapes
 - Log output (`-v`) is colorized on interactive terminals, plain when piped
 - Unicode checkmarks (✓/✗; `!` for the warnings of `doctor`) only in `get cluster`, `get node` and `doctor` output, and in the progress display, which draws ASCII marks unless the locale is UTF-8
@@ -302,7 +307,7 @@ Exit status and signals:
 
 Logging uses `pkg/log` with context-based injection. Silent by default. All log lines include millisecond timestamps (`HH:MM:SS.mmm`) for timing analysis.
 
-Logs and progress are separate channels: the logger writes the records `-v` asks for, and a progress display shows the spans the work reports (see Progress Display). Under a display the logger is rebuilt on the display's terminal (`Terminal.Lines`), so every record, from whatever goroutine, is written whole above the display and never into it, in the colours of the real stderr; without one it writes to stderr as before.
+Logs and progress are separate channels: the logger writes the records `-v` asks for, and a progress display shows the spans the work reports (see Progress Display). Under a display the logger is rebuilt on the display's terminal (`Terminal.Lines`), so every record, from whatever goroutine, is written whole above the display and never into it, in the colours of the real stderr; without one it writes to stderr as before. The logger takes its colours from the colour profile of stderr, which lipgloss reads from the environment, and never asks the terminal for its colours: charmbracelet/log would have termenv query a terminal it writes to, and a pseudo-terminal that answers nothing, as under `script`, `expect` or `docker run -t`, would hold every command for 10 seconds and keep the queries in its output.
 
 | Level | Flag | What to log |
 |-------|------|------------|
@@ -317,10 +322,11 @@ Rules:
 - Log messages use lowercase, present tense: "creating network", not "Created network"
 - Include identifying attrs: `"node", shortName`, `"name", netName`, `"service", svcName`
 - What a user watches while a command runs is a progress span, not a log line: a display shows spans, and `-v` shows logs
+- What a user must know although the command went on, such as a skipped step or a seccomp profile a new worker does not inherit, is a warning, not a log record: `pkg/` reports it with `sindlog.Warn(ctx, msg)` (or `mesh.Manager.Warn`, `state.LockOptions.OnWarning`), which the CLI prints as a `Warning:` line on stderr at every verbosity (`withStderr`); a library caller without that sink gets it at slog's warn level. Level Warn is for operator detail only
 
 ### Progress Display
 
-`create cluster`, `create worker`, `delete cluster` (also `--all`), `delete worker` and the `power` commands show their progress on stderr while they run, with the `progress`, `progress/display` and `progress/cliprogress` packages of [go-clikit](https://github.com/GSI-HPC/go-clikit) v0.4.0, as clusterctl does. `withProgress` (`cmd/sind/progress.go`) decorates their `RunE`: the command runs in a progress span of its own, named by its path below the root (`create cluster`), and the code it calls in `pkg/` reports its work under that span as steps, targets, waits and calls (`progress.Start` on the command's context; without a Bus in the context, as for a library caller, every span is a no-op). `ssh`, `enter`, `exec`, `logs`, `mcp`, `get`, `doctor`, `version` and `completion` never show progress.
+`create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker` and the `power` commands show their progress on stderr while they run, with the `progress`, `progress/display` and `progress/cliprogress` packages of [go-clikit](https://github.com/GSI-HPC/go-clikit) v0.4.0, as clusterctl does. `withProgress` (`cmd/sind/progress.go`) decorates their `RunE`: the command runs in a progress span of its own, named by its path below the root (`create cluster`), and the code it calls in `pkg/` reports its work under that span as steps, targets, waits and calls (`progress.Start` on the command's context; without a Bus in the context, as for a library caller, every span is a no-op). `ssh`, `enter`, `exec`, `logs`, `connect container`, `disconnect container`, `mcp`, `get`, `doctor`, `version` and `completion` never show progress.
 
 `--progress MODE`, else `SIND_PROGRESS`, else `auto`, says how stderr shows it:
 
@@ -337,9 +343,9 @@ Rules:
 - Without a display (`none`, and `auto` where stderr is not a terminal: a pipe, a file, a CI log, sind-action, an MCP tool call), sind makes no progress Bus unless an event log is asked for, and stderr carries byte for byte what it would without progress.
 - The tree and the counter draw nothing in their first second: a command done by then leaves nothing on the terminal. A hidden span, such as a docker command (a call named after its subcommand, `docker exec`), is drawn only once it has run for a second. Only steps leave a line, with their targets that failed below it: a hidden step only when it failed or took a second or longer, and no step that ends well within a tenth of a second with nothing drawn below it.
 - On success the tree leaves only the lines of its finished steps, the counter nothing and `plain` its lines, and `exit 0` says the rest. A command that failed or was interrupted after a second or longer also gets, under any display, a summary line (`display.Summary`) below the display and above the final error line: `sind: create cluster: failed in 38s: 5 ok, 1 failed, 2 canceled`. The Bus, the display, the event log and the summary live inside the decorated `RunE`, which takes them down before it returns, and so before `run` prints the error line: cobra does not run `PersistentPostRunE` for a command that failed.
-- Under a display, everything the command writes goes through the display's `Terminal`, which takes the tree or the counter off first: cobra's stderr (`Warning:` lines, help), stdout when it is the same terminal, the context's stderr (`withStderr`: the warnings of the realm lock and the mesh) and the logger (see Logging Conventions). Nothing in `pkg/` writes to a stream itself.
+- Under a display, everything the command writes goes through the display's `Terminal`, which takes the tree or the counter off first: cobra's stderr (`Warning:` lines, help), stdout when it is the same terminal, the context's stderr (`withStderr`: the warnings `pkg/` reports, the realm lock's and the mesh's among them) and the logger (see Logging Conventions). Nothing in `pkg/` writes to a stream itself.
 - On a terminal the displays and the summary draw go-clikit's Classic theme: its marks in green, red, amber and blue, `⋅` and `⋯` as separators, and a mark in front of the summary (`sind: ✗ create cluster: failed in 38s: ...`). It draws in 256 colours, in the terminal's own 16 where the colour profile of stderr shows no more, and in its marks alone under `NO_COLOR` (`progressTheme`, from the profile lipgloss reads for the logger). Off a terminal, and on one whose `TERM` is `dumb`, the displays draw plain text, as the lines then go to a log.
-- The tree draws ASCII marks unless `LC_ALL`, `LC_CTYPE` or `LANG` names UTF-8 (`cliprogress.UTF8Locale`). It draws its clocks in tenths of a second, `0:41.3` for the command and `4.2s` for a running step, so that every frame differs while anything runs; the summary and the durations of finished steps keep their formats. go-clikit asks the terminal for its size at each frame and draws nothing in the background of a terminal (`cliprogress.TerminalSize`, `cliprogress.InForeground`); sind passes both the stream and decides nothing about them.
+- The tree draws ASCII marks, and plain lines join the parts of a path with `>` instead of `›`, unless `LC_ALL`, `LC_CTYPE` or `LANG` names UTF-8 (`cliprogress.UTF8Locale`). It draws its clocks in tenths of a second, `0:41.3` for the command and `4.2s` for a running step, so that every frame differs while anything runs; the summary and the durations of finished steps keep their formats. go-clikit asks the terminal for its size at each frame and draws nothing in the background of a terminal (`cliprogress.TerminalSize`, `cliprogress.InForeground`); sind passes both the stream and decides nothing about them.
 - Once the first SIGINT or SIGTERM has arrived, the command's row says `interrupting`, with how many running targets will stop and how many queued ones will not start, and every span that fails from then on ends canceled (`progressClass`), as a docker command the interrupt killed fails with `signal: killed` alone. Otherwise a usage error is of the class `usage`, `cluster.ErrNotReady` (`--wait`) a `timeout`, and any other failure the target's.
 - `create cluster --config -` takes the display off the terminal while it reads stdin, which may be the terminal (`progress.Suspend`).
 - `--progress-log FILE`, else `SIND_PROGRESS_LOG`, appends the command's events to FILE as JSON lines, go-clikit's [event log](https://github.com/GSI-HPC/go-clikit/blob/v0.4.0/doc/event-log.md) version 1 (`progress.NewLog`, with sind's version), with any mode, `none` included, and writes nothing on stderr. `cliprogress` opens it privately: it creates the file with mode `0600` and appends to it (`O_APPEND`), so that the commands of a CI job can share one log, each a `run` of its own, and refuses a file that is not the user's, that others can read or write (`run chmod 600 <path>`), that has other names (`<path> has other names than this one (N hard links)`), or that a link or a named pipe of another user leads to; it writes `/dev/stdout`, `/dev/stderr`, `/dev/fd/N` and `/proc/self/fd/N` through a duplicate of that descriptor. A log on the file the display draws on, such as `/dev/stderr` on the terminal, goes through the display's `Terminal`, so that its lines, written from the log's goroutine, land above the display and never in it. A log the flag names that cannot be used is a usage error before the command acts; one the variable names is a note on stderr, and no log. `--progress-log ""` writes no log even when the variable names one. A log that cannot be written once the command runs fails nothing, and sind says once that it stops short.
@@ -441,8 +447,9 @@ NAME/CLUSTER defaults to `default` if omitted, except for `get nodes`, which the
 - Removes all matching Docker resources regardless of state
 - Updates `~/.local/state/sind/<realm>/known_hosts` (or `$XDG_STATE_HOME/sind/<realm>/known_hosts`) to remove deleted nodes
 - Order: stops/removes containers → disconnects/removes networks → removes volumes
-- Before it removes a network, it disconnects every container still attached: the SSH relay, and containers outside sind that were attached with `docker network connect`, such as kind nodes. Those are detached, not removed, as Docker does not remove a network with active endpoints
+- Before it removes a network, it disconnects every container still attached, running or stopped (`docker ps -a --filter network=`): the SSH relay, and containers outside sind that were attached with `docker network connect`, such as kind nodes. Those are detached, not removed, as Docker does not remove a network with active endpoints, and a stopped container that still names a removed network fails to start
 - The last cluster of a realm takes the mesh with it; its nodes are then not removed from the mesh DNS and `known_hosts` first
+- It updates the exported SSH configuration (see User SSH Client Integration) also when it fails partway, as `--all` does
 
 `sind delete cluster --all` deletes every cluster of the realm in parallel, then the mesh, the monitoring stack and the exported SSH configuration, as `sind delete realm` does. It finds the clusters by the `sind.cluster` labels of their containers, networks and volumes, and removes the mesh even when no cluster is left, as after a killed create. A cluster that fails to delete does not stop the others: the rest are deleted (and removed from the mesh DNS and `known_hosts`), the mesh stays, and the command exits non-zero with every failure. It deletes at most 4 clusters at a time, on go-clikit's `fanout.Map`, which a display shows as the step `clusters` with a target for each. Once the command is interrupted it starts no further cluster, and each one left out fails as one tried then would, `deleting cluster <name>: listing containers: context canceled`. A panic while deleting a cluster becomes that cluster's error, `sind panicked; this is a bug, please report it: ...`, with a line that names the cluster and the stack on stderr, and the other clusters finish: the command exits 1, where the panic used to end sind with Go's report and status 2.
 
@@ -463,23 +470,23 @@ NODES column shows total count and breakdown: **S**ubmitter / **C**ontroller / *
 
 ```
 $ sind get nodes dev
-CONTAINER            ROLE         FQDN                         IP           STATUS
-sind-dev-controller  controller   controller.dev.sind.sind     172.19.0.2   running
-sind-dev-db          db           db.dev.sind.sind             172.19.0.5   running
-sind-dev-worker-0    worker       worker-0.dev.sind.sind       172.19.0.3   running
-sind-dev-worker-1    worker       worker-1.dev.sind.sind       172.19.0.4   running
+CONTAINER             ROLE         FQDN                       IP           STATUS
+sind-dev-controller   controller   controller.dev.sind.sind   172.19.0.2   running
+sind-dev-db           db           db.dev.sind.sind           172.19.0.5   running
+sind-dev-worker-0     worker       worker-0.dev.sind.sind     172.19.0.3   running
+sind-dev-worker-1     worker       worker-1.dev.sind.sind     172.19.0.4   running
 ```
 
 Without a cluster argument, `sind get nodes` lists every node in the realm and adds a `CLUSTER` column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`:
 
 ```
 $ sind get nodes
-CONTAINER                CLUSTER   ROLE         FQDN                             IP           STATUS
-sind-default-controller  default   controller   controller.default.sind.sind     172.19.0.2   running
-sind-default-worker-0    default   worker       worker-0.default.sind.sind       172.19.0.3   running
-sind-dev-controller      dev       controller   controller.dev.sind.sind         172.20.0.2   running
-sind-dev-worker-2        dev       worker       worker-2.dev.sind.sind           172.20.0.3   running
-sind-dev-worker-10       dev       worker       worker-10.dev.sind.sind          172.20.0.4   running
+CONTAINER                 CLUSTER   ROLE         FQDN                           IP           STATUS
+sind-default-controller   default   controller   controller.default.sind.sind   172.19.0.2   running
+sind-default-worker-0     default   worker       worker-0.default.sind.sind     172.19.0.3   running
+sind-dev-controller       dev       controller   controller.dev.sind.sind       172.20.0.2   running
+sind-dev-worker-2         dev       worker       worker-2.dev.sind.sind         172.20.0.3   running
+sind-dev-worker-10        dev       worker       worker-10.dev.sind.sind        172.20.0.4   running
 ```
 
 ### Cluster Diagnostics
@@ -492,9 +499,9 @@ CLUSTER   SLURM     STATUS (R/S/P/T)
 dev       25.11.8   running (4/0/0/4)
 
 NETWORKS
-NAME             DRIVER   SUBNET           GATEWAY        STATUS
-sind-mesh        bridge   172.18.0.0/16    172.18.0.1     ✓
-sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
+NAME           DRIVER   SUBNET          GATEWAY      STATUS
+sind-mesh      bridge   172.18.0.0/16   172.18.0.1   ✓
+sind-dev-net   bridge   172.19.0.0/16   172.19.0.1   ✓
 
 MESH SERVICES
 NAME   CONTAINER   STATUS
@@ -502,17 +509,17 @@ dns    sind-dns    ✓
 ssh    sind-ssh    ✓
 
 MOUNTS
-MOUNT        SOURCE                    TYPE       STATUS
-/etc/slurm   sind-dev-config           volume     ✓
-/etc/munge   sind-dev-munge            volume     ✓
-/data        /home/user/project        hostPath   ✓
+MOUNT        SOURCE               TYPE       STATUS
+/etc/slurm   sind-dev-config      volume     ✓
+/etc/munge   sind-dev-munge       volume     ✓
+/data        /home/user/project   hostPath   ✓
 
 NODES
-NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
+NAME             ROLE         IP           STATUS    SERVICES
+controller.dev   controller   172.19.0.2   running   munge ✓ slurmctld ✓ sshd ✓
+db.dev           db           172.19.0.5   running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev     worker       172.19.0.3   running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev     worker       172.19.0.4   running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok`, `ssh_ok` in the JSON output); after a host reboot they exist but are stopped (see Host Reboot and Docker Daemon Restart). When the realm has a monitoring stack, `MESH SERVICES` adds a row for each of its four containers, with ✓ while the service is ready (its readiness endpoint, see Monitoring), and the JSON output adds `grafana_ok`, `prometheus_ok`, `loki_ok` and `alloy_ok` next to `dns_ok` and `ssh_ok`; without a stack the rows and the fields are left out. The JSON output has `"monitoring": true|false` at the top: whether a node of the cluster mounts the realm's journal volume.
@@ -541,15 +548,17 @@ The data row (`/data`, or the configured mount point) shows what Docker mounts t
 
 `SERVICES` lists munge and sshd for every node, plus slurmctld, slurmd, mariadb and slurmdbd on a db node, or slurmrestd on an api node, where sind manages Slurm. Unmanaged nodes (unmanaged workers, db and api nodes, and every node of an unmanaged cluster) list only munge and sshd. With identity `clientIds` no node lists munge, and the submitter lists sackd. The JSON output marks each node with `"managed": true|false`; `sind get node -o json` has the same field.
 
-Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Other nodes leave it empty. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
+Clusters with a backup controller add an `HA` column to the `NODES` table: each controller's position (`primary` or `backup`), with `*` on the controller in control. Other nodes show `-`. The JSON output adds `"ha": {"position": "backup", "in_control": true}` to each controller's `health`; `sind get node -o json` adds the same `ha` object. Single-controller clusters show neither, and neither do unmanaged clusters: sind cannot tell which of their controllers is in control.
 
 ```
 NODES
-NAME                    ROLE        HA         IP            STATUS    SERVICES
-controller.dev          controller  primary    172.19.0.2    running   munge ✓ slurmctld ✗ sshd ✓
-controller-backup.dev   controller  backup*    172.19.0.3    running   munge ✓ slurmctld ✓ sshd ✓
-worker-0.dev            worker                 172.19.0.4    running   munge ✓ slurmd ✓ sshd ✓
+NAME                    ROLE         HA        IP           STATUS    SERVICES
+controller.dev          controller   primary   172.19.0.2   running   munge ✓ slurmctld ✗ sshd ✓
+controller-backup.dev   controller   backup*   172.19.0.3   running   munge ✓ slurmctld ✓ sshd ✓
+worker-0.dev            worker       -         172.19.0.4   running   munge ✓ slurmd ✓ sshd ✓
 ```
+
+The `STATUS` of a node, in `sind get cluster`, `sind get node` and `sind get nodes`, and its JSON `status`, map its container's state (`containerStateToState`): `running`, `stopped` (exited, dead or created), `paused`, or `unknown` for another state, such as `restarting`, which the header counts under `S`. The cluster's state in the header and in `sind get clusters` uses the same words, plus `mixed` and `empty`.
 
 `sind get node NODE[.CLUSTER]` shows detailed health for a single node. NODE uses the format `shortName` or `shortName.cluster` (defaults to cluster "default"). Passing a full DNS FQDN (`NODE.CLUSTER.REALM.sind`) is rejected — use the bare short name or the `NODE.CLUSTER` form:
 
@@ -585,7 +594,7 @@ default   3       26.05.4
 dev       5       26.05.4
 ```
 
-`ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
+`ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist, also as the JSON `status`. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
 
 ```json
 {
@@ -621,7 +630,7 @@ For a local daemon, `nsdelegate` comes from this machine's `/proc/mounts`, which
 ```bash
 sind ssh [SSH_OPTIONS] [USER@]NODE [-- COMMAND]  # SSH into a specific node (passthrough)
 sind enter [CLUSTER] [--user USER]               # Interactive shell on submitter/controller
-sind exec [CLUSTER] [--user USER] -- <cmd>       # One-shot command on submitter/controller
+sind exec [CLUSTER] [--user USER] -- <cmd>       # Command on submitter/controller
 ```
 
 NODE uses DNS-style naming (see Node Arguments). CLUSTER defaults to `default`.
@@ -654,7 +663,7 @@ sind delete worker NODES               # remove worker nodes from cluster
 | `--device PATH` | the newest worker's, else none | Expose host device (repeatable; e.g. `/dev/fuse`); `--device=` for none |
 | `--security-opt OPT` | the newest worker's, else none | Security option (repeatable); `--security-opt=` for none |
 
-New workers take the shape of the cluster's newest worker, the one with the highest index among those managed like the new ones (or among all workers if none is): sind reads its image ID, CPU and memory limits, `/tmp` size, capabilities, devices and security options from `docker inspect`, so a bare `sind create worker` adds nodes like the ones the cluster has, whatever its `defaults` were. Two things are left out because sind decides them for each new worker: the security options every node gets, and the `SYS_NICE` capability where sind added it by itself, on a managed worker of a cluster whose `slurm.conf` enables `task/affinity` (unless the worker's `capDrop` lists `SYS_NICE` or `ALL`; see slurm.conf under Generated Configuration). A `SYS_NICE` from `capAdd` or `--cap-add` is inherited elsewhere, e.g. with the default `TaskPlugin=task/cgroup` or from an unmanaged worker; an unmanaged new worker modelled on a managed one keeps that worker's `SYS_NICE` either way, as sind reads `slurm.conf` for managed workers only. A seccomp profile is not inherited either, as docker reports its content rather than its file (pass it again with `--security-opt`). A cluster without workers gets the controller's image and 1 CPU, 512m and 256m. Each flag that is given replaces the inherited value; a repeatable flag replaces the whole inherited list, and given only empty (`--device=`, or `--device ""`) it replaces the list with none. The library tells the two apart by nil: in `cluster.WorkerAddOptions`, a nil `CapAdd`, `CapDrop`, `Devices` or `SecurityOpt` inherits the newest worker's list, and an empty one asks for none. What sind decides for each new worker itself stays either way: its security options, and `SYS_NICE` for `task/affinity`. The cluster-wide settings, the data and CVMFS mounts, the users and the identity mode, come from the controller's labels as `docker inspect` reports them, a map (`docker ps` joins all labels with commas, which cuts a path with a comma short); a `sind.data.hostpath` that is not an absolute path is refused rather than bind-mounted.
+New workers take the shape of the cluster's newest worker, the one with the highest index among those managed like the new ones (or among all workers if none is): sind reads its image ID, CPU and memory limits, `/tmp` size, capabilities, devices and security options from `docker inspect`, so a bare `sind create worker` adds nodes like the ones the cluster has, whatever its `defaults` were. Two things are left out because sind decides them for each new worker: the security options every node gets, and the `SYS_NICE` capability where sind added it by itself, on a managed worker of a cluster whose `slurm.conf` enables `task/affinity` (unless the worker's `capDrop` lists `SYS_NICE` or `ALL`; see slurm.conf under Generated Configuration). A `SYS_NICE` from `capAdd` or `--cap-add` is inherited elsewhere, e.g. with the default `TaskPlugin=task/cgroup` or from an unmanaged worker; an unmanaged new worker modelled on a managed one keeps that worker's `SYS_NICE` either way, as sind reads `slurm.conf` for managed workers only. A seccomp profile is not inherited either, as docker reports its content rather than its file (pass it again with `--security-opt`); sind says so in a `Warning:` line. A cluster without workers gets the controller's image and 1 CPU, 512m and 256m. Each flag that is given replaces the inherited value; a repeatable flag replaces the whole inherited list, and given only empty (`--device=`, or `--device ""`) it replaces the list with none. The library tells the two apart by nil: in `cluster.WorkerAddOptions`, a nil `CapAdd`, `CapDrop`, `Devices` or `SecurityOpt` inherits the newest worker's list, and an empty one asks for none. What sind decides for each new worker itself stays either way: its security options, and `SYS_NICE` for `task/affinity`. The cluster-wide settings, the data and CVMFS mounts, the users and the identity mode, come from the controller's labels as `docker inspect` reports them, a map (`docker ps` joins all labels with commas, which cuts a path with a comma short); a `sind.data.hostpath` that is not an absolute path is refused rather than bind-mounted.
 
 Without `--image`, the workers run the newest worker's (or controller's) image by its ID, not by the tag it was created from, which may have moved to another image since; `--pull` therefore needs `--image`. With `--image`, sind pulls the image once when the daemon does not have it, or with `--pull`, then runs `slurmctld -V` in it and refuses one whose Slurm version is not the cluster's (`sind.slurm.version`), as slurmd must not be newer than slurmctld; unmanaged workers and clusters without a recorded version skip this check.
 
@@ -688,6 +697,8 @@ Steps 3 to 5 run while the new workers are registered with the mesh DNS and know
 Managed nodes require the sind-generated Slurm configuration (see Generated Configuration). If `sind-nodes.conf` is missing (e.g., user replaced the config), the command fails with an error. Use `--unmanaged` to add nodes without modifying Slurm configuration. On an unmanaged cluster (see Unmanaged Cluster) every new worker is unmanaged, with or without `--unmanaged`. A controller that is stopped or frozen fails the command with an error that says so: start it with `sind power on` or `sind power unfreeze` first.
 
 **delete worker** deletes containers entirely. Works with both managed and unmanaged nodes. For managed nodes, sind removes them from `sind-nodes.conf` and reconfigures slurmctld before deleting the container, while it removes their mesh DNS and known_hosts entries. sind needs a running controller for this: with the controller stopped or frozen, deleting a managed worker fails and removes nothing, as the node would otherwise stay in the Slurm configuration without a container. Unmanaged workers need no controller. When none of the managed workers is in `sind-nodes.conf`, sind leaves the file alone and does not reconfigure. When the update fails, e.g. as `scontrol reconfigure` does, sind writes the file back as it was and keeps the containers, so that running the command again reconfigures slurmctld. On an unmanaged cluster, or one without `sind-nodes.conf`, it never edits the Slurm configuration or runs `scontrol`.
+
+With workers of several clusters, `delete worker` handles the clusters one after another, as the power commands do, and a cluster that fails does not stop the others: the command returns every failure, joined, and exits non-zero. It then updates the exported SSH configuration (see User SSH Client Integration) for the workers that are gone, also when a cluster failed.
 
 ### Power Control
 
@@ -789,27 +800,27 @@ sind mcp tools                          # export the tool definitions to mcp-too
 sind mcp {claude,vscode,cursor} {enable,disable,list}  # register sind with an editor
 ```
 
-The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags.
+The MCP server is built with ophis and configured in `cmd/sind/mcp.go`. Each tool runs the sind binary with the command's arguments and flags, in a process group of its own (`mcpExecute`, which a middleware puts in place of ophis's run function, and `cmdexec.WithProcessGroup`).
 
 The editor commands are sind's own (`cmd/sind/mcpeditor.go`, `internal/mcpconfig`), not ophis's, which rewrite the whole file from the fields they know (dropping the editor's other settings and the other servers' fields) and fail on a JSONC file:
 
-- They edit the editor's configuration in place, as JSON with comments and trailing commas (`github.com/tailscale/hujson`): only the entry of sind's server changes, and the editor's other settings, the other servers, comments and indentation stay. The servers are the members of `mcpServers` (Claude Desktop, Cursor) or `servers` (VS Code). A file that does not exist is created, readable by its owner alone, as an entry's `env` can hold secrets; one that exists keeps its permissions, and a symbolic link is followed to the file it points to.
-- `enable` adds or replaces the entry `--server-name` (default `sind`): `command` is the absolute path of the running sind binary (`os.Executable`), `args` is `["mcp", "start"]` plus `--log-level`, `env` is `--env`, and VS Code and Cursor get `"type": "stdio"`. An editor starts the server with its own environment, so the root `--realm` becomes `SIND_REALM` in `env`; an `--env SIND_REALM` that names another realm is a usage error. `disable` removes the entry and fails (exit 1) when there is none. `list` prints a `NAME`/`COMMAND` table (the command and its arguments, or the URL of an HTTP server), without the servers' environment.
+- They edit the editor's configuration in place, as JSON with comments and trailing commas (`github.com/tailscale/hujson`): only the entry of sind's server changes, and the editor's other settings, the other servers, comments and indentation stay. The servers are the members of `mcpServers` (Claude Desktop, Cursor) or `servers` (VS Code). A file that does not exist is created, readable by its owner alone, as an entry's `env` can hold secrets; one that exists keeps its permissions, and a symbolic link is followed to the file it points to. A file that names a server twice, or has the server list twice, is an error that names it, and is left alone: an editor reads the last of them, while sind would change the first. The lines sind adds have the file's line breaks, CRLF or LF.
+- `enable` adds or replaces the entry `--server-name` (default `sind`): `command` is the absolute path of the running sind binary (`os.Executable`), `args` is `["mcp", "start"]` plus `--log-level`, `env` is `--env`, and VS Code and Cursor get `"type": "stdio"`. A replaced entry keeps its `env`, with each variable `--env` or the realm names set to the new value, so a re-run after sind moved keeps the realm the server serves; it also keeps the members sind does not write (`disabled`, `autoApprove`, `cwd` …) in their place. `type`, `command`, `args` and `url` are sind's: they are written from the flags alone. An editor starts the server with its own environment, so the realm in effect, of the root `--realm` or else an exported `SIND_REALM`, becomes `SIND_REALM` in `env`, as every other command takes the realm; an `--env SIND_REALM` names the realm itself, and one that names another realm than `--realm` is a usage error. The values `enable` writes are checked as the commands that read them check them: `--env SIND_REALM` is a realm name, as `--realm` is, and `--log-level` one that `mcp start` takes; an empty `--server-name` (`enable`, `disable`) or `--config-path` (all three) is a usage error too, since an unset variable in `--config-path "$FILE"` would otherwise edit the editor's own file. `disable` removes the entry and fails (exit 1) when there is none. `list` prints a `NAME`/`COMMAND` table (the command and its arguments, or the URL of an HTTP server), without the servers' environment.
 - Before it changes a file that exists, `enable` or `disable` copies it to `<file>.<YYYYMMDD-HHMMSS>.bak` next to it (`-1`, `-2` … appended if that exists), so no backup is ever overwritten; `-v` logs its path. An unchanged file is not written and gets no backup. The new file replaces the old one through a temporary file and a rename.
 - The default files are `claude_desktop_config.json` in `Claude/` of the user configuration directory (`os.UserConfigDir`: `$XDG_CONFIG_HOME` or `~/.config` on Linux), `Code/User/mcp.json` there for VS Code, and `~/.cursor/mcp.json`; `--workspace` (VS Code, Cursor) selects `.vscode/mcp.json` or `.cursor/mcp.json` in the working directory, and `--config-path` any file.
 
 - The server reports itself as `sind` with the version `sind version` prints.
-- `--realm` on `sind mcp start` or `sind mcp stream` applies to every tool call: the server sets `SIND_REALM` for the sind processes it runs, which take the call's flags and the server's environment; on `sind mcp <editor> enable` it is written to the entry's `env`. The `mcp` commands take no arguments: an extra one is a usage error.
+- `--realm` on `sind mcp start` or `sind mcp stream` applies to every tool call: the server sets `SIND_REALM` for the sind processes it runs, which take the call's flags and the server's environment; on `sind mcp <editor> enable` it is written to the entry's `env`, as is an exported `SIND_REALM`. The `mcp` commands take no arguments: an extra one is a usage error.
 - ophis passes no flag for an empty array, so a middleware turns it into `[""]`, which ophis passes as the flag given empty (`--device ""`): for `sind_create_worker`, `"device": []` gives the new workers no devices, as `--device=` does, while leaving the flag out inherits the newest worker's.
 
-- `sind mcp stream` listens on `127.0.0.1` by default; `--host 0.0.0.0` opts in to all interfaces. Every request needs `Authorization: Bearer <token>` (go-sdk's `auth.RequireBearerToken`, constant-time comparison), else `401`: loopback keeps out other hosts but not the other users of this one, and every tool runs sind with the Docker access of the user who started the stream. The token is `SIND_MCP_TOKEN` (printable ASCII without spaces, at least 16 characters) or, when that is unset, a new `crypto/rand` token written at every start to `$XDG_STATE_HOME/sind/mcp-token` (`~/.local/state/sind/mcp-token`), mode `0600`, through a temporary file and a rename. The stream prints the listen URL, where the token is (never the token) and a client configuration to stderr. ophis's own stream has no hook for authentication, so `runMCPStream` (`cmd/sind/mcpstream.go`) replaces its run function and keeps its flags: it runs `sind mcp start`'s ophis server on an in-memory transport, lists its tools through an MCP client session, and serves them from a second MCP server whose handlers forward each call through that session, so ophis still builds every tool and runs every call with sind's selectors and middlewares. Stopped by SIGINT or SIGTERM, it shuts down and exits 0. `sind mcp start` (stdio) is unchanged and needs no token.
+- `sind mcp stream` listens on `127.0.0.1` by default; `--host 0.0.0.0` opts in to all interfaces. An empty `--host`, which `net.Listen` reads as all interfaces, is a usage error, so an unset variable in `--host "$HOST"` cannot open the stream to the network; so is a `--port` outside 0 to 65535. On a wildcard address the listen line gives the `localhost` URL a client uses and adds `(all interfaces)`. `--log-level` of `sind mcp start` and `sind mcp stream` takes `debug`, `info`, `warn` or `error` (any case, as ophis reads it); another value is a usage error, where ophis would use `info`. Every request needs `Authorization: Bearer <token>` (go-sdk's `auth.RequireBearerToken`, constant-time comparison), else `401`: loopback keeps out other hosts but not the other users of this one, and every tool runs sind with the Docker access of the user who started the stream. The token is `SIND_MCP_TOKEN` (printable ASCII without spaces, at least 16 characters) or, when that is unset, a new `crypto/rand` token written at every start to `$XDG_STATE_HOME/sind/mcp-token` (`~/.local/state/sind/mcp-token`), mode `0600`, through a temporary file and a rename. The stream prints the listen URL, where the token is (never the token) and a client configuration to stderr. ophis's own stream has no hook for authentication, so `runMCPStream` (`cmd/sind/mcpstream.go`) replaces its run function and keeps its flags: it runs `sind mcp start`'s ophis server on an in-memory transport, lists its tools through an MCP client session, and serves them from a second MCP server whose handlers forward each call through that session, so ophis still builds every tool and runs every call with sind's selectors and middlewares. Stopped by SIGINT or SIGTERM, it shuts down and exits 0. `sind mcp start` (stdio) is unchanged and needs no token.
 - Every runnable leaf command is a tool, except `enter` and `ssh` (interactive) and `get ssh-private-key` and `get auth-key` (secrets). Command groups, the root among them, are not tools: they only print help. Neither are `help`, `completion` and the `mcp` commands, which ophis leaves out.
 - Every tool carries MCP hints from `mcpEffects`: read-only (`readOnlyHint`: `get`, `logs`, `doctor`, `version`), additive (`destructiveHint: false`: `power on`, `power unfreeze`, `connect container`) or destructive (`destructiveHint: true`: `create`, `delete`, `disconnect container`, `exec`, and the other `power` actions). `create cluster` and `create worker` count as destructive because their flags choose the image a node runs as root, capabilities, devices, security options, a config file and a host directory mounted read-write: one call can run code with host-root power. A new command has to be classified there; a unit test fails otherwise.
 - Tools for commands with `-o` (every `get` subcommand and `doctor`) always run with `-o json`, set by an ophis middleware; `-o` is not in their input schema.
-- Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument), `logs --follow` (it never ends, and a tool returns its output only when the command exits), and `--progress` and `--progress-log` (a tool's output is no terminal, and holds no progress and no events).
-- `sind mcp start` and `sind mcp stream` set `SIND_PROGRESS=none` and unset `SIND_PROGRESS_LOG` for the sind processes they run (`asMCPServer`), which inherit the server's environment: a `SIND_PROGRESS=plain` set for the user's shell would add its lines to every tool's output, a `SIND_PROGRESS_LOG` of `/dev/stderr` its events, and one that cannot be opened a note.
-- A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked.
-- A cancelled call (`notifications/cancelled`) or a client that disconnects ends the call's context, and ophis then ends the tool's sind process with SIGKILL, which would skip the rollback of a failed `create` and leave partial resources, the realm lock and orphaned docker children behind. The tools that change state (`create`, `delete`, `connect`, `disconnect` and `power`) therefore run to completion on a context that ignores the cancellation (`mcpRunsToCompletion`): a cancelled create finishes, or rolls back, on its own, bounded by `--wait`, and the client gets no result. Read-only tools and `exec` stay cancellable. `sind mcp stream` waits at most `mcpShutdownTimeout` (5 s) for the MCP server to stop, so a call still running does not hold up its shutdown; the sind process it started goes on to finish or roll back.
+- Tool input schemas leave out `-v` (a count flag, which ophis would pass as `--verbose 2`, a stray positional argument), `logs --follow` (it never ends, and a tool returns its output only when the command exits), and `--progress` and `--progress-log` (a tool's output is no terminal, and holds no progress and no events). ophis takes a flag's schema `default` from its default value; the flags of `mcpNoDefault`, `logs --tail`, have none, since leaving them out means something else than that value (`--tail 0` shows no line, no `--tail` every line), which a client that fills in schema defaults would send. The flags of `mcpFlagUsage` get a description without the forms a tool call cannot use: a tool's sind process reads no stdin, so `create cluster`'s `config` describes a file path, without `-` for stdin. `sind mcp start` and `sind mcp tools` change these flags in their own process before ophis builds the tools (`withMCPFlagSchemas`), so the commands' help keeps them. ophis copies a command's usage line into the description of `args`, so a usage line names arguments only (`create cluster [NAME]`), never flags.
+- `sind mcp start` and `sind mcp stream` set `SIND_PROGRESS=none` and unset `SIND_PROGRESS_LOG` for the sind processes they run (`asMCPServer`), which inherit the server's environment: a `SIND_PROGRESS=plain` set for the user's shell would add its lines to every tool's output, a `SIND_PROGRESS_LOG` of `/dev/stderr` its events, and one that cannot be opened a note. They also set `SIND_LOG_TIMESTAMPS=false`, which leaves the time stamp off log lines: a tool's stderr reads `ERRO <message>`, as the time a line was written means nothing to the client.
+- A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked. The refusal reads as a usage error of the command: `exitCode` 2, `isError: true` and the `ERRO` line in `stderr`. A flag that is not in the tool's input schema fails go-sdk's validation of the call's input before sind sees the call, with an error result that has no `exitCode`.
+- A cancelled call (`notifications/cancelled`) or a client that disconnects ends the call's context, and the server then kills the tool's process group with SIGKILL: the sind process and the `docker exec` or `docker logs` it runs, so the call answers at once. ophis's own run function kills only the sind process, and the docker command would go on, holding the call's output open until it ended. The kill would skip the rollback of a failed `create` and leave partial resources and the realm lock behind, so the tools that change state (`create`, `delete`, `connect`, `disconnect` and `power`) run to completion on a context that ignores the cancellation (`mcpRunsToCompletion`): a cancelled create finishes, or rolls back, on its own, bounded by `--wait`, and the server sends its result when it ends. Read-only tools and `exec` stay cancellable. The command `exec` started in the node runs on until it ends: Docker has no way to signal a process that `docker exec` started, and killing the docker CLI does not stop it. `sind mcp stream` waits at most `mcpShutdownTimeout` (5 s) for the MCP server to stop, so a call still running does not hold up its shutdown; the sind process it started goes on to finish or roll back.
 - A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`, and `sind_exec` returns the status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`).
 
 ## Node Arguments
@@ -847,6 +858,7 @@ Rules:
 - The operators have no precedence: an expression is evaluated left to right, so `worker-[0-9]!worker-[0-4]&worker-[3-6]` is worker-5 and worker-6. `!`, `&` and `^` need an operand on each side; an empty operand of a union is nothing, so `worker-0,` is worker-0.
 - A command joins its node arguments with a space, which is a union, so `sind power on 'worker-[0-3]' '!worker-2'` is one expression. Quote an expression with `[`, `!`, `&` or `^` from the shell: the shell reads `!` itself, and expands `worker-[0-3]` to the files in the working directory that match it, such as a job's output file `worker-1`.
 - Zero padding is not part of a node's identity: `worker-1,worker-01` is one node, and `worker-[1-3]!worker-02` is worker-1 and worker-3. A node keeps the spelling it was first given, and sind looks it up by that spelling. sind names its workers without padding, so `worker-[00-03]` names none of them.
+- A node named with and without its cluster suffix, as in `controller,controller.default`, is one node too: `power` and `delete worker` act on it once.
 - The padding of the cluster suffix's numbers is no part of the identity either, but clusters `dev1` and `dev01` are two: an expression whose names differ only in the padding of their cluster (`worker-0.dev1,worker-0.dev01`), which would act on one of the two nodes, is a usage error (`paddingClash` expands each term on its own to see every spelling).
 - The operators compare names as written, cluster suffix included: `worker-[0-3]!worker-2.default` removes nothing. Write the suffix the same way throughout an expression.
 - A group (`@name`) is a usage error: sind has no node groups.
@@ -1104,7 +1116,9 @@ Per-node scalar values override the `defaults` section. List fields (`capAdd`, `
 - `monitoring` - requires a managed controller; `slurm.main` must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers` (the collector has no token), and with `PrivateData` it must set `MetricsParameters=ignore_private_data` (see Monitoring)
 - `name`, `realm` - valid cluster and realm names, see [Cluster and Realm Names](#cluster-and-realm-names)
 - unknown keys are rejected
-- the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`
+- the file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`, unquoted; anchors, aliases and merge keys (`<<: *worker`) are followed, so an object, a node's `role` included, can take its keys from another
+
+An error names the config it is about, `config FILE:` or, read from stdin, `config <stdin>:`, and a mistake in its form (YAML syntax, an unknown or repeated key, a value of the wrong type, or a role, identity mode, admin level or storage type that is not one) also the line and key path: `config dev.yaml: line 7: nodes[1].Cpus: unknown key (valid: role, count, …); did you mean "cpus"? keys are case-sensitive`. A config without content, only comments or `null` is `config FILE: empty configuration`.
 
 Validation checks a config's form, not its intent. A cluster config, like the `--data` flag, is as
 trusted as a script run with Docker access: `image` runs any image's services as root,
@@ -1121,7 +1135,7 @@ Cluster and realm names become part of Docker resource names, of DNS names (`<no
 - lowercase ASCII letters, digits and `-` only; uppercase is rejected, because DNS ignores case and `Dev` and `dev` would share DNS names
 - 1 to 63 characters
 - not beginning or ending with `-`
-- a cluster is not named `ssh`: its config volume, `<realm>-ssh-config`, would be the realm's SSH volume, which `sind delete cluster ssh` would then try to remove
+- a cluster is not named `ssh`: its config volume, `<realm>-ssh-config`, would be the realm's SSH volume, which `sind delete cluster ssh` would then try to remove. Nor does its name end in `-ssh`: the config volume of cluster `x-ssh` in realm `a`, `a-x-ssh-config`, would be the SSH volume of realm `a-x`. The mesh also refuses an SSH volume whose labels name another realm or another volume, such as the config volume of a cluster `x-ssh` that an earlier sind created, rather than mount it into the relay as `/root/.ssh`
 - with a managed db node, the cluster name has at most 40 characters: slurmdbd names the cluster's MariaDB tables `<cluster>_<table>`, MariaDB allows 64 characters, and Slurm documents the limit of 40. A longer name would keep slurmdbd from registering the cluster
 
 sind checks every place a name enters: the `name` and `realm` config fields, the `[CLUSTER]` argument, the cluster part of node arguments (`worker-0.dev`), `exec`'s cluster argument, `--realm` and `SIND_REALM`. The root command checks `--realm` before any command runs (`checkRealmFlag`), so it is a usage error even for a command that uses no realm, such as `version` or `get realms`. `SIND_REALM` is only checked when it is the realm in effect. The defaults `default` and `sind` are valid.
@@ -1370,7 +1384,7 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 
-The names have two parts, so they never equal a cluster's `<realm>-<cluster>-<type>` resources, and no cluster name has to be reserved. The images are pinned constants in `pkg/observability` (`GrafanaImage`, `PrometheusImage`, `LokiImage`, `AlloyImage`), each bumped on its own by hand; they do not follow `defaults.image`. Grafana must be the standard image: its Prometheus and Loki datasources ship only in the standard image's bundled plugins, which the `-slim` image would download at start, and it is the only one of the four with `curl`, which sind runs there to reach the others. A create that makes the stack pulls its images in Phase 2 with the node images; an existing stack keeps its containers, and their images, until it is removed or recreated (see Monitoring).
+The names have two parts, so they never equal a cluster's `<realm>-<cluster>-<type>` resources, and no cluster name has to be reserved. A service's container and its data volume share a name, so sind inspects containers with `docker inspect --type container` (`docker.Client.InspectContainers`), which never returns the volume of a missing container. The images are pinned constants in `pkg/observability` (`GrafanaImage`, `PrometheusImage`, `LokiImage`, `AlloyImage`), each bumped on its own by hand; they do not follow `defaults.image`. Grafana must be the standard image: its Prometheus and Loki datasources ship only in the standard image's bundled plugins, which the `-slim` image would download at start, and it is the only one of the four with `curl`, which sind runs there to reach the others. A create that makes the stack pulls its images in Phase 2 with the node images; an existing stack keeps its containers, and their images, until it is removed or recreated (see Monitoring).
 
 ### Realm Lock
 
@@ -1536,6 +1550,8 @@ with the working directory set to the data mount point (`/data` by default). Thi
 With `--user USER` they run as that cluster user (`docker exec -u USER`) in its home directory,
 `/home/USER`, which is shared too (see Users).
 
+`docker exec` always gets `-i`. `enter` adds `-t` when stdin is a terminal, for the login shell. `exec` adds `-t` only when stdin and stdout are both terminals, the rule of `sind ssh` (see sind ssh Implementation): `sind exec -- top` and `sind exec -- srun --pty bash` then get a pseudo-terminal, while output that a script captures or redirects keeps its line endings and its separate stderr.
+
 `sind ssh` continues to use the SSH relay container, for a login through the node's sshd. Its ssh client runs in the relay container, so port forwarding (`-L`, `-R`, `-D`) and the files that options name (`-i`, `-F`) are the relay's; forwarding to the host goes through the exported `ssh_config` (see User SSH Client Integration).
 
 ## Networking
@@ -1565,7 +1581,9 @@ The mesh does not route traffic between clusters by DNS name: the mesh DNS recor
 
 Containers outside sind, such as kind nodes, reach a realm's nodes by joining its networks: the mesh, for the DNS server, and every cluster network, for the addresses DNS answers with. `sind connect container CONTAINER...` attaches them to all of them, the mesh first, and skips the networks a container already joins; `sind disconnect container CONTAINER...` detaches them from every network of the realm, the mesh last. Both take the realm lock, so that no cluster network appears meanwhile, print nothing on success, and fail for a container that does not exist or is sind's own (it has the `sind.realm` label, or is in the mesh's Compose project, as the monitoring stack's containers are).
 
-sind keeps no list of them: an external container is any container on the mesh network that is not sind's own (`cluster.ExternalContainers`), whether `sind connect container` or `docker network connect` put it there. `sind create cluster` connects them to the new cluster network right after the SSH relay (`cluster.ConnectExternal`); a container that cannot be connected is a warning, not a failed create. Deleting a cluster network or the mesh detaches whatever is still attached, so external containers never block a delete.
+sind keeps no list of them: an external container is any container on the mesh network that is not sind's own (`cluster.ExternalContainers`), whether `sind connect container` or `docker network connect` put it there. `sind create cluster` connects them to the new cluster network right after the SSH relay (`cluster.ConnectExternal`); a container that cannot be connected is a warning, not a failed create. Deleting a cluster network or the mesh detaches whatever is still attached, stopped containers included, so external containers never block a delete and still start afterwards.
+
+So external containers are connected to the clusters created while the realm has a cluster, that is, while its mesh exists. Deleting the realm's last cluster with `sind delete cluster` takes the mesh with it, and with it what made them external containers: sind then writes a `Warning:` to stderr that names the detached containers and the `sind connect container` command that attaches them to a cluster created later. `sind delete cluster --all` and `sind delete realm`, which delete everything on purpose, detach them without a warning. sind keeps no state to connect them again on its own; a new mesh may also have another DNS address, which a CoreDNS forward to the old one (`sind get coredns-config`) then misses.
 
 ### DNS
 
@@ -1592,7 +1610,7 @@ The DNS container is lightweight and does not run systemd/sshd.
 
 A realm with a monitoring stack also has `grafana.<realm>.sind`, `prometheus.<realm>.sind` and `loki.<realm>.sind`, at the services' mesh addresses: the stack runs on the mesh only (see Monitoring).
 
-sind keeps the records in the Corefile's `hosts` block and writes them when it creates or deletes nodes, and when `sind power on`, `reboot` and `cycle` start nodes, as a node can get another address on each start. A running CoreDNS reloads the Corefile on `SIGUSR1` (`docker kill -s USR1`), without dropping queries; a stopped DNS container is started instead. The write and the reload ignore Ctrl+C, and so does the rewrite of `known_hosts`, whose `cat >` truncates the file first. Each realm-wide file has one writer at a time (the realm lock); the Corefile and `known_hosts` updates run in parallel, as they live in different containers.
+sind keeps the records in the Corefile's `hosts` block and writes them when it creates or deletes nodes, and when `sind power on`, `reboot` and `cycle` start nodes, as a node can get another address on each start. The server block for the zone has the `file` plugin after `hosts`, with a zone file `/zone.db` that holds only an SOA record (TTL and minimum 0, so the answer is not cached): CoreDNS's `hosts` plugin has no SOA and answers `SERVFAIL` for a name it lacks, which resolvers retry and report as a temporary failure, while `file` answers `NXDOMAIN`. A name that exists keeps `hosts`' answer, also for a type it has no record of (`AAAA`). Names with no record of their own, the zone's apex and `<cluster>.<realm>.sind`, answer `NXDOMAIN` too, as the zone file knows no names below the apex; nothing looks them up. Every write of the Corefile writes the zone file too, so a DNS container of an earlier sind gets it on the next update. A running CoreDNS reloads the Corefile on `SIGUSR1` (`docker kill -s USR1`), without dropping queries; a stopped DNS container is started instead. The write and the reload ignore Ctrl+C, and so does the rewrite of `known_hosts`, which replaces the file in one step (`docker.Client.ReplaceFile`: a temporary file next to it, renamed over it once complete), so that a write cut short, even by a Ctrl+C that reaches the docker CLI directly, leaves the old file rather than an empty one. Each realm-wide file has one writer at a time (the realm lock); the Corefile and `known_hosts` updates run in parallel, as they live in different containers.
 
 #### Host DNS Resolution
 
@@ -1714,7 +1732,7 @@ sind exports SSH configuration per realm to `$XDG_STATE_HOME/sind/<realm>/` (def
 | `known_hosts` | Host keys (copy from volume) |
 | `lock` | The realm lock's file part (see Realm Advisory Locking) |
 
-The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path):
+The generated `ssh_config` (for default realm `sind`; sind writes the state directory's absolute path, in double quotes with `%` doubled and `\` and `"` escaped, as ssh would otherwise split a path with a space and expand its `%` tokens; a line it cannot parse makes ssh reject the file, and with it every connection that includes it):
 
 ```
 Host controller controller.* controller-backup controller-backup.* db db.* api api.* submitter submitter.* worker-*
@@ -1722,8 +1740,9 @@ Host controller controller.* controller-backup controller-backup.* db db.* api a
     CanonicalDomains default.sind.sind sind.sind
 
 Host *.sind.sind
-    IdentityFile /home/user/.local/state/sind/sind/id_ed25519
-    UserKnownHostsFile /home/user/.local/state/sind/sind/known_hosts
+    IdentitiesOnly yes
+    IdentityFile "/home/user/.local/state/sind/sind/id_ed25519"
+    UserKnownHostsFile "/home/user/.local/state/sind/sind/known_hosts"
     User root
     StrictHostKeyChecking yes
 
@@ -1735,6 +1754,8 @@ Host worker-0.default.sind.sind
 ```
 
 The first block enables short-name resolution for the default realm: `ssh controller` expands to `controller.default.sind.sind`, and `ssh controller.dev` expands to `controller.dev.sind.sind`. ssh looks the candidates up in the host's DNS, which knows them where sind has pointed systemd-resolved at the mesh DNS for `*.<realm>.sind`, and reads the config again for the name it found. The block applies only to host names shaped like a node's, the node names alone or followed by `.<cluster>`, so ssh does not look up every other host it connects to under the sind domains first; `CanonicalizeMaxDots` keeps its default, 1, as these names have at most one dot. Other realms get no such block; use full names such as `controller.dev.ci.sind` there. While a node of that name exists, its short name reaches it rather than a host of the same name on the user's network. Short names need that host DNS (systemd-resolved with the polkit authorization `sind doctor` checks): without it, ssh falls back to the bare name, which matches no `Host` block (`Could not resolve hostname controller`); full names still work.
+
+The realm's block authenticates with sind's key only (`IdentitiesOnly yes`). ssh would otherwise offer the keys of the user's agent first, and the nodes' sshd ends the connection after `MaxAuthTries` (6) failed keys, so six agent keys would lock the user out; the nodes need not see those keys either.
 
 Each node in the realm's `known_hosts` gets a `Host` block of its own with the relay's `ProxyCommand`, the node's name written into it. ssh substitutes `%h` into a `ProxyCommand` unquoted and runs it in a shell, and a wildcard `Host *.sind.sind` matches any name with that suffix, so a host name with shell syntax in it, e.g. from a git submodule URL, would have run in the user's shell and in the relay's bash (the CVE-2023-51385 pattern). A name in `known_hosts` that is not `<node>.<cluster>.<realm>.sind` with lowercase host name labels gets no block. The file is rewritten whenever a cluster or worker of the realm is created or deleted, as `known_hosts` is.
 
@@ -1759,7 +1780,7 @@ scp file.txt controller.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller.default.sind.sind   # port forwarding to the host
 ```
 
-sind updates these files automatically when clusters or nodes are created/deleted, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file. The files are the invoking user's, so only that user's commands update them: in a realm shared with other clients of the daemon, their creates and deletes do not reach them.
+sind updates these files automatically when clusters or nodes are created/deleted, also after a `delete cluster` or `delete worker` that fails partway, reading the private key and `known_hosts` from the relay container in one `docker exec`; a relay container that no longer exists means the realm has no cluster. When the last cluster in a realm is deleted, `ssh_config`, `id_ed25519` and `known_hosts` are removed; the realm directory stays, as it holds the realm's `lock` file. The files are the invoking user's, so only that user's commands update them: in a realm shared with other clients of the daemon, their creates and deletes do not reach them.
 
 ## Monitoring
 
@@ -1928,7 +1949,7 @@ Opens an interactive shell on the submitter (or, without a submitter, on the con
 
 ### sind exec
 
-One-shot command execution on the same target as `sind enter`, through `docker exec` in `/data` rather than the SSH relay.
+Runs a command on the same target as `sind enter`, through `docker exec` in `/data` rather than the SSH relay, with a pseudo-terminal when stdin and stdout are terminals (see Enter and Exec).
 
 ## Container Images
 

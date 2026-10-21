@@ -76,11 +76,11 @@ attached to the realm's networks are detached, not removed.`,
 
 func runDeleteCluster(cmd *cobra.Command, name string) error {
 	return inLockedRealm(cmd, func(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
-		if err := cluster.Delete(ctx, client, meshMgr, name); err != nil {
-			return err
-		}
+		// The SSH export follows what is gone even when the delete fails
+		// partway, as with --all.
+		err := cluster.Delete(ctx, client, meshMgr, name)
 		updateSSHExport(cmd, client, meshMgr)
-		return nil
+		return err
 	})
 }
 

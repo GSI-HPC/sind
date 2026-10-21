@@ -108,7 +108,7 @@ nodes:
 | `monitoring` | no | `false` | Collect the cluster's metrics and logs in the realm's monitoring stack (see [Monitoring](#monitoring)) |
 | `nodes` | no | 1 controller + 1 worker | Node definitions |
 
-Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`. A cluster may not be named `ssh`, as its config volume would be the realm's SSH volume, `<realm>-ssh-config`. With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), the cluster name has at most 40 characters, Slurm's limit for clusters with accounting: slurmdbd builds the names of the cluster's database tables from it.
+Cluster and realm names end up in Docker resource names, DNS names and paths, so each must be a single DNS label: lowercase ASCII letters, digits and `-`, 1 to 63 characters, not beginning or ending with `-`. Names such as `Dev`, `my_cluster`, `dev.test` or `../x` are rejected. The same rule applies to cluster names given on the command line and to `--realm` and `SIND_REALM`. A cluster may not be named `ssh`, as its config volume would be the realm's SSH volume, `<realm>-ssh-config`, nor have a name ending in `-ssh`, as the config volume of cluster `x-ssh` would be the SSH volume of realm `<realm>-x`. With a managed [db node]({{< relref "/configuration/node-definitions#database-node" >}}), the cluster name has at most 40 characters, Slurm's limit for clusters with accounting: slurmdbd builds the names of the cluster's database tables from it.
 
 ## Defaults section
 
@@ -354,4 +354,13 @@ Use only configs you would run as a script: not a config from an untrusted pull 
 - `monitoring` requires a managed controller; with it, the `main` section must not set a `MetricsType` other than `metrics/openmetrics`, a `CommunicationParameters` that lists `disable_http`, or `MetricsAuthUsers`, and with `PrivateData` it must set `MetricsParameters=ignore_private_data`, so that the monitoring stack can read slurmctld's metrics without a token
 - `accounts`, and the users' `accounts`, `coordinator` and `adminLevel`, require a managed db node; account names must be valid and unique (see [Accounts section](#accounts-section)); a `parent` must be `root` or declared before; `limits` keys must be among the options in the [Accounts section](#accounts-section), with non-empty values; every account a user names must be declared, at most once in each of `accounts` and `coordinator`; `adminLevel` is `operator` or `admin`; `coordinator` and `adminLevel` need `accounts`
 - Unknown keys are rejected
-- The file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`
+- The file is YAML 1.2: a text field takes any scalar as written (`name: 123` is `123`, `realm: no` is `no`), and a `true`/`false` field also takes `yes`, `no`, `on` and `off`, unquoted; anchors, aliases and merge keys (`<<: *worker`) are followed, so an object, a node's `role` included, can take its keys from another
+
+`sind create cluster` reports the first rule a config breaks and names the config, as `config <stdin>` when it reads it from stdin. A mistake in the config's form, such as YAML syntax, an unknown or repeated key, a value of the wrong type, or a role that is not one, also gets its line and key path:
+
+```console
+$ sind create cluster --config dev.yaml
+12:00:00.000 ERRO config dev.yaml: line 7: nodes[1].Cpus: unknown key (valid: role, count, image, cpus, memory, tmpSize, managed, backupController, capAdd, capDrop, devices, securityOpt); did you mean "cpus"? keys are case-sensitive
+```
+
+A config without content, or with only comments, is `config dev.yaml: empty configuration`.

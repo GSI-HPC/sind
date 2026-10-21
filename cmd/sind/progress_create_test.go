@@ -67,8 +67,8 @@ func createDaemon(t *testing.T) func(args []string, stdin string) mock.Result {
 		// The mesh runs.
 		case joined == "network inspect sind-mesh --format {{json .Labels}}":
 			return mock.Result{Stdout: `{"sind.realm":"sind"}` + "\n"}
-		case joined == "volume inspect sind-ssh-config":
-			return mock.Result{Stdout: "[{}]\n"}
+		case joined == "volume inspect sind-ssh-config --format {{json .Labels}}":
+			return mock.Result{Stdout: `{"sind.realm":"sind"}` + "\n"}
 		case args[0] == "inspect" && args[1] == "sind-dns":
 			return mock.Result{Stdout: inspect("sind-dns", map[string]string{"sind-mesh": "10.0.255.254"})}
 		case args[0] == "inspect" && args[1] == "sind-ssh":
@@ -181,8 +181,9 @@ var timeouts = regexp.MustCompile(` timeout=[0-9hms.]+`)
 
 // When create cluster made the mesh and could not finish it, it removes the
 // mesh again as the step "rollback", which fails when the mesh stays, also
-// once the command was interrupted, as the rollback runs on; the command's
-// error and what it writes are those it has without the step.
+// once the command was interrupted, as the rollback runs on, and adds its
+// failure to the command's error; the command's error and what it writes
+// are those it has without the step.
 func TestCreateCluster_MeshRollbackIsAStep(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("SIND_REALM", "")
@@ -190,13 +191,15 @@ func TestCreateCluster_MeshRollbackIsAStep(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("kind: Cluster\nnodes: [controller, worker]\n"), 0o644))
 	interrupted, interrupt := context.WithCancel(context.Background())
 	interrupt()
+	const failed = "setting up mesh: inspecting mesh network: exit status 1: Error response from daemon: network sind-mesh not found"
+	const left = failed + "\nrolling back: removing the mesh: removing DNS container: docker daemon unavailable"
 	for _, tc := range []struct {
-		name, rollback string
-		interrupt      context.Context
+		name, rollback, err string
+		interrupt           context.Context
 	}{
-		{"removed", "step rollback: ok", context.Background()},
-		{"left", "step rollback: failed (target): removing DNS container: docker daemon unavailable", context.Background()},
-		{"left after an interrupt", "step rollback: failed (target): removing DNS container: docker daemon unavailable", interrupted},
+		{"removed", "step rollback: ok", failed, context.Background()},
+		{"left", "step rollback: failed (target): removing DNS container: docker daemon unavailable", left, context.Background()},
+		{"left after an interrupt", "step rollback: failed (target): removing DNS container: docker daemon unavailable", left, interrupted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			run := func(watched bool) (string, []progress.Event, error) {
@@ -232,7 +235,7 @@ func TestCreateCluster_MeshRollbackIsAStep(t *testing.T) {
 			plainStderr, _, plainErr := run(false)
 			stderr, events, err := run(true)
 
-			require.EqualError(t, err, "setting up mesh: inspecting mesh network: exit status 1: Error response from daemon: network sind-mesh not found")
+			require.EqualError(t, err, tc.err)
 			assert.EqualError(t, err, plainErr.Error())
 			assert.Equal(t, withoutTimestamps(plainStderr), withoutTimestamps(stderr))
 			tree := testutil.WithoutCalls(events)

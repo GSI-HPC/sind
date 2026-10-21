@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestParse_Accounts(t *testing.T) {
@@ -61,6 +62,15 @@ accounts:
 	}, cfg.Accounts[0].Limits)
 }
 
+func TestLimits_UnmarshalYAMLErrors(t *testing.T) {
+	// Parse checks the form first; the decoder still reports a list.
+	var l Limits
+	require.ErrorContains(t, l.UnmarshalYAML(&yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}), "cannot unmarshal !!seq into map[string]interface {}")
+	var doc yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("MaxJobs: true\n"), &doc))
+	require.EqualError(t, l.UnmarshalYAML(doc.Content[0]), "limit MaxJobs must be a string or a number, got true")
+}
+
 func TestParse_AccountsErrors(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -85,7 +95,12 @@ func TestParse_AccountsErrors(t *testing.T) {
 		{
 			name:    "limit is a bool",
 			input:   "kind: Cluster\naccounts:\n  - name: physics\n    limits:\n      MaxJobs: true",
-			wantErr: "limit MaxJobs must be a string or a number, got true",
+			wantErr: "line 5: accounts[0].limits.MaxJobs: expected a string or a number, got a boolean",
+		},
+		{
+			name:    "limit is a date",
+			input:   "kind: Cluster\naccounts:\n  - name: physics\n    limits:\n      MaxWall: 2001-12-14",
+			wantErr: "line 5: accounts[0].limits.MaxWall: expected a string or a number, got a date",
 		},
 		{
 			name:    "limit is a map",

@@ -194,6 +194,32 @@ func TestVolumeExists_OtherError(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func TestVolumeLabels(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(`{"sind.realm":"sind"}`+"\n", "", nil)
+	c := NewClient(&m)
+
+	labels, exists, err := c.VolumeLabels(t.Context(), testVolumeName)
+
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, Labels{"sind.realm": "sind"}, labels)
+	assert.Equal(t, []string{"volume", "inspect", string(testVolumeName), "--format", "{{json .Labels}}"}, m.Calls[0].Args)
+}
+
+func TestVolumeLabels_NotFound(t *testing.T) {
+	var m mock.Executor
+	m.AddResult("", "Error: No such volume: "+string(testVolumeName)+"\n",
+		&exec.ExitError{ProcessState: exitCode1(t)})
+	c := NewClient(&m)
+
+	labels, exists, err := c.VolumeLabels(t.Context(), testVolumeName)
+
+	require.NoError(t, err)
+	assert.False(t, exists)
+	assert.Nil(t, labels)
+}
+
 func TestCreateVolume(t *testing.T) {
 	var m mock.Executor
 	m.AddResult(string(testVolumeName)+"\n", "", nil)

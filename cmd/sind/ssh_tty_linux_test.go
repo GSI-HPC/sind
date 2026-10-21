@@ -23,7 +23,17 @@ import (
 // test ends.
 func openPTY(t *testing.T) *os.File {
 	t.Helper()
-	ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
+	_, pts := openPTYPair(t)
+	return pts
+}
+
+// openPTYPair returns both ends of a new pseudo-terminal, the master and
+// the terminal, and skips the test where the system gives none. Both stay
+// open until the test ends.
+func openPTYPair(t *testing.T) (ptmx, pts *os.File) {
+	t.Helper()
+	var err error
+	ptmx, err = os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		t.Skipf("no pseudo-terminal: %v", err)
 	}
@@ -36,12 +46,12 @@ func openPTY(t *testing.T) *os.File {
 	if err != nil {
 		t.Skipf("numbering the pseudo-terminal: %v", err)
 	}
-	pts, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", n), os.O_RDWR|syscall.O_NOCTTY, 0)
+	pts, err = os.OpenFile(fmt.Sprintf("/dev/pts/%d", n), os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		t.Skipf("opening the pseudo-terminal: %v", err)
 	}
 	t.Cleanup(func() { _ = pts.Close() })
-	return pts
+	return ptmx, pts
 }
 
 // TestSSH_TTYOnlyWithTerminalsAtBothEnds checks that ssh passes -t to docker
@@ -64,6 +74,28 @@ func TestSSH_TTYOnlyWithTerminalsAtBothEnds(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := dockerArgs(t, tc.stdin, tc.stdout, "ssh", "worker-0", "--", "hostname")
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestExec_TTYOnlyWithTerminalsAtBothEnds checks that exec passes -t to
+// docker exec only when stdin and stdout are terminals, as ssh does.
+func TestExec_TTYOnlyWithTerminalsAtBothEnds(t *testing.T) {
+	tty := openPTY(t)
+	withTTY := []string{"exec", "-i", "-t", "-w", "/data", "sind-default-submitter", "hostname"}
+	withoutTTY := []string{"exec", "-i", "-w", "/data", "sind-default-submitter", "hostname"}
+	for name, tc := range map[string]struct {
+		stdin  io.Reader
+		stdout io.Writer
+		want   []string
+	}{
+		"terminal at both ends": {tty, tty, withTTY},
+		"output captured":       {tty, new(bytes.Buffer), withoutTTY},
+		"input piped":           {strings.NewReader(""), tty, withoutTTY},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := dockerArgs(t, tc.stdin, tc.stdout, "exec", "--", "hostname")
 			assert.Equal(t, tc.want, got)
 		})
 	}

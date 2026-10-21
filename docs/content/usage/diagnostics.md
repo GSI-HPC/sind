@@ -141,6 +141,8 @@ Prints the version and, for a release build, the commit it was built from:
 sind 0.12.0 (0a57d68)
 ```
 
+`sind --version` prints the same line.
+
 `--json` prints all fields as one JSON object, for scripts such as [sind-action](https://github.com/GSI-HPC/sind-action), which reads `version`:
 
 ```bash
@@ -220,6 +222,8 @@ sind get nodes -o json
 sind get cluster dev --output json
 ```
 
+Listings are sorted by name in natural order, with numbers by their value, so the cluster `dev2` comes before `dev10`; `sind get dns` sorts by host name. A listing that finds nothing prints its header alone on stdout and says so on stderr, with where sind looked, such as `No clusters found in realm "sind".`; with `-o json` it prints an empty list and nothing on stderr. `sind get ssh-config` notes on stderr, with `Note:`, that the file it prints the path of does not exist yet.
+
 ## Cluster status
 
 ```bash
@@ -233,9 +237,9 @@ CLUSTER   SLURM     STATUS (R/S/P/T)
 dev       25.11.8   running (4/0/0/4)
 
 NETWORKS
-NAME             DRIVER   SUBNET           GATEWAY        STATUS
-sind-mesh        bridge   172.18.0.0/16    172.18.0.1     ✓
-sind-dev-net     bridge   172.19.0.0/16    172.19.0.1     ✓
+NAME           DRIVER   SUBNET          GATEWAY      STATUS
+sind-mesh      bridge   172.18.0.0/16   172.18.0.1   ✓
+sind-dev-net   bridge   172.19.0.0/16   172.19.0.1   ✓
 
 MESH SERVICES
 NAME   CONTAINER   STATUS
@@ -249,11 +253,11 @@ MOUNT        SOURCE               TYPE       STATUS
 /data        /home/user/project   hostPath   ✓
 
 NODES
-NAME              ROLE        IP            STATUS    SERVICES
-controller.dev    controller  172.19.0.2    running   munge ✓ slurmctld ✓ sshd ✓
-db.dev            db          172.19.0.5    running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
-worker-0.dev      worker      172.19.0.3    running   munge ✓ slurmd ✓ sshd ✓
-worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd ✓
+NAME             ROLE         IP           STATUS    SERVICES
+controller.dev   controller   172.19.0.2   running   munge ✓ slurmctld ✓ sshd ✓
+db.dev           db           172.19.0.5   running   mariadb ✓ munge ✓ slurmdbd ✓ sshd ✓
+worker-0.dev     worker       172.19.0.3   running   munge ✓ slurmd ✓ sshd ✓
+worker-1.dev     worker       172.19.0.4   running   munge ✓ slurmd ✗ sshd ✓
 ```
 
 `SLURM` shows `-` when sind does not know the version, as for unmanaged clusters. The `STATUS (R/S/P/T)` column shows the cluster state followed by container counts: **R**unning, **S**topped, **P**aused, **T**otal. The cluster state is derived from the container states of all nodes:
@@ -266,6 +270,17 @@ worker-1.dev      worker      172.19.0.4    running   munge ✓ slurmd ✗ sshd 
 | `mixed`   | Containers are in different states                    |
 | `empty`   | No nodes exist                                        |
 | `unknown` | All containers are in a state sind does not map, e.g. `restarting` |
+
+A node's `STATUS`, in `sind get cluster`, `sind get node` and `sind get nodes`, and its `status` in their JSON output, uses the same words for its container:
+
+| Status    | Container state                     |
+|-----------|-------------------------------------|
+| `running` | running                             |
+| `stopped` | exited, dead, or created            |
+| `paused`  | paused                              |
+| `unknown` | another state, e.g. `restarting`    |
+
+The `S` count of `STATUS (R/S/P/T)` includes the `unknown` nodes.
 
 `MESH SERVICES` shows ✓ for the realm's DNS container and SSH relay while they run (`dns_ok` and `ssh_ok` in the JSON output). After a host reboot or a Docker daemon restart they exist but are stopped; `sind power on` starts them again (see [Power Control]({{< relref "/usage/power-control#power-on" >}})).
 
@@ -295,7 +310,7 @@ A managed [api node]({{< relref "/configuration/node-definitions#api-node" >}}) 
 
 The data row shows what Docker mounts at the nodes' data mount point: the bind-mounted host directory (type `hostPath`) or the volume. With [`users`]({{< relref "/configuration/cluster-config#users-section" >}}), `MOUNTS` lists the home volume at `/home`. With [`storage.cvmfs`]({{< relref "/guides/cvmfs" >}}), `MOUNTS` lists `/cvmfs` too: source `cvmfs` of type `volume` from the volume plugin, or source `/cvmfs` of type `hostPath` from the Docker host.
 
-Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`. Unmanaged clusters show no `HA` column: sind cannot tell which of their controllers is in control.
+Clusters with a [backup controller]({{< relref "/guides/controller-failover" >}}) get an `HA` column in the `NODES` table: `primary` or `backup` for each controller, with `*` on the one in control, and `-` for the other nodes. The shared state volume appears under `MOUNTS` as `/var/spool/slurmctld`. Unmanaged clusters show no `HA` column: sind cannot tell which of their controllers is in control.
 
 > **Tip:** Run `watch sind get cluster` for a simple live dashboard that refreshes every two seconds.
 
@@ -352,10 +367,10 @@ sind get nodes [CLUSTER]
 Without a `CLUSTER` argument, lists every node in the realm with an extra `CLUSTER` column; with a cluster name, scopes to that cluster and drops the column. Rows are sorted by `(cluster, role, natural-name)` so `worker-2` precedes `worker-10`.
 
 ```
-CONTAINER                CLUSTER   ROLE         FQDN                            IP           STATUS
-sind-default-controller  default   controller   controller.default.sind.sind    172.19.0.2   running
-sind-default-worker-0    default   worker       worker-0.default.sind.sind      172.19.0.3   running
-sind-default-worker-1    default   worker       worker-1.default.sind.sind      172.19.0.4   running
+CONTAINER                 CLUSTER   ROLE         FQDN                           IP           STATUS
+sind-default-controller   default   controller   controller.default.sind.sind   172.19.0.2   running
+sind-default-worker-0     default   worker       worker-0.default.sind.sind     172.19.0.3   running
+sind-default-worker-1     default   worker       worker-1.default.sind.sind     172.19.0.4   running
 ```
 
 ## List networks
@@ -365,9 +380,9 @@ sind get networks
 ```
 
 ```
-NAME              DRIVER   SUBNET           GATEWAY
-sind-default-net  bridge   172.19.0.0/16    172.19.0.1
-sind-mesh         bridge   172.18.0.0/16    172.18.0.1
+NAME               DRIVER   SUBNET          GATEWAY
+sind-default-net   bridge   172.19.0.0/16   172.19.0.1
+sind-mesh          bridge   172.18.0.0/16   172.18.0.1
 ```
 
 ## List realms
@@ -405,9 +420,9 @@ sind get dns
 ```
 
 ```
-HOSTNAME                              IP
-controller.default.sind.sind         172.19.0.2
-worker-0.default.sind.sind           172.19.0.3
+HOSTNAME                       IP
+controller.default.sind.sind   172.19.0.2
+worker-0.default.sind.sind     172.19.0.3
 ```
 
 ## Authentication key
@@ -432,7 +447,7 @@ Without `--type` it prints the cluster's main key: `slurm.key` with identity `cl
 sind get mesh
 ```
 
-Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a [kind cluster]({{< relref "/guides/kind" >}})'s CoreDNS, can forward the `<realm>.sind` zone to it; it is empty while the DNS container is stopped.
+Shows the realm's mesh infrastructure: network name, DNS container/IP/zone/image, and the SSH container/volume/image. Useful for external consumers that need to connect to sind networks without reimplementing the naming conventions. The DNS IP is pinned for as long as the mesh exists (see [Networking]({{< relref "/architecture/networking#after-a-host-reboot-or-a-docker-daemon-restart" >}})), so a DNS server outside sind, such as a [kind cluster]({{< relref "/guides/kind" >}})'s CoreDNS, can forward the `<realm>.sind` zone to it; it is `-` while the DNS container is stopped (`""` with `-o json`).
 
 If no mesh has been created yet, the command returns a friendly `no mesh found for realm "<name>"` error.
 
@@ -475,7 +490,7 @@ default   3       26.05.4
 dev       5       26.05.4
 ```
 
-`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):
+`ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):
 
 ```json
 {

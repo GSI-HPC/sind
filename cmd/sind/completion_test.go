@@ -105,7 +105,7 @@ func TestCompleteLogsArgs_Service(t *testing.T) {
 	assert.Equal(t, []string{"munge", "sshd", "slurmd"}, names, "the services of the node's role")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 	require.Len(t, m.Calls, 1)
-	assert.Equal(t, []string{"inspect", "sind-dev-worker-0"}, m.Calls[0].Args)
+	assert.Equal(t, []string{"inspect", "sind-dev-worker-0", "--type", "container"}, m.Calls[0].Args)
 }
 
 func TestCompleteLogsArgs_ServiceOfNoSingleNode(t *testing.T) {

@@ -207,16 +207,21 @@ func (c *Client) InspectContainer(ctx context.Context, name ContainerName) (*Con
 
 // InspectContainers returns details for the given containers in a single
 // docker inspect invocation. The returned slice preserves argument order.
-// Returns nil when names is empty.
+// Returns nil when names is empty. The inspect is limited to containers
+// (--type container): docker inspect would otherwise return a volume or a
+// network of the name, such as the monitoring stack's <realm>-<service>
+// volume when its container is missing. The flag follows the names, as
+// the docker CLI allows.
 func (c *Client) InspectContainers(ctx context.Context, names ...ContainerName) ([]*ContainerInfo, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
-	args := make([]string, 0, 1+len(names))
+	args := make([]string, 0, 3+len(names))
 	args = append(args, "inspect")
 	for _, n := range names {
 		args = append(args, string(n))
 	}
+	args = append(args, "--type", "container")
 	stdout, _, err := c.run(ctx, args...)
 	if err != nil {
 		return nil, err

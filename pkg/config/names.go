@@ -12,7 +12,9 @@ import (
 // ReservedClusterName cannot name a cluster: its config volume,
 // <realm>-ssh-config, would be the realm's SSH volume (see
 // mesh.Manager.SSHVolumeName), which sind delete cluster would then try to
-// remove as the cluster's.
+// remove as the cluster's. Nor can a name that ends in "-" and it: the
+// config volume of cluster x-ssh in realm a, a-x-ssh-config, would be the
+// SSH volume of realm a-x, which its relay would mount.
 const ReservedClusterName = "ssh"
 
 // MaxAccountingClusterName is the longest cluster name a cluster with a
@@ -34,15 +36,18 @@ const MaxAccountingClusterName = 40
 // ignores case, so Dev and dev would be two sets of containers behind the
 // same DNS names.
 //
-// The cluster name ReservedClusterName is refused as well.
+// The cluster name ReservedClusterName, and names ending in
+// "-"+ReservedClusterName, are refused as well.
 func CheckName(kind, name string) error {
 	err := hostname.CheckLabel(name)
+	realmSuffix, reserved := strings.CutSuffix("-"+name, "-"+ReservedClusterName)
 	switch {
 	case err != nil:
 	case strings.ToLower(name) != name:
 		err = fmt.Errorf("it has uppercase letters")
-	case kind == "cluster" && name == ReservedClusterName:
-		err = fmt.Errorf("it is reserved: the cluster's config volume, <realm>-%s-config, would be the realm's SSH volume", name)
+	case kind == "cluster" && reserved:
+		err = fmt.Errorf("it is reserved: the cluster's config volume, <realm>-%s-config, would be the SSH volume of realm <realm>%s",
+			name, realmSuffix)
 	}
 	if err != nil {
 		return fmt.Errorf("invalid %s name %q: %w", kind, name, err)

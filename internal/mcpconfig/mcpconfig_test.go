@@ -216,6 +216,45 @@ func TestSet(t *testing.T) {
 }
 `,
 		},
+		{
+			name: "replaces the entry and keeps the members it does not set",
+			in: new(`{
+  "mcpServers": {
+    "sind": {"disabled": true, "command": "old", "autoApprove": ["x"], "env": {"A": "1"}, /* where */ "cwd": "/w", "url": "u", "command": "again",}
+  }
+}
+`),
+			key: "mcpServers",
+			want: `{
+  "mcpServers": {
+    "sind": {
+      "disabled": true,
+      "command": "/usr/bin/sind",
+      "autoApprove": [
+        "x"
+      ],
+      "cwd": "/w",
+      "args": [
+        "mcp",
+        "start"
+      ]
+    }
+  }
+}
+`,
+		},
+		{
+			name: "replaces a one-line entry",
+			in:   new(`{"mcpServers":{"sind":{"type":"http","disabled":false}}}`),
+			key:  "mcpServers",
+			want: `{"mcpServers":{"sind":{"disabled":false,"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
+		},
+		{
+			name: "replaces an entry that is no object",
+			in:   new(`{"mcpServers":{"sind":"x"}}`),
+			key:  "mcpServers",
+			want: `{"mcpServers":{"sind":{"command":"/usr/bin/sind","args":["mcp","start"]}}}`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -226,6 +265,54 @@ func TestSet(t *testing.T) {
 			assert.Equal(t, tt.want, read(t, fsys, "/cfg/c.json"))
 		})
 	}
+}
+
+// TestCRLF checks that what Set and Remove change in a file with CRLF line
+// breaks has them too.
+func TestCRLF(t *testing.T) {
+	crlf := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+	for name, tt := range map[string]struct {
+		in, want string
+		edit     func(*mcpconfig.File)
+	}{
+		"add": {
+			in:   "{\n  \"mcpServers\": {\n    \"a\": {}\n  }\n}\n",
+			want: "{\n  \"mcpServers\": {\n    \"a\": {},\n    \"sind\": {\n      \"command\": \"/usr/bin/sind\",\n      \"args\": [\n        \"mcp\",\n        \"start\"\n      ]\n    }\n  }\n}\n",
+			edit: func(f *mcpconfig.File) { f.Set(sindEntry) },
+		},
+		"add the servers": {
+			in:   "{\n  \"a\": 1\n}\n",
+			want: "{\n  \"a\": 1,\n  \"mcpServers\": {\n    \"sind\": {\n      \"command\": \"/usr/bin/sind\",\n      \"args\": [\n        \"mcp\",\n        \"start\"\n      ]\n    }\n  }\n}\n",
+			edit: func(f *mcpconfig.File) { f.Set(sindEntry) },
+		},
+		"replace": {
+			in:   "{\n  \"mcpServers\": {\n    \"sind\": {\"disabled\": true}\n  }\n}\n",
+			want: "{\n  \"mcpServers\": {\n    \"sind\": {\n      \"disabled\": true,\n      \"command\": \"/usr/bin/sind\",\n      \"args\": [\n        \"mcp\",\n        \"start\"\n      ]\n    }\n  }\n}\n",
+			edit: func(f *mcpconfig.File) { f.Set(sindEntry) },
+		},
+		"remove": {
+			in:   "{\n  \"mcpServers\": {\n    \"a\": {},\n    \"sind\": {}\n  }\n}\n",
+			want: "{\n  \"mcpServers\": {\n    \"a\": {}\n  }\n}\n",
+			edit: func(f *mcpconfig.File) { f.Remove("sind") },
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fsys, f := load(t, new(crlf(tt.in)), "mcpServers")
+			tt.edit(f)
+			_, err := f.Save(now)
+			require.NoError(t, err)
+			assert.Equal(t, crlf(tt.want), read(t, fsys, "/cfg/c.json"))
+		})
+	}
+}
+
+func TestServer(t *testing.T) {
+	_, f := load(t, new(`{"servers": {"a": {"command": "x"}, "sind": {"command": "/bin/sind", "env": {"K": "v"}}}}`), "servers")
+	s, ok := f.Server("sind")
+	assert.True(t, ok)
+	assert.Equal(t, mcpconfig.Server{Name: "sind", Command: "/bin/sind", Env: map[string]string{"K": "v"}}, s)
+	_, ok = f.Server("none")
+	assert.False(t, ok)
 }
 
 func TestRemove(t *testing.T) {
@@ -328,6 +415,8 @@ func TestLoad_Errors(t *testing.T) {
 		{"syntax", `{"a": }`, "parsing /cfg/c.json: hujson: line 1, column 7: invalid character '}' at start of value"},
 		{"not an object", `[]`, "parsing /cfg/c.json: not a JSON object"},
 		{"servers not an object", `{"mcpServers": []}`, `parsing /cfg/c.json: "mcpServers" is not an object`},
+		{"duplicate server", `{"mcpServers": {"sind": {}, "a": {}, "sind": {}}}`, `parsing /cfg/c.json: server "sind" is defined more than once in "mcpServers"`},
+		{"duplicate servers", `{"mcpServers": {}, "x": 1, "mcpServers": {}}`, `parsing /cfg/c.json: "mcpServers" is defined more than once`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

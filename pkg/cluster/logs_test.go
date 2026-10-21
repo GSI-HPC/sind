@@ -62,7 +62,7 @@ func TestNodeServicesOfContainer(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, names)
 			require.Len(t, m.Calls, 1)
-			assert.Equal(t, []string{"inspect", "sind-dev-node"}, m.Calls[0].Args)
+			assert.Equal(t, []string{"inspect", "sind-dev-node", "--type", "container"}, m.Calls[0].Args)
 		})
 	}
 }

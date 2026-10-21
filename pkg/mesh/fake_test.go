@@ -52,7 +52,7 @@ type fakeNetwork struct {
 type fakeDocker struct {
 	t          *testing.T
 	networks   map[string]*fakeNetwork
-	volumes    map[string]bool
+	volumes    map[string]docker.Labels // existing volumes, with their labels
 	containers map[string]*fakeContainer
 	fail       map[string]mock.Result
 }
@@ -62,7 +62,7 @@ func newFake(t *testing.T) *fakeDocker {
 	return &fakeDocker{
 		t:          t,
 		networks:   map[string]*fakeNetwork{},
-		volumes:    map[string]bool{},
+		volumes:    map[string]docker.Labels{},
 		containers: map[string]*fakeContainer{},
 		fail:       map[string]mock.Result{},
 	}
@@ -103,7 +103,9 @@ func (f *fakeDocker) addMesh(realm string, state docker.ContainerState, pinned b
 		nw.labels[LabelDNSIP] = dnsIP
 		dns.ip = dnsIP
 	}
-	f.volumes[string(mgr.SSHVolumeName())] = true
+	f.volumes[string(mgr.SSHVolumeName())] = docker.Labels{
+		LabelRealm: realm, docker.ComposeProjectLabel: mgr.ComposeProject(), docker.ComposeVolumeLabel: sshVolumeLabel,
+	}
 	f.containers[string(mgr.DNSContainerName())] = dns
 	require.NoError(f.t, f.start(string(mgr.DNSContainerName())))
 	f.containers[string(mgr.SSHContainerName())] = &fakeContainer{
@@ -227,18 +229,24 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		}
 		out, _ := json.Marshal(nw.labels)
 		return mock.Result{Stdout: string(out) + "\n"}
-	case len(args) == 5 && joined == "network inspect "+args[2]+" --format {{json .Containers}}":
-		if _, ok := f.networks[args[2]]; !ok {
-			return notFound(f.t, testutil.NoSuchNetwork(args[2]))
-		}
-		endpoints := map[string]map[string]string{}
+	case strings.HasPrefix(joined, "ps -a --no-trunc --format json --filter network="):
+		// docker ps -a lists stopped containers too, which keep their
+		// networks in their configuration.
+		network := strings.TrimPrefix(last, "network=")
+		var names []string
 		for name, c := range f.containers {
-			if slices.Contains(c.networks, args[2]) {
-				endpoints["id-"+name] = map[string]string{"Name": name}
+			if slices.Contains(c.networks, network) {
+				names = append(names, name)
 			}
 		}
-		out, _ := json.Marshal(endpoints)
-		return mock.Result{Stdout: string(out) + "\n"}
+		slices.Sort(names)
+		var out strings.Builder
+		for _, name := range names {
+			line, _ := json.Marshal(map[string]string{"Names": name, "State": string(f.containers[name].state)})
+			out.Write(line)
+			out.WriteString("\n")
+		}
+		return mock.Result{Stdout: out.String()}
 	case len(args) == 4 && joined == "network disconnect "+args[2]+" "+last:
 		c, ok := f.containers[last]
 		if !ok {
@@ -268,25 +276,42 @@ func (f *fakeDocker) onCall(args []string, stdin string) mock.Result {
 		delete(f.networks, last)
 		return mock.Result{}
 	case joined == "volume inspect "+last:
-		if !f.volumes[last] {
+		if _, ok := f.volumes[last]; !ok {
 			return notFound(f.t, testutil.NoSuchVolume(last))
 		}
 		return mock.Result{Stdout: "[{}]\n"}
+	case len(args) == 5 && joined == "volume inspect "+args[2]+" --format {{json .Labels}}":
+		labels, ok := f.volumes[args[2]]
+		if !ok {
+			return notFound(f.t, testutil.NoSuchVolume(args[2]))
+		}
+		out, _ := json.Marshal(labels)
+		return mock.Result{Stdout: string(out) + "\n"}
 	case strings.HasPrefix(joined, "volume create "):
-		f.volumes[last] = true
+		labels := docker.Labels{}
+		for i := 2; i < len(args)-2; i += 2 {
+			k, v, _ := strings.Cut(args[i+1], "=")
+			labels[k] = v
+		}
+		f.volumes[last] = labels
 		return mock.Result{Stdout: last + "\n"}
 	case joined == "volume rm "+last:
-		if !f.volumes[last] {
+		if _, ok := f.volumes[last]; !ok {
 			return notFound(f.t, testutil.NoSuchVolume(last))
 		}
 		delete(f.volumes, last)
 		return mock.Result{}
-	case joined == "inspect "+last, joined == "container inspect "+last:
-		c, ok := f.containers[last]
-		if !ok {
+	case joined == "container inspect "+last:
+		if _, ok := f.containers[last]; !ok {
 			return notFound(f.t, testutil.NoSuchContainer(last))
 		}
-		return mock.Result{Stdout: f.inspectJSON(last, c)}
+		return mock.Result{Stdout: "[{}]\n"}
+	case len(args) == 4 && joined == "inspect "+args[1]+" --type container":
+		c, ok := f.containers[args[1]]
+		if !ok {
+			return notFound(f.t, testutil.NoSuchContainer(args[1]))
+		}
+		return mock.Result{Stdout: f.inspectJSON(args[1], c)}
 	case args[0] == "create":
 		return f.create(args[1:])
 	case args[0] == "start":
@@ -463,8 +488,9 @@ func (f *fakeDocker) exec(args []string, stdin string) mock.Result {
 		file := strings.TrimPrefix(cmd, "sh -c cat >> ")
 		c.files[file] += stdin
 		return mock.Result{}
-	case strings.HasPrefix(cmd, "sh -c cat > "):
-		c.files[strings.TrimPrefix(cmd, "sh -c cat > ")] = stdin
+	case len(args) == 7 && args[1] == "sh" && args[2] == "-c" && strings.Contains(args[3], "mv -f") && args[4] == "sh":
+		// ReplaceFile: sh -c SCRIPT sh PATH LENGTH
+		c.files[args[5]] = stdin
 		return mock.Result{}
 	}
 	f.t.Errorf("fakeDocker: unexpected exec: %s", cmd)

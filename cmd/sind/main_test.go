@@ -28,13 +28,14 @@ import (
 // sind with the arguments it was given, and "wait" only waits for
 // interrupts, which is how a rollback that ignores the context behaves.
 // Started under the name "docker", the test binary is a fake docker instead:
-// it records that it started in the file fakeDockerEnv names and then
-// hangs, like a docker call still running when the user presses Ctrl-C, or
+// it records that it started, with its PID, in the file fakeDockerEnv names
+// and then hangs, like a docker call still running when the user presses Ctrl-C, or
 // fails at once when fakeDockerEnv is empty. fakeDockerExitEnv makes it end
 // at once instead, with the exit status it names or killed by the signal
 // it names (fakeDockerSignals), like a docker exec whose command failed.
 // fakeDockerArgsEnv names a file the fake docker writes its arguments to,
-// one per line, before anything else.
+// one per line, before anything else. fakeDockerPSEnv makes it answer
+// `docker ps` at once, with the output it holds.
 //
 // Adapted from GSI-HPC/clusterctl cmd/clusterctl/signal_test.go.
 const (
@@ -42,6 +43,7 @@ const (
 	fakeDockerEnv     = "SIND_TEST_DOCKER_STARTED"
 	fakeDockerExitEnv = "SIND_TEST_DOCKER_EXIT"
 	fakeDockerArgsEnv = "SIND_TEST_DOCKER_ARGS"
+	fakeDockerPSEnv   = "SIND_TEST_DOCKER_PS"
 )
 
 // fakeDockerSignals are the signals fakeDockerExitEnv can name.
@@ -74,7 +76,7 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	}
-	for _, name := range []string{"SIND_REALM", "XDG_STATE_HOME", envProgress, envProgressLog} {
+	for _, name := range []string{"SIND_REALM", "XDG_STATE_HOME", envProgress, envProgressLog, envLogTimestamps} {
 		_ = os.Unsetenv(name)
 	}
 	os.Exit(m.Run())
@@ -83,6 +85,10 @@ func TestMain(m *testing.M) {
 func fakeDocker() {
 	if file := os.Getenv(fakeDockerArgsEnv); file != "" {
 		_ = os.WriteFile(file, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
+	}
+	if ps := os.Getenv(fakeDockerPSEnv); ps != "" && len(os.Args) > 1 && os.Args[1] == "ps" {
+		fmt.Print(ps)
+		os.Exit(0)
 	}
 	if exit := os.Getenv(fakeDockerExitEnv); exit != "" {
 		if sig, ok := fakeDockerSignals[exit]; ok {
@@ -98,7 +104,7 @@ func fakeDocker() {
 		fmt.Fprintln(os.Stderr, "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?")
 		os.Exit(1)
 	}
-	_ = os.WriteFile(started, []byte("started\n"), 0o600)
+	_ = os.WriteFile(started, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
 	time.Sleep(time.Minute)
 	os.Exit(0)
 }

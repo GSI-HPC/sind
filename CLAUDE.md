@@ -90,6 +90,6 @@ commit rendered files. When a guide with an episode changes, check the episode
 [GSI-HPC/sind-action](https://github.com/GSI-HPC/sind-action) drives this CLI in CI:
 the release assets `sind-linux-amd64`/`sind-linux-arm64` and the `releases/latest`
 redirect, `sind version --json` (its `version` field), the root `-v` flag,
-`sind doctor`, `sind create cluster --config [--pull]`, `sind get cluster` (`sind status`
-before v0.9.0), `sind delete cluster --all`, and `SIND_REALM`. Removing or renaming any
-of these needs a matching sind-action change.
+`sind doctor`, `sind create cluster --config [--pull] [--wait]`, `sind get cluster`
+(`sind status` before v0.9.0), `sind delete cluster --all`, and `SIND_REALM`. Removing
+or renaming any of these needs a matching sind-action change.

@@ -38,8 +38,8 @@ type LockOptions struct {
 	// daemon lock whose holder no longer runs, which LockRealm removes; a
 	// holder that LockRealm cannot check and that keeps the lock for long,
 	// with the command that removes the lock; and a lock that the unlock
-	// function could not remove. LockRealm logs them at warn level instead
-	// when it is nil.
+	// function could not remove. LockRealm reports them through the
+	// context (sindlog.Warn) instead when it is nil.
 	OnWarning func(msg string)
 
 	// Test hooks; the zero value selects the default.

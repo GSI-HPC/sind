@@ -34,7 +34,7 @@ New workers look like the cluster's newest worker: the one with the highest inde
 Not inherited:
 
 - the security options that sind gives every node, and the `SYS_NICE` capability where sind gave it to a managed worker for `task/affinity` (see [Capabilities and devices]({{< relref "/configuration/node-definitions#capabilities-and-devices" >}})), as sind decides them for each new worker. A `SYS_NICE` you asked for yourself, with sind's default `TaskPlugin` or on unmanaged workers, is inherited;
-- a seccomp profile, which Docker reports by content rather than by file: pass it again with `--security-opt seccomp=FILE`.
+- a seccomp profile, which Docker reports by content rather than by file: pass it again with `--security-opt seccomp=FILE`. sind says so in a `Warning:` line when it leaves one out.
 
 A cluster without workers gets the controller's image and 1 CPU, `512m` memory and a `256m` `/tmp`.
 
@@ -108,5 +108,7 @@ sind delete worker 'worker-[2-4]'
 # Remove workers from a named cluster
 sind delete worker 'worker-[0-1].dev'
 ```
+
+With workers of several clusters, sind handles the clusters one after another, as `sind power` does. A cluster that fails does not stop the others: sind removes the workers of the rest, reports every failure and exits non-zero. The [exported SSH configuration]({{< relref "/usage/node-access#user-ssh-client-integration" >}}) follows the workers that are gone, also after a failure.
 
 See [Node Arguments](../node-arguments/) for the full node set syntax, set operators included.

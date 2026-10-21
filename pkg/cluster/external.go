@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/GSI-HPC/sind/pkg/docker"
-	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
 )
@@ -18,7 +17,8 @@ import (
 // server, and every cluster network, for the addresses DNS answers with.
 // Joining the mesh is what makes a container one of the realm's external
 // containers, so a cluster created later is connected to them too, and
-// deleting the realm's networks detaches them.
+// deleting the realm's networks detaches them. Deleting the realm's last
+// cluster removes the mesh, and with it the record of them (see Delete).
 
 // ownContainer reports whether a container with these labels is sind's:
 // a node or mesh container, which carry the realm label, or a container of
@@ -121,7 +121,8 @@ func missingContainer(ctx context.Context, client *docker.Client, names []docker
 
 // Connect attaches containers outside sind to the realm's mesh network and
 // every cluster network, skipping the ones they already join. Clusters
-// created later are connected to them as well (ConnectExternal). It fails
+// created later, while the realm has a cluster, are connected to them as
+// well (ConnectExternal). It fails
 // for a realm without mesh, and for a container that does not exist or is
 // sind's own.
 func Connect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, names ...docker.ContainerName) error {
@@ -178,17 +179,16 @@ func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 
 // ConnectExternal connects the realm's external containers to a new
 // cluster network. It is best-effort: a container that cannot be connected
-// is logged, and does not fail the create.
+// is a warning (meshMgr.Warn), and does not fail the create.
 func ConnectExternal(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, network docker.NetworkName) {
-	log := sindlog.From(ctx)
 	names, err := ExternalContainers(ctx, client, meshMgr)
 	if err != nil {
-		log.WarnContext(ctx, "not connecting external containers to the cluster network", "network", string(network), "err", err)
+		meshMgr.Warn(ctx, fmt.Sprintf("not connecting external containers to %s: %v", network, err))
 		return
 	}
 	for _, name := range names {
 		if err := client.ConnectNetwork(ctx, network, name); err != nil {
-			log.WarnContext(ctx, "connecting an external container to the cluster network", "container", string(name), "network", string(network), "err", err)
+			meshMgr.Warn(ctx, fmt.Sprintf("not connecting external container %s to %s: %v", name, network, err))
 		}
 	}
 }

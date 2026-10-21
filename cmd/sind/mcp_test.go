@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -132,6 +133,69 @@ func TestMCPTools_Flags(t *testing.T) {
 	assert.Contains(t, tools["sind_create_cluster"].InputSchema.Properties.Flags.Properties, "config")
 }
 
+// TestMCPTools_NoDefault checks that a flag that means something else when
+// it is not given than with its default value has no default in the input
+// schema, which a client would fill in.
+func TestMCPTools_NoDefault(t *testing.T) {
+	tools := exportMCPTools(t)
+	for path, names := range mcpNoDefault {
+		flags := tools[mcpToolName(path)].InputSchema.Properties.Flags.Properties
+		for _, name := range names {
+			require.Contains(t, flags, name, path)
+			var schema map[string]any
+			require.NoError(t, json.Unmarshal(flags[name], &schema))
+			assert.NotContains(t, schema, "default", path+" --"+name)
+		}
+	}
+	var count map[string]any
+	require.NoError(t, json.Unmarshal(tools["sind_create_worker"].InputSchema.Properties.Flags.Properties["count"], &count))
+	assert.InDelta(t, 1, count["default"], 0, "other flags keep their default")
+
+	logs, _, err := NewRootCommand().Find([]string{"logs"})
+	require.NoError(t, err)
+	assert.Equal(t, "0", logs.Flags().Lookup("tail").DefValue, "the command keeps its default")
+}
+
+// TestMCPTools_FlagUsage checks that the schema of a flag whose help names
+// a form a tool call cannot use describes it without that form.
+func TestMCPTools_FlagUsage(t *testing.T) {
+	tools := exportMCPTools(t)
+	for path, usages := range mcpFlagUsage {
+		flags := tools[mcpToolName(path)].InputSchema.Properties.Flags.Properties
+		for name, usage := range usages {
+			var schema map[string]any
+			require.NoError(t, json.Unmarshal(flags[name], &schema))
+			assert.Equal(t, usage, schema["description"], path+" --"+name)
+		}
+	}
+
+	create, _, err := NewRootCommand().Find([]string{"create", "cluster"})
+	require.NoError(t, err)
+	assert.Contains(t, create.Flags().Lookup("config").Usage, `"-" for stdin`, "the command keeps its help")
+}
+
+// TestMCPFlags_NameExistingFlags checks that mcpNoDefault and
+// mcpFlagUsage name flags that exist.
+func TestMCPFlags_NameExistingFlags(t *testing.T) {
+	root := NewRootCommand()
+	check := func(path, name string) {
+		cmd, _, err := root.Find(strings.Fields(path))
+		require.NoError(t, err, path)
+		require.Equal(t, path, commandPath(cmd))
+		assert.NotNil(t, cmd.Flags().Lookup(name), path+" --"+name)
+	}
+	for path, names := range mcpNoDefault {
+		for _, name := range names {
+			check(path, name)
+		}
+	}
+	for path, usages := range mcpFlagUsage {
+		for name := range usages {
+			check(path, name)
+		}
+	}
+}
+
 func TestMCPTools_NoOutputFlag(t *testing.T) {
 	tools := exportMCPTools(t)
 	var get int
@@ -200,6 +264,8 @@ func TestMCPEffects_NameTools(t *testing.T) {
 // with their hints.
 func TestMCPServer_VersionAndTools(t *testing.T) {
 	setVersion(t, "v1.2.3", "")
+	// The server sets it for its tool calls, in this process.
+	t.Setenv(envLogTimestamps, "")
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	cfg := mcpConfig()
 	cfg.Transport = serverTransport
@@ -248,30 +314,41 @@ func TestRefuseFlagArgs(t *testing.T) {
 		called = in
 		return nil, ophis.ToolOutput{}, nil
 	}
-	call := func(mw ophis.MiddlewareFunc, tool string, args ...string) error {
+	// refused reports whether the call was refused, as a usage error
+	// with the exit status and the error line of one, without running.
+	refused := func(mw ophis.MiddlewareFunc, tool string, args ...string) bool {
 		called = ophis.ToolInput{}
 		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tool}}
-		_, _, err := mw(t.Context(), req, ophis.ToolInput{Args: args}, run)
-		return err
+		res, out, err := mw(t.Context(), req, ophis.ToolInput{Args: args}, run)
+		require.NoError(t, err, args)
+		if out.ExitCode == 0 {
+			assert.NotNil(t, called.Args, "the tool ran", args)
+			return false
+		}
+		assert.Equal(t, exitUsage, out.ExitCode, args)
+		assert.Regexp(t, `^ERRO argument "-.*" is a flag; pass flags in "flags"\n$`, out.StdErr, args)
+		require.NotNil(t, res)
+		assert.True(t, res.IsError, args)
+		assert.Nil(t, called.Args, "the tool did not run", args)
+		return true
 	}
 
 	plain := refuseFlagArgs(nil)
-	require.NoError(t, call(plain, "sind_get_node", "worker-0.dev"))
+	assert.False(t, refused(plain, "sind_get_node", "worker-0.dev"))
 	assert.Equal(t, []string{"worker-0.dev"}, called.Args)
 	for _, args := range [][]string{{"-v"}, {"worker-0", "--follow"}, {"--", "-x"}} {
-		err := call(plain, "sind_logs", args...)
-		require.ErrorContains(t, err, "is a flag", args)
+		assert.True(t, refused(plain, "sind_logs", args...), args)
 	}
 
 	// exec's command after "--" may hold flags; its own arguments may not.
-	require.NoError(t, call(plain, "sind_exec", "dev", "--", "ls", "-la"))
-	require.Error(t, call(plain, "sind_exec", "-v", "dev", "--", "ls"))
-	require.Error(t, call(plain, "sind_logs", "controller", "--", "-f"))
+	assert.False(t, refused(plain, "sind_exec", "dev", "--", "ls", "-la"))
+	assert.True(t, refused(plain, "sind_exec", "-v", "dev", "--", "ls"))
+	assert.True(t, refused(plain, "sind_logs", "controller", "--", "-f"))
 
 	// A -o in the arguments cannot override the forced JSON output.
 	withJSON := refuseFlagArgs(forceJSONOutput)
-	require.Error(t, call(withJSON, "sind_get_nodes", "-o", "human"))
-	require.NoError(t, call(withJSON, "sind_get_nodes", "dev"))
+	assert.True(t, refused(withJSON, "sind_get_nodes", "-o", "human"))
+	assert.False(t, refused(withJSON, "sind_get_nodes", "dev"))
 	assert.Equal(t, map[string]any{"output": "json"}, called.Flags)
 
 	// An empty array reaches the tool as the flag given empty.
@@ -346,6 +423,8 @@ func (b *syncBuffer) String() string {
 func startMCPStream(t *testing.T, args ...string) (string, *syncBuffer, func() error) {
 	t.Helper()
 	setVersion(t, "v1.2.3", "")
+	// The server sets it for its tool calls, in this process.
+	t.Setenv(envLogTimestamps, "")
 	root := NewRootCommand()
 	root.SetArgs(append([]string{"mcp", "stream", "--port", "0"}, args...))
 	stderr := &syncBuffer{}
@@ -462,8 +541,12 @@ func TestMCPStream_RequiresToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
-	require.NotEmpty(t, res.Content)
-	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `argument "-o" is a flag`)
+	var out ophis.ToolOutput
+	raw, err := json.Marshal(res.StructuredContent)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &out))
+	assert.Equal(t, exitUsage, out.ExitCode)
+	assert.Contains(t, out.StdErr, `argument "-o" is a flag`)
 
 	require.NoError(t, session.Close())
 	assert.NoError(t, stop(), "a stopped stream exits 0")
@@ -625,6 +708,8 @@ func TestMCPStreamToken(t *testing.T) {
 // --realm to the sind processes of its tool calls through SIND_REALM.
 func TestAsMCPServer_Realm(t *testing.T) {
 	t.Setenv("SIND_REALM", "env")
+	// The server sets it for its tool calls, in this process.
+	t.Setenv(envLogTimestamps, "")
 	root := &cobra.Command{Use: "sind"}
 	root.PersistentFlags().String("realm", "", "")
 	var got string
@@ -642,6 +727,50 @@ func TestAsMCPServer_Realm(t *testing.T) {
 	root.SetArgs([]string{"--realm", "ci", "start"})
 	require.NoError(t, root.Execute())
 	assert.Equal(t, "ci", got)
+}
+
+// TestAsMCPServer_NoTimestamps checks that the error lines of a server's
+// tool calls carry no time stamp.
+func TestAsMCPServer_NoTimestamps(t *testing.T) {
+	t.Setenv(envLogTimestamps, "")
+	var got string
+	server := &cobra.Command{Use: "start", RunE: func(*cobra.Command, []string) error {
+		got = os.Getenv(envLogTimestamps)
+		return nil
+	}}
+	asMCPServer(server)
+	server.SetArgs(nil)
+	require.NoError(t, server.Execute())
+	assert.Equal(t, "false", got)
+}
+
+// TestPrintMCPStreamHint checks that a stream on all interfaces says so,
+// while its client URL stays localhost's.
+func TestPrintMCPStreamHint(t *testing.T) {
+	for addr, want := range map[string]string{
+		"127.0.0.1:8080": "MCP server listening on http://127.0.0.1:8080/\n",
+		"0.0.0.0:8080":   "MCP server listening on http://localhost:8080/ (all interfaces)\n",
+		"[::]:8080":      "MCP server listening on http://localhost:8080/ (all interfaces)\n",
+	} {
+		tcp, err := net.ResolveTCPAddr("tcp", addr)
+		require.NoError(t, err)
+		var stderr bytes.Buffer
+		cmd := &cobra.Command{}
+		cmd.SetErr(&stderr)
+		printMCPStreamHint(cmd, tcp, "/state/mcp-token")
+		lines := strings.SplitAfter(stderr.String(), "\n")
+		assert.Equal(t, want, lines[0], addr)
+		assert.Contains(t, lines[2], strconv.Quote(streamURL(tcp)), addr)
+	}
+}
+
+func TestCheckMCPLogLevel(t *testing.T) {
+	for _, level := range []string{"", "debug", "info", "warn", "error", "DEBUG"} {
+		require.NoError(t, checkMCPLogLevel(level), level)
+	}
+	err := checkMCPLogLevel("warning")
+	require.EqualError(t, err, `invalid --log-level value "warning": want debug, info, warn or error`)
+	assert.True(t, cobratree.IsUsage(err))
 }
 
 func TestStreamURL(t *testing.T) {
@@ -671,4 +800,131 @@ func TestMCPCommand_HelpStrings(t *testing.T) {
 			assert.NotContains(t, stdout, "Log level")
 		})
 	}
+}
+
+func TestMCPToolArgs(t *testing.T) {
+	in := ophis.ToolInput{
+		Flags: map[string]any{
+			"wait":    "5m",
+			"count":   float64(2),
+			"pull":    true,
+			"dry-run": false,
+			"image":   nil,
+			"device":  []any{"/dev/a", "/dev/b"},
+			"label":   map[string]any{"b": "2", "a": float64(1)},
+		},
+		Args: []string{"dev"},
+	}
+	assert.Equal(t, []string{
+		"create", "worker",
+		"--count", "2",
+		"--device", "/dev/a", "--device", "/dev/b",
+		"--label", "a=1", "--label", "b=2",
+		"--pull",
+		"--wait", "5m",
+		"dev",
+	}, mcpToolArgs("sind_create_worker", in))
+	assert.Equal(t, []string{"get", "ssh-config"}, mcpToolArgs("sind_get_ssh-config", ophis.ToolInput{}))
+}
+
+func TestInProcessGroup(t *testing.T) {
+	var got ophis.ExecuteFunc
+	mw := inProcessGroup(func(_ context.Context, _ *mcp.CallToolRequest, _ ophis.ToolInput, run ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		got = run
+		return nil, ophis.ToolOutput{}, nil
+	})
+	ophisRun := func(context.Context, *mcp.CallToolRequest, ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		t.Fatal("ophis's run function was called")
+		return nil, ophis.ToolOutput{}, nil
+	}
+	_, _, err := mw(t.Context(), &mcp.CallToolRequest{}, ophis.ToolInput{}, ophisRun)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+}
+
+// mcpToolProcesses makes the sind processes mcpExecute starts the test
+// binary acting as sind, with the fake docker on PATH, which hangs after
+// it recorded its PID in the file it returns.
+func mcpToolProcesses(t *testing.T) string {
+	t.Helper()
+	started := fakeDockerOnPath(t, "")
+	t.Setenv(childEnv, "main")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	return started
+}
+
+func TestMCPExecute_ExitCode(t *testing.T) {
+	mcpToolProcesses(t)
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "sind_version"}}
+	_, out, err := mcpExecute(t.Context(), req, ophis.ToolInput{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, out.ExitCode, out.StdErr)
+	assert.Contains(t, out.StdOut, "sind")
+
+	req.Params.Name = "sind_logs"
+	_, out, err = mcpExecute(t.Context(), req, ophis.ToolInput{Args: []string{"Bad_Name"}})
+	require.NoError(t, err)
+	assert.Equal(t, exitUsage, out.ExitCode)
+	assert.Contains(t, out.StdErr, "Bad_Name")
+}
+
+// TestMCPExecute_CancelKillsDocker checks that a cancelled call of a tool
+// that runs docker ends at once, and takes the docker process with it:
+// killed alone, the sind process left docker running, and docker held the
+// call's output open until it ended.
+func TestMCPExecute_CancelKillsDocker(t *testing.T) {
+	for _, tc := range []struct {
+		tool string
+		args []string
+	}{
+		{"sind_logs", []string{"controller"}},
+		{"sind_exec", []string{"--", "sleep", "60"}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			started := mcpToolProcesses(t)
+			// The cluster has a submitter and a controller, so it is the
+			// docker exec or docker logs that hangs, holding the call's
+			// output.
+			t.Setenv(fakeDockerPSEnv, `{"ID":"abc","Names":"sind-default-submitter","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=submitter"}`+"\n"+
+				`{"ID":"def","Names":"sind-default-controller","State":"running","Labels":"sind.realm=sind,sind.cluster=default,sind.role=controller"}`+"\n")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := make(chan ophis.ToolOutput, 1)
+			go func() {
+				req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: tc.tool}}
+				_, out, _ := mcpExecute(ctx, req, ophis.ToolInput{Args: tc.args})
+				done <- out
+			}()
+
+			var pid int
+			require.Eventually(t, func() bool {
+				data, _ := os.ReadFile(started)
+				pid, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+				return pid > 0
+			}, 10*time.Second, 20*time.Millisecond, "docker was never started")
+			cancel()
+
+			select {
+			case out := <-done:
+				assert.NotEqual(t, 0, out.ExitCode)
+			case <-time.After(5 * time.Second):
+				t.Fatal("the cancelled call did not end")
+			}
+			assert.Eventually(t, func() bool { return !processRunning(pid) }, 5*time.Second, 20*time.Millisecond,
+				"docker is still running")
+		})
+	}
+}
+
+// processRunning reports whether the process pid exists and is no zombie.
+func processRunning(pid int) bool {
+	stat, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return false
+	}
+	// The state follows the command name in parentheses, which may hold
+	// spaces.
+	fields := strings.Fields(string(stat[bytes.LastIndexByte(stat, ')')+1:]))
+	return len(fields) > 0 && fields[0] != "Z"
 }

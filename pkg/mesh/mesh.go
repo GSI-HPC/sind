@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -60,6 +61,27 @@ const DNSImage = "coredns/coredns:1.14.7"
 // corefilePath is the path to the Corefile inside the DNS container.
 const corefilePath = "/Corefile"
 
+// zonefilePath is the path to the zone file inside the DNS container, which
+// the Corefile serves after the hosts block.
+const zonefilePath = "/zone.db"
+
+// zonefile holds only the SOA record of the realm's zone, relative to the
+// zone's origin. CoreDNS's hosts plugin has no SOA, and answers SERVFAIL for
+// a name it lacks; the file plugin after it answers NXDOMAIN, with the SOA,
+// so that resolvers report a missing node as unknown instead of retrying.
+// The SOA's TTL and minimum, 0, keep resolvers from caching the answer for a
+// node about to be created.
+const zonefile = "@ 0 IN SOA ns hostmaster 1 7200 1800 86400 0\n"
+
+// dnsFiles returns the DNS container's configuration files, for docker cp
+// into its root, with the given host entries in the Corefile.
+func dnsFiles(realm string, entries []string) docker.FileContents {
+	return docker.FileContents{
+		"Corefile": []byte(generateCorefile(realm, entries)),
+		"zone.db":  []byte(zonefile),
+	}
+}
+
 // Manager handles global infrastructure resources shared across all clusters.
 type Manager struct {
 	Docker  *docker.Client
@@ -69,21 +91,22 @@ type Manager struct {
 	HostDNS bool // configure host DNS resolution via systemd-resolved
 
 	// OnWarning receives warnings meant for the user, such as a mesh DNS
-	// address that containers created earlier no longer use. The sind CLI
-	// prints them to stderr. Without it, Warn logs them at warn level.
+	// address that containers created earlier no longer use. Without it,
+	// Warn reports them through the context (sindlog.Warn), where the sind
+	// CLI prints them to stderr.
 	OnWarning func(msg string)
 
 	created bool // set by EnsureMeshNetwork when this call created the mesh network
 }
 
-// Warn reports a warning for the user through OnWarning, or the context's
-// logger when OnWarning is nil.
+// Warn reports a warning for the user through OnWarning, or through the
+// context (sindlog.Warn) when OnWarning is nil.
 func (m *Manager) Warn(ctx context.Context, msg string) {
 	if m.OnWarning != nil {
 		m.OnWarning(msg)
 		return
 	}
-	sindlog.From(ctx).WarnContext(ctx, msg)
+	sindlog.Warn(ctx, msg)
 }
 
 // NewManager returns a Manager that operates on global resources through the
@@ -556,9 +579,7 @@ func (m *Manager) createDNS(ctx context.Context, pinnedIP string) (*docker.Conta
 		return nil, fmt.Errorf("creating DNS container: %w", err)
 	}
 
-	err := m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
-		"Corefile": []byte(generateCorefile(m.Realm, nil)),
-	})
+	err := m.Docker.CopyToContainer(ctx, name, "/", dnsFiles(m.Realm, nil))
 	if err != nil {
 		return nil, fmt.Errorf("writing DNS configuration: %w", err)
 	}
@@ -744,7 +765,9 @@ type DNSRecord struct {
 	IP       string `json:"ip"`
 }
 
-// GetDNSRecords returns all A records currently served by the mesh DNS.
+// GetDNSRecords returns all A records currently served by the mesh DNS, in
+// the natural order of their host names (natsort), as the Corefile keeps
+// them in the order they were added.
 func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 	if err := m.requireMeshContainer(ctx, m.DNSContainerName()); err != nil {
 		return nil, err
@@ -760,6 +783,7 @@ func (m *Manager) GetDNSRecords(ctx context.Context) ([]DNSRecord, error) {
 			records = append(records, DNSRecord{IP: fields[0], Hostname: fields[1]})
 		}
 	}
+	slices.SortFunc(records, func(a, b DNSRecord) int { return natsort.Compare(a.Hostname, b.Hostname) })
 	return records, nil
 }
 
@@ -784,9 +808,7 @@ func (m *Manager) readDNSEntries(ctx context.Context) ([]string, error) {
 func (m *Manager) writeDNSEntries(ctx context.Context, entries []string) error {
 	ctx = context.WithoutCancel(ctx)
 	name := m.DNSContainerName()
-	err := m.Docker.CopyToContainer(ctx, name, "/", docker.FileContents{
-		"Corefile": []byte(generateCorefile(m.Realm, entries)),
-	})
+	err := m.Docker.CopyToContainer(ctx, name, "/", dnsFiles(m.Realm, entries))
 	if err != nil {
 		return fmt.Errorf("writing DNS Corefile: %w", err)
 	}
@@ -817,7 +839,7 @@ func generateCorefile(realm string, entries []string) string {
 	for _, entry := range entries {
 		b.WriteString("        " + entry + "\n")
 	}
-	b.WriteString("        fallthrough\n    }\n    reload\n    log\n    errors\n}\n\n")
+	b.WriteString("        fallthrough\n    }\n    file " + zonefilePath + "\n    reload\n    log\n    errors\n}\n\n")
 	b.WriteString(".:53 {\n    forward . /etc/resolv.conf\n    log\n    errors\n}\n")
 	return b.String()
 }

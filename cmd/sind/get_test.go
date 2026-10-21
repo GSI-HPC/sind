@@ -120,6 +120,7 @@ func TestCell(t *testing.T) {
 	assert.Equal(t, "plain", cell("plain"))
 	assert.Equal(t, `a\tb\nc\x1b[2J\u202e`, cell("a\tb\nc\x1b[2J\u202e"))
 	assert.Equal(t, "worker", cell(config.RoleWorker))
+	assert.Equal(t, "-", cell(""), "an empty cell keeps its column")
 }
 
 func TestGetNodes_Output(t *testing.T) {
@@ -192,6 +193,25 @@ func TestGetNodes_AllClusters(t *testing.T) {
 	assert.Contains(t, stdout, "dev")
 	assert.Contains(t, stdout, "sind-prod-controller")
 	assert.Contains(t, stdout, "prod")
+}
+
+// TestGetNodes_WarnsWithoutIPs checks that a listing whose IPs could not be
+// read says so on stderr without -v: it printed empty IPs and nothing else.
+func TestGetNodes_WarnsWithoutIPs(t *testing.T) {
+	var m mock.Executor
+	m.AddResult(testutil.NDJSON(
+		testutil.PsEntry{
+			ID: "a", Names: "sind-dev-controller", State: "running", Image: "sind-node:25.11",
+			Labels: "sind.cluster=dev,sind.role=controller",
+		},
+	), "", nil)
+	m.AddResult("", "daemon busy\x1b[2J", testutil.ExitCode1(t))
+
+	stdout, stderr, err := executeWithMock(&m, "get", "nodes")
+
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "sind-dev-controller")
+	assert.Equal(t, "Warning: listing the nodes without their IPs: exit status 1: daemon busy\\x1b[2J\n", stderr)
 }
 
 func TestGetMungeKey_Removed(t *testing.T) {
@@ -280,10 +300,11 @@ func TestGetDNS_Empty(t *testing.T) {
 	m.AddResult("[{}]\n", "", nil) // DNS container exists
 	m.AddResult(testutil.TarArchive("Corefile", corefile), "", nil)
 
-	stdout, _, err := executeWithMock(&m, "get", "dns")
+	stdout, stderr, err := executeWithMock(&m, "get", "dns")
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "HOSTNAME")
 	assert.NotContains(t, stdout, "sind.sind")
+	assert.Equal(t, "No DNS records found in realm \"sind\".\n", stderr)
 }
 
 func TestGetDNS_Error(t *testing.T) {
@@ -490,9 +511,9 @@ func TestGetSSHConfig_JSON(t *testing.T) {
 // meshInspectCall answers the inspects of get mesh for a running mesh.
 func meshInspectCall(args []string, _ string) mock.Result {
 	switch {
-	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-dns":
+	case len(args) == 4 && args[0] == "inspect" && args[1] == "sind-dns":
 		return mock.Result{Stdout: `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"running"},"Config":{"Image":"coredns/coredns:1.14.7","Labels":{}},"NetworkSettings":{"Networks":{"sind-mesh":{"IPAddress":"10.0.0.2"}}}}]`}
-	case len(args) == 2 && args[0] == "inspect" && args[1] == "sind-ssh":
+	case len(args) == 4 && args[0] == "inspect" && args[1] == "sind-ssh":
 		return mock.Result{Stdout: `[{"Id":"ssh1","Name":"/sind-ssh","State":{"Status":"running"},"Config":{"Image":"ghcr.io/gsi-hpc/sind-node:latest","Labels":{}}}]`}
 	}
 	return mock.Result{Err: fmt.Errorf("unexpected call: %v", args)}
@@ -513,6 +534,25 @@ func TestGetMesh_Output(t *testing.T) {
 	assert.Contains(t, stdout, "sind-ssh")
 	assert.Contains(t, stdout, "sind-ssh-config")
 	assert.Contains(t, stdout, "ghcr.io/gsi-hpc/sind-node:latest")
+}
+
+// TestGetMesh_StoppedDNS checks that an empty value is "-" in the table,
+// which printed "dns-ip" and trailing spaces, and "" in the JSON output.
+func TestGetMesh_StoppedDNS(t *testing.T) {
+	m := &mock.Executor{OnCall: func(args []string, stdin string) mock.Result {
+		if len(args) == 4 && args[0] == "inspect" && args[1] == "sind-dns" {
+			return mock.Result{Stdout: `[{"Id":"dns1","Name":"/sind-dns","State":{"Status":"exited"},"Config":{"Image":"coredns/coredns:1.14.7","Labels":{}},"NetworkSettings":{"Networks":{}}}]`}
+		}
+		return meshInspectCall(args, stdin)
+	}}
+
+	stdout, _, err := executeWithMock(m, "get", "mesh")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "\ndns-ip          -\n")
+
+	stdout, _, err = executeWithMock(m, "get", "mesh", "-o", "json")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, `"dns_ip": ""`)
 }
 
 func TestGetMesh_JSON(t *testing.T) {
@@ -701,7 +741,7 @@ func TestFormatState(t *testing.T) {
 			"mixed",
 			[]*cluster.NodeStatus{
 				{Health: &cluster.NodeHealth{State: "running"}},
-				{Health: &cluster.NodeHealth{State: "exited"}},
+				{Health: &cluster.NodeHealth{State: "stopped"}},
 			},
 			cluster.StateMixed,
 			"mixed (1/1/0/2)",
@@ -859,6 +899,27 @@ func TestGetNode_Output(t *testing.T) {
 	assert.Equal(t, 1, inspects, "the node container is inspected once")
 }
 
+// TestGetNode_Stopped checks that a node whose container exited is
+// "stopped" in get node, in both formats, as it is in get nodes and get
+// cluster: get node printed docker's "exited".
+func TestGetNode_Stopped(t *testing.T) {
+	inspect := `[{"Id":"id","Name":"/sind-dev-worker-0","State":{"Status":"exited"},"Config":{"Labels":{"sind.role":"worker"}},"NetworkSettings":{"Networks":{}}}]`
+	for _, tc := range []struct{ format, want string }{
+		{"human", "sind-dev-worker-0   worker   worker-0.dev.sind.sind   -    stopped\n"},
+		{"json", `"status": "stopped"`},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			var m mock.Executor
+			m.AddResult(inspect, "", nil)
+
+			stdout, _, err := executeWithMock(&m, "get", "node", "worker-0.dev", "-o", tc.format)
+
+			require.NoError(t, err)
+			assert.Contains(t, stdout, tc.want)
+		})
+	}
+}
+
 func TestGetNode_JSON(t *testing.T) {
 	m := nodeHealthMock(t)
 
@@ -873,7 +934,7 @@ func TestGetNode_JSON(t *testing.T) {
 	assert.True(t, got.Managed, "no sind.managed label: created before it existed")
 	assert.Equal(t, "controller.dev.sind.sind", got.FQDN)
 	assert.Equal(t, "10.0.0.2", got.IP)
-	assert.Equal(t, docker.StateRunning, got.Status)
+	assert.Equal(t, cluster.StateRunning, got.Status)
 	assert.True(t, got.Services["munge"])
 	assert.True(t, got.Services["sshd"])
 	assert.True(t, got.Services["slurmctld"])
@@ -922,7 +983,7 @@ func pairOnCall(t *testing.T) func([]string, string) mock.Result {
 			)}
 		case args[0] == "inspect":
 			entries := make([]string, 0, len(args)-1)
-			for _, name := range args[1:] {
+			for _, name := range args[1 : len(args)-2] {
 				role := "controller"
 				if strings.Contains(name, "worker") {
 					role = "worker"
@@ -975,7 +1036,8 @@ func TestGetCluster_ControllerPair(t *testing.T) {
 	assert.Equal(t, []string{"NAME", "ROLE", "HA", "IP", "STATUS", "SERVICES"}, strings.Fields(header))
 	assert.Equal(t, "primary", rows["controller.dev"][2])
 	assert.Equal(t, "backup*", rows["controller-backup.dev"][2])
-	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][2], "workers leave the HA column empty")
+	assert.Equal(t, "-", rows["worker-0.dev"][2], "workers have no HA position")
+	assert.Equal(t, "10.0.0.2", rows["worker-0.dev"][3])
 }
 
 func TestGetCluster_UnknownSlurmVersion(t *testing.T) {
@@ -1016,7 +1078,7 @@ func TestFormatSlurmVersion(t *testing.T) {
 }
 
 func TestFormatHA(t *testing.T) {
-	assert.Equal(t, "", formatHA(nil))
+	assert.Equal(t, "-", formatHA(nil))
 	assert.Equal(t, "primary", formatHA(&cluster.HAStatus{Position: "primary"}))
 	assert.Equal(t, "backup*", formatHA(&cluster.HAStatus{Position: "backup", InControl: true}))
 }
@@ -1133,13 +1195,23 @@ func TestGetSSHConfig_Exists(t *testing.T) {
 	assert.Empty(t, stderr)
 }
 
-func TestGetClusters_NoneSaysSoOnStderr(t *testing.T) {
-	var m mock.Executor
-	m.AddResult("", "", nil)
+// TestGetEmptyListings_SaySoOnStderr checks that every get listing that
+// lists nothing says so on stderr, as get clusters does, so that a lone
+// header is not mistaken for a failure; -o json says nothing.
+func TestGetEmptyListings_SaySoOnStderr(t *testing.T) {
+	for _, what := range []string{"networks", "volumes", "nodes", "clusters"} {
+		t.Run(what, func(t *testing.T) {
+			m := &mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{} }}
 
-	stdout, stderr, err := executeWithMock(&m, "get", "clusters")
+			stdout, stderr, err := executeWithMock(m, "--realm", "ci", "get", what)
 
-	require.NoError(t, err)
-	assert.Equal(t, 1, strings.Count(stdout, "\n"), "only the header")
-	assert.Equal(t, "No clusters found in realm \"sind\".\n", stderr)
+			require.NoError(t, err)
+			assert.Equal(t, 1, strings.Count(stdout, "\n"), "only the header")
+			assert.Equal(t, "No "+what+" found in realm \"ci\".\n", stderr)
+
+			_, stderr, err = executeWithMock(m, "--realm", "ci", "get", what, "-o", "json")
+			require.NoError(t, err)
+			assert.Empty(t, stderr)
+		})
+	}
 }

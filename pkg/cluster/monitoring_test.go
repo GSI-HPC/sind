@@ -114,7 +114,7 @@ func (f *stackFake) dns(args []string) (mock.Result, bool) {
 	case joined == "cp - sind-dns:/", joined == "kill -s USR1 sind-dns":
 		f.calls = append(f.calls, args)
 		return mock.Result{}, true
-	case joined == "inspect sind-dns":
+	case joined == "inspect sind-dns --type container":
 		return mock.Result{Stdout: inspectJSON(f.t, "sind-dns", "running", nil)}, true
 	}
 	return mock.Result{}, false
@@ -220,7 +220,7 @@ func (f *stackFake) handle(args []string, _ string) (mock.Result, bool) { //noli
 	switch args[0] {
 	case "inspect":
 		var out []map[string]any
-		for _, name := range args[1:] {
+		for _, name := range args[1 : len(args)-2] {
 			c, ok := f.containers[name]
 			if !ok {
 				return notFound(testutil.NoSuchContainer(name)), true
@@ -757,6 +757,11 @@ func TestGetMonitoring(t *testing.T) {
 	m, err = GetMonitoring(t.Context(), client, "sind")
 	require.NoError(t, err)
 	assert.Equal(t, "http://"+f.containers["sind-alloy"].ip+":12345", m.Services[3].URL)
+
+	delete(f.containers, "sind-loki")
+	m, err = GetMonitoring(t.Context(), client, "sind")
+	require.NoError(t, err)
+	assert.Equal(t, ServiceMissing, m.Services[2].State, "a container that does not exist")
 
 	f.fail["ps -a --no-trunc --format json --filter label=sind.realm"] = mock.Result{Err: testutil.ExitCode1(t)}
 	_, err = GetMonitoring(t.Context(), client, "sind")

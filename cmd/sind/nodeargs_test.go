@@ -192,6 +192,18 @@ func TestGroupByCluster(t *testing.T) {
 	}, groupByCluster(targets))
 }
 
+// TestGroupByCluster_NamedTwice covers a node named with and without its
+// cluster: a command acts on it once.
+func TestGroupByCluster_NamedTwice(t *testing.T) {
+	targets, err := parseNodeArgs("controller,controller.default,worker-0.dev,worker-0.dev")
+	require.NoError(t, err)
+
+	assert.Equal(t, []clusterNodes{
+		{Cluster: "default", ShortNames: []string{"controller"}},
+		{Cluster: "dev", ShortNames: []string{"worker-0"}},
+	}, groupByCluster(targets))
+}
+
 func TestGroupByCluster_Empty(t *testing.T) {
 	assert.Empty(t, groupByCluster(nil))
 }

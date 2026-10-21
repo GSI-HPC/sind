@@ -5,6 +5,7 @@ package config
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -67,9 +68,10 @@ func (n *Node) UnmarshalYAML(v *yaml.Node) error {
 		n.Role = Role(v.Value)
 	case hasKey(v, "role"):
 		return v.Decode((*alias)(n))
-	case len(v.Content) == 2:
-		n.Role = Role(v.Content[0].Value)
-		return v.Content[1].Decode(&n.Count)
+	default:
+		pairs := pairsOf(v)
+		n.Role = Role(pairs[0].Value)
+		return pairs[1].Decode(&n.Count)
 	}
 	return nil
 }
@@ -496,16 +498,17 @@ func validateSection(sectionName string, s Section) error {
 	return nil
 }
 
-// Parse parses a YAML cluster configuration and returns a Cluster.
+// Parse parses a YAML cluster configuration and returns a Cluster. An
+// error does not name the configuration's source, which the caller knows.
 func Parse(data []byte) (*Cluster, error) {
 	doc, err := checkSyntax(data)
 	if err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
+		return nil, err
 	}
 
 	var cfg Cluster
 	if err := doc.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
+		return nil, errors.New(strings.TrimPrefix(err.Error(), "yaml: "))
 	}
 
 	if cfg.Kind == "" {

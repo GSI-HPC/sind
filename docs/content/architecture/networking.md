@@ -54,6 +54,8 @@ Nodes are configured with:
 --dns-search <cluster>.<realm>.sind
 ```
 
+A name in the zone that names no node, such as a deleted worker, does not exist (`NXDOMAIN`), so lookups fail at once with an unknown host rather than being retried.
+
 The DNS container keeps its address for as long as the realm's mesh exists (see [below](#after-a-host-reboot-or-a-docker-daemon-restart)). `sind get mesh` shows it, so DNS servers outside sind, such as the CoreDNS of a kind cluster on the same host, can forward the `<realm>.sind` zone to it.
 
 Within a cluster, short names work via the search domain: a node in the `dev` cluster can reach `controller` without the full `controller.dev.sind.sind`.

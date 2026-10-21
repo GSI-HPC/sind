@@ -3,11 +3,13 @@
 package cluster
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
@@ -362,14 +364,18 @@ func probeMonitoringImages(ctx context.Context, client *docker.Client, meshMgr *
 	return infos[0].Version, nil
 }
 
+// ServiceMissing is the status of a monitoring service whose container does
+// not exist.
+const ServiceMissing docker.ContainerState = "missing"
+
 // MonitoringService is a service of the realm's monitoring stack.
 type MonitoringService struct {
 	Name      observability.Service `json:"name"`
 	Container docker.ContainerName  `json:"container"`
 	Image     string                `json:"image"`
-	IP        string                `json:"ip"`  // on the mesh, empty while stopped
-	URL       string                `json:"url"` // by mesh DNS name; by IP for Alloy, which has none
-	State     docker.ContainerState `json:"status"`
+	IP        string                `json:"ip"`     // on the mesh, empty while stopped
+	URL       string                `json:"url"`    // by mesh DNS name; by IP for Alloy, which has none
+	State     docker.ContainerState `json:"status"` // the container's state, or ServiceMissing
 	Ready     bool                  `json:"ready"`
 	Checked   bool                  `json:"checked"` // whether Ready was checked, which needs Grafana running
 }
@@ -407,7 +413,7 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 	}
 	m := &Monitoring{Realm: realm, Services: make([]MonitoringService, len(statuses)), Clusters: []MonitoredCluster{}}
 	for i, st := range statuses {
-		svc := MonitoringService{Name: st.Service, Container: st.Container, Image: st.Image, IP: st.IP, State: st.State, Ready: st.Ready, Checked: st.Checked}
+		svc := MonitoringService{Name: st.Service, Container: st.Container, Image: st.Image, IP: st.IP, State: cmp.Or(st.State, ServiceMissing), Ready: st.Ready, Checked: st.Checked}
 		switch {
 		case st.DNSName != "":
 			svc.URL = "http://" + st.DNSName + ":" + st.Port
@@ -428,6 +434,6 @@ func GetMonitoring(ctx context.Context, client *docker.Client, realm string) (*M
 			m.Clusters[i].SlurmVersion = v
 		}
 	}
-	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(m.Clusters, func(a, b MonitoredCluster) int { return natsort.Compare(a.Name, b.Name) })
 	return m, nil
 }

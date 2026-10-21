@@ -19,6 +19,9 @@ import (
 // knownHostsPath is the path to the known_hosts file inside the SSH container.
 const knownHostsPath = "/root/.ssh/known_hosts"
 
+// sshVolumeLabel is the com.docker.compose.volume label of the SSH volume.
+const sshVolumeLabel = "ssh-config"
+
 // SSHImage returns the container image of the SSH relay: sind's default
 // node image, which has an ssh client and bash, and which the default
 // cluster pulls anyway. Custom node images need not have an ssh client.
@@ -28,20 +31,34 @@ func SSHImage() string {
 
 // ensureSSHVolume creates the SSH config volume if it does not exist yet,
 // and reports whether it did. ensureSSH writes the keys into a new volume.
+//
+// An existing volume of that name must be the realm's SSH volume: realm
+// a-x's <realm>-ssh-config is also the config volume of cluster x-ssh in
+// realm a, which the relay would mount as /root/.ssh. Cluster names ending
+// in -ssh are refused (config.CheckName), but a cluster made before that,
+// or by another client, can still hold the name. A volume whose sind.realm
+// or com.docker.compose.volume label names something else is refused; one
+// without them, as docker run makes for a volume it mounts, is not.
 func (m *Manager) ensureSSHVolume(ctx context.Context) (bool, error) {
 	volName := m.SSHVolumeName()
-	exists, err := m.Docker.VolumeExists(ctx, volName)
+	labels, exists, err := m.Docker.VolumeLabels(ctx, volName)
 	if err != nil {
 		return false, fmt.Errorf("checking SSH volume: %w", err)
 	}
 	if exists {
+		realm, hasRealm := labels[LabelRealm]
+		vol, hasVol := labels[docker.ComposeVolumeLabel]
+		if hasRealm && realm != m.Realm || hasVol && vol != sshVolumeLabel {
+			return false, fmt.Errorf("volume %s is not the SSH volume of realm %q: its labels are %s=%q, %s=%q",
+				volName, m.Realm, LabelRealm, realm, docker.ComposeVolumeLabel, vol)
+		}
 		return false, nil
 	}
 
 	volumeLabels := docker.Labels{
 		LabelRealm:                 m.Realm,
 		docker.ComposeProjectLabel: m.ComposeProject(),
-		docker.ComposeVolumeLabel:  "ssh-config",
+		docker.ComposeVolumeLabel:  sshVolumeLabel,
 	}
 	if err := m.Docker.CreateVolume(ctx, volName, volumeLabels); err != nil {
 		return false, fmt.Errorf("creating SSH volume: %w", err)
@@ -206,11 +223,13 @@ func (m *Manager) editKnownHosts(ctx context.Context, hostnames, add []string) e
 	return nil
 }
 
-// writeKnownHosts replaces the relay's known_hosts. The write ignores the
-// cancellation of ctx: `cat >` truncates the file first, and a write cut
-// short by Ctrl+C would drop the host keys of every cluster in the realm.
+// writeKnownHosts replaces the relay's known_hosts in one step
+// (docker.Client.ReplaceFile): a write cut short, even by a Ctrl+C that
+// reaches the docker CLI directly, leaves the old file, not a truncated one
+// without the host keys of every cluster in the realm. The write ignores
+// the cancellation of ctx, so that the file keeps up with the mesh DNS.
 func (m *Manager) writeKnownHosts(ctx context.Context, content string) error {
-	return m.Docker.WriteFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
+	return m.Docker.ReplaceFile(context.WithoutCancel(ctx), m.SSHContainerName(), knownHostsPath, content)
 }
 
 // generateKeypair creates a new ed25519 keypair and returns the private key

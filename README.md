@@ -36,8 +36,11 @@ With Docker 28 or later on a Linux host with cgroup v2:
 ```bash
 curl -fLo sind https://github.com/GSI-HPC/sind/releases/latest/download/sind-linux-amd64
 sudo install sind /usr/local/bin/sind
+mkdir sind-demo && cd sind-demo
 sind create cluster && sind exec -- sinfo
 ```
+
+Every node mounts the working directory as `/data`, so start in a scratch directory like this one.
 
 See the [installation guide](https://gsi-hpc.github.io/sind/getting-started/installation/) to verify the download or install on ARM64, and `sind doctor` to check the host.
 

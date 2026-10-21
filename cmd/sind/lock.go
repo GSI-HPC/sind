@@ -55,8 +55,9 @@ func updateSSHExport(cmd *cobra.Command, client *docker.Client, meshMgr *mesh.Ma
 // While another sind command holds the lock, a warning on the command's
 // stderr (stderrFrom) says why the command waits, naming the holder of the
 // daemon lock: the user may have to end the other one, and without -v
-// nothing else would show. The lock's other warnings go there too. What
-// they quote of the holder comes from another client and is escaped.
+// nothing else would show. The lock's other warnings go there too, through
+// the context (withStderr). What they quote of the holder comes from
+// another client and is escaped.
 //
 // The wait is a progress span too, "realm lock", from the first wait to
 // the moment the lock is taken or the command gives up, whose message
@@ -82,9 +83,6 @@ func acquireRealmLock(ctx context.Context, realm, stateHome string) (unlock func
 			} else {
 				wait.Update(progress.Message(who))
 			}
-		},
-		OnWarning: func(msg string) {
-			_, _ = fmt.Fprintln(stderr, "Warning:", termtext.EscapeLines(msg))
 		},
 	}
 	if stateHome != "" {

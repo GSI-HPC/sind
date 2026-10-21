@@ -3,7 +3,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -124,7 +123,7 @@ func runGetClusters(cmd *cobra.Command, _ []string) error {
 		if err := w.Flush(); err != nil {
 			return err
 		}
-		noteNone(cmd, len(clusters), "clusters", realm)
+		noteNone(cmd, len(clusters), "clusters", inRealm(realm))
 		return nil
 	})
 }
@@ -242,7 +241,7 @@ func runGetAllNodes(cmd *cobra.Command) error {
 		if err := w.Flush(); err != nil {
 			return err
 		}
-		noteNone(cmd, len(nodes), "nodes", realm)
+		noteNone(cmd, len(nodes), "nodes", inRealm(realm))
 		return nil
 	})
 }
@@ -262,35 +261,47 @@ func runGetNodes(cmd *cobra.Command, name string) error {
 }
 
 func runGetNetworks(cmd *cobra.Command, _ []string) error {
-	return runGet(cmd, cluster.GetNetworks, func(cmd *cobra.Command, networks []*cluster.NetworkSummary, _ string) error {
+	return runGet(cmd, cluster.GetNetworks, func(cmd *cobra.Command, networks []*cluster.NetworkSummary, realm string) error {
 		w := newTabWriter(cmd.OutOrStdout())
 		_, _ = fmt.Fprintln(w, "NAME\tDRIVER\tSUBNET\tGATEWAY")
 		for _, n := range networks {
 			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", cell(n.Name), cell(n.Driver), cell(n.Subnet), cell(n.Gateway))
 		}
-		return w.Flush()
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		noteNone(cmd, len(networks), "networks", inRealm(realm))
+		return nil
 	})
 }
 
 func runGetVolumes(cmd *cobra.Command, _ []string) error {
-	return runGet(cmd, cluster.GetVolumes, func(cmd *cobra.Command, volumes []*cluster.VolumeSummary, _ string) error {
+	return runGet(cmd, cluster.GetVolumes, func(cmd *cobra.Command, volumes []*cluster.VolumeSummary, realm string) error {
 		w := newTabWriter(cmd.OutOrStdout())
 		_, _ = fmt.Fprintln(w, "NAME\tDRIVER")
 		for _, v := range volumes {
 			_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(v.Name), cell(v.Driver))
 		}
-		return w.Flush()
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		noteNone(cmd, len(volumes), "volumes", inRealm(realm))
+		return nil
 	})
 }
 
 func runGetDNS(cmd *cobra.Command, _ []string) error {
-	return runGet(cmd, fromMesh((*mesh.Manager).GetDNSRecords), func(cmd *cobra.Command, records []mesh.DNSRecord, _ string) error {
+	return runGet(cmd, fromMesh((*mesh.Manager).GetDNSRecords), func(cmd *cobra.Command, records []mesh.DNSRecord, realm string) error {
 		w := newTabWriter(cmd.OutOrStdout())
 		_, _ = fmt.Fprintln(w, "HOSTNAME\tIP")
 		for _, r := range records {
 			_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(r.Hostname), cell(r.IP))
 		}
-		return w.Flush()
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		noteNone(cmd, len(records), "DNS records", inRealm(realm))
+		return nil
 	})
 }
 
@@ -406,12 +417,12 @@ func runGetCoreDNSConfig(cmd *cobra.Command, _ []string) error {
 }
 
 func runGetMonitoring(cmd *cobra.Command, _ []string) error {
-	return runGet(cmd, cluster.GetMonitoring, func(cmd *cobra.Command, m *cluster.Monitoring, _ string) error {
+	return runGet(cmd, cluster.GetMonitoring, func(cmd *cobra.Command, m *cluster.Monitoring, realm string) error {
 		out := cmd.OutOrStdout()
 		w := newTabWriter(out)
 		_, _ = fmt.Fprintln(w, "SERVICE\tCONTAINER\tADDRESS\tSTATUS")
 		for _, s := range m.Services {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(cmp.Or(s.URL, "-")), formatServiceState(s))
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, cell(s.Container), cell(s.URL), formatServiceState(s))
 		}
 		if err := w.Flush(); err != nil {
 			return err
@@ -424,7 +435,11 @@ func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 		for _, c := range m.Clusters {
 			_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n", cell(c.Name), c.Nodes, formatSlurmVersion(c.SlurmVersion))
 		}
-		return w.Flush()
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		noteNone(cmd, len(m.Clusters), "monitored clusters", inRealm(realm))
+		return nil
 	})
 }
 
@@ -435,8 +450,6 @@ func runGetMonitoring(cmd *cobra.Command, _ []string) error {
 // not, and "missing" when the container does not exist.
 func formatServiceState(s cluster.MonitoringService) string {
 	switch {
-	case s.State == "":
-		return "missing"
 	case s.State == docker.StateRunning && !s.Checked:
 		return "unchecked"
 	case s.State == docker.StateRunning && !s.Ready:
@@ -551,10 +564,10 @@ func printStatus(cmd *cobra.Command, status *cluster.Status, realm string) error
 }
 
 // formatHA renders a controller's pair position, marking the controller in
-// control with "*". Nodes outside the pair render empty.
+// control with "*". Nodes outside the pair render "-".
 func formatHA(ha *cluster.HAStatus) string {
 	if ha == nil {
-		return ""
+		return "-"
 	}
 	if ha.InControl {
 		return ha.Position + "*"
@@ -566,9 +579,9 @@ func formatState(status *cluster.Status) string {
 	var running, stopped, paused int
 	for _, n := range status.Nodes {
 		switch n.Health.State {
-		case docker.StateRunning:
+		case cluster.StateRunning:
 			running++
-		case docker.StatePaused:
+		case cluster.StatePaused:
 			paused++
 		default:
 			stopped++
@@ -582,9 +595,6 @@ func formatState(status *cluster.Status) string {
 // not know it (unmanaged clusters). The version comes from a label, so it
 // is escaped like any other cell.
 func formatSlurmVersion(version string) string {
-	if version == "" {
-		return "-"
-	}
 	return cell(version)
 }
 
@@ -593,8 +603,13 @@ func formatSlurmVersion(version string) string {
 // reads, so such text may hold control sequences that retitle the
 // terminal or write its clipboard; they are shown escaped (\x1b), as on
 // the final error line. Tab and newline are shown escaped too (\t, \n): in
-// a table cell they would start a column or a row of their own.
+// a table cell they would start a column or a row of their own. An empty
+// cell is "-", so that every row has all its columns for awk and cut, as
+// a stopped node has no IP.
 func cell[S ~string](s S) string {
+	if s == "" {
+		return "-"
+	}
 	return termtext.Escape(string(s))
 }
 
@@ -606,16 +621,22 @@ func checkmark(ok bool) string {
 }
 
 // noteNone says on stderr that a table listed nothing, so that a lone header
-// is not mistaken for a failure. Stdout stays the table, for scripts.
-func noteNone(cmd *cobra.Command, n int, what, realm string) {
+// is not mistaken for a failure, and where sind looked, unless where is
+// empty: inRealm, or the file it read. Stdout stays the table, for scripts.
+func noteNone(cmd *cobra.Command, n int, what, where string) {
 	if n > 0 {
 		return
 	}
-	if realm == "" {
+	if where == "" {
 		cmd.PrintErrf("No %s found.\n", what)
 		return
 	}
-	cmd.PrintErrf("No %s found in realm %q.\n", what, realm)
+	cmd.PrintErrf("No %s found in %s.\n", what, where)
+}
+
+// inRealm names a realm for noteNone.
+func inRealm(realm string) string {
+	return fmt.Sprintf("realm %q", realm)
 }
 
 func formatServices(services cluster.ServiceHealth) string {

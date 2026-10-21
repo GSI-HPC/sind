@@ -4,8 +4,10 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 
 	"github.com/GSI-HPC/go-clikit/cobratree"
 	"github.com/GSI-HPC/sind/internal/mcpconfig"
+	"github.com/GSI-HPC/sind/pkg/config"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 )
 
@@ -98,9 +101,11 @@ func newMCPEnableCommand(e mcpEditor) *cobra.Command {
 		Short: "Register sind's MCP server with " + e.title,
 		Long: `Register sind's MCP server with ` + e.title + `: add an entry that runs
 "sind mcp start", by the absolute path of this sind binary, or replace the
-entry of that name. The rest of the configuration file stays as it is, and
-the file as it was is first copied to <file>.<time>.bak. The root --realm
-sets SIND_REALM in the entry's environment, so the server serves that realm.`,
+entry of that name, which keeps its environment, unless --env or the realm
+change it, and its other settings. The rest of the configuration file stays
+as it is, and the file as it was is first copied to <file>.<time>.bak. The
+realm in effect, of the root --realm or SIND_REALM, is set as SIND_REALM in
+the entry's environment, so the server serves that realm.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPEnable(cmd, e, f)
@@ -171,8 +176,16 @@ func (f *mcpEditorFlags) path(e mcpEditor) (string, error) {
 	return filepath.Join(dir, e.userFile), nil
 }
 
-// loadMCPConfig loads the configuration file the flags select.
-func loadMCPConfig(e mcpEditor, f *mcpEditorFlags) (*mcpconfig.File, error) {
+// loadMCPConfig loads the configuration file the flags of cmd select. An
+// empty --config-path or --server-name is a usage error: an unset variable
+// in --config-path "$FILE" would otherwise edit the editor's own file.
+func loadMCPConfig(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (*mcpconfig.File, error) {
+	if cmd.Flags().Changed("config-path") && f.configPath == "" {
+		return nil, cobratree.Usagef("--config-path must not be empty: give a file, or leave the flag out for the default one")
+	}
+	if cmd.Flags().Lookup("server-name") != nil && f.serverName == "" {
+		return nil, cobratree.Usagef("--server-name must not be empty")
+	}
 	if f.configPath != "" && f.workspace {
 		return nil, cobratree.Usagef("--config-path and --workspace are mutually exclusive")
 	}
@@ -197,18 +210,27 @@ func runMCPEnable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := loadMCPConfig(e, f)
+	cfg, err := loadMCPConfig(cmd, e, f)
 	if err != nil {
 		return err
+	}
+	// Run again, as after sind moved, enable keeps what the entry had and
+	// the flags do not change: its environment, with the realm the server
+	// serves, and the members sind does not write (cfg.Set).
+	if old, ok := cfg.Server(entry.Name); ok && len(old.Env) > 0 {
+		env := maps.Clone(old.Env)
+		maps.Copy(env, entry.Env)
+		entry.Env = env
 	}
 	cfg.Set(entry)
 	return saveMCPConfig(cmd, cfg)
 }
 
 // mcpEntry returns the entry enable writes: this binary, by its absolute
-// path, running `mcp start`, with the environment of --env and the root's
-// --realm. An editor starts its MCP servers with its own environment, not
-// the shell's, so a realm the entry does not name is the default one.
+// path, running `mcp start`, with the environment of --env and the realm in
+// effect, of the root's --realm or SIND_REALM. An editor starts its MCP
+// servers with its own environment, not the shell's, so a realm the entry
+// does not name is the default one.
 func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Server, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -218,13 +240,24 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 	if e.stdio {
 		entry.Type = "stdio"
 	}
+	if err := checkMCPLogLevel(f.logLevel); err != nil {
+		return mcpconfig.Server{}, err
+	}
 	if f.logLevel != "" {
 		entry.Args = append(entry.Args, "--log-level", f.logLevel)
+	}
+	if env, ok := f.env["SIND_REALM"]; ok {
+		if err := config.CheckName("realm", env); err != nil {
+			return mcpconfig.Server{}, cobratree.Usagef("--env SIND_REALM: %w", err)
+		}
 	}
 	if len(f.env) > 0 {
 		entry.Env = f.env
 	}
-	if cmd.Root().Flags().Changed("realm") {
+	// The realm in effect, as every other command takes it: --realm, or
+	// else SIND_REALM, unless --env names one.
+	_, envRealm := f.env["SIND_REALM"]
+	if cmd.Root().Flags().Changed("realm") || (!envRealm && os.Getenv("SIND_REALM") != "") {
 		realm, err := realmFromFlag(cmd)
 		if err != nil {
 			return mcpconfig.Server{}, err
@@ -241,7 +274,7 @@ func mcpEntry(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) (mcpconfig.Ser
 }
 
 func runMCPDisable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
-	cfg, err := loadMCPConfig(e, f)
+	cfg, err := loadMCPConfig(cmd, e, f)
 	if err != nil {
 		return err
 	}
@@ -255,18 +288,25 @@ func runMCPDisable(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
 // command with its arguments, one reached over HTTP with its URL. It
 // leaves out their environment, which can hold secrets.
 func runMCPList(cmd *cobra.Command, e mcpEditor, f *mcpEditorFlags) error {
-	cfg, err := loadMCPConfig(e, f)
+	cfg, err := loadMCPConfig(cmd, e, f)
 	if err != nil {
 		return err
 	}
 	w := newTabWriter(cmd.OutOrStdout())
 	_, _ = fmt.Fprintln(w, "NAME\tCOMMAND")
-	for _, s := range cfg.Servers() {
+	servers := cfg.Servers()
+	for _, s := range servers {
 		command := s.URL
 		if s.Command != "" {
 			command = strings.Join(append([]string{s.Command}, s.Args...), " ")
 		}
 		_, _ = fmt.Fprintf(w, "%s\t%s\n", cell(s.Name), cell(command))
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	// The file names where sind looked: a mistyped --config-path reads
+	// as an empty file.
+	noteNone(cmd, len(servers), "MCP servers", strconv.Quote(cfg.Path()))
+	return nil
 }

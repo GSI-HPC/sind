@@ -38,10 +38,11 @@ type File struct {
 	path string // the file itself, after symbolic links
 	key  string // the member that holds the servers: mcpServers or servers
 
-	exists bool
-	mode   fs.FileMode
-	orig   []byte
-	root   hujson.Value
+	exists  bool
+	mode    fs.FileMode
+	orig    []byte
+	root    hujson.Value
+	newline string // the file's line break: \r\n if it has one, else \n
 }
 
 // Server is an entry of a configuration's server list.
@@ -63,7 +64,7 @@ func Load(fsys afero.Fs, path, key string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := &File{fs: fsys, path: path, key: key, mode: 0o600}
+	f := &File{fs: fsys, path: path, key: key, mode: 0o600, newline: "\n"}
 	data, err := afero.ReadFile(fsys, path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -76,6 +77,9 @@ func Load(fsys afero.Fs, path, key string) (*File, error) {
 		}
 		f.exists, f.mode, f.orig = true, info.Mode().Perm(), bytes.Clone(data)
 	}
+	if bytes.Contains(data, []byte("\r\n")) {
+		f.newline = "\r\n"
+	}
 	if len(bytes.TrimSpace(data)) == 0 {
 		data = []byte("{}\n")
 	}
@@ -86,12 +90,35 @@ func Load(fsys afero.Fs, path, key string) (*File, error) {
 	if _, ok := f.root.Value.(*hujson.Object); !ok {
 		return nil, fmt.Errorf("parsing %s: not a JSON object", path)
 	}
+	// An editor reads the last of two members of the same name, while
+	// Set and Remove would change the first.
+	if duplicate(f.object()) == key {
+		return nil, fmt.Errorf("parsing %s: %q is defined more than once", path, key)
+	}
 	if m := member(f.object(), key); m != nil {
-		if _, ok := m.Value.Value.(*hujson.Object); !ok {
+		obj, ok := m.Value.Value.(*hujson.Object)
+		if !ok {
 			return nil, fmt.Errorf("parsing %s: %q is not an object", path, key)
+		}
+		if name := duplicate(obj); name != "" {
+			return nil, fmt.Errorf("parsing %s: server %q is defined more than once in %q", path, name, key)
 		}
 	}
 	return f, nil
+}
+
+// duplicate returns the first member name that obj has more than once, or
+// "" if it has none.
+func duplicate(obj *hujson.Object) string {
+	seen := make(map[string]bool, len(obj.Members))
+	for _, m := range obj.Members {
+		name := m.Name.Value.(hujson.Literal).String()
+		if seen[name] {
+			return name
+		}
+		seen[name] = true
+	}
+	return ""
 }
 
 // resolve follows the symbolic links of path, if fsys has any, to the file
@@ -162,8 +189,21 @@ func (f *File) Servers() []Server {
 	return servers
 }
 
+// Server returns the entry name, as Servers lists it, and whether there
+// is one.
+func (f *File) Server(name string) (Server, bool) {
+	for _, s := range f.Servers() {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return Server{}, false
+}
+
 // Set adds the server s under its name, or replaces the entry that has
-// that name. Comments around a replaced entry stay.
+// that name. A replaced entry keeps the members that Server has no field
+// for, such as "disabled" or "autoApprove", in their place, and the
+// comments around it stay.
 func (f *File) Set(s Server) {
 	obj := f.servers()
 	var m *hujson.ObjectMember
@@ -171,10 +211,12 @@ func (f *File) Set(s Server) {
 		m = member(obj, s.Name)
 	}
 	indent, lines := f.layout(obj, 2)
+	var old *hujson.Object
 	if m != nil {
 		indent, lines = indentOf(m.Name.BeforeExtra), multiline(m.Name.BeforeExtra)
+		old, _ = m.Value.Value.(*hujson.Object)
 	}
-	value := f.render(s, indent, lines)
+	value := f.render(s, old, indent, lines)
 	if m != nil {
 		m.Value.Value = value.Value
 		return
@@ -186,6 +228,10 @@ func (f *File) Set(s Server) {
 	}
 	f.insert(obj, "/"+pointerToken(f.key), 2, s.Name, value, indent, lines)
 }
+
+// serverMembers are the members of an entry that the fields of Server
+// hold: Set writes them as s has them, and leaves out those s leaves empty.
+var serverMembers = []string{"type", "command", "args", "url", "env"}
 
 // Remove removes the server entry name and reports whether there was one.
 func (f *File) Remove(name string) bool {
@@ -241,11 +287,17 @@ func (f *File) insert(obj *hujson.Object, ptr string, depth int, name string, va
 	// overwrite what follows them.
 	before := bytes.TrimRight(m.Name.BeforeExtra, " \t")
 	if !bytes.HasSuffix(before, []byte("\n")) {
-		before = slices.Concat(before, []byte("\n"))
+		before = slices.Concat(before, []byte(f.newline))
 	}
 	m.Name.BeforeExtra = slices.Concat(before, []byte(indent))
 	if !bytes.ContainsRune(obj.AfterExtra, '\n') {
-		obj.AfterExtra = slices.Concat(bytes.TrimRight(obj.AfterExtra, " \t"), []byte("\n"+strings.Repeat(f.indentUnit(), depth-1)))
+		obj.AfterExtra = slices.Concat(bytes.TrimRight(obj.AfterExtra, " \t"), []byte(f.newline+strings.Repeat(f.indentUnit(), depth-1)))
+	}
+	// The patch leaves a \n before the closing brace, even where the file
+	// had \r\n.
+	if f.newline != "\n" {
+		lf := bytes.ReplaceAll(obj.AfterExtra, []byte("\r\n"), []byte("\n"))
+		obj.AfterExtra = bytes.ReplaceAll(lf, []byte("\n"), []byte(f.newline))
 	}
 }
 
@@ -262,19 +314,52 @@ func (f *File) patch(op, ptr string, value hujson.ValueTrimmed) {
 	}
 }
 
-// render marshals s as JSON: indented with the file's indentation after
-// the prefix indent, if lines is set, or on one line. A Server always
-// marshals, to JSON that always parses.
-func (f *File) render(s Server, indent string, lines bool) hujson.Value {
+// render marshals s as JSON, with the members of old, the entry s
+// replaces, that Server has no field for, in their place, and those of s
+// after them: indented with the file's indentation after the prefix
+// indent, and with its line breaks, if lines is set, or on one line. A Server always marshals, to
+// JSON that always parses, and the members of old, standardized, are JSON.
+func (f *File) render(s Server, old *hujson.Object, indent string, lines bool) hujson.Value {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	if lines {
-		enc.SetIndent(indent, f.indentUnit())
-	}
 	_ = enc.Encode(s)
 	v, _ := hujson.Parse(bytes.TrimSpace(buf.Bytes()))
+	if old != nil {
+		v = merge(old, v.Value.(*hujson.Object))
+	}
+	buf.Reset()
+	if lines {
+		_ = json.Indent(&buf, v.Pack(), indent, f.indentUnit())
+	} else {
+		buf.Write(v.Pack())
+	}
+	v, _ = hujson.Parse(bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte(f.newline)))
 	return v
+}
+
+// merge returns the members of old that Server has no field for, in their
+// place, and those of s there and after them, without comments.
+func merge(old, s *hujson.Object) hujson.Value {
+	merged := &hujson.Object{}
+	added := map[string]bool{}
+	for _, m := range old.Members {
+		name := m.Name.Value.(hujson.Literal).String()
+		if !slices.Contains(serverMembers, name) {
+			v := m.Value.Clone()
+			v.Standardize()
+			merged.Members = append(merged.Members, hujson.ObjectMember{Name: hujson.Value{Value: m.Name.Value}, Value: v})
+		} else if sm := member(s, name); sm != nil && !added[name] {
+			merged.Members = append(merged.Members, *sm)
+			added[name] = true
+		}
+	}
+	for _, m := range s.Members {
+		if !added[m.Name.Value.(hujson.Literal).String()] {
+			merged.Members = append(merged.Members, m)
+		}
+	}
+	return hujson.Value{Value: merged}
 }
 
 // indentUnit returns the indentation of the file's first top-level member,

@@ -147,7 +147,7 @@ sind automatically exports SSH configuration per realm to `$XDG_STATE_HOME/sind/
 | `known_hosts` | Host keys |
 | `lock` | Advisory lock that serializes your commands that create and delete clusters and workers, and `sind power on`, `reboot` and `cycle`, in the realm; the [realm lock]({{< relref "/configuration/realms#advisory-locking" >}}) on the Docker daemon serializes them with other users' |
 
-The SSH files are updated on every create/delete operation and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file. Only your own sind commands update them: in a realm that you share with another user of the Docker daemon, that user's creates and deletes do not reach your files.
+The SSH files are updated on every create/delete operation, also on a delete that fails partway, and removed when the last cluster in a realm is deleted; the directory stays, as it holds the `lock` file. Only your own sind commands update them: in a realm that you share with another user of the Docker daemon, that user's creates and deletes do not reach your files.
 
 To find the path for your current realm:
 
@@ -176,6 +176,8 @@ ssh controller.default.sind.sind      # full FQDN
 scp file.txt worker-0.dev.sind.sind:/tmp/
 ssh -L 8080:localhost:80 controller   # port forwarding to your machine
 ```
+
+The config authenticates to the nodes with sind's key only (`IdentitiesOnly yes`). ssh does not offer them the keys of your ssh-agent, which it would otherwise try first: with six or more of them, the nodes' sshd would end the connection before sind's key got its turn.
 
 The `Include` relies on these OpenSSH behaviours:
 

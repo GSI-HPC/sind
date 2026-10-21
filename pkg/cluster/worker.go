@@ -297,7 +297,7 @@ func WorkerAdd(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 			retErr = fmt.Errorf("workers of cluster %q %w within %s: %w", opts.ClusterName, ErrNotReady, rd.wait, retErr)
 		}
 		if retErr != nil && needsCleanup {
-			log.ErrorContext(ctx, "cleaning up partial resources, please wait")
+			log.WarnContext(ctx, "cleaning up partial resources, please wait")
 			cleanupCtx, endRollback := startRollback(ctx)
 			var rollbackErrs []error
 			failed := func(err error) {
@@ -799,7 +799,7 @@ func extraSecurityOpts(ctx context.Context, container docker.ContainerName, opts
 		switch {
 		case slices.Contains(own, opt):
 		case strings.HasPrefix(opt, "seccomp={"):
-			sindlog.From(ctx).WarnContext(ctx, "not inheriting the seccomp profile of the newest worker: pass it with --security-opt seccomp=FILE", "worker", string(container))
+			sindlog.Warn(ctx, fmt.Sprintf("not inheriting the seccomp profile of %s: pass it with --security-opt seccomp=FILE", container))
 		default:
 			extra = append(extra, opt)
 		}

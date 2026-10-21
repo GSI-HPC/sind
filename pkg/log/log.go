@@ -36,3 +36,23 @@ func From(ctx context.Context) *slog.Logger {
 	}
 	return nop
 }
+
+type warnKey struct{}
+
+// WithWarn stores in the context where the warnings meant for the user go
+// (Warn). The sind CLI prints each as a "Warning:" line on stderr.
+func WithWarn(ctx context.Context, warn func(msg string)) context.Context {
+	return context.WithValue(ctx, warnKey{}, warn)
+}
+
+// Warn reports a warning meant for the user, something that did not fail
+// the operation but that its caller should know, such as a step that was
+// skipped: to the function the context carries (WithWarn), or else, for a
+// library caller that set none, to the context's logger at warn level.
+func Warn(ctx context.Context, msg string) {
+	if warn, ok := ctx.Value(warnKey{}).(func(string)); ok {
+		warn(msg)
+		return
+	}
+	From(ctx).WarnContext(ctx, msg)
+}

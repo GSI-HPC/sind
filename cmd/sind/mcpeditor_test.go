@@ -108,14 +108,66 @@ func TestMCPEnable_Environment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
-	_, _, err = executeCommand("--realm", "dev", "mcp", "cursor", "enable", "--config-path", path)
+	// Run again, enable keeps the environment, and the flags change what
+	// they name; the arguments are the flags' alone.
+	_, _, err = executeCommand("--realm", "dev", "mcp", "cursor", "enable", "--config-path", path, "--env", "TOKEN=t")
 	require.NoError(t, err)
 	servers, _ = readMCPConfig(t, path, "mcpServers")
-	assert.Equal(t, map[string]any{"SIND_REALM": "dev"}, servers["sind"]["env"])
+	assert.Equal(t, map[string]any{"PATH": "/opt/bin", "SIND_REALM": "dev", "TOKEN": "t"}, servers["sind"]["env"])
 	assert.Equal(t, []any{"mcp", "start"}, servers["sind"]["args"])
 }
 
+// TestMCPEnable_KeepsTheEntrysSettings checks that enable, run again as
+// after sind moved, keeps the realm and environment of the entry and the
+// settings sind does not write.
+func TestMCPEnable_KeepsTheEntrysSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "claude_desktop_config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"sind":{"command":"/old/sind","args":["mcp","start"],`+
+		`"env":{"SIND_REALM":"ci","FOO":"bar"},"disabled":true,"autoApprove":["sind_get_clusters"]}}}`), 0o600))
+
+	_, _, err := executeCommand("mcp", "claude", "enable", "--config-path", path)
+	require.NoError(t, err)
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	servers, _ := readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{
+		"command":     exe,
+		"args":        []any{"mcp", "start"},
+		"env":         map[string]any{"SIND_REALM": "ci", "FOO": "bar"},
+		"disabled":    true,
+		"autoApprove": []any{"sind_get_clusters"},
+	}, servers["sind"])
+}
+
+// TestMCPEnable_RealmFromEnvironment checks that enable records the realm
+// in effect, which an exported SIND_REALM sets as --realm does, unless
+// --env names one.
+func TestMCPEnable_RealmFromEnvironment(t *testing.T) {
+	t.Setenv("SIND_REALM", "ci")
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	_, _, err := executeCommand("mcp", "cursor", "enable", "--config-path", path)
+	require.NoError(t, err)
+	servers, _ := readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{"SIND_REALM": "ci"}, servers["sind"]["env"])
+
+	path = filepath.Join(t.TempDir(), "mcp.json")
+	_, _, err = executeCommand("mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_REALM=dev")
+	require.NoError(t, err)
+	servers, _ = readMCPConfig(t, path, "mcpServers")
+	assert.Equal(t, map[string]any{"SIND_REALM": "dev"}, servers["sind"]["env"])
+
+	t.Setenv("SIND_REALM", "Bad_Realm")
+	_, _, err = executeCommand("mcp", "cursor", "enable", "--config-path", path)
+	require.ErrorContains(t, err, `SIND_REALM: invalid realm name "Bad_Realm"`)
+	assert.False(t, cobratree.IsUsage(err), "the environment is no command line")
+}
+
 func TestMCPEnable_UsageErrors(t *testing.T) {
+	// An empty --config-path must not fall through to the default files.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	path := filepath.Join(t.TempDir(), "mcp.json")
 	tests := []struct {
 		args    []string
@@ -129,6 +181,18 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 			[]string{"mcp", "cursor", "enable", "--config-path", path, "--workspace"},
 			"--config-path and --workspace are mutually exclusive",
 		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--env", "SIND_REALM=Bad_Realm"},
+			`--env SIND_REALM: invalid realm name "Bad_Realm"`,
+		},
+		{
+			[]string{"mcp", "cursor", "enable", "--config-path", path, "--log-level", "bogus"},
+			`invalid --log-level value "bogus": want debug, info, warn or error`,
+		},
+		{[]string{"mcp", "cursor", "enable", "--config-path", path, "--server-name", ""}, "--server-name must not be empty"},
+		{[]string{"mcp", "cursor", "disable", "--config-path", path, "--server-name", ""}, "--server-name must not be empty"},
+		{[]string{"mcp", "cursor", "enable", "--config-path", ""}, "--config-path must not be empty: give a file, or leave the flag out for the default one"},
+		{[]string{"mcp", "cursor", "list", "--config-path", ""}, "--config-path must not be empty"},
 		{[]string{"mcp", "claude", "enable", "--workspace"}, "unknown flag: --workspace"},
 		{[]string{"mcp", "claude", "disable", "extra"}, "accepts no arguments, received 1 (usage: sind mcp claude disable)"},
 	}
@@ -141,6 +205,9 @@ func TestMCPEnable_UsageErrors(t *testing.T) {
 	}
 	_, err := os.Stat(path)
 	assert.ErrorIs(t, err, os.ErrNotExist, "nothing is written")
+	entries, err := os.ReadDir(home)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "nothing is written")
 }
 
 func TestMCPEditor_DefaultPaths(t *testing.T) {
@@ -201,9 +268,27 @@ func TestMCPList(t *testing.T) {
 		"web                https://example.com/mcp\n"+
 		`evil\x1b]0;x\x07   x`+"\n", stdout)
 
-	stdout, _, err = executeCommand("mcp", "claude", "list", "--config-path", filepath.Join(t.TempDir(), "none.json"))
+	none := filepath.Join(t.TempDir(), "none.json")
+	stdout, stderr, err := executeCommand("mcp", "claude", "list", "--config-path", none)
 	require.NoError(t, err)
 	assert.Equal(t, "NAME   COMMAND\n", stdout)
+	assert.Equal(t, "No MCP servers found in \""+none+"\".\n", stderr, "the note names the file, so that a mistyped path shows")
+}
+
+// TestMCPEditor_DuplicateServer checks that a file that has a server twice,
+// of which an editor reads the last and sind would change the first, is
+// left alone with an error that names the server.
+func TestMCPEditor_DuplicateServer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.json")
+	orig := `{"mcpServers": {"sind": {"command": "a"}, "sind": {"command": "b"}}}`
+	require.NoError(t, os.WriteFile(path, []byte(orig), 0o644))
+	for _, sub := range []string{"enable", "disable", "list"} {
+		_, _, err := executeCommand("mcp", "claude", sub, "--config-path", path)
+		require.EqualError(t, err, "parsing "+path+`: server "sind" is defined more than once in "mcpServers"`, sub)
+	}
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, orig, string(data))
 }
 
 func TestMCPEditor_LoadError(t *testing.T) {

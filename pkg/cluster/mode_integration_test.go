@@ -90,7 +90,7 @@ func TestClusterCreateDeleteLifecycle(t *testing.T) {
 			switch {
 			case len(a) > 2 && a[0] == "network" && a[1] == "connect" && a[len(a)-1] == name:
 				connects++
-			case len(a) == 2 && a[0] == "inspect" && a[1] == name:
+			case len(a) == 4 && a[0] == "inspect" && a[1] == name:
 				inspects++
 			case len(a) > 4 && a[0] == "exec" && a[1] == name && strings.Contains(a[4], "is-system-running"):
 				rounds++

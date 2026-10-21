@@ -237,10 +237,10 @@ func progressTheme(stderr io.Writer) display.Theme {
 // its streams goes through the writers of the display's terminal, which
 // take the tree or the counter off first: cobra's stderr, which Warning
 // lines and help are written to, and stdout when it is the terminal too;
-// the stderr of the context (withStderr), which the realm lock and the
-// mesh write their warnings to; and the logger, rebuilt on the terminal's
-// Lines, which writes its records above the display whatever goroutine
-// logs them, in the colours the terminal takes.
+// the stderr of the context (withStderr), which the warnings of pkg/ go
+// to, the realm lock's and the mesh's among them; and the logger, rebuilt
+// on the terminal's Lines, which writes its records above the display
+// whatever goroutine logs them, in the colours the terminal takes.
 func throughDisplay(cmd *cobra.Command, p *cliprogress.Run) (context.Context, func()) {
 	ctx := p.Context()
 	if p.Mode() == cliprogress.ModeNone {

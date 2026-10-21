@@ -3,11 +3,9 @@
 package cluster
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os/exec"
-	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -276,7 +274,7 @@ func TestDeregisterMesh_StartsStoppedMesh(t *testing.T) {
 }
 
 // TestDeregisterMesh_StartMeshError covers a mesh that cannot be inspected:
-// the failure is logged, and the removals are still tried.
+// the failure is a warning, and the removals are still tried.
 func TestDeregisterMesh_StartMeshError(t *testing.T) {
 	var m mock.Executor
 	base := meshDeregisterOnCall("controller.dev.sind.sind ssh-ed25519 K1\n")
@@ -287,12 +285,11 @@ func TestDeregisterMesh_StartMeshError(t *testing.T) {
 		return base(args, stdin)
 	}
 	c := docker.NewClient(&m)
-	var logs strings.Builder
-	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+	var warned []string
+	ctx := sindlog.WithWarn(t.Context(), func(msg string) { warned = append(warned, msg) })
 
 	DeregisterMesh(ctx, mesh.NewManager(c, mesh.DefaultRealm), "dev", []docker.ContainerListEntry{{Name: "sind-dev-controller"}})
-	assert.Contains(t, logs.String(), "starting the mesh failed, continuing")
-	assert.Contains(t, logs.String(), "inspecting SSH container: daemon gone")
+	assert.Equal(t, []string{"starting the mesh to remove the deleted nodes from it: inspecting SSH container: daemon gone"}, warned)
 	assert.Equal(t, 1, countCalls(m.Calls, "exec", "-i", "sind-ssh"), "known_hosts written")
 	assert.Equal(t, 1, countCalls(m.Calls, "kill", "-s", "USR1", "sind-dns"), "CoreDNS reloaded")
 }
@@ -462,20 +459,25 @@ func TestDelete_NetworkRemoveError(t *testing.T) {
 	require.ErrorContains(t, err, "removing network")
 }
 
-// TestDelete_DetachesForeignContainers covers containers outside sind, such
-// as kind nodes, attached to the cluster network: they are detached so that
-// the network can go, and they are not removed.
+// TestDelete_DetachesForeignContainers covers the mesh's SSH relay and
+// containers outside sind, such as kind nodes, attached to the cluster
+// network: they are detached so that the network can go, stopped ones too,
+// so that they can start again without it, and they are not removed. The
+// relay stays stopped when the mesh could not be started.
 func TestDelete_DetachesForeignContainers(t *testing.T) {
 	var m mock.Executor
 	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		containers: []testutil.PsEntry{
 			{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"},
 		},
-		networkExists:     true,
-		volumes:           []string{"config"},
-		otherClusters:     true,
-		knownHosts:        "controller.dev.sind.sind ssh-ed25519 K1\n",
-		networkContainers: []string{"sind-ssh", "kind-control-plane"},
+		networkExists: true,
+		volumes:       []string{"config"},
+		otherClusters: true,
+		knownHosts:    "controller.dev.sind.sind ssh-ed25519 K1\n",
+		networkContainers: []testutil.PsEntry{
+			{Names: "kind-control-plane", State: "running"},
+			{Names: "sind-ssh", State: "exited"},
+		},
 	})
 	c := docker.NewClient(&m)
 
@@ -501,7 +503,7 @@ func TestDelete_DetachError(t *testing.T) {
 	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
 		networkExists:     true,
 		otherClusters:     true,
-		networkContainers: []string{"kind-control-plane"},
+		networkContainers: []testutil.PsEntry{{Names: "kind-control-plane", State: "running"}},
 		disconnectFail:    true,
 	})
 	c := docker.NewClient(&m)
@@ -582,6 +584,77 @@ func TestDelete_CleanupMeshError(t *testing.T) {
 	err := Delete(t.Context(), c, mgr, "dev")
 
 	require.ErrorContains(t, err, "removing SSH keygen container")
+}
+
+// TestDelete_LastClusterWarnsDetached covers the last cluster of a realm
+// with external containers on the mesh: the mesh goes, so they are detached,
+// and a warning names them, as a cluster created later is not connected to
+// them.
+func TestDelete_LastClusterWarnsDetached(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
+		containers:    []testutil.PsEntry{{ID: "a", Names: "sind-dev-controller", State: "running", Image: "img"}},
+		networkExists: true,
+		meshContainers: []testutil.PsEntry{
+			{Names: "sind-dns", State: "running", Labels: "sind.realm=sind"},
+			{Names: "kind-worker", State: "exited"},
+			{Names: "kind-control-plane", State: "running"},
+		},
+	})
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
+	var warned []string
+	mgr.OnWarning = func(msg string) { warned = append(warned, msg) }
+
+	err := Delete(t.Context(), c, mgr, "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"deleting the last cluster of realm sind detached kind-control-plane, kind-worker from its networks: " +
+		"a cluster created later is not connected to them; run sind connect container kind-control-plane kind-worker after creating it"}, warned)
+	assert.Equal(t, 1, countCalls(m.Calls, "network", "disconnect", "sind-mesh", "kind-worker"), "stopped container detached")
+}
+
+// TestDelete_LastClusterWithoutExternal covers the last cluster of a realm
+// with nothing but sind's own containers on the mesh: no warning.
+func TestDelete_LastClusterWithoutExternal(t *testing.T) {
+	var m mock.Executor
+	m.OnCall = deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
+		networkExists:  true,
+		meshContainers: []testutil.PsEntry{{Names: "sind-dns", State: "running", Labels: "sind.realm=sind"}},
+	})
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
+	mgr.OnWarning = func(msg string) { t.Errorf("unexpected warning: %s", msg) }
+
+	require.NoError(t, Delete(t.Context(), c, mgr, "dev"))
+}
+
+// TestDelete_ExternalListErrorContinues covers a failure to list the
+// external containers before the mesh goes: it is logged, and the delete
+// goes on without a warning.
+func TestDelete_ExternalListErrorContinues(t *testing.T) {
+	var m mock.Executor
+	inner := deleteOnCall(t, testutil.ExitCode1(t), "dev", deleteOnCallOpts{
+		networkExists:  true,
+		meshContainers: []testutil.PsEntry{{Names: "kind-control-plane", State: "running"}},
+	})
+	failed := false
+	m.OnCall = func(args []string, stdin string) mock.Result {
+		if !failed && args[0] == "ps" && args[len(args)-1] == "network=sind-mesh" {
+			failed = true
+			return mock.Result{Err: fmt.Errorf("daemon unreachable")}
+		}
+		return inner(args, stdin)
+	}
+	c := docker.NewClient(&m)
+	mgr := mesh.NewManager(c, mesh.DefaultRealm)
+	mgr.OnWarning = func(msg string) { t.Errorf("unexpected warning: %s", msg) }
+	var logs strings.Builder
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+
+	require.NoError(t, Delete(ctx, c, mgr, "dev"))
+	assert.Contains(t, logs.String(), "listing external containers failed, continuing")
+	assert.Contains(t, logs.String(), "listing containers on the mesh: daemon unreachable")
 }
 
 // meshUpdates returns the recorded calls that update the realm's Corefile
@@ -719,9 +792,9 @@ func (f *realmFake) onCall(args []string, _ string) mock.Result {
 		return mock.Result{Stdout: testutil.TarArchive("Corefile", emptyCorefileContent())}
 	case args[0] == "cp", args[0] == "kill":
 		return mock.Result{}
-	case joined == "inspect sind-dns":
+	case joined == "inspect sind-dns --type container":
 		return mock.Result{Stdout: dnsRunningInspectJSON}
-	case joined == "inspect sind-ssh":
+	case joined == "inspect sind-ssh --type container":
 		return mock.Result{Stdout: sshRunningInspectJSON}
 	case args[0] == "inspect" && isStackContainer(args[1]):
 		return notFound
@@ -901,7 +974,7 @@ func meshDeregisterOnCall(knownHostsContent string) func([]string, string) mock.
 		// ReadFile: docker exec sind-ssh cat /root/.ssh/known_hosts
 		case args[0] == "exec" && len(args) >= 3 && args[2] == "cat":
 			return mock.Result{Stdout: knownHostsContent}
-		// WriteFile: docker exec -i sind-ssh sh -c 'cat > ...'
+		// ReplaceFile: docker exec -i sind-ssh sh -c SCRIPT sh /root/.ssh/known_hosts N
 		case args[0] == "exec" && len(args) >= 2 && args[1] == "-i":
 			return mock.Result{}
 		}
@@ -920,7 +993,8 @@ type deleteOnCallOpts struct {
 	containerRemoveFail bool
 	networkRemoveFail   bool
 	volumeRemoveFail    bool
-	networkContainers   []string // containers still attached to the cluster network
+	networkContainers   []testutil.PsEntry // containers still attached to the cluster network
+	meshContainers      []testutil.PsEntry // containers on the mesh network
 	disconnectFail      bool
 }
 
@@ -941,6 +1015,14 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 		}
 
 		switch {
+		// docker ps -a --filter network=... (DisconnectAll)
+		case args[0] == "ps" && args[len(args)-1] == "network=sind-"+clusterName+"-net":
+			return mock.Result{Stdout: testutil.NDJSON(opts.networkContainers...)}
+
+		// docker ps -a --filter network=sind-mesh (ExternalContainers, DisconnectAll)
+		case args[0] == "ps" && args[len(args)-1] == "network=sind-mesh":
+			return mock.Result{Stdout: testutil.NDJSON(opts.meshContainers...)}
+
 		// docker ps -a ... (ListContainers or HasOtherClusters)
 		case args[0] == "ps":
 			filterVal := ""
@@ -962,18 +1044,6 @@ func deleteOnCall(t *testing.T, exitErr *exec.ExitError, clusterName string, opt
 				)}
 			}
 			return mock.Result{Stdout: ""}
-
-		// docker network inspect --format {{json .Containers}} (DisconnectAll)
-		case args[0] == "network" && args[1] == "inspect" && slices.Contains(args, "{{json .Containers}}"):
-			if !opts.networkExists || args[2] != "sind-"+clusterName+"-net" {
-				return mock.Result{Stderr: testutil.NoSuchNetwork(args[2]), Err: exitErr}
-			}
-			endpoints := map[string]map[string]string{}
-			for _, name := range opts.networkContainers {
-				endpoints["id-"+name] = map[string]string{"Name": name}
-			}
-			out, _ := json.Marshal(endpoints)
-			return mock.Result{Stdout: string(out) + "\n"}
 
 		// docker network disconnect (DisconnectAll)
 		case args[0] == "network" && args[1] == "disconnect":

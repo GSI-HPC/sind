@@ -268,7 +268,7 @@ func Create(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, c
 		if !resourcesCreated && !meshMgr.Created() {
 			return
 		}
-		log.ErrorContext(ctx, "cleaning up partial resources, please wait")
+		log.WarnContext(ctx, "cleaning up partial resources, please wait")
 		cleanupCtx, endRollback := startRollback(ctx)
 		errs := []error{retErr}
 		removeMesh := rollbackRemovesMesh(cleanupCtx, client, meshMgr, cfg.Name, resourcesCreated)
@@ -496,7 +496,7 @@ func rollbackRemovesMesh(ctx context.Context, client *docker.Client, meshMgr *me
 	}
 	inUse, err := HasOtherClusters(ctx, client, meshMgr.Realm, ours)
 	if err != nil {
-		sindlog.From(ctx).ErrorContext(ctx, "keeping the mesh", "error", err)
+		sindlog.From(ctx).WarnContext(ctx, "keeping the mesh", "error", err)
 		return false
 	}
 	return !inUse
@@ -508,7 +508,7 @@ func rollbackRemovesMesh(ctx context.Context, client *docker.Client, meshMgr *me
 func rollbackKeepsStack(ctx context.Context, client *docker.Client, realm, clusterName string) bool {
 	other, err := otherMonitoredClusters(ctx, client, realm, clusterName)
 	if err != nil {
-		sindlog.From(ctx).ErrorContext(ctx, "keeping the monitoring stack", "error", err)
+		sindlog.From(ctx).WarnContext(ctx, "keeping the monitoring stack", "error", err)
 		return true
 	}
 	return other

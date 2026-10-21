@@ -4,13 +4,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/GSI-HPC/go-clikit/progress/cliprogress"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/njayp/ophis"
 	"github.com/spf13/cobra"
@@ -117,13 +121,13 @@ func mcpConfig() *ophis.Config {
 				},
 				LocalFlagSelector:     ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
 				InheritedFlagSelector: ophis.ExcludeFlags(append(mcpExcludedFlags, "output")...),
-				Middleware:            refuseFlagArgs(forceJSONOutput),
+				Middleware:            inProcessGroup(refuseFlagArgs(forceJSONOutput)),
 			},
 			{
 				CmdSelector:           isMCPTool,
 				LocalFlagSelector:     ophis.ExcludeFlags(mcpExcludedFlags...),
 				InheritedFlagSelector: ophis.ExcludeFlags(mcpExcludedFlags...),
-				Middleware:            refuseFlagArgs(nil),
+				Middleware:            inProcessGroup(refuseFlagArgs(nil)),
 			},
 		},
 	}
@@ -149,6 +153,50 @@ var mcpExcludedFlags = []string{
 	"progress", "progress-log",
 }
 
+// mcpNoDefault lists the flags, by command path below the root, whose input
+// schema has no default. ophis takes a flag's default from its DefValue,
+// but these flags mean something else when they are not given than with
+// that value, which a client that fills in the defaults of a schema would
+// send: logs --tail 0 shows no line, and logs without it every line.
+var mcpNoDefault = map[string][]string{
+	"logs": {"tail"},
+}
+
+// mcpFlagUsage replaces, by command path below the root and flag name, the
+// help of a flag that describes a form a tool call cannot use: a tool's
+// sind process reads no stdin, so create cluster --config - would read
+// an empty configuration.
+var mcpFlagUsage = map[string]map[string]string{
+	"create cluster": {"config": "path to cluster configuration file"},
+}
+
+// withMCPFlagSchemas makes cmd, `sind mcp start` or `sind mcp tools`,
+// apply mcpNoDefault and mcpFlagUsage to the flags before ophis builds the
+// tools from them. It changes the flags of this process alone, which only
+// serves or exports the tools, so the help of the commands stays as it is.
+func withMCPFlagSchemas(cmd *cobra.Command) {
+	run := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		adaptMCPFlags(cmd.Root())
+		return run(cmd, args)
+	}
+}
+
+// adaptMCPFlags applies mcpNoDefault and mcpFlagUsage to cmd and the
+// commands below it.
+func adaptMCPFlags(cmd *cobra.Command) {
+	for _, sub := range cmd.Commands() {
+		adaptMCPFlags(sub)
+	}
+	path := commandPath(cmd)
+	for _, name := range mcpNoDefault[path] {
+		cmd.Flags().Lookup(name).DefValue = ""
+	}
+	for name, usage := range mcpFlagUsage[path] {
+		cmd.Flags().Lookup(name).Usage = usage
+	}
+}
+
 // forceJSONOutput runs a tool with -o json, whatever flags it was given.
 func forceJSONOutput(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput, next ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
 	flags := make(map[string]any, len(in.Flags)+1)
@@ -159,7 +207,8 @@ func forceJSONOutput(ctx context.Context, req *mcp.CallToolRequest, in ophis.Too
 }
 
 // refuseFlagArgs returns a middleware that refuses a tool call whose
-// positional arguments hold a flag, and otherwise calls next, or the tool
+// positional arguments hold a flag, as a usage error that reads as the
+// tool's own (exit status 2, isError), and otherwise calls next, or the tool
 // itself when next is nil, with the flags of emptyListsAsNone. ophis puts
 // the arguments after the flags on the command line, so a flag among them
 // would get past the input schema: -v, --follow, or a -o that overrides the
@@ -172,7 +221,10 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 				break
 			}
 			if strings.HasPrefix(arg, "-") {
-				return nil, ophis.ToolOutput{}, fmt.Errorf("argument %q is a flag; pass flags in \"flags\"", arg)
+				return &mcp.CallToolResult{IsError: true}, ophis.ToolOutput{
+					StdErr:   fmt.Sprintf("ERRO argument %q is a flag; pass flags in \"flags\"\n", arg),
+					ExitCode: exitUsage,
+				}, nil
 			}
 		}
 		in.Flags = emptyListsAsNone(in.Flags)
@@ -184,6 +236,76 @@ func refuseFlagArgs(next ophis.MiddlewareFunc) ophis.MiddlewareFunc {
 			return run(ctx, req, in)
 		}
 		return next(ctx, req, in, run)
+	}
+}
+
+// inProcessGroup returns a middleware that calls mw with mcpExecute in
+// place of ophis's own run function.
+func inProcessGroup(mw ophis.MiddlewareFunc) ophis.MiddlewareFunc {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput, _ ophis.ExecuteFunc) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+		return mw(ctx, req, in, mcpExecute)
+	}
+}
+
+// mcpExecute runs a tool call as ophis does, the sind binary with the
+// call's command path, flags and arguments (mcpToolArgs), but in a process
+// group of its own (cmdexec.WithProcessGroup). ophis kills only the sind
+// process when the call's context ends, and the docker exec or docker logs
+// it started would go on, holding its output open: the cancelled call
+// would answer only when that docker command ended, if ever. Killing the
+// group ends both, and the call answers at once.
+func mcpExecute(ctx context.Context, req *mcp.CallToolRequest, in ophis.ToolInput) (*mcp.CallToolResult, ophis.ToolOutput, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, ophis.ToolOutput{}, fmt.Errorf("locating the sind binary: %w", err)
+	}
+	var e cmdexec.OSExecutor
+	stdout, stderr, err := e.Run(cmdexec.WithProcessGroup(ctx), exe, mcpToolArgs(req.Params.Name, in)...)
+	out := ophis.ToolOutput{StdOut: stdout, StdErr: stderr}
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		out.ExitCode = exitErr.ExitCode()
+	} else if err != nil {
+		return nil, ophis.ToolOutput{}, err
+	}
+	return nil, out, nil
+}
+
+// mcpToolArgs returns the command line of a tool call, as ophis builds it:
+// the command path from the tool's name ("sind_get_nodes" is "get nodes"),
+// the flags, and the positional arguments. A list flag is given once per
+// item, a map flag once per KEY=VALUE, a boolean flag only when true, and
+// a null flag not at all. The flags come in name order.
+func mcpToolArgs(tool string, in ophis.ToolInput) []string {
+	args := strings.Split(tool, "_")[1:]
+	for _, name := range slices.Sorted(maps.Keys(in.Flags)) {
+		switch value := in.Flags[name].(type) {
+		case []any:
+			for _, item := range value {
+				args = append(args, mcpFlagArgs(name, item)...)
+			}
+		case map[string]any:
+			for _, key := range slices.Sorted(maps.Keys(value)) {
+				args = append(args, "--"+name, fmt.Sprintf("%s=%v", key, value[key]))
+			}
+		default:
+			args = append(args, mcpFlagArgs(name, value)...)
+		}
+	}
+	return append(args, in.Args...)
+}
+
+// mcpFlagArgs returns the arguments that give the flag name the value.
+func mcpFlagArgs(name string, value any) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case bool:
+		if v {
+			return []string{"--" + name}
+		}
+		return nil
+	default:
+		return []string{"--" + name, fmt.Sprint(v)}
 	}
 }
 
@@ -206,14 +328,16 @@ func failedAsError(run ophis.ExecuteFunc) ophis.ExecuteFunc {
 }
 
 // mcpRunsToCompletion reports whether the tool changes state and so runs
-// on after its call is cancelled or its client disconnects. ophis ends a
-// tool's sind process with SIGKILL when the call's context ends, which
-// skips the rollback of a failed create and leaves partial resources, the
-// realm lock and orphaned docker children behind. Run to completion, the
-// command finishes or rolls back on its own, bounded by its own timeouts
-// (--wait), and the client gets no result. Read-only tools and exec keep
-// their cancellation: exec runs a command in a node that nothing rolls
-// back, and a client that stops waiting for it means to stop it.
+// on after its call is cancelled or its client disconnects. mcpExecute
+// kills a tool's sind process and the docker commands it started with
+// SIGKILL when the call's context ends, which skips the rollback of a
+// failed create and leaves partial resources and the realm lock behind.
+// Run to completion, the command finishes or rolls back on its own,
+// bounded by its own timeouts (--wait), and the call answers when it ends.
+// Read-only tools and exec keep their cancellation: exec runs a command in
+// a node that nothing rolls back, and a client that stops waiting for it
+// means to stop it. Killing docker exec does not stop that command, though:
+// Docker has no way to signal a process that docker exec started.
 func mcpRunsToCompletion(tool string) bool {
 	for path, effect := range mcpEffects {
 		if mcpToolName(path) == tool {
@@ -274,6 +398,7 @@ HTTP (stream), and register the server with an editor.`
 		switch sub.Name() {
 		case "start":
 			asMCPServer(sub)
+			withMCPFlagSchemas(sub)
 			start = sub
 			sub.Short = "Serve the MCP tools on stdio"
 			sub.Long = `Serve sind's MCP tools on standard input and output, for an AI assistant
@@ -282,6 +407,7 @@ that starts sind as its MCP server.`
 			stream = sub
 			sub.Short = "Serve the MCP tools over HTTP"
 		case "tools":
+			withMCPFlagSchemas(sub)
 			sub.Short = "Write the MCP tool definitions to mcp-tools.json"
 			sub.Long = `Write the definitions of the MCP tools that start and stream serve, with
 their input schemas, to mcp-tools.json in the working directory.`
@@ -313,8 +439,10 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 }
 
 // asMCPServer prepares `sind mcp start`, which `sind mcp stream` runs too,
-// for the sind processes it runs for its tool calls. They run with the
-// call's own flags and this process's environment, so it sets:
+// for the sind processes it runs for its tool calls, once it checked its
+// --log-level, which ophis would read as info if it does not know it. The
+// tool processes run with the call's own flags and this process's
+// environment, so it sets:
 //   - SIND_REALM to the root's --realm, or `sind --realm ci mcp start`
 //     would serve the default realm;
 //   - SIND_PROGRESS=none and no SIND_PROGRESS_LOG: a SIND_PROGRESS=plain
@@ -322,12 +450,18 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 //     a SIND_PROGRESS_LOG of /dev/stderr its events, and one that cannot be
 //     opened a note. Their stderr is no terminal, so nothing else would
 //     draw;
+//   - SIND_LOG_TIMESTAMPS=false: the time an error line was written means
+//     nothing to the client, which gets the line with the call's result;
 //   - the root's Version, which ophis reports to MCP clients, only while
 //     the server runs: set on the root for good, it would give every sind
 //     command a --version flag.
 func asMCPServer(cmd *cobra.Command) {
 	run := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		logLevel, _ := cmd.Flags().GetString("log-level")
+		if err := checkMCPLogLevel(logLevel); err != nil {
+			return err
+		}
 		root := cmd.Root()
 		if root.Flags().Changed("realm") {
 			realm, _ := root.Flags().GetString("realm")
@@ -335,9 +469,24 @@ func asMCPServer(cmd *cobra.Command) {
 		}
 		_ = os.Setenv(envProgress, cliprogress.ModeNone.String())
 		_ = os.Unsetenv(envProgressLog)
+		_ = os.Setenv(envLogTimestamps, "false")
 		root.Version = strings.TrimPrefix(resolveVersion(), "v")
 		return run(cmd, args)
 	}
+}
+
+// mcpLogLevels are the values of the --log-level of `sind mcp start` and
+// `sind mcp stream`, which ophis reads case-insensitively and turns any
+// other value into info.
+var mcpLogLevels = []string{"debug", "info", "warn", "error"}
+
+// checkMCPLogLevel returns a usage error for a --log-level value that is
+// not one of mcpLogLevels; empty is ophis's default.
+func checkMCPLogLevel(level string) error {
+	if level == "" || slices.Contains(mcpLogLevels, strings.ToLower(level)) {
+		return nil
+	}
+	return invalidFlagValue("log-level", level, mcpLogLevels...)
 }
 
 // refuseArgs makes the commands of ophis's tree that take no arguments refuse

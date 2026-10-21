@@ -21,6 +21,12 @@ sind mcp vscode enable
 sind mcp cursor enable
 ```
 
+Claude Code has its own command, which registers sind's stdio server under the name `sind` (`claude mcp remove sind` removes it):
+
+```bash
+claude mcp add sind -- sind mcp start
+```
+
 To unregister:
 
 ```bash
@@ -29,9 +35,9 @@ sind mcp vscode disable
 sind mcp cursor disable
 ```
 
-`enable` adds an entry named `sind` that runs `sind mcp start` and changes nothing else in the editor's configuration: its other settings, the other servers, comments and formatting stay. The entry runs sind by the absolute path of the binary you ran `enable` with, so run `enable` again after you move sind or install it somewhere else. `disable` removes the entry, and fails if there is none. Before either changes the file, it copies it to `<file>.<YYYYMMDD-HHMMSS>.bak` next to it; a backup is never overwritten.
+`enable` adds an entry named `sind` that runs `sind mcp start` and changes nothing else in the editor's configuration: its other settings, the other servers, comments and formatting stay. The entry runs sind by the absolute path of the binary you ran `enable` with, so run `enable` again after you move sind or install it somewhere else. Run again, `enable` keeps the entry's environment, its realm among it, and settings you added such as `disabled` or `autoApprove`; `--env`, `--realm` and `SIND_REALM` change the variables they name, and the command's arguments are those of the flags you give, `--log-level` among them. `disable` removes the entry, and fails if there is none. Before either changes the file, it copies it to `<file>.<YYYYMMDD-HHMMSS>.bak` next to it; a backup is never overwritten. A file that names a server twice is left alone with an error that names it, since your editor reads the last of the two; remove one by hand.
 
-`sind mcp <editor> list` shows the MCP servers registered with that editor, each with its command or URL. `enable` takes `--server-name` (default `sind`), `--log-level`, `--config-path` and `--env KEY=VALUE`, and for VS Code and Cursor `--workspace` to register sind in the workspace settings (`.vscode/mcp.json`, `.cursor/mcp.json`) instead; see `sind mcp <editor> enable --help`. The editor starts sind with its own environment, not your shell's, so `sind --realm ci mcp claude enable` writes `SIND_REALM=ci` into the entry to serve the realm `ci`, as `sind --realm ci mcp start` does for a server you start yourself.
+`sind mcp <editor> list` shows the MCP servers registered with that editor, each with its command or URL; when there are none, it says so on stderr with the file it read, `No MCP servers found in "<path>".` `enable` takes `--server-name` (default `sind`), `--log-level`, `--config-path` and `--env KEY=VALUE`, and for VS Code and Cursor `--workspace` to register sind in the workspace settings (`.vscode/mcp.json`, `.cursor/mcp.json`) instead; see `sind mcp <editor> enable --help`. `enable` checks what it writes: `--env SIND_REALM` must be a valid realm name and `--log-level` one of `debug`, `info`, `warn` and `error`, and `--server-name` and `--config-path` must not be empty. The editor starts sind with its own environment, not your shell's, so `sind --realm ci mcp claude enable` writes `SIND_REALM=ci` into the entry to serve the realm `ci`, as `sind --realm ci mcp start` does for a server you start yourself. An exported `SIND_REALM` is written the same way, unless `--env SIND_REALM=...` names the realm.
 
 ## Manual configuration
 
@@ -57,15 +63,17 @@ Every sind command is exposed as an MCP tool, except:
 - `sind enter` and `sind ssh`, which need an interactive terminal
 - `sind get ssh-private-key` and `sind get auth-key`, which print secrets
 
-The tools take the same arguments and flags as the commands, except `-v`, `sind logs --follow`, `--progress` and `--progress-log`, which a tool call cannot use. Flags go in the call's `flags` object; a call that puts a flag in `args` is refused, except for the command after `--` in `sind_exec`.
+The tools take the same arguments and flags as the commands, except `-v`, `sind logs --follow`, `--progress` and `--progress-log`, which a tool call cannot use. Flags go in the call's `flags` object; a call that puts a flag in `args` is refused, except for the command after `--` in `sind_exec`. A flag left out of a call is not given, as on the command line: `sind_logs` without `tail` returns the whole log, with `"tail": 0` none. A tool call has no stdin, so `sind_create_cluster` takes `config` as the path of a file the server can read, not `-`.
 
-Tool calls show no [progress]({{< relref "/usage/progress" >}}) and write no event log: the server runs them with `SIND_PROGRESS=none` and without `SIND_PROGRESS_LOG`, whatever its own environment says, so a tool's stderr holds what the command writes without progress.
+Tool calls show no [progress]({{< relref "/usage/progress" >}}) and write no event log: the server runs them with `SIND_PROGRESS=none` and without `SIND_PROGRESS_LOG`, whatever its own environment says, so a tool's stderr holds what the command writes without progress. Its error lines carry no time stamp, as in `ERRO cluster "dev" not found in realm "sind"`.
 
 Each tool tells the client what it does, so that the client can decide when to ask before calling it: the `get` tools, `sind_logs`, `sind_doctor` and `sind_version` are marked read-only; `sind_power_on`, `sind_power_unfreeze` and `sind_connect_container` only restore or add; `sind_create_*`, `sind_delete_*`, `sind_disconnect_container`, `sind_exec` and the other `sind_power_*` tools are marked destructive. The create tools are destructive because their flags decide what runs on your Docker host (see [Security](#security)).
 
 The `sind_get_*` tools and `sind_doctor` always return JSON: the server runs them with `-o json`, so they take no `-o` flag.
 
-Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`, and `sind_exec` returns the exit status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`); see [Exit Status]({{< relref "/usage/exit-status" >}}).
+Each tool call returns the command's stdout, stderr and exit status (`exitCode`). A call whose arguments or flags sind rejects exits `2`, a flag in `args` among them, and `sind_exec` returns the exit status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`); see [Exit Status]({{< relref "/usage/exit-status" >}}). A flag the tool does not have fails the validation of the call's input before sind runs, with an error result and no `exitCode`.
+
+A client that cancels a call of a read-only tool or of `sind_exec` gets its answer at once: the server stops the sind process and the docker command it runs. The command `sind_exec` started in the node runs on until it ends, since Docker cannot stop it, so bound a long one with `timeout`, as in `"args": ["--", "timeout", "60", "srun", "hostname"]`. The tools that change state run to completion, or roll back a failed create, and answer when they end.
 
 To see the full list:
 
@@ -81,12 +89,12 @@ This exports the tool definitions to `mcp-tools.json`. The tools follow the nami
 | `sind_create_worker` | Add worker nodes to a cluster |
 | `sind_delete_cluster` | Delete a cluster |
 | `sind_get_cluster` | Show cluster health status |
-| `sind_get_nodes` | List nodes |
+| `sind_get_nodes` | List the nodes of a cluster, or of every cluster of the realm |
 | `sind_get_realms` | List all realms |
 | `sind_get_mesh` | Show mesh infrastructure info |
 | `sind_get_monitoring` | Show the realm's monitoring stack |
-| `sind_power_shutdown` | Graceful shutdown |
-| `sind_power_reboot` | Graceful reboot |
+| `sind_power_shutdown` | Gracefully shut down nodes (docker stop) |
+| `sind_power_reboot` | Gracefully reboot nodes (shutdown, then on) |
 | `sind_exec` | Run a command on the submitter or controller |
 
 ## HTTP mode
@@ -97,7 +105,7 @@ For multi-client setups, sind can serve MCP over HTTP:
 sind mcp stream --port 8080
 ```
 
-The stream listens on `127.0.0.1` unless `--host` names another address. Every request needs the header `Authorization: Bearer <token>`; without it the stream answers `401 Unauthorized`. Loopback keeps other hosts out, but not the other users of your machine, and every tool runs sind with your Docker access, so the token is what keeps them from creating containers as you.
+The stream listens on `127.0.0.1` unless `--host` names another address; an empty `--host` is an error. With `--host 0.0.0.0` the first line it prints ends in `(all interfaces)`, and the URL in it stays `http://localhost:PORT/`, where a client on this machine connects. Every request needs the header `Authorization: Bearer <token>`; without it the stream answers `401 Unauthorized`. Loopback keeps other hosts out, but not the other users of your machine, and every tool runs sind with your Docker access, so the token is what keeps them from creating containers as you.
 
 The token comes from `SIND_MCP_TOKEN`. When that is not set, the stream generates a new random token at every start and writes it, readable only by you, to `mcp-token` in sind's state directory (`$XDG_STATE_HOME/sind`, by default `~/.local/state/sind`). It prints where the token is, never the token itself, and a client configuration to stderr:
 

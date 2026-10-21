@@ -71,8 +71,9 @@ func TestGenerateSSHConfig_DefaultRealm(t *testing.T) {
     CanonicalDomains default.sind.sind sind.sind
 
 Host *.sind.sind
-    IdentityFile /home/user/.sind/id_ed25519
-    UserKnownHostsFile /home/user/.sind/known_hosts
+    IdentitiesOnly yes
+    IdentityFile "/home/user/.sind/id_ed25519"
+    UserKnownHostsFile "/home/user/.sind/known_hosts"
     User root
     StrictHostKeyChecking yes
 
@@ -89,8 +90,9 @@ func TestGenerateSSHConfig_NamedRealm(t *testing.T) {
 		[]string{"controller.dev.ci42.sind"})
 
 	assert.Equal(t, `Host *.ci42.sind
-    IdentityFile /home/user/.sind/id_ed25519
-    UserKnownHostsFile /home/user/.sind/known_hosts
+    IdentitiesOnly yes
+    IdentityFile "/home/user/.sind/id_ed25519"
+    UserKnownHostsFile "/home/user/.sind/known_hosts"
     User root
     StrictHostKeyChecking yes
 
@@ -104,6 +106,18 @@ func TestGenerateSSHConfig_NoNodes(t *testing.T) {
 
 	assert.Contains(t, config, "Host *.ci42.sind\n")
 	assert.NotContains(t, config, "ProxyCommand")
+}
+
+// TestGenerateSSHConfig_QuotedPaths checks that a state directory with a
+// space, a % token, a double quote or a backslash in it stays one argument
+// of each option, with ssh's token expansion and quoting escaped.
+func TestGenerateSSHConfig_QuotedPaths(t *testing.T) {
+	config := GenerateSSHConfig(docker.ContainerName("ci42-ssh"), `/home/John Doe/50%d/a"b\c`, "ci42", nil)
+
+	assert.Contains(t, config, `
+    IdentityFile "/home/John Doe/50%%d/a\"b\\c/id_ed25519"
+    UserKnownHostsFile "/home/John Doe/50%%d/a\"b\\c/known_hosts"
+`)
 }
 
 // TestGenerateSSHConfig_OnlyNodeNames checks that only node DNS names of
@@ -165,8 +179,8 @@ func TestExportConfig(t *testing.T) {
 	// ProxyCommand for the node in known_hosts.
 	sshConfig, err := afero.ReadFile(fs, testExportDir+"/ssh_config")
 	require.NoError(t, err)
-	assert.Contains(t, string(sshConfig), "IdentityFile "+testExportDir+"/id_ed25519")
-	assert.Contains(t, string(sshConfig), "UserKnownHostsFile "+testExportDir+"/known_hosts")
+	assert.Contains(t, string(sshConfig), `IdentityFile "`+testExportDir+`/id_ed25519"`)
+	assert.Contains(t, string(sshConfig), `UserKnownHostsFile "`+testExportDir+`/known_hosts"`)
 	assert.Contains(t, string(sshConfig), "\nHost controller.dev.sind.sind\n    ProxyCommand docker exec -i sind-ssh ")
 
 	// Verify private key was written.

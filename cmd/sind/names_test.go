@@ -23,6 +23,7 @@ func TestInvalidClusterName(t *testing.T) {
 		{[]string{"delete", "cluster", "../x"}, `invalid cluster name "../x": '.' is not a letter, a digit or a hyphen`},
 		{[]string{"create", "cluster", "ssh"}, `invalid cluster name "ssh": it is reserved`},
 		{[]string{"delete", "cluster", "ssh"}, `invalid cluster name "ssh": it is reserved`},
+		{[]string{"create", "cluster", "x-ssh"}, `invalid cluster name "x-ssh": it is reserved`},
 		{[]string{"get", "cluster", "dev-"}, `invalid cluster name "dev-": it ends with a hyphen`},
 		{[]string{"get", "nodes", "dev.test"}, `invalid cluster name "dev.test": '.' is not a letter, a digit or a hyphen`},
 		{[]string{"get", "auth-key", "a/b"}, `invalid cluster name "a/b": '/' is not a letter, a digit or a hyphen`},
