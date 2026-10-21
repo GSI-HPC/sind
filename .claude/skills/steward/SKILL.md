@@ -70,8 +70,8 @@ CI runs for every pull request and every push to `main` and `next`.
   a PR: check a change to them with `actionlint`, and `docker buildx bake --print` for
   `docker-bake.hcl`.
 - The workflows pin every action to a commit SHA, which Dependabot updates, and the
-  versions of goreleaser, golangci-lint, gotestsum, govulncheck, Hugo and Geekdoc (with
-  its sha256), which it does not: bump those by hand. The Hextra docs theme is a Hugo
+  versions of goreleaser, golangci-lint, gotestsum, govulncheck, and Hugo, which it
+  does not: bump those by hand. The Hextra docs theme is a Hugo
   module in `docs/go.mod`: `hugo mod get github.com/imfing/hextra@<version>` in `docs/`.
 - Every other failure is this PR's to root-cause and fix. Never skip, disable or
   loosen tests or coverage thresholds.
