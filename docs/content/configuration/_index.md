@@ -1,7 +1,6 @@
 ---
 weight: 200
 title: "Configuration"
-icon: "settings"
 description: "Cluster configuration reference"
 ---
 

@@ -1,0 +1,384 @@
+/* sind theme for Hextra: brand colours, fonts, landing page and video episodes.
+   Hextra bundles this file into its stylesheet (assets/css/custom.css). */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../../fonts/inter-latin-wght.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../../fonts/jetbrains-mono-latin-wght.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+/* sind brand colors */
+:root {
+  --sind-blue:      #0EA5E9;
+  --sind-teal:      #14B8A6;
+  --sind-deep-teal: #0D9488;
+  --sind-text:      #2D3748;
+  --sind-muted:     #94A3B8;
+  --sind-dim:       #64748B;
+  --sind-dark:      #0F172A;
+  --sind-dark-alt:  #111C30;
+  --sind-line:      rgba(100, 116, 139, 0.2);
+
+  /* Hextra derives its primary scale from these: #0EA5E9 */
+  --primary-hue: 199deg;
+  --primary-saturation: 89%;
+  --primary-lightness: 48%;
+
+  --hx-color-dark: var(--sind-dark);
+  --hx-font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --hx-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dark {
+  --primary-hue: 199deg;
+  --primary-saturation: 89%;
+  --primary-lightness: 55%;
+}
+
+body {
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Hextra hard-codes #111 for the shadow above the sidebar footer. */
+.dark .hextra-sidebar-container > div:last-child {
+  box-shadow: 0 -12px 16px var(--sind-dark);
+}
+
+/* Flag and argument names in the first column of reference tables */
+.content table th {
+  text-align: left;
+}
+
+.content table td:first-child code {
+  color: var(--sind-deep-teal);
+  font-weight: 600;
+  background: none;
+  border: 0;
+}
+
+.dark .content table td:first-child code {
+  color: #2DD4BF;
+}
+
+/* Landing page (layouts/landing.html) */
+.sind-home {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  overflow-x: clip;
+}
+
+.sind-hero {
+  position: relative;
+  padding: 2.5rem 0 1rem;
+  text-align: center;
+}
+
+.sind-hero::before {
+  content: "";
+  position: absolute;
+  inset: -6rem 0 auto;
+  height: 34rem;
+  z-index: -1;
+  background:
+    radial-gradient(closest-side, rgba(14, 165, 233, 0.18), transparent),
+    radial-gradient(closest-side at 70% 60%, rgba(20, 184, 166, 0.14), transparent);
+  filter: blur(10px);
+}
+
+.sind-hero__logo {
+  margin: 0 auto;
+}
+
+.sind-hero h1 {
+  margin: 1.5rem 0 1.25rem;
+  font-size: clamp(2.4rem, 6vw, 4.4rem);
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.sind-grad {
+  background: linear-gradient(90deg, var(--sind-blue), var(--sind-teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.sind-sub {
+  max-width: 40rem;
+  margin: 0 auto 2rem;
+  padding: 0 0.5rem;
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: var(--sind-dim);
+}
+
+.sind-sub a {
+  color: var(--sind-blue);
+}
+
+.dark .sind-sub {
+  color: var(--sind-muted);
+}
+
+.sind-cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 3rem;
+}
+
+.sind-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.4rem;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-radius: 99px;
+  font-weight: 600;
+}
+
+.sind-btn--primary {
+  border-color: var(--sind-blue);
+  background: var(--sind-blue);
+  color: #fff;
+}
+
+.sind-btn--primary:hover {
+  background: #0284C7;
+}
+
+.sind-code {
+  max-width: 40rem;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--sind-dark);
+  box-shadow: 0 30px 80px -30px rgba(14, 165, 233, 0.55), 0 0 0 1px rgba(148, 163, 184, 0.18);
+  text-align: left;
+}
+
+.sind-code__bar {
+  display: flex;
+  gap: 1.25rem;
+  padding: 0.75rem 1.2rem 0;
+  border-bottom: 1px solid #1E293B;
+  overflow-x: auto;
+}
+
+.sind-code__bar button {
+  padding: 0 0 0.6rem;
+  border-bottom: 2px solid transparent;
+  font-size: 0.82rem;
+  color: var(--sind-dim);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sind-code__bar button[aria-selected="true"] {
+  border-color: var(--sind-teal);
+  color: #E2E8F0;
+}
+
+.sind-code pre {
+  margin: 0;
+  padding: 1.2rem 1.4rem;
+  overflow-x: auto;
+  background: none;
+  color: #E2E8F0;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.sind-code .p { color: var(--sind-blue); }
+.sind-code .c { color: var(--sind-dim); }
+.sind-code .k { color: #7DD3FC; }
+
+.sind-sec {
+  padding: 3.5rem 0 0;
+}
+
+.sind-sec h2 {
+  font-size: 2rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  text-align: center;
+}
+
+.sind-sec__blurb {
+  margin: 0.4rem 0 2rem;
+  color: var(--sind-dim);
+  text-align: center;
+}
+
+.sind-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--sind-line);
+  border-radius: 18px;
+  background: var(--sind-line);
+}
+
+.sind-feat {
+  display: block;
+  padding: 1.6rem;
+  background: #fff;
+  transition: background 0.15s;
+}
+
+.sind-feat:hover {
+  background: rgba(14, 165, 233, 0.05);
+}
+
+.dark .sind-feat {
+  background: var(--sind-dark);
+}
+
+.dark .sind-feat:hover {
+  background: var(--sind-dark-alt);
+}
+
+.sind-feat__icon {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-bottom: 1rem;
+  padding: 0.55rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--sind-blue), var(--sind-teal));
+  color: #fff;
+}
+
+.sind-feat h3 {
+  margin-bottom: 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.sind-feat p {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--sind-dim);
+}
+
+.dark .sind-feat p {
+  color: var(--sind-muted);
+}
+
+.sind-feat code {
+  font-size: 0.85em;
+  color: var(--sind-deep-teal);
+}
+
+@media (max-width: 48rem) {
+  .sind-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sind-hero {
+    padding-top: 1rem;
+  }
+
+  .sind-sub {
+    font-size: 1.05rem;
+  }
+
+  .sind-code pre {
+    font-size: 0.78rem;
+  }
+}
+
+/* Video episodes ({{< video >}} shortcode) */
+.sind-video {
+  margin: 1.25rem 0 2rem;
+  overflow: hidden;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  border-radius: 12px;
+  background: rgba(14, 165, 233, 0.06);
+}
+
+.sind-video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--sind-dark);
+}
+
+.sind-video figcaption {
+  padding: 0.75rem 1rem 0.9rem;
+}
+
+.sind-video-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+}
+
+.sind-video-title span {
+  font-size: 0.875rem;
+  color: var(--sind-muted);
+}
+
+.sind-video .sind-video-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.sind-video .sind-video-chapters button {
+  margin-right: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--sind-teal);
+  border-radius: 4px;
+  background: none;
+  color: var(--sind-teal);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* Page list on section pages (layouts/_partials/custom/content-end.html) */
+.sind-pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.sind-pages a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--sind-line);
+  border-radius: 12px;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.sind-pages a:hover {
+  border-color: var(--sind-blue);
+}
+
+.sind-pages span {
+  font-size: 0.9rem;
+  color: var(--sind-dim);
+}

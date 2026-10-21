@@ -1,7 +1,6 @@
 ---
 weight: 353
 title: "CI/CD"
-icon: "deployed_code"
 description: "Using sind in GitHub Actions and other CI systems"
 toc: true
 ---

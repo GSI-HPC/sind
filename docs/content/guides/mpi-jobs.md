@@ -1,7 +1,6 @@
 ---
 weight: 351
 title: "Running MPI Jobs"
-icon: "hub"
 description: "Compile and run multi-node MPI programs with OpenMPI and PMIx"
 toc: true
 ---

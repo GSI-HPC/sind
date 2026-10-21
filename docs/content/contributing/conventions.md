@@ -1,7 +1,6 @@
 ---
 weight: 640
 title: "Conventions"
-icon: "gavel"
 description: "Commit style, code patterns, and contribution guidelines"
 toc: true
 ---

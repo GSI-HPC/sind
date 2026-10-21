@@ -1,7 +1,6 @@
 ---
 weight: 354
 title: "Controller Failover"
-icon: "sync_alt"
 description: "Run a primary/backup slurmctld pair and trigger graceful or outage failovers"
 toc: true
 ---

@@ -1,0 +1,63 @@
+{{ define "main" }}
+<div class="sind-home">
+  <section class="sind-hero">
+    <img class="sind-hero__logo" src="{{ "images/sind-icon-only.svg" | relURL }}" alt="" width="72" height="72">
+    <h1>Slurm clusters,<br><span class="sind-grad">one command away.</span></h1>
+    <p class="sind-sub">Create and manage containerized <a href="https://slurm.schedmd.com/">Slurm</a> clusters for development, testing, and CI/CD workflows. Inspired by <a href="https://kind.sigs.k8s.io/">kind</a>, sind offers a familiar CLI for spinning clusters up and tearing them down.</p>
+    <div class="sind-cta">
+      <a class="sind-btn sind-btn--primary" href="{{ relref . "getting-started/quickstart" }}">Get started &rarr;</a>
+      <a class="sind-btn" href="{{ relref . "introduction" }}">Documentation</a>
+      <a class="sind-btn" href="https://github.com/GSI-HPC/sind">{{ partial "utils/icon.html" (dict "name" "github" "attributes" "height=18") }}GitHub</a>
+    </div>
+    <div class="sind-code" data-sind-tabs>
+      <div class="sind-code__bar" role="tablist">
+        <button type="button" role="tab" aria-selected="true">Terminal</button>
+        <button type="button" role="tab" aria-selected="false">GitHub Actions</button>
+        <button type="button" role="tab" aria-selected="false">Config</button>
+      </div>
+<pre role="tabpanel"><code><span class="c"># one controller and one worker</span>
+<span class="p">$</span> sind create cluster
+<span class="p">$</span> sind exec -- srun hostname
+worker-0
+<span class="p">$</span> sind delete cluster</code></pre>
+<pre role="tabpanel" hidden><code><span class="k">- uses:</span> GSI-HPC/sind-action@v2
+  <span class="k">with:</span>
+    <span class="k">clusters:</span> |
+      - test/cluster.yml
+<span class="k">- run:</span> sind exec -- srun hostname</code></pre>
+<pre role="tabpanel" hidden><code><span class="k">kind:</span> Cluster
+<span class="k">name:</span> dev
+<span class="k">nodes:</span>
+  - controller
+  - db
+  - worker: 3</code></pre>
+    </div>
+  </section>
+
+  {{ range hugo.Data.features }}
+  <section class="sind-sec">
+    <h2>{{ .name }}</h2>
+    <p class="sind-sec__blurb">{{ .blurb }}</p>
+    <div class="sind-grid">
+      {{ range .items }}
+      <a class="sind-feat" href="{{ relref $ .link }}">
+        <span class="sind-feat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ index hugo.Data.feature_icons .icon | safeHTML }}</svg></span>
+        <h3>{{ .title }}</h3>
+        <p>{{ .text | $.RenderString }}</p>
+      </a>
+      {{ end }}
+    </div>
+  </section>
+  {{ end }}
+</div>
+<script>
+  document.querySelectorAll("[data-sind-tabs]").forEach(function (box) {
+    var tabs = box.querySelectorAll("[role=tab]"), panels = box.querySelectorAll("[role=tabpanel]");
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener("click", function () {
+        tabs.forEach(function (t, j) { t.setAttribute("aria-selected", i === j); panels[j].hidden = i !== j; });
+      });
+    });
+  });
+</script>
+{{ end }}

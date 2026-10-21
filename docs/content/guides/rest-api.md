@@ -1,7 +1,6 @@
 ---
 weight: 358
 title: "REST API"
-icon: "api"
 description: "Run slurmrestd on an api node and call Slurm's REST API with JSON Web Tokens"
 toc: true
 ---

@@ -1,15 +1,14 @@
 ---
 weight: 110
 title: "Installation"
-icon: "download"
 description: "Prerequisites and installation instructions"
 toc: true
 ---
 
 ## Install
 
-{{< tabs "install" >}}
-{{< tab "Pre-built binary (Linux)" >}}
+{{< tabs >}}
+{{< tab name="Pre-built binary (Linux)" >}}
 
 Releases include binaries for linux/amd64 and linux/arm64. The commands below install the amd64 one; on 64-bit ARM, use `sind-linux-arm64` instead.
 
@@ -46,7 +45,7 @@ install -D ./sind-linux-amd64 ~/.local/bin/sind
 > after creating it.
 
 {{< /tab >}}
-{{< tab "mise" >}}
+{{< tab name="mise" >}}
 
 Install the release binary for your platform (linux/amd64 or linux/arm64) with [mise](https://mise.jdx.dev/):
 
@@ -57,7 +56,7 @@ mise use -g github:GSI-HPC/sind
 Drop `-g` to pin sind in the current project's `mise.toml` instead. mise checks the download against its published digest and verifies the release's build provenance attestation.
 
 {{< /tab >}}
-{{< tab "From source" >}}
+{{< tab name="From source" >}}
 Build and install with Go 1.26 or later:
 
 ```bash

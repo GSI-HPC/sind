@@ -98,9 +98,12 @@ jobs:
         with:
           hugo-version: "0.167.0"
 
+      # main's docs still use Geekdoc; drop this step once a release brings the
+      # Hextra docs to main. Hextra is a Hugo module: docs/go.mod pins it and
+      # docs/go.sum verifies it when Hugo fetches it with the runner's Go.
       # Pinned to a release and its checksum: the theme renders every page,
       # and a new release must not reach the site without a commit.
-      - name: Install theme
+      - name: Install Geekdoc
         env:
           GEEKDOC_VERSION: v4.1.3
           GEEKDOC_SHA256: 325d3960e568cb623ee47b498f70ae2da851c6b377b4c6723d5f73dfe24e9d21

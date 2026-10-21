@@ -1,7 +1,6 @@
 ---
 weight: 360
 title: "Connecting kind"
-icon: "lan"
 description: "Reaching sind nodes by name and over SSH from the pods of a kind cluster"
 toc: true
 ---

@@ -1,7 +1,6 @@
 ---
 weight: 410
 title: "Design Overview"
-icon: "info"
 description: "Operational model and design philosophy"
 toc: true
 ---

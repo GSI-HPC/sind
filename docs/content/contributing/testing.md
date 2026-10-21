@@ -1,7 +1,6 @@
 ---
 weight: 620
 title: "Testing"
-icon: "science"
 description: "Test infrastructure, mocking patterns, and integration tests"
 toc: true
 ---

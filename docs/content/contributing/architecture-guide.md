@@ -1,7 +1,6 @@
 ---
 weight: 630
 title: "Architecture Guide"
-icon: "account_tree"
 description: "Package structure and how to add new features"
 toc: true
 ---

@@ -1,7 +1,6 @@
 ---
 weight: 400
 title: "Architecture"
-icon: "architecture"
 description: "How sind works under the hood"
 ---
 

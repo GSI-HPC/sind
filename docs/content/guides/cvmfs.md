@@ -1,7 +1,6 @@
 ---
 weight: 356
 title: "Using CVMFS"
-icon: "folder_shared"
 description: "Mount CVMFS repositories on the nodes, or test how your tooling provisions the CVMFS client"
 toc: true
 ---

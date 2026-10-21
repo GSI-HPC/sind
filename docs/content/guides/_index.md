@@ -1,7 +1,6 @@
 ---
 weight: 350
 title: "Guides"
-icon: "menu_book"
 description: "Task-oriented walkthroughs for common workflows"
 ---
 

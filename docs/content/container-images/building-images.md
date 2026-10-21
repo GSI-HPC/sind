@@ -1,7 +1,6 @@
 ---
 weight: 510
 title: "Building Images"
-icon: "build"
 description: "Official images and custom image requirements"
 toc: true
 ---

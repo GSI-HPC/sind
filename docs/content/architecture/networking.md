@@ -1,7 +1,6 @@
 ---
 weight: 420
 title: "Networking"
-icon: "hub"
 description: "Cluster networks, mesh, DNS, and SSH infrastructure"
 toc: true
 ---
@@ -110,8 +109,8 @@ Host DNS is configured during every `sind create cluster` (the settings are idem
 
 sind needs polkit authorization to configure systemd-resolved. Install one of these rules depending on how you access the Docker host:
 
-{{< tabs "polkit" >}}
-{{< tab "Desktop" >}}
+{{< tabs >}}
+{{< tab name="Desktop" >}}
 
 Allows docker group members to configure DNS from local sessions only (direct keyboard/display access, not SSH):
 
@@ -130,7 +129,7 @@ RULES
 ```
 
 {{< /tab >}}
-{{< tab "Server" >}}
+{{< tab name="Server" >}}
 
 Allows docker group members to configure DNS from any active session, including SSH:
 

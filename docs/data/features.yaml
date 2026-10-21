@@ -1,0 +1,71 @@
+# Landing page features, grouped. text is Markdown without links: each card
+# links to its page.
+- name: Clusters
+  blurb: Real Slurm topologies in containers, from a laptop to a CI runner.
+  items:
+    - icon: nodes
+      title: Multi-node, multi-cluster & multi-realm
+      text: Run controller, database, REST API, submitter, and worker nodes side by side — or spin up multiple clusters across isolated realms with shared networking.
+      link: configuration/realms
+    - icon: server
+      title: System containers
+      text: Full systemd-based nodes that emulate bare metal — use the same config management tools you already have.
+      link: architecture/overview
+    - icon: scale
+      title: Worker lifecycle
+      text: Dynamically add and remove worker nodes from running clusters.
+      link: usage/worker-management
+    - icon: power
+      title: Power cycle simulation
+      text: Shutdown, reboot, freeze, and power-cycle nodes to simulate real-world failure scenarios.
+      link: usage/power-control
+    - icon: brackets
+      title: Node expressions
+      text: Node arguments take ranges with steps and set operators, such as `worker-[0-6/2]` or `worker-[0-3]!worker-2`.
+      link: usage/node-arguments
+    - icon: layers
+      title: Multiple Slurm versions
+      text: Official node images for Slurm 26.05 and 25.11 on linux/amd64 and linux/arm64 — or bring your own.
+      link: container-images
+- name: Slurm services
+  blurb: The daemons and integrations a production site runs.
+  items:
+    - icon: database
+      title: Job accounting
+      text: A db node runs MariaDB and slurmdbd, so `sacct` and `sacctmgr` work as on a production cluster.
+      link: configuration/node-definitions#database-node
+    - icon: api
+      title: REST API
+      text: slurmrestd on an api node with JWT authentication, for portals, workflow engines and tests (Slurm 26.05).
+      link: guides/rest-api
+    - icon: users
+      title: Users and identity
+      text: Linux users, groups and Slurm accounts with limits, and identity modes from local accounts to nss_slurm and auth/slurm.
+      link: guides/users
+    - icon: folder
+      title: CVMFS
+      text: Mount `/cvmfs` read-only on every node, from the Docker host or a Docker volume plugin.
+      link: guides/cvmfs
+    - icon: chart
+      title: Monitoring
+      text: An opt-in Prometheus, Loki and Grafana stack per realm collects Slurm's metrics, the nodes' resource use and their journals, with dashboards for clusters, nodes, services, users and logs (Slurm 26.05).
+      link: guides/monitoring
+- name: Workflow
+  blurb: Built for automation, pleasant by hand.
+  items:
+    - icon: ci
+      title: Designed for CI/CD
+      text: Runs on standard GitHub Actions runners with the runner's Docker daemon, no sudo or privileged containers. sind-action sets up clusters in a single step.
+      link: guides/ci-cd
+    - icon: spark
+      title: AI-ready via MCP
+      text: Built-in MCP server lets AI assistants manage your Slurm clusters — just `sind mcp start`.
+      link: guides/mcp
+    - icon: progress
+      title: Live progress
+      text: Create, delete and power draw a live tree of their steps on a terminal, and write plain lines or a JSON event log for CI.
+      link: usage/progress
+    - icon: box
+      title: Minimal dependencies
+      text: Just Docker and a sind container image. Usable as both a CLI tool and a Go library.
+      link: getting-started/installation

@@ -68,6 +68,12 @@ flags and output samples, config schema, labels, versions. `next` publishes a pr
 docs site; `main` publishes the release docs. `.github/workflows/docs.yml` builds both
 into one Pages artifact (`main` at `/`, `next` at `/next/`).
 
+The site uses the [Hextra](https://imfing.github.io/hextra/) theme, a Hugo module pinned
+in `docs/go.mod` (`hugo server` in `docs/` fetches it with Go). Use its shortcodes
+(`callout`, `tabs`/`tab name="…"`, `cards`); `docs/assets/css/custom.css` holds the
+brand colours and fonts, `docs/layouts/landing.html` the home page, and
+`docs/data/features.yaml` its feature cards.
+
 Guides can embed a video episode with `{{< video "<id>" >}}`. Episodes live in
 `video/episodes/<id>/` (see `video/README.md`); the docs workflow renders them, so never
 commit rendered files. When a guide with an episode changes, check the episode

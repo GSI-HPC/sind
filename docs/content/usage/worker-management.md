@@ -1,7 +1,6 @@
 ---
 weight: 330
 title: "Worker Management"
-icon: "group_add"
 description: "Dynamically adding and removing worker nodes"
 toc: true
 ---

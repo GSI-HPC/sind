@@ -1,7 +1,6 @@
 ---
 weight: 120
 title: "Quickstart"
-icon: "play_arrow"
 description: "Create your first Slurm cluster in minutes"
 toc: true
 ---

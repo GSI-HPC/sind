@@ -1,7 +1,6 @@
 ---
 weight: 610
 title: "Development Setup"
-icon: "code"
 description: "Clone, build, and run sind locally"
 toc: true
 ---
