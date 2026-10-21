@@ -175,6 +175,10 @@ The browser sent another host name, so the UI refused the request. Open the URL 
 
 Use `--no-open`, or copy the URL that sind prints into a browser on this machine.
 
+### A run says "no end recorded"
+
+The activity log has no end for this run, and its last event is more than an hour old. Its command was most likely killed, for example with `kill -9`, so it could not write its end. Check with `sind get cluster` what the command left, and delete it if needed. A run that sind ui started ends when its command ends, with the outcome of the command.
+
 ### A command waits for the realm lock
 
 The Overview says that a command holds the lock of the realm, and it names that command. Your command goes on when the other one ends. Open **Activity** to see the runs. If the other command hangs, stop it: press **Stop** if the UI started it, or press Ctrl-C in its terminal. See [Realms]({{< relref "/configuration/realms" >}}) for the lock.

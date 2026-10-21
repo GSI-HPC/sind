@@ -68,11 +68,16 @@ type Store struct {
 	mu   sync.Mutex
 	snap Snapshot
 	subs map[chan Topic]struct{}
+	// logRuns are the runs as the log tells them, before ended.
+	logRuns []Run
+	// ended holds the tasks that have ended, by their trace, so that their
+	// runs end with them even when the log has no end.
+	ended map[string]Task
 }
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{subs: map[chan Topic]struct{}{}}
+	return &Store{subs: map[chan Topic]struct{}{}, ended: map[string]Task{}}
 }
 
 // Snapshot returns the current snapshot.
@@ -105,10 +110,15 @@ func (s *Store) Subscribe() (<-chan Topic, func()) {
 // update changes the snapshot with fn under the lock and notifies the
 // subscribers of each of ts.
 func (s *Store) update(fn func(*Snapshot), ts ...Topic) {
+	s.updateTopics(func(sn *Snapshot) []Topic { fn(sn); return ts })
+}
+
+// updateTopics changes the snapshot with fn under the lock and notifies the
+// subscribers of each topic that fn returns.
+func (s *Store) updateTopics(fn func(*Snapshot) []Topic) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fn(&s.snap)
-	for _, t := range ts {
+	for _, t := range fn(&s.snap) {
 		s.notify(t)
 	}
 }
@@ -130,13 +140,55 @@ func (s *Store) notify(t Topic) {
 }
 
 // SetRuns replaces the runs and notifies TopicRuns and the topic of each
-// run in changed.
+// run in changed. A run that has not ended, of a task that has, ends as the
+// task did.
 func (s *Store) SetRuns(runs []Run, changed ...string) {
 	ts := []Topic{TopicRuns}
 	for _, id := range changed {
 		ts = append(ts, RunTopic(id))
 	}
-	s.update(func(sn *Snapshot) { sn.Runs = runs }, ts...)
+	s.update(func(sn *Snapshot) {
+		s.logRuns = runs
+		sn.Runs = s.endRuns(runs)
+	}, ts...)
+}
+
+// endRuns returns runs with each run that has not ended, of a task that
+// has, ended as the task did. The log lacks the end of such a run when its
+// process was killed.
+func (s *Store) endRuns(runs []Run) []Run {
+	var out []Run
+	for i, r := range runs {
+		t, ok := s.ended[r.Trace]
+		if r.Done() || r.Trace == "" || !ok {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(runs)
+		}
+		out[i] = endedAs(r, t)
+	}
+	if out == nil {
+		return runs
+	}
+	return out
+}
+
+// endedAs returns r ended as the task t did.
+func endedAs(r Run, t Task) Run {
+	r.End, r.Unfinished = t.End, true
+	switch t.Status {
+	case TaskOK:
+		r.Status = StatusOK
+	case TaskCanceled:
+		r.Status = StatusCanceled
+	default:
+		r.Status = StatusFailed
+		if r.Err == "" {
+			r.Err = t.Err
+		}
+	}
+	return r
 }
 
 // Run returns the run with the ID id.
@@ -163,16 +215,33 @@ func (s *Store) AddTask(t Task) {
 }
 
 // UpdateTask changes the task with the ID id with fn. A task that is gone
-// is left alone.
+// is left alone. When the task ends, the runs of its trace that the log has
+// not ended end with it, and their topics are notified.
 func (s *Store) UpdateTask(id string, fn func(*Task)) {
-	s.update(func(sn *Snapshot) {
+	s.updateTopics(func(sn *Snapshot) []Topic {
 		i := slices.IndexFunc(sn.Tasks, func(t Task) bool { return t.ID == id })
 		if i < 0 {
-			return
+			return []Topic{TopicTasks}
 		}
 		sn.Tasks = slices.Clone(sn.Tasks)
 		fn(&sn.Tasks[i])
-	}, TopicTasks)
+		t := sn.Tasks[i]
+		if !t.Done() || t.Trace == "" {
+			return []Topic{TopicTasks}
+		}
+		s.ended[t.Trace] = t
+		ts := []Topic{TopicTasks}
+		for _, r := range s.logRuns {
+			if r.Trace == t.Trace && !r.Done() {
+				ts = append(ts, RunTopic(r.ID))
+			}
+		}
+		if len(ts) == 1 {
+			return ts
+		}
+		sn.Runs = s.endRuns(s.logRuns)
+		return append(ts, TopicRuns)
+	})
 }
 
 // RemoveTask removes the task with the ID id from the tasks shown.

@@ -38,6 +38,11 @@ type Run struct {
 	Err    string
 	// Suspended is set between a suspend and a resume event.
 	Suspended bool
+	// Unfinished is set for a run whose end the log lacks, as its process
+	// was killed. End is then when the task that started it ended, with the
+	// task's Status, or the time of its newest event once that is old
+	// (activity.StaleAfter), with no Status.
+	Unfinished bool
 	// Root is the command span and the spans below it.
 	Root Span
 }

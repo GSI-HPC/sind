@@ -16,13 +16,13 @@ import (
 
 // runFollow starts follow in the background and returns a function that
 // stops it and waits for it.
-func runFollow(t *testing.T, st *store.Store, path string, active, idle time.Duration) (stop func()) {
+func runFollow(t *testing.T, st *store.Store, path string, active, idle, staleAfter time.Duration) (stop func()) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		follow(ctx, st, path, 10, active, idle)
+		follow(ctx, st, path, 10, active, idle, staleAfter)
 	}()
 	return func() {
 		cancel()
@@ -33,6 +33,9 @@ func runFollow(t *testing.T, st *store.Store, path string, active, idle time.Dur
 		}
 	}
 }
+
+// forever is a time after which no run of the tests is stale.
+const forever = 1 << 62
 
 // next returns the next notification, or fails after a while.
 func next(t *testing.T, ch <-chan store.Topic) store.Topic {
@@ -63,7 +66,7 @@ func TestFollowSetsTheChangedRuns(t *testing.T) {
 	defer unsubscribe()
 
 	// A log that is not there is empty: nothing to set.
-	stop := runFollow(t, st, path, 5*time.Millisecond, 5*time.Millisecond)
+	stop := runFollow(t, st, path, 5*time.Millisecond, 5*time.Millisecond, forever)
 	defer stop()
 	quiet(t, ch, 60*time.Millisecond)
 
@@ -104,7 +107,7 @@ func TestFollowReadsLessOftenWhenNoRunGoesOn(t *testing.T) {
 	ch, unsubscribe := st.Subscribe()
 	defer unsubscribe()
 	// The idle interval is an hour, so only the active one reads again.
-	stop := runFollow(t, st, path, 5*time.Millisecond, time.Hour)
+	stop := runFollow(t, st, path, 5*time.Millisecond, time.Hour, forever)
 	defer stop()
 	next(t, ch)
 	next(t, ch)
@@ -150,4 +153,73 @@ func TestAnyRunning(t *testing.T) {
 	assert.False(t, anyRunning(nil))
 	assert.False(t, anyRunning([]store.Run{{End: &end}, {End: &end}}))
 	assert.True(t, anyRunning([]store.Run{{End: &end}, {}}))
+}
+
+func TestFollowEndsAStaleRun(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "activity.jsonl")
+	// A run that has not ended, its last event long ago.
+	appendTo(t, path, line("trace", runA, `"trace":"t"`))
+	appendTo(t, path, []byte("\n"))
+	appendTo(t, path, ev("start", runA, "2026-01-01T00:00:00Z", `"span":"r","kind":"command","name":"one"`))
+	appendTo(t, path, []byte("\n"))
+	appendTo(t, path, logLines("bbbbbbbbbbbbbbbb", "two"))
+	st := store.New()
+	ch, unsubscribe := st.Subscribe()
+	defer unsubscribe()
+	stop := runFollow(t, st, path, 5*time.Millisecond, time.Hour, time.Hour)
+	defer stop()
+	got := map[store.Topic]bool{}
+	for len(got) < 3 {
+		got[next(t, ch)] = true
+	}
+	r, _ := st.Snapshot().Run(runA)
+	require.True(t, r.Done(), "ended as stale")
+	assert.True(t, r.Unfinished)
+	assert.Equal(t, r.Last, *r.End)
+	assert.Empty(t, r.Status)
+	other, _ := st.Snapshot().Run("bbbbbbbbbbbbbbbb")
+	assert.False(t, other.Unfinished)
+	// Nothing goes on now: the log is read once an hour, and the stale run
+	// is not set again.
+	quiet(t, ch, 60*time.Millisecond)
+}
+
+func TestEndStale(t *testing.T) {
+	now := time.Now()
+	end := now
+	runs := []store.Run{{ID: "a", Last: now.Add(-2 * time.Hour)}, {ID: "b", Last: now}, {ID: "c", Last: now.Add(-3 * time.Hour), End: &end}}
+	got, ids := endStale(runs, now.Add(-time.Hour))
+	assert.Equal(t, []string{"a"}, ids)
+	assert.True(t, got[0].Unfinished)
+	assert.False(t, runs[0].Unfinished, "a copy")
+	assert.False(t, got[1].Done())
+	assert.Same(t, &end, got[2].End)
+
+	same, ids := endStale(runs[1:], now.Add(-time.Hour))
+	assert.Empty(t, ids)
+	assert.Equal(t, runs[1:], same)
+}
+
+func TestFollowEndsARunThatFallsSilent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "activity.jsonl")
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	appendTo(t, path, line("trace", runA, `"trace":"t"`))
+	appendTo(t, path, []byte("\n"))
+	appendTo(t, path, ev("start", runA, now, `"span":"r","kind":"command","name":"one"`))
+	appendTo(t, path, []byte("\n"))
+	st := store.New()
+	ch, unsubscribe := st.Subscribe()
+	defer unsubscribe()
+	stop := runFollow(t, st, path, 5*time.Millisecond, 5*time.Millisecond, 300*time.Millisecond)
+	defer stop()
+	next(t, ch)
+	next(t, ch)
+	r, _ := st.Snapshot().Run(runA)
+	require.False(t, r.Done(), "it runs")
+
+	// No event comes: the run ends as stale, with no line read.
+	assert.Equal(t, store.TopicRuns, next(t, ch))
+	assert.Equal(t, store.RunTopic(runA), next(t, ch))
+	r, _ = st.Snapshot().Run(runA)
+	assert.True(t, r.Unfinished)
 }
