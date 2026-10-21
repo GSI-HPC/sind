@@ -400,3 +400,16 @@ func TestMoreHelpers(t *testing.T) {
 	assert.Equal(t, "bad", cls)
 	assert.Equal(t, "✗", mark)
 }
+
+func TestMoreListPagesReadTheRealmCookie(t *testing.T) {
+	ts, _ := moreTestServer(t, true, false)
+	for _, path := range []string{"/mesh", "/monitoring", "/topology"} {
+		r := request("GET", path)
+		r.AddCookie(ts.cookie)
+		r.AddCookie(&http.Cookie{Name: "sind_realm", Value: "ci"})
+		w := ts.do(r)
+		require.Equal(t, http.StatusOK, w.Code, path)
+		assert.Contains(t, w.Body.String(), `<option value="ci" selected>`, path)
+		assert.Contains(t, w.Body.String(), "realm=ci", path)
+	}
+}

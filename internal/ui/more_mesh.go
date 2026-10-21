@@ -15,10 +15,11 @@ func init() {
 		Params:   []string{"realm"},
 		Load:     moreMeshLoad,
 	})
-	RegisterPage(Page{
+	// A list page reads the realm cookie, which only a route can see.
+	RegisterRoute(pgListRoute(Page{
 		Name: "more-mesh", Pattern: "GET /mesh", Title: "Mesh and DNS", Nav: "mesh",
 		Params: []string{"realm"}, Fragments: []string{"more-mesh"},
-	})
+	}))
 }
 
 // moreMeshData is what the Mesh and DNS page shows.

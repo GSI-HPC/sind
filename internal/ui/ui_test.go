@@ -32,6 +32,7 @@ func runRegistry() *Registry {
 	r.AddFragment(railFragment())
 	r.AddFragment(tasksFragment())
 	r.AddPage(overviewPage)
+	pgRegister(r)
 	return r
 }
 

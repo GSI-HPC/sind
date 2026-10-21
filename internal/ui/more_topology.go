@@ -18,10 +18,11 @@ func init() {
 		Params:   []string{"realm"},
 		Load:     moreTopologyLoad,
 	})
-	RegisterPage(Page{
+	// A list page reads the realm cookie, which only a route can see.
+	RegisterRoute(pgListRoute(Page{
 		Name: "more-topology", Pattern: "GET /topology", Title: "Topology", Nav: "topology",
 		Params: []string{"realm"}, Fragments: []string{"more-topology"},
-	})
+	}))
 }
 
 // The diagram has four columns in a viewBox 900 wide: this host, the mesh

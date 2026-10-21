@@ -20,10 +20,11 @@ func init() {
 		Params:   []string{"realm"},
 		Load:     moreMonitoringLoad,
 	})
-	RegisterPage(Page{
+	// A list page reads the realm cookie, which only a route can see.
+	RegisterRoute(pgListRoute(Page{
 		Name: "more-monitoring", Pattern: "GET /monitoring", Title: "Monitoring", Nav: "monitoring",
 		Params: []string{"realm"}, Fragments: []string{"more-monitoring"},
-	})
+	}))
 }
 
 // moreMonitoringData is what the Monitoring page shows.

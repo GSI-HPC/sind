@@ -1,0 +1,30 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-node is the page of one node. */}}
+{{define "page-node"}}
+<div class="crumbs"><a href="/nodes">Nodes</a> / <a href="/clusters/{{.Params.Get "realm"}}/{{.Params.Get "cluster"}}">{{.Params.Get "cluster"}}</a> / {{.Params.Get "node"}}</div>
+<div sse-swap="pg-node-head">{{fragment "pg-node-head" .}}</div>
+<div sse-swap="pg-node-body">{{fragment "pg-node-body" .}}</div>
+{{end}}
+
+{{define "pg-node-head"}}{{with .Data}}{{if .Found}}
+<div class="head"><div class="t"><h1><span class="mono pg-h1">{{.Node.Arg}}</span> <span class="pill {{.Node.StateClass}}">{{.Node.State}}</span></h1>
+  <div class="sub"><span class="chip {{.Node.RoleClass}}">{{.Node.Role}}</span>{{with .Node.IP}}<span class="mono">{{.}}</span>{{end}}{{with .Node.HA}}<span>HA position {{.Position}}{{if .InControl}} · in control{{else}} · standby{{end}}</span>{{end}}</div></div>
+  <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
+{{else}}{{template "pg-gone" .Short}}{{end}}{{end}}{{template "pg-docker-note" .}}{{end}}
+
+{{define "pg-node-body"}}{{with .Data}}{{$d := .}}{{if .Found}}<div class="grid g2">
+  {{if .Node.Problem}}<section class="panel pg-wide"><div class="ph"><h2>Issues</h2></div><div class="pb stack">
+    {{range .Node.Issues}}<div class="pg-issue"><span class="pill {{.Class}}">{{.Text}}</span></div>{{end}}
+    <div><a class="btn sm" href="{{.LogsLink}}">Logs</a></div></div></section>{{end}}
+  <section class="panel"><div class="ph"><h2>Services</h2><span class="grow"></span><span class="faint">systemd</span></div><div class="pb">
+    {{if .Node.Known}}<dl class="kv">{{range .Node.Services}}<dt class="mono">{{.Name}}</dt><dd>{{if not $d.Node.Running}}<span class="pill">not running</span>{{else if .OK}}<span class="pill ok">active</span>{{else}}<span class="pill bad">failed</span>{{end}}</dd>
+      {{else}}<dt>none</dt><dd class="muted">This node has no service that sind checks.</dd>{{end}}</dl>
+    {{else}}<span class="muted">No probe result yet. sind ui probes a cluster's nodes while a page of it is open.</span>{{end}}</div></section>
+  <section class="panel"><div class="ph"><h2>Container</h2></div><div class="pb"><dl class="kv">
+    <dt>name</dt><dd class="mono">{{.Node.Container}}</dd><dt>cluster</dt><dd><a href="{{.ClusterLink}}">{{.Cluster}}</a> <span class="pill {{.ClusterPillClass}}">{{.ClusterState}}</span></dd>
+    <dt>realm</dt><dd class="mono">{{.Realm}}</dd>
+    {{if .Node.Known}}<dt>managed</dt><dd>{{if .Node.Managed}}yes{{else}}no{{end}}</dd>{{end}}
+    <dt>FQDN</dt><dd class="mono">{{.Node.FQDN}} <button type="button" class="btn sm ghost" data-pg-copy-text="{{.Node.FQDN}}">Copy</button></dd></dl></div></section>
+  <section class="panel pg-wide"><div class="ph"><h2>From your terminal</h2></div><div class="pb stack">{{range .Commands}}{{template "pg-cmd" .}}{{end}}</div></section>
+</div>{{end}}{{end}}{{end}}

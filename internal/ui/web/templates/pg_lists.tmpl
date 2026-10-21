@@ -1,0 +1,31 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-clusters and page-nodes are the list pages. The whole content is one
+fragment, so that the head follows the realm that the page shows. */}}
+{{define "page-clusters"}}<div sse-swap="pg-clusters-table">{{fragment "pg-clusters-table" .}}</div>{{end}}
+{{define "page-nodes"}}<div sse-swap="pg-nodes-table">{{fragment "pg-nodes-table" .}}</div>{{end}}
+
+{{define "pg-clusters-table"}}{{with .Data}}{{$d := .}}
+<div class="head"><div class="t"><h1>Clusters</h1><div class="sub">Every cluster of {{if .Realm}}realm <b class="mono">{{.Realm}}</b>{{else}}every realm{{end}}. sind finds them by their Docker labels.</div></div>
+  <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
+{{template "pg-realm-filter" .}}
+<section class="panel"><div class="tw"><table><thead><tr><th>Name</th>{{if not .Realm}}<th>Realm</th>{{end}}<th>State</th><th>Slurm</th><th class="num">Nodes</th><th>Roles</th><th>Monitoring</th><th></th></tr></thead><tbody>
+{{range .Clusters}}<tr class="click" data-href="{{.Link}}"><td><a href="{{.Link}}"><b>{{.Name}}</b></a></td>{{if not $d.Realm}}<td class="mono">{{.Realm}}</td>{{end}}<td><span class="pill {{.StateClass}}">{{.State}}</span></td><td class="mono">{{.Slurm}}</td><td class="num">{{len .Nodes}}</td>
+  <td><div class="pg-nodemap">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div></td><td>{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</td>
+  <td class="act"><a class="btn sm danger" href="{{.DeleteURL}}" hx-get="{{.DeleteURL}}" hx-target="#layer" hx-push-url="false">Delete…</a></td></tr>
+{{else}}<tr><td colspan="8"><div class="empty">No cluster{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.</div></td></tr>{{end}}
+</tbody></table></div></section>
+<p class="muted pg-hint">In a terminal: <code class="mono">sind get clusters</code></p>
+{{end}}{{template "pg-docker-note" .}}{{end}}
+
+{{define "pg-nodes-table"}}{{with .Data}}{{$d := .}}
+<div class="head"><div class="t"><h1>Nodes</h1><div class="sub">Every node of {{if .Realm}}realm <b class="mono">{{.Realm}}</b>{{else}}every realm{{end}}. A node's name is its short name and its cluster, as sind's commands take it.</div></div></div>
+{{template "pg-realm-filter" .}}
+<section class="panel"><div class="tw"><table><thead><tr><th>Node</th><th>Cluster</th>{{if not .Realm}}<th>Realm</th>{{end}}<th>Role</th><th>State</th><th>IP</th><th>Issues</th></tr></thead><tbody>
+{{range .Nodes}}<tr class="click" data-href="{{.Link}}"><td class="mono"><a href="{{.Link}}"><b>{{.Arg}}</b></a></td><td><a href="{{.ClusterLink}}">{{.Cluster}}</a></td>{{if not $d.Realm}}<td class="mono">{{.Realm}}</td>{{end}}
+  <td><span class="chip {{.RoleClass}}">{{.Role}}</span></td><td><span class="pill {{.StateClass}}">{{.State}}</span></td><td class="mono">{{.IP}}</td>
+  <td>{{range .Issues}}<span class="pill {{.Class}}">{{.Text}}</span> {{else}}<span class="faint">–</span>{{end}}</td></tr>
+{{else}}<tr><td colspan="7"><div class="empty">No node{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.</div></td></tr>{{end}}
+</tbody></table></div></section>
+<p class="muted pg-hint">In a terminal: <code class="mono">sind get nodes</code></p>
+{{end}}{{template "pg-docker-note" .}}{{end}}
