@@ -449,7 +449,8 @@ in sind's state directory ($XDG_STATE_HOME/sind or ~/.local/state/sind).`
 //     set for the user's shell would add its lines to every tool's output,
 //     a SIND_PROGRESS_LOG of /dev/stderr its events, and one that cannot be
 //     opened a note. Their stderr is no terminal, so nothing else would
-//     draw;
+//     draw. With the variable unset, a tool call writes the default
+//     activity log, as every command does, and nothing on its stderr;
 //   - SIND_LOG_TIMESTAMPS=false: the time an error line was written means
 //     nothing to the client, which gets the line with the call's result;
 //   - the root's Version, which ophis reports to MCP clients, only while

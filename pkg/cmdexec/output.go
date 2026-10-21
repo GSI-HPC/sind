@@ -2,7 +2,11 @@
 
 package cmdexec
 
-import "context"
+import (
+	"context"
+
+	"github.com/GSI-HPC/go-clikit/progress"
+)
 
 // stdoutDataKey is the context key of WithStdoutAsData.
 type stdoutDataKey struct{}
@@ -37,4 +41,26 @@ func WithProcessGroup(ctx context.Context) context.Context {
 func InProcessGroup(ctx context.Context) bool {
 	group, _ := ctx.Value(processGroupKey{}).(bool)
 	return group
+}
+
+// lineParserKey is the context key of WithLineParser.
+type lineParserKey struct{}
+
+// WithLineParser returns ctx for a command whose output a caller follows
+// line by line as it is written, such as the status lines of docker pull
+// that tell how far an image has got: OSExecutor hands each line of its
+// standard error, and of its standard output unless that is data
+// (WithStdoutAsData), to parse as it ends, without its line break, with the
+// stream it came from. parse is called from the goroutine that copies the
+// stream, so the calls for the two streams may run at the same time, and
+// must not block; a line that has not ended when the output does is none
+// it is given. The output is captured as without a parser.
+func WithLineParser(ctx context.Context, parse func(progress.Stream, string)) context.Context {
+	return context.WithValue(ctx, lineParserKey{}, parse)
+}
+
+// LineParser returns the function WithLineParser put in ctx, or nil.
+func LineParser(ctx context.Context) func(progress.Stream, string) {
+	parse, _ := ctx.Value(lineParserKey{}).(func(progress.Stream, string))
+	return parse
 }

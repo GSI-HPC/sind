@@ -109,6 +109,24 @@ func lockHolder(ctx context.Context, client *docker.Client, name docker.NetworkN
 	return holderOf(meta), nil
 }
 
+// Holder returns the process that holds realm's lock on the Docker daemon
+// of client, as the lock's labels describe it, or nil, with no error, when
+// nobody holds it: it is how a command that does not take the lock, such as
+// a display of what a realm is busy with, tells that a sind command is
+// changing the realm, and which. It reads the daemon part of LockRealm's
+// lock alone, the one every client of the daemon shares; a process that
+// waits for the file lock of a state directory holds nothing yet. The
+// holder of a network named <realm>-lock that no sind command made has no
+// command and no host, which LockHolder.String words as unknown.
+func Holder(ctx context.Context, client *docker.Client, realm string) (*LockHolder, error) {
+	name := LockNetworkName(realm)
+	h, err := lockHolder(ctx, client, name)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting %s: %w", name, err)
+	}
+	return h, nil
+}
+
 // process identifies a process among the machines and containers that share
 // a Docker daemon: by its host name, the boot ID of its kernel, its PID
 // namespace and its PID in that namespace. An empty part is one that could

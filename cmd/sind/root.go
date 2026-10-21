@@ -47,11 +47,11 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().String("realm", "", "realm namespace for resource isolation (overrides config and SIND_REALM)")
 	cmd.PersistentFlags().CountP("verbose", "v", "increase log verbosity (-v=info, -vv=debug, -vvv=trace)")
 	cmd.PersistentFlags().String("progress", "",
-		"how create, delete and power show their progress on standard error: "+progressModes()+
+		"how create, delete, connect, disconnect and power show their progress on standard error: "+progressModes()+
 			" (default: "+envProgress+", else auto, a live tree when standard error is a terminal; plain writes lines for a log)")
 	cmd.PersistentFlags().String("progress-log", "",
-		"append the progress events of create, delete and power to this file, one JSON object per line, "+
-			"created readable by you alone (default: "+envProgressLog+")")
+		"append the progress events of create, delete, connect, disconnect and power to this file, one JSON object per line, "+
+			"created readable by you alone (default: "+envProgressLog+", else $XDG_STATE_HOME/sind/activity.jsonl; an empty value writes no log)")
 
 	_ = cmd.RegisterFlagCompletionFunc("realm", completeRealmNames)
 	_ = cmd.RegisterFlagCompletionFunc("progress", cobra.FixedCompletions(progressModeNames(), cobra.ShellCompDirectiveNoFileComp))

@@ -8,19 +8,15 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
-	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/observability"
-	"github.com/GSI-HPC/sind/pkg/state"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -177,34 +173,7 @@ func runGetNode(cmd *cobra.Command, arg string) error {
 	}
 	shortName, clusterName := target.ShortName, target.Cluster
 	getNode := func(ctx context.Context, client *docker.Client, realm string) (*cluster.NodeDetail, error) {
-		containerName := cluster.ContainerName(realm, clusterName, shortName)
-		info, err := client.InspectContainer(ctx, containerName)
-		if docker.IsNotFound(err) {
-			// Tell a missing cluster from a missing node, as logs and ssh do.
-			if err := cluster.CheckNode(ctx, client, realm, clusterName, shortName); err != nil {
-				return nil, err
-			}
-			return nil, fmt.Errorf("node %q not found in cluster %q", shortName, clusterName)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("inspecting container: %w", err)
-		}
-		role := config.Role(info.Labels[cluster.LabelRole])
-		health, err := cluster.GetNodeHealth(ctx, client, info, role, realm, clusterName)
-		if err != nil {
-			return nil, err
-		}
-		return &cluster.NodeDetail{
-			Container: string(containerName),
-			Cluster:   clusterName,
-			Role:      role,
-			Managed:   cluster.IsManaged(info.Labels),
-			FQDN:      cluster.DNSName(shortName, clusterName, realm),
-			IP:        health.IP,
-			Status:    health.State,
-			Services:  health.Services,
-			HA:        health.HA,
-		}, nil
+		return cluster.GetNode(ctx, client, realm, clusterName, shortName)
 	}
 	return runGet(cmd, getNode, func(cmd *cobra.Command, n *cluster.NodeDetail, _ string) error {
 		out := cmd.OutOrStdout()
@@ -372,22 +341,15 @@ func runGetSSHConfig(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	dir, err := state.RealmDir(realm)
+	conf, err := cluster.GetSSHConfig(fsFrom(cmd.Context()), realm)
 	if err != nil {
 		return err
 	}
-	p := filepath.Join(dir, "ssh_config")
-	// The path is also right before the file exists, for an
-	// Include; a script that reads the file needs to know.
-	exists, _ := afero.Exists(fsFrom(cmd.Context()), p)
 	if isJSONOutput(cmd) {
-		return writeJSON(cmd.OutOrStdout(), struct {
-			Path   string `json:"path"`
-			Exists bool   `json:"exists"`
-		}{Path: p, Exists: exists})
+		return writeJSON(cmd.OutOrStdout(), conf)
 	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), p)
-	if !exists {
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), conf.Path)
+	if !conf.Exists {
 		cmd.PrintErrln("Note: the file does not exist yet; sind writes it when a cluster is created in this realm")
 	}
 	return nil
@@ -576,17 +538,7 @@ func formatHA(ha *cluster.HAStatus) string {
 }
 
 func formatState(status *cluster.Status) string {
-	var running, stopped, paused int
-	for _, n := range status.Nodes {
-		switch n.Health.State {
-		case cluster.StateRunning:
-			running++
-		case cluster.StatePaused:
-			paused++
-		default:
-			stopped++
-		}
-	}
+	running, stopped, paused := status.NodeCounts()
 	total := running + stopped + paused
 	return fmt.Sprintf("%s (%d/%d/%d/%d)", status.State, running, stopped, paused, total)
 }

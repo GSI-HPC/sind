@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/GSI-HPC/go-clikit/termtext"
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
-	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -92,46 +92,25 @@ func meshMgrFrom(ctx context.Context, client *docker.Client, realm string) *mesh
 	if m, ok := ctx.Value(meshMgrKey).(*mesh.Manager); ok {
 		return m
 	}
-	mgr := mesh.NewManager(client, realm)
-	mgr.Exec = &cmdexec.LoggingExecutor{
-		Inner: mgr.Exec,
-		Log: func(ctx context.Context, cmd string) {
-			sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "exec", "cmd", cmd)
-		},
-	}
-	mgr.HostDNS = true
-	return mgr
+	return mesh.NewHostManager(client, realm)
 }
 
-// resolveRealm determines the realm with the following precedence:
-//
-//	--realm flag > SIND_REALM env var > config file > mesh.DefaultRealm
-//
-// Only `create cluster` reads a config file; every other command resolves
-// --realm > SIND_REALM > mesh.DefaultRealm (realmFromFlag). Ranking
-// SIND_REALM above the config keeps them in step: a realm set in the
-// environment is the realm every later command looks in.
-//
-// The realm that wins must be a valid name (config.CheckName); a config
-// file's realm has already been checked by config.Validate.
+// resolveRealm determines the realm (cluster.ResolveRealm): --realm >
+// SIND_REALM > configRealm > mesh.DefaultRealm. Only `create cluster` has a
+// config file; every other command resolves with realmFromFlag. An invalid
+// --realm is a usage error.
 func resolveRealm(cmd *cobra.Command, configRealm string) (string, error) {
+	var flag *string
 	if cmd.Root().Flags().Changed("realm") {
 		r, _ := cmd.Root().Flags().GetString("realm")
-		if err := config.CheckName("realm", r); err != nil {
-			return "", cobratree.Usagef("--realm: %w", err)
-		}
-		return r, nil
+		flag = &r
 	}
-	if env := os.Getenv("SIND_REALM"); env != "" {
-		if err := config.CheckName("realm", env); err != nil {
-			return "", fmt.Errorf("SIND_REALM: %w", err)
-		}
-		return env, nil
+	realm, err := cluster.ResolveRealm(flag, configRealm)
+	var flagErr *cluster.RealmFlagError
+	if errors.As(err, &flagErr) {
+		return "", cobratree.Usage(err)
 	}
-	if configRealm != "" {
-		return configRealm, nil
-	}
-	return mesh.DefaultRealm, nil
+	return realm, err
 }
 
 // realmFromFlag resolves the realm when no config is available.

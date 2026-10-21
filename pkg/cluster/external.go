@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/GSI-HPC/sind/pkg/mesh"
 	"github.com/GSI-HPC/sind/pkg/state"
@@ -125,6 +126,12 @@ func missingContainer(ctx context.Context, client *docker.Client, names []docker
 // well (ConnectExternal). It fails
 // for a realm without mesh, and for a container that does not exist or is
 // sind's own.
+//
+// The attaching is the progress step "connecting", with a target for each
+// container, named by it and announced queued before the first runs; one
+// that joins every network already is skipped as "connected". The first
+// container that fails ends the step, and the targets not yet tried end
+// canceled with it.
 func Connect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, names ...docker.ContainerName) error {
 	networks, err := realmNetworks(ctx, client, meshMgr)
 	if err != nil {
@@ -137,22 +144,28 @@ func Connect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, 
 	if err != nil {
 		return err
 	}
-	for _, info := range infos {
+	return eachExternal(ctx, "connecting", "connected", infos, func(ctx context.Context, info *docker.ContainerInfo) (bool, error) {
+		changed := false
 		for _, net := range networks {
 			if _, ok := info.IPs[net]; ok {
 				continue
 			}
 			if err := client.ConnectNetwork(ctx, net, info.Name); err != nil {
-				return fmt.Errorf("connecting %s to %s: %w", info.Name, net, err)
+				return changed, fmt.Errorf("connecting %s to %s: %w", info.Name, net, err)
 			}
+			changed = true
 		}
-	}
-	return nil
+		return changed, nil
+	})
 }
 
 // Disconnect detaches containers outside sind from every network of the
 // realm they join. A container that joins none is left as it is. It fails
 // for a container that does not exist or is sind's own.
+//
+// The detaching is the progress step "disconnecting", reported as the step
+// of Connect is, with a container that joins no network skipped as "not
+// connected".
 func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, names ...docker.ContainerName) error {
 	networks, err := realmNetworks(ctx, client, meshMgr)
 	if err != nil {
@@ -162,16 +175,48 @@ func Disconnect(ctx context.Context, client *docker.Client, meshMgr *mesh.Manage
 	if err != nil {
 		return err
 	}
-	for _, info := range infos {
+	return eachExternal(ctx, "disconnecting", "not connected", infos, func(ctx context.Context, info *docker.ContainerInfo) (bool, error) {
+		changed := false
 		// The cluster networks first: the container leaves the mesh, and
 		// with it the realm's external containers, last.
 		for _, net := range slices.Backward(networks) {
 			if _, ok := info.IPs[net]; !ok {
 				continue
 			}
+			changed = true
 			if err := docker.IgnoreNotFound(client.DisconnectNetwork(ctx, net, info.Name)); err != nil {
-				return fmt.Errorf("disconnecting %s from %s: %w", info.Name, net, err)
+				return changed, fmt.Errorf("disconnecting %s from %s: %w", info.Name, net, err)
 			}
+		}
+		return changed, nil
+	})
+}
+
+// eachExternal applies work to the containers in turn as the progress step
+// step, with a target for each container, all announced before the first
+// runs. A container whose work changed nothing is skipped for reason. The
+// first failure ends the step with its error, and the targets not yet tried
+// end canceled with the step.
+func eachExternal(ctx context.Context, step, reason string, infos []*docker.ContainerInfo,
+	work func(ctx context.Context, info *docker.ContainerInfo) (changed bool, err error)) (err error) {
+	ctx, end := startStep(ctx, step, progress.WithFlags(progress.Fold), progress.Total(len(infos)))
+	defer func() { end(err) }()
+	names := make([]string, len(infos))
+	for i, info := range infos {
+		names[i] = string(info.Name)
+	}
+	ctxs, targets := startTargets(ctx, names, func(int) string { return "" })
+	for i, info := range infos {
+		targets[i].Run()
+		changed, err := work(ctxs[i], info)
+		switch {
+		case err != nil:
+			endSpan(ctx, targets[i], err)
+			return err
+		case changed:
+			targets[i].End(nil)
+		default:
+			targets[i].Skip(reason)
 		}
 	}
 	return nil

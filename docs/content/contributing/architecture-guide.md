@@ -11,7 +11,7 @@ toc: true
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
   ├── root.go      Root command, persistent --realm, --progress, --progress-log and -v flags, TraverseChildren, the strict tree (go-clikit's cobratree)
-  ├── context.go   Dependency injection via context
+  ├── context.go   Dependency injection via context; --realm flag glue for cluster.ResolveRealm
   ├── exitcode.go  Exit statuses, the words of flag value errors and the usage line of argument errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
   ├── lock.go      Realm lock for mutating commands (pkg/state): inLockedRealm, and updateSSHExport after the change
@@ -19,7 +19,7 @@ cmd/sind/          CLI commands (cobra)
   ├── nodeargs.go  Node argument parsing (go-nodeset expressions, cluster suffix)
   ├── sshexport.go SSH config export to ~/.local/state/sind/
   ├── output.go    -o/--output handling (human, json)
-  ├── progress.go  Progress of create, delete and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
+  ├── progress.go  Progress of create, delete, connect, disconnect and power: withProgress, the flags and variables handed to go-clikit's cliprogress, the streams under a display
   ├── mcp.go       MCP server setup (ophis): tool selection, JSON output, annotations, tool processes in a process group of their own
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── mcpeditor.go sind mcp <editor> enable/disable/list: register sind's MCP server with Claude Desktop, VS Code, Cursor
@@ -46,7 +46,7 @@ internal/testutil/ Shared test helpers
 
 pkg/cmdexec/       Command executor abstraction
   ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)
-  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show; WithProcessGroup: a cancel kills the command's process group
+  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as the layer count of docker pull reads them; WithProcessGroup: a cancel kills the command's process group
   ├── stream.go    Process, Start (long-lived commands with streamed stdout)
   ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)
@@ -57,6 +57,7 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
+  ├── pull.go      The layer count that PullImage reports from the status lines of docker pull
   ├── info.go      docker info (daemon version, cgroup version, security options, OS and kernel)
   ├── endpoint.go  Daemon endpoint the docker CLI uses (DOCKER_HOST, docker context)
   ├── plugin.go    Volume plugin queries (CVMFS)
@@ -65,13 +66,14 @@ pkg/docker/        Docker CLI wrapper
 pkg/cluster/       Cluster operations (orchestration)
   ├── create.go    Cluster creation flow
   ├── delete.go    Cluster deletion; DeleteAll's pool of clusters (fanout.Map)
-  ├── get.go       Listing clusters, nodes, networks, volumes
+  ├── get.go       Listing clusters, nodes (GetNode, GetAllNodes), networks, volumes; GetSSHConfig
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNoMonitoring), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
+  ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── api.go       slurmrestd setup steps of the api node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)
@@ -98,7 +100,7 @@ pkg/cluster/       Cluster operations (orchestration)
 
 pkg/config/        YAML configuration parsing and validation
 pkg/doctor/        Host prerequisite checks (Docker version, where the daemon runs, cgroupv2 and the
-                   nsdelegate probe, inotify)
+                   nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
@@ -109,7 +111,7 @@ pkg/slurm/         Slurm and slurmdbd config generation, sind-nodes.conf editing
                    discovery, munge key, slurm.key and jwt_hs256.key generation, sacctmgr
                    account commands
 pkg/ssh/           SSH key injection, host key collection, ssh_config export
-pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock network on the daemon) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold
+pkg/state/         sind's state directory and the realm lock (flock, and the <realm>-lock network on the daemon) that library callers of Create/Delete/WorkerAdd/WorkerRemove hold; Holder reads who holds it
 ```
 
 ## Dependency flow
@@ -122,6 +124,9 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                                      → pkg/log
                        → pkg/doctor  → pkg/docker
                                      → pkg/cmdexec
+                                     → pkg/config
+                                     → pkg/log
+                                     → pkg/mesh
                        → pkg/log
                        → pkg/mesh    → pkg/docker
                                      → pkg/cmdexec
@@ -156,7 +161,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
 
 `cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks (`doctor.Run`) directly from `cmd/sind` (no cluster orchestration; `cmd/sind/doctor.go` only prints the result); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
 The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
 
@@ -242,7 +247,7 @@ Work that takes a while reports what it does as progress spans of [go-clikit](ht
 - Announce every target of a counted step queued (`progress.Queued()`) before the first of them runs, then mark each running (`span.Run()`) when its work starts: a pool that starts each target in its own goroutine as it takes its place breaks the counts a display draws, and `progresstest.Check` fails it.
 - `pkg/cluster/progress.go` has the helpers of the pools written by hand: `startStep` starts a step, `startTargets` and `nodeTargets` announce its targets, and `endSpan` ends a span canceled (`stopped`) when a sibling's failure or an interrupt stopped its work, rather than failed with `signal: killed`.
 - A pool that tries every item and keeps going after a failure runs on go-clikit's `fanout.Map`, which announces its targets as `Check` requires, bounds them with `Limit`, and turns a panic in one item into that item's error (`sind panicked; this is a bug, please report it: ...`) with its stack in the Bus's panic log, or without a Bus where `cluster.WithPanicLog` says (`withStderr` sets the command's stderr). The power commands and `DeleteAll` pass `joinFailures` as its `Summarize`, which joins each item's error worded as before, so the error text and `errors.Is` do not change.
-- `cmd/sind` alone decides how the spans are shown: `withProgress` (`progress.go`) runs the command in a span of its own and makes the Bus through go-clikit's `cliprogress` package, with the display `--progress` asks for and the event log `--progress-log` names (which `cliprogress` opens privately), and tears them down before `run` prints the error line.
+- `cmd/sind` alone decides how the spans are shown: `withProgress` (`progress.go`) runs the command in a span of its own and makes the Bus through go-clikit's `cliprogress` package, with the display `--progress` asks for and the event log `--progress-log` names (which `cliprogress` opens privately) or, when neither it nor `SIND_PROGRESS_LOG` is given, the activity log of `pkg/state` (`PrepareActivityLog`: `$XDG_STATE_HOME/sind/activity.jsonl`, rotated above 8 MiB, left out silently when it cannot be used), and tears them down before `run` prints the error line.
 - `pkg/` never writes to stdout or stderr: a display owns the bottom rows of the terminal, and only the writers `cmd/sind` hands out, cobra's streams, `stderrFrom(ctx)` and the logger, go above it.
 
 ### Resource naming

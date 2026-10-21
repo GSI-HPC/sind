@@ -621,6 +621,28 @@ func TestTheEventLogOfACommand(t *testing.T) {
 	assert.Greater(t, len(readJSONLines(t, file)), len(lines))
 }
 
+// connect container and disconnect container report their progress, as the
+// commands that create, delete and power do: their span is the command in
+// the event log.
+func TestConnectAndDisconnectWriteAnEventLog(t *testing.T) {
+	for _, verb := range []string{"connect", "disconnect"} {
+		t.Run(verb, func(t *testing.T) {
+			onTerminals(t, nil)
+			file := filepath.Join(t.TempDir(), "events.jsonl")
+
+			code := run(powerCutFails(t.Context(), t, nil),
+				[]string{"--progress", "none", "--progress-log", file, verb, "container", "kind-worker"}, io.Discard)
+
+			assert.Equal(t, exitFailure, code)
+			lines := readJSONLines(t, file)
+			require.GreaterOrEqual(t, len(lines), 3)
+			assert.Equal(t, verb+" container", lines[1]["name"])
+			assert.Equal(t, "command", lines[1]["kind"])
+			assert.Equal(t, "failed", lines[len(lines)-1]["status"])
+		})
+	}
+}
+
 func readJSONLines(t *testing.T, file string) []map[string]any {
 	t.Helper()
 	f, err := os.Open(file)
@@ -683,8 +705,9 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 }
 
 // The MCP tools take neither progress flag, and a server's tool calls show
-// no progress and write no event log whatever SIND_PROGRESS and
-// SIND_PROGRESS_LOG the server inherited.
+// no progress and name no event log whatever SIND_PROGRESS and
+// SIND_PROGRESS_LOG the server inherited. With the variable unset, they
+// write the default activity log like any command.
 func TestMCPTools_NoProgress(t *testing.T) {
 	t.Setenv(envProgress, "plain")
 	t.Setenv(envProgressLog, "/dev/stderr")
@@ -706,7 +729,7 @@ func TestMCPTools_NoProgress(t *testing.T) {
 	server.SetArgs(nil)
 	require.NoError(t, server.Execute())
 	assert.Equal(t, cliprogress.ModeNone.String(), got)
-	assert.False(t, logSet, "the tool calls inherit no event log")
+	assert.False(t, logSet, "the tool calls inherit no event log, and so write the default one")
 }
 
 // Under a display, what the command writes goes through the terminal: the

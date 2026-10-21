@@ -7,8 +7,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
@@ -68,7 +70,14 @@ func (m *Executor) AddResult(stdout, stderr string, err error) {
 	m.results = append(m.results, Result{Stdout: stdout, Stderr: stderr, Err: err})
 }
 
-func (m *Executor) record(name string, args []string, stdin string) (string, string, error) {
+func (m *Executor) record(ctx context.Context, name string, args []string, stdin string) (string, string, error) {
+	stdout, stderr, err := m.dispatch(name, args, stdin)
+	parseLines(ctx, stdout, stderr)
+	return stdout, stderr, err
+}
+
+// dispatch records the call and returns its result.
+func (m *Executor) dispatch(name string, args []string, stdin string) (string, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -87,18 +96,44 @@ func (m *Executor) record(name string, args []string, stdin string) (string, str
 	return r.Stdout, r.Stderr, cmdexec.WrapExitError(r.Err, r.Stderr)
 }
 
+// parseLines hands the lines of a result to the line parser ctx carries
+// (cmdexec.WithLineParser), as OSExecutor does while the command runs: the
+// lines of standard output, unless ctx says it is data, then those of
+// standard error, each without its line break; a last line without one is
+// left out.
+func parseLines(ctx context.Context, stdout, stderr string) {
+	parse := cmdexec.LineParser(ctx)
+	if parse == nil {
+		return
+	}
+	feed := func(st progress.Stream, text string) {
+		for {
+			line, rest, ended := strings.Cut(text, "\n")
+			if !ended {
+				return
+			}
+			parse(st, strings.TrimSuffix(line, "\r"))
+			text = rest
+		}
+	}
+	if !cmdexec.StdoutIsData(ctx) {
+		feed(progress.Stdout, stdout)
+	}
+	feed(progress.Stderr, stderr)
+}
+
 // Run implements cmdexec.Executor.
-func (m *Executor) Run(_ context.Context, name string, args ...string) (string, string, error) {
-	return m.record(name, args, "")
+func (m *Executor) Run(ctx context.Context, name string, args ...string) (string, string, error) {
+	return m.record(ctx, name, args, "")
 }
 
 // RunWithStdin implements cmdexec.Executor.
-func (m *Executor) RunWithStdin(_ context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
+func (m *Executor) RunWithStdin(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	data, err := io.ReadAll(stdin)
 	if err != nil {
 		return "", "", fmt.Errorf("mock: reading stdin: %w", err)
 	}
-	return m.record(name, args, string(data))
+	return m.record(ctx, name, args, string(data))
 }
 
 // Pipes manages io.Pipe pairs for mock streaming. Each OnStart call

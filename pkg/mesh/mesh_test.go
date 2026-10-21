@@ -7,12 +7,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/netip"
 	"strings"
 	"testing"
 
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/stretchr/testify/assert"
@@ -1573,4 +1575,20 @@ func extractTarFile(t *testing.T, tarData, name string) string {
 			return string(data)
 		}
 	}
+}
+
+func TestNewHostManager(t *testing.T) {
+	m := NewHostManager(nil, "ci-42")
+
+	assert.Equal(t, "ci-42", m.Realm)
+	assert.True(t, m.HostDNS)
+	le, ok := m.Exec.(*cmdexec.LoggingExecutor)
+	require.True(t, ok)
+	assert.IsType(t, &cmdexec.OSExecutor{}, le.Inner)
+
+	// The logger reaches the context's logger at trace level.
+	var buf strings.Builder
+	ctx := sindlog.With(t.Context(), slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: sindlog.LevelTrace})))
+	le.Log(ctx, "docker ps")
+	assert.Contains(t, buf.String(), "docker ps")
 }

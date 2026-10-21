@@ -1,11 +1,11 @@
 ---
 weight: 355
 title: "Progress Display"
-description: "What create, delete and power show while they run, and the event log"
+description: "What create, delete, connect, disconnect and power show while they run, and the event log"
 toc: true
 ---
 
-`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `connect container`, `disconnect container`, `doctor`, `version`, `mcp`, `completion`) never do.
+`sind create cluster`, `create worker`, `delete cluster` (also `--all`), `delete realm`, `delete worker`, `connect container`, `disconnect container` and the `power` commands show their progress on standard error while they run. The other commands (`get`, `ssh`, `enter`, `exec`, `logs`, `doctor`, `version`, `mcp`, `completion`) never do.
 
 By default sind shows it only on a terminal. Where standard error is not a terminal, in a pipe, a file or a CI log, these commands print nothing on success, as they did before, and their standard error holds exactly what it did: errors, `Warning:` lines and the `-v` logs.
 
@@ -46,7 +46,7 @@ The tree draws with ASCII marks (`+`, `x`, `~`, `>`), and [plain lines](#plain-l
 | Step | Targets | What it does |
 |------|---------|--------------|
 | `mesh` | `network`, `dns`, `volume`, `relay` | sets up the realm's [mesh]({{< relref "/architecture/networking" >}}); a part in place is skipped, and the rows of `dns` and `relay` show the last line of the pull of their image. A mesh in place leaves no line |
-| `pull images` | one per image | pulls the images the daemon does not have, or every image with `--pull`; each row shows the last line `docker pull` wrote. No step when nothing is pulled |
+| `pull images` | one per image | pulls the images the daemon does not have, or every image with `--pull`; each row shows the last line `docker pull` wrote and, in the event log, how many of the image's layers are done out of those docker has told of so far (see [Image pulls](#image-pulls)). No step when nothing is pulled |
 | `preflight` | | beside the pull: checks that no resource of the cluster exists yet and that its nodes fit, creates the cluster network and volumes, reads the Slurm version and checks `nsdelegate` |
 | `nodes` | one per node | creates and starts each node, waits until it is `ready` and sets it up (`setup`) |
 | `mesh registration` | | adds the nodes' DNS records and `known_hosts` entries |
@@ -126,7 +126,22 @@ $ sind power reboot 'worker-[0-23]'
 ✓ starting  2.2s  24 ok
 ```
 
-`sind delete cluster --all` shows the step `clusters`, with a target for each cluster. `sind delete cluster` and `sind delete worker` show no steps, only the docker commands that take a second or longer.
+`sind delete cluster` shows these steps, each only when there is something for it to do:
+
+| Step | Targets | What it does |
+|------|---------|--------------|
+| `mesh deregistration` | | when other clusters keep the realm's mesh: removes the nodes' DNS records and `known_hosts` entries, starting the mesh first if it is stopped. A failure is a warning, not a failure of the step |
+| `nodes` | one per node | stops and removes each node's container |
+| `network` | | detaches the containers that joined the cluster network, those of the mesh and outside sind, and removes it |
+| `volumes` | one per volume | removes the cluster's volumes |
+| `monitoring` | | on a monitored cluster: syncs the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}) and removes the nodes' journals |
+| `monitoring stack`, `mesh`, `monitoring volumes` | | with the realm's last cluster: remove the monitoring stack's containers, the mesh and the stack's volumes. The two of the stack show only when they take long or fail |
+
+`sind delete worker` shows `slurm` (takes the workers out of `sind-nodes.conf` and reconfigures slurmctld, on a managed cluster) and `mesh deregistration` at the same time, then `nodes`, with a target for each worker, and on a monitored cluster `monitoring`. A node that cannot be removed fails its target, and the other nodes are removed still.
+
+`sind connect container` shows the step `connecting`, and `sind disconnect container` the step `disconnecting`, each with a target for each container, named as you name it: the containers are attached or detached one after another, and one that is on every network of the realm already, or on none, is skipped, as `skipped: connected` or `skipped: not connected`. The first container that fails ends the step, and those not yet tried are canceled.
+
+`sind delete cluster --all` and `sind delete realm` show the step `clusters`, with a target for each cluster; what each cluster's removal does shows as `nodes`, `network` and `volumes` steps below its target, without targets of their own. `mesh deregistration` follows, for the clusters that were deleted when another one failed to be, then `monitoring stack`, `mesh` and `monitoring volumes` for the realm.
 
 ## Choosing the display
 
@@ -181,20 +196,33 @@ $ sind create cluster --config dev.yaml --progress plain 2>&1 | tee create.log
 
 The waits `ready` say how much of the `--wait` limit they have left. The parts of a path are joined by `›` when `LC_ALL`, `LC_CTYPE` or `LANG` names a UTF-8 locale, and by `>` otherwise (`[0:12] create cluster > pull images: start, 2 targets`), as the tree then draws ASCII marks. On a terminal, each line also takes a mark after the time, in the colours of the tree; in a pipe or a file, as above, it is plain text.
 
+## Image pulls
+
+sind runs `docker pull` without a terminal, and there docker writes no byte counts, only a line for each change of a layer: `Pulling fs layer`, `Download complete`, `Pull complete`, `Already exists`. So a pull is counted in layers, not in bytes: the target of an image reports the layers that are done (`Pull complete` or `Already exists`) out of the layers docker has told of so far, which grows while the pull goes on, as work in `items`. A display can draw it as a count or a bar, and the event log holds it as `amount`, `size` and `unit` on the target (`advance` events, at most one a second), never the text of a line. A pull that finds the image there and so writes no layer is one item, done. Lines that sind does not know are ignored. Only `pull images` counts layers: the pulls that the `docker create` of the mesh's containers makes show their last line alone.
+
 ## Event log
 
-`--progress-log FILE`, or `SIND_PROGRESS_LOG` when the flag is not given, appends the progress events of the command to FILE, one JSON object per line, in go-clikit's [event log format](https://github.com/GSI-HPC/go-clikit/blob/v0.4.0/doc/event-log.md), version 1: what started and ended when, under which step or target, and how it ended and why, with each docker command by its subcommand alone and its exit code. It holds neither the command line nor the environment of the command, and of what the programs sind runs write, only what an error quotes; the `realm lock` wait names the command that holds the lock, its command line and host, as the `Warning:` line does. It works with every `--progress` mode, `none` included, and writes nothing on standard error.
+Every command that reports progress appends its events to a log. `--progress-log FILE`, or `SIND_PROGRESS_LOG` when the flag is not given, names the file; without either, sind writes the [activity log](#the-activity-log) in its state directory. The log holds, one JSON object per line, the progress events of the command, in go-clikit's [event log format](https://github.com/GSI-HPC/go-clikit/blob/v0.4.0/doc/event-log.md), version 1: what started and ended when, under which step or target, and how it ended and why, with each docker command by its subcommand alone and its exit code. It holds neither the command line nor the environment of the command, and of what the programs sind runs write, only what an error quotes; the `realm lock` wait names the command that holds the lock, its command line and host, as the `Warning:` line does. It works with every `--progress` mode, `none` included, and writes nothing on standard error.
 
 - sind creates the file readable and writable by you alone (mode `0600`) and appends to it, so the commands of a CI job can share one log; each command's lines carry a `run` of their own.
 - An existing file must be yours, have no other name (no hard link to it) and be readable or writable by nobody else: sind refuses one that is not, and for one that others can read or write says `run chmod 600 FILE`. A symbolic link on the way to it, and a named pipe, must be yours or root's: sind follows no link put at the file's name after it looked, and refuses another user's named pipe at once instead of waiting for someone to read it. `/dev/stderr`, `/dev/stdout` and `/dev/fd/N` are written to where that stream goes; on the terminal the tree is drawn on, the lines go above the tree, as the `-v` logs do.
 - A file named by `--progress-log` that sind cannot use is a usage error, before the command does anything. One named by `SIND_PROGRESS_LOG` is not: sind says why in one line and runs without a log. `--progress-log ""` writes no log, whatever the variable says.
 - A log that cannot be written while the command runs, such as on a full disk, does not fail the command: sind says once that the log stops short.
-- Only `create`, `delete` and `power` open the file; other commands leave it alone.
+- Only `create`, `delete`, `connect`, `disconnect` and `power` open the file; other commands leave it alone.
+
+### The activity log
+
+Without `--progress-log` and `SIND_PROGRESS_LOG`, sind appends the events to `activity.jsonl` in its state directory, `$XDG_STATE_HOME/sind/` or `~/.local/state/sind/`, so that a tool that watches the state directory sees what every sind command did, whichever way it was started. It is the same log as above, in the same format, and it changes nothing on standard output and standard error.
+
+- sind creates the directory for you alone (mode `0700`) and the file readable and writable by you alone (mode `0600`). The same rules for an existing file hold: it must be yours, have no other name and be readable and writable by nobody else.
+- Before a command appends, sind moves a log larger than 8 MiB to `activity.jsonl.1`, replacing the copy that was there, so the two files together stay under about 16 MiB. Commands that run at once rotate it once.
+- A log that sind cannot use, such as one in a read-only home directory, is left out without a word, and never fails the command; the debug log (`-vv`) says why.
+- `--progress-log ""`, or `SIND_PROGRESS_LOG=` with an empty value, turns it off; a file named by either replaces it.
 
 When sind is started with a W3C trace context in `TRACEPARENT` (and `TRACESTATE`), the log continues that trace. While sind shows progress or writes a log, it removes both variables from the environment of the programs it runs, such as docker; otherwise they inherit them.
 
 ## Scripts, CI and MCP
 
-Where standard error is not a terminal, nothing changes unless you ask: no tree, no summary, no event log. [sind-action](https://github.com/GSI-HPC/sind-action) and scripts that read sind's standard error see what they did before. `--progress plain` adds lines to a CI log, and `--progress-log` keeps the events as a job artifact; see [CI/CD]({{< relref "/guides/ci-cd#progress-in-ci-logs" >}}).
+Where standard error is not a terminal, nothing changes unless you ask: no tree and no summary. [sind-action](https://github.com/GSI-HPC/sind-action) and scripts that read sind's standard error see what they did before; the [activity log](#the-activity-log) is the only addition, and it is a file. `--progress plain` adds lines to a CI log, and `--progress-log` keeps the events as a job artifact; see [CI/CD]({{< relref "/guides/ci-cd#progress-in-ci-logs" >}}).
 
-The [MCP server]({{< relref "/guides/mcp" >}}) never shows progress: its tools take neither flag, and it runs its tool calls with `SIND_PROGRESS=none` and without `SIND_PROGRESS_LOG`, whatever its own environment says.
+The [MCP server]({{< relref "/guides/mcp" >}}) never shows progress: its tools take neither flag, and it runs its tool calls with `SIND_PROGRESS=none` and without `SIND_PROGRESS_LOG`, whatever its own environment says, so a tool call that reports progress writes the [activity log](#the-activity-log) and nothing on its standard error.

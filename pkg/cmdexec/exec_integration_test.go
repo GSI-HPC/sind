@@ -7,7 +7,9 @@ package cmdexec_test
 import (
 	"context"
 	"os/exec"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/GSI-HPC/go-clikit/progress"
@@ -125,4 +127,39 @@ func TestOSExecutor_WithStdin(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello from stdin", stdout)
 	assert.Empty(t, stderr)
+}
+
+// A line parser is handed the lines of both streams as they end, without
+// their line breaks, with no span to show them under; the output is kept as
+// without one. Standard output that is data is not parsed.
+func TestOSExecutor_ParsesLines(t *testing.T) {
+	var e cmdexec.OSExecutor
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+		want []string
+	}{
+		{"both", t.Context(), []string{"stderr err", "stdout out"}},
+		{"data", cmdexec.WithStdoutAsData(t.Context()), []string{"stderr err"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var lines []string
+			ctx := cmdexec.WithLineParser(tc.ctx, func(st progress.Stream, line string) {
+				mu.Lock()
+				defer mu.Unlock()
+				lines = append(lines, st.String()+" "+line)
+			})
+
+			stdout, stderr, err := e.Run(ctx, "sh", "-c", "printf 'out\\r\\nlast'; echo err >&2")
+
+			require.NoError(t, err)
+			assert.Equal(t, "out\r\nlast", stdout)
+			assert.Equal(t, "err\n", stderr)
+			mu.Lock()
+			defer mu.Unlock()
+			slices.Sort(lines)
+			assert.Equal(t, tc.want, lines)
+		})
+	}
 }

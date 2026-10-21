@@ -468,3 +468,19 @@ func nodeServices(role config.Role, labels docker.Labels) []probe.Service {
 	}
 	return services
 }
+
+// NodeCounts returns how many of the cluster's nodes are running, stopped
+// and paused; every state but running and paused counts as stopped.
+func (s *Status) NodeCounts() (running, stopped, paused int) {
+	for _, n := range s.Nodes {
+		switch n.Health.State {
+		case StateRunning:
+			running++
+		case StatePaused:
+			paused++
+		default:
+			stopped++
+		}
+	}
+	return running, stopped, paused
+}

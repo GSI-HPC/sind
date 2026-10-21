@@ -22,6 +22,7 @@ import (
 
 	"github.com/GSI-HPC/sind/pkg/cluster"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
+	"github.com/GSI-HPC/sind/pkg/state"
 )
 
 // progressModes returns the words --progress takes, for its help.
@@ -80,7 +81,8 @@ var (
 
 // withProgress returns run, the function of a command that changes
 // clusters and asks nothing, decorated to report the command's progress:
-// create cluster, create worker, delete cluster, delete worker and power.
+// create cluster, create worker, delete cluster, delete worker, connect
+// container, disconnect container and power.
 // The command runs in a progress span of its own, the root of what it
 // reports, named by its path below the root ("create cluster").
 //
@@ -101,7 +103,7 @@ func withProgress(run func(*cobra.Command, []string) error) func(*cobra.Command,
 	return func(cmd *cobra.Command, args []string) (err error) {
 		interrupt := cmd.Context()
 		returned := false
-		p, startErr := startRun(interrupt, progressOptions(interrupt, cmd))
+		p, startErr := startRun(interrupt, withActivityLog(interrupt, progressOptions(interrupt, cmd)))
 		if startErr != nil {
 			return cobratree.Usage(startErr)
 		}
@@ -263,6 +265,51 @@ func throughDisplay(cmd *cobra.Command, p *cliprogress.Run) (context.Context, fu
 		}
 		top.SetErr(stderr)
 	}
+}
+
+// activityLogName is what the notes of cliprogress call the default
+// activity log, in place of a variable.
+const activityLogName = "the default activity log"
+
+// withActivityLog returns o with the default activity log as its event log
+// when neither --progress-log nor SIND_PROGRESS_LOG names one: the file
+// $XDG_STATE_HOME/sind/activity.jsonl (state.PrepareActivityLog), which a
+// display of what sind did, such as sind ui, reads. A flag or a variable
+// that is given, even empty, wins, and an empty one writes no log.
+//
+// The log is a convenience and changes nothing a command writes: a log that
+// cannot be prepared, as in a read-only home, is left out, and one that
+// cannot be opened or written once the command runs says nothing either,
+// where a log named by the flag or the variable would (the notes of
+// cliprogress that name the path are dropped, the others written as before).
+func withActivityLog(ctx context.Context, o cliprogress.Options) cliprogress.Options {
+	if _, set := os.LookupEnv(envProgressLog); o.Log.Given || set {
+		return o
+	}
+	path, err := state.PrepareActivityLog()
+	if err != nil {
+		sindlog.From(ctx).DebugContext(ctx, "not writing the activity log", "error", err)
+		return o
+	}
+	o.Log.Env, o.Log.Variable = path, activityLogName
+	o.Notes = dropNotesAbout{w: o.Stderr, path: path}
+	return o
+}
+
+// dropNotesAbout is the writer of the notes of cliprogress while the
+// activity log is written: it drops those that name the log's path, "the
+// progress log ... stops short", and the one that says it cannot be used,
+// which name it as the default activity log, and passes the others on.
+type dropNotesAbout struct {
+	w    io.Writer
+	path string
+}
+
+func (d dropNotesAbout) Write(p []byte) (int, error) {
+	if text := string(p); strings.Contains(text, d.path) || strings.Contains(text, activityLogName) {
+		return len(p), nil
+	}
+	return d.w.Write(p)
 }
 
 // checkProgressFlag rejects a --progress that cliprogress.Choose refuses

@@ -3,12 +3,14 @@
 package cluster
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -27,6 +29,8 @@ type externalFake struct {
 	networks   []string
 	containers map[string]externalContainer
 	fail       map[string]mock.Result
+	// onConnect, when set, is called as a docker network connect starts.
+	onConnect func()
 }
 
 type externalContainer struct {
@@ -53,6 +57,9 @@ func newExternalFake(t *testing.T) (*externalFake, *docker.Client, *mock.Executo
 
 func (f *externalFake) onCall(args []string, _ string) mock.Result {
 	joined := strings.Join(args, " ")
+	if f.onConnect != nil && strings.HasPrefix(joined, "network connect") {
+		f.onConnect()
+	}
 	for prefix, r := range f.fail {
 		if strings.HasPrefix(joined, prefix) {
 			return r
@@ -323,4 +330,79 @@ func callsWithPrefix(m *mock.Executor, prefix string) []string {
 		}
 	}
 	return out
+}
+
+// Connecting is the step "connecting", with a target for each container
+// announced queued before the first runs; one that joins the mesh and every
+// cluster network already is skipped, as the step "disconnecting" skips one
+// that joins none.
+func TestConnectAndDisconnect_ReportTheContainers(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.containers["kind-control-plane"] = externalContainer{networks: []string{"kind"}}
+	f.containers["kind-worker"] = externalContainer{networks: []string{"sind-mesh", "sind-dev-net", "sind-ci-net"}}
+	meshMgr := mesh.NewManager(c, "sind")
+	names := []docker.ContainerName{"kind-control-plane", "kind-worker"}
+
+	ctx, w := progresstest.Watch(t.Context(), t)
+	require.NoError(t, Connect(ctx, c, meshMgr, names...))
+	w.Finish()
+	assert.Equal(t, `step connecting total=2 [fold]: ok
+  target kind-control-plane: ok
+  target kind-worker: skipped: connected
+`, testutil.WithoutCalls(w.Events()))
+
+	ctx, w = progresstest.Watch(t.Context(), t)
+	f.containers["kind-worker"] = externalContainer{networks: []string{"kind"}}
+	require.NoError(t, Disconnect(ctx, c, meshMgr, names...))
+	w.Finish()
+	assert.Equal(t, `step disconnecting total=2 [fold]: ok
+  target kind-control-plane: ok
+  target kind-worker: skipped: not connected
+`, testutil.WithoutCalls(w.Events()))
+}
+
+// The first container that fails ends the step with its error; the
+// targets of the containers not tried end canceled with it, and the one
+// that failed fails.
+func TestConnectAndDisconnect_ReportAFailure(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.containers["kind-control-plane"] = externalContainer{networks: []string{"kind", "sind-mesh"}}
+	f.containers["kind-worker"] = externalContainer{networks: []string{"kind", "sind-mesh"}}
+	f.fail["network connect"] = mock.Result{Err: fmt.Errorf("daemon unreachable")}
+	f.fail["network disconnect"] = mock.Result{Err: fmt.Errorf("daemon unreachable")}
+	meshMgr := mesh.NewManager(c, "sind")
+	names := []docker.ContainerName{"kind-control-plane", "kind-worker"}
+
+	ctx, w := progresstest.Watch(t.Context(), t)
+	require.Error(t, Connect(ctx, c, meshMgr, names...))
+	w.Finish()
+	assert.Equal(t, `step connecting total=2 [fold]: failed (target): connecting kind-control-plane to sind-ci-net: daemon unreachable
+  target kind-control-plane: failed (target): connecting {} to sind-ci-net: daemon unreachable
+  target kind-worker: canceled (canceled): not finished
+`, testutil.WithoutCalls(w.Events()))
+
+	ctx, w = progresstest.Watch(t.Context(), t)
+	require.Error(t, Disconnect(ctx, c, meshMgr, names...))
+	w.Finish()
+	assert.Equal(t, `step disconnecting total=2 [fold]: failed (target): disconnecting kind-control-plane from sind-mesh: daemon unreachable
+  target kind-control-plane: failed (target): disconnecting {} from sind-mesh: daemon unreachable
+  target kind-worker: canceled (canceled): not finished
+`, testutil.WithoutCalls(w.Events()))
+}
+
+// A container whose work the end of the context stopped ends canceled, as
+// the other steps' targets do.
+func TestConnect_Interrupted(t *testing.T) {
+	f, c, _ := newExternalFake(t)
+	f.containers["kind-control-plane"] = externalContainer{networks: []string{"kind"}}
+	ctx, w := progresstest.Watch(t.Context(), t)
+	ctx, cancel := context.WithCancel(ctx)
+	f.fail["network connect"] = mock.Result{Err: fmt.Errorf("signal: killed")}
+	f.onConnect = cancel
+
+	require.Error(t, Connect(ctx, c, mesh.NewManager(c, "sind"), "kind-control-plane"))
+	w.Finish()
+	assert.Equal(t, `step connecting total=1 [fold]: canceled (canceled): connecting kind-control-plane to sind-mesh: signal: killed
+  target kind-control-plane: canceled (canceled): connecting {} to sind-mesh: signal: killed
+`, testutil.WithoutCalls(w.Events()))
 }
