@@ -87,7 +87,7 @@ sind get clusters
 
 ```
 NAME      NODES (S/C/D/A/W)   SLURM     STATUS
-default   5 (1/1/0/1/2)       26.05.4   running
+default   5 (1/1/0/1/2)       26.05.5   running
 dev       4 (0/1/1/0/2)       25.11.8   running
 ```
 

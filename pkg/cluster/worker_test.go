@@ -1122,7 +1122,7 @@ func TestWorkerAdd_ExplicitImageVersionMismatch(t *testing.T) {
 	base := workerAddOnCall(t)
 	onCall := func(args []string, stdin string) mock.Result {
 		if args[0] == "run" {
-			return mock.Result{Stdout: "slurm 26.05.4\n"}
+			return mock.Result{Stdout: "slurm 26.05.5\n"}
 		}
 		return base(args, stdin)
 	}
@@ -1131,7 +1131,7 @@ func TestWorkerAdd_ExplicitImageVersionMismatch(t *testing.T) {
 		ClusterName: "dev", Count: 1, Image: "ghcr.io/gsi-hpc/sind-node:latest", Pull: true,
 	})
 
-	require.EqualError(t, err, `image ghcr.io/gsi-hpc/sind-node:latest has Slurm 26.05.4, but cluster "dev" runs Slurm 25.11.0: managed workers need the cluster's version`)
+	require.EqualError(t, err, `image ghcr.io/gsi-hpc/sind-node:latest has Slurm 26.05.5, but cluster "dev" runs Slurm 25.11.0: managed workers need the cluster's version`)
 	assert.Zero(t, countCalls(m.Calls, "create"))
 }
 
