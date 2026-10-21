@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -698,6 +699,79 @@ func TestProcessAlive(t *testing.T) {
 func TestCommandLine(t *testing.T) {
 	assert.Empty(t, commandLine(nil))
 	assert.Equal(t, "sind create cluster dev", commandLine([]string{"/usr/local/bin/sind", "create", "cluster", "dev"}))
+}
+
+// Holder reads who holds the realm's lock on the daemon: nobody before the
+// lock is taken and after it is released, and the process that took it
+// between, with the command it recorded.
+func TestHolder(t *testing.T) {
+	t.Parallel()
+	c, rec := testutil.NewClient(t)
+	rec.SetOnCall(newFakeDaemon(t).onCall)
+	realm := testutil.Realm("it-holder")
+	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), LockNetworkName(realm)) })
+
+	h, err := Holder(t.Context(), c, realm)
+	require.NoError(t, err)
+	assert.Nil(t, h)
+
+	unlock, err := LockRealm(t.Context(), realm, &LockOptions{Dir: t.TempDir(), Client: c, Command: "sind create cluster dev"})
+	require.NoError(t, err)
+	h, err = Holder(t.Context(), c, realm)
+	require.NoError(t, err)
+	require.NotNil(t, h)
+	host, _ := os.Hostname()
+	assert.Equal(t, "sind create cluster dev", h.Command)
+	assert.Equal(t, host, h.Host)
+	assert.Equal(t, os.Getpid(), h.PID)
+	assert.False(t, h.Since.IsZero())
+
+	unlock()
+	h, err = Holder(t.Context(), c, realm)
+	require.NoError(t, err)
+	assert.Nil(t, h)
+}
+
+// Holder reads the lock of the realm it is asked for, from the labels of
+// its network, and fails with docker's error when it cannot inspect it. A
+// network of the lock's name that sind did not make is a holder that is
+// unknown.
+func TestHolder_Inspect(t *testing.T) {
+	created := time.Date(2026, 10, 4, 10, 2, 3, 0, time.UTC)
+	inspect := func(labels string) string {
+		return `{"Id":"net-id","Name":"ci-42-lock","Created":"` + created.Format(time.RFC3339Nano) + `","ConfigOnly":true,"Labels":` + labels + `}`
+	}
+	for _, tc := range []struct {
+		name   string
+		result mock.Result
+		want   *LockHolder
+		errMsg string
+	}{
+		{"held", mock.Result{Stdout: inspect(`{"sind.lock.token":"t","sind.lock.command":"sind delete cluster","sind.lock.host":"box","sind.lock.pid":"7"}`)},
+			&LockHolder{Command: "sind delete cluster", Host: "box", PID: 7, Since: created, id: "net-id", token: "t"}, ""},
+		{"not a sind lock", mock.Result{Stdout: inspect(`null`)},
+			&LockHolder{Since: created, id: "net-id"}, ""},
+		{"not held", mock.Result{Stderr: testutil.NoSuchNetwork("ci-42-lock"), Err: testutil.ExitCode1(t)}, nil, ""},
+		{"daemon unreachable", mock.Result{Err: errors.New("cannot connect")}, nil, "inspecting ci-42-lock: cannot connect"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var inspected []string
+			c := docker.NewClient(&mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+				inspected = args
+				return tc.result
+			}})
+
+			h, err := Holder(t.Context(), c, "ci-42")
+
+			if tc.errMsg != "" {
+				require.EqualError(t, err, tc.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.want, h)
+			assert.Equal(t, []string{"network", "inspect", "ci-42-lock", "--format", "{{json .}}"}, inspected)
+		})
+	}
 }
 
 func TestLockNetworkName(t *testing.T) {
