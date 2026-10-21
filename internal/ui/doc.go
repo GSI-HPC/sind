@@ -49,6 +49,17 @@
 //     and a Run, which runs until the context ends. Every external command
 //     goes through Env.Exec.
 //
+// A service can also learn what the open pages need. Env.AddWatcher, called
+// from Setup, adds a Watcher: each /events stream calls it with the exact
+// topics its fragments depend on (Fragment.Topics and what Fragment.Watch
+// returns for the stream's Params) when it opens, and calls the function it
+// returns when it ends. The collectors count the status topics this way and
+// read the status of a cluster only while a page shows it. The collect
+// service also puts two plain funcs in Env for other parts: ColRefreshKey
+// (func(realm string), read that realm again now) and ColDoctorKey (func(),
+// run the host checks again). A part that finds neither (nil) works without
+// them.
+//
 // Styles and scripts need no registration: web/static/css/*.css and
 // web/static/js/*.js are linked from the layout, in name order, after app.css
 // and app.js, with content-hashed URLs. No inline script or style works: the

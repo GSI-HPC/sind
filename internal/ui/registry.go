@@ -183,6 +183,46 @@ type Env struct {
 	Addr string
 
 	values sync.Map
+
+	watchMu  sync.Mutex
+	watchers []Watcher
+}
+
+// A Watcher is told which topics a live stream (/events) watches: when the
+// stream opens it is called with the topics of the stream's fragments, and
+// the function it returns is called when the stream ends. A collector uses
+// it to read only what an open page shows, such as the status of a cluster
+// whose page is open. The topics are the exact ones of the fragments
+// (Fragment.Topics) and those their Watch functions return for the
+// stream's Params; a fragment that depends on a prefix names none. The
+// function may be called concurrently and must not block.
+type Watcher func(topics []store.Topic) (release func())
+
+// AddWatcher adds a Watcher. Call it from Service.Setup, which runs before
+// the server is built.
+func (e *Env) AddWatcher(w Watcher) {
+	e.watchMu.Lock()
+	defer e.watchMu.Unlock()
+	e.watchers = append(e.watchers, w)
+}
+
+// watch tells every Watcher that a stream watches topics, and returns the
+// function that tells them it has ended.
+func (e *Env) watch(topics []store.Topic) (release func()) {
+	e.watchMu.Lock()
+	ws := slices.Clone(e.watchers)
+	e.watchMu.Unlock()
+	releases := make([]func(), 0, len(ws))
+	for _, w := range ws {
+		if r := w(slices.Clone(topics)); r != nil {
+			releases = append(releases, r)
+		}
+	}
+	return func() {
+		for _, r := range releases {
+			r()
+		}
+	}
 }
 
 // Put keeps value under key, for a route or another service to Get. The

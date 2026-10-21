@@ -42,6 +42,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+	defer s.env.watch(fragmentTopics(frags, v.Params))()
 	sent := map[string][sha256.Size]byte{}
 	for _, f := range frags {
 		html, err := s.renderFragment(f, v)
@@ -109,6 +110,26 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		clear(pending)
 		flusher.Flush()
 	}
+}
+
+// fragmentTopics returns the exact topics that frags depend on for the
+// Params p, each once, in the order the fragments name them.
+func fragmentTopics(frags []Fragment, p Params) []store.Topic {
+	var out []store.Topic
+	add := func(ts ...store.Topic) {
+		for _, t := range ts {
+			if !slices.Contains(out, t) {
+				out = append(out, t)
+			}
+		}
+	}
+	for _, f := range frags {
+		add(f.Topics...)
+		if f.Watch != nil {
+			add(f.Watch(p)...)
+		}
+	}
+	return out
 }
 
 // eventsRequest checks the query of /events and returns the fragments it
