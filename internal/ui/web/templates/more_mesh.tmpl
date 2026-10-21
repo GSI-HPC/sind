@@ -1,0 +1,52 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-more-mesh is the Mesh and DNS page. */}}
+{{define "page-more-mesh"}}
+<div class="head"><div class="t"><h1>Mesh and DNS</h1>
+  <div class="sub"><span>What the clusters of a realm share: one network, one DNS server and one SSH relay.</span></div></div></div>
+<div class="stack" id="more-mesh" sse-swap="more-mesh">{{fragment "more-mesh" .}}</div>
+{{end}}
+
+{{/* more-mesh is the live body of the page; .Data is moreMeshData. */}}
+{{define "more-mesh"}}{{with .Data}}
+{{template "more-dockerdown" .DockerErr}}
+{{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{range .Realms}}
+<div class="stack more-realm">
+  <div class="more-rhead">
+    {{if $.Data.Multi}}<h2>Realm <b class="mono">{{.Name}}</b></h2>{{end}}
+    <span class="grow"></span>
+    <div class="actions">
+      <a class="btn" href="{{.ConnectURL}}" hx-get="{{.ConnectURL}}" hx-target="#layer" hx-swap="innerHTML">Connect a container…</a>
+      <a class="btn danger" href="{{.DeleteURL}}" hx-get="{{.DeleteURL}}" hx-target="#layer" hx-swap="innerHTML">Delete realm…</a>
+    </div>
+  </div>
+  {{if .Err}}<div class="callout bad">The mesh of realm {{.Name}} could not be read: {{.Err}}</div>{{end}}
+  {{if .Has}}
+  <div class="grid g3">
+    <section class="panel"><div class="ph"><h2>Mesh</h2><span class="grow"></span><span class="pill {{if .Err}}bad{{else}}ok{{end}}">{{if .Err}}error{{else}}ok{{end}}</span></div>
+      <div class="pb"><dl class="kv"><dt>network</dt><dd class="mono">{{.Info.Network}}</dd>{{if .Subnet}}<dt>subnet</dt><dd class="mono">{{.Subnet}}</dd>{{end}}</dl></div></section>
+    <section class="panel"><div class="ph"><h2>DNS</h2><span class="grow"></span><span class="chip">{{len .Records}} records</span></div>
+      <div class="pb"><dl class="kv"><dt>container</dt><dd class="mono">{{.Info.DNSContainer}}</dd><dt>address</dt><dd class="mono">{{.Info.DNSIP}}</dd><dt>zone</dt><dd class="mono">{{.Info.DNSZone}}</dd><dt>image</dt><dd class="mono faint">{{.Info.DNSImage}}</dd></dl></div></section>
+    <section class="panel"><div class="ph"><h2>SSH relay</h2></div>
+      <div class="pb"><dl class="kv"><dt>container</dt><dd class="mono">{{.Info.SSHContainer}}</dd><dt>volume</dt><dd class="mono">{{.Info.SSHVolume}}</dd><dt>image</dt><dd class="mono faint">{{.Info.SSHImage}}</dd></dl></div></section>
+  </div>
+  {{else if not .Err}}
+  <section class="panel"><div class="empty">Realm {{.Name}} has no mesh. sind creates it with the first cluster.</div></section>
+  {{end}}
+  <div class="grid g2">
+    <section class="panel"><div class="ph"><h2>DNS records</h2><span class="grow"></span><span class="faint num">{{len .Records}}</span></div>
+      {{if .Records}}<div class="tw more-scroll"><table><thead><tr><th>Name</th><th>Address</th></tr></thead><tbody>
+      {{range .Records}}<tr><td class="mono">{{.Hostname}}</td><td class="mono">{{.IP}}</td></tr>
+      {{end}}</tbody></table></div>
+      {{else}}<div class="empty">No DNS records yet. Each node adds its name when it starts.</div>{{end}}</section>
+    <section class="panel"><div class="ph"><h2>Other containers</h2><span class="grow"></span><span class="faint">connected with sind connect container</span></div>
+      {{if .External}}<div class="tw"><table><tbody>
+      {{range .External}}<tr><td class="mono"><b>{{.Name}}</b></td><td><span class="pill ok">connected</span></td>
+        <td class="act"><a class="btn sm" href="{{.DisconnectURL}}" hx-get="{{.DisconnectURL}}" hx-target="#layer" hx-swap="innerHTML">Disconnect…</a></td></tr>
+      {{end}}</tbody></table></div>
+      {{else}}<div class="empty">No other containers. Connect one, such as a kind node, to reach the clusters by name.</div>{{end}}</section>
+  </div>
+</div>
+{{end}}
+{{end}}{{end}}

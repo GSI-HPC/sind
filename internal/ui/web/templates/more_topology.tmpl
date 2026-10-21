@@ -1,0 +1,31 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-more-topology is the Topology page. */}}
+{{define "page-more-topology"}}
+<div class="head"><div class="t"><h1>Topology</h1>
+  <div class="sub"><span>From this host through the mesh of a realm to each cluster network and node. sind publishes no ports: the host reaches the nodes by their addresses.</span></div></div></div>
+<div class="stack" id="more-topology" sse-swap="more-topology">{{fragment "more-topology" .}}</div>
+{{end}}
+
+{{/* more-topology is the live body of the page; .Data is moreTopoData. */}}
+{{define "more-topology"}}{{with .Data}}
+{{template "more-dockerdown" .DockerErr}}
+{{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{range .Topologies}}
+<section class="panel more-figure">
+  <div class="ph"><h2>Realm <b class="mono">{{.Realm}}</b></h2><span class="grow"></span>
+    <span class="more-legend faint">
+      <span><svg width="26" height="8" aria-hidden="true"><path class="e mesh" d="M0 4h26"/></svg> mesh</span>
+      <span><svg width="26" height="8" aria-hidden="true"><path class="e net" d="M0 4h26"/></svg> cluster network</span>
+      <span><svg width="26" height="10" aria-hidden="true"><rect class="off" x="1" y="1" width="24" height="8" rx="2"/></svg> not running</span>
+    </span></div>
+  <div class="pb more-topo"><svg viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-label="{{.Label}}">
+    {{if .HasMesh}}<rect class="band" x="{{.BandX}}" y="{{.BandY}}" width="{{.BandW}}" height="{{.BandH}}" rx="10"/>{{end}}
+    {{range .Heads}}<text class="colh" x="{{.X}}" y="24">{{.Label}}</text>
+    {{end}}{{range .Edges}}<path class="e {{.Class}}" d="{{.D}}"/>
+    {{end}}{{range .Boxes}}<g class="n{{with .Class}} {{.}}{{end}}">{{if .Href}}<a href="{{.Href}}">{{end}}<title>{{.Full}}</title><rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="6"/><text x="{{.TextX}}" y="{{.TextY}}">{{.Label}}</text>{{if .Sub}}<text class="s" x="{{.TextX}}" y="{{.SubY}}">{{.Sub}}</text>{{end}}{{if .Href}}</a>{{end}}</g>
+    {{end}}</svg></div>
+</section>
+{{end}}
+{{if .Empty}}<section class="panel"><div class="empty">Nothing to draw for {{range $i, $r := .Empty}}{{if $i}}, {{end}}<span class="mono">{{$r}}</span>{{end}} yet: it has no mesh and no cluster.</div></section>{{end}}
+{{end}}{{end}}

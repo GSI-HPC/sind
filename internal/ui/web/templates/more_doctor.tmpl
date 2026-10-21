@@ -1,0 +1,39 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-more-doctor is the Doctor page. */}}
+{{define "page-more-doctor"}}
+<div class="head"><div class="t"><h1>Doctor</h1>
+  <div class="sub"><span>sind doctor on this host: what sind needs from Docker and the kernel, and how to fix what fails.</span></div></div></div>
+<div class="stack" id="more-doctor" sse-swap="more-doctor">{{fragment "more-doctor" .}}</div>
+{{end}}
+
+{{/* more-doctor is the live body of the page; .Data is moreDoctorData. */}}
+{{define "more-doctor"}}{{with .Data}}
+{{if .DockerErr}}<div class="callout bad"><b>Docker is not reachable:</b> {{.DockerErr}}. The checks that need Docker cannot pass until it is.</div>{{end}}
+<section class="panel">
+  <div class="ph">
+    <h2>Host checks</h2>
+    {{if .Running}}<span class="pill run">checking</span>
+    {{else if not .HasReport}}<span class="pill nodot">not run yet</span>
+    {{else if .Failures}}<span class="pill bad">{{.Failures}} failed</span>{{if .Warnings}}<span class="pill warn">{{.Warnings}} {{if eq .Warnings 1}}warning{{else}}warnings{{end}}</span>{{end}}
+    {{else if .Warnings}}<span class="pill warn">{{.Warnings}} {{if eq .Warnings 1}}warning{{else}}warnings{{end}}</span>
+    {{else}}<span class="pill ok">all passed</span>{{end}}
+    {{if .Ago}}<span class="faint">checked {{.Ago}}</span>{{end}}
+    <span class="grow"></span>
+    {{if .CanRecheck}}<form method="post" action="/doctor/check" hx-post="/doctor/check" hx-target="#more-doctor" hx-swap="innerHTML" hx-disabled-elt="find button">
+      {{template "csrf-field" $}}<button type="submit" class="btn"{{if .Running}} disabled{{end}}>Check again</button></form>{{end}}
+  </div>
+  {{range .Checks}}<div class="more-check">
+    <span class="more-mark {{.Class}}" aria-hidden="true">{{.Mark}}</span>
+    <div class="more-cbody">
+      <div><b>{{.Name}}</b> <span class="pill{{with .Class}} {{.}}{{end}} nodot">{{.Status}}</span></div>
+      {{if .Detail}}<div class="muted">{{.Detail}}</div>{{end}}
+      {{if .Remediation}}<div class="more-fix"><p class="cmdlabel">Fix</p>
+        <div class="cmd"><code class="nop">{{.Remediation}}</code><button type="button" data-more-copy>Copy</button></div></div>{{end}}
+    </div>
+  </div>
+  {{else}}<div class="empty">{{if .Running}}The first check is running.{{else}}No check has run yet.{{if .CanRecheck}} Press Check again to run them.{{end}}{{end}}</div>
+  {{end}}
+</section>
+<p class="muted">A warning does not stop sind. A failed check stops create and power on.</p>
+{{end}}{{end}}
