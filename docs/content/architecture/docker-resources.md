@@ -36,7 +36,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | Type | Name pattern | Example | Image |
 |------|-------------|---------|-------|
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
-| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.14.7` |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.15.0` |
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys written once, through the SSH container before it first starts) |
 

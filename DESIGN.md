@@ -1365,7 +1365,7 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 | Type | Name Pattern | Example | Image |
 |------|-------------|---------|-------|
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
-| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.14.7` |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.15.0` |
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys copied in through `<realm>-ssh` before it first starts) |
 
