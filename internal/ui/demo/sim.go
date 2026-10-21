@@ -85,8 +85,10 @@ func (l logSink) Write(b []byte) (int, error) {
 // plan is a command to play.
 type plan struct {
 	title string
-	realm string
-	work  func(ctx context.Context, p play) error
+	// target is what the command works on, as sind names it.
+	target string
+	realm  string
+	work   func(ctx context.Context, p play) error
 	// done is what a command that succeeded leaves besides its nodes.
 	done func()
 }
@@ -142,7 +144,7 @@ func (s *Sim) Start(spec run.Spec) (string, error) {
 func (s *Sim) exec(ctx context.Context, t store.Task, tc progress.TraceContext, id string, p plan) {
 	log := progress.NewLog(logSink{s}, progress.LogOptions{Program: "sind", Version: version, Run: id, AdvanceEvery: 250 * time.Millisecond})
 	bus := progress.NewBus(progress.BusOptions{Sinks: []progress.Sink{log}, Now: s.clk.Now, Trace: tc, Program: "sind"})
-	ctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, p.title)
+	ctx, command := progress.Start(progress.WithBus(ctx, bus), progress.KindCommand, p.title, targetOf(p.target)...)
 	pl := play{clk: s.clk, emit: s.emitter(p.realm, nil)}
 	err := s.locked(ctx, pl, p.realm, t.Display, func() error { return p.work(ctx, pl) })
 	if err == nil && p.done != nil {
@@ -310,9 +312,11 @@ func (s *Sim) plan(argv []string) (plan, error) {
 	case "create cluster":
 		return s.planCreateCluster(p, args)
 	case "create worker":
-		p.work = s.planCreateWorker(realm, clusterWord(words), args)
+		p.target = clusterWord(words)
+		p.work = s.planCreateWorker(realm, p.target, args)
 	case "delete cluster":
-		p.work = s.planDeleteCluster(realm, clusterWord(words))
+		p.target = clusterWord(words)
+		p.work = s.planDeleteCluster(realm, p.target)
 	case "delete realm":
 		p.work = s.planDeleteRealm(realm)
 	case "delete worker":
@@ -342,6 +346,7 @@ func (s *Sim) planCreateCluster(p plan, args []string) (plan, error) {
 		return plan{}, fmt.Errorf("config %s: %w", path, err)
 	}
 	cfg.ApplyDefaults()
+	p.target = cfg.Name
 	if cfg.Realm != "" {
 		p.realm = cfg.Realm
 	}

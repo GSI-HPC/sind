@@ -90,7 +90,7 @@ func TestSim_CreateCluster(t *testing.T) {
 	r, ok := sn.RunOfTrace(task.Trace)
 	require.True(t, ok, "the task finds its run by the trace")
 	assert.Equal(t, store.StatusOK, r.Status)
-	assert.Equal(t, "create cluster", r.Title)
+	assert.Equal(t, "create cluster nightly", r.Title, "sind names the cluster in the command span")
 	assert.Equal(t, []string{"pull images", "preflight", "nodes", "mesh registration", "slurm"}, stepsOf(r))
 	assert.Equal(t, map[string]cluster.State{
 		"controller": cluster.StateRunning, "controller-backup": cluster.StateRunning,
