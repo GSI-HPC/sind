@@ -98,7 +98,7 @@ pkg/cluster/       Cluster operations (orchestration)
 
 pkg/config/        YAML configuration parsing and validation
 pkg/doctor/        Host prerequisite checks (Docker version, where the daemon runs, cgroupv2 and the
-                   nsdelegate probe, inotify)
+                   nsdelegate probe, inotify, DNS policy); `doctor.Run` assembles and runs them
 pkg/log/           Context-based structured logging (slog)
 pkg/mesh/          Global infrastructure (mesh network, DNS records, SSH relay and keypair, host DNS)
 pkg/monitor/       Event-driven Docker and systemd watchers for readiness
@@ -122,6 +122,9 @@ cmd/sind → pkg/cluster → pkg/cmdexec
                                      → pkg/log
                        → pkg/doctor  → pkg/docker
                                      → pkg/cmdexec
+                                     → pkg/config
+                                     → pkg/log
+                                     → pkg/mesh
                        → pkg/log
                        → pkg/mesh    → pkg/docker
                                      → pkg/cmdexec
@@ -156,7 +159,7 @@ cmd/sind → pkg/cluster → pkg/cmdexec
 
 `cmd/sind` also imports `pkg/cmdexec`, `pkg/config`, `pkg/docker`, `pkg/log`, `pkg/mesh`, `pkg/probe` and `pkg/ssh` directly.
 
-The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks directly from `cmd/sind` (no cluster orchestration); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
+The `pkg/cmdexec` package provides the executor abstraction at the bottom of the stack. `pkg/docker` wraps Docker CLI commands and `pkg/mesh` uses a separate executor for system commands (resolvectl, systemctl). The `pkg/cluster` package orchestrates everything. `pkg/doctor` runs host prerequisite checks (`doctor.Run`) directly from `cmd/sind` (no cluster orchestration; `cmd/sind/doctor.go` only prints the result); `pkg/cluster` uses its nsdelegate probe in the create preflight. `pkg/monitor` streams Docker and systemd events for event-driven readiness. The `internal/mock` and `internal/testutil` packages are test-only and not part of the production dependency graph. `cmd/sind` escapes the final error line, `get` table cells and `doctor` details with the `termtext` package of [go-clikit](https://github.com/GSI-HPC/go-clikit), and takes from its `cobratree` package the strict command tree (`cobratree.Strict`: a group refuses an unknown subcommand, `help` an unknown topic), the usage errors that exit 2 (`cobratree.Usage`, `cobratree.IsUsage`) and the build info `sind version` falls back to (`cobratree.ReadBuildInfo`). It parses node arguments (`worker-[0-3]!worker-2`) with [go-nodeset](https://github.com/GSI-HPC/go-nodeset) in `nodeargs.go`.
 
 The packages that report progress, `pkg/cluster`, `pkg/cmdexec`, `pkg/docker`, `pkg/mesh` and `pkg/probe`, import go-clikit's `progress` package, and `pkg/cluster` its `fanout` package for the pools of the power commands and `DeleteAll`; only `cmd/sind` imports `progress/display`, which shows the spans (see [Progress spans](#progress-spans)).
 
