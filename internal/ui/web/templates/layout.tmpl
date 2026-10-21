@@ -1,0 +1,46 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* layout is the shell of every page: top bar, rail, content, task dock. The
+content is the block that .Content names; the rail and the dock are
+fragments. The slots in the top bar are blocks of their own files, which the
+parts that fill them replace as a whole. */}}
+
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true,"historyCacheSize":0}'>
+<meta name="csrf-token" content="{{.CSRF}}">
+<title>{{if .Title}}{{.Title}} · {{end}}sind ui</title>
+<link rel="icon" type="image/svg+xml" href="{{call .Asset "icon.svg"}}">
+<link rel="stylesheet" href="{{call .Asset "app.css"}}">
+{{range .Styles}}<link rel="stylesheet" href="{{.}}">
+{{end}}<script src="{{call .Asset "app.js"}}"></script>
+<script src="{{call .Asset "htmx.min.js"}}" defer></script>
+<script src="{{call .Asset "htmx-ext-sse.js"}}" defer></script>
+{{range .Scripts}}<script src="{{.}}" defer></script>
+{{end}}</head>
+<body>
+<div class="app"{{if .Events}} hx-ext="sse" sse-connect="{{.Events}}"{{end}}>
+  <header class="top">
+    <a class="brand" href="/"><img src="{{call .Asset "icon.svg"}}" alt="" width="24" height="24">sind <small>ui</small></a>
+    {{template "slot-jump" .}}
+    <div class="spacer"></div>
+    {{template "slot-realm" .}}
+    {{if .Events}}<span class="live" id="live" title="Live: changes show as they happen"><i></i><span>live</span></span>{{end}}
+    <span class="hostchip"><i></i>{{.Addr}}</span>
+    {{template "slot-help" .}}
+    <button type="button" class="iconbtn" data-theme-toggle aria-label="Light or dark" title="Light or dark">◐</button>
+  </header>
+  <nav class="rail" id="rail" aria-label="Pages" sse-swap="rail">{{fragment "rail" .}}</nav>
+  <main class="main" id="main">{{include .Content .}}</main>
+  <div class="tasks" id="tasks" aria-live="polite" sse-swap="tasks">{{fragment "tasks" .}}</div>
+</div>
+<div id="layer"></div>
+</body>
+</html>
+{{end}}
+
+{{/* csrf-field is the hidden field of a form that a browser sends without script. */}}
+{{define "csrf-field"}}<input type="hidden" name="csrf" value="{{.CSRF}}">{{end}}
