@@ -1,0 +1,125 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/*
+  Dialogs of the actions. A page opens one with
+  <button hx-get="/dialogs/ID?realm=R&cluster=C" hx-target="#layer">: the
+  answer is "act-dialog", which fills the layer of the layout. The form asks
+  /actions/ID/preview for the command as it changes, and runs it with
+  /actions/ID/run. A dialog shows the command it runs; it never sends one.
+  The views are the *View of the request; the dialog or the preview is its
+  Data.
+*/}}
+
+{{define "act-dialog"}}{{template "act-frame" .Data}}{{end}}
+
+{{define "act-dialog-page"}}{{template "act-frame" .Data}}{{end}}
+
+{{define "act-frame"}}
+<div class="scrim" id="act-dialog" data-act-scrim>
+<form class="modal{{if .Spec.Wide}} wide{{end}}" autocomplete="off" role="dialog" aria-modal="true" aria-label="{{.Title}}"
+  hx-post="/actions/{{.ID}}/run" hx-target="#act-preview" hx-swap="innerHTML">
+  {{template "csrf-field" .View}}
+  <input type="hidden" name="realm" value="{{.Realm}}">{{if .Cluster}}<input type="hidden" name="cluster" value="{{.Cluster}}">{{end}}
+  <div class="mh"><div class="mtop"><h2>{{.Title}}</h2><button type="button" class="iconbtn" data-help-open="{{.ID}}" aria-label="Help for this dialog" title="Help for this dialog">?</button></div>
+    <p>{{.Lead}}</p></div>
+  <div class="mb">
+    {{include .Body .}}
+    {{with .Typed}}<div class="fld"><label for="act-confirm">Type <b class="mono">{{.}}</b> to confirm</label><input type="text" id="act-confirm" name="confirm" autocomplete="off" spellcheck="false"></div>{{end}}
+    <div id="act-preview" class="stack" hx-post="/actions/{{.ID}}/preview" hx-target="this" hx-swap="innerHTML"
+      hx-trigger="load, input from:closest form delay:150ms, change from:closest form"></div>
+  </div>
+  <div class="mf"><button type="button" class="btn" data-act-close>Cancel</button><button type="submit" class="btn {{if .Spec.Danger}}danger solid{{else}}primary{{end}}" id="act-ok" disabled>{{.Spec.OK}}</button></div>
+</form>
+</div>
+{{end}}
+
+{{/* act-preview is the answer to a preview: the command, what to know about
+it, and the button and the panels of the dialog that depend on it. */}}
+{{define "act-preview"}}{{with .Data}}
+{{if .Shown}}<input type="hidden" name="shown" value="{{.Shown}}">{{end}}
+{{if .Err}}<div class="callout bad">{{.Err}}</div>{{else}}
+<div><div class="cmdlabel">Runs</div><div class="cmd"><code>{{.Cmd.Display}}</code><button type="button" data-copy="{{.Cmd.Display}}">Copy</button></div></div>
+{{end}}
+{{if .Warn}}<div class="callout warn">{{.Warn}}</div>{{end}}
+{{if and .Lock (not .Err)}}<div class="callout warn">Another command holds the lock of realm <b class="mono">{{.Realm}}</b>: <span class="mono">{{.Lock.String}}</span>. The command waits until it ends; its run page shows the realm lock wait.</div>{{end}}
+{{range .Cmd.Notes}}<div class="callout">{{.}}</div>{{end}}
+{{range .Cmd.Warns}}<div class="callout warn">{{.}}</div>{{end}}
+<button type="submit" class="btn {{if .Danger}}danger solid{{else}}primary{{end}}" id="act-ok" hx-swap-oob="true"{{if .Blocked}} disabled{{end}}>{{.Spec.OK}}</button>
+{{if .Tiles}}
+<div class="preview-map" id="act-map" hx-swap-oob="innerHTML">{{range .Cmd.Nodes}}<i class="nm {{.Role}}" title="{{.Short}}"></i>{{end}}<span class="mono faint act-count">{{len .Cmd.Nodes}} nodes</span></div>
+<p class="hint act-sum" id="act-sum" hx-swap-oob="innerHTML">{{.Cmd.Summary}}</p>
+<span class="faint act-path" id="act-path" hx-swap-oob="innerHTML">{{.Cmd.Config.Path}}</span>
+<pre class="term act-yaml" id="act-yaml" hx-swap-oob="innerHTML">{{.Cmd.Config.Content}}</pre>
+{{end}}
+{{end}}{{end}}
+
+{{/* act-nodes is the picker of the nodes of a cluster. */}}
+{{define "act-nodes"}}<div class="fld"><span class="lbl">Nodes of {{.Cluster}}</span>
+  {{if .Nodes}}<div class="checks act-nodes">{{range .Nodes}}<label><input type="checkbox" name="nodes" value="{{.Short}}"{{if .On}} checked{{end}}> <span class="mono">{{.Short}}</span> <small>{{.Role}}, {{.State}}</small></label>{{end}}</div>
+  {{else}}<div class="empty">sind ui sees no node of {{.Cluster}} yet.</div>{{end}}</div>{{end}}
+
+{{define "act-dlg-create-cluster"}}
+<div class="row">
+  <div class="fld"><label for="act-name">Name</label><input type="text" id="act-name" name="name" value="{{.Val "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="hint">Lowercase letters, digits and dashes.</span></div>
+  <div class="fld"><label for="act-image">Image</label><input type="text" id="act-image" name="image" value="{{.Val "image"}}" autocapitalize="off" spellcheck="false"><span class="hint">Its Slurm release is the cluster's.</span></div>
+  <div class="fld"><label for="act-wait">Wait for ready</label><select id="act-wait" name="wait">{{range .Waits}}<option value="{{.Value}}"{{if $.Is "wait" .Value}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
+</div>
+<div><h3>Nodes</h3><div class="roles">
+  {{range .Counters}}<div class="role{{if .Required}} req{{end}}"><b>{{.Label}}</b><div class="ctl"><button type="button" data-act-step="{{.Name}}" data-d="-1" aria-label="Fewer {{.Label}}">−</button><span>{{.Value}}</span><button type="button" data-act-step="{{.Name}}" data-d="1" aria-label="More {{.Label}}">+</button><input type="hidden" name="{{.Name}}" value="{{.Value}}" min="{{.Min}}" max="{{.Max}}"></div><span class="hint">{{.Hint}}</span></div>{{end}}
+</div></div>
+<div class="row">
+  <div class="fld"><label for="act-cpus">CPUs per node</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" min="1" max="64"></div>
+  <div class="fld"><label for="act-memory">Memory per node</label><select id="act-memory" name="memory">{{range .Memories}}<option{{if $.Is "memory" .}} selected{{end}}>{{.}}</option>{{end}}</select></div>
+  <div class="fld"><label for="act-users">Users</label><input type="text" id="act-users" name="users" value="{{.Val "users"}}" placeholder="none" autocapitalize="off" spellcheck="false"><span class="hint">sind creates them on every node, with a home.</span></div>
+</div>
+<div class="row">
+  <div class="fld"><span class="lbl">Data at /data</span><div class="checks">
+    <label><input type="radio" name="dtype" value="hostPath"{{if ne (.Val "dtype") "volume"}} checked{{end}}> A directory on this host</label>
+    <label><input type="radio" name="dtype" value="volume"{{if eq (.Val "dtype") "volume"}} checked{{end}}> A Docker volume</label></div></div>
+  <div class="fld"><label for="act-dir">Directory</label><input type="text" id="act-dir" name="dir" value="{{.Val "dir"}}" autocapitalize="off" spellcheck="false"><span class="hint">Jobs write here as root.</span></div>
+</div>
+<div class="checks">
+  <label><input type="checkbox" name="monitoring"{{if .Val "monitoring"}} checked{{end}}> <span>Monitoring <small>Adds the nodes to the realm's Prometheus, Loki and Grafana. Slurm 26.05 only.</small></span></label>
+  <label><input type="checkbox" name="pull"{{if .Val "pull"}} checked{{end}}> <span>Pull the image again <small>--pull: get the newest image, also if the daemon has one.</small></span></label>
+</div>
+<div class="grid act-plan">
+  <div><h3>Nodes it makes</h3><div class="preview-map" id="act-map"></div><p class="hint" id="act-sum"></p></div>
+  <div><h3>Config <span class="faint act-path" id="act-path"></span></h3><pre class="term act-yaml" id="act-yaml"></pre></div>
+</div>
+{{end}}
+
+{{define "act-dlg-create-worker"}}
+<div class="row">
+  <div class="fld"><label for="act-count">How many</label><input type="number" id="act-count" name="count" value="{{.Val "count"}}" min="1" max="64"></div>
+  <div class="fld"><label for="act-cpus">CPUs</label><input type="number" id="act-cpus" name="cpus" value="{{.Val "cpus"}}" placeholder="as the newest worker" min="1" max="64"></div>
+  <div class="fld"><label for="act-memory">Memory</label><input type="text" id="act-memory" name="memory" value="{{.Val "memory"}}" placeholder="as the newest worker" autocapitalize="off" spellcheck="false"><span class="hint">Such as 1g or 512m.</span></div>
+</div>
+{{end}}
+
+{{define "act-dlg-delete-cluster"}}
+<div class="callout bad">This cannot be undone. Jobs, accounting and the Slurm state of {{.Cluster}} go with it. A host directory mounted as /data stays as it is; a data volume goes too.</div>
+{{end}}
+
+{{define "act-dlg-delete-worker"}}
+{{template "act-nodes" .}}
+<div class="callout bad">Jobs on these workers fail. This cannot be undone; add workers again to get new ones.</div>
+{{end}}
+
+{{define "act-dlg-power"}}
+{{template "act-nodes" .}}
+<div class="fld"><span class="lbl">What to do</span><div class="checks">
+  {{range .Ops}}<label><input type="radio" name="op" value="{{.ID}}"{{if $.Is "op" .ID}} checked{{end}}> <span>{{.Label}} <small>{{.Text}}</small></span></label>{{end}}
+</div></div>
+{{end}}
+
+{{define "act-dlg-connect"}}
+<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false"><span class="hint">The name of a running container that no realm has yet.</span></div>
+{{end}}
+
+{{define "act-dlg-disconnect"}}
+<div class="fld"><label for="act-container">Container</label><input type="text" id="act-container" name="container" value="{{.Val "container"}}" placeholder="kind-control-plane" autocapitalize="off" spellcheck="false"><span class="hint">The name of a container that is connected to realm {{.Realm}}.</span></div>
+{{end}}
+
+{{define "act-dlg-delete-realm"}}
+<div class="callout bad">This cannot be undone.</div>
+{{end}}

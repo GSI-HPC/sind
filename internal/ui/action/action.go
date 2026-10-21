@@ -1,0 +1,268 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+// Package action turns the forms of sind ui's dialogs into the sind commands
+// they run.
+//
+// Each Action's Build is the only place that makes a command's argument
+// vector. The dialog shows the command's Display, and the runner executes
+// its Argv, so the command shown is the command run. A browser sends field
+// values, never a command line, and Build checks every one of them against
+// the rules of sind and the current snapshot.
+package action
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net/url"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"unicode"
+
+	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/mesh"
+)
+
+// Form holds the fields of a dialog as the browser posted them.
+type Form = url.Values
+
+// Command is what an action runs.
+type Command struct {
+	// Argv is the command line, run as it is with no shell. Argv[0] is
+	// "sind".
+	Argv []string
+	// Display is Argv quoted for a POSIX shell: what the dialog shows and
+	// Copy copies.
+	Display string
+	// Notes say what the user should know before running the command;
+	// Warns are those to read with care.
+	Notes []string
+	Warns []string
+	// Config is a file that the command reads and that sind ui saves
+	// first, if the action has one.
+	Config *File
+	// Nodes are the nodes the command will make, for the preview.
+	Nodes []PlannedNode
+	// Summary is a line about Nodes.
+	Summary string
+}
+
+// File is a file that sind ui saves before it runs a command, readable by
+// its owner alone.
+type File struct {
+	Path    string
+	Content string
+}
+
+// PlannedNode is a node that a command will make.
+type PlannedNode struct {
+	Short string
+	Role  string
+}
+
+// NewCommand returns the command with the arguments argv.
+func NewCommand(argv ...string) Command {
+	return Command{Argv: argv, Display: Quote(argv)}
+}
+
+// Fingerprint identifies what the command does: its command line and the
+// file it saves. The dialog sends it back with the run, so that a command
+// that changed since the preview is not run unseen.
+func (c Command) Fingerprint() string {
+	h := sha256.New()
+	h.Write([]byte(c.Display))
+	if c.Config != nil {
+		h.Write([]byte{0})
+		h.Write([]byte(c.Config.Path))
+		h.Write([]byte{0})
+		h.Write([]byte(c.Config.Content))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Quote writes argv as a command line for a POSIX shell.
+func Quote(argv []string) string {
+	words := make([]string, len(argv))
+	for i, a := range argv {
+		words[i] = quoteWord(a)
+	}
+	return strings.Join(words, " ")
+}
+
+func quoteWord(s string) string {
+	if s != "" && !strings.ContainsFunc(s, func(r rune) bool {
+		return r > unicode.MaxASCII || (!unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_@%+=:,./-", r))
+	}) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// Context is what Build knows besides the form.
+type Context struct {
+	// Snap is what sind ui shows, which Build checks the form against.
+	Snap store.Snapshot
+	// Home is the user's home directory, which "~" in a path stands for.
+	Home string
+	// ConfigDir is where sind ui saves the configs of the clusters it
+	// creates.
+	ConfigDir string
+}
+
+// Action is a change that a dialog makes by running one command.
+type Action struct {
+	// ID names the action in URLs and templates.
+	ID string
+	// Build checks the form and makes the command. Its error is shown to
+	// the user, so it says what to change.
+	Build func(f Form, c Context) (Command, error)
+	// Typed returns what the user must type to confirm the command, or
+	// "" if none. The server checks it, whatever the browser did.
+	Typed func(f Form) string
+	// Cluster returns the cluster the command works on, or "".
+	Cluster func(f Form) string
+}
+
+// ConfirmField is the field that holds the typed confirmation.
+const ConfirmField = "confirm"
+
+// Want returns what the user must type to confirm the command, or "".
+func (a Action) Want(f Form) string {
+	if a.Typed == nil {
+		return ""
+	}
+	return a.Typed(f)
+}
+
+// Confirmed reports whether the form holds the confirmation that a requires,
+// if it requires one.
+func (a Action) Confirmed(f Form) bool {
+	want := a.Want(f)
+	return want == "" || strings.TrimSpace(f.Get(ConfirmField)) == want
+}
+
+// Target returns the realm and the cluster that the command of the form
+// works on; the cluster is empty for none.
+func (a Action) Target(f Form) (realm, cluster string) {
+	realm = Realm(f)
+	if a.Cluster != nil {
+		cluster = a.Cluster(f)
+	}
+	return realm, cluster
+}
+
+// Realm returns the realm of the form, the default realm when it names none.
+func Realm(f Form) string {
+	if r := strings.TrimSpace(f.Get("realm")); r != "" {
+		return r
+	}
+	return mesh.DefaultRealm
+}
+
+// Lookup returns the action with the ID id.
+func Lookup(id string) (Action, bool) {
+	a, ok := registry[id]
+	return a, ok
+}
+
+// IDs returns the IDs of all actions, in order.
+func IDs() []string {
+	ids := make([]string, 0, len(registry))
+	for id := range registry {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+var registry = map[string]Action{}
+
+// register adds the actions to the registry.
+func register(as ...Action) {
+	for _, a := range as {
+		if _, dup := registry[a.ID]; dup {
+			panic("action " + a.ID + " registered twice")
+		}
+		registry[a.ID] = a
+	}
+}
+
+// formCluster is the Cluster of actions whose field "cluster" names it.
+func formCluster(f Form) string { return strings.TrimSpace(f.Get("cluster")) }
+
+// sindArgv starts the command line of sind in realm: --realm names any realm
+// but the default one, as the default needs no flag.
+func sindArgv(realm string, words ...string) []string {
+	argv := []string{"sind"}
+	if realm != mesh.DefaultRealm {
+		argv = append(argv, "--realm", realm)
+	}
+	return append(argv, words...)
+}
+
+// checkRealm returns the realm of the form once it is a valid name.
+func checkRealm(f Form) (string, error) {
+	realm := Realm(f)
+	if err := config.CheckName("realm", realm); err != nil {
+		return "", fmt.Errorf("realm: %w", err)
+	}
+	return realm, nil
+}
+
+// findCluster returns the cluster that the form's field "cluster" names in
+// the form's realm, and the realm.
+func findCluster(f Form, c Context) (string, cluster.Summary, error) {
+	realm, err := checkRealm(f)
+	if err != nil {
+		return "", cluster.Summary{}, err
+	}
+	name := formCluster(f)
+	if name == "" {
+		return "", cluster.Summary{}, errors.New("cluster: say which cluster")
+	}
+	if err := config.CheckName("cluster", name); err != nil {
+		return "", cluster.Summary{}, fmt.Errorf("cluster: %w", err)
+	}
+	s, ok := c.Snap.Cluster(realm, name)
+	if !ok {
+		return "", s, fmt.Errorf("realm %s has no cluster %s", realm, name)
+	}
+	return realm, s, nil
+}
+
+// clusterWord is the word of a command line that names the cluster: none for
+// the default cluster, which the commands take without a name.
+func clusterWord(name string) []string {
+	if name == config.DefaultClusterName {
+		return nil
+	}
+	return []string{name}
+}
+
+// number reads the whole number of field in the form, from min to max; an
+// empty field is def, or an error where def is -1.
+func number(f Form, field, label string, minimum, maximum, def int) (int, error) {
+	s := strings.TrimSpace(f.Get(field))
+	if s == "" && def >= 0 {
+		return def, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < minimum || n > maximum {
+		return 0, fmt.Errorf("%s: write a number from %d to %d", label, minimum, maximum)
+	}
+	return n, nil
+}
+
+// plainText reports whether s holds only printable characters, which a path
+// or a name needs to reach a command line and a file unchanged.
+func plainText(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) || r == unicode.ReplacementChar })
+}
+
+// containerPattern is what a Docker container name looks like.
+var containerPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
