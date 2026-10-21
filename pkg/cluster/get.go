@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/slurm"
 	"github.com/GSI-HPC/sind/pkg/state"
+	"github.com/spf13/afero"
 )
 
 // Summary holds summary information about a sind cluster.
@@ -111,6 +113,41 @@ type NodeDetail struct {
 	Status    State         `json:"status"`
 	Services  ServiceHealth `json:"services"`
 	HA        *HAStatus     `json:"ha,omitempty"` // controllers of a primary/backup pair only
+}
+
+// GetNode returns the identity and health of one node, for 'sind get node'.
+// A node that does not exist fails with what CheckNode reports for a
+// cluster without containers in the realm (ErrClusterNotFound), and
+// otherwise with a "not found" error naming the node and its cluster.
+func GetNode(ctx context.Context, client *docker.Client, realm, clusterName, shortName string) (*NodeDetail, error) {
+	containerName := ContainerName(realm, clusterName, shortName)
+	info, err := client.InspectContainer(ctx, containerName)
+	if docker.IsNotFound(err) {
+		// Tell a missing cluster from a missing node, as logs and ssh do.
+		if err := CheckNode(ctx, client, realm, clusterName, shortName); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("node %q not found in cluster %q", shortName, clusterName)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspecting container: %w", err)
+	}
+	role := config.Role(info.Labels[LabelRole])
+	health, err := GetNodeHealth(ctx, client, info, role, realm, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	return &NodeDetail{
+		Container: string(containerName),
+		Cluster:   clusterName,
+		Role:      role,
+		Managed:   IsManaged(info.Labels),
+		FQDN:      DNSName(shortName, clusterName, realm),
+		IP:        health.IP,
+		Status:    health.State,
+		Services:  health.Services,
+		HA:        health.HA,
+	}, nil
 }
 
 // GetAllNodes lists all nodes across all clusters in the realm.
@@ -431,4 +468,25 @@ func containerStateToState(state docker.ContainerState) State {
 	default:
 		return StateUnknown
 	}
+}
+
+// SSHConfig is the SSH client configuration file of a realm, as reported by
+// 'sind get ssh-config'.
+type SSHConfig struct {
+	Path   string `json:"path"`
+	Exists bool   `json:"exists"`
+}
+
+// GetSSHConfig returns the path of the realm's ssh_config in the state
+// directory and whether the file exists in fs. The path is also right before
+// the file exists, for an Include; sind writes the file when a cluster is
+// created in the realm.
+func GetSSHConfig(fs afero.Fs, realm string) (*SSHConfig, error) {
+	dir, err := state.RealmDir(realm)
+	if err != nil {
+		return nil, err
+	}
+	p := filepath.Join(dir, "ssh_config")
+	exists, _ := afero.Exists(fs, p)
+	return &SSHConfig{Path: p, Exists: exists}, nil
 }

@@ -11,7 +11,7 @@ toc: true
 cmd/sind/          CLI commands (cobra)
   ├── main.go      Entry point
   ├── root.go      Root command, persistent --realm, --progress, --progress-log and -v flags, TraverseChildren, the strict tree (go-clikit's cobratree)
-  ├── context.go   Dependency injection via context
+  ├── context.go   Dependency injection via context; --realm flag glue for cluster.ResolveRealm
   ├── exitcode.go  Exit statuses, the words of flag value errors and the usage line of argument errors (exit 2), child exit status of ssh/exec/enter/logs
   ├── logging.go   Logger construction from -v verbosity
   ├── lock.go      Realm lock for mutating commands (pkg/state): inLockedRealm, and updateSSHExport after the change
@@ -65,13 +65,14 @@ pkg/docker/        Docker CLI wrapper
 pkg/cluster/       Cluster operations (orchestration)
   ├── create.go    Cluster creation flow
   ├── delete.go    Cluster deletion; DeleteAll's pool of clusters (fanout.Map)
-  ├── get.go       Listing clusters, nodes, networks, volumes
+  ├── get.go       Listing clusters, nodes (GetNode, GetAllNodes), networks, volumes; GetSSHConfig
   ├── status.go    Health status collection
   ├── diagnostics.go Low-level diagnostics helpers used by get cluster/node
   ├── errors.go    Error sentinels for library callers (ErrClusterExists ... ErrNoMonitoring), rollback bound
   ├── notfound.go  Cluster-not-found error naming the realms that hold the cluster
   ├── readiness.go The --wait limit of Create and WorkerAdd
   ├── ha.go        Controller pair (backup controller) position and control state
+  ├── realm.go     Realm resolution (ResolveRealm: --realm > SIND_REALM > config > default)
   ├── db.go        Accounting services (mariadb, slurmdbd) on the db node
   ├── api.go       slurmrestd setup steps of the api node
   ├── accounts.go  Slurm accounts, associations and coordinators (sacctmgr)

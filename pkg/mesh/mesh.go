@@ -116,6 +116,21 @@ func NewManager(docker *docker.Client, realm string) *Manager {
 	return &Manager{Docker: docker, Exec: &cmdexec.OSExecutor{}, Realm: realm}
 }
 
+// NewHostManager returns the Manager that sind commands and UIs run on the
+// Docker host: NewManager with every command it runs logged at trace level
+// and host DNS configuration enabled (HostDNS).
+func NewHostManager(docker *docker.Client, realm string) *Manager {
+	m := NewManager(docker, realm)
+	m.Exec = &cmdexec.LoggingExecutor{
+		Inner: m.Exec,
+		Log: func(ctx context.Context, cmd string) {
+			sindlog.From(ctx).Log(ctx, sindlog.LevelTrace, "exec", "cmd", cmd)
+		},
+	}
+	m.HostDNS = true
+	return m
+}
+
 // NetworkName returns the mesh network name for this realm.
 func (m *Manager) NetworkName() docker.NetworkName {
 	return docker.NetworkName(m.Realm + "-mesh")

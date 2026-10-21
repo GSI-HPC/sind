@@ -24,10 +24,6 @@ import (
 
 const validCgroupMounts = "cgroup2 /sys/fs/cgroup cgroup2 rw,nsdelegate 0 0\n"
 
-// defaultContext is the `docker context inspect --format '{{json .}}'`
-// output of the default context without DOCKER_HOST.
-const defaultContext = `{"Name":"default","Metadata":{},"Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock","SkipTLSVerify":false}}}`
-
 // localDockerHost is the DOCKER_HOST of the hermetic doctor tests, and
 // localHostCheck the Docker host check it gives.
 const localDockerHost = "unix:///var/run/docker.sock"
