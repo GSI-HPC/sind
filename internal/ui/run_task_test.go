@@ -1,0 +1,143 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package ui
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRunTaskPageRedirectsToTheRun(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	runStore(t, ts)
+
+	w := ts.get("/tasks/t-mid")
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/runs/r-mid", w.Header().Get("Location"))
+
+	// A request that htmx makes is told to go there with a header.
+	r := request("GET", "/tasks/t-mid")
+	r.AddCookie(ts.cookie)
+	r.Header.Set("HX-Request", "true")
+	w = ts.do(r)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "/runs/r-mid", w.Header().Get("HX-Redirect"))
+}
+
+func TestRunTaskPageWaits(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	ts.st.AddTask(store.Task{ID: "t1", Display: "sind create cluster dev", Trace: "tr", Start: runAt(10), Status: store.TaskRunning})
+
+	w := ts.get("/tasks/t1")
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	for _, want := range []string{
+		"<title>Starting sind create cluster dev · sind ui</title>",
+		"Waiting for the command to write its first progress event.",
+		`action="/tasks/t1/cancel"`,
+		`<span class="pill run">running</span>`,
+		`data-since="`,
+		"/events?f=rail&amp;f=run-wait&amp;f=tasks&amp;id=t1&amp;nav=activity&amp;task=t1",
+	} {
+		assert.True(t, strings.Contains(body, want), "the page lacks %s", want)
+	}
+	assert.NotContains(t, body, `class="task running"`, "the dock does not repeat the task of the page")
+	assert.NotContains(t, body, `hx-trigger="load"`, "no run to go to yet")
+
+	// The run shows up: the fragment asks for the redirect.
+	ts.st.SetRuns([]store.Run{{ID: "r1", Trace: "tr", Title: "x"}})
+	html := runFragment(t, ts, runNow, "run-wait", "id", "t1")
+	assert.Contains(t, html, `hx-get="/tasks/t1" hx-trigger="load" hx-swap="none"`)
+}
+
+func TestRunTaskPageEndedWithoutRun(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	ts.st.AddTask(store.Task{ID: "f", Display: "d", Trace: "tr", Start: runAt(10), End: runPtr(runAt(11)), Status: store.TaskFailed, Err: "docker: not found", Output: "boom <b>"})
+	ts.st.AddTask(store.Task{ID: "c", Display: "d", Trace: "tr2", Start: runAt(10), End: runPtr(runAt(11)), Status: store.TaskCanceled})
+	ts.st.AddTask(store.Task{ID: "o", Display: "d", Trace: "tr3", Start: runAt(10), End: runPtr(runAt(11)), Status: store.TaskOK})
+	ts.st.AddTask(store.Task{ID: "s", Display: "d", Trace: "tr4", Start: runAt(10), Status: store.TaskRunning, Canceling: true})
+
+	body := ts.get("/tasks/f").Body.String()
+	assert.Contains(t, body, "The command ended (failed) before the event log held a run of it. docker: not found")
+	assert.Contains(t, body, `<pre class="term tout">boom &lt;b&gt;</pre>`)
+	assert.Contains(t, body, `<div class="callout bad">`)
+	assert.NotContains(t, body, "/cancel")
+
+	body = ts.get("/tasks/c").Body.String()
+	assert.Contains(t, body, `<div class="callout warn">The command ended (canceled)`)
+	assert.NotContains(t, body, "standard error")
+	body = ts.get("/tasks/o").Body.String()
+	assert.Contains(t, body, `<div class="callout ">The command ended (ok)`)
+	body = ts.get("/tasks/s").Body.String()
+	assert.Contains(t, body, "Stopping…")
+	assert.NotContains(t, body, `action="/tasks/s/cancel"`)
+}
+
+func TestRunTaskRoutesRefuseALongId(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	long := strings.Repeat("x", maxParamLen+1)
+	assert.Equal(t, http.StatusBadRequest, ts.get("/tasks/"+long).Code)
+	assert.Equal(t, http.StatusBadRequest, ts.post("/tasks/"+long+"/dismiss", "").Code)
+}
+
+func TestRunTaskPageGone(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	assert.Equal(t, http.StatusNotFound, ts.get("/tasks/nope").Code)
+	assert.Contains(t, runFragment(t, ts, runNow, "run-wait", "id", "nope"), "This task is gone")
+	// A task without a display shows its action.
+	ts.st.AddTask(store.Task{ID: "a", Action: "power", Start: runAt(1), Status: store.TaskRunning})
+	assert.Contains(t, runFragment(t, ts, runNow, "run-wait", "id", "a"), `<span class="mono rtitle">power</span>`)
+}
+
+func TestRunTaskDismiss(t *testing.T) {
+	ts := runTestServer(t, runNow)
+	ts.st.AddTask(store.Task{ID: "done", Status: store.TaskFailed, Start: runAt(1)})
+	ts.st.AddTask(store.Task{ID: "busy", Status: store.TaskRunning, Start: runAt(1)})
+
+	w := ts.post("/tasks/busy/dismiss", "")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "the command still runs; stop it first")
+	_, ok := ts.st.Snapshot().Task("busy")
+	assert.True(t, ok)
+
+	w = ts.post("/tasks/done/dismiss", "")
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	_, ok = ts.st.Snapshot().Task("done")
+	assert.False(t, ok)
+
+	// Closing a card twice, as two tabs do, is not an error.
+	assert.Equal(t, http.StatusNoContent, ts.post("/tasks/done/dismiss", "").Code)
+
+	// Without the CSRF token nothing happens.
+	r := request("POST", "/tasks/busy/dismiss")
+	r.Header.Set("Origin", "http://127.0.0.1:7878")
+	r.AddCookie(ts.cookie)
+	assert.Equal(t, http.StatusForbidden, ts.do(r).Code)
+}
+
+func TestRunRoutesAreRegistered(t *testing.T) {
+	// The default registry, which the server of sind ui uses, has them all.
+	r := defaultRegistry.snapshot()
+	for _, name := range append([]string{"tasks", "run-list", "run-wait"}, runFragments...) {
+		_, ok := r.fragments[name]
+		assert.True(t, ok, name)
+	}
+	var pages []string
+	for _, p := range r.pages {
+		pages = append(pages, p.Pattern)
+	}
+	assert.Contains(t, pages, "GET /runs/{id}")
+	assert.Contains(t, pages, "GET /activity")
+	var routes []string
+	for _, rt := range r.routes {
+		routes = append(routes, rt.Pattern)
+	}
+	assert.Contains(t, routes, "GET /tasks/{id}")
+	assert.Contains(t, routes, "POST /tasks/{id}/dismiss")
+	assert.NotNil(t, r.navCount("activity"))
+}

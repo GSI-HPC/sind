@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"syscall"
 )
@@ -17,10 +18,25 @@ type Process struct {
 	cmd    *exec.Cmd
 }
 
-// Start starts a command and returns a Process for reading its stdout.
-// The command is killed when ctx is cancelled.
+// Start starts a command and returns a Process for reading its stdout, and
+// its stderr too under WithStderrMerged. The command is killed when ctx is
+// cancelled.
 func Start(ctx context.Context, name string, args ...string) (*Process, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	if StderrMerged(ctx) {
+		r, w, err := os.Pipe()
+		if err != nil {
+			return nil, err
+		}
+		cmd.Stdout, cmd.Stderr = w, w
+		err = cmd.Start()
+		_ = w.Close() // the child holds its own copy
+		if err != nil {
+			_ = r.Close()
+			return nil, err
+		}
+		return &Process{Stdout: r, cmd: cmd}, nil
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err

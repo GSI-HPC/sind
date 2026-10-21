@@ -1,0 +1,21 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-run-task is the page of a task whose run the event log does not hold
+yet. It goes to the run page by itself as soon as the run shows up: the
+fragment then holds an element that asks for /tasks/ID on load, which
+answers with HX-Redirect. */}}
+{{define "page-run-task"}}
+<div class="crumbs"><a href="/activity">Activity</a> / task</div>
+<div sse-swap="run-wait">{{fragment "run-wait" .}}</div>
+{{end}}
+
+{{define "run-wait"}}{{with .Data}}{{if .Gone}}<div class="callout warn">This task is gone: its card was closed. <a href="/activity">Back to Activity</a></div>
+{{else}}<div class="head runhead"><div class="t"><h1><span class="mono rtitle">{{.Title}}</span></h1>
+  <div class="sub"><span class="pill {{.PillClass}}">{{.Class}}</span><span>from sind ui</span></div></div>
+  <div class="actions">{{if .Cancel}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none" hx-confirm="Stop this command? sind stops it and removes what it made so far.">{{template "csrf-field" $}}<button type="submit" class="btn">Stop</button></form>{{end}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{end}}</div></div>
+{{if .Redirect}}<div class="callout run" hx-get="/tasks/{{.TaskID}}" hx-trigger="load" hx-swap="none">Opening the run…</div>
+{{else if eq .Class "running"}}<section class="panel"><div class="pb waiting"><span class="spin" aria-hidden="true"></span><span>Waiting for the command to write its first progress event. This page opens the run as soon as it does.</span>{{template "run-elapsed" .}}</div></section>
+{{else}}<section class="panel"><div class="pb stack">
+  <div class="callout {{if eq .Class "failed"}}bad{{else if eq .Class "canceled"}}warn{{end}}">The command ended ({{.Class}}) before the event log held a run of it.{{if .Err}} {{.Err}}{{end}}</div>
+  {{if .Output}}<div><div class="cmdlabel">End of what it wrote to standard error</div><pre class="term tout">{{.Output}}</pre></div>{{end}}
+</div></section>{{end}}{{end}}{{end}}{{end}}

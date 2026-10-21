@@ -1,0 +1,53 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-overview is the Overview page: the realms, a card for each cluster,
+what needs the user, and the latest runs. Each part is a fragment. */}}
+{{define "page-overview"}}
+<div sse-swap="pg-overview-head">{{fragment "pg-overview-head" .}}</div>
+<div class="pg-block" sse-swap="pg-overview-cards">{{fragment "pg-overview-cards" .}}</div>
+<div class="grid g2 pg-block">
+  <div sse-swap="pg-overview-needs">{{fragment "pg-overview-needs" .}}</div>
+  <div sse-swap="pg-overview-recent">{{fragment "pg-overview-recent" .}}</div>
+</div>
+{{end}}
+
+{{define "pg-overview-head"}}{{with .Data}}
+<div class="head"><div class="t"><h1>Overview</h1>
+  <div class="sub"><span>{{.RealmsText}}{{if .Realm}}, showing <b class="mono">{{.Realm}}</b> <a href="/">Show all</a>{{end}}</span>
+    <span>{{.ClustersText}} · {{.NodesText}}</span>
+    {{if .Problems}}<span class="pill bad nodot">{{.ProblemsText}}</span>{{end}}</div></div>
+  <div class="actions">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
+{{end}}{{template "pg-docker-note" .}}{{end}}
+
+{{define "pg-overview-cards"}}{{with .Data}}
+{{if .Empty}}{{template "pg-first-steps" .}}{{else}}
+<section class="panel pg-realms"><div class="ph"><h2>Realms</h2><span class="grow"></span><span class="faint">a realm keeps its clusters apart</span></div>
+  <div class="tw"><table><thead><tr><th>Realm</th><th class="num">Clusters</th><th class="num">Nodes</th><th>Health</th><th></th></tr></thead><tbody>
+  {{range .Realms}}<tr{{if .On}} class="sel"{{end}}><td class="mono"><a href="/?realm={{.Name}}"><b>{{.Name}}</b></a></td><td class="num">{{.Clusters}}</td><td class="num">{{.Nodes}}</td>
+    <td>{{if .Problems}}<span class="pill bad">{{.ProblemsText}}</span>{{else if .Nodes}}<span class="pill ok">all running</span>{{else}}<span class="faint">–</span>{{end}}</td>
+    <td class="act">{{if .Locked}}<span class="pill run">a command runs</span> {{end}}<a class="btn sm ghost" href="/clusters?realm={{.Name}}">Clusters</a></td></tr>
+  {{end}}</tbody></table></div></section>
+{{if .Clusters}}<div class="grid g3 pg-block">{{range .Clusters}}<a class="panel pg-ccard" href="{{.Link}}">
+  <div class="pg-top"><span class="pg-name">{{.Name}}</span><span class="pill {{.StateClass}}">{{.State}}</span><span class="pg-ver">{{with .Slurm}}Slurm {{.}}{{end}}</span></div>
+  <div class="pg-nodemap" aria-label="{{.NodesText}}">{{range .Nodes}}{{template "pg-tile" .}}{{end}}</div>
+  {{range .Runs}}<div class="mono muted pg-small">{{.Title}} runs now</div>{{end}}
+  <dl class="kv"><dt>realm</dt><dd class="mono">{{.Realm}}</dd><dt>nodes</dt><dd>{{with .Roles}}{{.}}{{else}}<span class="faint">none</span>{{end}}</dd>
+    <dt>monitoring</dt><dd>{{if .Monitoring}}<span class="chip brand">on</span>{{else}}<span class="faint">off</span>{{end}}</dd></dl>
+  {{with .Problems}}<div class="pg-pills">{{range .}}<span class="pill {{.Class}}">{{.Text}}</span>{{end}}</div>{{end}}
+</a>{{end}}</div>
+{{else}}<section class="panel pg-block"><div class="empty">No cluster{{if .Realm}} in realm <b class="mono">{{.Realm}}</b>{{end}} yet.{{range .Actions}}{{if eq .Class "primary"}}<br><br>{{template "pg-action" .}}{{end}}{{end}}</div></section>{{end}}
+{{end}}{{end}}{{end}}
+
+{{define "pg-first-steps"}}<section class="panel"><div class="ph"><h2>No realm on this Docker daemon yet</h2></div><div class="pb"><ol class="pg-steps">
+  <li><div><b>Check the host</b><div class="muted">Doctor checks Docker and cgroup v2.</div></div><a class="btn sm" href="/doctor">Doctor</a></li>
+  <li><div><b>Create a cluster</b><div class="muted">One controller and one worker, in about 30 s.</div></div>{{range .Actions}}{{if eq .Class "primary"}}{{template "pg-action" .}}{{end}}{{end}}</li>
+  <li><div><b>Run a job</b><div class="muted">Enter the cluster and submit a test job.</div></div><span class="faint">after step 2</span></li>
+  <li><div><b>Delete it</b><div class="muted">sind removes the containers, networks and volumes.</div></div><span class="faint">when done</span></li></ol></div></section>{{end}}
+
+{{define "pg-overview-needs"}}{{with .Data}}<section class="panel pg-attn"><div class="ph"><h2>Needs you</h2><span class="grow"></span><span class="faint">{{.NeedsText}}</span></div>
+  {{range .Needs}}<div class="pg-it"><span class="pg-bar {{.Sev}}"></span><div><div class="pg-tt">{{.Title}}</div><div class="pg-dd">{{.Detail}}</div></div><div class="pg-bb">{{range .Actions}}{{template "pg-action" .}}{{end}}</div></div>
+  {{else}}<div class="empty">Nothing needs you.</div>{{end}}</section>{{end}}{{end}}
+
+{{define "pg-overview-recent"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Recent activity</h2><span class="grow"></span><a href="/activity">All activity</a></div>
+  <div class="pg-recent">{{range .Runs}}<a class="pg-r" href="{{.Link}}"><span class="dot {{.Class}}"></span><span class="pg-c">{{.Title}}</span>{{if .Terminal}}<span class="chip">terminal</span>{{end}}<span class="pg-tm">{{.Time}}</span></a>
+  {{else}}<div class="empty">No runs yet. Every command that changes something shows here, from this page or from a terminal.</div>{{end}}</div></section>{{end}}{{end}}

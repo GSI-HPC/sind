@@ -24,6 +24,7 @@ cmd/sind/          CLI commands (cobra)
   ├── mcpstream.go sind mcp stream: HTTP server with a bearer token, forwarding to ophis
   ├── mcpeditor.go sind mcp <editor> enable/disable/list: register sind's MCP server with Claude Desktop, VS Code, Cursor
   ├── worker.go    Worker create/delete commands
+  ├── ui.go        sind ui: flags only, the server is internal/ui
   └── *.go         One file per command group
 
 internal/mock/     Test doubles for cmdexec.Executor
@@ -38,6 +39,20 @@ internal/atomicfile/ Replaces a file in one step, through a temporary file and a
 internal/hostname/ DNS label check behind config.CheckName (cluster and realm names) and pkg/ssh's ssh_config host names
 
 internal/natsort/  Natural order of names (dev2 before dev10), for every listing of pkg/cluster and the mesh DNS records
+
+internal/ui/       sind ui, the web UI (doc.go has the extension API: pages, fragments, routes, services)
+  ├── server.go    HTTP server, security headers, Host check, the listener of 127.0.0.1
+  ├── auth.go      Token, session cookie and CSRF; peercred.go: the peer user check (/proc/net/tcp)
+  ├── runtime.go   Single instance in $XDG_RUNTIME_DIR/sind, the page that opens the browser
+  ├── sse.go       Live updates: Server-Sent Events of the fragments of a page
+  ├── pg_*.go, more_*.go, run_*.go Pages: realm, clusters and nodes; mesh, monitoring, topology, doctor; runs
+  ├── store/       Immutable snapshots and their change topics
+  ├── collect/     Collectors: Docker events, realms, clusters, statuses, lock, monitoring, doctor
+  ├── activity/    Reads the activity log into runs (Tail, Reducer, Follow)
+  ├── action/      The actions of the dialogs: forms to argv, validated against the snapshot
+  ├── run/         Runs a dialog's command as a sind child process and stops it with SIGINT
+  ├── demo/        --demo: made-up clusters and commands that write event logs in memory
+  └── web/         Embedded templates, CSS and JavaScript (htmx)
 
 internal/testutil/ Shared test helpers
   ├── testutil.go  ExitCode1, NoSuchContainer/Network/Volume, Image (SIND_TEST_IMAGE), TarModes, WithoutCalls

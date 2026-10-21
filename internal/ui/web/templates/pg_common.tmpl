@@ -1,0 +1,26 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* Blocks that the main pages share. A block with the name of a part's own
+prefix, pg, is part of the pages, clusters and nodes. */}}
+
+{{/* pg-action is a button of a page; a dialog link opens the dialog in the
+layer, and is a plain link without script. .Class holds btn modifiers. */}}
+{{define "pg-action"}}<a class="btn{{with .Class}} {{.}}{{end}}" href="{{.URL}}"{{if .Dialog}} hx-get="{{.URL}}" hx-target="#layer" hx-push-url="false"{{end}}>{{.Label}}</a>{{end}}
+
+{{/* pg-docker-note says when Docker does not answer; it takes the view. */}}
+{{define "pg-docker-note"}}{{with .Snap.Docker}}{{if not .Checked}}<div class="callout pg-note">sind ui has not read Docker yet. The pages fill in when it has.</div>{{else if .Err}}<div class="callout bad pg-note"><b>Docker is not reachable.</b> {{.Err}}. The pages show what sind ui read last, and no action works until Docker answers. <a href="/doctor">Doctor</a> checks the host.</div>{{end}}{{end}}{{end}}
+
+{{/* pg-ok is an ok or down pill; it takes a bool. */}}
+{{define "pg-ok"}}{{if .}}<span class="pill ok">ok</span>{{else}}<span class="pill bad">down</span>{{end}}{{end}}
+
+{{/* pg-tile is the tile of a node in a node map; it takes a node. */}}
+{{define "pg-tile"}}<i class="{{.Tile}}" title="{{.Short}} · {{.Role}} · {{.State}}"></i>{{end}}
+
+{{/* pg-cmd is a command to copy; it takes a pgCmd. */}}
+{{define "pg-cmd"}}<div><div class="cmdlabel">{{.Label}}</div><div class="cmd"><code>{{.Text}}</code><button type="button" data-pg-copy>Copy</button></div></div>{{end}}
+
+{{/* pg-realm-filter lets a list switch to one realm; it takes the list. */}}
+{{define "pg-realm-filter"}}{{if or .Realm (gt (len .Realms) 1)}}<nav class="seg pg-seg" aria-label="Realm"><a{{if not .Realm}} class="on" aria-current="true"{{end}} href="{{.Base}}?realm=">All realms</a>{{range .Realms}}<a{{if .On}} class="on" aria-current="true"{{end}} href="{{$.Base}}?realm={{.Name}}">{{.Name}} · {{.Clusters}}</a>{{end}}</nav>{{end}}{{end}}
+
+{{/* pg-gone is what a page of a cluster or a node shows after it was deleted. */}}
+{{define "pg-gone"}}<div class="callout warn pg-gone"><b>{{.}}</b> no longer exists. Someone may have deleted it. <a href="/clusters">Back to the clusters</a></div>{{end}}

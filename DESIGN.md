@@ -240,7 +240,7 @@ sind <verb> <noun> [ARGS] [FLAGS]
 - Single-purpose verbs (`ssh`, `enter`, `exec`, `logs`, `doctor`) stand alone
 - Standalone verbs are reserved for frequently-used operations that justify a short path
 - Groups print their help when invoked bare and fail on an unknown subcommand (`sind get bogus` exits 2), naming the closest subcommand or, for the removed `sind status`, the command that replaced it (`cobratree.Strict` in `NewRootCommand`, once the tree is built, so it covers every group). They fail with `--help` too (`sind get bogus --help`): a group's help flag (`groupHelp`, which `groupHelpFlags` gives every group after `cobratree.Strict`) reads as unset to cobra, which would print the help before it checks the arguments, and the group's `RunE` prints it once the check has passed
-- cobra's built-in `help` and `completion` commands follow the same rule, as `cobratree.Strict` adds them before it makes the tree strict: `sind completion fish-typo` fails like any group, and `sind help TOPIC` fails unless TOPIC names a command in full (`sind help bogus`, `sind help get bogus`)
+- cobra's built-in `help` and `completion` commands follow the same rule, as `cobratree.Strict` adds them before it makes the tree strict: `sind completion fish-typo` fails like any group, and `sind help TOPIC` fails unless TOPIC names a command in full (`sind help bogus`, `sind help get bogus`) or a topic of `sind help topics`
 
 ### Argument Conventions
 
@@ -756,6 +756,14 @@ sind logs db mariadb                   # MariaDB's own messages: the image logs 
 sind logs api slurmrestd               # slurmrestd journal logs on the api node
 ```
 
+### Web UI
+
+```bash
+sind ui [--port PORT] [--no-open] [--demo]   # serve the web UI on 127.0.0.1 and open it in a browser
+```
+
+`sind ui` serves the web UI of the realm on `127.0.0.1` and prints its URL, with a token that is new each run. `--port` names the port (default: a free one; a port in use is an error that names the flag), and `--no-open` prints the URL without starting a browser. The URL is the only way in: a second `sind ui` of the same user prints the URL of the running one and opens it, then exits 0. It runs until Ctrl-C, which stops the server and interrupts the commands it started (see Web UI). To use it from another machine, forward the port with `ssh -L` and pass `--no-open`. `--demo` serves made-up clusters and plays the commands of the dialogs in memory: it uses no Docker, starts no child process, writes nothing and records no running instance, so it can run next to a real `sind ui`. The hidden `--still` (only with `--demo`) stops the demo's clock at a fixed time and plays nothing, so that its pages are the same on every run; `tools/screenshots` uses it.
+
 ### Utilities
 
 ```bash
@@ -770,7 +778,11 @@ sind get dns                           # list mesh DNS records
 sind get ssh-private-key               # output SSH private key
 sind get ssh-public-key                # output SSH public key
 sind get ssh-known-hosts               # output SSH known_hosts
+sind help [COMMAND | TOPIC]            # help for a command, or for a word, how-to or action of sind ui
+sind help topics                       # list the topics of sind help
 ```
+
+`sind help TOPIC` prints the text of a topic from `internal/help` (the YAML that sind ui shows too): a word (`sind help realm`), a how-to (`sind help first-cluster`) or an action of sind ui (`sind help create-cluster`). `sind help topics` lists them. A name that is a command prints that command's help, and an unknown name is a usage error, as in the rule above.
 
 `sind version` prints the version and commit; `--json` adds the Go version and platform (`version`, `commit`, `goVersion`, `platform`). For release builds the output is `sind <version> (<commit>)`. For dev builds `git describe --tags --always --dirty` is used as the version, embedding tag distance and commit hash directly: `sind 0.5.0-3-gabc1234-dirty`. A binary built without a version, such as one from `go install github.com/GSI-HPC/sind/cmd/sind@vX.Y.Z` (releases after v0.9.0), reports the module version the Go toolchain recorded (`sind X.Y.Z`, read with `cobratree.ReadBuildInfo`); a plain `go build` from a checkout reports `sind dev` with its commit. The `--json` flag outputs all fields as JSON.
 
@@ -825,6 +837,35 @@ The editor commands are sind's own (`cmd/sind/mcpeditor.go`, `internal/mcpconfig
 - A tool call whose positional `args` hold a flag (an argument starting with `-`) is refused, because ophis appends the arguments after the flags and they would otherwise bring back `-v`, `--follow` or a `-o` that overrides `-o json`. For `exec` only the arguments before its `--` are checked. The refusal reads as a usage error of the command: `exitCode` 2, `isError: true` and the `ERRO` line in `stderr`. A flag that is not in the tool's input schema fails go-sdk's validation of the call's input before sind sees the call, with an error result that has no `exitCode`.
 - A cancelled call (`notifications/cancelled`) or a client that disconnects ends the call's context, and the server then kills the tool's process group with SIGKILL: the sind process and the `docker exec` or `docker logs` it runs, so the call answers at once. ophis's own run function kills only the sind process, and the docker command would go on, holding the call's output open until it ended. The kill would skip the rollback of a failed `create` and leave partial resources and the realm lock behind, so the tools that change state (`create`, `delete`, `connect`, `disconnect` and `power`) run to completion on a context that ignores the cancellation (`mcpRunsToCompletion`): a cancelled create finishes, or rolls back, on its own, bounded by `--wait`, and the server sends its result when it ends. Read-only tools and `exec` stay cancellable. The command `exec` started in the node runs on until it ends: Docker has no way to signal a process that `docker exec` started, and killing the docker CLI does not stop it. `sind mcp stream` waits at most `mcpShutdownTimeout` (5 s) for the MCP server to stop, so a call still running does not hold up its shutdown; the sind process it started goes on to finish or roll back.
 - A tool's result holds the command's stdout, stderr and exit status (`exitCode`): a usage error reads `2`, and `sind_exec` returns the status of the command it ran. A call whose command exits non-zero is also marked as an error (`isError: true`).
+
+## Web UI
+
+`sind ui` (`cmd/sind/ui.go` for the flags, `internal/ui` for the logic) is a local web UI for sind. Its pages show the realms, clusters and nodes, the networks and the runs of the realm, and it offers the actions that change something (new cluster, add workers, delete, power, connect and disconnect, delete realm). It has no Slurm page and no terminal: the Connect tab of a cluster shows the commands to run in a terminal.
+
+### Architecture
+
+- Pages are server-rendered with `html/template`. [htmx](https://htmx.org/) and Server-Sent Events update them live, one stream per open tab. The JavaScript and CSS are embedded in the binary, with no build step, and nothing loads from the network.
+- Reads run in the process. Collectors read Docker labels and `docker` output through `cmdexec.Executor` into immutable snapshots, and a page renders from the snapshot. A stream opens with every fragment of its page, as the page may predate a change, and then sends a fragment again only when its HTML changes. A stream that falls behind the store's notices gets one notice for all topics in their place and renders every fragment.
+- Changes run in a child process. An action builds an argv from the form fields, validates it against the current snapshot and shows it in its dialog as the exact command. Running the action rebuilds the argv and refuses to start when it differs from the one the dialog showed. The child is the sind binary, in a process group of its own, so it takes the realm lock, rolls back on failure and stops on SIGINT as it does in a terminal. Stop sends SIGINT to that group.
+- Progress comes from the activity log. The child writes the go-clikit event log (`--progress-log`, `SIND_PROGRESS_LOG`, or the default `activity.jsonl` in the state directory). sind ui tails the log and reduces its events to runs, steps, targets and the wait limit, and draws them on the run page and the task cards. A command started from a terminal shows the same way when it writes that log, which is the default; it is marked as started from a terminal, and sind ui cannot stop it. sind ui follows the rotated copy `activity.jsonl.1` too, as a command that had the log open when another rotated it goes on writing there. A run whose end the log lacks, as its process was killed, ends with the task that started it, with the task's outcome, or, after an hour without an event, at its last event as "no end recorded".
+- The config of a new cluster is saved with mode `0600` in `$XDG_STATE_HOME/sind/ui/configs/` (`~/.local/state/sind/ui/configs/`), so the command in the dialog can run again from a terminal.
+- The demo (`internal/ui/demo`) replaces the Docker collectors and the runner: its commands write real go-clikit event logs in memory, which the same reducer reads, so its run pages show what a real command shows. `tools/screenshots`, a Go module of its own so that sind does not depend on a browser driver, starts `sind ui --demo --still`, drives Chromium through the shots of `shots.yaml`, and writes one image per shot, theme and size. The images are not committed.
+
+### Single instance
+
+The running instance is recorded in `$XDG_RUNTIME_DIR/sind/ui.json` (`{"url": ..., "pid": ...}`, mode `0600`), written once the server listens. A lock file next to it, `ui.lock`, serializes starts, so two starts cannot both find nothing running. The directory must be private: when it is there already, it must be a directory of the user with mode `0700`, not a symbolic link, else `sind ui` fails; the lock file is opened with `O_NOFOLLOW`. A record counts as running when its process exists and a socket of the user listens at its URL (the owner of the listener, from `/proc/net/tcp`); otherwise a new instance replaces it, and the instance that exits removes it when it still names its own process. Without `XDG_RUNTIME_DIR`, and with `--demo`, nothing is recorded, and every `sind ui` starts its own server. The browser opens a small `0600` HTML file that redirects to the URL, so the token is never in a command line that other users can read: in the runtime directory, or else in a new `0700` directory below `$TMPDIR`, removed when `sind ui` stops. When that file cannot be written, no browser opens.
+
+### Security model
+
+Only the user who started `sind ui` may use it, and it can do what that user's Docker access can do. A request passes these checks, in this order:
+
+1. **Peer user.** The kernel's table of TCP sockets (`/proc/net/tcp`) names the owner of each connection; only a row in state `ESTABLISHED` with an inode counts. A connection of a process of another user is closed before HTTP is read. This works on Linux only, as sind does.
+2. **Host.** The `Host` header must be `127.0.0.1:PORT`, which stops DNS rebinding. `localhost` is refused: a browser may resolve it to `::1`, where a process of another user can listen on the same port and would get the token.
+3. **Session.** The first `GET` with `?token=` must carry the token of this run (32 random bytes). It sets an `HttpOnly`, `SameSite=Strict` cookie, named for the port, and redirects to the same page without the token. Any other request without a session gets `403`. The token stays valid while `sind ui` runs, so the printed URL opens it in more than one browser; it ends with the process. Browsers do not keep cookies apart by port, so the browser also sends the cookie to a server of another user on another port of `127.0.0.1`; that user still cannot use it, as check 1 closes their connections.
+4. **Writes.** Requests that change something (every method but `GET` and `HEAD`) need an `Origin` of `http://` followed by the `Host` header, and the session's CSRF token in the `X-Sind-CSRF` header or the `csrf` form field. Forms are capped at 64 KiB. Every path and query value is checked again on the server.
+5. **Responses.** `Content-Security-Policy` allows only files of the same origin (`default-src 'none'`, `frame-ancestors 'none'`), with `X-Frame-Options: DENY`, `Cache-Control: no-store` and `Referrer-Policy: same-origin` (a form POST then carries its origin). Text from containers and the event log is escaped.
+
+No secret has a page: the munge key, the JWT key and the SSH private key (`sind get auth-key`, `sind get ssh-private-key`) are not shown in the UI. Long-running commands are stopped with SIGINT only. When `sind ui` stops, it interrupts its commands so that they roll back, and kills any that have not ended after 60 seconds.
 
 ## Node Arguments
 

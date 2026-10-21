@@ -1,0 +1,71 @@
+# How-tos: steps to a goal. Fields (all required): id, title, summary, steps,
+# doc. commands (what to type in a terminal) and words may be empty.
+- id: first-cluster
+  title: Create a cluster and run a first job
+  summary: From nothing to a job that has run on a worker.
+  steps:
+    - Press New cluster on the Overview.
+    - Keep the defaults, or change the nodes. Press Create.
+    - When the run is done, open the cluster and its Connect tab.
+    - Run a job with the command that the tab shows.
+  commands:
+    - sind create cluster
+    - sind exec -- sbatch --wrap hostname
+  doc: getting-started/quickstart
+  words: [cluster, controller, worker]
+- id: slow-create
+  title: Find out why a create is slow
+  summary: How to see which check a node waits for.
+  steps:
+    - Open the run from the card at the bottom right, or from Activity.
+    - Look at the nodes. Each shows the check that it waits for, such as ready munge, and how much of the wait limit it used.
+    - Open the lines. They are the same as --progress plain in a terminal.
+    - If a node fails, read the error and the logs of its unit.
+  commands:
+    - sind create cluster --progress plain
+    - sind logs controller slurmctld
+  doc: usage/progress
+  words: [wait, munge, slurmctld, run]
+- id: add-workers
+  title: Add workers to a cluster
+  summary: Grow a running cluster.
+  steps:
+    - Open the cluster.
+    - Press Add workers and choose how many.
+    - Press Add. The card at the bottom right shows the progress.
+  commands:
+    - sind create worker dev --count 2
+  doc: usage/worker-management
+  words: [worker, managed]
+- id: reach-node
+  title: Open a shell on a node
+  summary: How to log in to a node from a terminal.
+  steps:
+    - Open the node, or the cluster and its Connect tab.
+    - Copy the command that it shows and run it in a terminal.
+  commands:
+    - sind enter dev
+    - sind ssh worker-0.dev
+  doc: usage/node-access
+  words: [submitter, nodeset]
+- id: connect-container
+  title: Reach a cluster from another container
+  summary: Let a container that sind did not make, such as a kind node, resolve and reach the nodes of a realm.
+  steps:
+    - Open Mesh and DNS.
+    - Press Connect a container and name the container.
+    - Use the node names from inside that container.
+  commands:
+    - sind connect container NAME
+  doc: guides/kind
+  words: [external, mesh]
+- id: realm-busy
+  title: A command waits for the realm lock
+  summary: What to do when sind says that another command holds the realm.
+  steps:
+    - Read which command holds the lock. The run shows it as a wait.
+    - Let that command end. The waiting command then goes on.
+    - If it hangs, stop that command with Ctrl-C in its terminal, or cancel its run here.
+  commands: []
+  doc: configuration/realms
+  words: [lock, realm, rollback]

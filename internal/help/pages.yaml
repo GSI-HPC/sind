@@ -1,0 +1,87 @@
+# Pages: what each page of sind ui shows. route is the path of the page, with
+# {wildcards}. Fields (all required): id, title, summary, route, doc. words
+# and howtos list ids; both may be empty.
+- id: overview
+  title: Overview
+  summary: The clusters of the realm, what needs you, and what sind did lately.
+  route: /
+  doc: getting-started/quickstart
+  words: [realm, cluster, needs-you, activity-log]
+  howtos: [first-cluster, add-workers]
+- id: clusters
+  title: Clusters
+  summary: Every cluster of the realm. sind keeps no list of them. It finds them by their Docker labels.
+  route: /clusters
+  doc: usage/cluster-lifecycle
+  words: [realm, cluster, data]
+  howtos: [first-cluster]
+- id: cluster
+  title: Cluster
+  summary: One cluster. Its tabs show the health of its nodes and services, the logs, the network and how to connect.
+  route: /clusters/{realm}/{cluster}
+  doc: usage/diagnostics#cluster-status
+  words: [cluster, node-roles, managed, nodeset, data, identity]
+  howtos: [add-workers, reach-node, slow-create]
+- id: nodes
+  title: Nodes
+  summary: Every node of the realm, with its role and state.
+  route: /nodes
+  doc: usage/diagnostics#list-nodes
+  words: [node-roles, managed, nodeset]
+  howtos: [reach-node]
+- id: node
+  title: Node
+  summary: One node container, its services and its address. You can power it or delete it here.
+  route: /nodes/{realm}/{cluster}/{node}
+  doc: usage/diagnostics#node-status
+  words: [node-roles, managed, munge, slurmctld]
+  howtos: [reach-node]
+- id: mesh
+  title: Mesh and DNS
+  summary: What the clusters of a realm share. It shows the mesh network, the DNS records and the containers that you connected.
+  route: /mesh
+  doc: architecture/networking#mesh-network
+  words: [mesh, realm, external]
+  howtos: [connect-container]
+- id: monitoring
+  title: Monitoring
+  summary: The Prometheus, Loki, Grafana and Alloy of the realm, when a cluster asks for them.
+  route: /monitoring
+  doc: guides/monitoring
+  words: [realm]
+  howtos: []
+- id: topology
+  title: Topology
+  summary: How this host reaches each node, by name and by address.
+  route: /topology
+  doc: architecture/networking
+  words: [mesh]
+  howtos: [reach-node]
+- id: doctor
+  title: Doctor
+  summary: What sind needs from this host. Each check says ok, warning or failed, and what to change.
+  route: /doctor
+  doc: usage/diagnostics#doctor
+  words: [doctor, needs-you]
+  howtos: []
+- id: activity
+  title: Activity
+  summary: The runs of the sind commands that change something, from this UI and from terminals.
+  route: /activity
+  doc: usage/progress#the-activity-log
+  words: [activity-log, run, lock]
+  howtos: [slow-create]
+- id: run
+  title: Run
+  summary: One sind command and its steps, live while it works. The steps are those that the terminal shows.
+  route: /runs/{id}
+  doc: usage/progress
+  words: [run, wait, rollback, lock, trace, nodeset]
+  howtos: [slow-create]
+- id: task
+  title: Task
+  summary: A command that sind ui started. It becomes a run as soon as the command writes its first event.
+  route: /tasks/{id}
+  doc: usage/progress
+  words: [run, activity-log]
+  howtos: []

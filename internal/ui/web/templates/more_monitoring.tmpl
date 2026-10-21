@@ -1,0 +1,45 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-more-monitoring is the Monitoring page. */}}
+{{define "page-more-monitoring"}}
+<div class="head"><div class="t"><h1>Monitoring</h1>
+  <div class="sub"><span>One stack per realm. It collects Slurm metrics, the nodes' resource use and their journals.</span></div></div></div>
+<div class="stack" id="more-monitoring" sse-swap="more-monitoring">{{fragment "more-monitoring" .}}</div>
+{{end}}
+
+{{/* more-monitoring is the live body of the page; .Data is moreMonitoringData. */}}
+{{define "more-monitoring"}}{{with .Data}}
+{{template "more-dockerdown" .DockerErr}}
+{{if .Notice.Text}}{{template "more-notice" .Notice}}{{end}}
+{{if .Empty}}
+<section class="panel"><div class="empty">
+  <p>{{if .Realm}}Realm <b class="mono">{{.Realm}}</b> has{{else}}No realm has{{end}} no monitoring stack.</p>
+  <p>Create a cluster with Monitoring on, and sind starts Prometheus, Loki, Grafana and Alloy for the realm. It needs Slurm 26.05.</p>
+  <div class="more-howto">
+    <p class="cmdlabel">From your terminal</p>
+    <div class="cmd"><code>sind create cluster --monitoring</code><button type="button" data-more-copy>Copy</button></div>
+  </div>
+  <p><a class="btn primary" href="{{.NewURL}}" hx-get="{{.NewURL}}" hx-target="#layer" hx-swap="innerHTML">New cluster…</a></p>
+</div></section>
+{{end}}
+{{range .Realms}}{{$realm := .Name}}
+<div class="stack more-realm">
+  <div class="more-rhead">
+    <h2>{{if $.Data.Multi}}Realm <b class="mono">{{.Name}}</b>{{else}}Stack{{end}}</h2>
+    <span class="grow"></span><span class="faint">{{len .Services}} services</span>
+  </div>
+  <section class="panel"><div class="tw"><table><thead><tr><th>Service</th><th>State</th><th>Address</th><th>Image</th><th></th></tr></thead><tbody>
+    {{range .Services}}<tr><td><b>{{.Name}}</b><br><span class="mono faint">{{.Container}}</span></td>
+      <td><span class="pill{{with .Pill}} {{.}}{{end}}">{{.Text}}</span></td>
+      <td class="mono">{{.URL}}</td><td class="mono faint">{{.Image}}</td>
+      <td class="act">{{if .Open}}<a class="btn sm" href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open ↗</a>{{end}}</td></tr>
+    {{end}}</tbody></table></div></section>
+  <section class="panel"><div class="ph"><h2>Monitored clusters</h2></div>
+    {{if .Clusters}}<div class="tw"><table><thead><tr><th>Cluster</th><th class="num">Nodes</th><th>Slurm</th></tr></thead><tbody>
+      {{range .Clusters}}<tr><td><a href="/clusters/{{$realm}}/{{.Name}}"><b>{{.Name}}</b></a></td><td class="num">{{.Nodes}}</td><td class="mono">{{.SlurmVersion}}</td></tr>{{end}}
+    </tbody></table></div>
+    {{else}}<div class="empty">No cluster of this realm is monitored.</div>{{end}}</section>
+</div>
+{{end}}
+{{if and .Realms .Without}}<p class="muted">No stack in {{range $i, $r := .Without}}{{if $i}}, {{end}}<span class="mono">{{$r}}</span>{{end}}.</p>{{end}}
+{{end}}{{end}}

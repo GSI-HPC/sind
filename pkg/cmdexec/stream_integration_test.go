@@ -64,3 +64,22 @@ func TestOSExecutor_Start(t *testing.T) {
 	require.True(t, scanner.Scan(), "expected output line")
 	assert.Equal(t, "hello", scanner.Text())
 }
+
+func TestStart_StderrMerged(t *testing.T) {
+	ctx := cmdexec.WithStderrMerged(t.Context())
+	proc, err := cmdexec.Start(ctx, "sh", "-c", "echo out; echo err >&2")
+	require.NoError(t, err)
+	defer func() { _ = proc.Close() }()
+
+	var lines []string
+	sc := bufio.NewScanner(proc.Stdout)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	assert.ElementsMatch(t, []string{"out", "err"}, lines)
+}
+
+func TestStart_StderrMergedNotFound(t *testing.T) {
+	_, err := cmdexec.Start(cmdexec.WithStderrMerged(t.Context()), "/nonexistent/command")
+	assert.Error(t, err)
+}

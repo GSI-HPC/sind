@@ -1,0 +1,69 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-run is the run page: one command of the event log, drawn as the
+header, the summary, what failed, the timeline of its steps, a tile for each
+node, the transfers and the steps without targets, and the raw facts. Each
+part is a fragment that /events sends again when the run changes. */}}
+{{define "page-run"}}
+<div class="crumbs"><a href="/activity">Activity</a> / <span class="mono">{{.Params.Get "id"}}</span></div>
+<div class="rp">
+<div sse-swap="run-head">{{fragment "run-head" .}}</div>
+<div sse-swap="run-summary">{{fragment "run-summary" .}}</div>
+<div sse-swap="run-failed">{{fragment "run-failed" .}}</div>
+<div sse-swap="run-timeline">{{fragment "run-timeline" .}}</div>
+<div sse-swap="run-nodes">{{fragment "run-nodes" .}}</div>
+<div sse-swap="run-more">{{fragment "run-more" .}}</div>
+<div sse-swap="run-facts">{{fragment "run-facts" .}}</div>
+</div>
+{{end}}
+
+{{define "run-head"}}{{with .Data}}{{if .Gone}}<div class="callout warn">This run is gone: sind ui keeps the newest runs of the event log only. <a href="/activity">Back to Activity</a></div>
+{{else}}<div class="head runhead"><div class="t"><h1><span class="mono rtitle">{{.Title}}</span></h1>
+  <div class="sub"><span class="pill {{.PillClass}}">{{.Pill}}</span><span>{{.Origin}}</span>{{if .Program}}<span>{{.Program}}</span>{{end}}<span>started {{.Started}}</span>{{if .Exit}}<span class="mono">{{.Exit}}</span>{{end}}<span class="mono faint" title="trace {{.TraceTip}}">trace {{.Trace}}</span></div></div>
+  <div class="actions">{{if .TaskID}}{{if .Canceling}}<button type="button" class="btn" disabled>Stopping…</button>{{else}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel" hx-post="/tasks/{{.TaskID}}/cancel" hx-swap="none" hx-confirm="Stop this command? sind stops it and removes what it made so far.">{{template "csrf-field" $}}<button type="submit" class="btn">Stop</button></form>{{end}}{{end}}{{if .ClusterHref}}<a class="btn" href="{{.ClusterHref}}">Open {{.Cluster}}</a>{{end}}</div></div>
+{{if and .Terminal .Running}}<div class="callout">This run was started from a terminal, so sind ui cannot stop it. Press Ctrl-C in that terminal to stop it.</div>{{end}}
+{{end}}{{end}}{{end}}
+
+{{define "run-summary"}}{{with .Data}}<section class="panel"><div class="pb">
+  <div class="rsum"><span class="clock">{{template "run-elapsed" .}}</span>
+    <div class="rbar">{{template "run-segbar" .Segs}}<div class="mono rline">{{.Line}}</div></div>
+    <div class="counts">{{if .NoTargets}}<span class="faint">no targets</span>{{else}}{{range .Counts}}<span><i class="dot {{.Class}}"></i>{{.N}} {{.Label}}</span>{{end}}{{end}}</div></div>
+  {{range .Hints}}<div class="hint">{{.}}</div>{{end}}
+  <span hidden data-doc-title="{{.DocTitle}}"></span>
+</div></section>{{end}}{{end}}
+
+{{define "run-failed"}}{{with .Data}}<section class="panel rfail {{.Class}}"><div class="ph"><h2>{{.Title}}</h2></div><div class="pb stack">
+  {{range .Groups}}<div class="callout {{$.Data.Class}}"><b class="mono">{{.Nodes}}</b>{{if .Class}} <span class="chip">{{.Class}}</span>{{end}}<br><span class="mono">{{.Err}}</span></div>{{end}}
+  {{if .CmdErr}}<div class="callout bad"><span class="mono">{{.CmdErr}}</span></div>{{end}}
+  {{range .Notes}}<div class="hint">{{.}}</div>{{end}}
+  {{if .Doctor}}<div class="hint">A timeout often means that a node needed more time: try again with a longer <span class="mono">--wait</span>, or check the host in <a href="/doctor">Doctor</a>.</div>{{end}}
+</div></section>{{end}}{{end}}
+
+{{define "run-timeline"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Steps</h2><span class="grow"></span><span class="faint">Open a step for its targets. Steps that overlap ran at the same time.</span></div><div class="pb gantt">
+<div class="axis"><span></span><span class="ticks">{{range .Ticks}}<span class="l{{.Pos}}">{{.Label}}</span>{{end}}</span><span></span></div>
+{{range .Rows}}{{template "run-row" .}}{{else}}<div class="faint">No steps yet.</div>{{end}}
+</div></section>{{end}}{{end}}
+
+{{define "run-rowcells"}}<span class="lbl" title="{{.Name}}"><span class="mark {{.Class}}">{{.Mark}}</span>{{.Name}}{{if .Total}} <span class="faint">{{.Total}}</span>{{end}}</span><span class="trk">{{if .Bar}}<span class="bar {{.Class}} l{{.Left}} w{{.Width}}"></span>{{end}}</span><span class="res">{{.Result}}</span>{{end}}
+
+{{define "run-row"}}{{if .Children}}<details class="grow-details" data-open-id="{{.ID}}"><summary class="grow-row">{{template "run-rowcells" .}}</summary>{{range .Children}}{{template "run-row" .}}{{end}}</details>{{else}}<div class="grow-row">{{template "run-rowcells" .}}</div>{{end}}{{end}}
+
+{{define "run-nodes"}}{{with .Data}}<section class="panel"><div class="ph"><h2>Nodes</h2><span class="grow"></span><span class="faint">Each node goes from left to right. The ring is the part of the wait limit it used.</span></div><div class="pb nodegrid">
+{{range .Tiles}}<div class="ntile {{.RoleClass}} {{.Class}}"><div class="nt"><span class="mark {{.Class}}">{{.Mark}}</span><b>{{.Name}}</b>{{if .Role}}<small>{{.Role}}</small>{{end}}</div>
+  <div class="pipe">{{range .Pipe}}<i class="{{.Class}}" title="{{.Title}}"></i>{{end}}</div>
+  <div class="pipelbl">{{range .Pipe}}<span>{{.Label}}</span>{{end}}</div>
+  <div class="msg"><span title="{{.Msg}}">{{.Msg}}</span>{{with .Ring}}<svg class="ring" viewBox="0 0 28 28" role="img" aria-label="{{.Title}} of the wait limit"><circle class="rtrack" cx="14" cy="14" r="11" fill="none" stroke-width="4"/><circle class="rarc {{.Class}}" cx="14" cy="14" r="11" fill="none" stroke-width="4" stroke-dasharray="{{.Dash}}" transform="rotate(-90 14 14)"/></svg>{{end}}</div></div>
+{{end}}</div></section>{{end}}{{end}}
+
+{{define "run-more"}}{{with .Data}}<div class="grid g2">
+{{if .Transfers}}<section class="panel"><div class="ph"><h2>Transfers</h2><span class="grow"></span><span class="faint">work done of work to do, from the advance events</span></div><div class="pb">
+{{range .Transfers}}<div class="pullrow"><span class="pn"><span class="mark {{.Class}}">{{.Mark}}</span>{{.Name}}</span><span class="num amt">{{.Amount}}</span>{{if .Bar}}<div class="meter"><i class="{{.Class}} w{{.Pct}}"></i></div>{{end}}{{if .Msg}}<span class="ln">{{.Msg}}</span>{{end}}</div>
+{{end}}</div></section>{{end}}
+{{if .Steps}}<section class="panel"><div class="ph"><h2>Other steps</h2></div><div class="pb"><dl class="kv">
+{{range .Steps}}<dt class="mono">{{.Name}}</dt><dd><span class="pill {{.PillClass}} nodot">{{.Class}}</span>{{if .Text}}<span class="muted">{{.Text}}</span>{{end}}</dd>
+{{end}}</dl></div></section>{{end}}
+</div>{{end}}{{end}}
+
+{{define "run-facts"}}{{with .Data}}<section class="panel"><details class="raw" data-open-id="facts"><summary>What the event log says about this run</summary><div class="pb"><dl class="kv">
+{{range .Facts}}<dt>{{.Key}}</dt><dd{{if .Mono}} class="mono"{{end}}>{{.Val}}</dd>
+{{end}}</dl></div></details></section>{{end}}{{end}}

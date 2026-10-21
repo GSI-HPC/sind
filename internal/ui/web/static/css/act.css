@@ -1,0 +1,46 @@
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
+
+/* Dialogs of the actions (dialogs.tmpl). Every rule sits below .scrim, so
+   that the names of the form parts, which the mock shares with other
+   screens, stay these dialogs' own. */
+
+.scrim{position:fixed;inset:0;background:rgba(6,11,22,.5);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 16px;overflow-y:auto}
+.scrim .modal{width:min(680px,100%);background:var(--panel);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--line)}
+.scrim .modal.wide{width:min(880px,100%)}
+.scrim .mh{padding:16px 18px 6px}
+.scrim .mtop{display:flex;gap:10px;align-items:flex-start}
+.scrim .mh h2{font-size:19px;font-weight:700;letter-spacing:-.02em;flex:1;min-width:0;overflow-wrap:anywhere}
+.scrim .mh p{margin:4px 0 0;color:var(--muted)}
+.scrim .mb{padding:10px 18px 16px;display:grid;gap:14px;min-width:0}
+.scrim .mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2)}
+.scrim .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}
+.scrim .fld{display:grid;gap:5px;min-width:0;align-content:start}
+.scrim .fld label,.scrim .fld .lbl{font-size:13px;font-weight:500}
+.scrim .fld input[type=text],.scrim .fld input[type=number],.scrim .fld select{padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font:13px var(--f-mono);width:100%}
+.scrim .hint{font-size:12px;color:var(--muted)}
+.scrim .checks{display:grid;gap:8px}
+.scrim .checks label{display:flex;gap:8px;align-items:flex-start}
+.scrim .checks small{color:var(--muted);display:block}
+.scrim .checks.act-nodes label{flex-wrap:wrap}
+.scrim .checks.act-nodes{grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))}
+.scrim .checks.act-nodes small{display:inline}
+.scrim .roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px}
+.scrim .role{border:1px solid var(--line);border-radius:8px;padding:10px;display:grid;gap:6px;background:var(--panel-2);min-width:0}
+.scrim .role b{font:600 12.5px var(--f-mono)}
+.scrim .role .ctl{display:flex;align-items:center;gap:6px}
+.scrim .role .ctl button{width:26px;height:26px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);cursor:pointer}
+.scrim .role .ctl span{font:600 14px var(--f-mono);min-width:22px;text-align:center}
+.scrim .role.req{border-color:var(--brand)}
+.scrim .preview-map{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.scrim .nm{display:block;flex:none;width:20px;height:20px;border-radius:4px;background:var(--brand-sky);position:relative}
+.scrim .nm.controller{background:var(--brand)}
+.scrim .nm.controller::after{content:"";position:absolute;left:5px;right:5px;top:6px;height:8px;background:repeating-linear-gradient(#fff 0 1.5px,transparent 1.5px 3.25px);opacity:.9}
+.scrim .nm.controller-backup{background:var(--brand-2)}
+.scrim .nm.db,.scrim .nm.api,.scrim .nm.submitter{background:var(--brand-2);opacity:.75}
+.scrim .act-count{margin-left:6px}
+.scrim .act-plan{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.scrim .act-plan>div{min-width:0}
+.scrim .act-path{text-transform:none;letter-spacing:0;font-weight:400;overflow-wrap:anywhere}
+.scrim .act-yaml{max-height:220px}
+.scrim .act-sum{margin:6px 0 0}
+@media (max-width:520px){.scrim{padding-top:2vh}}

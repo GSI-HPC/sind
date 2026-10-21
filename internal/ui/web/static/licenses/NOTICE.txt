@@ -1,0 +1,11 @@
+sind ui serves these files from its own binary and loads nothing from the
+network. Each has its license next to this file:
+
+- htmx 2.0.11 (htmx.min.js), Zero-Clause BSD: htmx-0BSD.txt
+- htmx SSE extension 2.2.4 (htmx-ext-sse.js), Copyright (c) 2023 Alexander
+  Petros, Zero-Clause BSD: htmx-ext-sse-0BSD.txt
+- Inter (fonts/inter-latin-wght.woff2), Copyright (c) 2016 The Inter Project
+  Authors, SIL Open Font License 1.1: inter-OFL.txt
+- JetBrains Mono (fonts/jetbrains-mono-latin-wght.woff2), Copyright 2020 The
+  JetBrains Mono Project Authors, SIL Open Font License 1.1:
+  jetbrains-mono-OFL.txt

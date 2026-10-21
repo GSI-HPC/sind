@@ -1,0 +1,673 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/GSI-HPC/sind/internal/mock"
+	"github.com/GSI-HPC/sind/internal/ui/action"
+	"github.com/GSI-HPC/sind/internal/ui/run"
+	"github.com/GSI-HPC/sind/internal/ui/store"
+	"github.com/GSI-HPC/sind/pkg/cluster"
+	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/state"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// actFakeStarter records what the routes start and stop.
+type actFakeStarter struct {
+	mu        sync.Mutex
+	specs     []run.Spec
+	canceled  []string
+	startErr  error
+	cancelErr error
+	shutdown  []time.Duration
+}
+
+func (f *actFakeStarter) Start(s run.Spec) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.specs = append(f.specs, s)
+	return "task1", f.startErr
+}
+
+func (f *actFakeStarter) Cancel(id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.canceled = append(f.canceled, id)
+	return f.cancelErr
+}
+
+func (f *actFakeStarter) Running() int { return 0 }
+
+func (f *actFakeStarter) Shutdown(g time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.shutdown = append(f.shutdown, g)
+}
+
+// actFixture is a server with the routes of the actions, a store holding a
+// realm with two clusters, and a starter that starts nothing.
+type actFixture struct {
+	*testServer
+	starter *actFakeStarter
+	state   *actState
+	saved   map[string]string
+}
+
+func actNode(clusterName, short string, role config.Role) cluster.NodeSummary {
+	return cluster.NodeSummary{
+		Container: "sind-" + clusterName + "-" + short, Cluster: clusterName, Role: role,
+		FQDN: cluster.DNSName(short, clusterName, "sind"), State: cluster.StateRunning,
+	}
+}
+
+func newActFixture(t *testing.T) *actFixture {
+	t.Helper()
+	cfg, st := testConfig(t)
+	for _, rt := range actRoutes() {
+		cfg.Registry.AddRoute(rt)
+	}
+	f := &actFixture{starter: &actFakeStarter{}, saved: map[string]string{}}
+	f.state = &actState{
+		starter: f.starter, home: "/home/ada", configDir: "/state/sind/ui/configs",
+		writeFile: func(path string, data []byte) error { f.saved[path] = string(data); return nil },
+	}
+	cfg.Env.Put(actKey{}, f.state)
+	st.SetRealms([]cluster.RealmSummary{{Name: "sind", Clusters: 2}})
+	st.SetClusters("sind", []cluster.Summary{{Name: "default"}, {Name: "dev"}})
+	st.SetNodes("sind", []cluster.NodeSummary{
+		actNode("dev", "controller", config.RoleController),
+		actNode("dev", "worker-0", config.RoleWorker), actNode("dev", "worker-1", config.RoleWorker),
+		actNode("default", "controller", config.RoleController),
+	})
+	f.testServer = newTestServerFrom(t, cfg, st).login()
+	return f
+}
+
+// form encodes key and value pairs.
+func actForm(kv ...string) string {
+	q := url.Values{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		q.Add(kv[i], kv[i+1])
+	}
+	return q.Encode()
+}
+
+// shown returns the fingerprint that the preview of the form holds.
+func (f *actFixture) shown(t *testing.T, id string, form string) string {
+	t.Helper()
+	w := f.post("/actions/"+id+"/preview", form)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	_, rest, ok := strings.Cut(w.Body.String(), `name="shown" value="`)
+	require.True(t, ok, w.Body.String())
+	v, _, _ := strings.Cut(rest, `"`)
+	require.Len(t, v, 64)
+	return v
+}
+
+func TestActRoutes_AreRegistered(t *testing.T) {
+	var patterns []string
+	for _, rt := range defaultRegistry.snapshot().routes {
+		patterns = append(patterns, rt.Pattern)
+	}
+	assert.Subset(t, patterns, []string{
+		"GET /dialogs/{action}", "POST /actions/{action}/preview", "POST /actions/{action}/run", "POST /tasks/{id}/cancel",
+	})
+	var services []string
+	for _, s := range defaultRegistry.snapshot().services {
+		services = append(services, s.Name)
+	}
+	assert.Contains(t, services, "act")
+}
+
+func TestActDialog_EveryActionOpens(t *testing.T) {
+	f := newActFixture(t)
+	for _, tc := range []struct {
+		id, query string
+		want      []string
+	}{
+		{"create-cluster", "", []string{"New cluster", `name="name" value="hpc"`, `data-act-step="workers"`, `id="act-yaml"`, "ghcr.io/gsi-hpc/sind-node", `value="5m" selected`, "In realm sind"}},
+		{"create-cluster", "realm=ci&name=big", []string{"In realm ci", `value="big"`, `value="~/sind/big"`, `name="realm" value="ci"`}},
+		{"create-worker", "cluster=dev", []string{"Add workers to dev", `name="count" value="1"`, `name="cluster" value="dev"`}},
+		{"delete-cluster", "cluster=dev", []string{"Delete cluster dev", "Removes its 3 containers", `Type <b class="mono">dev</b> to confirm`, `btn danger solid`}},
+		{"delete-worker", "cluster=dev&nodes=worker-1", []string{"Delete workers of dev", `value="worker-1" checked`, `value="worker-0"> `, "Type"}},
+		{"power", "cluster=dev&nodes=worker-0,worker-1&op=cut", []string{"Power: nodes of dev", `value="worker-0" checked`, `value="worker-1" checked`, `value="controller">`, `value="cut" checked`, "Cut power"}},
+		{"power", "cluster=dev&op=stop", []string{`value="shutdown" checked`}},
+		{"power", "cluster=dev&op=melt", []string{`value="shutdown" checked`}},
+		{"connect", "container=kind-cp", []string{"Connect a container", `value="kind-cp"`}},
+		{"disconnect", "", []string{"Disconnect a container", "connected to realm sind"}},
+		{"delete-realm", "", []string{"Delete realm sind", "all 2 clusters", `Type <b class="mono">sind</b> to confirm`}},
+	} {
+		t.Run(tc.id+"?"+tc.query, func(t *testing.T) {
+			w := f.get("/dialogs/" + tc.id + "?" + tc.query)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			body := w.Body.String()
+			assert.Contains(t, body, `hx-post="/actions/`+tc.id+`/preview"`)
+			assert.Contains(t, body, `hx-post="/actions/`+tc.id+`/run"`)
+			assert.Contains(t, body, `name="csrf" value="`+f.csrf+`"`)
+			for _, want := range tc.want {
+				assert.Contains(t, body, want)
+			}
+		})
+	}
+}
+
+func TestActDialog_CreateClusterKeepsTheLinksValues(t *testing.T) {
+	f := newActFixture(t)
+	w := f.get("/dialogs/create-cluster?name=x&memory=3g&dtype=volume&monitoring=on")
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, `<option selected>3g</option>`)
+	assert.Contains(t, body, `value="volume" checked`)
+	assert.Contains(t, body, `name="monitoring" checked`)
+}
+
+func TestActDialog_Errors(t *testing.T) {
+	f := newActFixture(t)
+	for _, tc := range []struct {
+		target string
+		code   int
+		want   string
+	}{
+		{"/dialogs/nope", http.StatusNotFound, ""},
+		{"/dialogs/power", http.StatusBadRequest, "cluster: say which cluster"},
+		{"/dialogs/power?cluster=No!", http.StatusBadRequest, "cluster: invalid cluster name"},
+		{"/dialogs/connect?realm=No!", http.StatusBadRequest, "realm: invalid realm name"},
+		{"/dialogs/connect?container=" + strings.Repeat("x", 300), http.StatusBadRequest, "longer than"},
+	} {
+		w := f.get(tc.target)
+		assert.Equal(t, tc.code, w.Code, tc.target)
+		assert.Contains(t, w.Body.String(), tc.want, tc.target)
+	}
+}
+
+func TestActPreview_ShowsWhoHoldsTheLock(t *testing.T) {
+	f := newActFixture(t)
+	f.st.SetLock("sind", &state.LockHolder{Command: "sind create cluster x", Host: "node1", PID: 77, Since: time.Unix(0, 0)})
+
+	body := f.post("/actions/delete-cluster/preview", actForm("cluster", "dev")).Body.String()
+	assert.Contains(t, body, `holds the lock of realm <b class="mono">sind</b>`)
+	assert.Contains(t, body, "sind create cluster x (pid 77 on node1, since ")
+	assert.Contains(t, body, "waits until it ends")
+
+	// A power command that only stops containers takes no lock.
+	power := actForm("cluster", "dev", "nodes", "worker-0")
+	assert.NotContains(t, f.post("/actions/power/preview", power+"&op=shutdown").Body.String(), "holds the lock")
+	assert.Contains(t, f.post("/actions/power/preview", power+"&op=on").Body.String(), "holds the lock")
+	assert.NotContains(t, f.post("/actions/delete-realm/preview", actForm("realm", "ci")).Body.String(), "holds the lock")
+}
+
+func TestActPreview_ShowsTheCommand(t *testing.T) {
+	f := newActFixture(t)
+
+	w := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on", "nodes", "worker-0", "nodes", "worker-1"))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	body := w.Body.String()
+	assert.Contains(t, body, `<code>sind power on &#39;worker-[0-1].dev&#39;</code>`)
+	assert.Contains(t, body, `data-copy="sind power on &#39;worker-[0-1].dev&#39;"`)
+	assert.Contains(t, body, `id="act-ok" hx-swap-oob="true">Run</button>`)
+	assert.NotContains(t, body, `disabled`)
+	assert.NotContains(t, body, "act-yaml")
+}
+
+func TestActPreview_DangerPaintsTheButton(t *testing.T) {
+	f := newActFixture(t)
+	power := actForm("cluster", "dev", "nodes", "worker-0")
+
+	for op, danger := range map[string]bool{"cut": true, "cycle": true, "on": false, "melt": false} {
+		body := f.post("/actions/power/preview", power+"&op="+op).Body.String()
+		assert.Equal(t, danger, strings.Contains(body, `class="btn danger solid" id="act-ok"`), op)
+	}
+	body := f.post("/actions/delete-cluster/preview", actForm("cluster", "dev")).Body.String()
+	assert.Contains(t, body, `class="btn danger solid" id="act-ok"`)
+	body = f.post("/actions/connect/preview", actForm("container", "x")).Body.String()
+	assert.Contains(t, body, `class="btn primary" id="act-ok"`)
+}
+
+func TestActPreview_Refusals(t *testing.T) {
+	f := newActFixture(t)
+
+	body := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "on")).Body.String()
+	assert.Contains(t, body, `callout bad`)
+	assert.Contains(t, body, "nodes: pick at least one node of dev")
+	assert.Contains(t, body, `disabled>Run</button>`)
+	assert.NotContains(t, body, `name="shown"`)
+
+	// The typed confirmation unlocks the button.
+	del := actForm("cluster", "dev")
+	assert.Contains(t, f.post("/actions/delete-cluster/preview", del).Body.String(), `disabled>Delete</button>`)
+	assert.NotContains(t, f.post("/actions/delete-cluster/preview", del+"&confirm=dev").Body.String(), `disabled`)
+}
+
+func TestActPreview_Warnings(t *testing.T) {
+	f := newActFixture(t)
+	f.st.SetLock("sind", &state.LockHolder{Command: "sind power on x", Host: "h", PID: 1, Since: time.Unix(0, 0)})
+
+	body := f.post("/actions/power/preview", actForm("cluster", "dev", "op", "cut", "nodes", "worker-0")).Body.String()
+	assert.Contains(t, body, "Cannot be undone: processes on these nodes stop without warning.")
+	assert.NotContains(t, body, "holds the lock", "cut takes no lock")
+
+	body = f.post("/actions/power/preview", actForm("cluster", "dev", "op", "reboot", "nodes", "worker-0")).Body.String()
+	assert.Contains(t, body, `holds the lock of realm <b class="mono">sind</b>: <span class="mono">sind power on x (pid 1 on h, since `)
+
+	// An error says nothing of the lock.
+	body = f.post("/actions/power/preview", actForm("cluster", "dev", "op", "reboot")).Body.String()
+	assert.NotContains(t, body, "lock")
+}
+
+func TestActPreview_NewClusterFillsThePanels(t *testing.T) {
+	f := newActFixture(t)
+
+	w := f.post("/actions/create-cluster/preview", actForm("name", "hpc", "workers", "2", "dir", "/scratch/hpc", "users", "ada"))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	body := w.Body.String()
+	assert.Contains(t, body, `--config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc`)
+	assert.Contains(t, body, `<div class="preview-map" id="act-map" hx-swap-oob="innerHTML"><i class="nm controller" title="controller"></i>`)
+	assert.Contains(t, body, `<i class="nm worker" title="worker-1"></i>`)
+	assert.Contains(t, body, `3 nodes`)
+	assert.Contains(t, body, `3 containers, 3 CPUs, 512m each.`)
+	assert.Contains(t, body, `id="act-path" hx-swap-oob="innerHTML">/state/sind/ui/configs/hpc.yaml</span>`)
+	assert.Contains(t, body, "kind: Cluster\nname: hpc\n")
+	assert.Contains(t, body, "- name: ada")
+	assert.Contains(t, body, "saves the config to /state/sind/ui/configs/hpc.yaml")
+}
+
+func TestActRoutes_WithoutTheRunner(t *testing.T) {
+	f := newActFixture(t)
+	f.srv.env.values.Delete(actKey{})
+
+	assert.Equal(t, http.StatusInternalServerError, f.post("/actions/power/preview", "").Code)
+	assert.Equal(t, http.StatusInternalServerError, f.post("/actions/power/run", "").Code)
+	assert.Equal(t, http.StatusInternalServerError, f.post("/tasks/t/cancel", "").Code)
+}
+
+func TestActPreviewAndRun_UnknownAction(t *testing.T) {
+	f := newActFixture(t)
+	assert.Equal(t, http.StatusNotFound, f.post("/actions/nope/preview", "").Code)
+	assert.Equal(t, http.StatusNotFound, f.post("/actions/nope/run", "").Code)
+}
+
+func TestActPreviewAndRun_RefuseAFormThatIsTooBig(t *testing.T) {
+	f := newActFixture(t)
+	long := "cluster=" + strings.Repeat("x", actMaxValue+1)
+	many := strings.Repeat("nodes=a&", actMaxValues+1)
+	for _, form := range []string{long, many} {
+		assert.Equal(t, http.StatusBadRequest, f.post("/actions/power/preview", form).Code)
+		assert.Equal(t, http.StatusBadRequest, f.post("/actions/power/run", form).Code)
+	}
+	assert.Empty(t, f.starter.specs)
+	assert.NoError(t, actCheckForm(url.Values{"nodes": {strings.Repeat("x", actMaxValue)}}))
+}
+
+func TestActRun_StartsTheCommand(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("realm", "sind", "cluster", "dev", "op", "reboot", "nodes", "worker-0")
+	form += "&shown=" + f.shown(t, "power", form)
+
+	w := f.post("/actions/power/run", form)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"))
+	assert.Empty(t, w.Body.String())
+	require.Len(t, f.starter.specs, 1)
+	assert.Equal(t, run.Spec{
+		Action: "power", Argv: []string{"sind", "power", "reboot", "worker-0.dev"},
+		Display: "sind power reboot worker-0.dev", Realm: "sind", Cluster: "dev",
+	}, f.starter.specs[0])
+	assert.Empty(t, f.saved)
+}
+
+func TestActRun_SavesTheConfigFirst(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("realm", "ci", "name", "hpc", "workers", "1", "dir", "/scratch/hpc", "wait", "2m")
+	form += "&shown=" + f.shown(t, "create-cluster", form)
+
+	w := f.post("/actions/create-cluster/run", form)
+
+	require.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"), w.Body.String())
+	assert.Equal(t, []string{"/state/sind/ui/configs/hpc.yaml"}, mapKeys(f.saved))
+	assert.Contains(t, f.saved["/state/sind/ui/configs/hpc.yaml"], "name: hpc\nrealm: ci\n")
+	require.Len(t, f.starter.specs, 1)
+	assert.Equal(t, "sind --realm ci create cluster --config /state/sind/ui/configs/hpc.yaml --data /scratch/hpc --wait 2m", f.starter.specs[0].Display)
+	assert.Equal(t, "ci", f.starter.specs[0].Realm)
+	assert.Equal(t, "hpc", f.starter.specs[0].Cluster)
+}
+
+func mapKeys(m map[string]string) []string {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func TestActRun_RefusesTheFormThatDoesNotBuild(t *testing.T) {
+	f := newActFixture(t)
+
+	w := f.post("/actions/power/run", actForm("cluster", "dev", "op", "on")+"&shown=x")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
+	assert.Equal(t, "innerHTML", w.Header().Get("HX-Reswap"))
+	assert.Contains(t, w.Body.String(), "nodes: pick at least one node of dev")
+	assert.Contains(t, w.Body.String(), "disabled>Run</button>")
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActRun_RefusesWithoutTheTypedName(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("cluster", "dev")
+	shown := f.shown(t, "delete-cluster", form)
+
+	for _, typed := range []string{"", "de", "default"} {
+		w := f.post("/actions/delete-cluster/run", form+"&shown="+shown+"&confirm="+typed)
+		assert.Contains(t, w.Body.String(), "Type dev to confirm.", typed)
+		assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
+	}
+	assert.Empty(t, f.starter.specs)
+
+	w := f.post("/actions/delete-cluster/run", form+"&shown="+shown+"&confirm=dev")
+	assert.Equal(t, "/tasks/task1", w.Header().Get("HX-Redirect"))
+	assert.Equal(t, "sind delete cluster dev", f.starter.specs[0].Display)
+}
+
+func TestActRun_RefusesACommandThatChanged(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("cluster", "dev", "op", "on", "nodes", "worker-0")
+	shown := f.shown(t, "power", form)
+
+	// The browser shows one command and posts the fields of another.
+	w := f.post("/actions/power/run", actForm("cluster", "dev", "op", "cut", "nodes", "worker-0", "shown", shown))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "The command changed while you looked. Check it, then press the button again.")
+	assert.Contains(t, body, "sind power cut worker-0.dev")
+	assert.NotContains(t, body, "disabled", "the button works once the new command was seen")
+	assert.Empty(t, f.starter.specs)
+
+	// Without any preview, nothing runs either.
+	w = f.post("/actions/power/run", form)
+	assert.Contains(t, w.Body.String(), "The command changed while you looked")
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActRun_ShownCoversTheConfig(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("name", "hpc", "workers", "1", "dir", "/scratch/hpc", "users", "ada")
+	shown := f.shown(t, "create-cluster", form)
+
+	// The command line is the same; the config is not.
+	w := f.post("/actions/create-cluster/run", actForm("name", "hpc", "workers", "1", "dir", "/scratch/hpc", "users", "eve", "shown", shown))
+
+	assert.Contains(t, w.Body.String(), "The command changed while you looked")
+	assert.Empty(t, f.saved)
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActRun_StartFailures(t *testing.T) {
+	f := newActFixture(t)
+	form := actForm("cluster", "dev", "op", "on", "nodes", "worker-0")
+	form += "&shown=" + f.shown(t, "power", form)
+	f.starter.startErr = errors.New("not a sind command")
+
+	w := f.post("/actions/power/run", form)
+
+	assert.Empty(t, w.Header().Get("HX-Redirect"))
+	assert.Equal(t, "#act-preview", w.Header().Get("HX-Retarget"))
+	assert.Contains(t, w.Body.String(), "not a sind command")
+
+	createForm := actForm("name", "hpc", "workers", "1", "dir", "/scratch/hpc")
+	createForm += "&shown=" + f.shown(t, "create-cluster", createForm)
+	f.state.writeFile = func(string, []byte) error { return errors.New("disk full") }
+	f.starter.specs = nil
+
+	w = f.post("/actions/create-cluster/run", createForm)
+
+	assert.Contains(t, w.Body.String(), "saving the config: disk full")
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActCancel(t *testing.T) {
+	f := newActFixture(t)
+	f.st.AddTask(store.Task{ID: "task1", Status: store.TaskRunning})
+
+	w := f.post("/tasks/task1/cancel", "")
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, []string{"task1"}, f.starter.canceled)
+
+	assert.Equal(t, http.StatusNotFound, f.post("/tasks/other/cancel", "").Code)
+
+	f.starter.cancelErr = fmt.Errorf("task1: %w", run.ErrNotRunning)
+	w = f.post("/tasks/task1/cancel", "")
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), "not running")
+
+	f.starter.cancelErr = errors.New("operation not permitted")
+	assert.Equal(t, http.StatusInternalServerError, f.post("/tasks/task1/cancel", "").Code)
+}
+
+func TestActWrites_NeedTheSession(t *testing.T) {
+	f := newActFixture(t)
+	for _, target := range []string{"/actions/power/run", "/actions/power/preview", "/tasks/t/cancel"} {
+		r := request("POST", target)
+		r.AddCookie(f.cookie)
+		r.Header.Set("Origin", "http://127.0.0.1:7878")
+		w := f.do(r)
+		assert.Equal(t, http.StatusForbidden, w.Code, "no CSRF header: "+target)
+	}
+	assert.Empty(t, f.starter.specs)
+}
+
+func TestActLocks(t *testing.T) {
+	power, _ := action.Lookup("power")
+	for op, want := range map[string]bool{"on": true, "start": true, "reboot": true, "cycle": true, "shutdown": false, "cut": false, "freeze": false, "unfreeze": false, "": false} {
+		assert.Equal(t, want, actLocks(power, url.Values{"op": {op}}), op)
+	}
+	del, _ := action.Lookup("delete-cluster")
+	assert.True(t, actLocks(del, url.Values{}))
+}
+
+func TestActWaits_AreTheOnesTheActionTakes(t *testing.T) {
+	var values []string
+	for _, w := range actWaits {
+		values = append(values, w.Value)
+		assert.NotEmpty(t, w.Label)
+	}
+	assert.Equal(t, action.Waits, values)
+	assert.Contains(t, action.Waits, action.DefaultWait)
+}
+
+func TestActSpecs_CoverEveryAction(t *testing.T) {
+	for _, id := range action.IDs() {
+		spec, ok := actSpecs[id]
+		require.True(t, ok, id)
+		assert.NotEmpty(t, spec.OK, id)
+		assert.NotNil(t, spec.Title, id)
+		assert.NotNil(t, spec.Lead, id)
+	}
+	assert.Len(t, actSpecs, len(action.IDs()))
+}
+
+func TestActService_Setup(t *testing.T) {
+	cfg, _ := testConfig(t)
+	env := cfg.Env
+	restore := actSeams(t)
+	defer restore()
+	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
+	actStateDir = func() (string, error) { return "/state/sind", nil }
+	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
+	actHome = func() (string, error) { return "/home/ada", nil }
+	actEnviron = func() []string { return []string{"A=1"} }
+
+	require.NoError(t, actService().Setup(env))
+
+	got, ok := env.Get(actKey{}).(*actState)
+	require.True(t, ok)
+	assert.Equal(t, "/home/ada", got.home)
+	assert.Equal(t, "/state/sind/ui/configs", got.configDir)
+	assert.NotNil(t, got.starter)
+	assert.NotNil(t, got.writeFile)
+}
+
+func TestActService_SetupErrors(t *testing.T) {
+	cfg, _ := testConfig(t)
+	restore := actSeams(t)
+	defer restore()
+
+	actExecutable = func() (string, error) { return "", errors.New("no /proc") }
+	assert.EqualError(t, actService().Setup(cfg.Env), "finding the sind executable: no /proc")
+
+	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
+	actStateDir = func() (string, error) { return "", errors.New("no home") }
+	assert.EqualError(t, actService().Setup(cfg.Env), "finding the state directory: no home")
+	assert.Nil(t, cfg.Env.Get(actKey{}))
+}
+
+func TestActService_SetupSurvivesWhatSindDefaults(t *testing.T) {
+	cfg, _ := testConfig(t)
+	restore := actSeams(t)
+	defer restore()
+	actExecutable = func() (string, error) { return "/usr/bin/sind", nil }
+	actStateDir = func() (string, error) { return "/state/sind", nil }
+	actActivityLog = func() (string, error) { return "", errors.New("read-only home") }
+	actHome = func() (string, error) { return "", errors.New("no home") }
+
+	require.NoError(t, actService().Setup(cfg.Env))
+
+	got := cfg.Env.Get(actKey{}).(*actState)
+	assert.Empty(t, got.home)
+}
+
+// actSeams returns the function that puts the seams of Setup back.
+func actSeams(t *testing.T) func() {
+	t.Helper()
+	e, d, l, h, v := actExecutable, actStateDir, actActivityLog, actHome, actEnviron
+	return func() { actExecutable, actStateDir, actActivityLog, actHome, actEnviron = e, d, l, h, v }
+}
+
+func TestActService_RefreshesTheCollectorAfterATask(t *testing.T) {
+	cfg, st := testConfig(t)
+	restore := actSeams(t)
+	defer restore()
+	actExecutable = func() (string, error) { return "/bin/sh", nil }
+	actStateDir = func() (string, error) { return "/state/sind", nil }
+	actActivityLog = func() (string, error) { return "/state/sind/activity.jsonl", nil }
+	actHome = func() (string, error) { return "/home/ada", nil }
+	actEnviron = func() []string { return []string{"PATH=/bin"} }
+	refreshed := make(chan string, 2)
+	cfg.Env.Put("collect.refresh", func(realm string) { refreshed <- realm })
+	cfg.Env.Exec = &mock.Executor{OnCall: func([]string, string) mock.Result { return mock.Result{} }}
+	require.NoError(t, actService().Setup(cfg.Env))
+
+	id, err := cfg.Env.Get(actKey{}).(*actState).starter.Start(run.Spec{Action: "power", Argv: []string{"sind", "power", "on", "x"}, Realm: "ci"})
+
+	require.NoError(t, err)
+	select {
+	case realm := <-refreshed:
+		assert.Equal(t, "ci", realm)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the collector was not asked to read the realm again")
+	}
+	assert.Eventually(t, func() bool { task, _ := st.Snapshot().Task(id); return task.Done() }, 5*time.Second, time.Millisecond)
+
+	// A collector that is not there is no reason to fail.
+	cfg.Env.Put("collect.refresh", nil)
+	id, err = cfg.Env.Get(actKey{}).(*actState).starter.Start(run.Spec{Argv: []string{"sind", "x"}})
+	require.NoError(t, err)
+	assert.Eventually(t, func() bool { task, _ := st.Snapshot().Task(id); return task.Done() }, 5*time.Second, time.Millisecond)
+}
+
+func TestActService_RunShutsTheRunnerDownWithTheServer(t *testing.T) {
+	cfg, _ := testConfig(t)
+	starter := &actFakeStarter{}
+	cfg.Env.Put(actKey{}, &actState{starter: starter})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { actService().Run(ctx, cfg.Env); close(done) }()
+
+	cancel()
+	<-done
+
+	assert.Equal(t, []time.Duration{actGrace}, starter.shutdown)
+
+	// Without a runner (Setup failed or did not run) there is nothing to stop.
+	cfg.Env.Put(actKey{}, nil)
+	actService().Run(ctx, cfg.Env)
+	assert.Len(t, starter.shutdown, 1)
+}
+
+func TestActActivityLog(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+
+	path, err := activityLogForChildren()
+
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, "sind", "activity.jsonl"), path)
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	// A state directory that cannot be made still gives the path.
+	blocker := filepath.Join(dir, "file")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	t.Setenv("XDG_STATE_HOME", blocker)
+	path, err = activityLogForChildren()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(blocker, "sind", "activity.jsonl"), path)
+}
+
+func TestActSaveFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ui", "configs", "hpc.yaml")
+
+	require.NoError(t, actSaveFile(path, []byte("kind: Cluster\n")))
+	require.NoError(t, actSaveFile(path, []byte("kind: Cluster\nname: x\n")))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Cluster\nname: x\n", string(data))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	dirInfo, err := os.Stat(filepath.Dir(path))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
+
+	// The directory cannot be made below a file.
+	assert.Error(t, actSaveFile(filepath.Join(path, "x", "y.yaml"), nil))
+}
+
+func TestActDialog_RendersAsAFragmentOfTheLayerOnly(t *testing.T) {
+	f := newActFixture(t)
+	r := request("GET", "/dialogs/connect")
+	r.AddCookie(f.cookie)
+	r.Header.Set("HX-Request", "true")
+	w := f.do(r)
+	assert.True(t, strings.HasPrefix(strings.TrimSpace(w.Body.String()), `<div class="scrim" id="act-dialog"`))
+	assert.NotContains(t, w.Body.String(), "<html")
+	assert.Equal(t, "text/html; charset=utf-8", w.Header().Get("Content-Type"))
+}
+
+func TestActDialog_OpenedByItsURLIsAPage(t *testing.T) {
+	f := newActFixture(t)
+	body := f.get("/dialogs/connect").Body.String()
+	assert.Contains(t, body, "<title>Connect a container · sind ui</title>")
+	assert.Contains(t, body, `<main class="main" id="main">`+"\n"+`<div class="scrim" id="act-dialog"`)
+}

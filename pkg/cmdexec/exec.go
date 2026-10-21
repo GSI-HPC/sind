@@ -52,6 +52,9 @@ func inProcessGroup(cmd *exec.Cmd) {
 func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = stdin
+	if env := Env(ctx); len(env) > 0 {
+		cmd.Env = env
+	}
 	if InProcessGroup(ctx) {
 		inProcessGroup(cmd)
 	}
@@ -67,7 +70,13 @@ func (e *OSExecutor) run(ctx context.Context, stdin io.Reader, name string, args
 		cmd.Stdout = progress.Tee(ctx, &outBuf, progress.Stdout, parse)
 	}
 	cmd.Stderr = progress.Tee(ctx, &errBuf, progress.Stderr, parse)
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		if started := Started(ctx); started != nil {
+			started(cmd.Process.Pid)
+		}
+		err = cmd.Wait()
+	}
 	return outBuf.String(), errBuf.String(), WrapExitError(err, errBuf.String())
 }
 

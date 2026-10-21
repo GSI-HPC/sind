@@ -1,0 +1,5 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* slot-realm is the realm picker in the top bar. Choosing a realm posts it
+to /realm with htmx, which keeps it in the cookie sind_realm. */}}
+{{define "slot-realm"}}<form class="realm" method="post" action="/realm" hx-post="/realm" hx-trigger="change" hx-swap="none"><label for="realm-sel">realm</label>{{template "csrf-field" .}}<input type="hidden" name="next" value="{{.PgRealmNext}}"><select id="realm-sel" name="realm" aria-label="Realm">{{range .PgRealmOptions}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></form>{{end}}

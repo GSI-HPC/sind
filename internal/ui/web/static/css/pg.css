@@ -1,0 +1,100 @@
+/* The main pages: Overview, Clusters, Nodes, a cluster and a node. Ported
+   from the mock's mock.css; every class starts with pg-. Colours are the
+   tokens of app.css. */
+
+.pg-block{margin-top:14px}
+.pg-hint{margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+.pg-flat{margin:0}
+.pg-small{font-size:12px}
+.pg-grow{flex:1;min-width:0}
+.pg-wide{grid-column:1/-1}
+.pg-h1{font-size:24px}
+.pg-note{margin-bottom:14px}
+.pg-gone{margin-bottom:14px}
+.pg-realms{margin-bottom:0}
+
+/* cluster cards */
+.pg-ccard{display:flex;flex-direction:column;gap:12px;padding:14px;color:var(--fg)}
+.pg-ccard:hover{border-color:var(--accent);text-decoration:none}
+.pg-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-name{font-size:20px;font-weight:700;letter-spacing:-.025em}
+.pg-ver{margin-left:auto;font:12px var(--f-mono);color:var(--faint)}
+.pg-pills{display:flex;gap:6px;flex-wrap:wrap}
+
+/* node tiles: they echo the logo; the controller is deep teal with three
+   lines, service nodes teal, workers sky; a stopped node is an outline, a
+   paused one hatched, one with a service down has an amber ring */
+.pg-nodemap{display:flex;flex-wrap:wrap;gap:4px}
+.pg-nm{display:inline-block;width:20px;height:20px;border-radius:4px;background:var(--brand-sky);position:relative;flex:none}
+a.pg-nm:hover{outline:2px solid var(--accent);outline-offset:1px}
+.pg-big .pg-nm{width:28px;height:28px;border-radius:5px}
+.pg-nm-controller{background:var(--brand)}
+.pg-nm-controller::after{content:"";position:absolute;left:25%;right:25%;top:30%;height:40%;background:repeating-linear-gradient(#fff 0 1.5px,transparent 1.5px 3.25px);opacity:.9}
+.pg-nm-controller-backup{background:var(--brand-2)}
+.pg-nm-db,.pg-nm-api,.pg-nm-submitter{background:var(--brand-2);opacity:.75}
+.pg-nm-stopped{background:transparent!important;border:2px solid var(--bad);opacity:1}
+.pg-nm-stopped::after{display:none}
+.pg-nm-paused{background:repeating-linear-gradient(45deg,var(--warn) 0 3px,transparent 3px 6px)!important;border:1px solid var(--warn);opacity:1}
+.pg-nm-unknown{background:transparent!important;border:2px dotted var(--warn);opacity:1}
+.pg-nm-svcdown{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--warn)}
+
+/* Needs you */
+.pg-it{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;padding:10px 14px 10px 0;border-bottom:1px solid var(--line-2);align-items:center}
+.pg-it:last-child{border-bottom:0}
+.pg-bar{align-self:stretch;border-radius:0 3px 3px 0;background:var(--info)}
+.pg-bar.bad{background:var(--bad)} .pg-bar.warn{background:var(--warn)} .pg-bar.run{background:var(--run)}
+.pg-tt{font-weight:500;overflow-wrap:anywhere}
+.pg-dd{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.pg-bb{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+
+/* recent runs */
+.pg-r{display:flex;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line-2);color:var(--fg)}
+.pg-r:hover{background:var(--panel-2);text-decoration:none}
+.pg-r:last-child{border-bottom:0}
+.pg-c{flex:1;font:12.5px var(--f-mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-tm{color:var(--faint);font-size:12px;white-space:nowrap}
+
+/* first steps */
+.pg-steps{display:grid;gap:10px;counter-reset:pg-step;margin:0;padding:0}
+.pg-steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;list-style:none;padding:10px 0;border-bottom:1px solid var(--line-2)}
+.pg-steps li:last-child{border-bottom:0}
+.pg-steps li::before{counter-increment:pg-step;content:counter(pg-step);width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:700 12px var(--f-mono)}
+
+/* the realm filter of the lists */
+.pg-seg{margin-bottom:14px;max-width:100%;overflow-x:auto}
+.pg-seg a{padding:5px 10px;color:var(--muted);border-right:1px solid var(--line);white-space:nowrap}
+.pg-seg a:last-child{border-right:0}
+.pg-seg a:hover{text-decoration:none;color:var(--fg)}
+.pg-seg a.on{background:var(--accent-soft);color:var(--fg);font-weight:600}
+
+/* a cluster's head */
+.pg-run{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+.pg-spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--run-soft);border-top-color:var(--run);animation:pg-spin 1s linear infinite;flex:none}
+@keyframes pg-spin{to{transform:rotate(360deg)}}
+
+/* the health matrix */
+.pg-mx td,.pg-mx th{text-align:center;padding:7px 8px}
+.pg-mx td:first-child,.pg-mx th:first-child,.pg-mx td:nth-child(2),.pg-mx th:nth-child(2){text-align:left}
+.pg-svc{text-transform:none;letter-spacing:0}
+.pg-ck{font:700 13px var(--f-mono)}
+.pg-ck.y{color:var(--ok)} .pg-ck.n{color:var(--bad)} .pg-ck.na{color:var(--faint)}
+
+/* the nodes tab: the selection and its bar */
+.pg-selbar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.pg-selbar[hidden],.pg-selbar [hidden]{display:none}
+.pg-expr{font:600 13px var(--f-mono);overflow-wrap:anywhere}
+.pg-chk{width:30px}
+tr.pg-sel td{background:var(--accent-soft)}
+tr[data-href]{cursor:pointer}
+
+/* a node's issues */
+.pg-issue{display:flex;gap:8px;align-items:center}
+
+@media (max-width:760px){
+  .pg-it{grid-template-columns:4px minmax(0,1fr)}
+  .pg-bb{grid-column:2;justify-content:flex-start}
+  .pg-steps li{grid-template-columns:28px minmax(0,1fr)}
+  .pg-steps li > :last-child{grid-column:2}
+  .pg-h1{font-size:20px}
+  .realm select{max-width:150px}
+}

@@ -1,0 +1,7 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* rail is the fragment of the page list; .Data holds the groups. */}}
+{{define "rail"}}{{range .Data}}
+<h6>{{.Title}}</h6>
+{{range .Items}}<a class="nav{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}><span class="g">{{.Glyph}}</span>{{.Label}}{{if .Count.Text}}<span class="n{{with .Count.Class}} {{.}}{{end}}">{{.Count.Text}}</span>{{end}}</a>
+{{end}}{{end}}{{end}}
