@@ -1,0 +1,92 @@
+name: Image updates
+
+# Checks every version that sind pins (Slurm, UCX, PMIx, PRRTE, Open MPI,
+# libjwt, CoreDNS, Alloy, Prometheus, Loki, Grafana) against upstream once a
+# week and keeps one open issue, labelled image-updates, that lists the
+# updates and newer release lines. A maintainer works it off with the
+# update-image-deps skill (.claude/skills/update-image-deps).
+#
+# Scheduled workflows run from the default branch, but sind is developed on
+# next, so the job checks out next and runs its script and pins. The issue
+# is keyed by its title, which lists the findings:
+# - an open issue with the same title is left alone
+# - an open issue with another title is updated in place, so there is never
+#   more than one
+# - an issue closed as not planned with the same title is not reopened or
+#   recreated, so a declined update stays quiet until upstream moves on
+on:
+  schedule:
+    - cron: "47 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: image-updates
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: next
+          persist-credentials: false
+
+      - name: Check the pinned versions
+        run: .github/scripts/image-updates.sh --verify-download | tee "$RUNNER_TEMP/updates.tsv"
+
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABEL: image-updates
+        run: |
+          updates="$RUNNER_TEMP/updates.tsv"
+          if [[ ! -s "$updates" ]]; then
+            echo "All pinned versions are current."
+            exit 0
+          fi
+
+          # Title: "Image updates: slurm 26.05.5, ompi 5.0.11, pmix 7.0.0 (new line)"
+          summary=$(awk -F'\t' '{ printf "%s%s %s%s", sep, $2, $4, ($1 == "new-line" ? " (new line)" : ""); sep = ", " }' "$updates")
+          title="Image updates: $summary"
+
+          {
+            echo "The weekly check found newer upstream releases than the versions pinned on \`next\`."
+            echo
+            echo "| Component | Pinned | Latest | |"
+            echo "|-----------|--------|--------|-|"
+            awk -F'\t' '{ printf "| %s | %s | %s | %s |\n", $2, $3, $4, ($1 == "new-line" ? "newer release line, maintainer decision" : "update") }' "$updates"
+            echo
+            echo "Apply the updates with the \`update-image-deps\` skill (\`.claude/skills/update-image-deps\`) and close this issue with \`Closes #<number>\` in the commit."
+            echo "A new release line is not added without a decision; close this issue as not planned to silence it until upstream moves on."
+            echo
+            echo "Found by [this run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+          } > "$RUNNER_TEMP/body.md"
+
+          gh label create "$LABEL" --color 0e8a16 --description "Pinned image versions behind upstream" 2>/dev/null || true
+
+          open=$(gh issue list --label "$LABEL" --state open --json number,title --jq '.[0] // empty')
+          if [[ -n "$open" ]]; then
+            number=$(jq -r .number <<<"$open")
+            if [[ "$(jq -r .title <<<"$open")" == "$title" ]]; then
+              echo "Issue #$number is up to date."
+            else
+              gh issue edit "$number" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+              echo "Updated issue #$number."
+            fi
+            exit 0
+          fi
+
+          declined=$(gh issue list --label "$LABEL" --state closed --limit 100 --json title,stateReason |
+            jq -r --arg t "$title" '.[] | select(.title == $t and .stateReason == "NOT_PLANNED") | .title')
+          if [[ -n "$declined" ]]; then
+            echo "A maintainer declined this update set: $title"
+            exit 0
+          fi
+
+          gh issue create --label "$LABEL" --title "$title" --body-file "$RUNNER_TEMP/body.md"
