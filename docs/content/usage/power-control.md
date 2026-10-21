@@ -1,7 +1,6 @@
 ---
 weight: 340
 title: "Power Control"
-icon: "power_settings_new"
 description: "Simulate power events on cluster nodes"
 toc: true
 ---

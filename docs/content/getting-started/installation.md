@@ -1,7 +1,6 @@
 ---
 weight: 110
 title: "Installation"
-icon: "download"
 description: "Prerequisites and installation instructions"
 toc: true
 ---

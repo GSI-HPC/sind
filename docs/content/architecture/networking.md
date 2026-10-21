@@ -1,7 +1,6 @@
 ---
 weight: 420
 title: "Networking"
-icon: "hub"
 description: "Cluster networks, mesh, DNS, and SSH infrastructure"
 toc: true
 ---

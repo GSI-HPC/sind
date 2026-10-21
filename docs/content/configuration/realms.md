@@ -1,7 +1,6 @@
 ---
 weight: 230
 title: "Realms"
-icon: "shield"
 description: "Isolated mesh namespaces for parallel environments"
 toc: true
 ---

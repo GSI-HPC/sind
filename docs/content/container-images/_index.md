@@ -1,7 +1,6 @@
 ---
 weight: 500
 title: "Container Images"
-icon: "deployed_code"
 description: "Building and customizing sind node images"
 ---
 

@@ -1,7 +1,6 @@
 ---
 weight: 355
 title: "Unmanaged Cluster"
-icon: "construction"
 description: "Leave Slurm to your own tooling: test Chef or Ansible provisioning, or run slurmctld by hand"
 toc: true
 ---

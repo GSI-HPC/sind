@@ -1,7 +1,6 @@
 ---
 weight: 430
 title: "Docker Resources"
-icon: "inventory_2"
 description: "Resource naming conventions, volumes, and labels"
 toc: true
 ---

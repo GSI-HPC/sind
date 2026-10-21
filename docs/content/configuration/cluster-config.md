@@ -1,7 +1,6 @@
 ---
 weight: 210
 title: "Cluster Configuration"
-icon: "description"
 description: "YAML configuration schema reference"
 toc: true
 ---

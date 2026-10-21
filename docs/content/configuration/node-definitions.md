@@ -1,7 +1,6 @@
 ---
 weight: 220
 title: "Node Definitions"
-icon: "dns"
 description: "Node roles, shorthand syntax, managed vs unmanaged workers, database and API nodes, and unmanaged clusters"
 toc: true
 ---

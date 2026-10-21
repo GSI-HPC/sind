@@ -1,7 +1,6 @@
 ---
 weight: 360
 title: "Node Arguments"
-icon: "label"
 description: "DNS-style node naming and node set expressions"
 toc: true
 ---

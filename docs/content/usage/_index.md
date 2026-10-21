@@ -1,7 +1,6 @@
 ---
 weight: 300
 title: "Usage"
-icon: "terminal"
 description: "CLI commands and workflows"
 ---
 

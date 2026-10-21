@@ -1,7 +1,6 @@
 ---
 weight: 440
 title: "Slurm Configuration"
-icon: "tune"
 description: "Generated configuration files and version discovery"
 toc: true
 ---

@@ -1,7 +1,6 @@
 ---
 weight: 370
 title: "Exit Status"
-icon: "exit_to_app"
 description: "What sind's exit status tells a script"
 toc: true
 ---

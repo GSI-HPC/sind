@@ -1,7 +1,6 @@
 ---
 weight: 310
 title: "Cluster Lifecycle"
-icon: "cycle"
 description: "Creating, listing, and deleting clusters"
 toc: true
 ---

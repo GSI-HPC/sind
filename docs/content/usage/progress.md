@@ -1,7 +1,6 @@
 ---
 weight: 355
 title: "Progress Display"
-icon: "timelapse"
 description: "What create, delete and power show while they run, and the event log"
 toc: true
 ---

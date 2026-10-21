@@ -1,7 +1,6 @@
 ---
 weight: 320
 title: "Node Access"
-icon: "vpn_key"
 description: "SSH, interactive shells, and command execution"
 toc: true
 ---

@@ -1,7 +1,6 @@
 ---
 weight: 359
 title: "Monitoring"
-icon: "query_stats"
 description: "Collect Slurm's metrics, the nodes' resource use and their journals in Prometheus, Loki and Grafana"
 toc: true
 ---

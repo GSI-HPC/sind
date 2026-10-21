@@ -1,7 +1,6 @@
 ---
 weight: 350
 title: "Diagnostics"
-icon: "monitoring"
 description: "Cluster health, logs, and resource inspection"
 toc: true
 ---

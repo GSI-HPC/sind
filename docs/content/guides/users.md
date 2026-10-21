@@ -1,7 +1,6 @@
 ---
 weight: 357
 title: "Users and Identity"
-icon: "group"
 description: "Run jobs as regular users with Slurm accounts, and test where your site resolves them"
 toc: true
 ---
