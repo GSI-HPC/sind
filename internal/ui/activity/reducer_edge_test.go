@@ -1,0 +1,324 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+package activity
+
+import (
+	"fmt"
+	"math"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/GSI-HPC/sind/internal/ui/store"
+)
+
+const runA = "aaaaaaaaaaaaaaaa"
+
+// start gives the reducer the start of a span at the second s.
+func start(r *Reducer, run string, s int, id, parent, kind, name string, extra ...string) {
+	rest := fmt.Sprintf(`"span":%q,"kind":%q,"name":%q`, id, kind, name)
+	if parent != "" {
+		rest += fmt.Sprintf(`,"parent":%q`, parent)
+	}
+	for _, e := range extra {
+		rest += "," + e
+	}
+	r.Line(ev("start", run, fmt.Sprintf("2026-01-01T00:00:%02dZ", s), rest))
+}
+
+func TestTreeByParent(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "root", "", "command", "create cluster")
+	start(r, runA, 1, "b", "root", "step", "b")
+	start(r, runA, 2, "a", "root", "step", "a")
+	start(r, runA, 3, "a1", "a", "target", "a1")
+	start(r, runA, 4, "b1", "b", "target", "b1")
+	start(r, runA, 5, "a2", "a", "target", "a2")
+	// A span whose parent is not known hangs below the root, and so does
+	// one that names itself, and one without a parent.
+	start(r, runA, 6, "orphan", "gone", "step", "orphan")
+	start(r, runA, 7, "self", "self", "step", "self")
+	start(r, runA, 8, "bare", "", "step", "bare")
+	// A cycle that does not reach the root is out of the tree.
+	start(r, runA, 9, "x", "y", "step", "x")
+	start(r, runA, 9, "y", "x", "step", "y")
+
+	runs := r.Runs()
+	require.Len(t, runs, 1)
+	root := runs[0].Root
+	assert.Equal(t, []string{"b", "a", "orphan", "self", "bare"}, names(root.Children), "in start order")
+	assert.Equal(t, []string{"b1"}, names(root.Children[0].Children))
+	assert.Equal(t, []string{"a1", "a2"}, names(root.Children[1].Children))
+	assert.Equal(t, "gone", root.Children[2].Parent, "the parent the log named")
+	assert.Equal(t, at("2026-01-01T00:00:00Z"), runs[0].Start)
+}
+
+func TestRunWithoutCommandSpan(t *testing.T) {
+	r := NewReducer(5)
+	// The start of the command was cut off, as by a rotation.
+	start(r, runA, 1, "s1", "root", "step", "nodes")
+	assert.Empty(t, r.Runs(), "a run needs its command")
+	assert.Equal(t, []string{runA}, r.Changed())
+	start(r, runA, 0, "root", "", "command", "create cluster")
+	runs := r.Runs()
+	require.Len(t, runs, 1)
+	assert.Equal(t, []string{"nodes"}, names(runs[0].Root.Children), "the span of before is below it")
+}
+
+func TestEventsBeforeTheTraceLine(t *testing.T) {
+	r := NewReducer(5)
+	r.Line(ev("start", runA, "2026-01-01T00:00:00Z", `"trace":"t9","span":"r","kind":"command","name":"x"`))
+	assert.Equal(t, "t9", r.Runs()[0].Trace, "the events name the trace too")
+	assert.Empty(t, r.Runs()[0].Program)
+	r.Line(line("trace", runA, `"trace":"t9","parent":"p1","program":"sind","version":"v2"`))
+	run := r.Runs()[0]
+	assert.Equal(t, "sind", run.Program)
+	assert.Equal(t, "v2", run.Version)
+	assert.Equal(t, "p1", run.Parent)
+	assert.Equal(t, "x", run.Title, "the span is kept")
+}
+
+func TestKeepDropsEndedRunsFirst(t *testing.T) {
+	const b, c, d = "bbbbbbbbbbbbbbbb", "cccccccccccccccc", "dddddddddddddddd"
+	r := NewReducer(2)
+	start(r, runA, 0, "r", "", "command", "a") // running, the oldest
+	start(r, b, 1, "r", "", "command", "b")
+	r.Line(ev("end", b, "2026-01-01T00:00:02Z", `"span":"r","status":"ok"`))
+	start(r, c, 3, "r", "", "command", "c")
+	assert.Equal(t, []string{"c", "a"}, titles(r), "b ended, so b goes, not the older a")
+	assert.Contains(t, r.Changed(), b, "the drop is a change of the run")
+
+	// With none ended the oldest goes.
+	start(r, d, 4, "r", "", "command", "d")
+	assert.Equal(t, []string{"d", "c"}, titles(r))
+
+	// A line of a run that was dropped does not bring it back.
+	r.Line(ev("end", runA, "2026-01-01T00:00:05Z", `"span":"r","status":"ok"`))
+	r.Line(ev("start", b, "2026-01-01T00:00:06Z", `"span":"late","kind":"step","name":"late"`))
+	assert.Equal(t, []string{"d", "c"}, titles(r))
+}
+
+func titles(r *Reducer) []string {
+	var out []string
+	for _, run := range r.Runs() {
+		out = append(out, run.Title)
+	}
+	return out
+}
+
+func TestKeepAtLeastOneAndForgetsWhatItDropped(t *testing.T) {
+	r := NewReducer(0)
+	for i := range 40 {
+		id := fmt.Sprintf("%016x", i+1)
+		start(r, id, i%60, "r", "", "command", id)
+	}
+	assert.Equal(t, []string{fmt.Sprintf("%016x", 40)}, titles(r), "one run is kept")
+	// The memory of dropped runs is bounded: an old id may come back.
+	r.Line(ev("start", fmt.Sprintf("%016x", 1), "2026-01-01T00:00:59Z", `"span":"r","kind":"command","name":"back"`))
+	assert.Equal(t, []string{"back"}, titles(r))
+	assert.LessOrEqual(t, len(r.gone), 16)
+}
+
+func TestSpanLimit(t *testing.T) {
+	r := NewReducer(5)
+	r.maxSpans = 2
+	start(r, runA, 0, "r", "", "command", "c")
+	start(r, runA, 1, "s1", "r", "step", "one")
+	start(r, runA, 2, "s2", "r", "step", "two")
+	r.Line(ev("update", runA, "2026-01-01T00:00:03Z", `"span":"s1","parent":"r","kind":"step","message":"still counted"`))
+	root := r.Runs()[0].Root
+	assert.Equal(t, []string{"one"}, names(root.Children))
+	assert.Equal(t, "still counted", root.Children[0].Message)
+}
+
+func TestReset(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "a")
+	start(r, "bbbbbbbbbbbbbbbb", 1, "r", "", "command", "b")
+	_ = r.Changed()
+	r.Reset()
+	assert.Empty(t, r.Runs())
+	assert.Equal(t, []string{runA, "bbbbbbbbbbbbbbbb"}, r.Changed())
+	start(r, runA, 2, "r", "", "command", "a2")
+	assert.Equal(t, []string{"a2"}, titles(r), "a run forgotten may start again")
+}
+
+func TestTextsAreStrippedOfControlCharacters(t *testing.T) {
+	r := NewReducer(5)
+	r.Line(line("trace", runA, `"program":"si\u001b[31mnd","version":"v1\u0000"`))
+	r.Line(ev("start", runA, "2026-01-01T00:00:00Z",
+		`"span":"r","kind":"command","name":"cre\u0007ate\tcluster","node":"de\u202ev","host":"h\u0085ost","role":"w\u200eorker","batch":"1\n/2","message":"a\r\nb\u001b]0;x\u0007"`))
+	r.Line(ev("end", runA, "2026-01-01T00:00:01Z", `"span":"r","status":"failed","class":"target","err":"bad\u0000 news\u202d!"`))
+	run := r.Runs()[0]
+	assert.Equal(t, "si[31mnd", run.Program, "the escape is gone, the rest is text")
+	assert.Equal(t, "v1", run.Version)
+	assert.Equal(t, "create cluster dev", run.Title)
+	assert.Equal(t, "host", run.Root.Host)
+	assert.Equal(t, "worker", run.Root.Role)
+	assert.Equal(t, "1 /2", run.Root.Batch)
+	assert.Equal(t, "a  b]0;x", run.Root.Message)
+	assert.Equal(t, "bad news!", run.Err)
+}
+
+func TestSuspendAndResume(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "c")
+	r.Line(ev("suspend", runA, "2026-01-01T00:00:01Z", `"span":"r"`))
+	run := r.Runs()[0]
+	assert.True(t, run.Suspended)
+	assert.Equal(t, at("2026-01-01T00:00:01Z"), run.Last)
+	r.Line(ev("resume", runA, "2026-01-01T00:00:02Z", ``))
+	assert.False(t, r.Runs()[0].Suspended)
+	r.Line(ev("suspend", runA, "2026-01-01T00:00:03Z", ``))
+	r.Line(ev("end", runA, "2026-01-01T00:00:04Z", `"span":"r","status":"ok"`))
+	assert.False(t, r.Runs()[0].Suspended, "a run that ended asks nothing")
+}
+
+func TestTitleTellsRunsApart(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "create cluster", `"node":"dev"`)
+	start(r, "bbbbbbbbbbbbbbbb", 1, "r", "", "command", "create cluster")
+	assert.Equal(t, []string{"create cluster", "create cluster dev"}, titles(r))
+}
+
+func TestSpanLifecycle(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "c")
+	start(r, runA, 1, "q", "r", "target", "q", `"state":"queued"`)
+	start(r, runA, 1, "u", "r", "target", "u", `"state":"queued"`)
+	start(r, runA, 1, "n", "r", "target", "n", `"state":"running"`)
+	var spans []store.Span
+	get := func() { spans = r.Runs()[0].Root.Children }
+	get()
+	assert.Equal(t, StateQueued, spans[0].State)
+	assert.True(t, spans[0].Started.IsZero())
+	assert.Equal(t, at("2026-01-01T00:00:01Z"), spans[0].Queued)
+	assert.Equal(t, StateRunning, spans[2].State)
+	assert.Equal(t, spans[2].Queued, spans[2].Started)
+
+	// run starts a queued span, once; the second changes nothing.
+	r.Line(ev("run", runA, "2026-01-01T00:00:03Z", `"span":"q","parent":"r","kind":"target","state":"running"`))
+	r.Line(ev("run", runA, "2026-01-01T00:00:04Z", `"span":"q","parent":"r","kind":"target","state":"running"`))
+	r.Line(ev("run", runA, "2026-01-01T00:00:04Z", `"span":"n","parent":"r","kind":"target","state":"running"`))
+	get()
+	assert.Equal(t, StateRunning, spans[0].State)
+	assert.Equal(t, at("2026-01-01T00:00:03Z"), spans[0].Started)
+	assert.Equal(t, at("2026-01-01T00:00:01Z"), spans[2].Started)
+
+	// A queued span can end without having run.
+	r.Line(ev("end", runA, "2026-01-01T00:00:05Z", `"span":"u","parent":"r","status":"canceled","class":"canceled","err":"stopped"`))
+	get()
+	assert.Equal(t, StateEnded, spans[1].State)
+	assert.True(t, spans[1].Started.IsZero())
+	require.NotNil(t, spans[1].Ended)
+	assert.Equal(t, at("2026-01-01T00:00:05Z"), *spans[1].Ended)
+
+	// Once ended, a span is done: a repeated end or a late event is left
+	// out.
+	r.Line(ev("end", runA, "2026-01-01T00:00:09Z", `"span":"u","status":"ok","message":"later","exit":3`))
+	r.Line(ev("line", runA, "2026-01-01T00:00:09Z", `"span":"u","stream":"stderr"`))
+	get()
+	assert.Equal(t, store.StatusCanceled, spans[1].Status)
+	assert.Equal(t, at("2026-01-01T00:00:05Z"), *spans[1].Ended)
+	assert.Empty(t, spans[1].Message)
+	assert.Nil(t, spans[1].Exit)
+	assert.Zero(t, spans[1].Lines)
+	// The run's newest event is still the newest the log had.
+	assert.Equal(t, at("2026-01-01T00:00:09Z"), r.Runs()[0].Last)
+
+	// A span first met at an update or an end, as after a cut log.
+	r.Line(ev("update", runA, "2026-01-01T00:00:10Z", `"span":"m1","parent":"r","kind":"step","name":"m1","state":"queued","total":4`))
+	r.Line(ev("end", runA, "2026-01-01T00:00:11Z", `"span":"m2","parent":"r","kind":"step","name":"m2","state":"ended","status":"ok","exit":0`))
+	get()
+	assert.Equal(t, StateQueued, spans[3].State)
+	assert.Equal(t, 4, spans[3].Total)
+	assert.Equal(t, StateEnded, spans[4].State)
+	assert.Equal(t, store.StatusOK, spans[4].Status)
+	assert.Equal(t, at("2026-01-01T00:00:11Z"), spans[4].Queued)
+	require.NotNil(t, spans[4].Exit)
+	assert.Zero(t, *spans[4].Exit)
+}
+
+func TestLinesAndDropped(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "c")
+	start(r, runA, 0, "s", "r", "call", "sol", `"flags":["show-lines"]`)
+	for _, extra := range []string{`,"dropped":2`, ``, `,"dropped":-4`, `,"dropped":1`} {
+		r.Line(ev("line", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"call","stream":"stdout"`+extra))
+	}
+	s := r.Runs()[0].Root.Children[0]
+	assert.Equal(t, 4, s.Lines)
+	assert.Equal(t, 3, s.Dropped)
+	assert.True(t, s.ShowLines)
+	// The end counts all the span's.
+	r.Line(ev("end", runA, "2026-01-01T00:00:02Z", `"span":"s","status":"ok","dropped":5`))
+	assert.Equal(t, 5, r.Runs()[0].Root.Children[0].Dropped)
+	r.Line(ev("end", runA, "2026-01-01T00:00:02Z", `"span":"r","status":"ok","dropped":-1`))
+	assert.Zero(t, r.Runs()[0].Root.Dropped)
+}
+
+func TestWorkOfASpan(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "c")
+	start(r, runA, 0, "d", "r", "call", "download", `"state":"running"`)
+	amount := func() int64 { return r.Runs()[0].Root.Children[0].Amount }
+
+	assert.Zero(t, amount(), "no work yet")
+	r.Line(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"d","parent":"r","kind":"call","size":1000,"unit":"bytes"`))
+	assert.Zero(t, amount())
+	assert.EqualValues(t, 1000, r.Runs()[0].Root.Children[0].Size)
+	r.Line(ev("advance", runA, "2026-01-01T00:00:02Z", `"span":"d","parent":"r","kind":"call","amount":400,"size":1000,"unit":"bytes"`))
+	assert.EqualValues(t, 400, amount())
+	r.Line(ev("advance", runA, "2026-01-01T00:00:03Z", `"span":"d","parent":"r","kind":"call","amount":700,"size":1000,"unit":"bytes","leftOut":9`))
+	assert.EqualValues(t, 700, amount())
+	// An event leaves out an amount of 0: the download started over.
+	r.Line(ev("advance", runA, "2026-01-01T00:00:04Z", `"span":"d","parent":"r","kind":"call","size":1000,"unit":"bytes"`))
+	assert.Zero(t, amount())
+	r.Line(ev("advance", runA, "2026-01-01T00:00:05Z", `"span":"d","parent":"r","kind":"call","amount":-5,"size":1000,"unit":"bytes"`))
+	assert.Zero(t, amount(), "never negative")
+	r.Line(ev("end", runA, "2026-01-01T00:00:06Z", `"span":"d","parent":"r","kind":"call","amount":1000,"size":1000,"unit":"bytes","status":"ok"`))
+	d := r.Runs()[0].Root.Children[0]
+	assert.EqualValues(t, 1000, d.Amount)
+	assert.EqualValues(t, 1000, d.Size)
+	assert.Equal(t, "bytes", d.Unit)
+
+	// An amount with no unit and no size, as a log of a later release may
+	// write, is kept.
+	start(r, runA, 7, "x", "r", "step", "x", `"amount":12`)
+	assert.EqualValues(t, 12, r.Runs()[0].Root.Children[1].Amount)
+}
+
+func TestCounts(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "c")
+	start(r, runA, 0, "s", "r", "step", "s", `"total":7,"limit":3`)
+	r.Line(ev("update", runA, "2026-01-01T00:00:01Z", `"span":"s","parent":"r","kind":"step","total":5,"limit":0,"batch":"2/5","message":"working"`))
+	r.Line(ev("update", runA, "2026-01-01T00:00:02Z", `"span":"s","parent":"r","kind":"step","message":""`))
+	s := r.Runs()[0].Root.Children[0]
+	assert.Equal(t, 7, s.Total, "a smaller total is not taken")
+	assert.Equal(t, 3, s.Limit)
+	assert.Equal(t, "2/5", s.Batch)
+	assert.Equal(t, "working", s.Message, "the latest message there is")
+}
+
+func TestTimeouts(t *testing.T) {
+	r := NewReducer(5)
+	start(r, runA, 0, "r", "", "command", "c")
+	for i, c := range []struct {
+		json string
+		want time.Duration
+	}{
+		{`"timeout":1.5`, 1500 * time.Millisecond},
+		{`"timeout":300`, 300 * time.Second},
+		{`"timeout":-3`, 0},
+		{`"timeout":1e30`, time.Duration(math.MaxInt64/int64(time.Second)) * time.Second},
+	} {
+		start(r, runA, 1, fmt.Sprintf("w%d", i), "r", "wait", "w", c.json)
+	}
+	for i, c := range r.Runs()[0].Root.Children {
+		want := []time.Duration{1500 * time.Millisecond, 300 * time.Second, 0, time.Duration(math.MaxInt64/int64(time.Second)) * time.Second}[i]
+		assert.Equal(t, want, c.Timeout, c.ID)
+	}
+}
