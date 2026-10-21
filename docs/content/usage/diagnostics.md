@@ -495,7 +495,7 @@ dev       5       26.05.4
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.3",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
   "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.4"}]
