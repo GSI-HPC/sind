@@ -1,0 +1,18 @@
+/* Logs tab of the cluster page. Colours come from app.css. */
+.logs-bar{gap:12px}
+.logs-fld{grid-auto-flow:column;align-items:center;gap:8px}
+.logs-fld[hidden]{display:none}
+.logs-fld select{font:12.5px var(--f-mono);padding:5px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);max-width:100%}
+.logs-fld label{white-space:nowrap}
+.logbox{height:420px;max-height:60vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.logbox .logs-line{display:block}
+.logbox .logs-notice{display:block;color:var(--term-dim);font-style:italic}
+.logbox .logs-err{color:#f87171}
+.logbox .logs-warn{color:#fbbf24}
+.logs-foot{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between;font-size:12px}
+@media (max-width:600px){
+  .logs-bar{align-items:stretch}
+  .logs-fld{grid-auto-flow:row;gap:3px;flex:1 1 100%}
+  .logs-fld select{width:100%}
+  .logbox{height:55vh}
+}

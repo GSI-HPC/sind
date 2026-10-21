@@ -26,7 +26,6 @@ func TestEmbeddedAssets(t *testing.T) {
 		_, err := fs.Stat(webFS(), "static/"+name)
 		assert.NoError(t, err, name)
 	}
-	assert.Empty(t, a.styles, "no part has added a stylesheet yet")
 }
 
 func TestAssetsServe(t *testing.T) {
