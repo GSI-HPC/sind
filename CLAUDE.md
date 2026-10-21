@@ -17,8 +17,9 @@ Personal, uncommitted instructions belong in `CLAUDE.local.md` (gitignored).
   then `git push --force-with-lease`.
 - Never push to `main`/`next`, create tags or releases, or merge PRs.
 - Ask the maintainer before commenting on issues or PRs, and never @-mention anyone.
-- `.claude/skills/steward` has the PR/CI routine; `.claude/skills/bump-image-deps`
-  covers Slurm and other node-image version bumps.
+- `.claude/skills/steward` has the PR/CI routine; `.claude/skills/update-image-deps`
+  finds and applies pending Slurm and other image-dependency updates,
+  `.claude/skills/bump-image-deps` covers a single bump.
 
 ## Commands
 
