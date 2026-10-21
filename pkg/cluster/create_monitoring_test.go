@@ -48,7 +48,7 @@ func TestCreate_Monitoring(t *testing.T) {
 	f := newStackFake(t)
 	cluster, m, err := createMonitored(t, f, createCfg(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, "26.05.4", cluster.SlurmVersion)
+	assert.Equal(t, "26.05.5", cluster.SlurmVersion)
 
 	for _, s := range observability.Services {
 		c := f.containers[string(observability.ContainerName("sind", s))]

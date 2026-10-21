@@ -19,8 +19,8 @@ variable "IMAGE_NAME" {
 variable "SLURM_RELEASES" {
   default = [
     {
-      version = "26.05.4"
-      sha256  = "035f4b193d4de979ba5381beca206a50b6b886b2793b06f68a1ce7e67022b06a"
+      version = "26.05.5"
+      sha256  = "4680cafc82b0689865c885eb703441e7ebf764896c40fd03a50f2fcb60664f68"
     },
     {
       version = "25.11.8"

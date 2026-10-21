@@ -56,7 +56,7 @@ func composeLabelFlags(project, service string) []string {
 
 // DNSImage is the container image used for the mesh DNS server, a pinned
 // CoreDNS release.
-const DNSImage = "coredns/coredns:1.14.7"
+const DNSImage = "coredns/coredns:1.15.0"
 
 // corefilePath is the path to the Corefile inside the DNS container.
 const corefilePath = "/Corefile"

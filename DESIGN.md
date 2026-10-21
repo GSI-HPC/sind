@@ -462,7 +462,7 @@ Example output:
 ```
 $ sind get clusters
 NAME      NODES (S/C/D/A/W)   SLURM     STATUS
-default   5 (1/1/0/1/2)       26.05.4   running
+default   5 (1/1/0/1/2)       26.05.5   running
 dev       4 (0/1/1/0/2)       25.11.8   running
 ```
 
@@ -590,8 +590,8 @@ alloy        sind-alloy        http://172.18.0.9:12345            running
 
 CLUSTERS
 NAME      NODES   SLURM
-default   3       26.05.4
-dev       5       26.05.4
+default   3       26.05.5
+dev       5       26.05.5
 ```
 
 `ADDRESS` is the service's URL by its mesh DNS name, and Alloy's by its address, as Alloy has no DNS name; `-` for a stopped Alloy. sind keeps no record of whether host DNS works, so the JSON output has both the URL and the address. `STATUS` uses words, as the CLI guidelines keep ✓/✗ to `get cluster`, `get node` and `doctor`: the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, and `missing` for a container that does not exist, also as the JSON `status`. `CLUSTERS` lists the clusters whose nodes mount the realm's journal volume, with the number of those nodes and the Slurm version of the controller. A realm without a stack fails with `no monitoring stack in realm "sind"` and exit status 1 (`cluster.ErrNoMonitoring`).
@@ -600,10 +600,10 @@ dev       5       26.05.4
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.3",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.4"}]
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5"}]
 }
 ```
 
@@ -1365,7 +1365,7 @@ The helpers mount the config and munge volumes while `sind create cluster` write
 | Type | Name Pattern | Example | Image |
 |------|-------------|---------|-------|
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
-| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.14.7` |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.15.0` |
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys copied in through `<realm>-ssh` before it first starts) |
 
@@ -1377,10 +1377,10 @@ A realm with a monitored cluster has one monitoring stack (see Monitoring):
 
 | Type | Name Pattern | Example | Image |
 |------|-------------|---------|-------|
-| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.3` |
-| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.0` |
-| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.8` |
-| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.20.1` |
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.4` |
+| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.1` |
+| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.1` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 
@@ -2141,7 +2141,7 @@ While it creates the cluster network and volumes, sind runs an ephemeral contain
 
 ```bash
 docker run --rm <controller image> slurmctld -V
-# Output: "slurm 26.05.4"
+# Output: "slurm 26.05.5"
 ```
 
 The version must have the form `X.Y.Z`, optionally with a pre-release suffix such as `-0rc1` (`[0-9A-Za-z.]`); any other output, such as a version followed by a terminal control sequence from an untrusted image, fails the create.
@@ -2149,7 +2149,7 @@ The version must have the form `X.Y.Z`, optionally with a pre-release suffix suc
 The discovered version is stored as a label on each node container:
 
 ```
---label sind.slurm.version=26.05.4
+--label sind.slurm.version=26.05.5
 ```
 
 Workers added with `sind create worker` copy the controller's label. Without `--image` they run an image the cluster already runs, by ID. With `--image`, sind discovers the image's version the same way and refuses managed workers whose version differs from the label. At cluster creation, nodes whose `image` differs from the controller's carry the controller's version too: `sind create cluster` does not discover versions per image or compare them.

@@ -614,7 +614,7 @@ func TestNodeRunConfigs_WithAPI(t *testing.T) {
 		},
 	}
 
-	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "26.05.4", "")
+	configs := NodeRunConfigs(cfg, mesh.DefaultRealm, "10.0.0.2", "26.05.5", "")
 
 	require.Len(t, configs, 3)
 	api := configs[1]
@@ -622,7 +622,7 @@ func TestNodeRunConfigs_WithAPI(t *testing.T) {
 	assert.Equal(t, config.RoleAPI, api.Role)
 	assert.Equal(t, "img:1", api.Image)
 	assert.Equal(t, 2, api.CPUs)
-	assert.Equal(t, "26.05.4", api.SlurmVersion)
+	assert.Equal(t, "26.05.5", api.SlurmVersion)
 	assert.Equal(t, 1, api.ContainerNumber)
 	assert.True(t, api.Managed, "api of a managed cluster")
 	assert.False(t, api.SharedState)
@@ -638,7 +638,7 @@ func TestNodeRunConfigs_UnmanagedAPI(t *testing.T) {
 			{Role: config.RoleWorker},
 		},
 	}
-	configs := NodeRunConfigs(inManaged, mesh.DefaultRealm, "", "26.05.4", "")
+	configs := NodeRunConfigs(inManaged, mesh.DefaultRealm, "", "26.05.5", "")
 	require.Len(t, configs, 3)
 	assert.True(t, configs[0].Managed, "controller")
 	assert.Equal(t, "api", configs[1].ShortName)

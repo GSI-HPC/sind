@@ -5,6 +5,9 @@ description: Bump Slurm or another source-built component (UCX, PMIx, PRRTE, Ope
 
 # Bump a node-image component
 
+`update-image-deps` finds the pending bumps (`.github/scripts/image-updates.sh`) and
+drives them into one PR; this skill is the procedure for each one.
+
 `Dockerfile` builds these from source, each pinned by version and sha256, or for
 libjwt, which publishes no release tarballs for 1.x, by version and git commit. Slurm's
 version and checksum are build args without defaults; `SLURM_RELEASES` in

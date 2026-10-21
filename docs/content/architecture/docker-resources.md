@@ -36,7 +36,7 @@ The default realm is `sind` and the default cluster name is `default`, resulting
 | Type | Name pattern | Example | Image |
 |------|-------------|---------|-------|
 | Mesh network | `<realm>-mesh` | `sind-mesh` | — |
-| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.14.7` |
+| DNS container | `<realm>-dns` | `sind-dns` | `coredns/coredns:1.15.0` |
 | SSH container | `<realm>-ssh` | `sind-ssh` | sind's default node image (runs `sleep infinity`) |
 | SSH volume | `<realm>-ssh-config` | `sind-ssh-config` | — (keys written once, through the SSH container before it first starts) |
 
@@ -48,10 +48,10 @@ A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also has
 
 | Type | Name pattern | Example | Image |
 |------|-------------|---------|-------|
-| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.3` |
-| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.0` |
-| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.8` |
-| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.20.1` |
+| Grafana container | `<realm>-grafana` | `sind-grafana` | `grafana/grafana:13.2.4` |
+| Prometheus container | `<realm>-prometheus` | `sind-prometheus` | `prom/prometheus:v3.15.1` |
+| Loki container | `<realm>-loki` | `sind-loki` | `grafana/loki:3.7.9` |
+| Alloy container | `<realm>-alloy` | `sind-alloy` | `grafana/alloy:v1.21.1` |
 | Data volumes | `<realm>-<service>` | `sind-grafana`, `sind-prometheus`, `sind-loki`, `sind-alloy` | — |
 | Journal volume | `<realm>-journal` | `sind-journal` | — (a directory `<cluster>/<node>` per monitored node) |
 

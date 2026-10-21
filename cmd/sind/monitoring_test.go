@@ -38,8 +38,8 @@ func monitoredOnCall(t *testing.T) func([]string, string) mock.Result {
 			return mock.Result{Stdout: testutil.NDJSON(entries...)}
 		case args[0] == "ps" && slices.Contains(filters, "volume=sind-journal"):
 			return mock.Result{Stdout: testutil.NDJSON(
-				testutil.PsEntry{Names: "sind-dev-controller", Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=26.05.4"},
-				testutil.PsEntry{Names: "sind-dev-worker-0", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=26.05.4"},
+				testutil.PsEntry{Names: "sind-dev-controller", Labels: "sind.cluster=dev,sind.role=controller,sind.slurm.version=26.05.5"},
+				testutil.PsEntry{Names: "sind-dev-worker-0", Labels: "sind.cluster=dev,sind.role=worker,sind.slurm.version=26.05.5"},
 			)}
 		case args[0] == "inspect" && stack(args[1]):
 			var infos []map[string]any
@@ -104,7 +104,7 @@ alloy        sind-alloy        -                                  exited
 
 CLUSTERS
 NAME   NODES   SLURM
-dev    2       26.05.4
+dev    2       26.05.5
 `, stdout)
 
 	stdout, _, err = executeWithMock(&mock.Executor{OnCall: monitoredOnCall(t)}, "get", "monitoring", "-o", "json")
@@ -116,7 +116,7 @@ dev    2       26.05.4
 		Name: observability.ServiceGrafana, Container: "sind-grafana", Image: "img-sind-grafana",
 		IP: "172.18.255.253", URL: "http://grafana.sind.sind:3000", State: "running", Ready: true, Checked: true,
 	}, m.Services[0])
-	assert.Equal(t, []cluster.MonitoredCluster{{Name: "dev", Nodes: 2, SlurmVersion: "26.05.4"}}, m.Clusters)
+	assert.Equal(t, []cluster.MonitoredCluster{{Name: "dev", Nodes: 2, SlurmVersion: "26.05.5"}}, m.Clusters)
 }
 
 // TestGetMonitoring_NoClusters checks that a stack that collects no

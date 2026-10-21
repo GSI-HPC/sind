@@ -485,8 +485,8 @@ alloy        sind-alloy        http://172.18.0.9:12345            running
 
 CLUSTERS
 NAME      NODES   SLURM
-default   3       26.05.4
-dev       5       26.05.4
+default   3       26.05.5
+dev       5       26.05.5
 ```
 
 `ADDRESS` uses the services' DNS names, which resolve on the host with [host DNS]({{< relref "/architecture/networking#host-dns-resolution" >}}), and Alloy's address, as Alloy has none; it shows `-` for a stopped Alloy. `STATUS` is the container's state, `not ready` for a running container whose readiness check fails, `unchecked` for a running container while Grafana, which runs the checks, does not, or `missing` for a container that does not exist, as is its `status` in the JSON output. `-o json` adds each service's image, address (`ip`) readiness (`ready`) and whether it was checked (`checked`):
@@ -495,10 +495,10 @@ dev       5       26.05.4
 {
   "realm": "sind",
   "services": [
-    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.3",
+    {"name": "grafana", "container": "sind-grafana", "image": "grafana/grafana:13.2.4",
      "ip": "172.18.255.253", "url": "http://grafana.sind.sind:3000", "status": "running", "ready": true, "checked": true}
   ],
-  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.4"}]
+  "clusters": [{"name": "default", "nodes": 3, "slurm_version": "26.05.5"}]
 }
 ```
 
