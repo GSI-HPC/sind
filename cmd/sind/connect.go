@@ -27,7 +27,7 @@ them, and deleting the realm's last cluster takes the realm's mesh, so that
 a cluster created after it is not connected to them.`,
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeContainers(cluster.ConnectableContainers),
-		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+		RunE: withProgressOn(containersTarget, func(cmd *cobra.Command, args []string) error {
 			return runExternal(cmd, args, cluster.Connect)
 		}),
 	})
@@ -47,7 +47,7 @@ join, the mesh network last, so that clusters created later are not
 connected to them. The containers keep running.`,
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeContainers(cluster.ExternalContainers),
-		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+		RunE: withProgressOn(containersTarget, func(cmd *cobra.Command, args []string) error {
 			return runExternal(cmd, args, cluster.Disconnect)
 		}),
 	})

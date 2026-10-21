@@ -64,7 +64,7 @@ func newPowerCommand() *cobra.Command {
 			Example:           nodesExample("sind power "+strings.Fields(c.use)[0], "controller.dev"),
 			Args:              cobra.MinimumNArgs(1),
 			ValidArgsFunction: completeNodeNames,
-			RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+			RunE: withProgressOn(nodesTarget, func(cmd *cobra.Command, args []string) error {
 				return runPower(cmd, strings.Join(args, " "), fn, locked)
 			}),
 		})

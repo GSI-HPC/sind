@@ -219,7 +219,7 @@ func TestTheProgressDisplayIsDrawnWhereItCan(t *testing.T) {
 			assert.Equal(t, tc.shown, c.shown(), "displays made")
 			assert.Empty(t, stdout.String())
 			if w != nil {
-				assert.Equal(t, "command create worker: failed (usage): "+ownErr+"\n", w.Finish())
+				assert.Equal(t, "command create worker node=default: failed (usage): "+ownErr+"\n", w.Finish())
 			}
 		})
 	}
@@ -863,4 +863,82 @@ func TestTheDisplaysDrawClassic(t *testing.T) {
 	// NO_COLOR reaches the profile the logger takes too.
 	t.Setenv("NO_COLOR", "1")
 	assert.Equal(t, termenv.Ascii, savedProfile(io.Discard))
+}
+
+// The command span names what the command works on, as its arguments name
+// it, and create cluster names the cluster of its configuration.
+func TestCommandTargets(t *testing.T) {
+	cmd := &cobra.Command{}
+	assert.Equal(t, "dev", clusterTarget(cmd, []string{"dev"}))
+	assert.Equal(t, "default", clusterTarget(cmd, nil))
+	assert.Equal(t, "ci,dev", nodesTarget(cmd, []string{"worker-[0-1].dev", "controller.ci", "worker-2.dev"}))
+	assert.Equal(t, "default", nodesTarget(cmd, []string{"worker-0"}))
+	assert.Empty(t, nodesTarget(cmd, []string{"Worker-0"}), "a node the command refuses")
+	assert.Equal(t, "minio,kind-control-plane", containersTarget(cmd, []string{"minio", "kind-control-plane"}))
+
+	del := newDeleteClusterCommand()
+	assert.Equal(t, "dev", deleteClusterTarget(del, []string{"dev"}))
+	require.NoError(t, del.Flags().Set("all", "true"))
+	assert.Empty(t, deleteClusterTarget(del, nil))
+
+	dir := t.TempDir()
+	named := filepath.Join(dir, "named.yaml")
+	require.NoError(t, os.WriteFile(named, []byte("kind: Cluster\nname: from-file\n"), 0o600))
+	unnamed := filepath.Join(dir, "unnamed.yaml")
+	require.NoError(t, os.WriteFile(unnamed, []byte("kind: Cluster\n"), 0o600))
+	bad := filepath.Join(dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(bad, []byte("kind: Nope\n"), 0o600))
+	tty, err := os.Open(os.DevNull) // a character device, as a terminal is
+	require.NoError(t, err)
+	defer func() { _ = tty.Close() }()
+	for _, tc := range []struct {
+		name, config string
+		args         []string
+		stdin        io.Reader
+		want         string
+	}{
+		{"NAME wins", named, []string{"dev"}, tty, "dev"},
+		{"the file's name", named, nil, tty, "from-file"},
+		{"the file's default", unnamed, nil, tty, "default"},
+		{"a file that does not parse", bad, nil, tty, ""},
+		{"a file that is not there", filepath.Join(dir, "gone.yaml"), nil, tty, ""},
+		{"stdin, read as the command runs", configStdin, nil, tty, ""},
+		{"no configuration", "", nil, tty, "default"},
+		{"a configuration piped in", "", nil, strings.NewReader("kind: Cluster\n"), ""},
+	} {
+		config := tc.config
+		c := &cobra.Command{}
+		c.SetIn(tc.stdin)
+		assert.Equal(t, tc.want, createClusterTarget(&config)(c, tc.args), tc.name)
+	}
+}
+
+// A command that learns its target as it runs ends its span with it; one
+// that names none has no Node, and nameTarget without a command span does
+// nothing.
+func TestNameTarget(t *testing.T) {
+	nameTarget(context.Background(), "dev")
+	for _, tc := range []struct {
+		target commandTarget
+		late   string
+		want   string
+	}{
+		{nil, "", "command work: ok"},
+		{clusterTarget, "", "command work node=default: ok"},
+		{nil, "late", "command work node=late: ok"},
+	} {
+		ctx, w := progresstest.Watch(context.Background(), t)
+		cmd := &cobra.Command{Use: "work", RunE: withProgressOn(tc.target, func(cmd *cobra.Command, _ []string) error {
+			if tc.late != "" {
+				nameTarget(cmd.Context(), tc.late)
+			}
+			return nil
+		})}
+		cmd.SetArgs(nil)
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		require.NoError(t, cmd.ExecuteContext(ctx))
+		w.Finish()
+		assert.Equal(t, tc.want+"\n", testutil.WithoutCalls(w.Events()))
+	}
 }

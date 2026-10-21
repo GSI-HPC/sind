@@ -100,6 +100,21 @@ var (
 // A command that failed once it had been interrupted ends canceled,
 // whatever its error says, as run tells it.
 func withProgress(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	return withProgressOn(nil, run)
+}
+
+// commandTarget returns what a command works on, as its arguments name it:
+// a cluster, the clusters of its nodes or its containers; "" for what they
+// do not name.
+type commandTarget func(cmd *cobra.Command, args []string) string
+
+// withProgressOn is withProgress for a command that works on what target
+// names: the command span's Node, which the event log carries, so that a
+// reader such as sind ui can tell "create cluster dev" from another create
+// cluster. A command that learns its target only as it runs names it with
+// nameTarget, and the span ends with that Node. The display draws no Node
+// of a command span.
+func withProgressOn(target commandTarget, run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) (err error) {
 		interrupt := cmd.Context()
 		returned := false
@@ -112,16 +127,20 @@ func withProgress(run func(*cobra.Command, []string) error) func(*cobra.Command,
 			p.Finish(!returned || err != nil || interrupt.Err() != nil)
 			restore()
 		}()
-		ctx, span := progress.Start(ctx, progress.KindCommand, commandPath(cmd))
-		cmd.SetContext(ctx)
+		named := &targetName{}
+		if target != nil {
+			named.name = target(cmd, args)
+		}
+		ctx, span := progress.Start(ctx, progress.KindCommand, commandPath(cmd), named.options()...)
+		cmd.SetContext(context.WithValue(ctx, targetKey{}, named))
 		defer func() {
 			switch {
 			case !returned:
-				span.End(errPanicked)
+				span.End(errPanicked, named.options()...)
 			case err != nil && interrupt.Err() != nil:
-				span.End(interrupted{err})
+				span.End(interrupted{err}, named.options()...)
 			default:
-				span.End(err)
+				span.End(err, named.options()...)
 			}
 			cmd.SetContext(interrupt)
 		}()
@@ -130,6 +149,53 @@ func withProgress(run func(*cobra.Command, []string) error) func(*cobra.Command,
 		return err
 	}
 }
+
+// targetName is what the command span of a command works on, "" for
+// nothing named.
+type targetName struct{ name string }
+
+// targetKey is the context key of a command's *targetName.
+type targetKey struct{}
+
+// options returns the options that give the command span its target.
+func (n *targetName) options() []progress.Option {
+	if n.name == "" {
+		return nil
+	}
+	return []progress.Option{progress.Node(n.name)}
+}
+
+// nameTarget names what the command of ctx works on once it knows, such as
+// the cluster of a configuration read from stdin: its span ends with it.
+// Without a command span it does nothing.
+func nameTarget(ctx context.Context, name string) {
+	if n, ok := ctx.Value(targetKey{}).(*targetName); ok {
+		n.name = name
+	}
+}
+
+// clusterTarget is the target of a command whose argument is a cluster,
+// the default one when there is none.
+func clusterTarget(_ *cobra.Command, args []string) string { return clusterArg(args) }
+
+// nodesTarget is the target of a command whose arguments are nodes: their
+// clusters, each once, in the order the command works on them, "" for nodes
+// that do not parse, as the command fails on them.
+func nodesTarget(_ *cobra.Command, args []string) string {
+	targets, err := parseNodeArgs(strings.Join(args, " "))
+	if err != nil {
+		return ""
+	}
+	var clusters []string
+	for _, g := range groupByCluster(targets) {
+		clusters = append(clusters, g.Cluster)
+	}
+	return strings.Join(clusters, ",")
+}
+
+// containersTarget is the target of a command whose arguments are
+// containers.
+func containersTarget(_ *cobra.Command, args []string) string { return strings.Join(args, ",") }
 
 // errPanicked ends the span of a command whose function panicked.
 var errPanicked = errors.New("the command panicked")

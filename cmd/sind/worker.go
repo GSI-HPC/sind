@@ -23,7 +23,7 @@ func newCreateWorkerCommand() *cobra.Command {
 		Long:              "Add worker nodes to a cluster.\n\n" + defaultClusterHelp("CLUSTER"),
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
-		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+		RunE: withProgressOn(clusterTarget, func(cmd *cobra.Command, args []string) error {
 			return runCreateWorker(cmd, clusterArg(args))
 		}),
 	}
@@ -131,7 +131,7 @@ func newDeleteWorkerCommand() *cobra.Command {
 		Example:           nodesExample("sind delete worker", "worker-0.dev"),
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeWorkerNames,
-		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+		RunE: withProgressOn(nodesTarget, func(cmd *cobra.Command, args []string) error {
 			return runDeleteWorker(cmd, strings.Join(args, " "))
 		}),
 	}

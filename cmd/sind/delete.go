@@ -37,7 +37,7 @@ func newDeleteClusterCommand() *cobra.Command {
 and its exported SSH configuration, as delete realm does.`,
 		Args:              optionalCluster,
 		ValidArgsFunction: completeClusterNames,
-		RunE: withProgress(func(cmd *cobra.Command, args []string) error {
+		RunE: withProgressOn(deleteClusterTarget, func(cmd *cobra.Command, args []string) error {
 			all, _ := cmd.Flags().GetBool("all")
 			if all {
 				if len(args) > 0 {
@@ -72,6 +72,15 @@ attached to the realm's networks are detached, not removed.`,
 			return runDeleteClustersAll(cmd)
 		}),
 	}
+}
+
+// deleteClusterTarget is the cluster that delete cluster deletes, none for
+// --all.
+func deleteClusterTarget(cmd *cobra.Command, args []string) string {
+	if all, _ := cmd.Flags().GetBool("all"); all {
+		return ""
+	}
+	return clusterArg(args)
 }
 
 func runDeleteCluster(cmd *cobra.Command, name string) error {
