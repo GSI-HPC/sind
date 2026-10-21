@@ -46,7 +46,7 @@ internal/testutil/ Shared test helpers
 
 pkg/cmdexec/       Command executor abstraction
   ├── exec.go      Executor interface, OSExecutor (tees output to the progress span of the call)
-  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show; WithProcessGroup: a cancel kills the command's process group
+  ├── output.go    WithStdoutAsData: a command's stdout is data, not lines to show; WithLineParser: a callback for the lines a command writes, as the layer count of docker pull reads them; WithProcessGroup: a cancel kills the command's process group
   ├── stream.go    Process, Start (long-lived commands with streamed stdout)
   ├── exiterror.go ExitError (exit code + stderr of a failed command)
   └── logging.go   LoggingExecutor (TRACE-level command logging)
@@ -57,6 +57,7 @@ pkg/docker/        Docker CLI wrapper
   ├── network.go   Network operations
   ├── volume.go    Volume operations
   ├── image.go     Image operations
+  ├── pull.go      The layer count that PullImage reports from the status lines of docker pull
   ├── info.go      docker info (daemon version, cgroup version, security options, OS and kernel)
   ├── endpoint.go  Daemon endpoint the docker CLI uses (DOCKER_HOST, docker context)
   ├── plugin.go    Volume plugin queries (CVMFS)

@@ -4,6 +4,9 @@ package docker
 
 import (
 	"context"
+
+	"github.com/GSI-HPC/go-clikit/progress"
+	"github.com/GSI-HPC/sind/pkg/cmdexec"
 )
 
 // ImageLabels returns the labels of a local image, and whether the image is
@@ -21,8 +24,23 @@ func (c *Client) ImageExists(ctx context.Context, image string) (bool, error) {
 // present. What docker pull writes is not kept; a progress span that shows
 // lines, as the targets of the pull images step do, shows the newest of
 // its status lines (one per layer and change, no bars without a terminal).
+//
+// The innermost progress span in ctx, which is the image's target and has
+// to be running, reports the pull as work in items, the layers: how many
+// are done out of how many docker has told of so far (see layerCount). A
+// pull that finds the image there already, and writes no layer, ends with
+// one item of one done. A pull that fails leaves the count where it was.
 func (c *Client) PullImage(ctx context.Context, image string) error {
-	return c.do(ctx, "pull", image)
+	target := progress.SpanFrom(ctx)
+	if target == nil {
+		return c.do(ctx, "pull", image)
+	}
+	layers := &layerCount{span: target}
+	err := c.do(cmdexec.WithLineParser(ctx, layers.line), "pull", image)
+	if err == nil {
+		layers.finish()
+	}
+	return err
 }
 
 // RunEphemeral runs a command in a temporary container and returns its stdout.

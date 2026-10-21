@@ -3,12 +3,14 @@
 package mock
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/cmdexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -260,4 +262,46 @@ func TestExecutor_ExitErrorShape(t *testing.T) {
 			assert.Equal(t, 1, got.ExitCode())
 		})
 	}
+}
+
+// A command run under a line parser (cmdexec.WithLineParser) has the lines
+// of its result parsed, as the real executor does while it runs: those of
+// standard output, unless that is data, then those of standard error, each
+// without its line break; a last line that has none is left out. Without a
+// parser nothing is parsed, and the result is as it was.
+func TestExecutor_ParsesLines(t *testing.T) {
+	type line struct {
+		stream progress.Stream
+		text   string
+	}
+	result := Result{Stdout: "a\r\nb\nc", Stderr: "d\n"}
+	for _, tc := range []struct {
+		name string
+		ctx  func(context.Context) context.Context
+		want []line
+	}{
+		{"both", func(ctx context.Context) context.Context { return ctx },
+			[]line{{progress.Stdout, "a"}, {progress.Stdout, "b"}, {progress.Stderr, "d"}}},
+		{"stdout is data", cmdexec.WithStdoutAsData, []line{{progress.Stderr, "d"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []line
+			ctx := cmdexec.WithLineParser(tc.ctx(t.Context()), func(st progress.Stream, text string) { got = append(got, line{st, text}) })
+			m := Executor{OnCall: func([]string, string) Result { return result }}
+
+			stdout, stderr, err := m.Run(ctx, "docker", "pull", "img")
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+			assert.Equal(t, result.Stdout, stdout)
+			assert.Equal(t, result.Stderr, stderr)
+
+			got = nil
+			_, _, err = m.RunWithStdin(ctx, strings.NewReader("in"), "docker", "pull", "img")
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+
+	_, _, err := (&Executor{OnCall: func([]string, string) Result { return result }}).Run(t.Context(), "docker", "ps")
+	require.NoError(t, err)
 }

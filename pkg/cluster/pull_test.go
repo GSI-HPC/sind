@@ -9,9 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GSI-HPC/go-clikit/progress/progresstest"
 	"github.com/GSI-HPC/sind/internal/mock"
 	"github.com/GSI-HPC/sind/internal/testutil"
 	"github.com/GSI-HPC/sind/pkg/config"
+	"github.com/GSI-HPC/sind/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -192,4 +194,29 @@ func TestWorkerAdd_LocalImageNotPulled(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Zero(t, countCalls(m.Calls, "pull"))
+}
+
+// The pull is the step "pull images", with a target for each image that
+// reports its layers as work in items: those done out of those docker has
+// told of, the whole image when it was there already; the output text is no
+// part of the events.
+func TestPullImages_ReportsTheLayers(t *testing.T) {
+	ctx, w := progresstest.Watch(t.Context(), t)
+	m := &mock.Executor{OnCall: func(args []string, _ string) mock.Result {
+		if args[1] == "img:1" {
+			return mock.Result{Stdout: "latest: Pulling from library/img\n" +
+				"a3ed95caeb02: Pulling fs layer\nb4f1e0d2c9a1: Already exists\n" +
+				"a3ed95caeb02: Pull complete\nStatus: Downloaded newer image for img:1\n"}
+		}
+		return mock.Result{Stdout: "Status: Image is up to date for other:2\n"}
+	}}
+
+	err := pullImages(ctx, docker.NewClient(m), []string{"img:1", "other:2"})
+
+	require.NoError(t, err)
+	w.Finish()
+	assert.Equal(t, `step pull images total=2 [fold,show-lines]: ok
+  target img:1 amount=2 size=2 unit=items [show-lines]: ok
+  target other:2 amount=1 size=1 unit=items [show-lines]: ok
+`, testutil.WithoutCalls(w.Events()))
 }

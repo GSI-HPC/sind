@@ -46,7 +46,7 @@ The tree draws with ASCII marks (`+`, `x`, `~`, `>`), and [plain lines](#plain-l
 | Step | Targets | What it does |
 |------|---------|--------------|
 | `mesh` | `network`, `dns`, `volume`, `relay` | sets up the realm's [mesh]({{< relref "/architecture/networking" >}}); a part in place is skipped, and the rows of `dns` and `relay` show the last line of the pull of their image. A mesh in place leaves no line |
-| `pull images` | one per image | pulls the images the daemon does not have, or every image with `--pull`; each row shows the last line `docker pull` wrote. No step when nothing is pulled |
+| `pull images` | one per image | pulls the images the daemon does not have, or every image with `--pull`; each row shows the last line `docker pull` wrote and, in the event log, how many of the image's layers are done out of those docker has told of so far (see [Image pulls](#image-pulls)). No step when nothing is pulled |
 | `preflight` | | beside the pull: checks that no resource of the cluster exists yet and that its nodes fit, creates the cluster network and volumes, reads the Slurm version and checks `nsdelegate` |
 | `nodes` | one per node | creates and starts each node, waits until it is `ready` and sets it up (`setup`) |
 | `mesh registration` | | adds the nodes' DNS records and `known_hosts` entries |
@@ -195,6 +195,10 @@ $ sind create cluster --config dev.yaml --progress plain 2>&1 | tee create.log
 ```
 
 The waits `ready` say how much of the `--wait` limit they have left. The parts of a path are joined by `›` when `LC_ALL`, `LC_CTYPE` or `LANG` names a UTF-8 locale, and by `>` otherwise (`[0:12] create cluster > pull images: start, 2 targets`), as the tree then draws ASCII marks. On a terminal, each line also takes a mark after the time, in the colours of the tree; in a pipe or a file, as above, it is plain text.
+
+## Image pulls
+
+sind runs `docker pull` without a terminal, and there docker writes no byte counts, only a line for each change of a layer: `Pulling fs layer`, `Download complete`, `Pull complete`, `Already exists`. So a pull is counted in layers, not in bytes: the target of an image reports the layers that are done (`Pull complete` or `Already exists`) out of the layers docker has told of so far, which grows while the pull goes on, as work in `items`. A display can draw it as a count or a bar, and the event log holds it as `amount`, `size` and `unit` on the target (`advance` events, at most one a second), never the text of a line. A pull that finds the image there and so writes no layer is one item, done. Lines that sind does not know are ignored. Only `pull images` counts layers: the pulls that the `docker create` of the mesh's containers makes show their last line alone.
 
 ## Event log
 
