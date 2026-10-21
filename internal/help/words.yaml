@@ -1,0 +1,130 @@
+# Words: short definitions of the terms that sind and sind ui use.
+# Fields: id, title, summary (required); command (a command to try), doc (a
+# page below docs/content, with an optional #heading), see (related word ids).
+- id: realm
+  title: Realm
+  summary: A name that keeps groups of clusters apart on one Docker daemon. Every container, network and volume of a realm starts with its name. The default realm is sind.
+  command: sind get realms
+  doc: configuration/realms
+  see: [mesh, lock]
+- id: cluster
+  title: Cluster
+  summary: A Slurm cluster made of containers. It has one controller, workers, and optionally a db, an api and a submitter node.
+  command: sind get clusters
+  doc: configuration/cluster-config
+  see: [node-roles, realm]
+- id: node-roles
+  title: Node roles
+  summary: Each node has one role. The controller runs slurmctld. A worker runs slurmd. The submitter takes jobs from users. The db node keeps accounting. The api node runs slurmrestd.
+  command: sind get nodes
+  doc: configuration/node-definitions#node-roles
+  see: [controller, worker, managed]
+- id: controller
+  title: Controller
+  summary: The node that runs slurmctld, the Slurm scheduler. Every cluster has exactly one, and may have a backup controller.
+  command: sind get node controller
+  doc: configuration/node-definitions#node-roles
+  see: [slurmctld, worker]
+- id: worker
+  title: Worker
+  summary: A node that runs jobs. A managed worker runs slurmd and is in the Slurm configuration. A cluster has at least one worker.
+  command: sind create worker --count 2
+  doc: usage/worker-management
+  see: [managed, slurmctld]
+- id: submitter
+  title: Submitter
+  summary: The node where users start jobs. It has the Slurm clients but runs no scheduler. Without one, sind exec and sind enter use the controller.
+  command: sind enter
+  doc: configuration/node-definitions#node-roles
+  see: [node-roles]
+- id: managed
+  title: Managed node
+  summary: A node that sind sets up for Slurm. sind writes the config, the munge key and starts the daemons. An unmanaged node gets only the container.
+  command: sind create worker --unmanaged
+  doc: configuration/node-definitions#managed-vs-unmanaged-workers
+  see: [worker, munge]
+- id: slurmctld
+  title: slurmctld
+  summary: The Slurm controller daemon. It decides which job runs on which node. A node shows slurmctld as ready when the daemon answers.
+  command: sind logs controller slurmctld
+  doc: architecture/slurm-config
+  see: [controller]
+- id: munge
+  title: munge
+  summary: The service that signs the requests between Slurm daemons with a key that all nodes of a cluster share. A node is not ready until its munge works.
+  command: sind get auth-key
+  doc: architecture/slurm-config
+  see: [slurmctld]
+- id: mesh
+  title: Mesh
+  summary: The network that all clusters of a realm share, with one DNS server and one SSH relay. It lets a node of one cluster reach a node of another by name.
+  command: sind get mesh
+  doc: architecture/networking#mesh-network
+  see: [realm]
+- id: nodeset
+  title: Node set
+  summary: A way to name several nodes in one word. worker-[0-3].dev is worker-0 to worker-3 of the cluster dev. sind ui writes your selection this way.
+  command: sind power reboot 'worker-[0-3].dev'
+  doc: usage/node-arguments
+  see: [worker]
+- id: data
+  title: Data directory
+  summary: The directory or volume that every node mounts at /data. Jobs start there and write their output there.
+  command: sind create cluster --data ~/sind/dev
+  doc: configuration/cluster-config
+  see: [cluster]
+- id: wait
+  title: Wait limit
+  summary: How long sind waits for each node to become ready before it gives up and rolls back. It counts from the start of the container, so image pulls do not use it. The default is 5 minutes.
+  command: sind create cluster --wait 10m
+  doc: usage/cluster-lifecycle
+  see: [rollback]
+- id: lock
+  title: Realm lock
+  summary: Only one sind command changes a realm at a time. Another command waits, and says which command it waits for. sind ui uses the same lock.
+  doc: configuration/realms
+  see: [realm]
+- id: identity
+  title: Identity mode
+  summary: How the nodes know the users of a cluster. With local, every node has the users. With nssSlurm or clientIds, the nodes ask slurmctld.
+  doc: guides/users
+  see: [slurmctld]
+- id: rollback
+  title: Rollback
+  summary: What sind does when a command fails or you press Ctrl-C. It removes what the command created, so that you can try again. The run shows it as the step rollback.
+  doc: usage/progress
+  see: [wait, activity-log]
+- id: activity-log
+  title: Activity log
+  summary: The file in which sind writes the steps of each command that changes something. sind ui reads it to show runs, also those that you started in a terminal.
+  command: sind create cluster --progress-log ''
+  doc: usage/progress#the-activity-log
+  see: [run, trace]
+- id: run
+  title: Run
+  summary: One sind command with its steps. A run is live while the command works, and stays in Activity afterwards.
+  doc: usage/progress
+  see: [activity-log, trace]
+- id: trace
+  title: Trace
+  summary: An id that ties the runs of one job together. sind continues the trace that a caller hands over in TRACEPARENT. sind ui uses it to find the run of a task it started.
+  doc: usage/progress#event-log
+  see: [activity-log]
+- id: needs-you
+  title: Needs you
+  summary: What sind ui found that you may want to fix, such as nodes that stopped, services that failed, runs that failed and host checks. Empty means nothing waits on you.
+  command: sind doctor
+  doc: usage/diagnostics#doctor
+  see: [doctor]
+- id: doctor
+  title: Doctor
+  summary: The host checks of sind. They tell whether Docker, cgroups, DNS and the other things that sind needs from this host work.
+  command: sind doctor
+  doc: usage/diagnostics#doctor
+  see: [needs-you]
+- id: external
+  title: External container
+  summary: A container that sind did not make, such as a kind node. Connect it to a realm and it resolves the names of the realm and reaches its nodes.
+  command: sind connect container NAME
+  doc: architecture/networking#external-containers
+  see: [mesh]
