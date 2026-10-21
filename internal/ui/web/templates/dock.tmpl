@@ -1,5 +1,22 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* tasks is the fragment of the task dock: one card for each command that
-sind ui started. It is empty until the dock is built. */}}
-{{define "tasks"}}{{end}}
+{{/* tasks is the fragment of the task dock: a card for each command that sind
+ui started, and for each run that a terminal writes to the event log. The
+cards are built in dock.go. */}}
+{{define "tasks"}}{{with .Data}}{{range .Cards}}
+<div class="task {{.Class}}" role="status">
+  <div class="th">{{if eq .Class "running"}}<span class="spin" aria-hidden="true"></span>{{else}}<span class="mark {{.Class}}">{{.Mark}}</span>{{end}}<b><a href="{{.Href}}" title="{{.Title}}">{{.Title}}</a></b>{{if .Terminal}}<span class="chip">terminal</span>{{end}}
+    {{if .Dismiss}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/dismiss" hx-post="/tasks/{{.TaskID}}/dismiss" hx-swap="none">{{template "csrf-field" $}}<button type="submit" class="iconbtn" aria-label="Hide this card" title="Hide">×</button></form>{{end}}</div>
+  {{template "run-segbar" .Segs}}
+  <div class="tl"><span>{{.Line}}</span>{{template "run-elapsed" .}}</div>
+  {{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+  {{if and .Output (not .Terminal)}}{{if eq .Class "failed"}}<pre class="term tout">{{.Output}}</pre>{{end}}{{end}}
+  <div class="tf">{{if .Cancel}}<form class="inline" method="post" action="/tasks/{{.TaskID}}/cancel">{{template "csrf-field" $}}<button type="submit" class="btn sm">Stop</button></form>{{end}}{{if .Canceling}}<button type="button" class="btn sm" disabled>Stopping…</button>{{end}}<a class="btn sm{{if eq .Class "running"}} primary{{end}}" href="{{.Href}}">{{.Action}}</a></div>
+</div>
+{{end}}{{if .More}}<a class="task more" href="/activity">{{.More}} more in Activity</a>{{end}}{{end}}{{end}}
+
+{{/* run-segbar draws the bar of a run's steps from a []runSeg. */}}
+{{define "run-segbar"}}<div class="segbar">{{range .}}<i class="{{.Class}}" title="{{.Title}}">{{if .Fill}}<b class="w{{.Fill}}"></b>{{end}}</i>{{end}}</div>{{end}}
+
+{{/* run-elapsed is a clock: run.js counts it up while data-since is set. */}}
+{{define "run-elapsed"}}<span class="num"{{if .Since}} data-since="{{.Since}}"{{end}}>{{.Elapsed}}</span>{{end}}

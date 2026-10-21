@@ -1,0 +1,20 @@
+{{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
+
+{{/* page-run-activity is the Activity page: the runs of the event log. */}}
+{{define "page-run-activity"}}
+<div class="head"><div class="t"><h1>Activity</h1>
+  <div class="sub"><span>What sind did, from here or from a terminal that writes the same event log. Open a run for its steps.</span></div></div></div>
+<div sse-swap="run-list">{{fragment "run-list" .}}</div>
+{{end}}
+
+{{define "run-list"}}{{with .Data}}<div class="tabs" role="navigation" aria-label="Filter by status">{{range .Tabs}}<a class="tab{{if .On}} on{{end}}" href="{{.Href}}">{{.Label}}<span class="n">{{.N}}</span></a>{{end}}</div>
+<section class="panel">{{if .Rows}}<div class="tw"><table class="runs">
+<thead><tr><th>Status</th><th>Command</th><th>Started</th><th class="num">Duration</th><th class="hide-s">Targets</th></tr></thead>
+<tbody>{{range .Rows}}<tr>
+<td><span class="pill {{.PillClass}}">{{.Pill}}</span></td>
+<td><a class="mono" href="/runs/{{.ID}}">{{.Title}}</a>{{if .Terminal}} <span class="chip">terminal</span>{{end}}</td>
+<td class="muted">{{.Started}}</td>
+<td class="num">{{template "run-elapsed" .}}</td>
+<td class="hide-s mono muted">{{.Counts}}</td>
+</tr>{{end}}</tbody></table></div>{{if .More}}<div class="pb faint">{{.More}} older runs are not listed.</div>{{end}}
+{{else}}<div class="empty">{{if .Total}}No run matches this filter.{{else}}No runs yet. A command that sind runs, here or in a terminal, shows up as soon as it writes to the event log.{{end}}</div>{{end}}</section>{{end}}{{end}}
