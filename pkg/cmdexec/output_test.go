@@ -30,3 +30,18 @@ func TestLineParser(t *testing.T) {
 	parse(progress.Stdout, "a3ed95caeb02: Pull complete")
 	assert.Equal(t, []string{"stdout a3ed95caeb02: Pull complete"}, got)
 }
+
+func TestEnv(t *testing.T) {
+	assert.Nil(t, Env(t.Context()))
+	assert.Equal(t, []string{"A=1"}, Env(WithEnv(t.Context(), []string{"A=1"})))
+}
+
+func TestStarted(t *testing.T) {
+	assert.Nil(t, Started(t.Context()))
+
+	var pid int
+	started := Started(WithStarted(t.Context(), func(p int) { pid = p }))
+	require.NotNil(t, started)
+	started(42)
+	assert.Equal(t, 42, pid)
+}

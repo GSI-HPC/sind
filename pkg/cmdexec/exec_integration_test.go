@@ -8,6 +8,7 @@ import (
 	"context"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -162,4 +163,17 @@ func TestOSExecutor_ParsesLines(t *testing.T) {
 			assert.Equal(t, tc.want, lines)
 		})
 	}
+}
+
+// A command runs with the environment WithEnv gives it, and WithStarted is
+// told its process ID while it runs.
+func TestOSExecutor_EnvAndStarted(t *testing.T) {
+	var e cmdexec.OSExecutor
+	var pid int
+	ctx := cmdexec.WithEnv(t.Context(), []string{"ONLY=this"})
+	ctx = cmdexec.WithStarted(ctx, func(p int) { pid = p })
+	stdout, _, err := e.Run(ctx, "/bin/sh", "-c", "echo $ONLY $$; echo ${HOME:-nohome}")
+	require.NoError(t, err)
+	assert.Positive(t, pid)
+	assert.Equal(t, "this "+strconv.Itoa(pid)+"\nnohome\n", stdout)
 }
