@@ -1,4 +1,10 @@
 {{/* SPDX-License-Identifier: LGPL-3.0-or-later */}}
 
-{{/* slot-help is the help button in the top bar. */}}
-{{define "slot-help"}}<button type="button" class="iconbtn" data-help-toggle aria-label="Help" title="Help (?)" disabled>?</button>{{end}}
+{{/* slot-help is the help button in the top bar, and the markup of the help
+pane, which help.js copies into #layer when the pane opens. */}}
+{{define "slot-help"}}<button type="button" class="iconbtn" data-help-toggle aria-label="Help" title="Help (?)" aria-expanded="false">?</button>
+<template id="help-shell"><aside class="helppane" id="helppane" aria-label="Help">
+  <div class="hh"><button type="button" class="iconbtn" data-help-back aria-label="Back" title="Back" hidden>←</button><span class="crumb" id="help-crumb">Help</span><button type="button" class="iconbtn" data-help-close aria-label="Close help" title="Close (Esc)">×</button></div>
+  <div class="hs"><input type="search" id="help-q" placeholder="Search help: realm, mesh, rollback…" aria-label="Search help" autocomplete="off" spellcheck="false"></div>
+  <div class="hb" id="help-body" aria-live="polite"></div>
+</aside></template>{{end}}
