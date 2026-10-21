@@ -576,7 +576,6 @@ func TestPgLiveCluster(t *testing.T) {
 	require.NotNil(t, m)
 	query := strings.ReplaceAll(m[1], "&amp;", "&")
 	c := ts.connect(query)
-	assert.Equal(t, "retry", c.next().name)
 
 	// A status changes the body; the head says the same.
 	pgFillStatus(ts.st)
@@ -611,7 +610,6 @@ func TestPgLiveLogsTabIsLeftAlone(t *testing.T) {
 	m := regexp.MustCompile(`sse-connect="/events\?([^"]+)"`).FindStringSubmatch(body)
 	require.NotNil(t, m)
 	c := ts.connect(strings.ReplaceAll(m[1], "&amp;", "&"))
-	assert.Equal(t, "retry", c.next().name)
 	ts.st.SetNodes("sind", nil)
 	for range 2 { // head and rail
 		assert.NotEqual(t, "pg-cluster-body", c.next().name)
@@ -627,7 +625,6 @@ func TestPgLiveNode(t *testing.T) {
 	m := regexp.MustCompile(`sse-connect="/events\?([^"]+)"`).FindStringSubmatch(body)
 	require.NotNil(t, m)
 	c := ts.connect(strings.ReplaceAll(m[1], "&amp;", "&"))
-	assert.Equal(t, "retry", c.next().name)
 	ts.st.SetNodes("sind", nil)
 	got := map[string]string{}
 	for range 3 { // head, body and rail

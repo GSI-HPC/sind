@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -28,14 +29,18 @@ type sseEvent struct {
 
 // sseClient reads a stream of /events from a real server.
 type sseClient struct {
-	t      *testing.T
-	events chan sseEvent
-	cancel context.CancelFunc
+	t *testing.T
+	// opening is what the stream opened with: an event for each fragment.
+	opening []sseEvent
+	events  chan sseEvent
+	cancel  context.CancelFunc
 	// served closes when the server's handler has returned.
 	served chan struct{}
 }
 
-// connect opens /events?query in the session of ts, on a real HTTP server.
+// connect opens /events?query in the session of ts, on a real HTTP server,
+// and reads what the stream opens with: the retry time and an event for
+// each fragment.
 func (ts *testServer) connect(query string) *sseClient {
 	ts.t.Helper()
 	served := make(chan struct{})
@@ -79,6 +84,16 @@ func (ts *testServer) connect(query string) *sseClient {
 			}
 		}
 	}()
+	q, err := url.ParseQuery(query)
+	require.NoError(ts.t, err)
+	require.Equal(ts.t, sseEvent{"retry", "2000"}, c.next())
+	var names []string
+	for range q["f"] {
+		e := c.next()
+		names = append(names, e.name)
+		c.opening = append(c.opening, e)
+	}
+	require.ElementsMatch(ts.t, q["f"], names, "the stream opens with every fragment")
 	return c
 }
 
@@ -163,8 +178,8 @@ func TestEventsNeedsAFlusher(t *testing.T) {
 func TestEventsSendsAChangedFragmentOnly(t *testing.T) {
 	ts := newTestServer(t).login()
 	c := ts.connect("f=count&f=same&f=runs&f=one-run&id=x")
-	assert.Equal(t, sseEvent{"retry", "2000"}, c.next())
-	c.quiet(80 * time.Millisecond) // the baseline is not sent: the page holds it
+	assert.Contains(t, c.opening, sseEvent{"count", "tasks=0"})
+	c.quiet(80 * time.Millisecond) // then nothing until a change
 
 	// A task changes the count. "same" depends on the topic too, renders
 	// the same HTML, and is not sent.
@@ -196,7 +211,6 @@ func TestEventsCoalescesChanges(t *testing.T) {
 	ts := newTestServer(t).login()
 	ts.srv.coalesce = 150 * time.Millisecond
 	c := ts.connect("f=count")
-	c.next() // retry
 	for i := range 3 {
 		ts.st.AddTask(store.Task{ID: fmt.Sprint(i)})
 	}
@@ -204,13 +218,13 @@ func TestEventsCoalescesChanges(t *testing.T) {
 	c.quiet(250 * time.Millisecond)
 }
 
-func TestEventsBaselineAfterAChangeBetweenPageAndStream(t *testing.T) {
-	// A change that lands before the stream opens is in the baseline and
-	// is not sent again.
+func TestEventsOpenWithAChangeBetweenPageAndStream(t *testing.T) {
+	// A change that lands after the page was rendered, before the stream
+	// opens, is in what the stream opens with, and is not sent again.
 	ts := newTestServer(t).login()
 	ts.st.AddTask(store.Task{ID: "early"})
 	c := ts.connect("f=count")
-	c.next()
+	assert.Equal(t, []sseEvent{{"count", "tasks=1"}}, c.opening)
 	c.quiet(80 * time.Millisecond)
 	ts.st.AddTask(store.Task{ID: "late"})
 	assert.Equal(t, sseEvent{"count", "tasks=2"}, c.next())
@@ -222,7 +236,6 @@ func TestEventsRailFollowsAnyTopicAndNav(t *testing.T) {
 		return NavCount{Text: fmt.Sprint(len(sn.Runs))}
 	})
 	c := ts.connect("f=rail&nav=nodes")
-	c.next()
 	ts.st.SetRuns([]store.Run{{ID: "a"}, {ID: "b"}})
 	e := c.next()
 	assert.Equal(t, "rail", e.name)
@@ -233,7 +246,6 @@ func TestEventsKeepAliveAndDisconnect(t *testing.T) {
 	ts := newTestServer(t).login()
 	ts.srv.keepAlive = 30 * time.Millisecond
 	c := ts.connect("f=count")
-	c.next()
 	assert.Equal(t, sseEvent{"comment", "keep-alive"}, c.next())
 	assert.Equal(t, sseEvent{"comment", "keep-alive"}, c.next())
 	c.cancel()
@@ -243,7 +255,6 @@ func TestEventsKeepAliveAndDisconnect(t *testing.T) {
 func TestEventsEndWithTheServer(t *testing.T) {
 	ts := newTestServer(t).login()
 	c := ts.connect("f=count")
-	c.next()
 	ts.cancel()
 	c.waitServed()
 }
@@ -253,7 +264,6 @@ func TestEventsSkipAFragmentThatFails(t *testing.T) {
 	var logs bytes.Buffer
 	ts.srv.log = slog.New(slog.NewTextHandler(&logs, nil))
 	c := ts.connect("f=one-run&f=count&id=x")
-	c.next()
 	// The run goes away: "one-run" cannot render now, "count" goes on.
 	ts.st.SetRuns(nil, "x")
 	ts.st.AddTask(store.Task{ID: "t"})
@@ -291,9 +301,11 @@ func TestEventsEndWhenAWriteFails(t *testing.T) {
 		failAfter int
 		trigger   func()
 	}{
-		// Write 1 is "retry"; the next is an event or a keep-alive.
-		"event":      {2, func() { ts.st.AddTask(store.Task{ID: "t"}) }},
-		"keep-alive": {2, func() {}},
+		// Write 1 is "retry", write 2 the event the stream opens with; the
+		// next is an event or a keep-alive.
+		"opening":    {2, func() {}},
+		"event":      {3, func() { ts.st.AddTask(store.Task{ID: "t"}) }},
+		"keep-alive": {3, func() {}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ts.srv.keepAlive = time.Hour

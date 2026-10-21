@@ -136,7 +136,6 @@ func TestRunStreamSendsWhatChanged(t *testing.T) {
 	ts := runTestServer(t, runNow)
 	mid, _, _, _ := runStore(t, ts)
 	c := ts.connect("f=run-summary&f=run-head&f=tasks&id=r-mid&run=r-mid")
-	require.Equal(t, "retry", c.next().name)
 
 	// A change of another run does not touch the run page; the dock hides
 	// this run, and it is the dock only that other runs change.

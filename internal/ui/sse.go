@@ -23,10 +23,10 @@ const maxFragments = 32
 // names the fragments (f), the lit rail entry (nav) and the Params that
 // the fragments declare.
 //
-// Changes gather for coalesceEvery. Then each fragment that depends on a
-// changed topic is rendered, and sent when its HTML differs from what the
-// stream sent last. The first render, which the stream makes when it
-// opens, is the baseline and is not sent: the page holds it already.
+// The stream opens with every fragment, as the page may have been rendered
+// before a change the stream does not hear of. Then changes gather for
+// coalesceEvery, and each fragment that depends on a changed topic is
+// rendered, and sent when its HTML differs from what the stream sent last.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	// Subscribe before the baseline snapshot, so that no change falls
 	// between them.
@@ -44,12 +44,14 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.env.watch(fragmentTopics(frags, v.Params))()
 	sent := map[string][sha256.Size]byte{}
-	for _, f := range frags {
+	first := make([]string, len(frags))
+	for i, f := range frags {
 		html, err := s.renderFragment(f, v)
 		if err != nil {
 			s.Fail(w, r, err)
 			return
 		}
+		first[i] = html
 		sent[f.Name] = sha256.Sum256([]byte(html))
 	}
 
@@ -59,6 +61,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	// The browser reconnects after this long when the stream breaks.
 	_, _ = io.WriteString(w, "retry: 2000\n\n")
+	for i, f := range frags {
+		if err := writeEvent(w, f.Name, first[i]); err != nil {
+			return
+		}
+	}
 	flusher.Flush()
 
 	pending := map[store.Topic]bool{}
