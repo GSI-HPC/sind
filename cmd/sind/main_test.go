@@ -56,7 +56,7 @@ var fakeDockerSignals = map[string]syscall.Signal{
 // TestMain runs the tests without the caller's sind settings: an exported
 // SIND_REALM, as sind-action sets it in CI, would move every command into
 // another realm than the one the tests expect, XDG_STATE_HOME would
-// point the state directory at the developer's own, and SIND_PROGRESS=plain
+// point the state directory at the developer's own (they get one of their own), and SIND_PROGRESS=plain
 // would add progress lines to stderr. A test that needs one
 // of them sets it with t.Setenv.
 //
@@ -76,10 +76,21 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	}
-	for _, name := range []string{"SIND_REALM", "XDG_STATE_HOME", envProgress, envProgressLog, envLogTimestamps} {
+	for _, name := range []string{"SIND_REALM", envProgress, envProgressLog, envLogTimestamps} {
 		_ = os.Unsetenv(name)
 	}
-	os.Exit(m.Run())
+	// The state directory is one of the tests' own: the commands that report
+	// progress write the default activity log there, never in the
+	// developer's home.
+	state, err := os.MkdirTemp("", "sind-test-state-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "creating the state directory of the tests:", err)
+		os.Exit(1)
+	}
+	_ = os.Setenv("XDG_STATE_HOME", state)
+	code := m.Run()
+	_ = os.RemoveAll(state)
+	os.Exit(code)
 }
 
 func fakeDocker() {

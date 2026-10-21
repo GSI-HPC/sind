@@ -202,7 +202,7 @@ sind runs `docker pull` without a terminal, and there docker writes no byte coun
 
 ## Event log
 
-`--progress-log FILE`, or `SIND_PROGRESS_LOG` when the flag is not given, appends the progress events of the command to FILE, one JSON object per line, in go-clikit's [event log format](https://github.com/GSI-HPC/go-clikit/blob/v0.4.0/doc/event-log.md), version 1: what started and ended when, under which step or target, and how it ended and why, with each docker command by its subcommand alone and its exit code. It holds neither the command line nor the environment of the command, and of what the programs sind runs write, only what an error quotes; the `realm lock` wait names the command that holds the lock, its command line and host, as the `Warning:` line does. It works with every `--progress` mode, `none` included, and writes nothing on standard error.
+Every command that reports progress appends its events to a log. `--progress-log FILE`, or `SIND_PROGRESS_LOG` when the flag is not given, names the file; without either, sind writes the [activity log](#the-activity-log) in its state directory. The log holds, one JSON object per line, the progress events of the command, in go-clikit's [event log format](https://github.com/GSI-HPC/go-clikit/blob/v0.4.0/doc/event-log.md), version 1: what started and ended when, under which step or target, and how it ended and why, with each docker command by its subcommand alone and its exit code. It holds neither the command line nor the environment of the command, and of what the programs sind runs write, only what an error quotes; the `realm lock` wait names the command that holds the lock, its command line and host, as the `Warning:` line does. It works with every `--progress` mode, `none` included, and writes nothing on standard error.
 
 - sind creates the file readable and writable by you alone (mode `0600`) and appends to it, so the commands of a CI job can share one log; each command's lines carry a `run` of their own.
 - An existing file must be yours, have no other name (no hard link to it) and be readable or writable by nobody else: sind refuses one that is not, and for one that others can read or write says `run chmod 600 FILE`. A symbolic link on the way to it, and a named pipe, must be yours or root's: sind follows no link put at the file's name after it looked, and refuses another user's named pipe at once instead of waiting for someone to read it. `/dev/stderr`, `/dev/stdout` and `/dev/fd/N` are written to where that stream goes; on the terminal the tree is drawn on, the lines go above the tree, as the `-v` logs do.
@@ -210,10 +210,19 @@ sind runs `docker pull` without a terminal, and there docker writes no byte coun
 - A log that cannot be written while the command runs, such as on a full disk, does not fail the command: sind says once that the log stops short.
 - Only `create`, `delete`, `connect`, `disconnect` and `power` open the file; other commands leave it alone.
 
+### The activity log
+
+Without `--progress-log` and `SIND_PROGRESS_LOG`, sind appends the events to `activity.jsonl` in its state directory, `$XDG_STATE_HOME/sind/` or `~/.local/state/sind/`, so that a tool that watches the state directory sees what every sind command did, whichever way it was started. It is the same log as above, in the same format, and it changes nothing on standard output and standard error.
+
+- sind creates the directory for you alone (mode `0700`) and the file readable and writable by you alone (mode `0600`). The same rules for an existing file hold: it must be yours, have no other name and be readable and writable by nobody else.
+- Before a command appends, sind moves a log larger than 8 MiB to `activity.jsonl.1`, replacing the copy that was there, so the two files together stay under about 16 MiB. Commands that run at once rotate it once.
+- A log that sind cannot use, such as one in a read-only home directory, is left out without a word, and never fails the command; the debug log (`-vv`) says why.
+- `--progress-log ""`, or `SIND_PROGRESS_LOG=` with an empty value, turns it off; a file named by either replaces it.
+
 When sind is started with a W3C trace context in `TRACEPARENT` (and `TRACESTATE`), the log continues that trace. While sind shows progress or writes a log, it removes both variables from the environment of the programs it runs, such as docker; otherwise they inherit them.
 
 ## Scripts, CI and MCP
 
-Where standard error is not a terminal, nothing changes unless you ask: no tree, no summary, no event log. [sind-action](https://github.com/GSI-HPC/sind-action) and scripts that read sind's standard error see what they did before. `--progress plain` adds lines to a CI log, and `--progress-log` keeps the events as a job artifact; see [CI/CD]({{< relref "/guides/ci-cd#progress-in-ci-logs" >}}).
+Where standard error is not a terminal, nothing changes unless you ask: no tree and no summary. [sind-action](https://github.com/GSI-HPC/sind-action) and scripts that read sind's standard error see what they did before; the [activity log](#the-activity-log) is the only addition, and it is a file. `--progress plain` adds lines to a CI log, and `--progress-log` keeps the events as a job artifact; see [CI/CD]({{< relref "/guides/ci-cd#progress-in-ci-logs" >}}).
 
-The [MCP server]({{< relref "/guides/mcp" >}}) never shows progress: its tools take neither flag, and it runs its tool calls with `SIND_PROGRESS=none` and without `SIND_PROGRESS_LOG`, whatever its own environment says.
+The [MCP server]({{< relref "/guides/mcp" >}}) never shows progress: its tools take neither flag, and it runs its tool calls with `SIND_PROGRESS=none` and without `SIND_PROGRESS_LOG`, whatever its own environment says, so a tool call that reports progress writes the [activity log](#the-activity-log) and nothing on its standard error.

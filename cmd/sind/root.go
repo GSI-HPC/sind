@@ -51,7 +51,7 @@ func NewRootCommand() *cobra.Command {
 			" (default: "+envProgress+", else auto, a live tree when standard error is a terminal; plain writes lines for a log)")
 	cmd.PersistentFlags().String("progress-log", "",
 		"append the progress events of create, delete, connect, disconnect and power to this file, one JSON object per line, "+
-			"created readable by you alone (default: "+envProgressLog+")")
+			"created readable by you alone (default: "+envProgressLog+", else $XDG_STATE_HOME/sind/activity.jsonl; an empty value writes no log)")
 
 	_ = cmd.RegisterFlagCompletionFunc("realm", completeRealmNames)
 	_ = cmd.RegisterFlagCompletionFunc("progress", cobra.FixedCompletions(progressModeNames(), cobra.ShellCompDirectiveNoFileComp))

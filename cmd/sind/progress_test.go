@@ -705,8 +705,9 @@ func TestAnEventLogThatCannotBeUsed(t *testing.T) {
 }
 
 // The MCP tools take neither progress flag, and a server's tool calls show
-// no progress and write no event log whatever SIND_PROGRESS and
-// SIND_PROGRESS_LOG the server inherited.
+// no progress and name no event log whatever SIND_PROGRESS and
+// SIND_PROGRESS_LOG the server inherited. With the variable unset, they
+// write the default activity log like any command.
 func TestMCPTools_NoProgress(t *testing.T) {
 	t.Setenv(envProgress, "plain")
 	t.Setenv(envProgressLog, "/dev/stderr")
@@ -728,7 +729,7 @@ func TestMCPTools_NoProgress(t *testing.T) {
 	server.SetArgs(nil)
 	require.NoError(t, server.Execute())
 	assert.Equal(t, cliprogress.ModeNone.String(), got)
-	assert.False(t, logSet, "the tool calls inherit no event log")
+	assert.False(t, logSet, "the tool calls inherit no event log, and so write the default one")
 }
 
 // Under a display, what the command writes goes through the terminal: the
