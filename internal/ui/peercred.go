@@ -74,21 +74,38 @@ func procNetTCPOwner(procRoot string) func(local, remote netip.AddrPort) (int, e
 			return 0, err
 		}
 		defer func() { _ = f.Close() }()
-		return socketOwner(f, local, remote)
+		return socketOwner(f, tcpEstablished, local, remote)
 	}
 }
 
+// procNetTCPListener returns the owner of the socket that listens at addr,
+// from the table net/tcp below procRoot.
+func procNetTCPListener(procRoot string, addr netip.AddrPort) (int, error) {
+	f, err := os.Open(filepath.Join(procRoot, "net", "tcp"))
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = f.Close() }()
+	return socketOwner(f, tcpListen, addr, netip.AddrPortFrom(netip.IPv4Unspecified(), 0))
+}
+
+// The states of a socket in /proc/net/tcp.
+const (
+	tcpEstablished = "01"
+	tcpListen      = "0A"
+)
+
 // socketOwner reads a table in the format of /proc/net/tcp and returns the
-// uid of the socket bound to local and connected to remote. Only a socket
-// that is connected (state 01, ESTABLISHED) and has an inode counts: a
-// socket in TIME_WAIT that once had the same addresses has neither, and its
-// uid is 0.
-func socketOwner(r io.Reader, local, remote netip.AddrPort) (int, error) {
+// uid of the socket in state that is bound to local and connected to remote
+// (0.0.0.0:0 for a listener). Only a socket with an inode counts: a socket
+// in TIME_WAIT, or one that no process has accepted yet, has none, and its
+// uid is not that of a process.
+func socketOwner(r io.Reader, state string, local, remote netip.AddrPort) (int, error) {
 	sc := bufio.NewScanner(r)
 	sc.Scan() // the header
 	for sc.Scan() {
 		f := strings.Fields(sc.Text())
-		if len(f) < 10 || f[3] != "01" || f[9] == "0" {
+		if len(f) < 10 || f[3] != state || f[9] == "0" {
 			continue
 		}
 		l, err1 := parseProcAddr(f[1])

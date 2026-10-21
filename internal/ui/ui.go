@@ -87,6 +87,7 @@ func Run(ctx context.Context, o Options) error {
 		if inst, err = newInstance(o.RuntimeDir); err != nil {
 			return fmt.Errorf("preparing the runtime directory: %w", err)
 		}
+		inst.procRoot = o.procRoot
 		if o.flock != nil {
 			inst.flock = o.flock
 		}
@@ -99,7 +100,7 @@ func Run(ctx context.Context, o Options) error {
 			_, _ = fmt.Fprintf(o.Stderr, "sind ui is already running: %s\n", r.URL)
 			if !o.NoOpen {
 				select {
-				case <-openBrowser(ctx, o.Exec, inst, r.URL, log):
+				case <-openBrowser(ctx, o.Exec, inst.dir, r.URL, log):
 				case <-time.After(openWait):
 				}
 			}
@@ -178,7 +179,18 @@ func Run(ctx context.Context, o Options) error {
 		_, _ = fmt.Fprintln(o.Stderr, "Demo: made-up clusters; nothing touches Docker.")
 	}
 	if !o.NoOpen {
-		openBrowser(ctx, o.Exec, inst, url, log)
+		dir := ""
+		if inst != nil {
+			dir = inst.dir
+		} else if dir, err = os.MkdirTemp("", "sind-ui-"); err != nil {
+			log.Warn("could not make a directory for the page that opens sind ui; open the URL above yourself", "err", err)
+		} else {
+			// The browser reads the page while sind ui runs.
+			defer func() { _ = os.RemoveAll(dir) }()
+		}
+		if dir != "" {
+			openBrowser(ctx, o.Exec, dir, url, log)
+		}
 	}
 
 	errc := make(chan error, 1)

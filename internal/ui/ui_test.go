@@ -184,13 +184,32 @@ func TestRunOpensTheBrowserWithoutARuntimeDir(t *testing.T) {
 		return mock.Result{}
 	}}
 	r := startRun(t, Options{Exec: m})
-	defer func() { require.NoError(t, r.stop()) }()
+	var args []string
 	select {
-	case args := <-opened:
-		assert.Equal(t, []string{r.url}, args)
+	case args = <-opened:
 	case <-time.After(2 * time.Second):
 		t.Fatal("no browser was opened")
 	}
+	// The page is in a private directory of its own, not in the command line.
+	require.Len(t, args, 1)
+	assert.NotContains(t, args[0], "token")
+	page, err := os.ReadFile(args[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(page), r.url)
+	info, err := os.Stat(filepath.Dir(args[0]))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+	require.NoError(t, r.stop())
+	assert.NoDirExists(t, filepath.Dir(args[0]), "removed when sind ui stops")
+}
+
+func TestRunWithoutAPrivateDirectoryOpensNoBrowser(t *testing.T) {
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "gone"))
+	m := &mock.Executor{}
+	r := startRun(t, Options{Exec: m})
+	require.NoError(t, r.stop())
+	assert.Empty(t, m.Calls)
+	assert.Contains(t, r.stderr.String(), "could not make a directory")
 }
 
 func TestSecondRunOpensTheRunningOne(t *testing.T) {

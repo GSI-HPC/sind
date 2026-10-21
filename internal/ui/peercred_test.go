@@ -31,22 +31,22 @@ const procNetTCP = `  sl  local_address rem_address   st tx_queue rx_queue tr tm
 func TestSocketOwner(t *testing.T) {
 	client := netip.MustParseAddrPort("127.0.0.1:54321")
 	server := netip.MustParseAddrPort("127.0.0.1:7878")
-	uid, err := socketOwner(strings.NewReader(procNetTCP), client, server)
+	uid, err := socketOwner(strings.NewReader(procNetTCP), tcpEstablished, client, server)
 	require.NoError(t, err)
 	assert.Equal(t, 1001, uid, "the client's end")
-	uid, err = socketOwner(strings.NewReader(procNetTCP), server, client)
+	uid, err = socketOwner(strings.NewReader(procNetTCP), tcpEstablished, server, client)
 	require.NoError(t, err)
 	assert.Equal(t, 1000, uid, "the server's end")
 
-	_, err = socketOwner(strings.NewReader(procNetTCP), netip.MustParseAddrPort("127.0.0.1:1"), server)
+	_, err = socketOwner(strings.NewReader(procNetTCP), tcpEstablished, netip.MustParseAddrPort("127.0.0.1:1"), server)
 	assert.ErrorContains(t, err, "no such socket")
-	_, err = socketOwner(strings.NewReader(procNetTCP), netip.MustParseAddrPort("127.0.0.1:54322"), server)
+	_, err = socketOwner(strings.NewReader(procNetTCP), tcpEstablished, netip.MustParseAddrPort("127.0.0.1:54322"), server)
 	assert.ErrorContains(t, err, "no such socket", "a socket in TIME_WAIT does not count")
-	_, err = socketOwner(strings.NewReader(procNetTCP), netip.MustParseAddrPort("127.0.0.1:54323"), server)
+	_, err = socketOwner(strings.NewReader(procNetTCP), tcpEstablished, netip.MustParseAddrPort("127.0.0.1:54323"), server)
 	assert.ErrorContains(t, err, "no such socket", "a socket without an inode does not count")
 
 	// A line longer than the scanner takes is an error, not "no such socket".
-	_, err = socketOwner(strings.NewReader("header\n"+strings.Repeat("x", 1<<20)), client, server)
+	_, err = socketOwner(strings.NewReader("header\n"+strings.Repeat("x", 1<<20)), tcpEstablished, client, server)
 	assert.ErrorContains(t, err, "too long")
 }
 
