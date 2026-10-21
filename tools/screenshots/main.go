@@ -5,8 +5,8 @@
 // It starts sind ui --demo --still, whose pages are the same on every run,
 // drives an installed Chromium through the shots of shots.yaml, and writes one
 // image per shot, theme and size into the directory of -out. It is a module of
-// its own, so that sind does not depend on a browser driver, and its images
-// are not committed: the docs build takes them from here.
+// its own, so that sind does not depend on a browser driver. Its images are
+// not committed.
 //
 //	go build -o sind ../../cmd/sind && go run . -sind ./sind -out /tmp/shots
 package main

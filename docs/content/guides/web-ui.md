@@ -34,6 +34,7 @@ Useful flags:
 |------|--------|
 | `--port PORT` | Listen on this port on `127.0.0.1`. By default sind takes a free one. |
 | `--no-open` | Print the URL, but do not start a browser. |
+| `--demo` | Show made-up clusters, and play the commands instead of running them. It uses no Docker and changes nothing. |
 
 The UI listens on `127.0.0.1` only. Only your user can open it. To use it from another machine, forward the port over SSH and use the same port on both ends (see [Use it from another machine](#use-it-from-another-machine)).
 
