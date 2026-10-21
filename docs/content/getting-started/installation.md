@@ -96,6 +96,6 @@ sind pulls the image when it creates your first cluster, and after a sind upgrad
 sind create cluster --pull
 ```
 
-Besides the node image, each realm's mesh runs `coredns/coredns:1.15.0` (DNS) from Docker Hub, and its SSH relay runs sind's default node image whatever `defaults.image` says. A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also runs `grafana/grafana:13.2.3`, `prom/prometheus:v3.15.1`, `grafana/loki:3.7.8` and `grafana/alloy:v1.21.1` from Docker Hub. Hosts that cannot reach Docker Hub or ghcr.io need these images preloaded.
+Besides the node image, each realm's mesh runs `coredns/coredns:1.15.0` (DNS) from Docker Hub, and its SSH relay runs sind's default node image whatever `defaults.image` says. A realm with a [monitored]({{< relref "/guides/monitoring" >}}) cluster also runs `grafana/grafana:13.2.3`, `prom/prometheus:v3.15.1`, `grafana/loki:3.7.9` and `grafana/alloy:v1.21.1` from Docker Hub. Hosts that cannot reach Docker Hub or ghcr.io need these images preloaded.
 
 See [Container Images](../../container-images/building-images/) for details on building custom images.
