@@ -1,0 +1,8 @@
+{{- /* Section pages list their pages, as Geekdoc's navigation did. */ -}}
+{{- if and .IsSection (not .IsHome) -}}
+<div class="sind-pages">
+  {{- range .RegularPages.ByWeight }}
+  <a href="{{ .RelPermalink }}"><b>{{ .LinkTitle }}</b>{{ with .Description }}<span>{{ . }}</span>{{ end }}</a>
+  {{- end }}
+</div>
+{{- end -}}

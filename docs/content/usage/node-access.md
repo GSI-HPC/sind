@@ -122,9 +122,9 @@ sind create cluster --data /home/user/shared
 sind create cluster --data volume
 ```
 
-{{< hint info >}}
+{{< callout type="info" >}}
 `sind ssh` connects via SSH and starts in the user's home directory, not `/data`. The data mount is still accessible — just `cd /data`. Use `sind enter` or `sind exec` to land in `/data` directly. With `--user`, they start in the user's home directory instead.
-{{< /hint >}}
+{{< /callout >}}
 
 ## Command routing
 
@@ -186,8 +186,8 @@ The `Include` relies on these OpenSSH behaviours:
 - Short names use hostname canonicalization (`CanonicalizeHostname`), only for names shaped like a node's: `controller`, `controller-backup`, `db`, `api`, `submitter` and `worker-*`, alone or followed by `.<cluster>`. For them, ssh looks up `<name>.default.sind.sind` and then `<name>.sind.sind` in the host's DNS and reads the config again for the name it found (see below). Other host names are not looked up.
 - ssh puts a host name into a `ProxyCommand` as it was given, and runs the command in a shell. The relay's `ProxyCommand` is therefore set only in the `Host` block of each node, with the node's name written into it, so a host name with shell syntax in it, such as one from a git submodule URL, never reaches a shell (the pattern of CVE-2023-51385; OpenSSH 9.6 and later also refuse such names on the command line). sind rewrites the file whenever it creates or deletes a cluster or a worker in the realm.
 
-{{< hint warning >}}
+{{< callout type="warning" >}}
 While a node of that name exists, `ssh controller`, `ssh db` or `ssh db.lab` (with a cluster named `lab`) connect to the sind node, as root, even when your network has a host of that name. Reach such a host by its full name, or include the default realm's `ssh_config` only while you need it.
-{{< /hint >}}
+{{< /callout >}}
 
 Short names need [host DNS resolution]({{< relref "/architecture/networking#host-dns-resolution" >}}) of `*.<realm>.sind`: OpenSSH keeps a canonical name only if the host's resolver finds it, and otherwise falls back to the bare name, which no `Host` block of the exported config matches (`Could not resolve hostname controller`). sind sets up host DNS only with systemd-resolved and the polkit authorization that `sind doctor` checks. Without it, use full names such as `controller.default.sind.sind`, which the relay resolves, or `sind ssh`.

@@ -1,42 +1,75 @@
 baseURL = "https://gsi-hpc.github.io/sind/"
 title = "sind"
-theme = "hugo-geekdoc"
 enableGitInfo = true
 enableRobotsTXT = true
-pygmentsUseClasses = true
-pygmentsCodeFences = true
 disablePathToLower = true
+
+[module]
+  [[module.imports]]
+    path = "github.com/imfing/hextra"
 
 [markup]
   [markup.goldmark.renderer]
     unsafe = true
-  [markup.tableOfContents]
-    startLevel = 1
-    endLevel = 3
+  [markup.highlight]
+    noClasses = false
 
-[taxonomies]
-  tag = "tags"
+[menu]
+  [[menu.main]]
+    name = "Docs"
+    pageRef = "/introduction"
+    weight = 1
+  [[menu.main]]
+    name = "Guides"
+    pageRef = "/guides"
+    weight = 2
+  [[menu.main]]
+    name = "Releases"
+    url = "https://github.com/GSI-HPC/sind/releases"
+    weight = 3
+  [[menu.main]]
+    name = "Go Reference"
+    url = "https://pkg.go.dev/github.com/GSI-HPC/sind"
+    weight = 4
+  [[menu.main]]
+    name = "Search"
+    weight = 5
+    [menu.main.params]
+      type = "search"
+  [[menu.main]]
+    name = "GitHub"
+    url = "https://github.com/GSI-HPC/sind"
+    weight = 6
+    [menu.main.params]
+      icon = "github"
 
 [params]
   description = "sind — create and manage containerized Slurm clusters for development, testing, and CI/CD workflows"
-  geekdocToC = 3
-  geekdocSearch = true
-  geekdocDarkModeToggle = true
-  geekdocDarkModeDim = false
-  geekdocNextPrev = true
-  geekdocBreadcrumb = true
-  geekdocBackToTop = true
-  geekdocAnchor = true
-  geekdocAnchorCopy = true
-  geekdocImageLazyLoading = true
-  geekdocMenuBundle = false
-  geekdocCollapseAllSections = false
-  geekdocFileTreeSortBy = "title"
-  geekdocLogo = "images/sind-icon-only.svg"
-  geekdocRepo = "https://github.com/GSI-HPC/sind"
-  geekdocEditPath = ""
+  displayUpdatedDate = true
+  [params.navbar]
+    displayTitle = true
+    displayLogo = true
+    width = "wide"
+    [params.navbar.logo]
+      path = "images/sind-icon-only.svg"
+      width = 28
+      height = 28
+  [params.page]
+    width = "wide"
+  [params.theme]
+    default = "system"
+    displayToggle = true
+  [params.footer]
+    displayCopyright = false
+    displayPoweredBy = false
+    width = "wide"
 
-[minify]
-  [minify.tdewolff]
-    [minify.tdewolff.html]
-      keepWhitespace = true
+  [params.search]
+    enable = true
+    type = "flexsearch"
+    [params.search.flexsearch]
+      # Vendored, so the build fetches nothing from a CDN.
+      js = "vendor/flexsearch.bundle.min.js"
+  [params.editURL]
+    enable = true
+    base = "https://github.com/GSI-HPC/sind/edit/next/docs/content"
