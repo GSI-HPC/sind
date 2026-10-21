@@ -33,6 +33,8 @@ type fakeExec struct {
 	calls   []call
 	pid     int
 	noStart error
+	// gate, when set, holds the start of a command until it is closed.
+	gate    chan struct{}
 	results chan result
 }
 
@@ -49,6 +51,9 @@ func (f *fakeExec) Run(ctx context.Context, name string, args ...string) (string
 	f.mu.Unlock()
 	if f.noStart != nil {
 		return "", "", f.noStart
+	}
+	if f.gate != nil {
+		<-f.gate
 	}
 	if started := cmdexec.Started(ctx); started != nil {
 		started(f.pid)
@@ -294,13 +299,63 @@ func TestCancel_Errors(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotRunning)
 
 	id, _ := f.r.Start(spec)
-	f.kill.err = syscall.ESRCH // gone between the check and the signal
-	require.NoError(t, f.r.Cancel(id))
 	f.kill.err = syscall.EPERM
 	err = f.r.Cancel(id)
 	require.ErrorIs(t, err, syscall.EPERM)
 	f.ex.results <- result{}
 	f.waitDone(t, id)
+
+	id, _ = f.r.Start(spec)
+	f.kill.err = syscall.ESRCH // gone between the check and the signal
+	require.NoError(t, f.r.Cancel(id))
+	f.ex.results <- result{}
+	f.waitDone(t, id)
+}
+
+func TestCancel_InterruptsOnce(t *testing.T) {
+	f := newFixture(t)
+	id, err := f.r.Start(spec)
+	require.NoError(t, err)
+
+	// A second Stop, and then the shutdown of sind ui, send no second
+	// SIGINT: it would kill sind in the middle of its rollback.
+	require.NoError(t, f.r.Cancel(id))
+	require.NoError(t, f.r.Cancel(id))
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		f.ex.results <- result{err: exitErr(t, "130", "")}
+	}()
+	f.r.Shutdown(5 * time.Second)
+	assert.Equal(t, []string{"interrupt"}, f.kill.got())
+	task, _ := f.st.Snapshot().Task(id)
+	assert.Equal(t, store.TaskCanceled, task.Status)
+}
+
+func TestShutdown_InterruptsAChildThatStartsLate(t *testing.T) {
+	f := newFixture(t)
+	f.ex.gate = make(chan struct{})
+	go func() { _, _ = f.r.Start(spec) }()
+	require.Eventually(t, func() bool { return len(f.st.Snapshot().Tasks) == 1 }, time.Second, time.Millisecond)
+	shut := make(chan struct{})
+	go func() { f.r.Shutdown(5 * time.Second); close(shut) }()
+	require.Eventually(t, func() bool {
+		f.r.mu.Lock()
+		defer f.r.mu.Unlock()
+		return f.r.closing
+	}, time.Second, time.Millisecond)
+	close(f.ex.gate)
+	require.Eventually(t, func() bool { return len(f.kill.got()) == 1 }, time.Second, time.Millisecond)
+	f.ex.results <- result{err: exitErr(t, "130", "")}
+	<-shut
+	assert.Equal(t, []string{"interrupt"}, f.kill.got())
+}
+
+func TestStart_RefusedOnceShutdownBegan(t *testing.T) {
+	f := newFixture(t)
+	f.r.Shutdown(time.Second)
+	_, err := f.r.Start(spec)
+	require.ErrorIs(t, err, ErrClosing)
+	assert.Empty(t, f.st.Snapshot().Tasks)
 }
 
 func TestShutdown_InterruptsAndWaits(t *testing.T) {

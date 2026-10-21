@@ -41,6 +41,9 @@ const (
 // ErrNotRunning is what Cancel returns for a task that is not running.
 var ErrNotRunning = errors.New("the command is not running")
 
+// ErrClosing is the error of Start once Shutdown has begun.
+var ErrClosing = errors.New("sind ui is shutting down")
+
 // Spec describes a command to run as a task.
 type Spec struct {
 	// Action is the id of the action that built the command.
@@ -104,12 +107,18 @@ type Runner struct {
 
 	mu      sync.Mutex
 	running map[string]*child
+	// closing is set once Shutdown has begun: no task starts after it.
+	closing bool
 	wg      sync.WaitGroup
 }
 
 // child is a running task's process.
 type child struct {
 	pid int
+	// interrupted is set once the child got its SIGINT. sind takes the
+	// first SIGINT as Ctrl-C and rolls back; a second one would kill it in
+	// the middle of the rollback, so it never gets one.
+	interrupted bool
 }
 
 // New returns a Runner for cfg.
@@ -148,20 +157,33 @@ func (r *Runner) Start(s Spec) (string, error) {
 		environ = r.cfg.Environ()
 	}
 	env := childEnv(environ, r.cfg.ActivityLog, "00-"+trace+"-"+span+"-01")
+	r.mu.Lock()
+	if r.closing {
+		r.mu.Unlock()
+		return "", ErrClosing
+	}
+	r.wg.Add(1)
+	r.mu.Unlock()
 	r.cfg.Store.AddTask(t)
 
 	started := make(chan struct{})
 	var once sync.Once
 	onStart := func(pid int) {
-		r.mu.Lock()
-		r.running[t.ID] = &child{pid: pid}
-		r.mu.Unlock()
-		once.Do(func() { close(started) })
+		once.Do(func() {
+			r.mu.Lock()
+			late := r.closing
+			r.running[t.ID] = &child{pid: pid, interrupted: late}
+			r.mu.Unlock()
+			if late {
+				// Shutdown began while the child started.
+				_ = r.cfg.Kill(pid, syscall.SIGINT)
+			}
+			close(started)
+		})
 	}
 	ctx := cmdexec.WithStarted(cmdexec.WithEnv(r.ctx, env), onStart)
 
 	done := make(chan struct{})
-	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
 		defer close(done)
@@ -247,9 +269,16 @@ func tail(stderr string) string {
 func (r *Runner) Cancel(id string) error {
 	r.mu.Lock()
 	c, ok := r.running[id]
+	again := ok && c.interrupted
+	if ok {
+		c.interrupted = true
+	}
 	r.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("task %s: %w", id, ErrNotRunning)
+	}
+	if again {
+		return nil // it is stopping already
 	}
 	r.cfg.Store.UpdateTask(id, func(t *store.Task) { t.Canceling = true })
 	if err := r.cfg.Kill(c.pid, syscall.SIGINT); err != nil && !errors.Is(err, syscall.ESRCH) {
@@ -262,7 +291,7 @@ func (r *Runner) Cancel(id string) error {
 // rolls back as it does for Ctrl-C, and kills those that have not ended
 // after grace.
 func (r *Runner) Shutdown(grace time.Duration) {
-	r.signal(syscall.SIGINT)
+	r.interruptAll()
 	done := make(chan struct{})
 	go func() { r.wg.Wait(); close(done) }()
 	select {
@@ -275,12 +304,17 @@ func (r *Runner) Shutdown(grace time.Duration) {
 	r.cancel()
 }
 
-// signal sends sig to the process group of every running child.
-func (r *Runner) signal(sig syscall.Signal) {
+// interruptAll stops new tasks and sends SIGINT to the process group of
+// every running child that has not had one yet.
+func (r *Runner) interruptAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.closing = true
 	for _, c := range r.running {
-		_ = r.cfg.Kill(c.pid, sig)
+		if !c.interrupted {
+			c.interrupted = true
+			_ = r.cfg.Kill(c.pid, syscall.SIGINT)
+		}
 	}
 }
 
