@@ -58,9 +58,9 @@ RUN dnf -y install epel-release dnf-plugins-core && \
 # ==============================================================================
 FROM builder-base AS ucx-builder
 
-ARG UCX_VERSION=1.20.0
+ARG UCX_VERSION=1.22.0
 
-ADD --checksum=sha256:7c8a6093cada179aa1d851b83625e3b25ed5658966e309de5118c27a038c7ef9 \
+ADD --checksum=sha256:258941cddd14ca60d38c0d31b9b09ec1052c901086841011a498da8b55a3cb24 \
     https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz \
     /tmp/ucx.tar.gz
 
@@ -415,7 +415,7 @@ RUN ldconfig && \
     esac
 
 ARG SLURM_VERSION
-ARG UCX_VERSION=1.20.0
+ARG UCX_VERSION=1.22.0
 ARG PMIX_VERSION=6.1.0
 ARG PRRTE_VERSION=4.1.0
 ARG OMPI_VERSION=5.0.10
