@@ -75,6 +75,7 @@ func NewRootCommand() *cobra.Command {
 	// the command that replaced one sind dropped, and every argument check
 	// returns a usage error that ends with the usage line.
 	cobratree.Strict(cmd, map[string]string{"status": "get cluster"})
+	addHelpTopics(cmd)
 	groupHelpFlags(cmd)
 	usageLines(cmd)
 	annotateMCPTools(cmd)
