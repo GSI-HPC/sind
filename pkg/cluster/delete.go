@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/GSI-HPC/go-clikit/fanout"
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/pkg/docker"
 	sindlog "github.com/GSI-HPC/sind/pkg/log"
 	"github.com/GSI-HPC/sind/pkg/mesh"
@@ -91,14 +92,26 @@ func warnDetached(ctx context.Context, meshMgr *mesh.Manager, external []docker.
 // gone: the monitoring stack's containers, which hold endpoints on the mesh
 // network, then the mesh, then the stack's volumes and the journal volume,
 // which Docker removes only once no container references them.
+//
+// The parts are the progress steps "monitoring stack", "mesh" and
+// "monitoring volumes". The two of the stack are hidden, since a realm
+// without a monitoring stack has nothing for them to do.
 func cleanupRealm(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 	if err := removeMonitoringContainers(ctx, client, meshMgr.Realm); err != nil {
 		return err
 	}
-	if err := meshMgr.CleanupMesh(ctx); err != nil {
+	if err := removeMesh(ctx, meshMgr); err != nil {
 		return err
 	}
 	return removeMonitoringVolumes(ctx, client, meshMgr.Realm)
+}
+
+// removeMesh removes the realm's mesh (mesh.Manager.CleanupMesh), as the
+// progress step "mesh".
+func removeMesh(ctx context.Context, meshMgr *mesh.Manager) (err error) {
+	ctx, end := startStep(ctx, "mesh")
+	defer func() { end(err) }()
+	return meshMgr.CleanupMesh(ctx)
 }
 
 // deleteAllConcurrency bounds how many clusters DeleteAll deletes at once.
@@ -118,7 +131,9 @@ const deleteAllConcurrency = 4
 // deleting a cluster becomes that cluster's error.
 //
 // The clusters are the progress step "clusters", with a target for each
-// (fanout.Map).
+// (fanout.Map), under which each cluster's removal reports its steps as
+// Delete does; the realm's the steps "monitoring stack", "mesh" and
+// "monitoring volumes".
 func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -155,6 +170,7 @@ func DeleteAll(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager
 		}),
 	}, func(ctx context.Context, name string) (*Resources, error) {
 		started[index[name]] = true
+		ctx = withoutTargets(ctx)
 		log.InfoContext(ctx, "deleting cluster", "name", name)
 		res, err := ListClusterResources(ctx, client, realm, name)
 		if err != nil {
@@ -261,13 +277,7 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 	}
 
 	if res.NetworkExists {
-		// The mesh's SSH relay joins every cluster network, and containers
-		// outside sind, such as kind nodes, may have been attached to it.
-		if err := client.DisconnectAll(ctx, res.Network); err != nil {
-			return fmt.Errorf("detaching containers from network %s: %w", res.Network, err)
-		}
-		log.DebugContext(ctx, "removing network", "name", string(res.Network))
-		if err := DeleteNetwork(ctx, client, res.Network); err != nil {
+		if err := removeClusterNetwork(ctx, client, res.Network); err != nil {
 			return err
 		}
 	}
@@ -289,18 +299,48 @@ func removeClusterResources(ctx context.Context, client *docker.Client, meshMgr 
 // state transition. Like DeleteVolumes, it tries every container even when
 // one fails, so that one failure does not cancel the removals still waiting
 // for a docker call slot, and returns every failure.
+//
+// The removals are the progress step "nodes", with a target for each
+// container, named by its node's short name and with the node's role (see
+// removeEach). Without containers there is no step.
 func DeleteContainers(ctx context.Context, client *docker.Client, containers []docker.ContainerListEntry) error {
-	names := make([]docker.ContainerName, len(containers))
+	removals := make([]removal, len(containers))
 	for i, c := range containers {
-		names[i] = c.Name
+		removals[i] = removal{
+			name: string(c.Name),
+			node: nodeOf(c),
+			role: c.Labels[LabelRole],
+			run:  func(ctx context.Context) error { return client.RemoveContainer(ctx, c.Name) },
+		}
 	}
-	return removeEach(ctx, "container", names, client.RemoveContainer)
+	return removeEach(ctx, "nodes", "container", removals)
+}
+
+// nodeOf returns the short name of the node whose container c is: the name
+// without its realm and cluster prefix, or the whole name for a container
+// that does not carry it.
+func nodeOf(c docker.ContainerListEntry) string {
+	return strings.TrimPrefix(string(c.Name), ContainerPrefix(c.Labels[LabelRealm], c.Labels[LabelCluster]))
 }
 
 // DeleteNetwork removes the cluster network. A network that is already gone
 // is logged and treated as success.
 func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.NetworkName) error {
-	return removeEach(ctx, "network", []docker.NetworkName{name}, client.RemoveNetwork)
+	return removeOne(ctx, "network", string(name), func(ctx context.Context) error { return client.RemoveNetwork(ctx, name) })
+}
+
+// removeClusterNetwork detaches every container from the cluster network
+// and removes it, as the progress step "network".
+func removeClusterNetwork(ctx context.Context, client *docker.Client, network docker.NetworkName) (err error) {
+	ctx, end := startStep(ctx, "network")
+	defer func() { end(err) }()
+	// The mesh's SSH relay joins every cluster network, and containers
+	// outside sind, such as kind nodes, may have been attached to it.
+	if err := client.DisconnectAll(ctx, network); err != nil {
+		return fmt.Errorf("detaching containers from network %s: %w", network, err)
+	}
+	sindlog.From(ctx).DebugContext(ctx, "removing network", "name", string(network))
+	return DeleteNetwork(ctx, client, network)
 }
 
 // DeleteVolumes removes the given cluster volumes in parallel. Each removal
@@ -308,31 +348,108 @@ func DeleteNetwork(ctx context.Context, client *docker.Client, name docker.Netwo
 // A volume that is already gone is logged and treated as success. Every
 // volume is attempted; the errors of those that could not be removed are
 // joined in argument order.
+//
+// The removals are the progress step "volumes", with a target for each
+// volume, named by it (see removeEach). Without volumes there is no step.
 func DeleteVolumes(ctx context.Context, client *docker.Client, volumes []docker.VolumeName) error {
-	return removeEach(ctx, "volume", volumes, client.RemoveVolume)
+	removals := make([]removal, len(volumes))
+	for i, v := range volumes {
+		removals[i] = removal{
+			name: string(v),
+			node: string(v),
+			run:  func(ctx context.Context) error { return client.RemoveVolume(ctx, v) },
+		}
+	}
+	return removeEach(ctx, "volumes", "volume", removals)
 }
 
-// removeEach removes the named resources of a kind in parallel. A resource
-// that is already gone is logged and treated as success; the errors of the
-// others are joined in argument order.
-func removeEach[N ~string](ctx context.Context, kind string, names []N, remove func(context.Context, N) error) error {
-	log := sindlog.From(ctx)
-	errs := make([]error, len(names))
+// removal is the removal of one resource: its name, what its progress
+// target is named by and the role of its node, if it is one, and the docker
+// command that removes it.
+type removal struct {
+	name, node, role string
+	run              func(context.Context) error
+}
+
+// removeOne runs the removal of the resource name of a kind. A resource
+// that is already gone is logged and treated as success.
+func removeOne(ctx context.Context, kind, name string, remove func(context.Context) error) error {
+	err := remove(ctx)
+	switch {
+	case err == nil:
+	case docker.IsNotFound(err):
+		sindlog.From(ctx).WarnContext(ctx, kind+" already gone, skipping", "name", name)
+	default:
+		return fmt.Errorf("removing %s %s: %w", kind, name, err)
+	}
+	return nil
+}
+
+// removeEach runs the removals of resources of a kind in parallel, all at
+// once, as the progress step step with a target for each, all announced
+// before the first runs. A resource that is already gone is logged and
+// treated as success; the errors of the others are joined in the order of
+// the removals, as "removing <kind> <name>: <error>". A removal stopped by
+// the end of ctx ends its target canceled, and the step ends canceled when
+// every one that failed was stopped, as the pools of fanout do. With no
+// removals there is no step.
+//
+// Below a target of DeleteAll the step has no targets of its own (see
+// withoutTargets).
+func removeEach(ctx context.Context, step, kind string, removals []removal) (err error) {
+	if len(removals) == 0 {
+		return nil
+	}
+	targeted := hasTargets(ctx)
+	var opts []progress.Option
+	if targeted {
+		opts = append(opts, progress.WithFlags(progress.Fold), progress.Total(len(removals)))
+	}
+	ctx, end := startStep(ctx, step, opts...)
+	defer func() { end(err) }()
+
+	ctxs := make([]context.Context, len(removals))
+	spans := make([]*progress.Span, len(removals))
+	for i, r := range removals {
+		ctxs[i] = ctx
+		if targeted {
+			ctxs[i], spans[i] = progress.Start(ctx, progress.KindTarget, r.node,
+				progress.Queued(), progress.Node(r.node), progress.Role(r.role))
+		}
+	}
+	errs := make([]error, len(removals))
 	var wg sync.WaitGroup
-	for i, name := range names {
+	for i, r := range removals {
 		wg.Go(func() {
-			err := remove(ctx, name)
-			switch {
-			case err == nil:
-			case docker.IsNotFound(err):
-				log.WarnContext(ctx, kind+" already gone, skipping", "name", string(name))
-			default:
-				errs[i] = fmt.Errorf("removing %s %s: %w", kind, name, err)
-			}
+			spans[i].Run()
+			errs[i] = stoppedBy(ctx, removeOne(ctxs[i], kind, r.name, r.run))
+			spans[i].End(errs[i])
 		})
 	}
 	wg.Wait()
-	return errors.Join(errs...)
+	return failures(errs)
+}
+
+// failures joins the errors of work that was done for several items, the
+// non-nil ones of errs in order, as joinFailures joins those of a pool: nil
+// when there are none; of the class canceled when every one was a stop
+// (stoppedBy), and of the target's otherwise.
+func failures(errs []error) error {
+	var failed []error
+	class := progress.ClassCanceled
+	for _, err := range errs {
+		if err == nil {
+			continue
+		}
+		failed = append(failed, err)
+		if !errors.As(err, &stopped{}) {
+			class = progress.ClassTarget
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return poolFailure{error: errors.Join(failed...), class: class}
 }
 
 // DeregisterMesh removes DNS records and known_hosts entries for all
@@ -365,10 +482,15 @@ func meshHostnames(realm, clusterName string, containers []docker.ContainerListE
 // exec in the relay, which needs it running. The Corefile and known_hosts
 // live in different containers, so the two updates then run in parallel;
 // each stays a single read-modify-write.
+//
+// It is the progress step "mesh deregistration", which ends ok whatever
+// the warnings say; with no hostnames there is no step.
 func deregisterHostnames(ctx context.Context, meshMgr *mesh.Manager, hostnames []string) {
 	if len(hostnames) == 0 {
 		return
 	}
+	ctx, end := startStep(ctx, "mesh deregistration")
+	defer end(nil) // failures are warnings
 	if _, _, err := meshMgr.StartMesh(ctx); err != nil {
 		meshMgr.Warn(ctx, fmt.Sprintf("starting the mesh to remove the deleted nodes from it: %v", err))
 	}

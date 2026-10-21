@@ -34,6 +34,10 @@ import (
 // the Slurm part of step 2 are skipped: the Slurm configuration of an
 // unmanaged cluster is the user's, even if it contains a sind-nodes.conf.
 // So is a configuration without sind-nodes.conf.
+//
+// The steps it reports are "slurm" (the update of sind-nodes.conf and the
+// reconfigure), "mesh deregistration" and, once these are done, "nodes"
+// with a target for each worker, and "monitoring" on a monitored cluster.
 func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, clusterName string, shortNames []string) error {
 	log := sindlog.From(ctx)
 	realm := meshMgr.Realm
@@ -99,8 +103,10 @@ func WorkerRemove(ctx context.Context, client *docker.Client, meshMgr *mesh.Mana
 	// DeregisterMesh logs its failures; worker removal continues.
 	var g errgroup.Group
 	if updateConf {
-		g.Go(func() error {
-			return removeNodesConf(ctx, client, controller.Name, nodesConf, shortNames)
+		g.Go(func() (err error) {
+			sctx, end := startStep(ctx, "slurm")
+			defer func() { end(err) }()
+			return removeNodesConf(sctx, client, controller.Name, nodesConf, shortNames)
 		})
 	}
 	DeregisterMesh(ctx, meshMgr, clusterName, targets)

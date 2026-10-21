@@ -115,12 +115,12 @@ func withController(t *testing.T, base func([]string, string) mock.Result, label
 func workerContainers(computes ...string) string {
 	entries := []testutil.PsEntry{
 		{ID: "abc", Names: "sind-dev-controller", State: "running", Image: "img:1",
-			Labels: "sind.cluster=dev,sind.role=controller"},
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=controller"},
 	}
 	for _, c := range computes {
 		entries = append(entries, testutil.PsEntry{
 			ID: "c" + c, Names: "sind-dev-" + c, State: "running", Image: "img:1",
-			Labels: "sind.cluster=dev,sind.role=worker",
+			Labels: "sind.realm=sind,sind.cluster=dev,sind.role=worker",
 		})
 	}
 	return testutil.NDJSON(entries...)

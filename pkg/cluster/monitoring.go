@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GSI-HPC/go-clikit/progress"
 	"github.com/GSI-HPC/sind/internal/natsort"
 	"github.com/GSI-HPC/sind/pkg/config"
 	"github.com/GSI-HPC/sind/pkg/docker"
@@ -188,7 +189,17 @@ func startMonitoring(ctx context.Context, client *docker.Client, meshMgr *mesh.M
 // none without a cluster. The removal is done by then, so failures are only warnings: Alloy keeps
 // reading what is gone until the next sync, and a directory left behind
 // is cleared when a node of its name comes back, or goes with the stack.
+//
+// It is the progress step "monitoring", which ends ok whatever the
+// warnings say, and is hidden without a cluster, when the realm may have
+// no stack and so nothing for it to do.
 func forgetMonitoredNodes(ctx context.Context, client *docker.Client, meshMgr *mesh.Manager, cluster string, nodes ...string) {
+	var flags progress.Flags
+	if cluster == "" {
+		flags = progress.Hidden
+	}
+	ctx, end := startStep(ctx, "monitoring", progress.WithFlags(flags))
+	defer end(nil) // failures are warnings
 	realm := meshMgr.Realm
 	warn := func(err error) {
 		meshMgr.Warn(ctx, fmt.Sprintf("updating the monitoring stack of realm %q: %v", realm, err))
@@ -234,7 +245,12 @@ func otherMonitoredClusters(ctx context.Context, client *docker.Client, realm, c
 
 // removeMonitoringContainers removes the realm's stack containers, which
 // keep the mesh network in use until they go.
-func removeMonitoringContainers(ctx context.Context, client *docker.Client, realm string) error {
+//
+// It is the hidden progress step "monitoring stack": a realm without a
+// stack has nothing for it to do.
+func removeMonitoringContainers(ctx context.Context, client *docker.Client, realm string) (err error) {
+	ctx, end := startStep(ctx, "monitoring stack", progress.WithFlags(progress.Hidden))
+	defer func() { end(err) }()
 	if err := observability.NewManager(client, realm).Remove(ctx); err != nil {
 		return fmt.Errorf("removing the monitoring stack: %w", err)
 	}
@@ -243,7 +259,11 @@ func removeMonitoringContainers(ctx context.Context, client *docker.Client, real
 
 // removeMonitoringVolumes removes the realm's stack volumes and its
 // journal volume, once their containers are gone.
-func removeMonitoringVolumes(ctx context.Context, client *docker.Client, realm string) error {
+//
+// It is the hidden progress step "monitoring volumes".
+func removeMonitoringVolumes(ctx context.Context, client *docker.Client, realm string) (err error) {
+	ctx, end := startStep(ctx, "monitoring volumes", progress.WithFlags(progress.Hidden))
+	defer func() { end(err) }()
 	if err := observability.NewManager(client, realm).RemoveVolumes(ctx); err != nil {
 		return fmt.Errorf("removing the monitoring stack's volumes: %w", err)
 	}

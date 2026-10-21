@@ -61,10 +61,36 @@ func (stopped) ProgressClass() progress.Class { return progress.ClassCanceled }
 // work whose own deadline ran out, such as a --wait limit, is no
 // cancellation and keeps the class of its error.
 func endSpan(ctx context.Context, span *progress.Span, err error) {
+	span.End(stoppedBy(ctx, err))
+}
+
+// stoppedBy returns err, the outcome of work that ran under ctx, as
+// stopped when ctx had been canceled with another cause than err by the
+// time the work returned, as endSpan decides, and err otherwise.
+func stoppedBy(ctx context.Context, err error) error {
 	if err != nil && errors.Is(ctx.Err(), context.Canceled) && !errors.Is(context.Cause(ctx), err) {
-		err = stopped{err}
+		return stopped{err}
 	}
-	span.End(err)
+	return err
+}
+
+// untargetedKey is the context key withoutTargets sets.
+type untargetedKey struct{}
+
+// withoutTargets returns ctx marked as the context of work below a target
+// of a counting step, a pool's. A target counts in every counting step
+// above it (progresstest.Check), so a step below it, such as the removal
+// of a cluster's nodes inside DeleteAll's target for the cluster, reports
+// no targets of its own: its Total and Limit would otherwise be counted
+// into the pool's.
+func withoutTargets(ctx context.Context) context.Context {
+	return context.WithValue(ctx, untargetedKey{}, true)
+}
+
+// hasTargets reports whether a step started under ctx may announce targets:
+// ctx is not below a target of a counting step (see withoutTargets).
+func hasTargets(ctx context.Context) bool {
+	return ctx.Value(untargetedKey{}) == nil
 }
 
 // startStep starts the progress step name under ctx, and returns its

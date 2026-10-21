@@ -126,7 +126,20 @@ $ sind power reboot 'worker-[0-23]'
 ✓ starting  2.2s  24 ok
 ```
 
-`sind delete cluster --all` shows the step `clusters`, with a target for each cluster. `sind delete cluster` and `sind delete worker` show no steps, only the docker commands that take a second or longer.
+`sind delete cluster` shows these steps, each only when there is something for it to do:
+
+| Step | Targets | What it does |
+|------|---------|--------------|
+| `mesh deregistration` | | when other clusters keep the realm's mesh: removes the nodes' DNS records and `known_hosts` entries, starting the mesh first if it is stopped. A failure is a warning, not a failure of the step |
+| `nodes` | one per node | stops and removes each node's container |
+| `network` | | detaches the containers that joined the cluster network, those of the mesh and outside sind, and removes it |
+| `volumes` | one per volume | removes the cluster's volumes |
+| `monitoring` | | on a monitored cluster: syncs the realm's [monitoring stack]({{< relref "/guides/monitoring" >}}) and removes the nodes' journals |
+| `monitoring stack`, `mesh`, `monitoring volumes` | | with the realm's last cluster: remove the monitoring stack's containers, the mesh and the stack's volumes. The two of the stack show only when they take long or fail |
+
+`sind delete worker` shows `slurm` (takes the workers out of `sind-nodes.conf` and reconfigures slurmctld, on a managed cluster) and `mesh deregistration` at the same time, then `nodes`, with a target for each worker, and on a monitored cluster `monitoring`. A node that cannot be removed fails its target, and the other nodes are removed still.
+
+`sind delete cluster --all` and `sind delete realm` show the step `clusters`, with a target for each cluster; what each cluster's removal does shows as `nodes`, `network` and `volumes` steps below its target, without targets of their own. `mesh deregistration` follows, for the clusters that were deleted when another one failed to be, then `monitoring stack`, `mesh` and `monitoring volumes` for the realm.
 
 ## Choosing the display
 

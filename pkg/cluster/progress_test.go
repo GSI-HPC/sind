@@ -517,12 +517,15 @@ func TestDeleteAll_Interrupted(t *testing.T) {
 	w.Finish()
 	assert.Equal(t, `step clusters total=2 limit=4 [fold]: canceled (canceled): deleting cluster dev: listing containers: context canceled\ndeleting cluster prod: listing containers: context canceled
   target dev,prod: canceled (canceled): context canceled
+step monitoring [hidden]: ok
 `, testutil.WithoutCalls(w.Events()))
 }
 
 // delete cluster --all deletes the clusters as the step "clusters", with a
-// target for each; one that fails does not stop the others, and the error
-// names it, as before the step.
+// target for each, under which the cluster's steps have no targets of
+// their own; one that fails does not stop the others, and the error names
+// it, as before the step. The mesh stays for the cluster that is left, so
+// the deleted ones leave it, and the stack, if any, forgets their nodes.
 func TestDeleteAll_ReportsTheClusters(t *testing.T) {
 	ctx, w := progresstest.Watch(t.Context(), t)
 	f := &realmFake{t: t,
@@ -541,6 +544,11 @@ func TestDeleteAll_ReportsTheClusters(t *testing.T) {
 	w.Finish()
 	assert.Equal(t, `step clusters total=3 limit=4 [fold]: failed (target): deleting cluster test: removing container sind-test-controller: docker daemon unavailable
   target dev,prod: ok
+    step network: ok
+    step nodes: ok
   target test: failed (target): removing container sind-{}-controller: docker daemon unavailable
+    step nodes: failed (target): removing container sind-{}-controller: docker daemon unavailable
+step mesh deregistration: ok
+step monitoring [hidden]: ok
 `, testutil.WithoutCalls(w.Events()))
 }
