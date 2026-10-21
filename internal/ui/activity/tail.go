@@ -27,6 +27,16 @@ type Tail struct {
 	// made again, at the same inode and as long as before, does not share.
 	head    []byte
 	started bool
+	// old is the rotated copy, path.1, as it was read. A command that had
+	// the log open when another rotated it goes on writing to the copy.
+	old oldCopy
+}
+
+// oldCopy is where Tail stands in the rotated copy of the log.
+type oldCopy struct {
+	info    os.FileInfo
+	off     int64
+	partial []byte
 }
 
 // headLen is how much of the start of the log Tail remembers.
@@ -40,7 +50,9 @@ func NewTail(path string, red *Reducer) *Tail {
 // Poll feeds red with the complete lines written since the last poll, and
 // keeps the unfinished last line for the next. The first poll reads the
 // rotated copy of the log, path.1, first, so that the runs before the last
-// rotation count too.
+// rotation count too. Later polls read what was written to the copy since,
+// as long as it is the same file, so that a run that was going on when the
+// log was rotated still ends.
 //
 // A log that is another file than before, or shorter, or that starts with
 // other bytes, was rotated or truncated: Poll resets red, then reads the rotated copy and the new file
@@ -66,9 +78,9 @@ func (t *Tail) Poll() bool {
 		if rotated {
 			t.red.Reset()
 		}
-		t.off, t.partial, t.head = 0, nil, nil
-		changed = t.readOld() || changed
+		t.off, t.partial, t.head, t.old = 0, nil, nil, oldCopy{}
 	}
+	changed = t.readOld() || changed
 	if err != nil {
 		return changed
 	}
@@ -91,15 +103,26 @@ func (t *Tail) sameHead(f *os.File) bool {
 	return bytes.Equal(head[:n], t.head)
 }
 
-// readOld reads the rotated copy of the log, if there is one, and reports
-// whether it held a line. A last line without its end is not one yet.
+// readOld reads the rotated copy of the log: from its start the first time,
+// and then what was written to it since, while it is the file it was. It
+// reports whether it fed red a line. A last line without its end is not one
+// yet.
 func (t *Tail) readOld() bool {
 	f, err := os.Open(t.path + ".1")
-	if err != nil {
+	defer func() { _ = f.Close() }()
+	var info os.FileInfo
+	if err == nil {
+		info, err = f.Stat()
+	}
+	if err != nil || t.old.info != nil && !os.SameFile(t.old.info, info) {
+		// Gone, or replaced: a copy that replaces it was the log, which
+		// a later poll finds rotated and reads again.
 		return false
 	}
-	defer func() { _ = f.Close() }()
-	_, _, lines := readLines(f, t.red, nil)
+	t.old.info = info
+	n, rest, lines := readLines(io.NewSectionReader(f, t.old.off, math.MaxInt64-t.old.off), t.red, t.old.partial)
+	t.old.off += n
+	t.old.partial = rest
 	return lines > 0
 }
 

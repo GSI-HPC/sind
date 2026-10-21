@@ -198,3 +198,37 @@ func TestTailUnreadableLog(t *testing.T) {
 	assert.False(t, NewTail(filepath.Join(file, "activity.jsonl"), red).Poll())
 	assert.Empty(t, red.Runs())
 }
+
+func TestTailFollowsARunInTheRotatedCopy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "activity.jsonl")
+	whole := logLines(runA, "long")
+	end := bytes.LastIndexByte(whole[:len(whole)-1], '\n') + 1
+	appendTo(t, path, whole[:end]) // the run has not ended
+	red := NewReducer(10)
+	tail := NewTail(path, red)
+	require.True(t, tail.Poll())
+	require.False(t, red.Runs()[0].Done())
+
+	// Another command rotates the log; the run goes on writing to the copy.
+	require.NoError(t, os.Rename(path, path+".1"))
+	appendTo(t, path, logLines("bbbbbbbbbbbbbbbb", "next"))
+	require.True(t, tail.Poll())
+	_ = red.Changed()
+	appendTo(t, path+".1", whole[end:end+10])
+	assert.False(t, tail.Poll(), "half a line")
+	appendTo(t, path+".1", whole[end+10:])
+	assert.True(t, tail.Poll())
+	assert.Equal(t, []string{runA}, red.Changed())
+	assert.True(t, red.Runs()[1].Done(), "the run ended in the copy")
+	assert.False(t, tail.Poll())
+
+	// The log is rotated again: the copy is the log of before now, which
+	// is not read on its own. Once the new log is there, the log is found
+	// rotated, and both are read again.
+	require.NoError(t, os.Rename(path, path+".1"))
+	assert.False(t, tail.Poll())
+	assert.Equal(t, []string{"next", "long"}, titles(red))
+	appendTo(t, path, logLines("cccccccccccccccc", "third"))
+	assert.True(t, tail.Poll())
+	assert.Equal(t, []string{"third", "next"}, titles(red))
+}
