@@ -21,6 +21,8 @@ import (
 const procNetTCP = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 0100007F:1EC6 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 101 1 0000000000000000 100 0 0 10 0
    1: short line
+   5: 0100007F:D432 0100007F:1EC6 06 00000000:00000000 03:00000000 00000000     0        0 0 3 0000000000000000
+   6: 0100007F:D433 0100007F:1EC6 01 00000000:00000000 00:00000000 00000000     0        0 0 1 0000000000000000 20 4 30 10 -1
    2: zz00007F:D431 0100007F:1EC6 01 00000000:00000000 00:00000000 00000000  1002        0 104 1 0000000000000000 20 4 30 10 -1
    3: 0100007F:D431 0100007F:1EC6 01 00000000:00000000 00:00000000 00000000  1001        0 102 1 0000000000000000 20 4 30 10 -1
    4: 0100007F:1EC6 0100007F:D431 01 00000000:00000000 00:00000000 00000000  1000        0 103 1 0000000000000000 20 4 30 10 -1
@@ -38,6 +40,10 @@ func TestSocketOwner(t *testing.T) {
 
 	_, err = socketOwner(strings.NewReader(procNetTCP), netip.MustParseAddrPort("127.0.0.1:1"), server)
 	assert.ErrorContains(t, err, "no such socket")
+	_, err = socketOwner(strings.NewReader(procNetTCP), netip.MustParseAddrPort("127.0.0.1:54322"), server)
+	assert.ErrorContains(t, err, "no such socket", "a socket in TIME_WAIT does not count")
+	_, err = socketOwner(strings.NewReader(procNetTCP), netip.MustParseAddrPort("127.0.0.1:54323"), server)
+	assert.ErrorContains(t, err, "no such socket", "a socket without an inode does not count")
 
 	// A line longer than the scanner takes is an error, not "no such socket".
 	_, err = socketOwner(strings.NewReader("header\n"+strings.Repeat("x", 1<<20)), client, server)

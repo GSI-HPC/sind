@@ -129,7 +129,7 @@ The UI can do what your Docker access can do, so sind protects it in these ways:
 
 - **Only your user.** The UI refuses connections from processes of other users before it reads any request. This works on Linux only.
 - **A token in the URL.** Each run prints a new token. The first visit with the token sets a cookie for this browser, and the address bar then shows the page without the token. A visit with an old or wrong token is refused.
-- **Your own pages only.** The UI accepts requests for `127.0.0.1` and `localhost` only. A request that changes something must come from the UI itself, with its CSRF token. A web page in another tab cannot start an action.
+- **Your own pages only.** The UI accepts requests for `127.0.0.1` only, not for `localhost`. A request that changes something must come from the UI itself, with its CSRF token. A web page in another tab cannot start an action.
 - **No secrets.** The UI has no page for the munge key, the JWT key or the SSH private key.
 - **No outside resources.** The UI loads its scripts, styles and fonts from itself only. No other site can show it in a frame.
 
@@ -166,10 +166,10 @@ The token is new with each run. Use the URL that the running `sind ui` printed, 
 ### Opened by another host name
 
 ```
-sind ui answers only to 127.0.0.1:41873 and localhost:41873
+sind ui answers only to 127.0.0.1:41873
 ```
 
-The browser sent another host name, so the UI refused the request. Open the URL that sind printed, with `127.0.0.1` or `localhost` and the same port.
+The browser sent another host name, so the UI refused the request. Open the URL that sind printed, with `127.0.0.1` and the same port. A URL with `localhost` does not work: a browser can send it to `::1`, where sind ui does not listen.
 
 ### The browser does not open
 
@@ -188,4 +188,4 @@ The UI does not accept connections from other hosts. To use it from a laptop, st
 ssh -L 41873:127.0.0.1:41873 user@host
 ```
 
-Use the same port on both ends. The UI checks the host name that the browser sends, so a different local port does not work. Then open the URL from the host, with `localhost` and the same port, as `http://localhost:41873/?token=...`.
+Use the same port on both ends. The UI checks the host name that the browser sends, so a different local port does not work. Then open the URL that the host printed, `http://127.0.0.1:41873/?token=...`, on the laptop.

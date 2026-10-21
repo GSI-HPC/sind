@@ -178,13 +178,13 @@ func (s *Server) headers(next http.Handler) http.Handler {
 
 // checkHostHeader refuses requests for any host name but ours, so that a
 // web page whose name resolves to 127.0.0.1 (DNS rebinding) cannot read
-// sind ui as its own origin.
+// sind ui as its own origin. Not even localhost is ours: a browser may
+// resolve it to ::1, where another user's process can listen on our port.
 func (s *Server) checkHostHeader(next http.Handler) http.Handler {
-	port := strconv.Itoa(s.port)
-	ok := map[string]bool{"127.0.0.1:" + port: true, "localhost:" + port: true}
+	host := "127.0.0.1:" + strconv.Itoa(s.port)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !ok[r.Host] {
-			http.Error(w, "sind ui answers only to 127.0.0.1:"+port+" and localhost:"+port, http.StatusMisdirectedRequest)
+		if r.Host != host {
+			http.Error(w, "sind ui answers only to "+host, http.StatusMisdirectedRequest)
 			return
 		}
 		next.ServeHTTP(w, r)

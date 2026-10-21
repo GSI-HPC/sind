@@ -858,8 +858,8 @@ The running instance is recorded in `$XDG_RUNTIME_DIR/sind/ui.json` (`{"url": ..
 
 Only the user who started `sind ui` may use it, and it can do what that user's Docker access can do. A request passes these checks, in this order:
 
-1. **Peer user.** The kernel's table of TCP sockets (`/proc/net/tcp`) names the owner of each connection. A connection of a process of another user is closed before HTTP is read. This works on Linux only, as sind does.
-2. **Host.** The `Host` header must be `127.0.0.1:PORT` or `localhost:PORT`, which stops DNS rebinding.
+1. **Peer user.** The kernel's table of TCP sockets (`/proc/net/tcp`) names the owner of each connection; only a row in state `ESTABLISHED` with an inode counts. A connection of a process of another user is closed before HTTP is read. This works on Linux only, as sind does.
+2. **Host.** The `Host` header must be `127.0.0.1:PORT`, which stops DNS rebinding. `localhost` is refused: a browser may resolve it to `::1`, where a process of another user can listen on the same port and would get the token.
 3. **Session.** The first `GET` with `?token=` must carry the token of this run (32 random bytes). It sets an `HttpOnly`, `SameSite=Strict` cookie, named for the port, and redirects to the same page without the token. Any other request without a session gets `403`.
 4. **Writes.** Requests that change something (every method but `GET` and `HEAD`) need an `Origin` of `http://` followed by the `Host` header, and the session's CSRF token in the `X-Sind-CSRF` header or the `csrf` form field. Forms are capped at 64 KiB. Every path and query value is checked again on the server.
 5. **Responses.** `Content-Security-Policy` allows only files of the same origin (`default-src 'none'`, `frame-ancestors 'none'`), with `X-Frame-Options: DENY`, `Cache-Control: no-store` and `Referrer-Policy: same-origin` (a form POST then carries its origin). Text from containers and the event log is escaped.
